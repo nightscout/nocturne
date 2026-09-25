@@ -469,7 +469,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
-    /// V4 record tables keyed on <see cref="IV4TimeSeriesEntity.Timestamp"/>.
+    /// V4 record tables keyed on <see cref="IObservationTimestamped.Timestamp"/>.
     /// </summary>
     internal static readonly Type[] V4TimeSeriesRecordEntities =
     [

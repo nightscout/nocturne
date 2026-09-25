@@ -421,9 +421,6 @@ public abstract class BaseV3Controller<T> : ControllerBase
     /// Returns the Nightscout V3-compatible envelope: <c>{"status": 200, "result": [...]}</c>.
     /// </summary>
     /// <typeparam name="TItem">The type of items in the collection.</typeparam>
-    /// <param name="data">Response data.</param>
-    /// <param name="parameters">The <see cref="V3QueryParameters"/> used for field selection and pagination.</param>
-    /// <param name="totalCount">Total count of items for pagination headers.</param>
     /// <returns>A <see cref="V3CollectionResponse{T}"/> wrapped in the Nightscout V3 envelope.</returns>
     protected IActionResult CreateV3CollectionResponse<TItem>(
         IEnumerable<TItem> data,

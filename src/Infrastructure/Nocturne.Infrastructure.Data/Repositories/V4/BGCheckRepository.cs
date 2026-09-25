@@ -29,10 +29,6 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
     /// <summary>
     /// Initializes a new instance of the <see cref="BGCheckRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     public BGCheckRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,

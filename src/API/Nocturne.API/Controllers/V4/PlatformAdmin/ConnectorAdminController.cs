@@ -100,6 +100,7 @@ public class ConnectorAdminController : ControllerBase
     /// Get the progress of a connector cursor reset job, including per-connector outcomes as they land.
     /// </summary>
     /// <param name="jobId">The job id returned by <see cref="ResetTenantCursors"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpGet("jobs/{jobId:guid}")]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorResetJobStatus), StatusCodes.Status200OK)]
@@ -120,7 +121,8 @@ public class ConnectorAdminController : ControllerBase
     /// Request cancellation of a running connector cursor reset job. Connectors already re-pulled
     /// keep their committed data; the fan-out simply stops before the next connector.
     /// </summary>
-    /// <param name="jobId">The job id to cancel.</param>
+    /// <param name="jobId">The job id returned by <see cref="ResetTenantCursors"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpPost("jobs/{jobId:guid}/cancel")]
     [RemoteCommand(Invalidates = ["GetResetJobStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -36,6 +36,7 @@ import {
 	Shield,
 	Stethoscope,
 	Sun,
+	SunMoon,
 	Syringe,
 	Target,
 	Timer,
@@ -185,6 +186,15 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["comparison", "trend", "weekly"],
 		icon: TrendingUp,
 		href: "/reports/week-to-week",
+	},
+	{
+		id: "report-hourly-patterns",
+		label: "Hourly Patterns",
+		group: "reports",
+		description: "Hours of the day with the most and least time in range",
+		keywords: ["hourly", "time of day", "best hours", "worst hours"],
+		icon: SunMoon,
+		href: "/reports/hourly-stats",
 	},
 	{
 		id: "report-year-overview",

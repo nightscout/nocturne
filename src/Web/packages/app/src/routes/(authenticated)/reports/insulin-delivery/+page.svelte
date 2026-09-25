@@ -146,7 +146,7 @@
       <span>{dayCount} days</span>
       <span class="text-muted-foreground/50">•</span>
       <span>
-        {(insulinStats.bolusCount ?? 0) + (insulinStats.basalCount ?? 0)} insulin events
+        {insulinStats.insulinEventCount ?? 0} insulin events
       </span>
     </div>
     <ReliabilityBadge reliability={insulinStats?.reliability} />

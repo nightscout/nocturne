@@ -618,6 +618,37 @@ public static class Scope
 
         return null;
     }
+
+    /// <summary>
+    /// Validates scopes a caller is delegating against the scopes the caller itself holds. Unlike
+    /// <see cref="ValidateGrant"/> this speaks the scope vocabulary rather than permission atoms:
+    /// aliases such as <see cref="HealthRead"/> are expanded through <see cref="Normalize"/> first,
+    /// and a scope need not be an atom to be delegable.
+    /// </summary>
+    /// <param name="requested">The scopes being delegated. <c>null</c> or empty is always allowed.</param>
+    /// <param name="callerScopes">The delegating caller's resolved scopes.</param>
+    /// <returns>The first violation, or <c>null</c> when the whole set is delegable.</returns>
+    public static GrantCeilingViolation? ValidateDelegation(
+        IEnumerable<string>? requested,
+        IEnumerable<string> callerScopes)
+    {
+        if (requested is null)
+            return null;
+
+        var granter = callerScopes as IReadOnlyCollection<string> ?? callerScopes.ToList();
+
+        foreach (var scope in Normalize(requested))
+        {
+            if (!Satisfies(granter, scope))
+            {
+                return new GrantCeilingViolation(
+                    GrantCeilingViolation.ExceedsGranter,
+                    $"Cannot grant '{scope}' because the caller does not hold it.");
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>
@@ -631,4 +662,19 @@ public record GrantCeilingViolation(string Code, string Description)
 
     /// <summary>The caller does not hold the permission it is trying to confer.</summary>
     public const string ExceedsGranter = "grant_exceeds_granter";
+}
+
+/// <summary>
+/// Thrown when a caller tries to delegate a scope wider than the one it holds. Carries the
+/// <see cref="GrantCeilingViolation"/> so a controller can report its stable code.
+/// </summary>
+public class GrantCeilingViolationException : Exception
+{
+    public GrantCeilingViolationException(GrantCeilingViolation violation)
+        : base(violation.Description)
+    {
+        Violation = violation;
+    }
+
+    public GrantCeilingViolation Violation { get; }
 }

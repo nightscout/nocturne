@@ -33,6 +33,7 @@ public sealed class ConnectorSyncBudget
     private readonly SemaphoreSlim _slots;
     private int _pollersStarted;
 
+    /// <param name="slots">Tenant syncs that may run at once across every poller; at least 1.</param>
     /// <param name="pollerCount">
     /// How many pollers share the budget; the poll interval is divided into this many phases.
     /// </param>

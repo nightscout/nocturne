@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Analytics;
 using Nocturne.API.Services.Analytics;
@@ -37,6 +38,7 @@ public class StatisticsControllerTests
     private readonly Mock<IDeviceEventRepository> _deviceEventRepoMock = new();
     private readonly Mock<IAidMetricsService> _aidMetricsServiceMock = new();
     private readonly Mock<IBasalRateResolver> _basalRateResolverMock = new();
+    private readonly Mock<ILogger<StatisticsController>> _loggerMock = new();
 
     private StatisticsController CreateController(
         ICanonicalGlucoseService? canonicalGlucose = null,
@@ -68,7 +70,8 @@ public class StatisticsControllerTests
             _basalInjectionRepoMock.Object,
             _activeProfileResolverMock.Object,
             canonicalGlucose ?? TestDoubles.CanonicalGlucosePassThrough.Create(),
-            categoryReadContext ?? new CategoryReadContext());
+            categoryReadContext ?? new CategoryReadContext(),
+            _loggerMock.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -159,7 +162,7 @@ public class StatisticsControllerTests
                 (entries, _, _, _, _) => analysedEntries = entries.ToList())
             .Returns(analysis);
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(averaged);
 
         var controller = CreateController();
@@ -199,7 +202,7 @@ public class StatisticsControllerTests
                 It.IsAny<ExtendedAnalysisConfig?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(new List<AveragedStats>());
 
         var controller = CreateController();
@@ -216,8 +219,11 @@ public class StatisticsControllerTests
             It.IsAny<ExtendedAnalysisConfig?>()), Times.Once);
     }
 
+    private static readonly GlycemicThresholds BandThresholds = new();
+
     private void SetupAnalysis()
     {
+        _statsServiceMock.SetupGet(s => s.HourlyBandThresholds).Returns(BandThresholds);
         _statsServiceMock
             .Setup(s => s.AnalyzeGlucoseDataExtended(
                 It.IsAny<IEnumerable<SensorGlucose>>(),
@@ -227,7 +233,7 @@ public class StatisticsControllerTests
                 It.IsAny<ExtendedAnalysisConfig?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(new List<AveragedStats>());
     }
 
@@ -354,6 +360,333 @@ public class StatisticsControllerTests
             new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
 
         usedTz.Should().Be(TimeZoneInfo.Utc);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_BucketsTheHourlyStatsOnTheTherapyTimezone()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Stockholm");
+        TimeZoneInfo? usedTz = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
+            .Returns(new List<AveragedStats>());
+
+        await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm"));
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_WithoutATherapyTimezone_LeavesTheHourlyStatsOnEachReadingsOffset()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        TimeZoneInfo? usedTz = TimeZoneInfo.Local;
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
+            .Returns(new List<AveragedStats>());
+
+        await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        usedTz.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_WhenTheTimezoneLookupFails_LeavesThePersonalRangeEmptyAndWarns()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepoMock
+            .Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TargetRangeSchedule
+            {
+                Entries = [new() { Time = "00:00", TimeAsSeconds = 0, Low = 80, High = 160 }],
+            });
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var result = await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ReportAnalysisResult>().Subject;
+        payload.PersonalRange.Should().BeNull();
+        _statsServiceMock.Verify(
+            s => s.CalculatePersonalRangeTime(
+                It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<List<TargetRangeEntry>>(), It.IsAny<TimeZoneInfo>()),
+            Times.Never);
+        _loggerMock.Verify(
+            l => l.Log(
+                LogLevel.Warning, It.IsAny<EventId>(), It.IsAny<It.IsAnyType>(),
+                It.IsAny<InvalidOperationException>(), It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetWeekdayAverages_WhenTheTimezoneLookupFails_FailsRatherThanBucketingOnUtc()
+    {
+        SetupGlucose(Array.Empty<SensorGlucose>());
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+
+        var act = () => CreateController().GetWeekdayAverages(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _statsServiceMock.Verify(
+            s => s.CalculateWeekdayAverages(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_WhenTheTimezoneLookupFails_StillReturnsTheReport()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        TimeZoneInfo? usedTz = TimeZoneInfo.Local;
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
+            .Returns(new List<AveragedStats>());
+
+        var result = await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+        usedTz.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_ResolvesTheTimezoneOnceForBothHourlyStatsAndPersonalRange()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        var scheduleEntries = new List<TargetRangeEntry>
+        {
+            new() { Time = "00:00", TimeAsSeconds = 0, Low = 80, High = 160 },
+        };
+        _activeProfileResolverMock
+            .Setup(r => r.GetActiveProfileNameAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Default");
+        _targetRangeScheduleRepoMock
+            .Setup(r => r.GetActiveAtAsync("Default", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TargetRangeSchedule { Entries = scheduleEntries });
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Stockholm");
+        var stockholm = TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm");
+
+        await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        _therapySettingsResolverMock.Verify(
+            r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()), Times.Once);
+        _statsServiceMock.Verify(
+            s => s.CalculatePersonalRangeTime(It.IsAny<IEnumerable<SensorGlucose>>(), scheduleEntries, stockholm),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_PublishesTheHourlyBandThresholds()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+
+        var result = await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<ReportAnalysisResult>().Subject;
+        payload.HourlyBandThresholds.Should().BeSameAs(BandThresholds);
+    }
+
+    [Fact]
+    public async Task GetHourlyPatterns_WithoutATherapyTimezone_LeavesTheHoursOnEachReadingsOffset()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        TimeZoneInfo? usedTz = TimeZoneInfo.Local;
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
+            .Returns(new HourlyPatterns());
+
+        var result = await CreateController().GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<HourlyPatterns>().Subject;
+        usedTz.Should().BeNull();
+        payload.TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.NotConfigured);
+    }
+
+    [Theory]
+    [InlineData(true, TimeZoneUnavailableReason.Share)]
+    [InlineData(false, TimeZoneUnavailableReason.NotConfigured)]
+    public async Task GetHourlyPatterns_SaysAShareCannotSeeTheTimezoneRatherThanThatNoneIsSet(
+        bool share, TimeZoneUnavailableReason expected)
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        var category = new CategoryReadContext();
+        if (share)
+            category.MarkShare();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Returns(new HourlyPatterns());
+
+        var result = await CreateController(categoryReadContext: category).GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<HourlyPatterns>().Subject
+            .TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(false, TimeZoneUnavailableReason.Unrecognised)]
+    [InlineData(true, TimeZoneUnavailableReason.Share)]
+    public async Task GetHourlyPatterns_WithAStoredTimezoneThatDoesNotResolve_SaysItIsUnrecognised(
+        bool share, TimeZoneUnavailableReason expected)
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        var category = new CategoryReadContext();
+        if (share)
+            category.MarkShare();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Mars/Olympus_Mons");
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Returns(new HourlyPatterns());
+
+        var result = await CreateController(categoryReadContext: category).GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<HourlyPatterns>().Subject
+            .TimeZoneUnavailableReason.Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task GetHourlyPatterns_WhenTheTimezoneLookupFails_SaysSo()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("db down"));
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo?>()))
+            .Returns(new HourlyPatterns());
+
+        var result = await CreateController().GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value
+            .Should().BeOfType<HourlyPatterns>().Subject
+            .TimeZoneUnavailableReason.Should().Be(TimeZoneUnavailableReason.LookupFailed);
+    }
+
+    [Fact]
+    public async Task CalculateAveragedStats_BucketsThePostedReadingsOnTheTherapyTimezone()
+    {
+        var posted = new[] { new SensorGlucose { Mgdl = 100 } };
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+        TimeZoneInfo? usedTz = null;
+        var averaged = new List<AveragedStats> { new() { Hour = 3 } };
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(posted, It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((_, tz) => usedTz = tz)
+            .Returns(averaged);
+
+        var result = await CreateController().CalculateAveragedStats(posted);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeSameAs(averaged);
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Australia/Sydney"));
+    }
+
+    [Fact]
+    public async Task GetHourlyPatterns_PassesTheCanonicalReadingsAndTherapyTimezoneToTheService()
+    {
+        var readings = new List<SensorGlucose> { new() { Mgdl = 100 }, new() { Mgdl = 120 } };
+        SetupGlucose(readings);
+        var canonical = new List<SensorGlucose> { new() { Mgdl = 110 } };
+        var canonicalGlucose = new Mock<ICanonicalGlucoseService>();
+        canonicalGlucose
+            .Setup(s => s.SelectAsync(It.IsAny<IReadOnlyList<SensorGlucose>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(canonical);
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Stockholm");
+
+        var patterns = new HourlyPatterns();
+        List<SensorGlucose>? usedEntries = null;
+        TimeZoneInfo? usedTz = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateHourlyPatterns(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo?>((entries, tz) =>
+            {
+                usedEntries = entries.ToList();
+                usedTz = tz;
+            })
+            .Returns(patterns);
+
+        var result = await CreateController(canonicalGlucose.Object).GetHourlyPatterns(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeSameAs(patterns);
+        patterns.TimeZoneUnavailableReason.Should().BeNull();
+        usedEntries.Should().BeEquivalentTo(canonical);
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm"));
+        _glucoseRepoMock.Verify(r => r.GetAsync(
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+            It.IsAny<string?>(), It.IsAny<string?>(),
+            int.MaxValue, It.IsAny<int>(), It.IsAny<bool>(),
+            It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -715,6 +1048,91 @@ public class StatisticsControllerTests
         day.InRangeCount.Should().Be(60);
         month.TotalReadings.Should().Be(60);
         month.Summary!.TotalReadings.Should().Be(60);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_AveragesEveryReadingOfTheDayAndWeightsTheMonthByReadings()
+    {
+        var dayStart = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = new[]
+        {
+            new SensorGlucose { Timestamp = dayStart.AddHours(1), Mgdl = 60 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(2), Mgdl = 100 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(3), Mgdl = 200 },
+            new SensorGlucose { Timestamp = dayStart.AddDays(1).AddHours(1), Mgdl = 200 },
+        };
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(readings);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateTimeInRange(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<GlycemicThresholds?>()))
+            .Returns(new TimeInRangeMetrics
+            {
+                Percentages = new TimeInRangePercentages { Target = 100 },
+                RangeStats = new TimeInRangeDetailedStats
+                {
+                    Target = new PeriodMetrics { PeriodName = "In Range", Mean = 100 },
+                },
+            });
+
+        var result = await CreateController().GetPunchCardData(
+            DateOnly.FromDateTime(dayStart),
+            DateOnly.FromDateTime(dayStart.AddDays(1)));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var month = ok.Value.Should().BeOfType<PunchCardResponse>().Subject.Months.Should().ContainSingle().Subject;
+
+        month.Days.Single(d => d.Date == "2026-06-01").AverageGlucose.Should().Be(120);
+        month.Days.Single(d => d.Date == "2026-06-02").AverageGlucose.Should().Be(200);
+        // Four readings averaging 140, not the 160 an average of the two daily means would give.
+        month.Summary!.AvgGlucose.Should().Be(140);
+    }
+
+    [Fact]
+    public async Task GetPunchCardData_LeavesImplausibleReadingsOutOfTheDay()
+    {
+        var dayStart = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = new[]
+        {
+            new SensorGlucose { Timestamp = dayStart.AddHours(1), Mgdl = 100 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(2), Mgdl = 700 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(3), Mgdl = double.NaN },
+        };
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(readings);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateTimeInRange(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<GlycemicThresholds?>()))
+            .Returns(new TimeInRangeMetrics { Percentages = new TimeInRangePercentages { Target = 100 } });
+
+        var result = await CreateController().GetPunchCardData(
+            DateOnly.FromDateTime(dayStart),
+            DateOnly.FromDateTime(dayStart));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var day = ok.Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Single().Days.Single(d => d.Date == "2026-06-01");
+
+        day.TotalReadings.Should().Be(1);
+        day.AverageGlucose.Should().Be(100);
     }
 
     private void SetupPumps(params PatientDevice[] pumps)

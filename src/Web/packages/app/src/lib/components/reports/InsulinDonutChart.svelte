@@ -11,6 +11,7 @@
     boluses: Bolus[];
     scheduledBasal: number;
     additionalBasal: number;
+    totalInsulin: number;
     carbIntakes?: CarbIntake[];
     onBolusClick?: (bolus: Bolus) => void;
   }
@@ -19,6 +20,7 @@
     boluses,
     scheduledBasal,
     additionalBasal,
+    totalInsulin,
     carbIntakes = [],
     onBolusClick,
   }: Props = $props();
@@ -108,7 +110,6 @@
   const totalBolus = $derived(
     bolusTreatments.reduce((sum, t) => sum + (t.insulin ?? 0), 0)
   );
-  const total = $derived(totalBolus + scheduledBasal + additionalBasal);
 
   const keyItems = $derived(
     (
@@ -133,7 +134,7 @@
 </script>
 
 <div class="flex flex-col items-center">
-  {#if total > 0}
+  {#if totalInsulin > 0}
     <div class="h-[140px] w-[140px]">
       <PieChart
         data={segmentData}
@@ -160,7 +161,7 @@
             class="fill-muted-foreground tabular-nums text-xs"
           />
           <Text
-            value={`${total.toFixed(1)}U`}
+            value={`${totalInsulin.toFixed(1)}U`}
             textAnchor="middle"
             verticalAnchor="middle"
             dy={10}

@@ -19,6 +19,11 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
 
 vi.mock("$lib/api/user-preferences.remote", () => ({ updateDisplayPreferences: vi.fn() }));
 
+// The real loaders read catalogs that only a wuchale build compiles.
+vi.mock("wuchale/load-utils", () => ({ loadLocale: vi.fn() }));
+vi.mock("../../../../locales/main.loader.svelte.js", () => ({}));
+vi.mock("../../../../locales/js.loader.js", () => ({}));
+
 const { load } = await import("./+layout");
 
 type LoadEvent = Parameters<typeof load>[0];

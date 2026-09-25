@@ -243,7 +243,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             _logger.LogInformation(
                 "Broadcasting data update to {Group}: {DataType}",
                 group,
-                data?.GetType().Name ?? "null"
+                data.GetType().Name
             );
             await _dataHubContext
                 .Clients.Group(group)

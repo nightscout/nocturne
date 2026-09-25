@@ -149,8 +149,6 @@ public class TempBasalRepository : ITempBasalRepository
     /// inserted — making the operation idempotent for uploader retries. Tenant scoping is
     /// implicit via the DbContext's RLS-equivalent query filter. Mirrors SensorGlucoseRepository.
     /// </summary>
-    /// <param name="model">The temporary basal record to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The created or updated temporary basal record.</returns>
     public async Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -212,9 +210,6 @@ public class TempBasalRepository : ITempBasalRepository
     /// <summary>
     /// Updates an existing temporary basal record.
     /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated temporary basal record.</returns>
     public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -232,8 +227,6 @@ public class TempBasalRepository : ITempBasalRepository
     /// <summary>
     /// Deletes a temporary basal record by its unique identifier.
     /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
     public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
@@ -284,8 +277,6 @@ public class TempBasalRepository : ITempBasalRepository
     /// <summary>
     /// Deletes a temporary basal record by its legacy identifier.
     /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
     /// <remarks>
     /// Above <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> the ids are not
@@ -335,8 +326,6 @@ public class TempBasalRepository : ITempBasalRepository
     /// <summary>
     /// Performs a bulk creation of temporary basal records, handling deduplication.
     /// </summary>
-    /// <param name="records">The collection of records to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of created records.</returns>
     public async Task<BulkWrite<TempBasal>> BulkCreateAsync(
         IEnumerable<TempBasal> records,
