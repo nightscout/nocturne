@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -144,7 +145,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             if (threshold.AlertRuleId is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
             {
                 if (rule.ConditionType != AlertConditionType.TrackerAge
-                    || !AlertRuleRearm.SameTree(rule.ConditionParams, conditionParams))
+                    || !ConditionTreeEquality.Same(rule.ConditionParams, conditionParams))
                 {
                     changed.Add(rule.Id);
                     rule.ConditionParams = conditionParams;
@@ -307,7 +308,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .FirstOrDefault(r => r.ConditionType == AlertConditionType.Reservoir);
         if (existing is not null)
         {
-            if (!AlertRuleRearm.SameTree(existing.ConditionParams, conditionParams))
+            if (!ConditionTreeEquality.Same(existing.ConditionParams, conditionParams))
             {
                 changed.Add(existing.Id);
                 existing.ConditionParams = conditionParams;

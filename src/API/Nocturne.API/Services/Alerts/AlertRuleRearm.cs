@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -14,24 +12,6 @@ namespace Nocturne.API.Services.Alerts;
 /// <param name="gate">The in-process per-rule lease the tracker holds across read, decide and write.</param>
 public sealed class AlertRuleRearm(AlertRuleEvaluationGate gate)
 {
-    /// <summary>
-    /// Whether two stored condition trees say the same thing: equal as JSON, whatever their
-    /// formatting or key order. Blank is no tree. A tree that is not JSON compares as text.
-    /// </summary>
-    public static bool SameTree(string? stored, string? requested)
-    {
-        if (string.IsNullOrWhiteSpace(stored) || string.IsNullOrWhiteSpace(requested))
-            return string.IsNullOrWhiteSpace(stored) && string.IsNullOrWhiteSpace(requested);
-        try
-        {
-            return JsonNode.DeepEquals(JsonNode.Parse(stored), JsonNode.Parse(requested));
-        }
-        catch (JsonException)
-        {
-            return string.Equals(stored, requested, StringComparison.Ordinal);
-        }
-    }
-
     /// <summary>
     /// Clears the hold of each of <paramref name="ruleIds"/> that has one, after the rule changes
     /// are saved. Each clear is its own transaction, under the lease and transition lock the

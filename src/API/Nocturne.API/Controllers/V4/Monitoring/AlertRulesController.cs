@@ -243,8 +243,8 @@ public class AlertRulesController : ControllerBase
 
         // A tree equal as JSON keeps its stored text, so an edit that leaves it alone is not a
         // new condition version.
-        var sameBody = AlertRuleRearm.SameTree(rule.ConditionParams, conditionParamsJson);
-        var sameAutoResolve = AlertRuleRearm.SameTree(rule.AutoResolveParams, trees.AutoResolveParams);
+        var sameBody = ConditionTreeEquality.Same(rule.ConditionParams, conditionParamsJson);
+        var sameAutoResolve = ConditionTreeEquality.Same(rule.AutoResolveParams, trees.AutoResolveParams);
         var conditionsChanged = rule.IsEnabled != request.IsEnabled
             || rule.ConditionType != request.ConditionType
             || !sameBody

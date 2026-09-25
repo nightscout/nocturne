@@ -136,6 +136,25 @@ public class AlertRulesControllerRearmTests
     }
 
     [Fact]
+    public async Task A_corrected_number_token_is_saved_and_rearms_the_rule()
+    {
+        var (controller, db) = await CreateAsync();
+        var stored = await db.AlertRules.SingleAsync(r => r.Id == RuleId);
+        stored.ConditionType = AlertConditionType.SignalLoss;
+        stored.ConditionParams = """{"timeout_minutes":15.0}""";
+        await db.SaveChangesAsync();
+        var request = Unchanged();
+        request.ConditionType = AlertConditionType.SignalLoss;
+        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{"timeout_minutes":15}""");
+
+        await controller.UpdateRule(RuleId, request, CancellationToken.None);
+
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId)).ConditionParams
+            .Should().Be("""{"timeout_minutes":15}""");
+        (await AwaitingRearm(db)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task The_hold_is_cleared_only_once_an_evaluation_holding_the_rule_lets_go()
     {
         var gate = new AlertRuleEvaluationGate();
