@@ -189,6 +189,23 @@ public class AlertRulesControllerRearmTests
         (await AwaitingRearm(db)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task A_request_aborted_after_its_save_still_clears_the_hold()
+    {
+        var gate = new AlertRuleEvaluationGate();
+        var (controller, db) = await CreateAsync(gate);
+        var evaluation = await gate.AcquireAsync(RuleId, CancellationToken.None);
+        using var request = new CancellationTokenSource();
+
+        var toggle = controller.ToggleRule(RuleId, request.Token);
+        await Task.Delay(100);
+        await request.CancelAsync();
+        evaluation.Dispose();
+        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+
+        (await AwaitingRearm(db)).Should().BeFalse();
+    }
+
     private static async Task SetHold(NocturneDbContext db, bool held)
     {
         var state = await db.AlertTrackerState.SingleAsync(s => s.AlertRuleId == RuleId);

@@ -285,8 +285,10 @@ public class AlertRulesController : ControllerBase
         }
 
         await db.SaveChangesAsync(ct);
+        // Once the save lands the clear must follow it: an edit retried after an abort changes
+        // nothing, so it would not clear the hold.
         if (conditionsChanged)
-            await _rearm.ClearAsync([id], ct);
+            await _rearm.ClearAsync([id], CancellationToken.None);
 
         foreach (var field in check.Stripped)
         {
@@ -365,7 +367,8 @@ public class AlertRulesController : ControllerBase
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
-        await _rearm.ClearAsync([id], ct);
+        // See UpdateRule: the clear follows a landed save.
+        await _rearm.ClearAsync([id], CancellationToken.None);
 
         return Ok(MapToResponse(rule));
     }
