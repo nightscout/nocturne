@@ -236,7 +236,7 @@
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gmi: {
-      label: "GMI",
+      label: "Est. A1C",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d, 2)} pp`,
     },
