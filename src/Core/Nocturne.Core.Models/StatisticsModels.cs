@@ -1004,6 +1004,22 @@ public enum HourlyClockBasis
 }
 
 /// <summary>
+/// Why no tenant timezone was available, so the hours fell back to each reading's own offset.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<TimeZoneUnavailableReason>))]
+public enum TimeZoneUnavailableReason
+{
+    /// <summary>The tenant has no timezone set, or one that does not resolve; the owner can set one.</summary>
+    NotConfigured,
+
+    /// <summary>The request came through a public share, which cannot read the tenant's settings.</summary>
+    Share,
+
+    /// <summary>Looking the timezone up failed.</summary>
+    LookupFailed,
+}
+
+/// <summary>
 /// Which hours of the day go best and worst, bucketed on the tenant's local clock.
 /// </summary>
 public class HourlyPatterns
@@ -1061,6 +1077,12 @@ public class HourlyPatterns
     /// <see cref="HourlyClockBasis.ReadingOffsets"/>.
     /// </summary>
     public string? TimeZone { get; set; }
+
+    /// <summary>
+    /// Why <see cref="ClockBasis"/> is <see cref="HourlyClockBasis.ReadingOffsets"/>; null when the
+    /// hours followed the tenant's timezone.
+    /// </summary>
+    public TimeZoneUnavailableReason? TimeZoneUnavailableReason { get; set; }
 }
 
 /// <summary>

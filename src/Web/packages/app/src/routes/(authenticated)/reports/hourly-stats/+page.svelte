@@ -9,6 +9,7 @@
     HourlyClockBasis,
     HourlyComparison,
     HourlyExcursion,
+    TimeZoneUnavailableReason,
     type HourlyPattern,
   } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -37,14 +38,15 @@
   const minimumLowDays = $derived(report?.minimumLowDaysToList ?? 0);
   const onTenantClock = $derived(report?.clockBasis === HourlyClockBasis.TenantTimeZone);
 
-  // Band edges as the API classified on them; the labels follow the viewer's unit.
-  const edges = $derived({
-    veryLow: report?.thresholds?.veryLow ?? 0,
-    low: report?.thresholds?.low ?? 0,
-    targetTop: report?.thresholds?.targetTop ?? 0,
-    tightBottom: report?.thresholds?.tightTargetBottom ?? 0,
-    tightTop: report?.thresholds?.tightTargetTop ?? 0,
+  // Band edges as the API classified on them, or null when it sent none; copy that quotes an
+  // edge is left out then rather than printing a made-up number.
+  const edges = $derived.by(() => {
+    const t = report?.thresholds;
+    if (t?.veryLow == null || t.low == null || t.tightTargetTop == null || t.targetTop == null)
+      return null;
+    return { veryLow: t.veryLow, low: t.low, tightTop: t.tightTargetTop, targetTop: t.targetTop };
   });
+  const fallbackReason = $derived(report?.timeZoneUnavailableReason);
   const unranked = $derived(hours.filter((h) => !h.isRanked && (h.count ?? 0) > 0));
   const emptyHours = $derived(hours.filter((h) => (h.count ?? 0) === 0));
 
@@ -107,8 +109,8 @@
       </p>
       <p class="text-pretty">
         This report lays every day in the range over one 24-hour clock, so you can see
-        which hours of the day tend to go well and which tend to be harder. In range
-        means a reading between {bgRange(edges.low, edges.targetTop)}.
+        which hours of the day tend to go well and which tend to be harder.
+        {#if edges}In range means a reading between {bgRange(edges.low, edges.targetTop)}.{/if}
       </p>
     </header>
 
@@ -190,7 +192,7 @@
               <div class="bg-card">
                 {@render column(
                   "Most time below range",
-                  `The hours with the largest share of readings under ${bg(edges.low)} ${bgLabel()}, among those that went below range on at least ${minimumLowDays} days.`
+                  `The hours with the largest share of readings ${edges ? `under ${bg(edges.low)} ${bgLabel()}` : "below range"}, among those that went below range on at least ${minimumLowDays} days.`
                 )}
                 {#if mostBelow.length > 0}
                   <ol class="divide-y">
@@ -199,14 +201,15 @@
                         hour,
                         percent(hour.belowRange, 1),
                         "below range",
-                        `${percent(hour.timeInRange?.veryLow, 1)} under ${bg(edges.veryLow)} ${bgLabel()}`
+                        edges
+                          ? `${percent(hour.timeInRange?.veryLow, 1)} under ${bg(edges.veryLow)} ${bgLabel()}`
+                          : `${percent(hour.timeInRange?.veryLow, 1)} very low`
                       )}
                     {/each}
                   </ol>
                 {:else}
                   <p class="px-4 py-3 text-sm text-muted-foreground">
-                    No compared hour had a reading under {bg(edges.low)} {bgLabel()} on
-                    {minimumLowDays} or more days.
+                    No compared hour went below range on {minimumLowDays} or more days.
                   </p>
                 {/if}
               </div>
@@ -304,22 +307,34 @@
           <div class="grid gap-6 text-sm @3xl:grid-cols-3 print:grid-cols-3">
             <div class="space-y-2">
               <h3 class="font-semibold">How to read this report</h3>
-              <p class="text-muted-foreground">
-                In range is {bgRange(edges.low, edges.targetTop)}, the international
-                consensus target. Below range is under {bg(edges.low)} {bgLabel()}, and
-                very low is under {bg(edges.veryLow)} {bgLabel()}. Tight range,
-                {bgRange(edges.tightBottom, edges.tightTop)}, is a narrower part of the
-                target that some people and care teams also look at.
-              </p>
+              {#if edges}
+                <p class="text-muted-foreground">
+                  In range is {bgRange(edges.low, edges.targetTop)}, the international
+                  consensus target. Below range is under {bg(edges.low)} {bgLabel()}, and
+                  very low is under {bg(edges.veryLow)} {bgLabel()}. Tight range,
+                  {bgRange(edges.low, edges.tightTop)}, is a narrower part of the target
+                  that some people and care teams also look at.
+                </p>
+              {/if}
               <p class="text-muted-foreground">
                 {#if onTenantClock}
-                  Hours follow the clock of the time zone in your profile settings
-                  ({report.timeZone}).
+                  Hours follow the time zone set in the profile settings ({report.timeZone}).
                 {:else}
-                  No time zone is available for this data, so each reading is placed at
-                  the local time the device that recorded it reported. If readings came
-                  from devices set to different time zones, some hours may be off. Setting
-                  a time zone in the profile settings fixes this.
+                  {#if fallbackReason === TimeZoneUnavailableReason.Share}
+                    A shared link cannot see the time zone this data belongs to,
+                  {:else if fallbackReason === TimeZoneUnavailableReason.LookupFailed}
+                    The time zone for this data could not be loaded just now,
+                  {:else}
+                    No time zone is set in the profile settings for this data,
+                  {/if}
+                  so each reading is placed at the local time the device that recorded it
+                  reported. If readings came from devices set to different time zones, some
+                  hours may be off.
+                  {#if fallbackReason === TimeZoneUnavailableReason.NotConfigured}
+                    Setting a time zone in the profile settings fixes this.
+                  {:else if fallbackReason === TimeZoneUnavailableReason.LookupFailed}
+                    Reloading the report later may fix this.
+                  {/if}
                 {/if}
               </p>
             </div>

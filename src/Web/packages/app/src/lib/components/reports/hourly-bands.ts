@@ -24,24 +24,35 @@ const band = (key: HourlyBandKey, label: string, texture: GlucoseRange): HourlyB
   props: { class: patternClass(texture) },
 });
 
+const edge = (mgdl: number | undefined) => (mgdl == null ? null : String(bg(mgdl)));
+
+const span = (low: number | undefined, high: number | undefined) => {
+  const from = edge(low);
+  const to = edge(high);
+  return from && to ? `${from}-${to}` : "";
+};
+
+const beyond = (sign: "<" | ">", mgdl: number | undefined) => {
+  const at = edge(mgdl);
+  return at ? `${sign}${at}` : "";
+};
+
 /**
  * The per-hour bands the API partitions `AveragedStats.timeInRange` on, lowest
- * first so a stack reads upward, labelled from the edges the API says it used.
- * Built per call: the labels follow the viewer's glucose unit. Without
- * thresholds the labels are empty, for marks that show no key.
+ * first so a stack reads upward. The edges mirror the API's scale: the tight
+ * band starts at `low`, and the high band at `targetTop`. Built per call, as
+ * the labels follow the viewer's glucose unit. A label whose edge the API did
+ * not send is empty rather than a made-up number.
  */
 export function hourlyBandSeries(thresholds?: GlycemicThresholds): HourlyBandSeries[] {
-  const edge = (mgdl: number | undefined) => (mgdl == null ? "" : String(bg(mgdl)));
-  const span = (low: number | undefined, high: number | undefined) =>
-    thresholds ? `${edge(low)}-${edge(high)}` : "";
   const t = thresholds;
 
   return [
-    band("veryLow", t ? `<${edge(t.veryLow)}` : "", "very-low"),
+    band("veryLow", beyond("<", t?.veryLow), "very-low"),
     band("low", span(t?.veryLow, t?.low), "low"),
-    band("tightTarget", span(t?.tightTargetBottom, t?.tightTargetTop), "tight-range"),
+    band("tightTarget", span(t?.low, t?.tightTargetTop), "tight-range"),
     band("aboveTightTarget", span(t?.tightTargetTop, t?.targetTop), "in-range"),
     band("high", span(t?.targetTop, t?.veryHigh), "high"),
-    band("veryHigh", t ? `>${edge(t.veryHigh)}` : "", "very-high"),
+    band("veryHigh", beyond(">", t?.veryHigh), "very-high"),
   ];
 }

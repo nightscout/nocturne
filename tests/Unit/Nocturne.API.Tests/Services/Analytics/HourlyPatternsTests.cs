@@ -38,6 +38,15 @@ public class HourlyPatternsTests
             .Select((e, i) => { if (i < outOfRange) e.Mgdl = value; return e; })
             .ToList();
 
+    private static void AssertColumnsApart(HourlyPatterns result)
+    {
+        foreach (var best in result.BestHours)
+        foreach (var worst in result.WorstHours)
+            (best.InRange - worst.InRange).Should().BeGreaterThanOrEqualTo(
+                StatisticsService.HourlyPatternsMinimumSpread,
+                "hour {0} is named best and hour {1} worst", best.Hour, worst.Hour);
+    }
+
     #region Timezone
 
     [Fact]
@@ -73,6 +82,7 @@ public class HourlyPatternsTests
     {
         var result = _service.CalculateHourlyPatterns([], TimeZoneInfo.Utc);
 
+        result.Thresholds.Should().BeSameAs(_service.HourlyBandThresholds);
         result.Thresholds.Should().BeEquivalentTo(new GlycemicThresholds());
     }
 
@@ -313,7 +323,7 @@ public class HourlyPatternsTests
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
         result.WorstHours.Select(h => h.Hour).Should().Equal(5);
-        result.BestHours.Select(h => h.Hour).Should().Equal(0, 1, 2);
+        result.BestHours.Should().BeEmpty("the five full hours tie one another past the list's end");
     }
 
     [Fact]
@@ -325,11 +335,11 @@ public class HourlyPatternsTests
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
         result.BestHours.Select(h => h.Hour).Should().Equal(0);
-        result.WorstHours.Select(h => h.Hour).Should().Equal(3, 4, 5);
+        result.WorstHours.Should().BeEmpty("the five half hours tie one another past the list's end");
     }
 
     [Fact]
-    public void CalculateHourlyPatterns_NeverNamesATiedMiddleHourBothBestAndWorst()
+    public void CalculateHourlyPatterns_NamesNoHourWhoseTimeInRangeTiesAnHourInTheOtherColumn()
     {
         // 100%, then four hours tied at 75%, then 50%.
         var entries = RankableHour(0, 12)
@@ -338,9 +348,63 @@ public class HourlyPatternsTests
 
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
-        result.BestHours.Select(h => h.Hour).Should().Equal(0, 1, 2);
-        result.WorstHours.Select(h => h.Hour).Should().Equal(5, 3, 4);
-        result.BestHours.Select(h => h.Hour).Should().NotIntersectWith(result.WorstHours.Select(h => h.Hour));
+        result.BestHours.Select(h => h.Hour).Should().Equal(0);
+        result.WorstHours.Select(h => h.Hour).Should().Equal(5);
+        AssertColumnsApart(result);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_KeepsEveryNamedBestHourTheMinimumSpreadAboveEveryNamedWorstHour()
+    {
+        // 100%, 98.8%, 97.6% and 92.9%: 97.6 sits within the spread of both best hours.
+        var entries = RankableHourWith(0, 0)
+            .Concat(RankableHourWith(1, 1))
+            .Concat(RankableHourWith(2, 2))
+            .Concat(RankableHourWith(3, 6));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.BestHours.Select(h => h.Hour).Should().Equal(0, 1);
+        result.WorstHours.Select(h => h.Hour).Should().Equal(3);
+        AssertColumnsApart(result);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_TrimsTheMiddleUntilTheColumnsAreTheMinimumSpreadApart()
+    {
+        // Six hours at 100, 97.6, 96.4, 95.2, 94.0 and 90.5%.
+        var entries = new[] { 0, 2, 3, 4, 5, 8 }
+            .SelectMany((outOfRange, hour) => RankableHourWith(hour, outOfRange));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.BestHours.Should().NotBeEmpty();
+        result.WorstHours.Should().NotBeEmpty();
+        AssertColumnsApart(result);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_DoesNotNameHoursThatTieTheFirstHourLeftOffTheList()
+    {
+        // 23 hours tied at 83.3%: which three are "most in range" would come down to the clock.
+        var entries = Enumerable.Range(0, 23).SelectMany(h => RankableHour(h, 10))
+            .Concat(RankableHour(23, 6));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.BestHours.Should().BeEmpty();
+        result.WorstHours.Select(h => h.Hour).Should().Equal(23);
+        result.Comparison.Should().Be(HourlyComparison.Ranked);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_DoesNotListBelowRangeHoursThatTieTheFirstHourLeftOff()
+    {
+        var entries = Enumerable.Range(0, 4).SelectMany(h => RankableHour(h, 10, outOfRange: 60));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.MostBelowRangeHours.Should().BeEmpty();
     }
 
     [Fact]

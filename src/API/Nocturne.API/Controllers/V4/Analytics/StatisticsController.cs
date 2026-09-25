@@ -72,6 +72,7 @@ public class StatisticsController : ControllerBase
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ILogger<StatisticsController> _logger;
 
     private string TenantCacheId =>
         _tenantAccessor.Context?.TenantId.ToString()
@@ -97,7 +98,8 @@ public class StatisticsController : ControllerBase
         IBasalInjectionRepository basalInjectionRepository,
         IActiveProfileResolver activeProfileResolver,
         ICanonicalGlucoseService canonicalGlucose,
-        ICategoryReadContext categoryReadContext
+        ICategoryReadContext categoryReadContext,
+        ILogger<StatisticsController> logger
     )
     {
         _statisticsService = statisticsService;
@@ -120,6 +122,7 @@ public class StatisticsController : ControllerBase
         _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
         _categoryReadContext = categoryReadContext;
+        _logger = logger;
     }
 
     private readonly record struct InsulinRecords(
@@ -292,8 +295,8 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
-        return Ok(_statisticsService.CalculateAveragedStats(entries, tz));
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
+        return Ok(_statisticsService.CalculateAveragedStats(entries, clock.Zone));
     }
 
     /// <summary>
@@ -464,15 +467,19 @@ public class StatisticsController : ControllerBase
             });
         }
 
-        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
 
         var result = new ReportAnalysisResult
         {
             Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
-            AveragedStats = _statisticsService.CalculateAveragedStats(entries, tz).ToList(),
-            HourlyBandThresholds = new GlycemicThresholds(),
+            AveragedStats = _statisticsService.CalculateAveragedStats(entries, clock.Zone).ToList(),
+            HourlyBandThresholds = _statisticsService.HourlyBandThresholds,
             ContributingDevices = contributingDevices,
-            PersonalRange = await CalculatePersonalRangeAsync(entries, tz ?? TimeZoneInfo.Utc, cancellationToken),
+            // A failed lookup leaves the personal range out, as a failure inside it always has; an
+            // unset zone evaluates the schedule on UTC, as it did before the zone was resolved here.
+            PersonalRange = clock.Reason == TimeZoneUnavailableReason.LookupFailed
+                ? null
+                : await CalculatePersonalRangeAsync(entries, clock.Zone ?? TimeZoneInfo.Utc, cancellationToken),
         };
         return Ok(result);
     }
@@ -502,7 +509,10 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tz = await ResolveTenantTimeZoneAsync(cancellationToken) ?? TimeZoneInfo.Utc;
+        // Unlike the hourly reports this one has no per-reading fallback, so a failed lookup fails
+        // the request rather than bucketing a database outage onto UTC.
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
+            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken));
 
         return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
     }
@@ -532,31 +542,49 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
 
-        return Ok(_statisticsService.CalculateHourlyPatterns(entries, tz));
+        var patterns = _statisticsService.CalculateHourlyPatterns(entries, clock.Zone);
+        patterns.TimeZoneUnavailableReason = clock.Reason;
+        return Ok(patterns);
     }
 
+    private readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailableReason? Reason);
+
     /// <summary>
-    /// The tenant's timezone, or null when none is configured, it does not resolve, or the lookup
-    /// fails. A public share always takes the null path: the therapy settings the zone lives in are
-    /// not share-governed, so RLS hides them. Null rather than UTC, so the hourly statistics fall
-    /// back to each reading's own offset instead of shifting every hour for those callers.
+    /// The tenant's timezone, or no zone and why not: none is set or it does not resolve, the
+    /// request is a public share, or the lookup threw. No zone rather than UTC, so the hourly
+    /// statistics fall back to each reading's own offset instead of shifting every hour.
+    /// <para>
+    /// A share normally gets no zone, because RLS hides the therapy settings it lives in from share
+    /// connections. It is not guaranteed: <see cref="ITherapySettingsResolver"/> caches briefly by
+    /// tenant, so a share arriving just after the owner can be served the owner's zone.
+    /// </para>
     /// </summary>
-    private async Task<TimeZoneInfo?> ResolveTenantTimeZoneAsync(CancellationToken ct)
+    private async Task<TenantClock> ResolveTenantTimeZoneAsync(CancellationToken ct)
     {
         try
         {
             var id = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
-            return TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
+            if (TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz))
+                return new TenantClock(tz, null);
+
+            return new TenantClock(
+                null,
+                _categoryReadContext.IsShare
+                    ? TimeZoneUnavailableReason.Share
+                    : TimeZoneUnavailableReason.NotConfigured);
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            _logger.LogWarning(
+                ex,
+                "Tenant timezone lookup failed; hourly statistics fall back to each reading's own offset");
+            return new TenantClock(null, TimeZoneUnavailableReason.LookupFailed);
         }
     }
 

@@ -1211,6 +1211,9 @@ public class StatisticsService : IStatisticsService
 
     private static readonly GlycemicThresholds Consensus = new();
 
+    /// <inheritdoc/>
+    public GlycemicThresholds HourlyBandThresholds => Consensus;
+
     /// <summary>The widest UTC offset any zone uses; a recorded offset beyond it is treated as none.</summary>
     private const int MaxUtcOffsetMinutes = 14 * 60;
 
@@ -1731,8 +1734,8 @@ public class StatisticsService : IStatisticsService
             hours.Add(pattern);
         }
 
-        // One total order, best first. Best is its head and worst its tail, and with at most half
-        // the ranked hours on each side the two never share an hour, however many tie.
+        // One order, best first. The hour only fixes where equal hours sit in it; which hours are
+        // named never depends on it (see SelectBestAndWorst).
         var ranked = hours
             .Where(h => h.IsRanked)
             .OrderByDescending(h => h.InRange)
@@ -1740,32 +1743,19 @@ public class StatisticsService : IStatisticsService
             .ThenBy(h => h.Hour)
             .ToList();
 
-        var listLength = Math.Min(HourlyPatternsListLength, ranked.Count / 2);
-        var spread = ranked.Count > 0 ? ranked[0].InRange - ranked[^1].InRange : 0;
-        var farEnoughApart = spread >= HourlyPatternsMinimumSpread;
+        var (best, worst) = SelectBestAndWorst(ranked);
 
-        // An hour that ties the other end's time in range is dropped rather than named as better
-        // or worse than it.
-        var best = farEnoughApart
-            ? ranked.Take(listLength).Where(h => h.InRange > ranked[^1].InRange).ToList()
-            : [];
-
-        var worst = farEnoughApart
-            ? ranked
-                .TakeLast(listLength)
-                .Where(h => h.InRange < ranked[0].InRange)
-                .OrderBy(h => h.InRange)
-                .ThenByDescending(h => h.BelowRange)
-                .ThenBy(h => h.Hour)
-                .ToList()
-            : [];
-
-        var mostBelow = ranked
+        var belowCandidates = ranked
             .Where(h => h.BelowRange > 0 && lowDays[h.Hour] >= HourlyPatternsMinimumLowDays)
             .OrderByDescending(h => h.BelowRange)
             .ThenBy(h => h.Hour)
-            .Take(HourlyPatternsListLength)
             .ToList();
+        var belowCount = Math.Min(HourlyPatternsListLength, belowCandidates.Count);
+        while (belowCount > 0
+            && belowCount < belowCandidates.Count
+            && belowCandidates[belowCount - 1].BelowRange == belowCandidates[belowCount].BelowRange)
+            belowCount--;
+        var mostBelow = belowCandidates.Take(belowCount).ToList();
 
         return new HourlyPatterns
         {
@@ -1782,10 +1772,92 @@ public class StatisticsService : IStatisticsService
             MinimumReadingsToRank = HourlyPatternsMinimumReadings,
             MinimumSpreadToRank = HourlyPatternsMinimumSpread,
             MinimumLowDaysToList = HourlyPatternsMinimumLowDays,
-            Thresholds = new GlycemicThresholds(),
+            Thresholds = Consensus,
             ClockBasis = tenantTimeZone is null ? HourlyClockBasis.ReadingOffsets : HourlyClockBasis.TenantTimeZone,
             TimeZone = tenantTimeZone?.Id,
         };
+    }
+
+    /// <summary>
+    /// The best hours from the head of <paramref name="ranked"/> and the worst from its tail, each
+    /// at most <see cref="HourlyPatternsListLength"/> and at most half the hours, so the two never
+    /// share an hour. From there the lists shrink from their inner ends until three rules hold:
+    /// <list type="bullet">
+    /// <item>No listed hour ties, on time in range and time below range, the first hour left off
+    /// its list; which of two equal hours makes the list would otherwise come down to the clock.</item>
+    /// <item>Every best hour beats the worst ranked hour, and every worst hour trails the best,
+    /// by at least <see cref="HourlyPatternsMinimumSpread"/>.</item>
+    /// <item>Every best hour beats every worst hour by at least the same spread. When they do not,
+    /// the longer list gives up its innermost hour, or both do when they are the same length.</item>
+    /// </list>
+    /// Either list may end up empty while the other is not: one hour well below 23 equal ones is
+    /// named worst with no best.
+    /// </summary>
+    private static (List<HourlyPattern> Best, List<HourlyPattern> Worst) SelectBestAndWorst(
+        List<HourlyPattern> ranked
+    )
+    {
+        var count = ranked.Count;
+        var bestCount = Math.Min(HourlyPatternsListLength, count / 2);
+        var worstCount = bestCount;
+
+        static bool Ties(HourlyPattern a, HourlyPattern b) =>
+            a.InRange == b.InRange && a.BelowRange == b.BelowRange;
+
+        HourlyPattern InnermostBest() => ranked[bestCount - 1];
+        HourlyPattern InnermostWorst() => ranked[count - worstCount];
+
+        bool changed;
+        do
+        {
+            changed = false;
+
+            if (bestCount > 0 && Ties(InnermostBest(), ranked[bestCount]))
+            {
+                bestCount--;
+                changed = true;
+            }
+            else if (worstCount > 0 && Ties(InnermostWorst(), ranked[count - worstCount - 1]))
+            {
+                worstCount--;
+                changed = true;
+            }
+            else if (bestCount > 0 && InnermostBest().InRange - ranked[^1].InRange < HourlyPatternsMinimumSpread)
+            {
+                bestCount--;
+                changed = true;
+            }
+            else if (worstCount > 0 && ranked[0].InRange - InnermostWorst().InRange < HourlyPatternsMinimumSpread)
+            {
+                worstCount--;
+                changed = true;
+            }
+            else if (bestCount > 0
+                && worstCount > 0
+                && InnermostBest().InRange - InnermostWorst().InRange < HourlyPatternsMinimumSpread)
+            {
+                if (bestCount > worstCount)
+                    bestCount--;
+                else if (worstCount > bestCount)
+                    worstCount--;
+                else
+                {
+                    bestCount--;
+                    worstCount--;
+                }
+                changed = true;
+            }
+        } while (changed);
+
+        var best = ranked.Take(bestCount).ToList();
+        var worst = ranked
+            .Skip(count - worstCount)
+            .OrderBy(h => h.InRange)
+            .ThenByDescending(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .ToList();
+
+        return (best, worst);
     }
 
     private readonly record struct LocalReading(double Mgdl, DateOnly Day);

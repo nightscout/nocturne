@@ -225,6 +225,12 @@ public interface IStatisticsService
     );
 
     /// <summary>
+    /// The band edges <see cref="CalculateAveragedStats"/> and <see cref="CalculateHourlyPatterns"/>
+    /// classify each reading on: the instance they use, not a copy of it.
+    /// </summary>
+    GlycemicThresholds HourlyBandThresholds { get; }
+
+    /// <summary>
     /// The hourly-patterns report: each hour's statistics and split around the consensus range,
     /// with the best, worst and most-below-range hours among those with enough data to rank.
     /// </summary>
