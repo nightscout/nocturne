@@ -277,7 +277,7 @@ public class StatisticsServiceClinicalAccuracyTests
         // 5 entries at 300 mg/dL (severe high: > 250)
         entries.AddRange(Enumerable.Range(0, 5).Select(_ => new SensorGlucose { Mgdl = 300 }));
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
         result.Percentages.VeryLow.Should().Be(5);
         result.Percentages.Low.Should().Be(10);
@@ -351,7 +351,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 60 },  // low (54-63)
         };
 
-        var result = _sut.CalculateTimeInRange(entries, thresholds);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries), thresholds);
 
         // 1 of 3 in target = 33.33%
         result.Percentages.Target.Should().BeApproximately(33.33, 0.1);
@@ -369,7 +369,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 250 }, // > 180 and <= 250 → High
         };
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
         result.Percentages.VeryLow.Should().Be(0);
         result.Percentages.Low.Should().Be(25);     // 1/4 = 25%
@@ -1268,7 +1268,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 160 },
         };
 
-        var tir = _sut.CalculateTimeInRange(entries);
+        var tir = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
         var basicStats = _sut.CalculateBasicStats(new double[] { 80, 100, 120, 140, 160 });
 
         tir.RangeStats.Target.StandardDeviation.Should().Be(
@@ -1369,6 +1369,18 @@ public class StatisticsServiceClinicalAccuracyTests
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// The readings, each stamped five minutes after the one before: readings sharing a timestamp
+    /// are one instant, so percentage tests need every reading at its own time.
+    /// </summary>
+    private static SensorGlucose[] SpacedFiveMinutesApart(IEnumerable<SensorGlucose> readings)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        return readings
+            .Select((reading, i) => new SensorGlucose { Mgdl = reading.Mgdl, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
+    }
 
     private static SensorGlucose[] EveryFiveMinutes(params int[] mgdl)
     {

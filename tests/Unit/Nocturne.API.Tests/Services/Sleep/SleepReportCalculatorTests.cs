@@ -317,6 +317,26 @@ public class SleepReportCalculatorTests
         hypo.LowestBg.Should().Be(65);
     }
 
+    [Theory]
+    [InlineData(3)]
+    [InlineData(30)]
+    public void ComputeHypoEvents_FindsALowUploadedTwiceSecondsApart(int offsetSeconds)
+    {
+        var session = MakeSession();
+        var t0 = session.StartTime.AddMinutes(60);
+        var glucose = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            glucose.Add(MakeGlucose(t0.AddMinutes(i * 5), 60));
+            glucose.Add(MakeGlucose(t0.AddMinutes(i * 5).AddSeconds(offsetSeconds), 60));
+        }
+        glucose.Add(MakeGlucose(t0.AddMinutes(120), 100));
+
+        var result = API.Services.Sleep.SleepReportCalculator.ComputeHypoEvents(session, glucose, [], _thresholds);
+
+        result.Should().ContainSingle().Which.DurationMinutes.Should().Be(120);
+    }
+
     [Fact]
     public void ComputeHypoEvents_FindsTheSameLowsAsTheTimeInRangeEpisodes()
     {

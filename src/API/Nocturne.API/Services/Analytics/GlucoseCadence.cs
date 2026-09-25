@@ -17,9 +17,13 @@ internal static class GlucoseCadence
     internal const double DefaultCadenceMinutes = 5;
 
     /// <summary>
-    /// How many intervals either side of a reading its local cadence is taken over.
+    /// How many intervals either side of a reading its local cadence is taken over. Even, so that
+    /// when two uploaders interleave, and short and long intervals alternate, each side holds as
+    /// many of one as of the other and the median falls between them. An odd radius gives the
+    /// intervals on either side of a long one a majority of short ones, and caps its credit at
+    /// twice the short one.
     /// </summary>
-    private const int LocalCadenceRadius = 3;
+    private const int LocalCadenceRadius = 4;
 
     /// <summary>
     /// The slowest cadence any CGM reports at: fifteen-minute history. No local cadence is taken
@@ -36,11 +40,29 @@ internal static class GlucoseCadence
     private const double MaxCadenceEvidenceMinutes = MaxCadenceMinutes + 2;
 
     /// <summary>
-    /// One reading per instant of a time-ordered series, chosen the same way whatever order
-    /// readings sharing a timestamp arrive in: the lowest if any is below range, otherwise the
-    /// highest if any is above range, otherwise the lowest. The choice leans towards the
-    /// reading that would matter more if it were the true one, which for disagreeing sources is
-    /// a low.
+    /// The shortest interval that counts as evidence of a cadence: three quarters of the fastest
+    /// cadence any CGM reports at, one minute. A shorter interval is two uploads of readings
+    /// that are not a sensor's consecutive readings, and a series of them would otherwise set a
+    /// cadence of seconds and cap every reading's credit there.
+    /// </summary>
+    private const double MinCadenceEvidenceMinutes = 0.75;
+
+    /// <summary>
+    /// How far after the first reading of an instant another reading still belongs to it: half
+    /// the fastest cadence, one minute. Two uploaders posting one reading land seconds apart and
+    /// fold into one instant, while a one-minute sensor's next reading, even with the few seconds
+    /// of jitter uploads show, is twice as far away and never folds. The window is measured from
+    /// the instant's first reading rather than chained, so a dense stream cannot fold into one.
+    /// </summary>
+    private const long InstantWindowMillis = 30_000;
+
+    /// <summary>
+    /// One reading per instant of a time-ordered series: readings within
+    /// <see cref="InstantWindowMillis"/> of an instant's first reading are one instant. The reading
+    /// is chosen the same way whatever order they arrive in: the lowest if any is below range,
+    /// otherwise the highest if any is above range, otherwise the lowest. The choice leans towards
+    /// the reading that would matter more if it were the true one, which for disagreeing sources
+    /// is a low.
     /// </summary>
     internal static List<SensorGlucose> Instants(
         IList<SensorGlucose> sortedEntries,
@@ -51,8 +73,11 @@ internal static class GlucoseCadence
         for (var first = 0; first < sortedEntries.Count;)
         {
             var last = first;
-            while (last + 1 < sortedEntries.Count && sortedEntries[last + 1].Mills == sortedEntries[first].Mills)
+            while (last + 1 < sortedEntries.Count
+                && sortedEntries[last + 1].Mills - sortedEntries[first].Mills <= InstantWindowMillis)
+            {
                 last++;
+            }
 
             SensorGlucose? lowest = null, highest = null, lowestBelow = null, highestAbove = null;
             for (var j = first; j <= last; j++)
@@ -150,8 +175,8 @@ internal static class GlucoseCadence
 
     /// <summary>
     /// The median of the intervals within <see cref="LocalCadenceRadius"/> of the interval following
-    /// reading <paramref name="index"/> that are evidence of a cadence (elapsed, and no longer than
-    /// <see cref="MaxCadenceEvidenceMinutes"/>), capped at <see cref="MaxCadenceMinutes"/>. The
+    /// reading <paramref name="index"/> that are evidence of a cadence (between
+    /// <see cref="MinCadenceEvidenceMinutes"/> and <see cref="MaxCadenceEvidenceMinutes"/>), capped at <see cref="MaxCadenceMinutes"/>. The
     /// interval itself is excluded so a gap does not vouch for itself. With no evidence nearby,
     /// <see cref="DefaultCadenceMinutes"/>. That includes the first reading of a two-reading series,
     /// whose only nearby interval is its own: on a fifteen-minute sensor it is judged, and
@@ -163,7 +188,7 @@ internal static class GlucoseCadence
         for (var j = index - LocalCadenceRadius; j <= index + LocalCadenceRadius; j++)
         {
             if (j != index && j >= 0 && j < intervals.Length
-                && intervals[j] > 0 && intervals[j] <= MaxCadenceEvidenceMinutes)
+                && intervals[j] >= MinCadenceEvidenceMinutes && intervals[j] <= MaxCadenceEvidenceMinutes)
             {
                 around.Add(intervals[j]);
             }

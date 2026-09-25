@@ -41,8 +41,8 @@ internal static class GlucoseEpisodeDetector
 
     /// <summary>
     /// The episodes in <paramref name="sortedEntries"/>, which must be plausible readings in time
-    /// order, in the order they began. Readings sharing a timestamp are taken as the one reading
-    /// <see cref="GlucoseCadence.Instants"/> chooses for that instant.
+    /// order, in the order they began. Readings of one instant are taken as the one reading
+    /// <see cref="GlucoseCadence.Instants"/> chooses for it.
     /// </summary>
     internal static List<GlucoseEpisode> Detect(
         IList<SensorGlucose> sortedEntries,

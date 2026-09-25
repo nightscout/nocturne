@@ -220,11 +220,11 @@ public class StatisticsServiceTests
         var entries = new[]
         {
             new SensorGlucose { Mgdl = 50, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime }, // Very low
-            new SensorGlucose { Mgdl = 65, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime }, // Low
-            new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2).UtcDateTime }, // Target
-            new SensorGlucose { Mgdl = 150, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 3).UtcDateTime }, // Target
-            new SensorGlucose { Mgdl = 200, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 4).UtcDateTime }, // High
-            new SensorGlucose { Mgdl = 300, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 5).UtcDateTime }, // Very high
+            new SensorGlucose { Mgdl = 65, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1 * 300_000).UtcDateTime }, // Low
+            new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2 * 300_000).UtcDateTime }, // Target
+            new SensorGlucose { Mgdl = 150, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 3 * 300_000).UtcDateTime }, // Target
+            new SensorGlucose { Mgdl = 200, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 4 * 300_000).UtcDateTime }, // High
+            new SensorGlucose { Mgdl = 300, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 5 * 300_000).UtcDateTime }, // Very high
         };
 
         // Act
@@ -247,8 +247,8 @@ public class StatisticsServiceTests
         var entries = new[]
         {
             new SensorGlucose { Mgdl = 100, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now).UtcDateTime },
-            new SensorGlucose { Mgdl = 120, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1).UtcDateTime },
-            new SensorGlucose { Mgdl = 140, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2).UtcDateTime },
+            new SensorGlucose { Mgdl = 120, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 1 * 300_000).UtcDateTime },
+            new SensorGlucose { Mgdl = 140, Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(now + 2 * 300_000).UtcDateTime },
         };
         var customThresholds = new GlycemicThresholds { TargetBottom = 90, TargetTop = 130 };
 
@@ -579,6 +579,93 @@ public class StatisticsServiceTests
         result.Durations.Low.Should().Be(120);
         result.Durations.Target.Should().Be(0);
         result.Episodes.Low.Should().Be(1);
+        result.Percentages.Low.Should().Be(100);
+        result.Percentages.Target.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(12)]
+    [InlineData(30)]
+    public void CalculateTimeInRange_Episodes_FoldALowUploadedTwiceSecondsApartIntoOneReading(int offsetSeconds)
+    {
+        var result = _statisticsService.CalculateTimeInRange(TwoUploaderLow(offsetSeconds));
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeApproximately(120, 0.5);
+        result.Percentages.Low.Should().BeApproximately(24.0 / 28 * 100, 1e-9);
+    }
+
+    [Theory]
+    [InlineData(31)]
+    [InlineData(45)]
+    [InlineData(60)]
+    [InlineData(90)]
+    public void CalculateTimeInRange_Episodes_FindALowUploadedTwiceTooFarApartToFold(int offsetSeconds)
+    {
+        // Interleaved uploads outside the fold window: the episode is found, and only the ends of
+        // the series, where the cadence window sees one side, lose a few minutes.
+        var result = _statisticsService.CalculateTimeInRange(TwoUploaderLow(offsetSeconds));
+
+        result.Episodes.Low.Should().Be(1);
+        result.Durations.Low.Should().BeInRange(110, 121);
+    }
+
+    /// <summary>
+    /// A two-hour low at five-minute cadence posted by two uploaders, the second
+    /// <paramref name="offsetSeconds"/> behind the first, then twenty minutes in range.
+    /// </summary>
+    private static List<SensorGlucose> TwoUploaderLow(int offsetSeconds)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            var at = start.AddMinutes(i * 5);
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = at, DataSource = "xdrip" });
+            entries.Add(new SensorGlucose { Mgdl = 60, Timestamp = at.AddSeconds(offsetSeconds), DataSource = "share" });
+        }
+        for (var i = 0; i < 4; i++)
+            entries.Add(new SensorGlucose { Mgdl = 100, Timestamp = start.AddMinutes(120 + i * 5) });
+
+        return entries;
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Durations_KeepEveryReadingOfAOneMinuteSensorWithJitter()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable.Range(0, 120)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = 100,
+                Timestamp = start.AddSeconds(i * 60 + (i % 2 == 0 ? 4 : -4)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Durations.Target.Should().BeApproximately(120, 0.5);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotManufactureALowFromAOneMinuteSensorAtTheThreshold()
+    {
+        // Alternating 69 and 71 every minute: half the time low, never fifteen minutes of it.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        var entries = Enumerable.Range(0, 120)
+            .Select(i => new SensorGlucose
+            {
+                Mgdl = i % 2 == 0 ? 69 : 71,
+                Timestamp = start.AddSeconds(i * 60 + (i % 3 == 0 ? 5 : 0)),
+            })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+        result.Percentages.Low.Should().Be(50);
+        result.Durations.Low.Should().BeApproximately(60, 1);
     }
 
     [Theory]

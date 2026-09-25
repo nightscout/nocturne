@@ -1207,7 +1207,11 @@ public class StatisticsService : IStatisticsService
         // from and the minutes derived from the entry timestamps line up with it.
         var entriesList = entries.Where(IsPlausibleReading).OrderBy(e => e.Mills).ToList();
 
-        var glucoseValues = ExtractGlucoseValues(entriesList).ToList();
+        // Every figure here counts instants: readings two uploaders posted of one moment were never
+        // two readings, so each instant counts once, as the reading GlucoseCadence.Instants
+        // chooses for it.
+        var instants = GlucoseCadence.Instants(entriesList, thresholds);
+        var glucoseValues = instants.Select(reading => reading.Mgdl).ToList();
         var totalReadings = glucoseValues.Count;
 
         if (totalReadings == 0)
@@ -1229,29 +1233,25 @@ public class StatisticsService : IStatisticsService
         var zoneMinutes = new double[zones.ZoneCount];
         int targetCount = 0, tightTargetCount = 0;
         double targetMinutes = 0, tightTargetMinutes = 0;
-        foreach (var v in glucoseValues)
-        {
-            zoneCounts[zones.Classify(v)]++;
-            if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
-                targetCount++;
-            if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop)
-                tightTargetCount++;
-        }
-
-        // Percentages count every reading; minutes are elapsed time, so each instant is credited
-        // once, to the reading GlucoseCadence.Instants chooses for it.
-        var instants = GlucoseCadence.Instants(entriesList, thresholds);
         var (instantMinutes, _) = GlucoseCadence.ReadingMinutes(instants);
-        for (var i = 0; i < instants.Count; i++)
+        for (var i = 0; i < totalReadings; i++)
         {
-            var v = instants[i].Mgdl;
+            var v = glucoseValues[i];
             var minutes = instantMinutes[i];
 
-            zoneMinutes[zones.Classify(v)] += minutes;
+            var zone = zones.Classify(v);
+            zoneCounts[zone]++;
+            zoneMinutes[zone] += minutes;
             if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
+            {
+                targetCount++;
                 targetMinutes += minutes;
+            }
             if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop)
+            {
+                tightTargetCount++;
                 tightTargetMinutes += minutes;
+            }
         }
 
         var veryLowCount = zoneCounts[(int)ExcludingZone.VeryLow];
