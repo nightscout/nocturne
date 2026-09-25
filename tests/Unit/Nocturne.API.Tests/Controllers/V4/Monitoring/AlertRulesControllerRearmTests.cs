@@ -119,6 +119,23 @@ public class AlertRulesControllerRearmTests
     }
 
     [Fact]
+    public async Task A_tree_reformatted_but_equal_as_json_keeps_the_hold_and_its_stored_text()
+    {
+        var (controller, db) = await CreateAsync();
+        var request = Unchanged();
+        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>("""{ "value": 70, "direction": "below" }""");
+        request.AutoResolveParams = JsonSerializer.Deserialize<JsonElement>(
+            """{ "threshold": { "value": 80, "direction": "above" }, "type": "threshold" }""");
+
+        await controller.UpdateRule(RuleId, request, CancellationToken.None);
+
+        (await AwaitingRearm(db)).Should().BeTrue();
+        var stored = await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId);
+        stored.ConditionParams.Should().Be(Body);
+        stored.AutoResolveParams.Should().Be(Resolve);
+    }
+
+    [Fact]
     public async Task The_hold_is_cleared_only_once_an_evaluation_holding_the_rule_lets_go()
     {
         var gate = new AlertRuleEvaluationGate();

@@ -241,23 +241,29 @@ public class AlertRulesController : ControllerBase
 
         var conditionParamsJson = trees.ConditionParams;
 
+        // A tree equal as JSON keeps its stored text, so an edit that leaves it alone is not a
+        // new condition version.
+        var sameBody = AlertRuleRearm.SameTree(rule.ConditionParams, conditionParamsJson);
+        var sameAutoResolve = AlertRuleRearm.SameTree(rule.AutoResolveParams, trees.AutoResolveParams);
         var conditionsChanged = rule.IsEnabled != request.IsEnabled
             || rule.ConditionType != request.ConditionType
-            || rule.ConditionParams != conditionParamsJson
+            || !sameBody
             || rule.AutoResolveEnabled != request.AutoResolveEnabled
-            || rule.AutoResolveParams != trees.AutoResolveParams;
+            || !sameAutoResolve;
 
         rule.Name = request.Name;
         rule.Description = request.Description;
         rule.ConditionType = request.ConditionType;
-        rule.ConditionParams = conditionParamsJson;
+        if (!sameBody)
+            rule.ConditionParams = conditionParamsJson;
         rule.ScopeClass = _scopeClassifier.Classify(request.ConditionType, conditionParamsJson);
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
         rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
         rule.AllowThroughDnd = request.AllowThroughDnd;
         rule.AutoResolveEnabled = request.AutoResolveEnabled;
-        rule.AutoResolveParams = trees.AutoResolveParams;
+        if (!sameAutoResolve)
+            rule.AutoResolveParams = trees.AutoResolveParams;
         rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
         rule.UpdatedAt = DateTime.UtcNow;
 
