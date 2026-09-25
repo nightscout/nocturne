@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -1079,7 +1080,7 @@ public class StatisticsController : ControllerBase
             var carbToInsulinRatio = treatment?.CarbToInsulinRatio ?? 0;
 
             var entries = dayEntries
-                .Where(e => e.Mgdl > 0)
+                .Where(e => GlucoseStatistics.IsPlausibleReading(e.Mgdl))
                 .OrderBy(e => e.Mills)
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();

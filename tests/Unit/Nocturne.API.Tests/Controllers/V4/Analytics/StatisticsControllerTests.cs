@@ -764,6 +764,44 @@ public class StatisticsControllerTests
         month.Summary!.AvgGlucose.Should().Be(140);
     }
 
+    [Fact]
+    public async Task GetPunchCardData_LeavesImplausibleReadingsOutOfTheDay()
+    {
+        var dayStart = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var readings = new[]
+        {
+            new SensorGlucose { Timestamp = dayStart.AddHours(1), Mgdl = 100 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(2), Mgdl = 700 },
+            new SensorGlucose { Timestamp = dayStart.AddHours(3), Mgdl = double.NaN },
+        };
+
+        _glucoseRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<bool>(), It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>(), It.IsAny<Guid?>()))
+            .ReturnsAsync(readings);
+        SetupEmptyTreatments();
+        _statsServiceMock
+            .Setup(s => s.CalculateTimeInRange(
+                It.IsAny<IEnumerable<SensorGlucose>>(),
+                It.IsAny<GlycemicThresholds?>()))
+            .Returns(new TimeInRangeMetrics { Percentages = new TimeInRangePercentages { Target = 100 } });
+
+        var result = await CreateController().GetPunchCardData(
+            DateOnly.FromDateTime(dayStart),
+            DateOnly.FromDateTime(dayStart));
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var day = ok.Value.Should().BeOfType<PunchCardResponse>().Subject
+            .Months.Single().Days.Single(d => d.Date == "2026-06-01");
+
+        day.TotalReadings.Should().Be(1);
+        day.AverageGlucose.Should().Be(100);
+    }
+
     private void SetupPumps(params PatientDevice[] pumps)
     {
         _patientDeviceRepoMock
