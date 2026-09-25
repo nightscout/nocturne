@@ -1,27 +1,34 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page as pageState } from "$app/state";
 
 const { goto } = vi.hoisted(() => ({ goto: vi.fn(() => Promise.resolve()) }));
 
 vi.mock("$app/navigation", () => ({ goto }));
 
 vi.mock("$lib/stores/auth-store.svelte", () => ({
-  getAuthStore: () => ({ hasPermission: () => true, hasRole: () => true }),
+  getAuthStore: () => ({ hasRole: () => true }),
 }));
 
 vi.mock("$lib/stores/realtime-store.svelte", () => ({
   getRealtimeStore: () => ({ pillsData: {} }),
 }));
 
+// The vitals strip reads live glucose; the palette under test only owns its items.
+vi.mock("./CommandPaletteVitals.svelte", () => ({ default: () => {} }));
+
 import CommandPalette from "./CommandPalette.svelte";
 import { pinnedItemIds, recentItemIds } from "./command-palette-store.svelte";
+
+const item = (name: string) => page.getByRole("option", { name, exact: true });
 
 describe("CommandPalette", () => {
   beforeEach(() => {
     goto.mockClear();
     pinnedItemIds.current = [];
     recentItemIds.current = [];
+    pageState.data = { effectivePermissions: [] };
   });
 
   it("renders no button inside an option or link", async () => {
@@ -62,5 +69,42 @@ describe("CommandPalette", () => {
     expect(pinnedItemIds.current).toContain("settings-appearance");
     expect(goto).not.toHaveBeenCalled();
     expect(clickedInsideLink).toBe(false);
+  });
+
+  it("offers Audit to a viewer holding audit.read", async () => {
+    pageState.data = { effectivePermissions: ["audit.read"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(item("Audit")).toBeVisible();
+  });
+
+  it("offers Audit to a viewer holding audit.manage", async () => {
+    pageState.data = { effectivePermissions: ["audit.manage"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(item("Audit")).toBeVisible();
+  });
+
+  it("withholds Audit from a viewer holding neither audit scope", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(item("Dashboard")).toBeVisible();
+    await expect.element(item("Audit")).not.toBeInTheDocument();
+  });
+
+  it("offers Grants to a viewer holding sharing.manage", async () => {
+    pageState.data = { effectivePermissions: ["sharing.manage"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(item("Grants")).toBeVisible();
+  });
+
+  it("withholds Grants from a viewer without sharing.manage", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+    render(CommandPalette, { open: true });
+
+    await expect.element(item("Dashboard")).toBeVisible();
+    await expect.element(item("Grants")).not.toBeInTheDocument();
   });
 });
