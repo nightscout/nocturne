@@ -7,7 +7,7 @@
       "rules": [
         {
           "rule_id": "00000000-0000-0000-0000-000000000001",
-          "root": false,
+          "root": true,
           "leaves": [
             {
               "leaf_id": 0,
@@ -15,13 +15,14 @@
             },
             {
               "leaf_id": 1,
-              "value": false
+              "value": true
             }
           ],
-          "transition": "none",
+          "transition": "opened",
           "tracker": {
-            "state": "idle",
-            "confirmation_count": 0
+            "state": "active",
+            "confirmation_count": 0,
+            "excursion": 1
           }
         }
       ]

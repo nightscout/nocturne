@@ -67,7 +67,7 @@ public class ExcursionTrackerConcurrencyTests
         IAlertTrackerRepository repository, AlertRuleEvaluationGate gate, Guid ruleId) =>
         Task.Run(() => new ExcursionTracker(
                 repository, gate, new FakeTimeProvider(Now), NullLogger<ExcursionTracker>.Instance)
-            .ProcessEvaluationAsync(ruleId, true, CancellationToken.None));
+            .ProcessEvaluationAsync(ruleId, true, null, CancellationToken.None));
 
     private static AlertRule Rule(Guid id) => new()
     {
@@ -151,6 +151,11 @@ public class ExcursionTrackerConcurrencyTests
 
             lock (_sync) Excursions.Add(excursion);
             return Task.FromResult(excursion);
+        }
+
+        public Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
+        {
+            lock (_sync) return Task.FromResult(Excursions.FirstOrDefault(e => e.Id == excursionId));
         }
 
         public Task CloseExcursionAsync(Guid excursionId, DateTime endedAt, CancellationToken ct = default)

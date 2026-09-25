@@ -9,21 +9,20 @@ namespace Nocturne.API.Services.Alerts.Engines;
 
 /// <summary>
 /// The in-process C# implementation of <see cref="IAlertEvaluationEngine"/>: wraps
-/// <see cref="ConditionEvaluatorRegistry"/> and <see cref="IExcursionTracker"/> into the
-/// per-rule driver sequence the orchestrator historically composed inline
-/// (root eval with the canonical wire-string root path → excursion tracker →
-/// unconditional auto-resolve under the <c>auto_resolve</c> path root).
+/// <see cref="ConditionEvaluatorRegistry"/> and a managed-deciding <see cref="ExcursionTracker"/> into the
+/// per-rule driver sequence (root eval with the canonical wire-string root path → excursion
+/// tracker → unconditional auto-resolve under the <c>auto_resolve</c> path root).
 /// </summary>
 /// <remarks>
-/// The logic here is extracted verbatim from <c>AlertOrchestrator.EvaluateRuleAsync</c> /
-/// <c>TryAutoResolveAsync</c>; the orchestrator keeps every side effect (instance
-/// creation, delivery, DND suppression, info auto-ack) and consumes the transitions this
-/// engine reports. Behaviour is pinned by the golden corpus
-/// (<c>tests/Parity/AlertEngineCorpus</c>) and the seam-level corpus tests.
+/// Side effects (instance creation, delivery, DND suppression, info auto-ack) stay with
+/// <see cref="AlertOrchestrator"/>, which consumes the transitions this engine reports.
+/// Behaviour is pinned by the golden corpus (<c>tests/Parity/AlertEngineCorpus</c>) and the
+/// seam-level corpus tests.
 /// </remarks>
 internal sealed class ManagedAlertEngine(
     ConditionEvaluatorRegistry evaluatorRegistry,
-    IExcursionTracker excursionTracker,
+    ExcursionTracker excursionTracker,
+    ConditionVersionLog conditionLog,
     ILogger<ManagedAlertEngine> logger)
     : IAlertEvaluationEngine
 {
@@ -39,11 +38,20 @@ internal sealed class ManagedAlertEngine(
         var evaluator = evaluatorRegistry.GetEvaluator(rule.ConditionType);
         if (evaluator is null)
         {
-            // Orchestrator parity: no evaluator (e.g. signal_loss as a root type) means
-            // the rule is skipped entirely — no tracker call, no auto-resolve.
-            logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
+            // Orchestrator parity: no evaluator for the root type means the rule is
+            // skipped entirely — no tracker call, no auto-resolve.
+            if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+            {
+                logger.LogWarning(
+                    "No evaluator registered for condition type '{ConditionType}' of alert rule {AlertRuleId}; the rule is skipped until it is edited",
+                    rule.ConditionType, rule.Id);
+            }
             return new AlertEngineEvaluation { Skipped = true };
         }
+
+        // The orchestrator's per-rule catch skips the rule.
+        if (ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is { } fault)
+            throw new ConditionTreeFaultException(fault);
 
         // Seed CurrentRuleId / CurrentPath so stateful evaluators (sustained) can key
         // persistent timers, and recursive evaluators (composite/not/sustained) can extend
@@ -65,14 +73,25 @@ internal sealed class ManagedAlertEngine(
             leafValues = await ForceEvaluateLeavesAsync(rule, rootContext, ct);
         }
 
-        var transition = await excursionTracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
+        // Awaiting re-arm, the tracker reads the resolve tree first, and that is the evaluation's
+        // only read of it (docs/alerts/engine-semantics.md §6.3).
+        var rearmReadResolve = false;
+        var transition = await excursionTracker.ProcessEvaluationAsync(
+            rule.Id,
+            conditionMet,
+            token =>
+            {
+                rearmReadResolve = true;
+                return AutoResolveHoldsAsync(rule, context, token);
+            },
+            ct);
 
         // Orchestrator parity: after a close (hysteresis expiry) the per-reading pass
         // returns without an auto-resolve attempt. (The attempt would be a no-op anyway —
         // the active-excursion gate fails once the tracker is idle — but skipping keeps
         // the call sequence byte-identical.)
         ExcursionTransition? autoResolveTransition = null;
-        if (transition.Type != ExcursionTransitionType.ExcursionClosed)
+        if (transition.Type != ExcursionTransitionType.ExcursionClosed && !rearmReadResolve)
         {
             autoResolveTransition = await TryAutoResolveAsync(rule, context, ct);
         }
@@ -94,6 +113,9 @@ internal sealed class ManagedAlertEngine(
         string pathRoot,
         CancellationToken ct)
     {
+        if (ConditionTreeFaults.InNode(node, pathRoot) is { } fault)
+            throw new ConditionTreeFaultException(fault);
+
         var nodeContext = context with
         {
             CurrentRuleId = ruleId,
@@ -113,9 +135,8 @@ internal sealed class ManagedAlertEngine(
     }
 
     /// <summary>
-    /// Extracted verbatim from <c>AlertOrchestrator.TryAutoResolveAsync</c>: evaluates
-    /// <see cref="AlertRuleSnapshot.AutoResolveParams"/> against the enriched context under
-    /// the <c>auto_resolve</c> path root and force-closes the active excursion when true.
+    /// Evaluates <see cref="AlertRuleSnapshot.AutoResolveParams"/> against the enriched context
+    /// under the <c>auto_resolve</c> path root and force-closes the active excursion when true.
     /// Returns null when auto-resolve was not attempted or did not fire; otherwise the
     /// <see cref="IExcursionTracker.ForceCloseAsync"/> transition.
     /// </summary>
@@ -131,6 +152,24 @@ internal sealed class ManagedAlertEngine(
         if (activeExcursionId is null)
             return null;
 
+        if (!await AutoResolveHoldsAsync(rule, context, ct))
+            return null;
+
+        return await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+    }
+
+    /// <summary>
+    /// Whether the rule's enabled auto-resolve tree holds at the <c>auto_resolve</c> path root.
+    /// A tree that is absent, malformed, cannot be evaluated or throws does not.
+    /// </summary>
+    private async Task<bool> AutoResolveHoldsAsync(
+        AlertRuleSnapshot rule,
+        SensorContext context,
+        CancellationToken ct)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+            return false;
+
         ConditionNode? node;
         try
         {
@@ -139,10 +178,18 @@ internal sealed class ManagedAlertEngine(
         catch (JsonException ex)
         {
             logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
-            return null;
+            return false;
         }
 
-        if (node is null) return null;
+        if (node is null) return false;
+
+        if (ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is { } fault)
+        {
+            logger.LogWarning(
+                "AutoResolveParams for rule {AlertRuleId} cannot be evaluated ({Reason} at {Path}); skipping",
+                rule.Id, fault.Reason, fault.Path);
+            return false;
+        }
 
         // Path-prefix auto-resolve so any nested sustained timers don't collide with
         // timers owned by the main rule body (which roots at e.g. "composite"). Both
@@ -154,20 +201,15 @@ internal sealed class ManagedAlertEngine(
             CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
         };
 
-        bool shouldResolve;
         try
         {
-            shouldResolve = await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
+            return await evaluatorRegistry.EvaluateNodeAsync(node, autoResolveContext, ct);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Auto-resolve evaluation failed for rule {AlertRuleId}", rule.Id);
-            return null;
+            return false;
         }
-
-        if (!shouldResolve) return null;
-
-        return await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
     }
 
     private async Task<IReadOnlyDictionary<int, bool>> ForceEvaluateLeavesAsync(

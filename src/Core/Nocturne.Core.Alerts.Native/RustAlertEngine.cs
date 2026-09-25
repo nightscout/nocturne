@@ -3,9 +3,13 @@ using System.Text.Json;
 namespace Nocturne.Core.Alerts.Native;
 
 /// <summary>
-/// Thrown when the Rust alert engine returns an <c>ok: false</c> envelope or
-/// produces an unintelligible response.
+/// Thrown when the Rust alert engine returns an <c>ok: false</c> envelope, or a response that
+/// is unparseable, of another <c>schema_version</c>, or missing a field its shape requires.
 /// </summary>
+/// <remarks>
+/// The message names the operation and the offending field or JSON path, never the response
+/// body: that body carries the tenant's glucose context, and this message is logged.
+/// </remarks>
 public sealed class RustAlertEngineException : Exception
 {
     public RustAlertEngineException(string message) : base(message)
@@ -15,6 +19,28 @@ public sealed class RustAlertEngineException : Exception
     public RustAlertEngineException(string message, Exception innerException) : base(message, innerException)
     {
     }
+
+    /// <param name="message">The exception message.</param>
+    /// <param name="rejection">The <c>error</c> of the engine's <c>ok: false</c> envelope.</param>
+    public RustAlertEngineException(string message, string? rejection) : base(message)
+    {
+        Rejection = rejection;
+    }
+
+    /// <summary>
+    /// The <c>error</c> the engine answered with when it rejected the request, or
+    /// <see langword="null"/> when the host refused the engine's response or the call failed.
+    /// </summary>
+    public string? Rejection { get; }
+
+    /// <summary>
+    /// The engine rejected the request's condition tree, node or kind as one it cannot evaluate
+    /// (docs/alerts/engine-semantics.md §1.4). The fault is in the stored rule, not the engine.
+    /// </summary>
+    public bool IsConditionRejection =>
+        Rejection is { } error
+        && (error.StartsWith("malformed condition", StringComparison.Ordinal)
+            || error.StartsWith("unknown condition_type", StringComparison.Ordinal));
 }
 
 /// <summary>
@@ -23,30 +49,38 @@ public sealed class RustAlertEngineException : Exception
 /// evaluation state (timers, tracker) is carried as data — the caller
 /// persists what comes back and threads it into the next call.
 /// </summary>
-public static class RustAlertEngine
+public static partial class RustAlertEngine
 {
     /// <summary>The native crate version (e.g. <c>"0.1.0"</c>).</summary>
     public static string Version() => AlertsInterop.GetVersion();
+
+    /// <inheritdoc cref="AlertsInterop.GetTzdbVersion"/>
+    public static string TzdbVersion() => AlertsInterop.GetTzdbVersion();
 
     /// <summary>
     /// Evaluates one rule for one tick through the Rust engine.
     /// </summary>
     /// <exception cref="RustAlertEngineException">
-    /// The engine rejected the request (<c>ok: false</c>) or returned an
-    /// unparseable response.
+    /// The engine rejected the request (<c>ok: false</c>) or returned a response
+    /// <see cref="ParseEvaluateResponse"/> refuses.
     /// </exception>
     public static RustEvaluateResponse Evaluate(RustEvaluateRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return ParseEvaluateResponse(AlertsInterop.Evaluate(Serialize(request)));
+    }
 
-        var requestJson = JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
-        var responseJson = AlertsInterop.Evaluate(requestJson);
-        var response = Deserialize<RustEvaluateResponse>(responseJson, "evaluate");
-
-        if (!response.Ok)
-            throw new RustAlertEngineException($"Rust alert engine rejected the evaluate request: {response.Error ?? "(no error message)"}");
-        if (response.Result is null)
-            throw new RustAlertEngineException("Rust alert engine returned ok without a result");
+    /// <summary>
+    /// A successful evaluate envelope carries <c>result</c>, <c>timers</c> and <c>tracker</c>,
+    /// and a tracker holding a <c>state</c> carries its <c>updated_at</c>.
+    /// </summary>
+    internal static RustEvaluateResponse ParseEvaluateResponse(string responseJson)
+    {
+        var response = ParseResponse<RustEvaluateResponse>(responseJson, "evaluate");
+        Require(response.Result is not null, "evaluate", "result");
+        Require(response.Timers is not null, "evaluate", "timers");
+        Require(response.Tracker is not null, "evaluate", "tracker");
+        Require(response.Tracker!.State is null || response.Tracker.UpdatedAt is not null, "evaluate", "tracker.updated_at");
         return response;
     }
 
@@ -58,7 +92,8 @@ public static class RustAlertEngine
         JsonElement context,
         DateTime now,
         IReadOnlyDictionary<string, DateTime>? timers = null,
-        RustTrackerState? tracker = null)
+        RustTrackerState? tracker = null,
+        bool includeLeaves = true)
     {
         return Evaluate(new RustEvaluateRequest
         {
@@ -67,28 +102,40 @@ public static class RustAlertEngine
             Now = now,
             Timers = timers is null ? null : new Dictionary<string, DateTime>(timers),
             Tracker = tracker,
+            IncludeLeaves = includeLeaves,
         });
     }
 
     /// <summary>
-    /// Deserializes the typed rule result out of an evaluate response.
+    /// Deserializes the typed rule result out of an evaluate response, requiring the fields a
+    /// result that was not skipped always carries, and its leaves when
+    /// <paramref name="leavesRequested"/>.
     /// </summary>
-    /// <exception cref="RustAlertEngineException">The result payload was unparseable.</exception>
-    public static RustRuleResult GetRuleResult(RustEvaluateResponse response)
+    /// <exception cref="RustAlertEngineException">The result payload was unparseable or incomplete.</exception>
+    public static RustRuleResult GetRuleResult(RustEvaluateResponse response, bool leavesRequested = true)
     {
         ArgumentNullException.ThrowIfNull(response);
-        if (response.Result is null)
-            throw new RustAlertEngineException("Rust alert engine response has no result payload");
+        Require(response.Result is not null, "evaluate", "result");
+        RustRuleResult? result;
         try
         {
-            return response.Result.Value.Deserialize<RustRuleResult>(AlertEnvelopeJson.Options)
-                ?? throw new RustAlertEngineException("Rust alert engine returned a null rule result");
+            result = response.Result!.Value.Deserialize<RustRuleResult>(AlertEnvelopeJson.Options);
         }
         catch (JsonException ex)
         {
             throw new RustAlertEngineException(
-                $"Rust alert engine returned an unparseable rule result: {response.Result.Value.GetRawText()}", ex);
+                $"Rust alert engine returned an unparseable evaluate result at {ex.Path ?? "$"}", ex);
         }
+        Require(result is not null, "evaluate", "result");
+        if (result!.Skipped)
+            return result;
+
+        Require(result.Root is not null, "evaluate", "result.root");
+        Require(!leavesRequested || result.Leaves is not null, "evaluate", "result.leaves");
+        Require(result.Transition is not null, "evaluate", "result.transition");
+        Require((result.Transition == RustTransition.Closed) == (result.CloseReason is not null), "evaluate", "result.close_reason");
+        RequireTimerOps(result.TimerOps, "evaluate", "result.timer_ops");
+        return result;
     }
 
     /// <summary>
@@ -104,13 +151,16 @@ public static class RustAlertEngine
     public static RustEvaluateNodeResponse EvaluateNode(RustEvaluateNodeRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        return ParseEvaluateNodeResponse(AlertsInterop.EvaluateNode(Serialize(request)));
+    }
 
-        var requestJson = JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
-        var responseJson = AlertsInterop.EvaluateNode(requestJson);
-        var response = Deserialize<RustEvaluateNodeResponse>(responseJson, "evaluate_node");
-
-        if (!response.Ok)
-            throw new RustAlertEngineException($"Rust alert engine rejected the evaluate_node request: {response.Error ?? "(no error message)"}");
+    /// <summary>A successful evaluate_node envelope carries <c>value</c> and <c>timers</c>.</summary>
+    internal static RustEvaluateNodeResponse ParseEvaluateNodeResponse(string responseJson)
+    {
+        var response = ParseResponse<RustEvaluateNodeResponse>(responseJson, "evaluate_node");
+        Require(response.Value is not null, "evaluate_node", "value");
+        Require(response.Timers is not null, "evaluate_node", "timers");
+        RequireTimerOps(response.TimerOps, "evaluate_node", "timer_ops");
         return response;
     }
 
@@ -144,11 +194,10 @@ public static class RustAlertEngine
             inputJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         }
 
-        var responseJson = AlertsInterop.LeafPaths(inputJson);
-        var response = Deserialize<RustLeafPathsResponse>(responseJson, "leaf_paths");
-
-        if (!response.Ok)
-            throw new RustAlertEngineException($"Rust alert engine rejected the leaf_paths request: {response.Error ?? "(no error message)"}");
+        var response = ParseResponse<RustLeafPathsResponse>(AlertsInterop.LeafPaths(inputJson), "leaf_paths");
+        Require(response.Root is not null, "leaf_paths", "root");
+        Require(response.Paths is not null, "leaf_paths", "paths");
+        Require(response.Leaves is not null, "leaf_paths", "leaves");
         return response;
     }
 
@@ -167,15 +216,87 @@ public static class RustAlertEngine
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var requestJson = JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
-        var responseJson = AlertsInterop.Classify(requestJson);
-        var response = Deserialize<RustClassifyResponse>(responseJson, "classify");
+        var response = ParseResponse<RustClassifyResponse>(AlertsInterop.Classify(Serialize(request)), "classify");
+        Require(response.ScopeClass is not null, "classify", "scope_class");
+        return response.ScopeClass!;
+    }
 
+    /// <summary>
+    /// Every problem saving the rule's condition trees should reject, each with its scope,
+    /// condition path and reason code, in <see cref="RustValidateResponse.Issues"/>; empty when
+    /// the rule is valid. For an edit, also what was stripped (<see cref="RustValidateRequest.Stored"/>).
+    /// </summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>, a malformed envelope) or returned an
+    /// unparseable response.
+    /// </exception>
+    public static RustValidateResponse Validate(RustValidateRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var response = ParseResponse<RustValidateResponse>(AlertsInterop.Validate(Serialize(request)), "validate");
+        Require(response.Issues is not null, "validate", "issues");
+        Require(request.Stored is null || response.Stripped is not null, "validate", "stripped");
+        return response;
+    }
+
+    /// <summary>Replays a rule set over a series of ticks through the Rust engine.</summary>
+    /// <exception cref="RustAlertEngineException">
+    /// The engine rejected the request (<c>ok: false</c>) or returned a response
+    /// <see cref="ParseReplayResponse"/> refuses.
+    /// </exception>
+    public static RustReplayResponse Replay(RustReplayRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return ParseReplayResponse(AlertsInterop.Replay(Serialize(request)), request.IncludeTicks);
+    }
+
+    /// <summary>
+    /// A successful replay envelope carries <c>order</c>, <c>events</c> and
+    /// <c>leaf_transitions</c>, and <c>ticks</c> exactly when they were asked for, with
+    /// <c>met</c> and <c>firing</c> on every rule tick that was not skipped.
+    /// </summary>
+    internal static RustReplayResponse ParseReplayResponse(string responseJson, bool ticksRequested)
+    {
+        var response = ParseResponse<RustReplayResponse>(responseJson, "replay");
+        Require(response.Order is not null, "replay", "order");
+        Require(response.Events is not null, "replay", "events");
+        Require(response.LeafTransitions is not null, "replay", "leaf_transitions");
+        Require(!ticksRequested || response.Ticks is not null, "replay", "ticks");
+        foreach (var rule in response.Ticks?.SelectMany(t => t.Rules) ?? [])
+            Require(rule.Skipped || (rule.Met is not null && rule.Firing is not null), "replay", "ticks.rules.met");
+        return response;
+    }
+
+    private static string Serialize<T>(T request) => JsonSerializer.Serialize(request, AlertEnvelopeJson.Options);
+
+    /// <summary>
+    /// Parses a response envelope, requiring <c>schema_version</c> to be
+    /// <see cref="AlertEnvelopeJson.SchemaVersion"/> and <c>ok</c> to be true.
+    /// </summary>
+    internal static T ParseResponse<T>(string responseJson, string operation) where T : IRustResponseEnvelope
+    {
+        var response = Deserialize<T>(responseJson, operation);
+        if (response.SchemaVersion != AlertEnvelopeJson.SchemaVersion)
+            throw new RustAlertEngineException(
+                $"Rust alert engine answered {operation} with schema_version {response.SchemaVersion}, expected {AlertEnvelopeJson.SchemaVersion}");
         if (!response.Ok)
-            throw new RustAlertEngineException($"Rust alert engine rejected the classify request: {response.Error ?? "(no error message)"}");
-        if (response.ScopeClass is null)
-            throw new RustAlertEngineException("Rust alert engine returned ok without a scope_class");
-        return response.ScopeClass;
+            throw new RustAlertEngineException(
+                $"Rust alert engine rejected the {operation} request: {response.Error ?? "(no error message)"}",
+                response.Error);
+        return response;
+    }
+
+    private static void RequireTimerOps(List<RustTimerOp>? ops, string operation, string field)
+    {
+        foreach (var op in ops ?? [])
+            Require((op.Op == RustTimerOpKind.Set) == (op.At is not null), operation, $"{field}.at");
+    }
+
+    private static void Require(bool present, string operation, string field)
+    {
+        if (!present)
+            throw new RustAlertEngineException($"Rust alert engine {operation} response is missing '{field}'");
     }
 
     private static T Deserialize<T>(string responseJson, string operation)
@@ -187,7 +308,8 @@ public static class RustAlertEngine
         }
         catch (JsonException ex)
         {
-            throw new RustAlertEngineException($"Rust alert engine returned an unparseable {operation} response: {responseJson}", ex);
+            throw new RustAlertEngineException(
+                $"Rust alert engine returned an unparseable {operation} response at {ex.Path ?? "$"}", ex);
         }
     }
 }

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -20,11 +21,7 @@ public static class Extensions
 {
     public static IHostApplicationBuilder AddServiceDefaults(this IHostApplicationBuilder builder)
     {
-        // EF Core logs every executed SQL command at Information by default. Under
-        // load (e.g. connector ingest) this floods stdout and the OTEL pipeline
-        // with thousands of entries per second. Suppress at the source so all
-        // downstream providers (Console, OTEL) see the reduced volume.
-        builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+        builder.AddQuietLogCategoryDefaults();
 
         builder.ConfigureOpenTelemetry();
 
@@ -63,14 +60,49 @@ public static class Extensions
         return builder;
     }
 
-    public static IHostApplicationBuilder ConfigureOpenTelemetry(
+    // EF Core logs every executed SQL command at Information, which floods every provider under
+    // connector ingest. The HttpClient and Polly categories log each request and attempt.
+    private static readonly (string Category, LogLevel Level)[] QuietLogCategoryDefaults =
+    [
+        ("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning),
+        ("System.Net.Http.HttpClient", LogLevel.Warning),
+        ("Polly", LogLevel.Warning),
+    ];
+
+    // Rule selection lets the last of two equally specific rules win, so these go ahead of the
+    // configuration rules and a Logging:LogLevel:<category> setting can still raise them.
+    private static IHostApplicationBuilder AddQuietLogCategoryDefaults(
         this IHostApplicationBuilder builder
     )
     {
+        builder.Services.Configure<LoggerFilterOptions>(options =>
+        {
+            for (var i = 0; i < QuietLogCategoryDefaults.Length; i++)
+            {
+                var (category, level) = QuietLogCategoryDefaults[i];
+                options.Rules.Insert(i, new LoggerFilterRule(null, category, level, null));
+            }
+        });
+
+        return builder;
+    }
+
+    private static IHostApplicationBuilder ConfigureOpenTelemetry(
+        this IHostApplicationBuilder builder
+    )
+    {
+        var logToConsole =
+            builder.Environment.IsDevelopment() || !builder.Configuration.IsOtlpConfigured();
+
+        builder.Logging.ClearProviders();
         builder.Logging.AddOpenTelemetry(logging =>
         {
             logging.IncludeFormattedMessage = true;
             logging.IncludeScopes = true;
+            if (logToConsole)
+            {
+                logging.AddConsoleExporter();
+            }
         });
 
         builder

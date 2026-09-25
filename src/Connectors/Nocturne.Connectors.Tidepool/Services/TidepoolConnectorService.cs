@@ -51,7 +51,7 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
         TidepoolConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -139,7 +139,6 @@ public class TidepoolConnectorService : BaseConnectorService<TidepoolConnectorCo
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

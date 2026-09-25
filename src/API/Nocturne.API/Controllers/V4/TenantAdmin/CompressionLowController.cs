@@ -41,16 +41,16 @@ public class CompressionLowController : ControllerBase
     private readonly ICompressionLowDetectionService _detectionService;
 
     /// <summary>
-    /// What accepting or dismissing tells the reader when the suggestion has already been acted on
-    /// or removed. The service says which id and which state, which is of no use to them.
-    /// </summary>
-    /// <summary>
     /// What a read tells the reader when the tenant's settings could not be read. The condition is
     /// transient, so the page is worth retrying. <see cref="SettingsUnavailableException"/>.
     /// </summary>
     private const string SettingsUnavailable =
         "Your settings could not be read just now, so this cannot be shown. Try again in a moment.";
 
+    /// <summary>
+    /// What accepting or dismissing tells the reader when the suggestion has already been acted on
+    /// or removed. The service says which id and which state, which is of no use to them.
+    /// </summary>
     private const string SuggestionUnavailable =
         "That suggestion is no longer waiting for a decision. Refresh the page to see the current list.";
 

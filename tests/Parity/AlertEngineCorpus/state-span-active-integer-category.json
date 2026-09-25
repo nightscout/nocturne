@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "name": "state-span-active-integer-category",
+  "description": "an integer category is the StateSpanCategory ordinal: 4 is Exercise and 8 is TemporaryTarget",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": 4,
+        "state": null,
+        "is_active": true,
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "rule-2",
+      "condition_type": "state_span_active",
+      "condition_params": {
+        "category": 8,
+        "state": null,
+        "is_active": true,
+        "for_minutes": null
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 0,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_state_spans": [
+          {
+            "category": "Exercise",
+            "started_at": "2026-01-05T11:50:00Z"
+          },
+          {
+            "category": "TemporaryTarget",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:05:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:05:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:05:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "active_state_spans": [
+          {
+            "category": "Illness",
+            "started_at": "2026-01-05T11:50:00Z"
+          },
+          {
+            "category": "DataExclusion",
+            "started_at": "2026-01-05T11:50:00Z"
+          }
+        ],
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

@@ -54,6 +54,13 @@ public interface IAlertTrackerRepository
         DateTime startedAt,
         CancellationToken ct = default);
 
+    /// <summary>The excursion with <paramref name="excursionId"/>, or <c>null</c> if there is none.</summary>
+    /// <param name="excursionId">The unique identifier of the <see cref="AlertExcursion"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<AlertExcursion?> GetExcursionAsync(
+        Guid excursionId,
+        CancellationToken ct = default);
+
     /// <summary>
     /// Close an excursion by setting its <c>EndedAt</c> timestamp.
     /// </summary>
@@ -84,4 +91,32 @@ public interface IAlertTrackerRepository
     Task ClearHysteresisAsync(
         Guid excursionId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Holds <paramref name="alertRuleId"/>'s transition lock until the transaction
+    /// (<see cref="ExecuteInTransactionAsync{T}"/>) it is taken in ends, so that one process at a
+    /// time reads and writes the rule's tracker state. The default, for a store no other process
+    /// shares, takes nothing.
+    /// </summary>
+    /// <param name="alertRuleId">The rule whose transition is about to be written.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) => Task.CompletedTask;
+
+    /// <summary>
+    /// Runs <paramref name="work"/> in one database transaction, so the writes it makes through
+    /// this repository commit or roll back together. The default, for a store with no
+    /// transactions, runs it as is.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="work"/> can run more than once when the store retries a transient failure.
+    /// Each attempt starts from the store's committed rows, not from what an earlier attempt read
+    /// or wrote. A failure can leave it unknown whether the commit landed: the store then asks
+    /// <paramref name="verifySucceeded"/>, with the result that attempt produced, whether its
+    /// writes are there, and returns that result instead of running <paramref name="work"/>
+    /// again. Without it, a commit that landed but reported failure runs the work twice.
+    /// </remarks>
+    Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default) => work(ct);
 }

@@ -21,6 +21,8 @@ vi.mock("$routes/(unauthenticated)/auth/auth.remote", () => ({
 }));
 
 import AuthenticatedLayoutHarness from "./AuthenticatedLayoutHarness.test.svelte";
+import SettingsLayout from "./settings/+layout.svelte";
+import ToolsLayout from "./tools/+layout.svelte";
 
 const BASE = new Date("2026-09-21T12:00:00Z").getTime();
 
@@ -92,5 +94,20 @@ describe("authenticated layout", () => {
 
     await expect.element(page.getByText("Guest access")).toBeVisible();
     await expect.element(warning()).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { name: "a top-level page", section: undefined },
+    { name: "a settings page", section: SettingsLayout },
+    { name: "a tools page", section: ToolsLayout },
+  ])("gives $name exactly one main landmark", async ({ section }) => {
+    render(AuthenticatedLayoutHarness, {
+      props: { data: layoutData(), section },
+    });
+
+    await expect
+      .element(page.getByRole("main").getByText("page content"))
+      .toBeVisible();
+    expect(page.getByRole("main").elements()).toHaveLength(1);
   });
 });

@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Audit;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -13,10 +14,12 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 internal abstract class ConnectorPublisherBase
 {
     private readonly IAuditContext _auditContext;
+    private readonly PublishSkipTally _skips;
 
-    protected ConnectorPublisherBase(IAuditContext auditContext, ILogger logger)
+    protected ConnectorPublisherBase(IAuditContext auditContext, PublishSkipTally skips, ILogger logger)
     {
         _auditContext = auditContext ?? throw new ArgumentNullException(nameof(auditContext));
+        _skips = skips ?? throw new ArgumentNullException(nameof(skips));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -28,6 +31,12 @@ internal abstract class ConnectorPublisherBase
     /// is never attributed to whichever user's request happened to trigger the sync.
     /// </summary>
     protected IDisposable PushSystemAudit() => SystemAuditScope.Push(_auditContext);
+
+    /// <summary>
+    /// Records what a write this base does not itself perform left out because the user had deleted
+    /// it, as <see cref="PublishAsync"/> does for its own.
+    /// </summary>
+    protected void RecordSkippedDeleted(int count) => _skips.AddSkippedDeleted(count);
 
     /// <summary>
     /// <paramref name="beforeWrite"/> runs inside the system audit scope: a preparation step that
@@ -55,7 +64,8 @@ internal abstract class ConnectorPublisherBase
                 if (beforeWrite is not null)
                     await beforeWrite(recordList);
 
-                await repository.BulkCreateAsync(recordList, origin, ct);
+                var written = await repository.BulkCreateAsync(recordList, origin, ct);
+                _skips.AddSkippedDeleted(written.SkippedDeleted);
             }
 
             if (afterWrite is not null)

@@ -308,7 +308,7 @@ describe("WebSocketClient tracker updates", () => {
     client.on("trackerUpdate", handler);
 
     lastSocket!.handlers.get("trackerUpdate")?.({
-      action: "update",
+      action: "ack",
       instance: { definitionName: "Sensor" },
     });
 

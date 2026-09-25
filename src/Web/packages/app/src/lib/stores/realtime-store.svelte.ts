@@ -713,19 +713,10 @@ export class RealtimeStore {
         }
         break;
 
-      case "update":
       case "ack": {
-        // Update existing instance
-        const updateIndex = this.trackerInstances.findIndex((i) => i.id === instance.id);
-        if (updateIndex !== -1) {
-          this.trackerInstances = [
-            ...this.trackerInstances.slice(0, updateIndex),
-            {
-              ...this.trackerInstances[updateIndex],
-              ageHours: instance.ageHours,
-            },
-            ...this.trackerInstances.slice(updateIndex + 1),
-          ];
+        const index = this.trackerInstances.findIndex((i) => i.id === instance.id);
+        if (index !== -1) {
+          this.trackerInstances = this.trackerInstances.with(index, instance);
         }
         break;
       }

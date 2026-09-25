@@ -10,12 +10,7 @@ import {
   getApiBaseUrl,
   createServerApiClient,
 } from "$lib/server/api-client-factory";
-import {
-  getHashedInstanceKey,
-  INSTANCE_KEY_HEADER,
-  INSTANCE_SERVICE_HEADER,
-  INSTANCE_SERVICE_NAME,
-} from "$lib/server/instance-key";
+import { authenticateGuestSession } from "$lib/server/guest-session-auth";
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
@@ -80,45 +75,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
 
   if (!authCookie && !accessToken) {
-    // Check for guest session cookie before giving up
-    const guestSessionCookie = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
-    if (guestSessionCookie) {
-      try {
-        const forwardedHost = getEffectiveHost(event.request, event.cookies);
-        const headers: Record<string, string> = {
-          Cookie: `${AUTH_COOKIE_NAMES.guestSession}=${guestSessionCookie}`,
-        };
-        if (forwardedHost) headers["X-Forwarded-Host"] = forwardedHost;
-        headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
-
-        const hashedKey = getHashedInstanceKey();
-        if (hashedKey) {
-          headers[INSTANCE_KEY_HEADER] = hashedKey;
-          // Genuine SSR service call — declare the service so the API honors
-          // the instance key (a bare key is ignored).
-          headers[INSTANCE_SERVICE_HEADER] = INSTANCE_SERVICE_NAME;
-        }
-
-        const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });
-        const session = await sessionRes.json();
-
-        if (session?.isAuthenticated) {
-          event.locals.user = {
-            subjectId: session.subjectId ?? "guest",
-            name: "Guest",
-            email: undefined,
-            roles: [],
-            permissions: session.permissions ?? [],
-            expiresAt: session.expiresAt,
-          };
-          event.locals.isAuthenticated = true;
-          event.locals.isGuestSession = true;
-          event.locals.guestExpiresAt = session.expiresAt;
-        }
-      } catch (error) {
-        console.error("Failed to validate guest session:", error);
-      }
-    }
+    await authenticateGuestSession(event, apiBaseUrl, fetch);
     return resolve(event);
   }
 
@@ -136,7 +93,6 @@ const authHandle: Handle = async ({ event, resolve }) => {
       accessToken,
       refreshToken,
       platformAccessToken,
-      hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
       rawSetCookies: event.locals.rawSetCookies,
@@ -354,8 +310,8 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // NB: this client carries ONLY the end user's credentials (cookies) — it
   // deliberately does NOT attach the instance key. Forwarding the instance key
   // on user-originated requests elevated anonymous visitors to admin and
-  // bypassed per-tenant public access. Genuine service calls (bot dispatch,
-  // webhooks, realtime tickets) build their own instance-key client explicitly.
+  // bypassed per-tenant public access. Only genuine service calls (bot
+  // dispatch, webhooks) build their own instance-key client.
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,

@@ -30,6 +30,9 @@ public class EntriesControllerTests
     public EntriesControllerTests()
     {
         _mockEntryService = new Mock<IEntryService>();
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
         _mockProcessingStatusService = new Mock<IProcessingStatusService>();
         _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
@@ -83,7 +86,7 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
-            .ReturnsAsync(new[] { expectedProcessedEntry });
+            .ReturnsAsync([expectedProcessedEntry]);
 
         // Act
         var result = await _controller.CreateEntries(rawEntry);
@@ -136,11 +139,10 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "1", Sgv = 120 },
                     new Entry { Id = "2", Sgv = 150 },
-                }
+                ]
             );
 
         // Act
@@ -193,11 +195,10 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "1", Sgv = 120 },
                     new Entry { Id = "2", Type = "cal" },
-                }
+                ]
             );
 
         // Act
@@ -241,10 +242,9 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "created-id", Sgv = 120 },
-                }
+                ]
             );
 
         // Act
@@ -285,10 +285,9 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "created-id", Sgv = 120 },
-                }
+                ]
             );
 
         // Act
@@ -333,7 +332,7 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
-            .ReturnsAsync(new[] { new Entry { Id = "created-id", Sgv = 120 } });
+            .ReturnsAsync([new Entry { Id = "created-id", Sgv = 120 }]);
 
         // Act
         await _controller.CreateEntriesAsync(entryWithDate);
@@ -369,7 +368,7 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync(Array.Empty<Entry>());
+            .ReturnsAsync([]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
@@ -459,7 +458,7 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
@@ -514,7 +513,7 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
@@ -569,7 +568,7 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
@@ -733,7 +732,7 @@ public class EntriesControllerTests
             .ToArray());
         _mockEntryService
             .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         await _controller.CreateEntries(submitted);
 
@@ -758,7 +757,7 @@ public class EntriesControllerTests
             .ToArray());
         _mockEntryService
             .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Entry>());
+            .ReturnsAsync([]);
 
         return submitted;
     }

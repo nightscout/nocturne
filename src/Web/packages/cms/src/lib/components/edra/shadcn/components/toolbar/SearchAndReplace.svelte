@@ -95,16 +95,20 @@
 		}
 	}}
 >
-	<Popover.Trigger>
-		<EdraToolTip
-			tooltip={strings.toolbar.searchAndReplace.buttonTitle}
-			shortCut={getKeyboardShortcut('F', true)}
-		>
-			<Button variant="ghost" size="icon">
-				<Search />
-			</Button>
-		</EdraToolTip>
-	</Popover.Trigger>
+	<EdraToolTip
+		tooltip={strings.toolbar.searchAndReplace.buttonTitle}
+		shortCut={getKeyboardShortcut('F', true)}
+	>
+		{#snippet children({ props }: { props: Record<string, unknown> })}
+			<Popover.Trigger {...props}>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} variant="ghost" size="icon">
+						<Search />
+					</Button>
+				{/snippet}
+			</Popover.Trigger>
+		{/snippet}
+	</EdraToolTip>
 	<Popover.Content
 		class="flex w-fit items-center gap-1 p-2"
 		portalProps={{ disabled: true, to: undefined }}
@@ -128,38 +132,43 @@
 					>{searchCount > 0 ? searchIndex + 1 : 0}/{searchCount}
 				</span>
 				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.caseSensitive}>
-					<Toggle
-						size="icon-xs"
-						bind:pressed={caseSensitive}
-						onPressedChange={(pressed) => {
-							caseSensitive = pressed;
-							updateSearchTerm();
-						}}
-					>
-						<CaseSensitive class="size-4" />
-					</Toggle>
+					{#snippet children({ props }: { props: Record<string, unknown> })}
+						<Toggle
+							{...props}
+							size="icon-xs"
+							bind:pressed={caseSensitive}
+							onPressedChange={(pressed) => {
+								caseSensitive = pressed;
+								updateSearchTerm();
+							}}
+						>
+							<CaseSensitive class="size-4" />
+						</Toggle>
+					{/snippet}
 				</EdraToolTip>
-				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.goToPrevious}>
-					<Button
-						variant="ghost"
-						size="icon"
-						class="size-7"
-						onclick={previous}
-						title={strings.toolbar.searchAndReplace.previous}
-					>
-						<ArrowLeft />
-					</Button>
+				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.goToPrevious} onclick={previous}>
+					{#snippet children({ props }: { props: Record<string, unknown> })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon"
+							class="size-7"
+						>
+							<ArrowLeft />
+						</Button>
+					{/snippet}
 				</EdraToolTip>
-				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.goToNext}>
-					<Button
-						variant="ghost"
-						size="icon"
-						class="size-7"
-						onclick={next}
-						title={strings.toolbar.searchAndReplace.next}
-					>
-						<ArrowRight />
-					</Button>
+				<EdraToolTip tooltip={strings.toolbar.searchAndReplace.goToNext} onclick={next}>
+					{#snippet children({ props }: { props: Record<string, unknown> })}
+						<Button
+							{...props}
+							variant="ghost"
+							size="icon"
+							class="size-7"
+						>
+							<ArrowRight />
+						</Button>
+					{/snippet}
 				</EdraToolTip>
 			</div>
 			{#if showMore}
@@ -170,15 +179,19 @@
 						oninput={() => updateSearchTerm()}
 						class="w-48"
 					/>
-					<EdraToolTip tooltip={strings.toolbar.searchAndReplace.replace}>
-						<Button variant="ghost" size="icon" class="size-7" onclick={replace}>
-							<Replace />
-						</Button>
+					<EdraToolTip tooltip={strings.toolbar.searchAndReplace.replace} onclick={replace}>
+						{#snippet children({ props }: { props: Record<string, unknown> })}
+							<Button {...props} variant="ghost" size="icon" class="size-7">
+								<Replace />
+							</Button>
+						{/snippet}
 					</EdraToolTip>
-					<EdraToolTip tooltip={strings.toolbar.searchAndReplace.replaceAll}>
-						<Button variant="ghost" size="icon" class="size-7" onclick={replaceAll}>
-							<ReplaceAll />
-						</Button>
+					<EdraToolTip tooltip={strings.toolbar.searchAndReplace.replaceAll} onclick={replaceAll}>
+						{#snippet children({ props }: { props: Record<string, unknown> })}
+							<Button {...props} variant="ghost" size="icon" class="size-7">
+								<ReplaceAll />
+							</Button>
+						{/snippet}
 					</EdraToolTip>
 				</div>
 			{/if}

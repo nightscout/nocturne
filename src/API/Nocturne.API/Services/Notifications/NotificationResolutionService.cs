@@ -1,9 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Realtime;
 
 namespace Nocturne.API.Services.Notifications;
@@ -16,6 +15,7 @@ namespace Nocturne.API.Services.Notifications;
 public class NotificationResolutionService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<NotificationResolutionService> _logger;
 
     /// <summary>
@@ -27,13 +27,16 @@ public class NotificationResolutionService : BackgroundService
     /// Initializes a new instance of the <see cref="NotificationResolutionService"/> class.
     /// </summary>
     /// <param name="serviceProvider">Service provider for creating scoped services</param>
+    /// <param name="activeTenants">The active tenants to evaluate</param>
     /// <param name="logger">Logger</param>
     public NotificationResolutionService(
         IServiceProvider serviceProvider,
+        ActiveTenantSnapshot activeTenants,
         ILogger<NotificationResolutionService> logger
     )
     {
         _serviceProvider = serviceProvider;
+        _activeTenants = activeTenants;
         _logger = logger;
     }
 
@@ -74,14 +77,7 @@ public class NotificationResolutionService : BackgroundService
     /// </summary>
     private async Task EvaluateAllTenantsAsync(CancellationToken cancellationToken)
     {
-        // Lookup active tenants using unfiltered context
-        using var lookupScope = _serviceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(cancellationToken);
-        var tenants = await lookupContext.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await _activeTenants.GetAsync(cancellationToken);
 
         foreach (var tenant in tenants)
         {

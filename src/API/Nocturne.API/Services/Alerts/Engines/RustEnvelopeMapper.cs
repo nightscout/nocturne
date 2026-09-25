@@ -50,22 +50,37 @@ internal static class RustEnvelopeMapper
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Builds the FFI rule object from the stored rule row. Malformed stored JSON throws
-    /// <see cref="JsonException"/> — matching the managed path, where the evaluator's
-    /// payload deserialisation would throw into the per-rule catch.
+    /// Builds the FFI rule object from the stored rule row. Malformed stored condition JSON
+    /// throws <see cref="JsonException"/>, matching the managed path, where the evaluator's
+    /// payload deserialisation would throw into the per-rule catch. Auto-resolve params are sent
+    /// only when auto-resolve is enabled, and unparseable ones as null. They only gate
+    /// auto-resolve, which neither engine fires for a tree that does not parse. Timezone ids go
+    /// through <see cref="ConditionTimeZones"/>.
     /// </summary>
     public static RustAlertRule BuildRule(AlertRule rule) => new()
     {
         Id = rule.Id,
         ConditionType = AlertConditionTypeNames.ToWireString(rule.ConditionType),
-        ConditionParams = ParseJson(rule.ConditionParams),
+        ConditionParams = ParseJson(ConditionTimeZones.CanonicaliseRule(rule.ConditionType, rule.ConditionParams)),
         ConfirmationReadings = rule.ConfirmationReadings,
         HysteresisMinutes = rule.HysteresisMinutes,
         AutoResolveEnabled = rule.AutoResolveEnabled,
-        AutoResolveParams = string.IsNullOrWhiteSpace(rule.AutoResolveParams)
-            ? null
-            : ParseJson(rule.AutoResolveParams!),
+        AutoResolveParams = rule.AutoResolveEnabled ? TryParseJson(rule.AutoResolveParams) : null,
     };
+
+    private static JsonElement? TryParseJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            return ParseNode(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Maps persisted tracker state into the envelope's tracker object. The stored GUID
@@ -81,6 +96,8 @@ internal static class RustEnvelopeMapper
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionOrdinal = state.ActiveExcursionId is null ? null : ActiveExcursionSentinel,
                 UpdatedAt = DateTime.SpecifyKind(state.UpdatedAt, DateTimeKind.Utc),
+                HysteresisStartedAt = Utc(state.HysteresisStartedAt),
+                AwaitingRearm = state.AwaitingRearm,
                 NextExcursionOrdinal = ActiveExcursionSentinel + 1,
             };
 
@@ -88,6 +105,31 @@ internal static class RustEnvelopeMapper
     {
         using var doc = JsonDocument.Parse(json);
         return doc.RootElement.Clone();
+    }
+
+    /// <summary>A stored full condition node, with timezone ids through <see cref="ConditionTimeZones"/>.</summary>
+    public static JsonElement ParseNode(string nodeJson) => ParseJson(ConditionTimeZones.CanonicaliseNode(nodeJson));
+
+    /// <summary>
+    /// The full node <c>{"type": wire, wire: payload}</c> for a stored payload-only body, the payload
+    /// copied verbatim; a blank body is JSON <c>null</c>.
+    /// </summary>
+    /// <exception cref="JsonException">The payload is not valid JSON.</exception>
+    public static string WrapPayload(string wire, string? payloadJson)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", wire);
+            writer.WritePropertyName(wire);
+            if (string.IsNullOrWhiteSpace(payloadJson))
+                writer.WriteNullValue();
+            else
+                writer.WriteRawValue(payloadJson);
+            writer.WriteEndObject();
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
     /// <summary>
@@ -104,15 +146,9 @@ internal static class RustEnvelopeMapper
     /// <see cref="DateTimeKind.Utc"/>.
     /// </summary>
     /// <remarks>
-    /// Defensive rather than a live fix: <c>alert_condition_timers.first_true_at</c> is
-    /// <c>timestamp with time zone</c>, so Npgsql already hands these back as
-    /// <see cref="DateTimeKind.Utc"/>, and the replay store round-trips whatever it was given.
-    /// The reason to pin it anyway is that the crate deserialises these as
-    /// <c>DateTime&lt;Utc&gt;</c>, which requires an offset in the wire form — a
-    /// <see cref="DateTimeKind.Unspecified"/> instant serialises without one and turns the whole
-    /// call into an error envelope. This is the one instant crossing the boundary that arrives
-    /// straight from a store rather than through a projection that normalises it, so a future
-    /// column or store change would otherwise land as a silent engine failure.
+    /// The crate requires an offset on every instant, and a <see cref="DateTimeKind.Unspecified"/>
+    /// one serialises without it, failing the whole call. These are the one instants that reach
+    /// the boundary straight from a store rather than through a projection that pins them.
     /// </remarks>
     public static Dictionary<string, DateTime> BuildTimers(IReadOnlyDictionary<string, DateTime> timers)
     {
@@ -181,7 +217,9 @@ internal static class RustEnvelopeMapper
             GlucoseBucket = ctx.GlucoseBucket is { } gb ? WireEnum(gb) : null,
             LastCarbAt = Utc(ctx.LastCarbAt),
             LastBolusAt = Utc(ctx.LastBolusAt),
-            TenantTimeZoneId = ctx.TenantTimeZoneId,
+            TenantTimeZoneId = ctx.TenantTimeZoneId is { Length: > 0 } tenantZone
+                ? TimeZoneHelper.ToIanaIdIfWindows(tenantZone)
+                : ctx.TenantTimeZoneId,
             ActivePumpState = ctx.ActivePumpState is { } pump
                 ? new WirePumpState(WireEnum(pump.Mode), Utc(pump.StartedAt)!.Value)
                 : null,
@@ -210,31 +248,53 @@ internal static class RustEnvelopeMapper
     /// expects (child <c>type</c> strings preserved verbatim).
     /// </summary>
     public static JsonElement BuildNode(ConditionNode node) =>
-        JsonSerializer.SerializeToElement(node, EvaluatorJson.Options);
+        ConditionTimeZones.CanonicaliseNode(JsonSerializer.SerializeToElement(node, EvaluatorJson.Options));
 
     // -----------------------------------------------------------------------
     // Response mapping
     // -----------------------------------------------------------------------
 
-    public static ExcursionTransitionType TransitionFromWire(string? wire) => wire switch
+    public static ExcursionTransitionType TransitionFromWire(RustTransition wire) => wire switch
     {
-        "none" or null => ExcursionTransitionType.None,
-        "opened" => ExcursionTransitionType.ExcursionOpened,
-        "continues" => ExcursionTransitionType.ExcursionContinues,
-        "hysteresis_started" => ExcursionTransitionType.HysteresisStarted,
-        "hysteresis_resumed" => ExcursionTransitionType.HysteresisResumed,
-        "closed" => ExcursionTransitionType.ExcursionClosed,
-        _ => throw new InvalidOperationException($"Unknown transition wire value '{wire}'"),
+        RustTransition.None => ExcursionTransitionType.None,
+        RustTransition.Opened => ExcursionTransitionType.ExcursionOpened,
+        RustTransition.Continues => ExcursionTransitionType.ExcursionContinues,
+        RustTransition.HysteresisStarted => ExcursionTransitionType.HysteresisStarted,
+        RustTransition.HysteresisResumed => ExcursionTransitionType.HysteresisResumed,
+        RustTransition.Closed => ExcursionTransitionType.ExcursionClosed,
+        _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
 
-    public static ExcursionCloseReason? CloseReasonFromWire(string? wire) => wire switch
+    public static ExcursionCloseReason CloseReasonFromWire(RustCloseReason wire) => wire switch
     {
-        null => null,
-        "hysteresis" => ExcursionCloseReason.Hysteresis,
-        "auto" => ExcursionCloseReason.AutoResolve,
-        "manual" => ExcursionCloseReason.Manual,
-        _ => throw new InvalidOperationException($"Unknown close reason wire value '{wire}'"),
+        RustCloseReason.Hysteresis => ExcursionCloseReason.Hysteresis,
+        RustCloseReason.Auto => ExcursionCloseReason.AutoResolve,
+        RustCloseReason.Manual => ExcursionCloseReason.Manual,
+        _ => throw new ArgumentOutOfRangeException(nameof(wire), wire, null),
     };
+
+    public static RustCloseReason CloseReasonToRust(ExcursionCloseReason reason) => reason switch
+    {
+        ExcursionCloseReason.Hysteresis => RustCloseReason.Hysteresis,
+        ExcursionCloseReason.AutoResolve => RustCloseReason.Auto,
+        ExcursionCloseReason.Manual => RustCloseReason.Manual,
+        _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, null),
+    };
+
+    /// <summary>
+    /// The engine's post-state as a <see cref="TrackerPostState"/>, or <see langword="null"/> when
+    /// it holds no per-rule state.
+    /// </summary>
+    public static TrackerPostState? PostStateFromWire(RustTrackerState tracker) =>
+        tracker.State is null
+            ? null
+            : new TrackerPostState(
+                tracker.State,
+                tracker.ConfirmationCount,
+                tracker.ActiveExcursionOrdinal is not null,
+                tracker.UpdatedAt!.Value,
+                tracker.HysteresisStartedAt,
+                tracker.AwaitingRearm);
 
     /// <summary>Wire form of a managed transition type (for shadow comparison logging).</summary>
     public static string TransitionToWire(ExcursionTransitionType type) => type switch

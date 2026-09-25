@@ -154,11 +154,6 @@
   const uploaderApps = $derived(servicesData?.uploaderApps ?? []);
 
   // ── Navigation ──────────────────────────────────────────────────────
-  function handlePathSelect(selected: "fresh" | "migration") {
-    path = selected;
-    stepIndex = 1;
-  }
-
   function handleBack() {
     if (stepIndex > 0) stepIndex--;
   }
@@ -235,7 +230,8 @@
       if (existing?.id) {
         migrationJobId = existing.id;
       } else {
-        const job = await migrationRemote.startFromConnector(MIGRATION_CONNECTOR);
+        const job =
+          await migrationRemote.startFromConnector(MIGRATION_CONNECTOR);
         if (job?.id) migrationJobId = job.id;
       }
     } catch {
@@ -263,9 +259,7 @@
   class:onb-migration={path === "migration"}
 >
   <!-- Background gradient -->
-  <div
-    class="onb-backdrop fixed inset-0 z-0 pointer-events-none"
-  ></div>
+  <div class="onb-backdrop fixed inset-0 z-0 pointer-events-none"></div>
 
   <!-- Constellation background (above gradient so stars are visible) -->
   <div class="fixed inset-0 z-1 pointer-events-none">
@@ -300,9 +294,7 @@
           <circle cx="82" cy="60" r="1.6" />
         </g>
       </svg>
-      <span
-        class="font-brand text-xl font-light tracking-wide text-white"
-      >
+      <span class="font-brand text-xl font-light tracking-wide text-white">
         nocturne
       </span>
     </div>
@@ -349,7 +341,9 @@
   >
     {#if httpsRequired}
       <div class="w-full max-w-lg mx-auto text-center py-20">
-        <div class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8">
+        <div
+          class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8"
+        >
           <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-destructive" />
           <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
           <p class="text-white/60 text-sm leading-relaxed">
@@ -358,7 +352,7 @@
             >
               https://
             </strong>
-             instead of http://.
+            instead of http://.
           </p>
           <p class="text-white/40 text-xs mt-4">
             Passkey authentication and secure cookies require HTTPS to function.
@@ -482,7 +476,7 @@
           <!-- Step body -->
           <div class="relative z-2 flex-1 px-5 py-3 max-[900px]:px-4">
             {#if currentStep?.id === "path"}
-              <PathChoice currentPath={path} onSelect={handlePathSelect} />
+              <PathChoice bind:path />
             {:else if currentStep?.id === "connect"}
               <NightscoutConnect onComplete={handleMigrationConnected} />
             {:else if currentStep?.id === "cgm"}
@@ -620,7 +614,12 @@
                   Save and continue
                   <ArrowRight class="h-4 w-4" />
                 </Button>
-              {:else if currentStep?.id !== "path"}
+              {:else if currentStep?.id === "path"}
+                <Button onclick={handleNext}>
+                  Continue
+                  <ArrowRight class="h-4 w-4" />
+                </Button>
+              {:else}
                 <Button variant="ghost" onclick={handleSkip}>
                   Skip for now
                 </Button>
@@ -690,7 +689,11 @@
 
   .onb-backdrop {
     background:
-      radial-gradient(ellipse 50% 35% at 50% 0%, oklch(0.16 0.05 265 / 0.6), transparent 70%),
+      radial-gradient(
+        ellipse 50% 35% at 50% 0%,
+        oklch(0.16 0.05 265 / 0.6),
+        transparent 70%
+      ),
       linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));
   }
 
@@ -699,7 +702,11 @@
   }
 
   .step-card {
-    background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75));
+    background: linear-gradient(
+      180deg,
+      oklch(0.14 0.03 261.692 / 0.85),
+      oklch(0.12 0.025 261.692 / 0.75)
+    );
     box-shadow:
       0 1px 0 rgb(255 255 255 / 0.05) inset,
       0 30px 80px -30px rgb(0 0 0 / 0.6);

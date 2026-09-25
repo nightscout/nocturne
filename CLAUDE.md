@@ -80,6 +80,8 @@ The `--skip-worktree` bits may be cleared by git during branch switches that tou
 
 Git worktrees are supported. In the main checkout, `aspire start` uses persistent Postgres (named volume, pgAdmin at `http://localhost:1611`), binds the gateway to `https://nocturne.localhost:1612` (tenants at `https://<slug>.nocturne.localhost:1612`), and pins nocturne-api to `http://localhost:1610`. In a worktree, Postgres is automatically ephemeral (anonymous volume, no pgAdmin) and ports are dynamic.
 
+On Windows, deep worktree paths can push `Nocturne.Desktop.Tray`'s extracted WindowsAppSDK files past MAX_PATH, and a root `dotnet build` then fails with MSB3030 "could not copy ... because it was not found". The tray project tolerates a checkout root of about 124 characters. Beyond that, enable long paths (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`, admin) or use a shorter worktree path.
+
 **Always use `--isolated` when running Aspire from a worktree** to avoid dashboard port collisions with the main instance:
 
 ```bash
@@ -303,7 +305,9 @@ Design notes:
   unclamped `api-secret` caller share a key), so every `[ResponseCache]`d tenant read
   declares `ResponseCacheLocation.Client`, or `NoStore`. `ResponseCachePolicyTests`
   asserts no `[ResponseCache]` attribute on a controller action allows the shared
-  cache; headers a controller writes by hand are outside what it checks.
+  cache; headers a controller writes by hand are outside what it checks. Hand-set
+  `Cache-Control` headers follow the same rule: a tenant data read is never `public`
+  (V3 reads send `private, max-age=60`, pinned by `V3CacheControlTests`).
 - **PHI cache invariant.** The same holds for the tenant-keyed application caches of
   time-series data (`EntryCacheAdapter`, `TreatmentCacheAdapter`, the multi-period
   statistics, the eHbA1c timeline): their keys carry the tenant, not the history

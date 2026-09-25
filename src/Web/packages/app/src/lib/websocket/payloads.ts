@@ -94,7 +94,6 @@ export function parseNotification(data: unknown): InAppNotificationDto | null {
 
 const TRACKER_ACTIONS = [
   "create",
-  "update",
   "delete",
   "complete",
   "ack",

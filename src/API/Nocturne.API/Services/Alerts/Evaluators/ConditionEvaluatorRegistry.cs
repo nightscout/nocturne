@@ -42,14 +42,9 @@ public class ConditionEvaluatorRegistry
     /// </summary>
     public IConditionEvaluator? GetEvaluator(string conditionTypeString)
     {
-        var byWire = AlertConditionTypeNames.FromWireString(conditionTypeString);
-        if (byWire is not null)
-            return GetEvaluator(byWire.Value);
-
-        if (Enum.TryParse<AlertConditionType>(conditionTypeString, ignoreCase: true, out var parsed))
-            return GetEvaluator(parsed);
-
-        return null;
+        return AlertConditionTypeNames.Resolve(conditionTypeString) is { } type
+            ? GetEvaluator(type)
+            : null;
     }
 
     /// <summary>

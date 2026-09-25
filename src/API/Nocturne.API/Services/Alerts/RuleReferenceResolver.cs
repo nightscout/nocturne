@@ -7,7 +7,7 @@ namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
 /// Filters a batch of <see cref="AlertRuleSnapshot"/>s down to those whose <c>alert_state</c>
-/// references all resolve to other rules in the same enabled set. A rule that references a
+/// references all resolve to enabled rules. A rule that references a
 /// disabled or deleted parent is dropped from evaluation — the parent isn't being evaluated,
 /// so its state would be stale and the chained rule can't fire meaningfully.
 /// </summary>
@@ -25,25 +25,37 @@ public static class RuleReferenceResolver
 {
     /// <summary>
     /// Returns the subset of <paramref name="rules"/> that have no <c>alert_state</c> references
-    /// to rule ids outside the input set. Order is preserved.
+    /// to rule ids outside <paramref name="enabledIds"/>, which defaults to the ids of
+    /// <paramref name="rules"/>. Order is preserved. A rule whose tree cannot be walked is kept,
+    /// so the engine's per-rule skip handles it rather than this pass failing.
     /// </summary>
-    public static IReadOnlyList<AlertRuleSnapshot> FilterEvaluable(IReadOnlyList<AlertRuleSnapshot> rules)
+    public static IReadOnlyList<AlertRuleSnapshot> FilterEvaluable(
+        IReadOnlyList<AlertRuleSnapshot> rules, ILogger? logger = null, IReadOnlySet<Guid>? enabledIds = null)
     {
         if (rules.Count == 0) return rules;
 
-        var enabledIds = new HashSet<Guid>(rules.Count);
-        foreach (var r in rules) enabledIds.Add(r.Id);
+        enabledIds ??= rules.Select(r => r.Id).ToHashSet();
 
         var keep = new List<AlertRuleSnapshot>(rules.Count);
         foreach (var rule in rules)
         {
-            if (AllReferencesResolve(rule, enabledIds))
+            bool resolves;
+            try
+            {
+                resolves = AllReferencesResolve(rule, enabledIds);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Could not resolve alert_state references of alert rule {AlertRuleId}", rule.Id);
+                resolves = true;
+            }
+            if (resolves)
                 keep.Add(rule);
         }
         return keep;
     }
 
-    private static bool AllReferencesResolve(AlertRuleSnapshot rule, HashSet<Guid> enabledIds)
+    private static bool AllReferencesResolve(AlertRuleSnapshot rule, IReadOnlySet<Guid> enabledIds)
     {
         switch (rule.ConditionType)
         {
@@ -56,7 +68,7 @@ public static class RuleReferenceResolver
                 {
                     var composite = TryDeserialize<CompositeCondition>(rule.ConditionParams);
                     if (composite is null) return true;
-                    foreach (var child in composite.Conditions)
+                    foreach (var child in composite.Conditions ?? [])
                         if (!NodeReferencesResolve(child, rule.Id, enabledIds)) return false;
                     return true;
                 }
@@ -75,7 +87,7 @@ public static class RuleReferenceResolver
         }
     }
 
-    private static bool NodeReferencesResolve(ConditionNode node, Guid ownerRuleId, HashSet<Guid> enabledIds)
+    private static bool NodeReferencesResolve(ConditionNode? node, Guid ownerRuleId, IReadOnlySet<Guid> enabledIds)
     {
         var unresolved = ConditionPath.Walk<UnresolvedMarker>(node, (visited, _) =>
         {

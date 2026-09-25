@@ -24,7 +24,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<DeviceEventRepository> _logger;
     private readonly IDeviceEventReactor? _reactor;
 
     /// <summary>
@@ -44,10 +43,9 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         ILogger<DeviceEventRepository> logger,
         IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
         IDeviceEventReactor? reactor = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
         _reactor = reactor;
     }
 
@@ -69,7 +67,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
+            Logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
         }
     }
 
@@ -186,7 +184,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
         }
     }
 

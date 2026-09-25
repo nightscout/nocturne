@@ -53,11 +53,11 @@
             </div>
         </aside>
 
-        <main class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0">
             <article class="prose prose-neutral dark:prose-invert max-w-none">
                 {@render children()}
             </article>
-        </main>
+        </div>
     </div>
 </div>
 

@@ -31,7 +31,10 @@
 
   interface Props {
     open: boolean;
-    /** Whether the host resolves no tenant (the apex, or a reserved dashboard slug). */
+    /**
+     * Whether the host resolves no tenant (the apex, or a reserved dashboard
+     * slug).
+     */
     tenantless?: boolean;
   }
 
@@ -185,11 +188,6 @@
     }
   }
 
-  function handlePinClick(e: MouseEvent, itemId: string) {
-    e.stopPropagation();
-    togglePin(itemId);
-  }
-
   $effect(() => {
     if (!open) {
       searchValue = "";
@@ -197,74 +195,59 @@
   });
 </script>
 
+{#snippet itemBody(item: CommandPaletteItem)}
+  {#if item.icon}
+    {@const Icon = item.icon}
+    <Icon class="mr-2 h-4 w-4" />
+  {/if}
+  <div class="flex flex-1 flex-col">
+    <span>{getItemLabel(item)}</span>
+    {#if item.description}
+      <span class="text-xs text-muted-foreground">{item.description}</span>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet commandItem(item: CommandPaletteItem, pinAlwaysVisible: boolean)}
   {@const pinned = isPinned(item.id)}
-  {#if item.href}
-    <Command.LinkItem
-      class="group"
-      href={item.href}
-      value={item.label}
-      keywords={item.keywords}
-      onSelect={() => handleSelect(item)}
-    >
-      {#if item.icon}
-        {@const Icon = item.icon}
-        <Icon class="mr-2 h-4 w-4" />
-      {/if}
-      <div class="flex flex-1 flex-col">
-        <span>{getItemLabel(item)}</span>
-        {#if item.description}
-          <span class="text-xs text-muted-foreground"
-            >{item.description}</span
-          >
-        {/if}
-      </div>
-      <Button
-        variant="ghost-muted"
-        size="icon-2xs"
-        reveal={!(pinAlwaysVisible || pinned)}
-        class="ml-auto"
-        aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e: MouseEvent) => handlePinClick(e, item.id)}
+  <!-- The pin sits beside the item, not in it: a button inside an option or link fires both. The row hides with its item when a search filters the item out. -->
+  <div
+    class="group flex items-center rounded-sm pr-2 not-has-data-[slot=command-item]:hidden has-aria-selected:bg-accent has-aria-selected:text-accent-foreground"
+  >
+    {#if item.href}
+      <Command.LinkItem
+        class="flex-1"
+        href={item.href}
+        value={item.label}
+        keywords={item.keywords}
+        onSelect={() => handleSelect(item)}
       >
-        <Star
-          class="size-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
-        />
-      </Button>
-    </Command.LinkItem>
-  {:else}
-    <Command.Item
-      class="group"
-      value={item.label}
-      keywords={item.keywords}
-      onSelect={() => handleSelect(item)}
-    >
-      {#if item.icon}
-        {@const Icon = item.icon}
-        <Icon class="mr-2 h-4 w-4" />
-      {/if}
-      <div class="flex flex-1 flex-col">
-        <span>{getItemLabel(item)}</span>
-        {#if item.description}
-          <span class="text-xs text-muted-foreground"
-            >{item.description}</span
-          >
-        {/if}
-      </div>
-      <Button
-        variant="ghost-muted"
-        size="icon-2xs"
-        reveal={!(pinAlwaysVisible || pinned)}
-        class="ml-auto"
-        aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e: MouseEvent) => handlePinClick(e, item.id)}
+        {@render itemBody(item)}
+      </Command.LinkItem>
+    {:else}
+      <Command.Item
+        class="flex-1"
+        value={item.label}
+        keywords={item.keywords}
+        onSelect={() => handleSelect(item)}
       >
-        <Star
-          class="size-3.5 {pinned ? 'fill-current text-favorite' : 'text-muted-foreground'}"
-        />
-      </Button>
-    </Command.Item>
-  {/if}
+        {@render itemBody(item)}
+      </Command.Item>
+    {/if}
+    <Button
+      variant="ghost-muted"
+      size="icon-2xs"
+      reveal={!(pinAlwaysVisible || pinned)}
+      aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+      onclick={() => togglePin(item.id)}
+    >
+      <Star
+        class="size-3.5 {pinned
+          ? 'fill-current text-favorite'
+          : 'text-muted-foreground'}"
+      />
+    </Button>
+  </div>
 {/snippet}
 
 <Command.Dialog bind:open>

@@ -26,7 +26,7 @@
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { DirectGrantDto } from "$api";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   // ============================================================================
   // Props
@@ -73,7 +73,7 @@
   let newTokenLimitTo24Hours = $state(false);
   let isCreating = $state(false);
   let createdToken = $state<string | null>(null);
-  let copiedToken = $state(false);
+  const copy = createCopyFeedback();
 
   // Revoke flow
   let isRevoking = $state<string | null>(null);
@@ -87,7 +87,6 @@
       newTokenScopes = [...prefillScopes];
       newTokenLimitTo24Hours = false;
       createdToken = null;
-      copiedToken = false;
       showCreateDialog = true;
       createOpen = false;
     }
@@ -102,7 +101,6 @@
     newTokenScopes = [];
     newTokenLimitTo24Hours = false;
     createdToken = null;
-    copiedToken = false;
     showCreateDialog = true;
   }
 
@@ -128,12 +126,7 @@
 
   async function copyToken() {
     if (createdToken) {
-      if (!(await copyToClipboard(createdToken))) {
-        mutationError = "Couldn't copy the token to the clipboard. Copy it manually instead.";
-        return;
-      }
-      copiedToken = true;
-      setTimeout(() => (copiedToken = false), 2000);
+      await copy.copy(createdToken);
     }
   }
 
@@ -143,7 +136,6 @@
   function closeCreateDialog() {
     showCreateDialog = false;
     createdToken = null;
-    copiedToken = false;
     newTokenLabel = "";
     newTokenScopes = [];
     newTokenLimitTo24Hours = false;
@@ -353,7 +345,7 @@
             class="font-mono"
           />
           <Button variant="outline" size="icon" onclick={copyToken}>
-            {#if copiedToken}
+            {#if copy.isCopied()}
               <Check class="h-4 w-4 text-success" />
             {:else}
               <Copy class="h-4 w-4" />
