@@ -3,7 +3,7 @@
   import { ArrowDownToLine } from "lucide-svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import { bg, bgLabel, time, toDate } from "$lib/utils/formatting";
-  import { HYPNOGRAM_LANE_LABELS, laneForStage } from "$lib/utils/sleep-stages";
+  import { laneForStage } from "$lib/utils/sleep-stages";
   import { SleepHypoSeverity, type SleepHypoEvent } from "$lib/api";
 
   interface Props {
@@ -13,10 +13,18 @@
   let { lows }: Props = $props();
 
   function stageLabel(event: SleepHypoEvent): string | null {
-    const lane = laneForStage(event.stage);
-    if (lane === "unspecified") return null;
-    if (lane === "awake") return "While awake";
-    return `During ${HYPNOGRAM_LANE_LABELS[lane]} sleep`;
+    switch (laneForStage(event.stage)) {
+      case "deep":
+        return "During deep sleep";
+      case "rem":
+        return "During REM sleep";
+      case "light":
+        return "During light sleep";
+      case "awake":
+        return "While awake";
+      default:
+        return null;
+    }
   }
 
   function span(event: SleepHypoEvent): string {
