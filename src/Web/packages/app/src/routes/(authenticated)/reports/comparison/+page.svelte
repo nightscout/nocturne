@@ -286,7 +286,7 @@
       case "tirTarget":
         return tir?.percentages?.target ?? null;
       case "gmi":
-        return gv?.estimatedA1c ?? a.gmi?.value ?? null;
+        return a.gmi?.value ?? null;
       case "cv":
         return gv?.coefficientOfVariation ?? null;
       case "gri":
