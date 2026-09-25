@@ -397,8 +397,8 @@ public partial class CareLinkAuthFlowService : IDisposable
         for (var i = 0; i < maxRedirects; i++)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, currentUrl);
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
-            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
             if (response.Headers.Location != null && (int)response.StatusCode is >= 300 and < 400)
             {
                 currentUrl = response.Headers.Location.IsAbsoluteUri
@@ -410,6 +410,12 @@ public partial class CareLinkAuthFlowService : IDisposable
             var html = await response.Content.ReadAsStringAsync(ct);
             if (html.Contains("<form", StringComparison.OrdinalIgnoreCase))
                 return new FormPageResult(html, currentUrl);
+
+            var pageUrl = new Uri(currentUrl);
+            _logger.LogWarning(
+                "CareLink authorize page returned {StatusCode} with no login form at {Url}",
+                response.StatusCode, pageUrl.GetLeftPart(UriPartial.Path));
+            return null;
         }
 
         return null;

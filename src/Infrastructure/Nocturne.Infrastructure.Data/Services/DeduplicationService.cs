@@ -724,11 +724,7 @@ public class DeduplicationService : IDeduplicationService
             // canonicals' primary links to learn their event timestamps, then DB-bound the
             // neighbour query to [minCandidateTs - window, maxCandidateTs + window]. This keeps
             // the candidate path O(candidates + window-slice) rather than O(all primaries).
-            var candidatePrimaries = await _context.LinkedRecords
-                .AsNoTracking()
-                .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary
-                             && candidateCanonicalIds.Contains(lr.CanonicalId))
-                .ToListAsync(ct);
+            var candidatePrimaries = await PrimariesOf(recordTypeStr, candidateCanonicalIds).ToListAsync(ct);
 
             if (candidatePrimaries.Count == 0)
                 return 0;
@@ -1164,6 +1160,19 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <summary>
+    /// The primary links of <paramref name="canonicalIds"/>. The set is copied to an array because
+    /// EF expands an <see cref="IReadOnlySet{T}"/> operand into one parameter per element, so every
+    /// set size would get its own statement and plan; an array binds as one parameter.
+    /// </summary>
+    internal IQueryable<LinkedRecordEntity> PrimariesOf(string recordTypeStr, IReadOnlySet<Guid> canonicalIds)
+    {
+        var ids = canonicalIds.ToArray();
+        return _context.LinkedRecords
+            .AsNoTracking()
+            .Where(lr => lr.RecordType == recordTypeStr && lr.IsPrimary && ids.Contains(lr.CanonicalId));
+    }
+
+    /// <summary>
     /// Loads, for each requested record id, its <see cref="MatchCriteria"/> and whether the
     /// underlying record is soft-deleted. Soft-deleted rows are included via
     /// <c>IgnoreQueryFilters</c>; record types without a <c>DeletedAt</c> column report
@@ -1255,6 +1264,14 @@ public class DeduplicationService : IDeduplicationService
     }
 
     /// <summary>
+    /// True when two temp basal durations describe one delivery. Both must be known: an open-ended
+    /// temp basal carries no duration, and admitting a null would reduce the wide comparison to
+    /// rate alone, which for a stream that repeats the same rate all day is no evidence at all.
+    /// </summary>
+    private static bool DurationsAgree(TimeSpan? a, TimeSpan? b) =>
+        a.HasValue && b.HasValue && (a.Value - b.Value).Duration() <= ExactDurationTolerance;
+
+    /// <summary>
     /// Per-type value comparison shared by the tight and wide paths. With <paramref name="exact"/>
     /// the criteria tolerances are replaced by <see cref="ExactValueEpsilon"/> and each type adds
     /// whatever the wide window needs to keep the comparison meaningful over ten minutes.
@@ -1264,14 +1281,6 @@ public class DeduplicationService : IDeduplicationService
     /// the public surface and would otherwise be an untestable defence.
     /// </para>
     /// </summary>
-    /// <summary>
-    /// True when two temp basal durations describe one delivery. Both must be known: an open-ended
-    /// temp basal carries no duration, and admitting a null would reduce the wide comparison to
-    /// rate alone, which for a stream that repeats the same rate all day is no evidence at all.
-    /// </summary>
-    private static bool DurationsAgree(TimeSpan? a, TimeSpan? b) =>
-        a.HasValue && b.HasValue && (a.Value - b.Value).Duration() <= ExactDurationTolerance;
-
     internal static bool CriteriaMatch(RecordType recordType, MatchCriteria a, MatchCriteria b, bool exact = false)
     {
         if (exact && !WideMatchableTypes.Contains(recordType))

@@ -25,7 +25,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, BolusCalculationEntity>, IBolusCalculationRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<BolusCalculationRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusCalculationRepository"/> class.
@@ -41,10 +40,9 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         ILogger<BolusCalculationRepository> logger,
         IV4RecordBroadcaster<BolusCalculation>? broadcaster = null
     )
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -143,7 +141,7 @@ public class BolusCalculationRepository : V4RepositoryBase<BolusCalculation, Bol
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BolusCalculation", inserted.Count);
         }
     }
 }

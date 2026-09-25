@@ -27,7 +27,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<SensorGlucoseRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
@@ -44,10 +43,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null
     )
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -97,17 +95,17 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         catch (OperationCanceledException) { throw; }
         catch (DbUpdateException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
         catch (TimeoutException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
     }
@@ -216,11 +214,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public override async Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
+    public override async Task<BulkWrite<SensorGlucose>> BulkCreateAsync(
         IEnumerable<SensorGlucose> recordsParam, WriteOrigin origin, CancellationToken ct = default)
     {
-        var written = (await base.BulkCreateAsync(recordsParam, origin, ct)).ToList();
-        await AdvanceTenantLastReadingAsync(written, ct);
+        var written = await base.BulkCreateAsync(recordsParam, origin, ct);
+        await AdvanceTenantLastReadingAsync([.. written], ct);
         return written;
     }
 
@@ -263,7 +261,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to advance tenant LastReadingAt");
+            Logger.LogWarning(ex, "Failed to advance tenant LastReadingAt");
         }
     }
 
@@ -367,7 +365,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
         }
     }
 

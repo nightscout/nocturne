@@ -3,6 +3,12 @@
 //! envelope, plus the error-envelope contract (null, invalid UTF-8, malformed
 //! JSON, bad schema, panic path).
 
+#![allow(
+    unsafe_code,
+    clippy::undocumented_unsafe_blocks,
+    reason = "tests call the C ABI"
+)]
+
 use std::ffi::{CStr, CString, c_char};
 use std::fs;
 use std::path::PathBuf;
@@ -10,9 +16,9 @@ use std::path::PathBuf;
 use serde_json::{Map, Value, json};
 
 use crate::{
-    boundary, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
+    envelope_string, nocturne_alerts_classify, nocturne_alerts_describe, nocturne_alerts_evaluate,
     nocturne_alerts_evaluate_node, nocturne_alerts_free_string, nocturne_alerts_leaf_paths,
-    nocturne_alerts_version,
+    nocturne_alerts_references_wall_clock, nocturne_alerts_tzdb_version, nocturne_alerts_version,
 };
 
 /// Calls an FFI function with `input`, copies the result into a Rust string
@@ -31,11 +37,14 @@ fn call(f: unsafe extern "C" fn(*const c_char) -> *mut c_char, input: &str) -> S
     }
 }
 
-fn call_json(f: unsafe extern "C" fn(*const c_char) -> *mut c_char, input: &str) -> Value {
+pub(crate) fn call_json(
+    f: unsafe extern "C" fn(*const c_char) -> *mut c_char,
+    input: &str,
+) -> Value {
     serde_json::from_str(&call(f, input)).expect("FFI returned valid JSON")
 }
 
-fn evaluate(request: &Value) -> Value {
+pub(crate) fn evaluate(request: &Value) -> Value {
     call_json(nocturne_alerts_evaluate, &request.to_string())
 }
 
@@ -55,6 +64,47 @@ fn version_returns_crate_version() {
 }
 
 #[test]
+fn include_leaves_false_omits_only_the_leaf_log() {
+    let mut request = json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "composite",
+            "condition_params": { "operator": "and", "conditions": [
+                { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+                { "type": "sustained", "sustained": { "minutes": 5, "child":
+                    { "type": "iob", "iob": { "operator": "<", "value": 1 } } } }
+            ] }
+        },
+        "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z", "iob_units": 0 },
+        "now": "2026-01-05T12:00:00Z",
+    });
+    let mut with_leaves = evaluate(&request);
+    assert_eq!(
+        with_leaves["result"]["leaves"].as_array().map(Vec::len),
+        Some(2)
+    );
+    request["include_leaves"] = json!(false);
+    let without = evaluate(&request);
+    with_leaves["result"]
+        .as_object_mut()
+        .unwrap()
+        .remove("leaves");
+    assert_eq!(without, with_leaves);
+}
+
+#[test]
+fn tzdb_version_is_the_compiled_release() {
+    unsafe {
+        let ptr = nocturne_alerts_tzdb_version();
+        let version = CStr::from_ptr(ptr).to_str().unwrap().to_string();
+        nocturne_alerts_free_string(ptr);
+        assert_eq!(version, nocturne_alerts_core::TZDB_VERSION);
+        assert!(version.len() >= 5 && version.starts_with("20"), "{version}");
+    }
+}
+
+#[test]
 fn free_string_accepts_null() {
     unsafe { nocturne_alerts_free_string(std::ptr::null_mut()) };
 }
@@ -64,16 +114,16 @@ fn free_string_accepts_null() {
 // ---------------------------------------------------------------------------
 
 #[derive(serde::Deserialize)]
-struct ScenarioFile {
-    name: String,
-    rules: Vec<Value>,
-    ticks: Vec<ScenarioTick>,
+pub(crate) struct ScenarioFile {
+    pub(crate) name: String,
+    pub(crate) rules: Vec<Value>,
+    pub(crate) ticks: Vec<ScenarioTick>,
 }
 
 #[derive(serde::Deserialize)]
-struct ScenarioTick {
-    at: String,
-    context: Value,
+pub(crate) struct ScenarioTick {
+    pub(crate) at: String,
+    pub(crate) context: Value,
 }
 
 fn corpus_dir() -> PathBuf {
@@ -85,7 +135,7 @@ fn corpus_dir() -> PathBuf {
 
 /// Lists every corpus scenario file (excluding the `.expected.json`
 /// snapshots), sorted for determinism.
-fn scenario_paths() -> Vec<PathBuf> {
+pub(crate) fn scenario_paths() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = fs::read_dir(corpus_dir())
         .expect("read corpus dir")
         .map(|e| e.expect("dir entry").path())
@@ -100,7 +150,7 @@ fn scenario_paths() -> Vec<PathBuf> {
     paths
 }
 
-fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
+pub(crate) fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
     let scenario: ScenarioFile =
         serde_json::from_str(&fs::read_to_string(path).expect("read scenario"))
             .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
@@ -113,6 +163,9 @@ fn load_scenario(path: &PathBuf) -> (ScenarioFile, Value) {
             .expect("parse expected");
     (scenario, expected)
 }
+
+/// Error prefix of a rule body that cannot be evaluated.
+pub(crate) const UNEVALUABLE_RULE: &str = "malformed condition_params for ";
 
 /// Drives one scenario through an evaluate-envelope function (C ABI or
 /// UniFFI), threading the timers/tracker state envelopes between ticks exactly
@@ -148,6 +201,14 @@ fn run_scenario(scenario: &ScenarioFile, evaluate: impl Fn(&Value) -> Value) -> 
                     });
 
                     let response = evaluate(&request);
+                    if response["ok"] == Value::Bool(false)
+                        && response["error"]
+                            .as_str()
+                            .is_some_and(|e| e.starts_with(UNEVALUABLE_RULE))
+                    {
+                        // The host skips the rule and keeps its state.
+                        return json!({ "rule_id": rule_id, "skipped": true });
+                    }
                     assert_eq!(
                         response["ok"],
                         Value::Bool(true),
@@ -256,6 +317,81 @@ fn state_threading_survives_serialisation() {
     assert_eq!(second["tracker"]["next_excursion_ordinal"], json!(2));
     assert_eq!(
         second["tracker"]["updated_at"],
+        json!("2026-01-05T12:10:00Z")
+    );
+}
+
+fn hysteresis_request(now: &str, tracker: Value) -> Value {
+    json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-00000000abce",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 },
+            "hysteresis_minutes": 30,
+        },
+        "context": { "latest_value": 100, "latest_timestamp": now },
+        "now": now,
+        "tracker": tracker,
+    })
+}
+
+#[test]
+fn hysteresis_start_round_trips_and_anchors_expiry() {
+    let entered = evaluate(&hysteresis_request(
+        "2026-01-05T12:05:00Z",
+        json!({
+            "state": "active",
+            "confirmation_count": 0,
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-05T12:00:00Z",
+            "next_excursion_ordinal": 2,
+        }),
+    ));
+    assert_eq!(entered["result"]["transition"], json!("hysteresis_started"));
+    assert_eq!(
+        entered["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+    assert_eq!(
+        entered["result"]["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+
+    let held = evaluate(&hysteresis_request(
+        "2026-01-05T12:30:00Z",
+        entered["tracker"].clone(),
+    ));
+    assert_eq!(held["result"]["transition"], json!("none"));
+    assert_eq!(
+        held["tracker"]["hysteresis_started_at"],
+        json!("2026-01-05T12:05:00Z")
+    );
+
+    let closed = evaluate(&hysteresis_request(
+        "2026-01-05T12:35:00Z",
+        held["tracker"].clone(),
+    ));
+    assert_eq!(closed["result"]["transition"], json!("closed"));
+    assert!(closed["tracker"].get("hysteresis_started_at").is_none());
+}
+
+#[test]
+fn hysteresis_state_without_a_start_adopts_updated_at() {
+    let response = evaluate(&hysteresis_request(
+        "2026-01-05T12:30:00Z",
+        json!({
+            "state": "hysteresis",
+            "confirmation_count": 0,
+            "active_excursion_ordinal": 1,
+            "updated_at": "2026-01-05T12:10:00Z",
+            "next_excursion_ordinal": 2,
+        }),
+    ));
+    assert_eq!(response["ok"], Value::Bool(true));
+    assert_eq!(response["result"]["transition"], json!("none"));
+    assert_eq!(
+        response["tracker"]["hysteresis_started_at"],
         json!("2026-01-05T12:10:00Z")
     );
 }
@@ -406,7 +542,7 @@ fn evaluate_node_rejects_null_pointer() {
 // Error envelopes
 // ---------------------------------------------------------------------------
 
-fn assert_error(response: &Value, fragment: &str) {
+pub(crate) fn assert_error(response: &Value, fragment: &str) {
     assert_eq!(response["schema_version"], json!(1));
     assert_eq!(response["ok"], Value::Bool(false));
     let error = response["error"].as_str().expect("error message present");
@@ -519,14 +655,67 @@ fn evaluate_rejects_tracker_state_without_updated_at() {
     assert_error(&evaluate(&request), "tracker.updated_at is required");
 }
 
+fn threshold_request_at(now: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "rule": {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "condition_type": "threshold",
+            "condition_params": { "direction": "below", "value": 70 }
+        },
+        "context": {},
+        "now": now,
+    })
+}
+
+#[test]
+fn evaluate_rejects_now_outside_the_dotnet_range() {
+    let response = evaluate(&threshold_request_at("+10000-01-01T00:00:00Z"));
+    assert_error(&response, "now is outside the supported timestamp range");
+    assert!(!response["error"].as_str().unwrap().contains("10000"));
+}
+
+#[test]
+fn evaluate_rejects_timers_and_tracker_outside_the_dotnet_range() {
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["timers"] = json!({ "threshold": "0000-06-01T00:00:00Z" });
+    assert_error(&evaluate(&request), "timers is outside");
+
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["tracker"] = json!({
+        "state": "active",
+        "updated_at": "0000-06-01T00:00:00Z",
+        "next_excursion_ordinal": 2,
+    });
+    assert_error(&evaluate(&request), "tracker.updated_at is outside");
+}
+
+#[test]
+fn evaluate_rejects_a_context_timestamp_outside_the_dotnet_range() {
+    let mut request = threshold_request_at("2026-01-05T12:00:00Z");
+    request["context"] = json!({ "last_carb_at": "0000-06-01T00:00:00Z" });
+    assert_error(&evaluate(&request), "last_carb_at is outside");
+}
+
+#[test]
+fn evaluate_node_rejects_now_outside_the_dotnet_range() {
+    let request = json!({
+        "schema_version": 1,
+        "rule_id": "00000000-0000-0000-0000-000000000001",
+        "node": { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+        "context": {},
+        "now": "0000-06-01T00:00:00Z",
+    });
+    assert_error(
+        &evaluate_node(&request),
+        "now is outside the supported timestamp range",
+    );
+}
+
 #[test]
 fn boundary_converts_panics_to_error_envelopes() {
-    let ptr = boundary(|| panic!("deliberate test panic"));
-    let response: Value = unsafe {
-        let out = CStr::from_ptr(ptr).to_str().unwrap().to_string();
-        nocturne_alerts_free_string(ptr);
-        serde_json::from_str(&out).unwrap()
-    };
+    let response: Value =
+        serde_json::from_str(&envelope_string(|| panic!("deliberate test panic"))).unwrap();
     assert_error(&response, "panic in alert engine: deliberate test panic");
 }
 
@@ -710,6 +899,55 @@ fn classify_defaults_missing_params_to_undirected() {
     }));
     assert_eq!(response["ok"], Value::Bool(true));
     assert_eq!(response["scope_class"], json!("undirected"));
+}
+
+fn wall_clock(condition_type: &str, condition_params: Value) -> Value {
+    call_json(
+        nocturne_alerts_references_wall_clock,
+        &json!({
+            "schema_version": 1,
+            "condition_type": condition_type,
+            "condition_params": condition_params,
+        })
+        .to_string(),
+    )
+}
+
+#[test]
+fn references_wall_clock_selects_nested_wall_clock_leaves() {
+    let nested = json!({
+        "operator": "and",
+        "conditions": [
+            { "type": "threshold", "threshold": { "direction": "below", "value": 70 } },
+            { "type": "staleness", "staleness": { "operator": ">", "value": 20 } },
+        ]
+    });
+    let response = wall_clock("composite", nested);
+    assert_eq!(response["ok"], json!(true));
+    assert_eq!(response["references_wall_clock"], json!(true));
+    assert_eq!(
+        wall_clock("threshold", json!({ "direction": "below", "value": 70 }))["references_wall_clock"],
+        json!(false)
+    );
+    assert_eq!(
+        wall_clock("no_such_kind", json!({}))["references_wall_clock"],
+        json!(false)
+    );
+}
+
+#[test]
+fn references_wall_clock_rejects_a_bad_envelope() {
+    assert_error(
+        &call_json(nocturne_alerts_references_wall_clock, "{ nope"),
+        "invalid request envelope",
+    );
+    assert_error(
+        &call_json(
+            nocturne_alerts_references_wall_clock,
+            r#"{"schema_version":2,"condition_type":"signal_loss"}"#,
+        ),
+        "unsupported schema_version 2",
+    );
 }
 
 #[test]
@@ -915,8 +1153,6 @@ fn describe_leaf_ids_align_with_evaluate_force_eval_log() {
 
 #[test]
 fn describe_signal_loss_is_a_leaf_with_its_timeout() {
-    // signal_loss has no leaves in evaluate (the rule is skipped), but the host
-    // still needs to render its watchdog — describe exposes it as a leaf.
     let tree = describe_rule("signal_loss", json!({ "timeout_minutes": 20 }));
     assert_eq!(tree["leaf_id"], json!(0));
     assert_eq!(tree["kind"], json!("signal_loss"));
@@ -1130,7 +1366,7 @@ fn describe_decodes_remaining_enum_ordinal_operands() {
             "state_span_active",
             json!({ "category": 4, "is_active": true })
         )["params"]["category"],
-        json!("Sleep")
+        json!("Exercise")
     );
     // An out-of-range ordinal surfaces verbatim as a number (the engine accepts
     // raw integers).
@@ -1167,13 +1403,34 @@ mod uniffi_surface {
     use serde_json::{Value, json};
 
     fn evaluate(request: &Value) -> Value {
-        serde_json::from_str(&uniffi_api::evaluate(request.to_string()))
+        serde_json::from_str(&uniffi_api::evaluate(&request.to_string()))
             .expect("uniffi evaluate returned valid JSON")
     }
 
     #[test]
     fn version_matches_crate_version() {
         assert_eq!(uniffi_api::version(), env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            uniffi_api::tzdb_version(),
+            nocturne_alerts_core::TZDB_VERSION
+        );
+    }
+
+    #[test]
+    fn classify_and_wall_clock_share_the_envelope_contract() {
+        let request = json!({
+            "schema_version": 1,
+            "condition_type": "signal_loss",
+            "condition_params": { "timeout_minutes": 15 }
+        })
+        .to_string();
+        let classified: Value =
+            serde_json::from_str(&uniffi_api::classify(&request)).expect("valid JSON");
+        assert_eq!(classified["scope_class"], json!("undirected"));
+        let wall_clock: Value =
+            serde_json::from_str(&uniffi_api::references_wall_clock(&request)).expect("valid JSON");
+        assert_eq!(wall_clock["ok"], json!(true));
+        assert_eq!(wall_clock["references_wall_clock"], json!(true));
     }
 
     #[test]
@@ -1203,7 +1460,8 @@ mod uniffi_surface {
                 "context": { "latest_value": 60, "latest_timestamp": "2026-01-05T12:00:00Z" },
                 "now": "2026-01-05T12:00:00Z",
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1217,7 +1475,8 @@ mod uniffi_surface {
                 "root": "auto_resolve",
                 "node": { "type": "threshold", "threshold": { "direction": "above", "value": 180 } }
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1235,7 +1494,8 @@ mod uniffi_surface {
                 "condition_type": "threshold",
                 "condition_params": { "direction": "below", "value": 70 }
             })
-            .to_string(),
+            .to_string()
+            .as_str(),
         ))
         .expect("valid JSON");
         assert_eq!(response["ok"], Value::Bool(true));
@@ -1246,7 +1506,7 @@ mod uniffi_surface {
     #[test]
     fn errors_come_back_as_envelopes_not_exceptions() {
         let malformed: Value =
-            serde_json::from_str(&uniffi_api::evaluate("{ nope".to_string())).expect("valid JSON");
+            serde_json::from_str(&uniffi_api::evaluate("{ nope")).expect("valid JSON");
         assert_error(&malformed, "invalid request envelope");
 
         let bad_schema = evaluate(&json!({

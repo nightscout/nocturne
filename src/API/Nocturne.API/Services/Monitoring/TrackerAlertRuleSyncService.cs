@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
@@ -38,6 +39,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertReferenceService _referenceService;
+    private readonly AlertRuleRearm _rearm;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
@@ -45,11 +47,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         ITenantDbContextFactory contextFactory,
         IRuleScopeClassifier scopeClassifier,
         IAlertReferenceService referenceService,
+        AlertRuleRearm rearm,
         ILogger<TrackerAlertRuleSyncService> logger)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
         _referenceService = referenceService;
+        _rearm = rearm;
         _logger = logger;
     }
 
@@ -116,6 +120,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         }
 
         var keptRuleIds = new HashSet<Guid>();
+        var changed = new List<Guid>();
         foreach (var (threshold, minutes) in pending)
         {
             if (minutes is null)
@@ -139,10 +144,15 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
 
             if (threshold.AlertRuleId is { } ruleId && managedRules.TryGetValue(ruleId, out var rule))
             {
+                if (rule.ConditionType != AlertConditionType.TrackerAge
+                    || !ConditionTreeEquality.Same(rule.ConditionParams, conditionParams))
+                {
+                    changed.Add(rule.Id);
+                    rule.ConditionParams = conditionParams;
+                }
                 rule.Name = name;
                 rule.Description = threshold.Description;
                 rule.ConditionType = AlertConditionType.TrackerAge;
-                rule.ConditionParams = conditionParams;
                 rule.ScopeClass = scopeClass;
                 rule.Severity = severity;
                 rule.UpdatedAt = DateTime.UtcNow;
@@ -198,12 +208,13 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             }
         }
 
-        SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds);
+        SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds, changed);
 
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
-        var removed = await RemoveOrDisableAsync(db, orphaned, ct);
+        var removed = await RemoveOrDisableAsync(db, orphaned, changed, ct);
 
         await db.SaveChangesAsync(ct);
+        await _rearm.ClearAsync(changed, ct);
 
         _logger.LogInformation(
             "Synced {ThresholdCount} threshold(s) to managed alert rules for tracker definition {DefinitionId} ({Orphaned} removed)",
@@ -221,8 +232,10 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .ToListAsync(ct);
         if (rules.Count == 0) return;
 
-        var removed = await RemoveOrDisableAsync(db, rules, ct);
+        var disabled = new List<Guid>();
+        var removed = await RemoveOrDisableAsync(db, rules, disabled, ct);
         await db.SaveChangesAsync(ct);
+        await _rearm.ClearAsync(disabled, ct);
 
         _logger.LogInformation(
             "Deleted {Count} managed alert rule(s) for removed tracker definition {DefinitionId}",
@@ -235,10 +248,11 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// referencing (escalation) rule from every evaluation pass, so they are kept but
     /// disabled: the referencing rule visibly stops (disabled-parent semantics, the same
     /// state a user creates by toggling the parent off) instead of dying invisibly, and
-    /// the stale condition can no longer fire.
+    /// the stale condition can no longer fire. Each disabled rule is added to
+    /// <paramref name="disabled"/>.
     /// </summary>
     private async Task<int> RemoveOrDisableAsync(
-        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules, CancellationToken ct)
+        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules, List<Guid> disabled, CancellationToken ct)
     {
         var removed = 0;
         foreach (var rule in rules)
@@ -246,6 +260,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             var referencing = await _referenceService.FindReferencingRulesAsync(rule.Id, ct);
             if (referencing.Count > 0)
             {
+                if (rule.IsEnabled)
+                    disabled.Add(rule.Id);
                 rule.IsEnabled = false;
                 rule.UpdatedAt = DateTime.UtcNow;
                 _logger.LogWarning(
@@ -276,7 +292,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         TrackerDefinitionEntity definition,
         string tag,
         IReadOnlyDictionary<Guid, AlertRuleEntity> managedRules,
-        HashSet<Guid> keptRuleIds)
+        HashSet<Guid> keptRuleIds,
+        List<Guid> changed)
     {
         if (definition.Category != TrackerCategory.Reservoir || definition.LowReservoirUnits is not { } units)
             return;
@@ -291,8 +308,12 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
             .FirstOrDefault(r => r.ConditionType == AlertConditionType.Reservoir);
         if (existing is not null)
         {
+            if (!ConditionTreeEquality.Same(existing.ConditionParams, conditionParams))
+            {
+                changed.Add(existing.Id);
+                existing.ConditionParams = conditionParams;
+            }
             existing.Name = name;
-            existing.ConditionParams = conditionParams;
             existing.ScopeClass = scopeClass;
             existing.Severity = severity;
             existing.UpdatedAt = DateTime.UtcNow;

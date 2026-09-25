@@ -309,6 +309,34 @@ public class AuthTokenProviderBaseRetryTests
         cache.GetSignInFailure(SignInProvider.Name, tenantId).Should().BeNull();
     }
 
+    /// <summary>
+    ///     An HttpClient timeout surfaces as a <see cref="TaskCanceledException"/> while the caller's
+    ///     token is still live, so a credential check against a slow source has to report that it
+    ///     could not verify rather than throw into the settings page that asked.
+    /// </summary>
+    [Fact]
+    public async Task VerifyCredentialsAsync_AcquireTimesOut_ReturnsFalse()
+    {
+        using var provider = new ThrowingTokenProvider(new TaskCanceledException("timed out"));
+
+        var verified = await provider.VerifyCredentialsAsync(new TestConnectorConfig(), CancellationToken.None);
+
+        verified.Should().BeFalse("a timeout is a failed credential check, not a withdrawn run");
+    }
+
+    /// <summary>A caller who cancelled still has to see the cancellation, not a false verdict.</summary>
+    [Fact]
+    public async Task VerifyCredentialsAsync_CancelledByTheCaller_PropagatesCancellation()
+    {
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        using var provider = new ThrowingTokenProvider(new OperationCanceledException(cts.Token));
+
+        await FluentActions.Awaiting(() =>
+                provider.VerifyCredentialsAsync(new TestConnectorConfig(), cts.Token))
+            .Should().ThrowAsync<OperationCanceledException>();
+    }
+
     private static SignInProvider BuildSignInProvider(
         IConnectorTokenCache cache,
         Guid tenantId,
@@ -389,6 +417,22 @@ public class AuthTokenProviderBaseRetryTests
         protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
             TestConnectorConfig config, CancellationToken cancellationToken)
             => throw new NotSupportedException();
+    }
+
+    /// <summary>Fails every credential check with the supplied exception.</summary>
+    private sealed class ThrowingTokenProvider(Exception loginFailure)
+        : AuthTokenProviderBase<TestConnectorConfig>(
+            new HttpClient(),
+            new ConnectorTokenCache(),
+            NoOpResolver,
+            Mock.Of<ITenantAccessor>(),
+            NullLogger<ThrowingTokenProvider>.Instance)
+    {
+        protected override string ConnectorName => "Throwing";
+
+        protected override Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
+            TestConnectorConfig config, CancellationToken cancellationToken)
+            => Task.FromException<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)>(loginFailure);
     }
 
     /// <summary>Fails every login, recording how many times it was asked to try.</summary>

@@ -15,20 +15,26 @@
 	const disabled = $derived(command.clickable ? !command.clickable(editor) : false);
 </script>
 
-<EdraToolTip tooltip={command.tooltip ?? ''} shortCut={command.shortCut ?? ''}>
-	{@const Icon = command.icon}
-	{#if command.isActive}
-		<!-- The editor owns the state: a click runs the command and the next transaction reports it back. -->
-		<Toggle
-			bind:pressed={() => command.isActive?.(editor) ?? false, () => {}}
-			onclick={() => command.onClick?.(editor)}
-			{disabled}
-		>
-			<Icon />
-		</Toggle>
-	{:else}
-		<Button variant="ghost" size="icon" onclick={() => command.onClick?.(editor)} {disabled}>
-			<Icon />
-		</Button>
-	{/if}
+<EdraToolTip
+	tooltip={command.tooltip ?? ''}
+	shortCut={command.shortCut ?? ''}
+	onclick={() => command.onClick?.(editor)}
+>
+	{#snippet children({ props }: { props: Record<string, unknown> })}
+		{@const Icon = command.icon}
+		{#if command.isActive}
+			<!-- The editor owns the state: a click runs the command and the next transaction reports it back. -->
+			<Toggle
+				{...props}
+				bind:pressed={() => command.isActive?.(editor) ?? false, () => {}}
+				{disabled}
+			>
+				<Icon />
+			</Toggle>
+		{:else}
+			<Button {...props} variant="ghost" size="icon" {disabled}>
+				<Icon />
+			</Button>
+		{/if}
+	{/snippet}
 </EdraToolTip>

@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Xunit;
 
@@ -94,7 +96,16 @@ public class AlertEngineCorpusTests
             var ruleResults = new List<ExpectedRuleResult>(scenario.Rules.Count);
             foreach (var (scenarioRule, snapshot) in scenario.Rules.Zip(snapshots))
             {
-                var evaluation = await engine.EvaluateRuleAsync(snapshot, context, options, ct);
+                AlertEngineEvaluation evaluation;
+                try
+                {
+                    evaluation = await engine.EvaluateRuleAsync(snapshot, context, options, ct);
+                }
+                catch (Exception ex) when (ex is ConditionTreeFaultException or RustAlertEngineException)
+                {
+                    // The orchestrator's per-rule catch skips a rule the engine cannot evaluate.
+                    evaluation = new AlertEngineEvaluation { Skipped = true };
+                }
                 ruleResults.Add(await EngineTestHarness.ToExpectedResultAsync(
                     scenarioRule, evaluation, trackerRepo, timerStore, ct));
             }

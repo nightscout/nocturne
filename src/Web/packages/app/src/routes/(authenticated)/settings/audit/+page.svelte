@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Switch } from "$lib/components/ui/switch";
@@ -26,12 +27,8 @@
   import { toIsoString } from "$lib/utils/api-date";
 
   // Permissions
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
   const canManageAudit = $derived(
-    effectivePermissions.includes("audit.manage") ||
-      effectivePermissions.includes("*"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "audit.manage"),
   );
 
   // --- Config ---

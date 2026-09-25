@@ -12,6 +12,7 @@ using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -45,7 +46,9 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
             Mock.Of<ILogger<AlertRulesController>>());
 
         var http = new DefaultHttpContext();

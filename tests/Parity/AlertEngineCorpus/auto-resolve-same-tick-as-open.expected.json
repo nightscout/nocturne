@@ -17,7 +17,8 @@
           "transition": "opened",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "confirmation_count": 0,
+            "awaiting_rearm": true
           },
           "auto_resolved": true
         }

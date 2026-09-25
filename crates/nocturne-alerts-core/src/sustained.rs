@@ -1,21 +1,30 @@
-//! Sustained-condition timer state: an in-memory `IConditionTimerStore` that
-//! records observable mutations (the state the host persists between
-//! evaluations), plus the `sustained` container evaluation itself.
+//! Sustained-condition timers, which record their mutations for the host to
+//! persist, and the `sustained` container (engine-semantics.md §3).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::compare::total_minutes;
 use crate::eval::{Env, eval_node};
 use crate::model::SustainedPayload;
-use crate::paths::child_path;
+use crate::paths::node_child_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TimerOpKind {
     Set,
     Clear,
+}
+
+impl TimerOpKind {
+    #[must_use]
+    pub fn wire(self) -> &'static str {
+        match self {
+            TimerOpKind::Set => "set",
+            TimerOpKind::Clear => "clear",
+        }
+    }
 }
 
 /// A recorded timer mutation. `at` is present only for `set`.
@@ -26,92 +35,85 @@ pub struct TimerOp {
     pub at: Option<DateTime<Utc>>,
 }
 
-/// `(rule_id, path) -> first_true_utc` store. Mirrors `RecordingTimerStore`:
-/// a clear is recorded only when a timer actually existed (the engine calls
-/// clear unconditionally on every child-false tick).
+/// First-true instants keyed by rule and condition path. A clear is recorded
+/// only when a timer existed.
 #[derive(Debug, Default)]
 pub struct TimerStore {
-    map: HashMap<(Uuid, String), DateTime<Utc>>,
+    timers: HashMap<Uuid, BTreeMap<String, DateTime<Utc>>>,
     log: Vec<TimerOp>,
 }
 
 impl TimerStore {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
-        self.map.get(&(rule_id, path.to_string())).copied()
+    pub(crate) fn get_first_true(&self, rule_id: Uuid, path: &str) -> Option<DateTime<Utc>> {
+        self.timers.get(&rule_id)?.get(path).copied()
     }
 
-    pub fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
-        self.map.insert((rule_id, path.to_string()), at);
+    pub(crate) fn set_first_true(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
+        self.seed(rule_id, path, at);
         self.log.push(TimerOp {
             kind: TimerOpKind::Set,
-            path: path.to_string(),
+            path: path.to_owned(),
             at: Some(at),
         });
     }
 
-    pub fn clear(&mut self, rule_id: Uuid, path: &str) {
-        if self.map.remove(&(rule_id, path.to_string())).is_some() {
+    pub(crate) fn clear(&mut self, rule_id: Uuid, path: &str) {
+        let removed = self
+            .timers
+            .get_mut(&rule_id)
+            .and_then(|timers| timers.remove(path));
+        if removed.is_some() {
             self.log.push(TimerOp {
                 kind: TimerOpKind::Clear,
-                path: path.to_string(),
+                path: path.to_owned(),
                 at: None,
             });
         }
     }
 
-    pub fn clear_all_for_rule(&mut self, rule_id: Uuid) {
-        let mut paths: Vec<String> = self
-            .map
-            .keys()
-            .filter(|(r, _)| *r == rule_id)
-            .map(|(_, p)| p.clone())
-            .collect();
-        paths.sort();
-        for path in paths {
-            self.map.remove(&(rule_id, path.clone()));
-            self.log.push(TimerOp {
+    /// Clears every timer of `rule_id`, recording a clear for each.
+    pub(crate) fn clear_all_for_rule(&mut self, rule_id: Uuid) {
+        if let Some(timers) = self.timers.remove(&rule_id) {
+            self.log.extend(timers.into_keys().map(|path| TimerOp {
                 kind: TimerOpKind::Clear,
                 path,
                 at: None,
-            });
+            }));
         }
     }
 
-    /// Returns the ops recorded since the last drain, then clears the log.
+    /// The ops recorded since the last drain.
     pub fn drain_ops(&mut self) -> Vec<TimerOp> {
         std::mem::take(&mut self.log)
     }
 
-    /// Seeds a persisted timer without recording an op. Used by hosts that
-    /// carry timer state across evaluations as data (e.g. the FFI envelope).
+    /// Loads a persisted timer without recording an op.
     pub fn seed(&mut self, rule_id: Uuid, path: &str, at: DateTime<Utc>) {
-        self.map.insert((rule_id, path.to_string()), at);
+        self.timers
+            .entry(rule_id)
+            .or_default()
+            .insert(path.to_owned(), at);
     }
 
-    /// Snapshot of every `(path, first_true)` entry for `rule_id`, sorted by
-    /// path. The state a host persists between evaluations.
-    pub fn snapshot_for_rule(&self, rule_id: Uuid) -> Vec<(String, DateTime<Utc>)> {
-        let mut entries: Vec<(String, DateTime<Utc>)> = self
-            .map
-            .iter()
-            .filter(|((r, _), _)| *r == rule_id)
-            .map(|((_, p), at)| (p.clone(), *at))
-            .collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        entries
+    /// `rule_id`'s timers by path, in path order: the state a host persists.
+    pub fn snapshot_for_rule(&self, rule_id: Uuid) -> impl Iterator<Item = (&str, DateTime<Utc>)> {
+        self.timers
+            .get(&rule_id)
+            .into_iter()
+            .flatten()
+            .map(|(path, &at)| (path.as_str(), at))
     }
 }
 
-/// `SustainedEvaluator`: null child or `minutes <= 0` → false (child not
-/// evaluated, timers untouched). Otherwise evaluate the child first
-/// (path-extended `[0].{child.Type}`); child false clears the `(rule, path)`
-/// timer; first true sets it and returns false (no 0-elapsed check on the set
-/// tick); subsequent trues fire once `(now - first).TotalMinutes >= minutes`
-/// in f64. The timer key path is the path of the sustained node itself.
+/// A missing child or `minutes <= 0` is false, with the child unevaluated and
+/// the timer untouched. Otherwise the child evaluates first: false clears the
+/// timer keyed by this node's path; the first true sets it and is false; later
+/// trues hold once `minutes` fractional minutes have passed since it was set.
 pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) -> bool {
     let Some(child) = &p.child else {
         return false;
@@ -121,8 +123,7 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
     }
 
     let now = env.now;
-    let child_path = child_path(path, 0, child.type_str.as_deref());
-    let child_result = eval_node(Some(child), &child_path, env);
+    let child_result = eval_node(Some(child), &node_child_path(path, 0, Some(child)), env);
 
     if !child_result {
         env.timers.clear(env.rule_id, path);
@@ -134,6 +135,6 @@ pub(crate) fn eval_sustained(p: &SustainedPayload, path: &str, env: &mut Env) ->
             env.timers.set_first_true(env.rule_id, path, now);
             false
         }
-        Some(first) => total_minutes(now - first) >= f64::from(p.minutes),
+        Some(first) => env.held_for(first, p.minutes),
     }
 }

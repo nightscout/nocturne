@@ -50,7 +50,7 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
         TandemConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
         var activeTypes = ResolveActiveTypes(request, config);
         var region = TandemConstants.ForRegion(config.Region);
 
@@ -64,7 +64,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                 _logger.LogError("[{Source}] Tandem Source authentication failed", ConnectorSource);
                 result.Success = false;
                 result.Errors.Add("Authentication failed");
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -90,7 +89,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
                     _logger.LogWarning("[{Source}] No Tandem pumps found on the account", ConnectorSource);
                 }
 
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -119,7 +117,6 @@ public class TandemConnectorService : BaseConnectorService<TandemConnectorConfig
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

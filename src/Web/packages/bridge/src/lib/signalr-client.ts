@@ -204,6 +204,11 @@ class SignalRClient {
       logger.debug("Received notificationUpdated from SignalR:", data);
       this.messageHandler.handleNotificationUpdated(data);
     });
+
+    this.dataConnection.on("trackerUpdate", (data: unknown) => {
+      logger.debug("Received trackerUpdate from SignalR:", data);
+      this.messageHandler.handleTrackerUpdate(data);
+    });
   }
 
   private setupAlarmEventHandlers(): void {

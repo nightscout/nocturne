@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Treatments;
@@ -62,8 +63,11 @@ public interface ITreatmentStore
     /// </summary>
     /// <param name="treatments">The treatments to create.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of the created <see cref="Treatment"/> records.</returns>
-    Task<IReadOnlyList<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+    /// <returns>
+    /// The created <see cref="Treatment"/> records, carrying how many of their records were not
+    /// written because the user had deleted them.
+    /// </returns>
+    Task<BulkWrite<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 
     /// <summary>
     /// Updates an existing treatment by ID, propagating changes to V4 tables.

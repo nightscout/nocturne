@@ -4,6 +4,7 @@
   import { scaleTime } from 'd3-scale';
   import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
+  import { FALLBACK_GLUCOSE_Y_MAX } from '$lib/constants/glucose-thresholds';
   import { bg, bgLabel, time } from '$lib/utils/formatting';
   import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
   import {
@@ -55,7 +56,7 @@
   y="sgv"
   xScale={scaleTime()}
   xDomain={[day, xDomainEnd]}
-  yDomain={[0, thresholds?.glucoseYMax ?? 300]}
+  yDomain={[0, thresholds?.glucoseYMax ?? FALLBACK_GLUCOSE_Y_MAX]}
   padding={{ left: 0, top: 0, bottom: 0, right: 0 }}
   tooltipContext={{ mode: "manual" }}
 >

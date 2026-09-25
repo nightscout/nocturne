@@ -58,25 +58,25 @@ public class TreatmentDecomposerBatchTests : IDisposable
         // BulkCreateAsync returns the input records
         _bolusRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _carbRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.CarbIntake>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.CarbIntake> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _bgCheckRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BGCheck>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.BGCheck> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.BGCheck> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _noteRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.Note>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.Note> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.Note> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _bolusCalcRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.BolusCalculation>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.BolusCalculation> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.BolusCalculation> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _deviceEventRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.DeviceEvent> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.DeviceEvent> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _tempBasalRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> records, WriteOrigin origin, CancellationToken _) => [.. records]);
 
         // StateSpanService returns a new StateSpan
         _stateSpanServiceMock
@@ -353,7 +353,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 var persisted = records.ToList();
                 foreach (var record in persisted)
                     record.Id = record.LegacyId == "meal-1" ? mealCarbIntakeId : Guid.CreateVersion7();
-                return persisted;
+                return [.. persisted];
             });
 
         var treatments = new List<Treatment>
@@ -398,7 +398,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 var upserted = records.ToList();
                 foreach (var record in upserted)
                     record.Id = storedCarbIntakeId;
-                return upserted;
+                return [.. upserted];
             });
 
         _treatmentFoodServiceMock
@@ -450,7 +450,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
                 var inserted = records.GroupBy(r => r.LegacyId!).Select(g => g.First()).ToList();
                 foreach (var record in inserted)
                     record.Id = carbIntakeId;
-                return inserted;
+                return [.. inserted];
             });
 
         var treatments = new List<Treatment>

@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
@@ -16,16 +18,22 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly IAuditContext _auditContext;
+    private readonly ILogger<DeviceStatusExtrasRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeviceStatusExtrasRepository"/> class.
     /// </summary>
     /// <param name="contextFactory">The tenant database context factory.</param>
     /// <param name="auditContext">The audit context for tracking mutations.</param>
-    public DeviceStatusExtrasRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext)
+    /// <param name="logger">The logger instance.</param>
+    public DeviceStatusExtrasRepository(
+        ITenantDbContextFactory contextFactory,
+        IAuditContext auditContext,
+        ILogger<DeviceStatusExtrasRepository> logger)
     {
         _contextFactory = contextFactory;
         _auditContext = auditContext;
+        _logger = logger;
     }
 
     /// <summary>
@@ -43,7 +51,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var entity = DeviceStatusExtrasMapper.ToEntity(model);
-        if ((await ctx.GetBlockingCorrelationIdsAsync([entity.CorrelationId], ct)).Count > 0)
+        if ((await ctx.GetBlockingCorrelationIdsAsync([entity.CorrelationId], ct)).Held.Count > 0)
             throw new RecreationBlockedException(nameof(DeviceStatusExtras), $"correlation id '{entity.CorrelationId}'");
 
         ctx.DeviceStatusExtras.Add(entity);
@@ -86,7 +94,7 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<DeviceStatusExtras>> BulkCreateAsync(
+    public async Task<BulkWrite<DeviceStatusExtras>> BulkCreateAsync(
         IEnumerable<DeviceStatusExtras> records,
         WriteOrigin origin, CancellationToken ct = default)
     {
@@ -107,27 +115,30 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        var written = await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
 
+            var toInsert = entities;
+            var skippedDeleted = 0;
             if (correlationIds.Count > 0)
             {
-                var blockedCorrelationIds = await ctx.GetBlockingCorrelationIdsAsync(correlationIds, ct);
+                var blocked = await ctx.GetBlockingCorrelationIdsAsync(correlationIds, ct);
 
-                entities = entities
-                    .Where(e => !blockedCorrelationIds.Contains(e.CorrelationId))
+                skippedDeleted = toInsert.Count(e => blocked.DeletedByUser.Contains(e.CorrelationId));
+                toInsert = toInsert
+                    .Where(e => !blocked.Held.Contains(e.CorrelationId))
                     .ToList();
             }
 
-            if (entities.Count == 0)
+            if (toInsert.Count == 0)
             {
                 await tx.CommitAsync(ct);
-                return [];
+                return new BulkWrite<DeviceStatusExtras>([], skippedDeleted);
             }
 
             const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
+            foreach (var batch in toInsert.Chunk(batchSize))
             {
                 ctx.DeviceStatusExtras.AddRange(batch);
                 await ctx.SaveChangesAsync(ct);
@@ -135,7 +146,11 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             }
 
             await tx.CommitAsync(ct);
-            return entities.Select(DeviceStatusExtrasMapper.ToDomainModel);
+            return new BulkWrite<DeviceStatusExtras>(
+                toInsert.Select(DeviceStatusExtrasMapper.ToDomainModel).ToList(), skippedDeleted);
         });
+
+        _logger.LogSkippedDeleted(nameof(DeviceStatusExtras), written.SkippedDeleted);
+        return written;
     }
 }

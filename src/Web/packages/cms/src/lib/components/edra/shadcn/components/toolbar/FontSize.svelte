@@ -32,16 +32,18 @@
 
 <DropdownMenu.Root>
 	<EdraToolTip tooltip={strings.toolbar.font.buttonTitle}>
-		<DropdownMenu.Trigger>
-			{#snippet child({ props }: { props: Record<string, unknown> })}
-				<Button {...props} variant="ghost" size="sm">
-					<span class="flex items-center">
-						{currentLabel}
-						<ChevronDown class="text-muted-foreground size-2!" />
-					</span>
-				</Button>
-			{/snippet}
-		</DropdownMenu.Trigger>
+		{#snippet children({ props }: { props: Record<string, unknown> })}
+			<DropdownMenu.Trigger {...props}>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} variant="ghost" size="sm">
+						<span class="flex items-center">
+							{currentLabel}
+							<ChevronDown class="text-muted-foreground size-2!" />
+						</span>
+					</Button>
+				{/snippet}
+			</DropdownMenu.Trigger>
+		{/snippet}
 	</EdraToolTip>
 	<DropdownMenu.Content portalProps={{ to: document.getElementById('edra-editor') ?? 'undefined' }}>
 		<DropdownMenu.Label>{strings.toolbar.font.dropdownTitle}</DropdownMenu.Label>

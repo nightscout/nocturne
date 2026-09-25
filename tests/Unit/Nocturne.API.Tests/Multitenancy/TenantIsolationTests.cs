@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Identity;
@@ -454,7 +455,12 @@ public class TenantIsolationTests
     {
         var (service, dataClients, _, _, _, _, _) = CreateBroadcastService(TenantA);
 
-        await service.BroadcastTrackerUpdateAsync("created", new { id = "tracker-1" });
+        await service.BroadcastTrackerUpdateAsync(
+            "created",
+            new TrackerInstanceDto { Id = Guid.NewGuid() },
+            "owner-123",
+            TrackerVisibility.Public
+        );
 
         dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);
         dataClients.Verify(c => c.Group("authorized"), Times.Never);

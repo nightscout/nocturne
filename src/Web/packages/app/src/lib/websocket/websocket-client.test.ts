@@ -263,3 +263,55 @@ describe("WebSocketClient handshake ticket handling", () => {
     expect(lastSocket!.disconnectCalls).toBeGreaterThan(0);
   });
 });
+
+describe("WebSocketClient tracker updates", () => {
+  /** A client past the handshake, so its event listeners are live. */
+  async function connectedClient(): Promise<InstanceType<typeof WebSocketClient>> {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+    client.connect();
+    await lastSocket!.handshake();
+    return client;
+  }
+
+  const trackerUpdate = {
+    action: "create",
+    instance: { id: "tracker-1", definitionName: "Sensor" },
+  };
+
+  it("dispatches a trackerUpdate to the registered handler", async () => {
+    const client = await connectedClient();
+    const handler = vi.fn();
+    client.on("trackerUpdate", handler);
+
+    lastSocket!.handlers.get("trackerUpdate")?.(trackerUpdate);
+
+    expect(handler).toHaveBeenCalledWith(trackerUpdate);
+  });
+
+  it("drops a trackerUpdate carrying an unknown action", async () => {
+    const client = await connectedClient();
+    const handler = vi.fn();
+    client.on("trackerUpdate", handler);
+
+    lastSocket!.handlers.get("trackerUpdate")?.({
+      action: "explode",
+      instance: { id: "tracker-1" },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("drops a trackerUpdate whose instance has no id", async () => {
+    const client = await connectedClient();
+    const handler = vi.fn();
+    client.on("trackerUpdate", handler);
+
+    lastSocket!.handlers.get("trackerUpdate")?.({
+      action: "ack",
+      instance: { definitionName: "Sensor" },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+});

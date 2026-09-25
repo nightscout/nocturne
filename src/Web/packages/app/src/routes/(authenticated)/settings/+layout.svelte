@@ -20,7 +20,7 @@
   {/if}
 
   <!-- Main Content - No secondary sidebar, use the app's main sidebar -->
-  <main class="flex-1 overflow-auto">
+  <div class="flex-1 overflow-auto">
     {@render children()}
-  </main>
+  </div>
 </div>

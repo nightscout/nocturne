@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -75,24 +76,34 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     protected virtual TimeSpan PerTenantSyncTimeout => TimeSpan.FromMinutes(3);
 
     private readonly ConnectorSyncBudget _budget;
+    private readonly ConnectorSyncMetrics? _metrics;
+
+    /// <summary>The active tenants, shared by every poller.</summary>
+    protected readonly ActiveTenantSnapshot ActiveTenants;
 
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
     /// <param name="budget">The process-wide budget.</param>
+    /// <param name="activeTenants">The active tenants every poller reads.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="nudge">Delivers configuration writes for this connector; absent, a change is noticed on the tenant's next scheduled look.</param>
+    /// <param name="metrics">Connector sync instruments; absent, the sync runs unmeasured.</param>
     protected ConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        ActiveTenantSnapshot activeTenants,
         ILogger logger,
-        ConnectorPollerNudge? nudge = null
+        ConnectorPollerNudge? nudge = null,
+        ConnectorSyncMetrics? metrics = null
     )
     {
         ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _budget = budget ?? throw new ArgumentNullException(nameof(budget));
+        ActiveTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _metrics = metrics;
         nudge?.Subscribe(ConnectorName, RequestImmediateSync);
     }
 
@@ -365,14 +376,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     private async Task SyncAllTenantsAsync(CancellationToken stoppingToken)
     {
-        using var lookupScope = ServiceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(stoppingToken);
+        var activeTenants = await ActiveTenants.GetAsync(stoppingToken);
         var now = DateTime.UtcNow;
-        var tenants = (await lookupContext.Tenants.AsNoTracking()
-                .Where(t => t.IsActive)
-                .Select(t => new { t.Id, t.Slug, t.DisplayName })
-                .ToListAsync(stoppingToken))
+        var tenants = activeTenants
             .Where(t => !_nextCheckByTenant.TryGetValue(t.Id, out var nextCheck) || nextCheck <= now)
             .ToList();
 
@@ -396,7 +402,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
                 try
                 {
-                    await SyncForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, tenantCts.Token);
+                    await SyncForTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct, tenantCts.Token);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -426,23 +432,35 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     private async Task<ConnectorSyncBudget.Lease> AcquireSlotAsync(string tenantSlug, CancellationToken stoppingToken)
     {
+        var started = Stopwatch.GetTimestamp();
+
         var acquire = _budget.AcquireAsync(stoppingToken);
         if (acquire.IsCompleted)
-            return await acquire;
+        {
+            var fastPath = await acquire;
+            _metrics?.RecordSlotWait(ConnectorName, Stopwatch.GetElapsedTime(started));
+            return fastPath;
+        }
 
         var pending = acquire.AsTask();
-        var started = DateTime.UtcNow;
         while (await Task.WhenAny(pending, Task.Delay(SlotWaitWarningAfter, stoppingToken)) != pending)
         {
             Logger.LogWarning(
                 "{ConnectorName} sync for tenant {TenantSlug} has waited {Waited} for a sync slot; {InFlight} of {Slots} in use",
-                ConnectorName, tenantSlug, DateTime.UtcNow - started, _budget.InFlight, _budget.Slots);
+                ConnectorName, tenantSlug, Stopwatch.GetElapsedTime(started), _budget.InFlight, _budget.Slots);
         }
 
-        return await pending;
+        var held = await pending;
+        _metrics?.RecordSlotWait(ConnectorName, Stopwatch.GetElapsedTime(started));
+        return held;
     }
 
-    private async Task SyncForTenantAsync(Guid tenantId, string tenantSlug, string displayName, CancellationToken stoppingToken)
+    private async Task SyncForTenantAsync(
+        Guid tenantId,
+        string tenantSlug,
+        string displayName,
+        CancellationToken shutdownToken,
+        CancellationToken stoppingToken)
     {
         using var scope = ServiceProvider.CreateScope();
 
@@ -509,14 +527,39 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
             lastSyncAttempt: now,
             cancellationToken: stoppingToken);
 
+        var started = Stopwatch.GetTimestamp();
         var progressReporter = scope.ServiceProvider.GetService<ISyncProgressReporter>();
-        var result = await PerformSyncAsync(scope.ServiceProvider, config, stoppingToken, progressReporter);
+        SyncResult result;
+        try
+        {
+            result = await PerformSyncAsync(scope.ServiceProvider, config, stoppingToken, progressReporter);
+        }
+        catch (OperationCanceledException)
+        {
+            _metrics?.RecordSyncDuration(
+                ConnectorName,
+                shutdownToken.IsCancellationRequested ? "cancelled"
+                    : stoppingToken.IsCancellationRequested ? "timeout"
+                    : "failure",
+                Stopwatch.GetElapsedTime(started));
+            throw;
+        }
+        catch (Exception)
+        {
+            _metrics?.RecordSyncDuration(ConnectorName, "failure", Stopwatch.GetElapsedTime(started));
+            throw;
+        }
 
         // A run that never got a token has nothing to fetch, which several connectors report as a
         // successful sync that found no data. Reading the failure here rather than in each connector
         // is what makes a connector that cannot sign in visible for all of them.
         var signInFailure = scope.ServiceProvider.GetRequiredService<IConnectorTokenCache>()
             .GetSignInFailure(ConnectorName, tenantId);
+
+        _metrics?.RecordSyncDuration(
+            ConnectorName,
+            result.Success && signInFailure == null ? "success" : "failure",
+            Stopwatch.GetElapsedTime(started));
 
         if (result.Success && signInFailure == null)
         {
@@ -575,9 +618,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 public class ConnectorBackgroundService<TService, TConfig>(
     IServiceProvider serviceProvider,
     ConnectorSyncBudget budget,
+    ActiveTenantSnapshot activeTenants,
     ILogger<ConnectorBackgroundService<TService, TConfig>> logger,
-    ConnectorPollerNudge? nudge = null)
-    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, logger, nudge)
+    ConnectorPollerNudge? nudge = null,
+    ConnectorSyncMetrics? metrics = null)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, activeTenants, logger, nudge, metrics)
     where TService : class, IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {

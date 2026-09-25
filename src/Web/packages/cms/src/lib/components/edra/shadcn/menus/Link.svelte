@@ -57,39 +57,40 @@
 		<Button variant="link" size="sm" href={link} class="max-w-120" target="_blank">
 			<span class="min-w-0 truncate">{link}</span>
 		</Button>
-		<SimpleTooltip tooltip={strings.menu.link.edit}>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={() => {
-					isEditing = true;
-					editor.commands.blur();
-				}}
-			>
-				<Edit />
-			</Button>
+		<SimpleTooltip
+			tooltip={strings.menu.link.edit}
+			onclick={() => {
+				isEditing = true;
+				editor.commands.blur();
+			}}
+		>
+			{#snippet children({ props }: { props: Record<string, unknown> })}
+				<Button {...props} variant="ghost" size="icon">
+					<Edit />
+				</Button>
+			{/snippet}
 		</SimpleTooltip>
-		<SimpleTooltip tooltip={strings.menu.link.copy}>
-			<Button
-				variant="ghost"
-				title={strings.menu.link.copy}
-				size="icon"
-				onclick={() => {
-					window.navigator.clipboard.writeText(link);
-				}}
-			>
-				<Copy />
-			</Button>
+		<SimpleTooltip
+			tooltip={strings.menu.link.copy}
+			onclick={() => {
+				window.navigator.clipboard.writeText(link);
+			}}
+		>
+			{#snippet children({ props }: { props: Record<string, unknown> })}
+				<Button {...props} variant="ghost" size="icon">
+					<Copy />
+				</Button>
+			{/snippet}
 		</SimpleTooltip>
-		<SimpleTooltip tooltip={strings.menu.link.remove}>
-			<Button
-				variant="ghost"
-				title={strings.menu.link.remove}
-				size="icon"
-				onclick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()}
-			>
-				<Trash />
-			</Button>
+		<SimpleTooltip
+			tooltip={strings.menu.link.remove}
+			onclick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()}
+		>
+			{#snippet children({ props }: { props: Record<string, unknown> })}
+				<Button {...props} variant="ghost" size="icon">
+					<Trash />
+				</Button>
+			{/snippet}
 		</SimpleTooltip>
 	{:else}
 		<form onsubmit={handleSubmit} class="flex max-w-120 items-center gap-0.5">
@@ -100,9 +101,11 @@
 				placeholder={strings.menu.link.enterLinkPlaceholder}
 			/>
 			<SimpleTooltip tooltip={strings.menu.link.enterLinkButton}>
-				<Button type="submit" size="icon">
-					<Check />
-				</Button>
+				{#snippet children({ props }: { props: Record<string, unknown> })}
+					<Button {...props} type="submit" size="icon">
+						<Check />
+					</Button>
+				{/snippet}
 			</SimpleTooltip>
 		</form>
 	{/if}

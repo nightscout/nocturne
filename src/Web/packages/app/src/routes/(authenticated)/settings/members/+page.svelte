@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { describeSubmitError } from "$lib/forms";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
@@ -43,36 +44,24 @@
   import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
-  const hasStar = $derived(effectivePermissions.includes("*"));
-  const canInvite = $derived(
-    hasStar || effectivePermissions.includes("members.invite"),
-  );
+  const granted = $derived(page.data.effectivePermissions ?? []);
+  const canInvite = $derived(satisfiesScope(granted, "members.invite"));
   const canManageMembers = $derived(
-    hasStar ||
-      effectivePermissions.includes("members.manage") ||
-      effectivePermissions.includes("sharing.manage"),
+    satisfiesScope(granted, "members.manage") ||
+      satisfiesScope(granted, "sharing.manage"),
   );
   const canEditMemberRoles = $derived(
-    hasStar || effectivePermissions.includes("members.manage"),
+    satisfiesScope(granted, "members.manage"),
   );
   const canManageSharing = $derived(
-    hasStar || effectivePermissions.includes("sharing.manage"),
+    satisfiesScope(granted, "sharing.manage"),
   );
-  const canManageRoles = $derived(
-    hasStar || effectivePermissions.includes("roles.manage"),
-  );
-  const canViewAudit = $derived(
-    hasStar ||
-      effectivePermissions.includes("audit.read") ||
-      effectivePermissions.includes("audit.manage"),
-  );
+  const canManageRoles = $derived(satisfiesScope(granted, "roles.manage"));
+  const canViewAudit = $derived(satisfiesScope(granted, "audit.read"));
   // GuestLinksSection self-gates on this; mirror it so the access-denied card isn't shown to a
   // guest-link-only user who can still use the guest-links section.
   const canCreateGuestLinks = $derived(
-    hasStar || effectivePermissions.includes("sharing.guest"),
+    satisfiesScope(granted, "sharing.guest"),
   );
 
   // Queries

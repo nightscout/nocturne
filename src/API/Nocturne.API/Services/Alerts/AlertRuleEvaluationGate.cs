@@ -14,15 +14,20 @@ namespace Nocturne.API.Services.Alerts;
 public sealed class AlertRuleEvaluationGate
 {
     private readonly Dictionary<Guid, Stripe> _stripes = new();
+    private readonly AsyncLocal<Section?> _heldByFlow = new();
 
     /// <summary>
     /// Waits for exclusive access to <paramref name="alertRuleId"/>. Dispose the returned
-    /// lease to release it.
+    /// lease to release it. Inside <see cref="RunExclusiveAsync{T}"/> for the same rule it
+    /// returns at once, with a lease that releases nothing.
     /// </summary>
     /// <param name="alertRuleId">The alert rule to serialise on.</param>
     /// <param name="ct">Cancellation token.</param>
     public async Task<IDisposable> AcquireAsync(Guid alertRuleId, CancellationToken ct)
     {
+        if (Section.Holds(_heldByFlow.Value, alertRuleId))
+            return NoLease.Instance;
+
         Stripe stripe;
         lock (_stripes)
         {
@@ -46,6 +51,29 @@ public sealed class AlertRuleEvaluationGate
         }
 
         return new Lease(this, alertRuleId, stripe);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> holding <paramref name="alertRuleId"/>'s lease, so that
+    /// everything it does to the rule, including the leases it takes itself, is one exclusive
+    /// section. Work <paramref name="body"/> starts concurrently shares the lease while the
+    /// section runs; work still running after it returns takes the lease like any other flow.
+    /// </summary>
+    public async Task<T> RunExclusiveAsync<T>(Guid alertRuleId, Func<Task<T>> body, CancellationToken ct)
+    {
+        using var lease = await AcquireAsync(alertRuleId, ct);
+        var outer = _heldByFlow.Value;
+        var section = new Section(alertRuleId, outer);
+        _heldByFlow.Value = section;
+        try
+        {
+            return await body();
+        }
+        finally
+        {
+            section.End();
+            _heldByFlow.Value = outer;
+        }
     }
 
     /// <summary>Number of rules currently holding or awaiting a stripe.</summary>
@@ -73,12 +101,46 @@ public sealed class AlertRuleEvaluationGate
         }
     }
 
+    /// <summary>
+    /// One <see cref="RunExclusiveAsync{T}"/> section, chained to the sections it runs inside. A
+    /// flow started inside copies the chain, so ending a section is seen by every copy.
+    /// </summary>
+    private sealed class Section(Guid alertRuleId, Section? outer)
+    {
+        private volatile bool _ended;
+
+        public void End() => _ended = true;
+
+        public static bool Holds(Section? section, Guid alertRuleId)
+        {
+            for (var s = section; s is not null; s = s.Outer)
+            {
+                if (!s._ended && s.RuleId == alertRuleId)
+                    return true;
+            }
+            return false;
+        }
+
+        private Guid RuleId { get; } = alertRuleId;
+
+        private Section? Outer { get; } = outer;
+    }
+
     private sealed class Stripe
     {
         public SemaphoreSlim Semaphore { get; } = new(1, 1);
 
         /// <summary>Holders plus waiters, mutated only under the dictionary lock.</summary>
         public int Users { get; set; }
+    }
+
+    private sealed class NoLease : IDisposable
+    {
+        public static readonly NoLease Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 
     private sealed class Lease(AlertRuleEvaluationGate gate, Guid alertRuleId, Stripe stripe) : IDisposable

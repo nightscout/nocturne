@@ -238,7 +238,8 @@ export const getDataQualityReport = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = await resolveReportRange(input);
+    const { startDate, endDate, timeZone, days } =
+      await resolveReportRange(input);
 
     const [entries, integrity] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
@@ -257,6 +258,8 @@ export const getDataQualityReport = query(
     return {
       entries,
       integrity,
+      timeZone,
+      days,
       dateRange: {
         from: startDate,
         to: endDate,

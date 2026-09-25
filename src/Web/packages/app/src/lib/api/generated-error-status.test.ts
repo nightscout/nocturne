@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
-import { error, isHttpError } from "@sveltejs/kit";
+import { error, isHttpError, isRedirect, redirect } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
 import {
   describeSubmitError,
@@ -271,6 +271,58 @@ describe("the status a generated remote function lets through", () => {
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
+  });
+});
+
+/**
+ * What a generated query answers a 401 with. The event carries only what the
+ * hooks leave on it, so the arm has to take the share-host decision from
+ * `locals` rather than reading the host again.
+ */
+async function queryAnswerTo401(isShareHost: boolean): Promise<unknown> {
+  const compiled = await transformWithEsbuild(
+    `(getRequestEvent, error, redirect) => { ${config.errorHandling.on401("query")}; }`,
+    "on401.ts",
+    { loader: "ts" }
+  );
+  const source = compiled.code.trim().replace(/;$/, "");
+
+  const answer: (
+    getRequestEvent: () => { locals: { isShareHost: boolean }; url: URL },
+    error: typeof import("@sveltejs/kit").error,
+    redirect: typeof import("@sveltejs/kit").redirect
+  ) => never = new Function(`return ${source}`)();
+
+  const event = {
+    locals: { isShareHost },
+    url: new URL("https://abc123.share.example.test/dashboard?range=24h"),
+  };
+
+  try {
+    answer(() => event, error, redirect);
+  } catch (thrown) {
+    return thrown;
+  }
+
+  throw new Error("the 401 arm returned without throwing");
+}
+
+describe("a generated query refused as unauthenticated", () => {
+  it("fails on a share host rather than sending the viewer to sign in", async () => {
+    const answer = await queryAnswerTo401(true);
+
+    expect(isHttpError(answer) && answer.status).toBe(401);
+    expect(answer).not.toHaveProperty("location");
+  });
+
+  it("sends an expired session to the login route", async () => {
+    const answer = await queryAnswerTo401(false);
+
+    expect(isRedirect(answer)).toBe(true);
+    expect(answer).toMatchObject({
+      status: 302,
+      location: "/auth/login?returnUrl=%2Fdashboard%3Frange%3D24h",
+    });
   });
 });
 

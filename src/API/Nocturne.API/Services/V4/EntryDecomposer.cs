@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
+using System.Linq;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
@@ -80,7 +81,12 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                 await DecomposeCalAsync(entry, result, origin, ct);
                 break;
             default:
-                Logger.LogWarning("Unknown entry type '{Type}' for entry {Id}, skipping decomposition", entry.Type, entry.Id);
+                var sanitizedType = entry.Type?
+                    .Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty);
+
+                Logger.LogWarning("Skipped an entry whose type Nocturne does not store: {Type}", sanitizedType);
+                result.SkippedUnsupported++;
                 break;
         }
 
@@ -137,6 +143,15 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         => await UpsertByLegacyIdAsync(
             _calibrationRepository, entry.Id, MapToCalibration(entry, result.CorrelationId), result, origin, ct);
 
+    private static string SanitizeForLog(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return "(none)";
+
+        var sanitized = value.Replace("\r", " ").Replace("\n", " ");
+        return new string(sanitized.Where(c => !char.IsControl(c)).ToArray());
+    }
+
     /// <inheritdoc />
     public async Task<DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Entry> entries, WriteOrigin origin, CancellationToken ct = default)
@@ -150,6 +165,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var sgvList = new List<SensorGlucose>();
         var mbgList = new List<MeterGlucose>();
         var calList = new List<Calibration>();
+        var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {
@@ -165,9 +181,17 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                     calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
-                    Logger.LogDebug("Skipping entry with unknown type: {Type}", entry.Type);
+                    result.SkippedUnsupported++;
+                    unsupportedTypes.Add(SanitizeForLog(entry.Type));
                     break;
             }
+        }
+
+        if (result.SkippedUnsupported > 0)
+        {
+            Logger.LogWarning(
+                "Skipped {Count} entries whose type Nocturne does not store: {Types}",
+                result.SkippedUnsupported, string.Join(", ", unsupportedTypes));
         }
 
         if (sgvList.Count > 0)

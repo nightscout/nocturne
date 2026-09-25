@@ -168,6 +168,37 @@ describe("ConnectorDetailsDialog", () => {
     await expect.element(page.getByText("(288 items)")).toBeVisible();
   });
 
+  // A re-sync of records the user deleted fetches them and writes none. Showing only the
+  // fetched count would present that as a clean success.
+  it("says how many records were skipped because the user had deleted them", async () => {
+    await syncReturning({
+      success: true,
+      message: "",
+      errors: [],
+      itemsSynced: { Glucose: 4210 },
+      itemsSkipped: 412,
+    });
+
+    await expect
+      .element(page.getByText(/412 records were not added again/))
+      .toBeVisible();
+  });
+
+  it("mentions no skipped records when nothing was skipped", async () => {
+    await syncReturning({
+      success: true,
+      message: "",
+      errors: [],
+      itemsSynced: { Glucose: 288 },
+      itemsSkipped: 0,
+    });
+
+    await expect.element(page.getByText("(288 items)")).toBeVisible();
+    await expect
+      .element(page.getByText(/because you had deleted/))
+      .not.toBeInTheDocument();
+  });
+
   it("shows the server's reason when the sync was refused", async () => {
     await syncing(async () =>
       error(409, "A sync for this connector is already running.")

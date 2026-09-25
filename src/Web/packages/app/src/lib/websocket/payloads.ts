@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { InAppNotificationDto } from "$lib/api/generated/nocturne-api-client";
-import { isRecord, nonEmptyString } from "$lib/utils/type-guards";
+import { isOneOf, isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import { isoNow } from "$lib/utils/now";
 import type {
   AlarmEvent,
@@ -9,6 +9,7 @@ import type {
   StatusEvent,
   StorageEvent,
   SyncProgressEvent,
+  TrackerUpdateEvent,
 } from "./types";
 
 // Socket.IO hands listeners untyped JSON. These parsers are the only place a
@@ -89,6 +90,28 @@ export function parseStatus(data: unknown): StatusEvent {
  *  client parses with no reviver). */
 export function parseNotification(data: unknown): InAppNotificationDto | null {
   return isRecord(data) && typeof data.id === "string" ? data : null;
+}
+
+const TRACKER_ACTIONS = [
+  "create",
+  "delete",
+  "complete",
+  "ack",
+] as const satisfies readonly TrackerUpdateEvent["action"][];
+
+/** A tracker event needs both a known action and an identifiable instance, since
+ *  the store keys every action on `instance.id`. */
+export function parseTrackerUpdate(data: unknown): TrackerUpdateEvent | null {
+  const fields = fieldsOf(data);
+  if (!isOneOf(TRACKER_ACTIONS, fields.action)) return null;
+
+  const instance = fields.instance;
+  if (!isRecord(instance) || nonEmptyString(instance.id) === undefined) return null;
+
+  return {
+    action: fields.action,
+    instance,
+  };
 }
 
 const SyncProgressSchema = z.object({

@@ -10,7 +10,7 @@
         installPrintFitFallback,
         printReport,
     } from "$lib/components/reports/print/report-print.svelte";
-    import {reportCategories} from "$lib/navigation/report-navigation";
+    import {reportCategories} from "$lib/navigation/report-navigation.svelte";
     import {Filter, Calendar, ChevronDown, Printer} from "lucide-svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
@@ -47,8 +47,8 @@
     let reportRoot = $state<HTMLElement | null>(null);
     $effect(() => installPrintFitFallback(() => reportRoot));
 
-    const registryTitles = new Map(
-        reportCategories.flatMap((c) => c.reports).map((r) => [r.href, r.title])
+    const registryTitles = $derived(
+        new Map(reportCategories().flatMap((c) => c.reports).map((r) => [r.href, r.title]))
     );
 
     // Extract report name from the URL
@@ -133,7 +133,12 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onclick={printReport}>
+                    <Button
+                            variant="outline"
+                            size="sm"
+                            onclick={printReport}
+                            aria-label="Print report"
+                    >
                         <Printer class="w-4 h-4"/>
                         <span class="hidden sm:inline">Print</span>
                     </Button>
@@ -142,6 +147,7 @@
                                 variant="outline"
                                 size="sm"
                                 onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Filters"
                         >
                             <Filter class="w-4 h-4"/>
                             <span class="hidden sm:inline">Filters</span>
@@ -153,7 +159,7 @@
     {/if}
 
     <!-- Main Content -->
-    <main class="relative">
+    <div class="relative">
         {#if useResourceGuard}
             <ResourceGuard
                 loading={resourceCtx.loading}
@@ -168,7 +174,7 @@
         {:else}
             {@render children()}
         {/if}
-    </main>
+    </div>
 
     <!-- Filter Sidebar -->
     {#if showFilters}

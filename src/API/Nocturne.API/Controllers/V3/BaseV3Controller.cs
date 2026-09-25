@@ -302,8 +302,9 @@ public abstract class BaseV3Controller<T> : ControllerBase
             Response.Headers["Link"] = string.Join(", ", links);
         }
 
-        // Set cache control headers
-        Response.Headers["Cache-Control"] = "public, max-age=60";
+        // Tenant reads must not be shared-cacheable: UseResponseCaching answers before
+        // authentication runs, so a stored entry would outlive the credential check.
+        Response.Headers["Cache-Control"] = "private, max-age=60";
         Response.Headers["Last-Modified"] = effectiveLastModified.UtcDateTime.ToString("R");
         Response.Headers["Vary"] = "Accept, If-Modified-Since, If-None-Match";
     }

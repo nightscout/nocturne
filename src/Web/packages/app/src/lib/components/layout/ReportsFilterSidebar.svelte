@@ -37,29 +37,17 @@
   // This is the single source of truth; the highlighted preset is derived from it.
   let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
-  // Initialize draft state when sidebar opens
+  // Initialize draft state when the sidebar opens, from the resolved range
+  // rather than the URL-only params: a default range seeded during hydration
+  // never reaches the URL, so params.from/days can read as null while the range
+  // on screen is intact.
   $effect(() => {
     if (!open) return;
 
-    if (params.from && params.to) {
-      try {
-        draftCalendarValue = {
-          start: parseDate(params.from),
-          end: parseDate(params.to),
-        };
-        return;
-      } catch {
-        // Fall through to days-based calculation
-      }
-    }
-
-    if (params.days) {
-      const endDate = today(getLocalTimeZone());
-      draftCalendarValue = {
-        start: endDate.subtract({ days: params.days - 1 }),
-        end: endDate,
-      };
-    }
+    draftCalendarValue = {
+      start: parseDate(params.fromDay),
+      end: parseDate(params.toDay),
+    };
   });
 
   // The quick-selection preset to highlight: the whole-day span of the draft

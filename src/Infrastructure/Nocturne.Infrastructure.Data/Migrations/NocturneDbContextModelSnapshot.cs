@@ -554,9 +554,17 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("active_excursion_id");
 
+                    b.Property<bool>("AwaitingRearm")
+                        .HasColumnType("boolean")
+                        .HasColumnName("awaiting_rearm");
+
                     b.Property<int>("ConfirmationCount")
                         .HasColumnType("integer")
                         .HasColumnName("confirmation_count");
+
+                    b.Property<DateTime?>("HysteresisStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hysteresis_started_at");
 
                     b.Property<string>("State")
                         .IsRequired()

@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using System.Collections.Concurrent;
 using SocketIOClient;
 
@@ -42,27 +40,24 @@ public class NightscoutConnectorBackgroundService
 
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
     /// <param name="budget">The process-wide budget.</param>
+    /// <param name="activeTenants">The active tenants every poller reads.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
+    /// <param name="metrics">Connector sync instruments.</param>
     public NightscoutConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        ActiveTenantSnapshot activeTenants,
         ILogger<NightscoutConnectorBackgroundService> logger,
-        ConnectorPollerNudge? nudge = null
+        ConnectorPollerNudge? nudge = null,
+        ConnectorSyncMetrics? metrics = null
     )
-        : base(serviceProvider, budget, logger, nudge) { }
+        : base(serviceProvider, budget, activeTenants, logger, nudge, metrics) { }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
     {
-        using var scope = ServiceProvider.CreateScope();
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(cancellationToken);
-
-        var tenants = await context.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await ActiveTenants.GetAsync(cancellationToken);
 
         // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll cycle
         // does not continue until this returns, so connecting them in sequence would delay the first

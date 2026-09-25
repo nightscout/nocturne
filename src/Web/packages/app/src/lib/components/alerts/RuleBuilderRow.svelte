@@ -321,7 +321,7 @@
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
             const n = Number(e.currentTarget.value);
-            sustainedNode.sustained.minutes = Number.isFinite(n)
+            sustainedNode.sustained.minutes = Number.isInteger(n) && n >= 1
               ? n
               : sustainedNode.sustained.minutes;
           }

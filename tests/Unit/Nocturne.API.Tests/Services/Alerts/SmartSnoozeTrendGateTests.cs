@@ -25,6 +25,15 @@ public class SmartSnoozeTrendGateTests
         AlertConditionType type = AlertConditionType.Threshold)
         => SmartSnoozeTrendGate.Evaluate(type, conditionParams, readings, Now);
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_reading_without_a_glucose_value_is_not_a_point(double error)
+    {
+        Evaluate(High, FiveMinute(200, 200, error)).Should().Be(TrendGateOutcome.InsufficientData);
+        Evaluate(Low, FiveMinute(error, 60, 70)).Should().Be(TrendGateOutcome.InsufficientData);
+    }
+
     [Fact]
     public void Low_NoiseLevelRise_DoesNotExtend()
     {
