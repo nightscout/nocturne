@@ -32,13 +32,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly IAuditContext _auditContext;
 
-    /// <param name="dbContext">EF Core context used for entry bulk-delete operations.</param>
-    /// <param name="sensorGlucoseRepository">Repository for <see cref="SensorGlucose"/> records.</param>
-    /// <param name="meterGlucoseRepository">Repository for <see cref="MeterGlucose"/> records.</param>
-    /// <param name="calibrationRepository">Repository for <see cref="Calibration"/> records.</param>
-    /// <param name="glucoseResolver">Resolves glucose processing type and smoothed/unsmoothed values from v1/v3 hints or source defaults.</param>
-    /// <param name="patientDeviceStamper">Attributes decomposed records to the patient device active at their timestamp.</param>
-    /// <param name="logger">Logger instance for this decomposer.</param>
     public EntryDecomposer(
         NocturneDbContext dbContext,
         ISensorGlucoseRepository sensorGlucoseRepository,

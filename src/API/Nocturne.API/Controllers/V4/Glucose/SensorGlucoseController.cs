@@ -38,8 +38,7 @@ public class SensorGlucoseController(
     IGlucoseProcessingResolver glucoseResolver,
     ICanonicalAlertEvaluator alertEvaluator,
     IPatientDeviceRepository patientDevices,
-    IPatientDeviceStamper deviceStamper,
-    ILogger<SensorGlucoseController> logger)
+    IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
     /// <inheritdoc/>

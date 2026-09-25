@@ -31,10 +31,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     public SensorGlucoseRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
@@ -148,6 +144,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <param name="afterTimestamp">Keyset cursor timestamp. When paired with <paramref name="afterId"/>, replaces offset-based pagination.</param>
     /// <param name="afterId">Keyset cursor record ID (tiebreaker). When paired with <paramref name="afterTimestamp"/>, replaces offset-based pagination.</param>
     /// <param name="ct">The cancellation token.</param>
+    /// <param name="patientDeviceId">Matched against the registered patient-device link and combined
+    /// with <paramref name="device"/> when both are set. Last so positional callers ending at
+    /// <paramref name="ct"/> are unaffected.</param>
     /// <returns>A collection of sensor glucose records.</returns>
     public async Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,

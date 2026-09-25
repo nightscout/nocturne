@@ -37,7 +37,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// </list>
 ///
 /// On successful login or setup, the controller uses
-/// <see cref="SessionCookieExtensions.SetSessionCookies"/> to set session cookies.
+/// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions)"/> to set session cookies.
 ///
 /// Passkey deletion is guarded by <see cref="ISubjectService.TryRemovePasskeyCredentialAsync"/> which
 /// enforces an atomic last-factor check inside a serializable transaction.

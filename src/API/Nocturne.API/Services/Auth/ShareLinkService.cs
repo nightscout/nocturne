@@ -284,12 +284,13 @@ public sealed class ShareLinkService : IShareLinkService
     /// the secret back: rotate, which has just minted it, and reveal, which has just decrypted it.
     /// Every other path reports only that a link exists, and in what shape.
     /// </summary>
-    /// <param name="attemptedDecrypt">
-    /// True on the reveal path, where <paramref name="token"/> is the outcome of an actual decrypt
-    /// and so a null one settles <see cref="ShareLinkDto.CanReveal"/>. Off the reveal path the
-    /// columns are all there is to go on, and they cannot see the changed-key case
-    /// <see cref="TenantEntity.ShareTokenEncrypted"/> describes.
-    /// </param>
+    /// <remarks>
+    /// <paramref name="attemptedDecrypt"/> is true on the reveal path, where
+    /// <paramref name="token"/> is the outcome of an actual decrypt and so a null one settles
+    /// <see cref="ShareLinkDto.CanReveal"/>. Off the reveal path the columns are all there is to go
+    /// on, and they cannot see the changed-key case <see cref="TenantEntity.ShareTokenEncrypted"/>
+    /// describes.
+    /// </remarks>
     private ShareLinkDto ToDto(
         TenantEntity tenant,
         TenantMemberEntity? member,

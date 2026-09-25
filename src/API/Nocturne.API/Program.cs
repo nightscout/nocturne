@@ -455,7 +455,7 @@ app.MapScalarApiReference((options, httpContext) =>
     {
         options
             .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
-            .WithHttpBearerAuthentication(bearer => bearer.Token = demoToken);
+            .AddHttpAuthentication("bearer", bearer => bearer.Token = demoToken);
     }
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 

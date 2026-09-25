@@ -14,7 +14,7 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// notification (CreateNotificationAsync does not dedupe by sourceId).
 /// </summary>
 /// <remarks>
-/// Authorisation: <see cref="Notifications.IInAppNotificationService.ExecuteActionAsync"/>
+/// Authorisation: <see cref="IInAppNotificationService.ExecuteActionAsync"/>
 /// verifies <c>notification.UserId == userId</c> before dispatching here, so a forwarded
 /// notificationId from another user is rejected upstream. Tenant scope for the ack call
 /// comes from the request-scoped <see cref="ITenantAccessor"/>, never from the

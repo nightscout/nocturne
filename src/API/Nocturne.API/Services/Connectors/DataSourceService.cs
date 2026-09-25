@@ -54,10 +54,10 @@ public class DataSourceService : IDataSourceService
         _logger = logger;
     }
 
-    /// <param name="Handle">
-    /// Which handle the bucket's key names, or <see langword="null"/> when no contributing table
-    /// could tell.
-    /// </param>
+    /// <remarks>
+    /// <paramref name="Handle"/> is which handle the bucket's key names, or <see langword="null"/>
+    /// when no contributing table could tell.
+    /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)

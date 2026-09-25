@@ -191,8 +191,8 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         var (basalInjections, _) = _mapper.MapV3ManualInsulin(graphData);
 
-        basalInjections[0].InsulinContext.Concentration.Should().Be(200);
-        basalInjections[0].InsulinContext.InsulinName.Should().Contain("U200");
+        basalInjections[0].InsulinContext!.Concentration.Should().Be(200);
+        basalInjections[0].InsulinContext!.InsulinName.Should().Contain("U200");
     }
 
     [Fact]
@@ -204,8 +204,8 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         var (basalInjections, _) = _mapper.MapV3ManualInsulin(graphData);
 
-        basalInjections[0].InsulinContext.Concentration.Should().Be(100);
-        basalInjections[0].InsulinContext.InsulinName.Should().NotContain("U200");
+        basalInjections[0].InsulinContext!.Concentration.Should().Be(100);
+        basalInjections[0].InsulinContext!.InsulinName.Should().NotContain("U200");
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         var (basalInjections, _) = _mapper.MapV3ManualInsulin(graphData);
 
-        var context = basalInjections[0].InsulinContext;
+        var context = basalInjections[0].InsulinContext!;
         context.InsulinName.Should().Be("SomeNewInsulin");
         context.PatientInsulinId.Should().Be(Guid.Empty);
         // Should use long-acting defaults since primaryCategory is LongActing
@@ -287,7 +287,7 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         var (basalInjections, _) = _mapper.MapV3ManualInsulin(graphData);
 
-        basalInjections[0].InsulinContext.InsulinName.Should().Be("Unknown");
+        basalInjections[0].InsulinContext!.InsulinName.Should().Be("Unknown");
     }
 
     #endregion
@@ -311,7 +311,7 @@ public class GlookoV4TreatmentMapperManualInsulinTests
 
         var (basalInjections, boluses) = _mapper.MapV3ManualInsulin(graphData);
 
-        var context = isLongActing ? basalInjections[0].InsulinContext : boluses[0].InsulinContext!;
+        var context = isLongActing ? basalInjections[0].InsulinContext! : boluses[0].InsulinContext!;
         context.InsulinName.Should().Be(expectedCatalogName);
         context.Dia.Should().Be(expectedDia);
         context.Concentration.Should().Be(expectedConcentration);

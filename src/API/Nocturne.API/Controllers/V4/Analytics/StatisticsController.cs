@@ -125,11 +125,13 @@ public class StatisticsController : ControllerBase
         List<TempBasal> TempBasals,
         List<BasalInjection> BasalInjections);
 
-    /// <param name="limit">Per collection. An AID pump writes a TempBasal and often an SMB every
-    /// ~5 minutes, so anything short of <c>int.MaxValue</c> truncates a multi-month window to its
-    /// oldest records and understates every total computed from it.</param>
-    /// <param name="alongside">Reads the caller started before calling, joined into the same
-    /// <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.</param>
+    /// <remarks>
+    /// <paramref name="limit"/> applies per collection. An AID pump writes a TempBasal and often
+    /// an SMB every ~5 minutes. Anything short of <c>int.MaxValue</c> truncates a multi-month
+    /// window to its oldest records and understates every total computed from it.
+    /// <paramref name="alongside"/> holds reads the caller started before calling, joined into the
+    /// same <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.
+    /// </remarks>
     private async Task<InsulinRecords> FetchInsulinRecordsAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default, params Task[] alongside)
     {
@@ -168,9 +170,11 @@ public class StatisticsController : ControllerBase
     /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
     /// when the pump reported none.
     /// </summary>
-    /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
-    /// suppresses the fallback, because a profile baseline on top of MDI injections would
-    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.</param>
+    /// <remarks>
+    /// <paramref name="recordedBasal"/> is basal delivered by a route other than TempBasals. A
+    /// non-empty one suppresses the fallback: a profile baseline on top of MDI injections would
+    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.
+    /// </remarks>
     private async Task AddScheduledBasalFallbackAsync(
         List<TempBasal> tempBasals,
         DateTime startUtc,
@@ -378,6 +382,9 @@ public class StatisticsController : ControllerBase
     /// <param name="startDate">Start of the window (inclusive, UTC).</param>
     /// <param name="endDate">End of the window (exclusive, UTC).</param>
     /// <param name="population">Diabetes population for clinical target assessment. Defaults to Type 1 adult.</param>
+    /// <param name="patientDeviceId">Restricts glucose to readings from this one patient device,
+    /// in place of the canonical stream selected across all devices. Boluses and carb intakes are
+    /// not filtered.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The extended analytics and time-of-day averaged stats for the window.</returns>
     [HttpGet("range-analytics")]
@@ -964,6 +971,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>
     /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     [HttpGet("punch-card")]
     [RequireScope(Scope.GlucoseRead)]

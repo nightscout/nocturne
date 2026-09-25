@@ -14,13 +14,13 @@ public sealed partial class GlucoseStateService : ObservableObject, IDisposable
     private const int MaxHistorySize = 1000;
 
     [ObservableProperty]
-    private V4GlucoseReading? _currentReading;
+    public partial V4GlucoseReading? CurrentReading { get; set; }
 
     [ObservableProperty]
-    private bool _isConnected;
+    public partial bool IsConnected { get; set; }
 
     [ObservableProperty]
-    private bool _isStale;
+    public partial bool IsStale { get; set; }
 
     private readonly List<V4GlucoseReading> _history = [];
     private readonly object _lock = new();

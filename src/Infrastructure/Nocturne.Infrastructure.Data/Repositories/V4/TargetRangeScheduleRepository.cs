@@ -23,9 +23,6 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// <summary>
     /// Initializes a new instance of the <see cref="TargetRangeScheduleRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public TargetRangeScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TargetRangeScheduleRepository> logger, IV4RecordBroadcaster<TargetRangeSchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
@@ -85,8 +82,6 @@ public class TargetRangeScheduleRepository : V4RepositoryBase<TargetRangeSchedul
     /// <summary>
     /// Deletes target range schedules by legacy identifier prefix.
     /// </summary>
-    /// <param name="prefix">The legacy identifier prefix.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
     public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
     {

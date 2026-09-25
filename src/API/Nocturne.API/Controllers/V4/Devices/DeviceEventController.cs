@@ -23,9 +23,9 @@ namespace Nocturne.API.Controllers.V4.Devices;
 /// calculations via <see cref="IDeviceAgeService"/>.
 ///
 /// Create and update use the same <see cref="UpsertDeviceEventRequest"/> shape. On update,
-/// the immutable fields <see cref="DeviceEvent.CorrelationId"/>, <see cref="DeviceEvent.LegacyId"/>,
-/// <see cref="DeviceEvent.CreatedAt"/>, <see cref="DeviceEvent.SyncIdentifier"/>, and
-/// <see cref="DeviceEvent.AdditionalProperties"/> are preserved from the existing record,
+/// the immutable fields <see cref="V4RecordBase.CorrelationId"/>, <see cref="V4RecordBase.LegacyId"/>,
+/// <see cref="V4RecordBase.CreatedAt"/>, <see cref="DeviceEvent.SyncIdentifier"/>, and
+/// <see cref="V4RecordBase.AdditionalProperties"/> are preserved from the existing record,
 /// as are <see cref="DeviceEvent.DeviceId"/> and <see cref="DeviceEvent.PatientDeviceId"/>
 /// when the request carries no explicit <c>patientDeviceId</c>.
 /// </remarks>
