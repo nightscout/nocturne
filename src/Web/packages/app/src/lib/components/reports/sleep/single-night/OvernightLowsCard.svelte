@@ -30,8 +30,7 @@
   function span(event: SleepHypoEvent): string {
     const start = toDate(event.startAt);
     const end = toDate(event.endAt);
-    if (!start) return "";
-    return end && end.getTime() !== start.getTime() ? `${time(start)}–${time(end)}` : time(start);
+    return start && end ? `${time(start)}–${time(end)}` : "";
   }
 </script>
 
@@ -42,9 +41,9 @@
       Overnight Lows
     </CardTitle>
   </CardHeader>
-  <CardContent>
+  <CardContent class="space-y-3">
     {#if lows.length === 0}
-      <p class="text-sm text-muted-foreground">No low readings during this session</p>
+      <p class="text-sm text-muted-foreground">No lows lasting 15 minutes or more during this session</p>
     {:else}
       <ul class="divide-y divide-border">
         {#each lows as event (event.startAt)}
@@ -61,10 +60,8 @@
                   ></span>
                   {veryLow ? "Very low" : "Low"}
                 </span>
-                {#if (event.durationMinutes ?? 0) > 0}
-                  <span aria-hidden="true">·</span>
-                  <span class="tabular-nums">{formatMinutesDuration(event.durationMinutes ?? 0)}</span>
-                {/if}
+                <span aria-hidden="true">·</span>
+                <span class="tabular-nums">{formatMinutesDuration(event.durationMinutes ?? 0)}</span>
                 {#if stage}
                   <span aria-hidden="true">·</span>
                   <span>{stage}</span>
@@ -79,5 +76,9 @@
         {/each}
       </ul>
     {/if}
+    <p class="text-xs text-muted-foreground">
+      A low is counted when glucose stays below range for 15 minutes or more. Shorter dips still
+      show in the time in range chart.
+    </p>
   </CardContent>
 </Card>

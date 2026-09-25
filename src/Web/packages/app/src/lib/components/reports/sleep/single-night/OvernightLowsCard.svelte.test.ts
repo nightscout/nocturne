@@ -8,10 +8,33 @@ import OvernightLowsCard from "./OvernightLowsCard.svelte";
 const span = (start: string, end: string) => `${time(new Date(start))}–${time(new Date(end))}`;
 
 describe("OvernightLowsCard", () => {
-  it("says so when the session had no lows", async () => {
+  it("says a night with only brief dips had no lows of fifteen minutes, not no low readings", async () => {
+    // A dip shorter than fifteen minutes reaches the chart as time below range but is not a low
+    // event, so the report sends an empty list.
     render(OvernightLowsCard, { lows: [] });
 
-    await expect.element(page.getByText("No low readings during this session")).toBeVisible();
+    await expect
+      .element(page.getByText("No lows lasting 15 minutes or more during this session", { exact: true }))
+      .toBeVisible();
+    await expect.element(page.getByText(/No low readings/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/below range for 15 minutes or more/)).toBeVisible();
+  });
+
+  it("explains what counts as a low alongside the list", async () => {
+    render(OvernightLowsCard, {
+      lows: [
+        {
+          startAt: "2026-09-01T02:10:00Z",
+          endAt: "2026-09-01T02:25:00Z",
+          durationMinutes: 15,
+          lowestBg: 62,
+          stage: SleepStageType.Light,
+          severity: SleepHypoSeverity.Low,
+        },
+      ],
+    });
+
+    await expect.element(page.getByText(/below range for 15 minutes or more/)).toBeVisible();
   });
 
   it("names each low's time span, severity, duration, stage and lowest reading", async () => {
@@ -74,26 +97,6 @@ describe("OvernightLowsCard", () => {
       .toBeVisible();
     await expect.element(page.getByText("15m", { exact: true })).toBeVisible();
     await expect.element(page.getByText("66")).toBeVisible();
-  });
-
-  it("shows one time and no duration when a low has no extent", async () => {
-    render(OvernightLowsCard, {
-      lows: [
-        {
-          startAt: "2026-09-01T04:40:00Z",
-          endAt: "2026-09-01T04:40:00Z",
-          durationMinutes: 0,
-          lowestBg: 66,
-          stage: SleepStageType.Light,
-          severity: SleepHypoSeverity.Low,
-        },
-      ],
-    });
-
-    await expect
-      .element(page.getByText(time(new Date("2026-09-01T04:40:00Z")), { exact: true }))
-      .toBeVisible();
-    await expect.element(page.getByText(/^\d+m$/)).not.toBeInTheDocument();
   });
 
   it("omits the stage when no stage covered the lowest reading", async () => {
