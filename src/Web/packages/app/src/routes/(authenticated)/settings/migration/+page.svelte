@@ -33,6 +33,7 @@
   } from "lucide-svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,
@@ -121,7 +122,7 @@
       }
     } catch (err) {
       console.error("Failed to load migration data:", err);
-      error = "Failed to load migration data";
+      error = remoteErrorMessage(err, "Failed to load migration data");
     } finally {
       loading = false;
     }

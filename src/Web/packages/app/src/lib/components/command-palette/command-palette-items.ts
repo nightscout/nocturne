@@ -66,7 +66,8 @@ export interface CommandPaletteItem {
 	keywords?: string[];
 	icon?: ComponentType;
 	shortcut?: string;
-	permission?: string;
+	/** Scope required to see this item (e.g. "audit.read"). */
+	scope?: string;
 	/** Role required to see this item (e.g. "platform_admin"). */
 	role?: string;
 	href?: string;
@@ -410,7 +411,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["grants", "access", "permissions", "sharing"],
 		icon: Shield,
 		href: "/settings/grants",
-		permission: "api:settings:admin",
+		scope: "sharing.manage",
 	},
 	{
 		id: "settings-connectors",
@@ -482,7 +483,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["audit", "log", "history", "changes"],
 		icon: FileSearch,
 		href: "/settings/audit",
-		permission: "api:settings:admin",
+		scope: "audit.read",
 	},
 	{
 		id: "settings-support",

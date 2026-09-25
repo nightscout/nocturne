@@ -177,7 +177,9 @@ public static class ServiceCollectionExtensions
             // null) are already set by CarrierResettingDbContextFactory; this path never resolves
             // the CSV, so a share reading PHI here is denied (fail-closed) — share PHI reads go
             // through ITenantDbContextFactory, which carries the CSV.
-            context.IsShareContext = sp.GetService<ICategoryReadContext>()?.IsShare == true;
+            var categoryReadContext = sp.GetService<ICategoryReadContext>();
+            context.IsShareContext = categoryReadContext?.IsShare == true;
+            context.HistoryClamped = categoryReadContext?.IsHistoryClamped == true;
             return context;
         });
 

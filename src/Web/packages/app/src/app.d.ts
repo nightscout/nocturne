@@ -74,6 +74,10 @@ declare global {
 			 */
 			effectivePermissions?: string[];
 			/**
+			 * Whether the current user may read only the last 24 hours of time-series data
+			 */
+			limitTo24Hours?: boolean;
+			/**
 			 * Whether the current user is a platform administrator
 			 */
 			isPlatformAdmin: boolean;
@@ -110,6 +114,8 @@ declare global {
 			lastSignIn?: LastSignIn | null;
 			/** The viewer's granted scopes, resolved by the root layout. */
 			effectivePermissions?: string[];
+			/** Whether the viewer may read only the last 24 hours, resolved by the root layout. */
+			limitTo24Hours?: boolean;
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.

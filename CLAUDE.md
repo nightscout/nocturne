@@ -230,18 +230,23 @@ BYPASSRLS to either role.
 Public share links (`{token}.share.{domain}`) serve an anonymous viewer who may
 see only the categories the tenant's Public subject was granted. On top of the
 `tenant_isolation` policy, every tenant-scoped table carries a second,
-**RESTRICTIVE FOR SELECT** policy (`share_category_read`) gating reads by category:
+**RESTRICTIVE FOR SELECT** policy (`share_category_read`) gating reads by category
+and by history window:
 
-    USING ( current_setting('app.is_share', true) IS DISTINCT FROM 'true'
-         OR ( '<governing_scope>' = ANY(string_to_array(current_setting('app.visible_categories', true), ','))
-              AND ( current_setting('app.share_full_history', true) = 'true'
-                    OR "<recency_column>" >= now() - interval '24 hours' ) ) )
+    USING ( ( current_setting('app.is_share', true) IS DISTINCT FROM 'true'
+              OR '<governing_scope>' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')) )
+        AND ( "<recency_column>" >= now() - interval '24 hours'
+              OR NOT ( ( current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'
+                         AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true' )
+                       OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true' ) ) )
 
-(The 24-hour clamp appears only on tables with a recency column in
+(The recency conjunct appears only on tables with a recency column in
 `ShareDataCategories.RecencyColumns`; catalog tables with no per-row time, e.g.
-`foods`, carry just the category gate.)
+`foods`, carry just the category gate, and a table with no governing scope carries
+only the `is_share` test, so it is hidden from shares and never clamped for members.
+`IS [NOT] DISTINCT FROM` keeps the clamp test non-null when a GUC is unset.)
 
-Three extra GUCs carry the request state to the connection (set by
+Four extra GUCs carry the request state to the connection (set by
 `TenantConnectionInterceptor` from `NocturneDbContext` properties):
 
 - **`app.is_share`** — `'true'` for a public share, else `'false'`. Known
@@ -257,11 +262,27 @@ Three extra GUCs carry the request state to the connection (set by
   `limit_to_24_hours = false`. Same post-auth, factory-only carriage as the CSV; a
   share connection that never sets it is **clamped to the last 24 hours** of every
   time-series category (fail-closed).
+- **`app.history_clamped`**: `'true'` when `ICategoryReadContext.IsHistoryClamped`:
+  a share without full history, or an authenticated member or credential whose
+  `AuthContext.LimitTo24Hours` resolved true (membership flag OR credential flag,
+  combined in `MemberScopeMiddleware`). Known **post-auth**, so it is carried on
+  **both** paths: `TenantDbContextFactory` stamps it from `ICategoryReadContext`, and
+  `MemberScopeMiddleware` stamps the already-pinned scoped context. Every reset site
+  (`CarrierResettingDbContextFactory`, scoped registration, `PinTenantOnScopedDbContext`)
+  clears it, and the interceptor sets it unconditionally. Unlike the share clamp it is
+  **fail-open**: a connection that never sets it is not clamped, so owners, members
+  without the flag and background jobs read full history. A member who is an owner or
+  holds `tenant.settings` (`MemberScopeResolver.IsExemptFromHistoryClamp`) cannot be
+  given the flag, and a membership row that holds it anyway is ignored. A clamped
+  caller cannot mint anything wider than itself: invites, direct grants, guest links
+  and OAuth consents inherit its clamp, and it may not lift another member's clamp or
+  give a share full history (`HttpContext.IsCallerHistoryClamped`).
 
 Design notes:
 
 - **`is_share`-gated, fail-closed-for-shares.** A non-share (`is_share` ≠ `'true'`)
-  is never restricted — no platform blackout, and a rollback to an image that
+  is never category-restricted, and is history-clamped only when `app.history_clamped`
+  says so. That means no platform blackout, and a rollback to an image that
   doesn't set the GUCs returns to status-quo (over-share on owner-minted links)
   rather than locking everyone out. A share with a missing/empty CSV is denied all
   categorized data (`'x' = ANY(NULL/{''})` → not true).
@@ -279,11 +300,21 @@ Design notes:
   A response whose body is additionally narrowed per *caller scope* cannot use the
   shared cache at all — its key is only host + query + `Cookie`, so a credential
   presenting neither a cookie nor an `Authorization` header (the legacy `api-secret`
-  header) would be served another credential's unredacted body. Those endpoints
-  (`ChartDataController`'s dashboard, `ActogramController`) declare
-  `ResponseCacheLocation.Client`. Hand-set `Cache-Control` headers follow the same rule:
-  a tenant data read is never `public` (V3 reads send `private, max-age=60`, pinned by
-  `V3CacheControlTests`).
+  header) would be served another credential's unredacted body. The 24-hour history
+  clamp narrows every time-series read per caller in the same way (a clamped and an
+  unclamped `api-secret` caller share a key), so every `[ResponseCache]`d tenant read
+  declares `ResponseCacheLocation.Client`, or `NoStore`. `ResponseCachePolicyTests`
+  asserts no `[ResponseCache]` attribute on a controller action allows the shared
+  cache; headers a controller writes by hand are outside what it checks. Hand-set
+  `Cache-Control` headers follow the same rule: a tenant data read is never `public`
+  (V3 reads send `private, max-age=60`, pinned by `V3CacheControlTests`).
+- **PHI cache invariant.** The same holds for the tenant-keyed application caches of
+  time-series data (`EntryCacheAdapter`, `TreatmentCacheAdapter`, the multi-period
+  statistics, the eHbA1c timeline): their keys carry the tenant, not the history
+  window, so a history-clamped request (`ICategoryReadContext.IsHistoryClamped`)
+  neither reads nor writes them. Do not key them by clamp instead. A read that fans out
+  in a fresh DI scope (`TenantOverviewService`) carries the caller's clamp into that
+  scope's `ICategoryReadContext`.
 
 ## Testing
 

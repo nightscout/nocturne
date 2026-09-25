@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.ClientDevices;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -27,15 +26,18 @@ public class GuestLinkService : IGuestLinkService
 
     private readonly NocturneDbContext _dbContext;
     private readonly GuestSessionCacheService _sessionCache;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<GuestLinkService> _logger;
 
     public GuestLinkService(
         NocturneDbContext dbContext,
         GuestSessionCacheService sessionCache,
+        GrantRevocationService grantRevocation,
         ILogger<GuestLinkService> logger)
     {
         _dbContext = dbContext;
         _sessionCache = sessionCache;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
@@ -45,11 +47,14 @@ public class GuestLinkService : IGuestLinkService
         Guid createdBySubjectId,
         string label,
         string baseUrl,
+        IReadOnlySet<string> creatorScopes,
         IEnumerable<string>? scopes = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
-        var scopeList = Scope.ValidateGrantScopes(
-            scopes ?? DefaultScopes, OAuthGrantTypes.Guest);
+        var requestedScopes = ResolveScopes(scopes, creatorScopes);
+
+        var scopeList = Scope.ValidateGrantScopes(requestedScopes, OAuthGrantTypes.Guest);
 
         var activeCount = await GetActiveCountAsync(dataOwnerSubjectId, ct);
         if (activeCount >= MaxActiveLinks)
@@ -72,6 +77,7 @@ public class GuestLinkService : IGuestLinkService
             Label = label,
             TokenHash = hash,
             ExpiresAt = now + LinkLifetime,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -86,6 +92,38 @@ public class GuestLinkService : IGuestLinkService
             dataOwnerSubjectId, createdBySubjectId, entity.ExpiresAt);
 
         return new GuestLinkCreationResult(formatted, fullUrl, info);
+    }
+
+    /// <summary>
+    /// The scopes to store on a new guest link. Explicit scopes are checked against the creator's
+    /// own (see <see cref="Scope.ValidateDelegation"/>); with none, <see cref="DefaultScopes"/> are
+    /// expanded, cut to the guest vocabulary, and narrowed to what the creator holds.
+    /// </summary>
+    private static IEnumerable<string> ResolveScopes(
+        IEnumerable<string>? scopes, IReadOnlySet<string> creatorScopes)
+    {
+        if (scopes is not null && scopes.Any())
+        {
+            var violation = Scope.ValidateDelegation(scopes, creatorScopes);
+            if (violation is not null)
+                throw new GrantCeilingViolationException(violation);
+
+            return scopes;
+        }
+
+        var narrowed = Scope.Normalize(DefaultScopes)
+            .Where(scope => Scope.AllowedGuestScopes.Contains(scope)
+                            && Scope.Satisfies(creatorScopes, scope))
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (narrowed.Count == 0)
+        {
+            throw new GrantCeilingViolationException(new GrantCeilingViolation(
+                GrantCeilingViolation.ExceedsGranter,
+                "None of the default guest scopes are available to this account."));
+        }
+
+        return narrowed;
     }
 
     /// <inheritdoc />
@@ -123,7 +161,8 @@ public class GuestLinkService : IGuestLinkService
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
-            grant.ExpiresAt!.Value);
+            grant.ExpiresAt!.Value,
+            grant.LimitTo24Hours);
 
         _logger.LogInformation("Guest link {GrantId} activated from {IpAddress}", grant.Id, ipAddress);
 
@@ -152,7 +191,8 @@ public class GuestLinkService : IGuestLinkService
             grant.SubjectId,
             grant.Scopes.AsReadOnly(),
             grant.Label,
-            grant.ExpiresAt!.Value);
+            grant.ExpiresAt!.Value,
+            grant.LimitTo24Hours);
     }
 
     /// <inheritdoc />
@@ -193,15 +233,10 @@ public class GuestLinkService : IGuestLinkService
             return false;
         }
 
-        grant.RevokedAt = DateTime.UtcNow;
-        var deviceCount = await _dbContext.RemoveGrantDevicesAsync(grantId, ct);
-        await _dbContext.SaveChangesAsync(ct);
-
-        _sessionCache.Evict(grant.TenantId, grant.Id);
+        await _grantRevocation.RevokeAsync(_dbContext, grant, ct);
 
         _logger.LogInformation(
-            "Guest link {GrantId} revoked by {RequestingSubjectId}; removed {DeviceCount} devices",
-            grantId, requestingSubjectId, deviceCount);
+            "Guest link {GrantId} revoked by {RequestingSubjectId}", grantId, requestingSubjectId);
         return true;
     }
 

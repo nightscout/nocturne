@@ -45,7 +45,7 @@ public class CgmComparisonController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(CgmComparisonResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

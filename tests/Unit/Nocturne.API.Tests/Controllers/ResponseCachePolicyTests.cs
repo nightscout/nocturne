@@ -70,23 +70,47 @@ public class ResponseCachePolicyTests
     }
 
     /// <summary>
-    /// Aggregates over a window, gated all-or-nothing by <c>reports.read</c> and narrowed no
-    /// further per caller scope, so the shared cache is safe and its staleness window is a
-    /// deliberate trade-off against recompute cost.
+    /// Aggregates over time-series data, which the 24-hour history clamp narrows per caller, so
+    /// they keep their staleness window in the caller's own cache only: a clamped and an unclamped
+    /// <c>api-secret</c> caller present the same shared-cache key.
     /// </summary>
     [Theory]
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetAvailableYears), 300)]
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetDailySummary), 180)]
     [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetGriTimeline), 300)]
+    [InlineData(typeof(DataOverviewController), nameof(DataOverviewController.GetEHbA1cTimeline), 300)]
     [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetRangeAnalytics), 60)]
+    [InlineData(typeof(StatisticsController), nameof(StatisticsController.GetWeekdayAverages), 60)]
     [InlineData(typeof(SensorIntegrityController), nameof(SensorIntegrityController.Analyze), 60)]
+    [InlineData(typeof(CgmComparisonController), nameof(CgmComparisonController.Compare), 60)]
     [InlineData(typeof(ChartDataController), nameof(ChartDataController.GetBasalSeries), 60)]
-    public void AggregateReads_KeepTheirSharedCacheWindow(Type controller, string action, int seconds)
+    public void ClampNarrowedReads_KeepTheirWindowInTheCallersCacheOnly(Type controller, string action, int seconds)
     {
         var cache = CacheOn(controller, action);
 
         cache.NoStore.Should().BeFalse();
-        cache.Location.Should().Be(ResponseCacheLocation.Any);
+        cache.Location.Should().Be(ResponseCacheLocation.Client);
         cache.Duration.Should().Be(seconds);
+    }
+
+    /// <summary>
+    /// Every attribute-cached read in the API serves tenant data some caller may see narrowed, by
+    /// scope or by the history clamp, so no <see cref="ResponseCacheAttribute"/> may allow the
+    /// shared response cache. Inherited actions count, so an abstract base cannot hide one.
+    /// </summary>
+    [Fact]
+    public void NoResponseCacheAttribute_AllowsTheSharedCache()
+    {
+        var shared = typeof(ChartDataController).Assembly.GetTypes()
+            .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract)
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.DeclaringType != typeof(ControllerBase) && m.DeclaringType != typeof(object))
+                .Select(m => (Action: $"{t.Name}.{m.Name}",
+                    Cache: m.GetCustomAttribute<ResponseCacheAttribute>() ?? t.GetCustomAttribute<ResponseCacheAttribute>(inherit: true))))
+            .Where(x => x.Cache is { NoStore: false, Location: ResponseCacheLocation.Any })
+            .Select(x => x.Action)
+            .ToList();
+
+        shared.Should().BeEmpty();
     }
 }

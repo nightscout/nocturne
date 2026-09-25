@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
@@ -87,6 +88,8 @@ public class TenantDirectGrantControllerTests : IDisposable
                 new HttpContextAccessor { HttpContext = httpContext },
                 new AuditContext(),
                 new Mock<ILogger<AuthAuditService>>().Object),
+            new GrantRevocationService(
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
             new Mock<ILogger<DirectGrantService>>().Object);
         var tenantMemberService = new TenantMemberService(factory.Object);
 

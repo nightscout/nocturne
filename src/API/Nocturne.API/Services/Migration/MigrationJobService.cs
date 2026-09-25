@@ -988,10 +988,11 @@ internal class MigrationJob
     /// single place a migration read decides whether a response is usable, so that no page loop can
     /// mistake a rejection for the end of the data.
     /// </summary>
-    /// <param name="read">
-    ///     What this read is, for the wording a failure gets. Collections are the ordinary case and
-    ///     the default; the connection test names itself, because a 404 means something else there.
-    /// </param>
+    /// <remarks>
+    /// <paramref name="read"/> says what this read is, for the wording a failure gets. Collections
+    /// are the ordinary case and the default; the connection test names itself, because a 404 means
+    /// something else there.
+    /// </remarks>
     internal static async Task<string> ReadFromSourceAsync(
         HttpClient httpClient, string url, string label, CancellationToken ct,
         NightscoutRead read = NightscoutRead.ImportCollection)
@@ -1117,9 +1118,10 @@ internal class MigrationJob
     {
         public long DocumentsSkipped => DocumentsSkippedDeleted + DocumentsSkippedUnsupported;
 
-        /// <param name="oneRecordPerDocument">
-        /// Whether each document becomes exactly one record, so a deleted record is a skipped document.
-        /// </param>
+        /// <remarks>
+        /// Set <paramref name="oneRecordPerDocument"/> when each document becomes exactly one
+        /// record, so a deleted record is a skipped document.
+        /// </remarks>
         public DecompositionTally Add(DecompositionResult result, bool oneRecordPerDocument) => new(
             RecordsStored + result.CreatedRecords.Count + result.UpdatedRecords.Count,
             RecordsSkippedDeleted + result.SkippedDeleted,

@@ -21,6 +21,7 @@ public class PoolReturnDiscardsRlsGucsIntegrationTests
         "app.is_share",
         "app.visible_categories",
         "app.share_full_history",
+        "app.history_clamped",
     ];
 
     private readonly RlsCompletenessFixture _fx;
@@ -54,6 +55,7 @@ public class PoolReturnDiscardsRlsGucsIntegrationTests
             IsShareContext = true,
             VisibleCategories = "glucose.read,treatments.read",
             ShareFullHistory = true,
+            HistoryClamped = true,
         })
         {
             var connection = await OpenAsync(share);
@@ -64,6 +66,7 @@ public class PoolReturnDiscardsRlsGucsIntegrationTests
             await AssertSettingAsync(connection, "app.is_share", "true");
             await AssertSettingAsync(connection, "app.visible_categories", "glucose.read,treatments.read");
             await AssertSettingAsync(connection, "app.share_full_history", "true");
+            await AssertSettingAsync(connection, "app.history_clamped", "true");
 
             await share.Database.CloseConnectionAsync();
         }
@@ -96,6 +99,7 @@ public class PoolReturnDiscardsRlsGucsIntegrationTests
             await AssertSettingAsync(connection, "app.is_share", "false");
             (await SettingAsync(connection, "app.visible_categories")).Should().BeEmpty();
             await AssertSettingAsync(connection, "app.share_full_history", "false");
+            await AssertSettingAsync(connection, "app.history_clamped", "false");
 
             await plain.Database.CloseConnectionAsync();
         }

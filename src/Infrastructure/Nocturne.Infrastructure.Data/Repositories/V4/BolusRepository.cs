@@ -28,10 +28,6 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     public BolusRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,

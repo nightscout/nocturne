@@ -14,12 +14,11 @@
   import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
   import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
   import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
-  import DayDetailPanel from "$lib/components/reports/year-overview/DayDetailPanel.svelte";
   import type {
     DailySummaryDay,
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
-  import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
+  import { getUnitLabel } from "$lib/utils/formatting";
   import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import { glucoseUnits, yearOverviewColors } from "$lib/stores/appearance-store.svelte";
   import {
@@ -54,7 +53,6 @@
   let loadingYears = $state<Set<number>>(new Set());
   let metadataLoaded = $state(false);
   let metadataLoading = $state(false);
-  let selectedDay = $state<CalendarDatum | null>(null);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
   type HeatmapMetric =
@@ -548,14 +546,6 @@
     }
   }
 
-  // =========================================================================
-  // Day detail panel
-  // =========================================================================
-
-  function closeDetailPanel() {
-    selectedDay = null;
-  }
-
   function navigateToDayInReview(dateStr: string) {
     goto(resolve(`/reports/day-in-review?date=${dateStr}`));
   }
@@ -601,12 +591,6 @@
   // Helpers
   // =========================================================================
 
-  function formatSelectedDate(dateStr: string): string {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
-    return formatLongDate(date);
-  }
-
   function formatUnits(value: number | null): string {
     if (value == null) return "-";
     return value.toFixed(1) + " U";
@@ -632,11 +616,7 @@
 
 <div class="year-overview @container flex min-h-full print:px-3">
   <!-- Main Content -->
-  <div
-    class="flex-1 transition-all duration-200 print:mr-0 {selectedDay
-      ? 'mr-80 @5xl:mr-96'
-      : ''}"
-  >
+  <div class="flex-1">
     <!-- Header / interactive filters — hidden on print -->
     <div class="print:hidden">
       <YearOverviewFilters
@@ -752,21 +732,6 @@
         {/each}
       </div>
     {/if}
-  </div>
-
-  <!-- Day Detail Panel — interactive fly-out, hidden on print -->
-  <div class="print:hidden">
-    <DayDetailPanel
-      {selectedDay}
-      {units}
-      {unitLabel}
-      {formatSelectedDate}
-      {formatUnits}
-      {glucoseColorScale}
-      {getVisibleCounts}
-      {closeDetailPanel}
-      {navigateToDayInReview}
-    />
   </div>
 </div>
 

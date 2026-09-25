@@ -33,6 +33,7 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     [Column("code_hash")]
     public string CodeHash { get; set; } = string.Empty;
 
+    /// <summary>After this instant the code can no longer be exchanged.</summary>
     [Column("expires_at")]
     public DateTime ExpiresAt { get; set; }
 

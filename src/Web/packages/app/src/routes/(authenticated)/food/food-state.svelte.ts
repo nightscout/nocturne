@@ -15,6 +15,7 @@ import {
 } from '$api/generated/foods.generated.remote';
 import { deleteFood as deleteFoodRemote } from './data.remote';
 import { describeSubmitError } from '$lib/forms/submit-error';
+import { remoteErrorMessage } from '$lib/api/remote-error';
 
 export class FoodState {
   foods = $state<Food[]>([]);
@@ -86,7 +87,7 @@ export class FoodState {
       );
     } catch (err) {
       console.error('Failed to load food data:', err);
-      toast.error('Failed to load food database');
+      toast.error(remoteErrorMessage(err, 'Failed to load food database'));
     } finally {
       this.loading = false;
     }

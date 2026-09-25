@@ -187,7 +187,8 @@ public sealed class FindQuery
         // field-filtered delete into a whole-window sweep.
         var entries = new List<(string GroupKey, string Field, string Op, string Value)>();
         var findKeys = parsed.AllKeys
-            .Where(k => k is not null && k.StartsWith("find[", StringComparison.OrdinalIgnoreCase));
+            .OfType<string>()
+            .Where(k => k.StartsWith("find[", StringComparison.OrdinalIgnoreCase));
         foreach (var key in findKeys)
         {
             var values = parsed.GetValues(key);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -43,7 +44,7 @@
       }
     } catch (err) {
       console.error("Failed to create clock face:", err);
-      toast.error("Failed to create clock face");
+      toast.error(describeSubmitError(err, "Failed to create clock face"));
     } finally {
       creating = false;
     }

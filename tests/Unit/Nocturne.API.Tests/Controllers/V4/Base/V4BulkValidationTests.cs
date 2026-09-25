@@ -533,6 +533,5 @@ public class V4BulkValidationTests
             Mock.Of<IGlucoseProcessingResolver>(),
             Mock.Of<ICanonicalAlertEvaluator>(),
             Mock.Of<IPatientDeviceRepository>(),
-            Mock.Of<IPatientDeviceStamper>(),
-            Mock.Of<ILogger<SensorGlucoseController>>()));
+            Mock.Of<IPatientDeviceStamper>()));
 }

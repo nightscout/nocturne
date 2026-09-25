@@ -99,7 +99,7 @@ public class MyTenantsController : ControllerBase
                 : HttpContext.GetGrantedScopes();
 
         var overview = await _overviewService.GetOverviewAsync(
-            subjectId, tokenScopes, caller.AuthType, ct);
+            subjectId, tokenScopes, caller.AuthType, caller.LimitTo24Hours, ct);
         return Ok(overview);
     }
 

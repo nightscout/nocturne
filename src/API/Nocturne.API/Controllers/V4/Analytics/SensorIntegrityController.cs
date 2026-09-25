@@ -46,7 +46,7 @@ public class SensorIntegrityController : ControllerBase
     /// <returns>The sensor-integrity report for the window.</returns>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<SensorIntegrityReport>> Analyze(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,

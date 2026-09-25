@@ -33,6 +33,7 @@ function makeDevice(overrides: Record<string, unknown> = {}) {
     installId: "install-1",
     kind: "companion",
     label: "My Laptop",
+    linkedToApp: false,
     capabilities: ["notify", "torch"],
     lastSeenAt: new Date(Date.now() - 5 * 60_000).toISOString(),
     createdAt: new Date().toISOString(),
@@ -66,6 +67,40 @@ describe("ClientDevices", () => {
     // Capabilities use the catalog human labels
     await expect.element(page.getByText("Notifications")).toBeVisible();
     await expect.element(page.getByText("Flashlight")).toBeVisible();
+  });
+
+  it("names the app a device is paired through", async () => {
+    devicesCurrent = [makeDevice({ appName: "Prelude", linkedToApp: true })];
+    render(ClientDevices);
+
+    await expect.element(page.getByText("Paired through Prelude")).toBeVisible();
+    await expect
+      .element(page.getByText("Not linked to an app", { exact: false }))
+      .not.toBeInTheDocument();
+  });
+
+  it("says a linked device whose app reports no name is still paired with an app", async () => {
+    devicesCurrent = [makeDevice({ appName: null, linkedToApp: true })];
+    render(ClientDevices);
+
+    await expect.element(page.getByText("Paired through an app that reports no name.")).toBeVisible();
+    await expect
+      .element(page.getByText("Not linked to an app", { exact: false }))
+      .not.toBeInTheDocument();
+  });
+
+  it("says an unlinked device will not be removed by revoking an app", async () => {
+    devicesCurrent = [makeDevice()];
+    render(ClientDevices);
+
+    await expect
+      .element(
+        page.getByText(
+          "Not linked to an app. Revoking an app will not remove this device."
+        )
+      )
+      .toBeVisible();
+    await expect.element(page.getByText("Paired through", { exact: false })).not.toBeInTheDocument();
   });
 
   it("title-cases an unknown device kind in the badge", async () => {

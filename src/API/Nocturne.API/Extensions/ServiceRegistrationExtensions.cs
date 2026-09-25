@@ -411,6 +411,7 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<GuestSessionCacheService>();
+        services.AddScoped<GrantRevocationService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
         // Same instance behind the seam, so the cache is shared rather than duplicated.
@@ -968,6 +969,7 @@ public static class ServiceRegistrationExtensions
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<AlertRuleRearm>();
+        services.AddScoped<AlertRuleRetirement>();
 
         // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
         services.AddAlertEvaluationEngine(configuration);

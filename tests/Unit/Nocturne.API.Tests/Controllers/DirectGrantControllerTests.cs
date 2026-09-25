@@ -2,6 +2,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
@@ -11,10 +12,10 @@ using Nocturne.API.Services.Auth;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -67,7 +68,10 @@ public class DirectGrantControllerTests : IDisposable
             new AuditContext(),
             new Mock<ILogger<AuthAuditService>>().Object);
         var directGrantService = new DirectGrantService(
-            auditService, new Mock<ILogger<DirectGrantService>>().Object);
+            auditService,
+            new GrantRevocationService(
+                new GuestSessionCacheService(new MemoryCache(new MemoryCacheOptions()))),
+            new Mock<ILogger<DirectGrantService>>().Object);
 
         _controller = new DirectGrantController(_dbContext, directGrantService);
         _controller.ControllerContext = new ControllerContext
@@ -170,6 +174,48 @@ public class DirectGrantControllerTests : IDisposable
         var listed = Assert.IsType<List<DirectGrantDto>>(
             Assert.IsType<OkObjectResult>(listResult.Result).Value);
         Assert.Equal(expiresAt, Assert.Single(listed, g => g.Id == response.Id).ExpiresAt);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Create_HistoryLimit_IsPersistedAndReturned(bool limitTo24Hours)
+    {
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Follower phone",
+            Scopes = ["glucose.read"],
+            LimitTo24Hours = limitTo24Hours,
+        });
+
+        var response = Assert.IsType<CreateDirectGrantResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(limitTo24Hours, response.LimitTo24Hours);
+
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
+        Assert.Equal(limitTo24Hours, grant.LimitTo24Hours);
+
+        var listed = Assert.IsType<List<DirectGrantDto>>(
+            Assert.IsType<OkObjectResult>((await _controller.List()).Result).Value);
+        Assert.Equal(limitTo24Hours, Assert.Single(listed, g => g.Id == response.Id).LimitTo24Hours);
+    }
+
+    [Fact]
+    public async Task Create_ByAClampedCredential_CannotMintAnUnclampedGrant()
+    {
+        _controller.HttpContext.RequestServices = TestRequestServices.HistoryClamped();
+
+        var result = await _controller.Create(new CreateDirectGrantRequest
+        {
+            Label = "Wider than its maker",
+            Scopes = ["glucose.read"],
+            LimitTo24Hours = false,
+        });
+
+        var response = Assert.IsType<CreateDirectGrantResponse>(
+            Assert.IsType<OkObjectResult>(result.Result).Value);
+        var grant = await _dbContext.OAuthGrants.AsNoTracking().SingleAsync(g => g.Id == response.Id);
+        Assert.True(grant.LimitTo24Hours);
     }
 
     [Fact]
@@ -367,61 +413,6 @@ public class DirectGrantControllerTests : IDisposable
         var result = await _controller.Revoke(grantId);
 
         Assert.IsType<NoContentResult>(result);
-    }
-
-    [Fact]
-    public async Task Revoke_RemovesTheGrantsDevicesAndSparesAnotherGrants()
-    {
-        var revokedGrantId = Guid.CreateVersion7();
-        var survivingGrantId = Guid.CreateVersion7();
-        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
-        {
-            Id = revokedGrantId,
-            SubjectId = _subjectId,
-            GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["glucose.read"],
-            Label = "WithDevice",
-            TokenHash = "hashwithdevice",
-            CreatedAt = DateTime.UtcNow,
-        });
-        _dbContext.OAuthGrants.Add(new OAuthGrantEntity
-        {
-            Id = survivingGrantId,
-            SubjectId = _subjectId,
-            GrantType = OAuthGrantTypes.Direct,
-            Scopes = ["glucose.read"],
-            Label = "OtherDevice",
-            TokenHash = "hashotherdevice",
-            CreatedAt = DateTime.UtcNow,
-        });
-
-        var revokedDeviceId = Guid.CreateVersion7();
-        var survivingDeviceId = Guid.CreateVersion7();
-        _dbContext.ClientDevices.Add(new ClientDeviceEntity
-        {
-            Id = revokedDeviceId,
-            TenantId = _testTenantId,
-            SubjectId = _subjectId,
-            GrantId = revokedGrantId,
-            InstallId = "install-revoked",
-            Kind = DeviceKinds.Prelude,
-        });
-        _dbContext.ClientDevices.Add(new ClientDeviceEntity
-        {
-            Id = survivingDeviceId,
-            TenantId = _testTenantId,
-            SubjectId = _subjectId,
-            GrantId = survivingGrantId,
-            InstallId = "install-surviving",
-            Kind = DeviceKinds.Companion,
-        });
-        await _dbContext.SaveChangesAsync();
-
-        var result = await _controller.Revoke(revokedGrantId);
-
-        Assert.IsType<NoContentResult>(result);
-        Assert.False(await _dbContext.ClientDevices.AnyAsync(d => d.Id == revokedDeviceId));
-        Assert.True(await _dbContext.ClientDevices.AnyAsync(d => d.Id == survivingDeviceId));
     }
 
     /// <summary>

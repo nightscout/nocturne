@@ -4,6 +4,8 @@
   import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     glucoseChartLookback,
     setColorScheme,
@@ -48,7 +50,8 @@
   const visibleItems = $derived(
     paletteItemsFor(tenantless).filter(
       (item) =>
-        (!item.permission || authStore.hasPermission(item.permission)) &&
+        (!item.scope ||
+          satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
         (!item.role || authStore.hasRole(item.role))
     )
   );

@@ -234,6 +234,7 @@
             status={isDisabled ? "disabled" : "offline"}
             syncProgress={syncProgressByConnector[connector.id ?? ""] ?? null}
             totalEntries={entryCount}
+            totalCoversLast30Days
             entriesLast24h={entries24h}
             lastSeen={lastSeenDate}
             onclick={() => {

@@ -30,9 +30,14 @@ public interface IMembershipRequestService
     /// The approving caller's resolved scopes. Required, not optional: approving confers the
     /// requested roles, so it is bound by the same grant ceiling as a direct permission edit.
     /// </param>
+    /// <param name="limitTo24Hours">
+    /// Whether the new member may read only the last 24 hours: the approver's own ceiling, which a
+    /// membership it confers inherits. Refused when the roles would exempt the member.
+    /// </param>
     Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
         Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        bool limitTo24Hours = false,
         CancellationToken ct = default);
 
     Task<DecideMembershipRequestResult> DenyRequestAsync(

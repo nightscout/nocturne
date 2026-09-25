@@ -7,11 +7,11 @@ namespace Nocturne.Infrastructure.Data.Services;
 /// <see cref="NocturneDbContext"/> starts from fail-closed carrier defaults.
 ///
 /// <para>
-/// The context carries per-request state — <see cref="NocturneDbContext.TenantId"/>,
+/// The context carries per-request state that the RLS policy reads: <see cref="NocturneDbContext.TenantId"/>,
 /// <see cref="NocturneDbContext.SubjectId"/>, <see cref="NocturneDbContext.AuditContext"/>,
-/// <see cref="NocturneDbContext.IsShareContext"/>
-/// and <see cref="NocturneDbContext.VisibleCategories"/> — that the RLS policy reads. The
-/// <c>ITenantDbContextFactory</c> and scoped-context registration stamp those on acquisition;
+/// <see cref="NocturneDbContext.IsShareContext"/>, <see cref="NocturneDbContext.VisibleCategories"/>,
+/// <see cref="NocturneDbContext.ShareFullHistory"/> and <see cref="NocturneDbContext.HistoryClamped"/>.
+/// The <c>ITenantDbContextFactory</c> and scoped-context registration stamp those on acquisition;
 /// callers that take the raw factory and call <see cref="IDbContextFactory{TContext}.CreateDbContext"/>
 /// directly do not. Normalizing to safe defaults here guarantees that, however a context is
 /// obtained, a missing stamp fails closed: a null category CSV denies categorized reads rather
@@ -41,6 +41,7 @@ internal sealed class CarrierResettingDbContextFactory(IDbContextFactory<Nocturn
         context.IsShareContext = false;
         context.VisibleCategories = null;
         context.ShareFullHistory = false;
+        context.HistoryClamped = false;
         return context;
     }
 }

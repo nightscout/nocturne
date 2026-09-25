@@ -23,11 +23,12 @@ internal sealed record LegacyTreatmentRepositories(
 );
 
 /// <summary>The time window, page size and provenance filter of one time-range projection read.</summary>
-/// <param name="NativeOnly">
-/// When <see langword="true"/>, records that mirror a legacy v1/v2/v3 write (<c>LegacyId</c> set) are
-/// dropped. Treatments have no legacy table left to double up against, so every caller passes
-/// <see langword="false"/>; the filter survives for callers that want V4-native records only.
-/// </param>
+/// <remarks>
+/// When <paramref name="NativeOnly"/> is <see langword="true"/>, records that mirror a legacy
+/// v1/v2/v3 write (<c>LegacyId</c> set) are dropped. Treatments have no legacy table left to double
+/// up against, so every caller passes <see langword="false"/>; the filter survives for callers that
+/// want V4-native records only.
+/// </remarks>
 internal readonly record struct LegacyTreatmentRange(
     DateTime? From,
     DateTime? To,

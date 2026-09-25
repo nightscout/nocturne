@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -71,6 +72,7 @@ public class StatisticsController : ControllerBase
     private readonly IBasalInjectionRepository _basalInjectionRepository;
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
+    private readonly ICategoryReadContext _categoryReadContext;
 
     private string TenantCacheId =>
         _tenantAccessor.Context?.TenantId.ToString()
@@ -95,7 +97,8 @@ public class StatisticsController : ControllerBase
         ITargetRangeScheduleRepository targetRangeScheduleRepository,
         IBasalInjectionRepository basalInjectionRepository,
         IActiveProfileResolver activeProfileResolver,
-        ICanonicalGlucoseService canonicalGlucose
+        ICanonicalGlucoseService canonicalGlucose,
+        ICategoryReadContext categoryReadContext
     )
     {
         _statisticsService = statisticsService;
@@ -117,6 +120,7 @@ public class StatisticsController : ControllerBase
         _basalInjectionRepository = basalInjectionRepository;
         _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
+        _categoryReadContext = categoryReadContext;
     }
 
     private readonly record struct InsulinRecords(
@@ -125,11 +129,13 @@ public class StatisticsController : ControllerBase
         List<TempBasal> TempBasals,
         List<BasalInjection> BasalInjections);
 
-    /// <param name="limit">Per collection. An AID pump writes a TempBasal and often an SMB every
-    /// ~5 minutes, so anything short of <c>int.MaxValue</c> truncates a multi-month window to its
-    /// oldest records and understates every total computed from it.</param>
-    /// <param name="alongside">Reads the caller started before calling, joined into the same
-    /// <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.</param>
+    /// <remarks>
+    /// <paramref name="limit"/> applies per collection. An AID pump writes a TempBasal and often
+    /// an SMB every ~5 minutes. Anything short of <c>int.MaxValue</c> truncates a multi-month
+    /// window to its oldest records and understates every total computed from it.
+    /// <paramref name="alongside"/> holds reads the caller started before calling, joined into the
+    /// same <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.
+    /// </remarks>
     private async Task<InsulinRecords> FetchInsulinRecordsAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default, params Task[] alongside)
     {
@@ -168,9 +174,11 @@ public class StatisticsController : ControllerBase
     /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
     /// when the pump reported none.
     /// </summary>
-    /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
-    /// suppresses the fallback, because a profile baseline on top of MDI injections would
-    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.</param>
+    /// <remarks>
+    /// <paramref name="recordedBasal"/> is basal delivered by a route other than TempBasals. A
+    /// non-empty one suppresses the fallback: a profile baseline on top of MDI injections would
+    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.
+    /// </remarks>
     private async Task AddScheduledBasalFallbackAsync(
         List<TempBasal> tempBasals,
         DateTime startUtc,
@@ -378,12 +386,15 @@ public class StatisticsController : ControllerBase
     /// <param name="startDate">Start of the window (inclusive, UTC).</param>
     /// <param name="endDate">End of the window (exclusive, UTC).</param>
     /// <param name="population">Diabetes population for clinical target assessment. Defaults to Type 1 adult.</param>
+    /// <param name="patientDeviceId">Restricts glucose to readings from this one patient device,
+    /// in place of the canonical stream selected across all devices. Boluses and carb intakes are
+    /// not filtered.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The extended analytics and time-of-day averaged stats for the window.</returns>
     [HttpGet("range-analytics")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<ReportAnalysisResult>> GetRangeAnalytics(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
@@ -473,7 +484,7 @@ public class StatisticsController : ControllerBase
     [HttpGet("weekday-averages")]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<IEnumerable<WeekdayGlucoseSlot>>> GetWeekdayAverages(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
@@ -712,11 +723,12 @@ public class StatisticsController : ControllerBase
     {
         var cacheKey = $"statistics:multi-period:{TenantCacheId}";
 
-        // Try to get from cache first
-        var cachedResult = await _cacheService.GetAsync<MultiPeriodStatistics>(
-            cacheKey,
-            cancellationToken
-        );
+        // A history-clamped request bypasses the cache, for the reason given on
+        // EntryCacheAdapter.
+        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var cachedResult = useCache
+            ? await _cacheService.GetAsync<MultiPeriodStatistics>(cacheKey, cancellationToken)
+            : null;
         if (cachedResult != null)
         {
             return Ok(cachedResult);
@@ -784,13 +796,20 @@ public class StatisticsController : ControllerBase
                 {
                     var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
                     var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var profileSegments = await _basalSegments
+                        .GetSegmentsAsync(fromMs, toMs, cancellationToken)
+                        .ToListAsync(cancellationToken);
                     var profileBasal = Math.Round(
-                        await _basalSegments.GetSegmentsAsync(fromMs, toMs, cancellationToken).SumUnitsAsync(cancellationToken)
-                        * 100) / 100;
+                        profileSegments.Sum(s => s.Units) * 100) / 100;
                     var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
                     insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.ScheduledBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.AdditionalBasal = 0;
+                    insulinDelivery.BasalCount = profileSegments.Count;
+                    insulinDelivery.InsulinEventCount =
+                        insulinDelivery.BolusCount
+                        + insulinDelivery.MicroBolusCount
+                        + insulinDelivery.BasalCount;
                     insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
                     insulinDelivery.Tdd =
                         Math.Round(
@@ -894,7 +913,8 @@ public class StatisticsController : ControllerBase
         // Cache for 5 minutes — long enough to absorb rapid dashboard refreshes,
         // short enough that newly-imported connector data (basal StateSpans, etc.) appears promptly.
         var expiry = DateTime.UtcNow.AddMinutes(5);
-        await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
+        if (useCache)
+            await _cacheService.SetAsync(cacheKey, result, expiry, cancellationToken);
 
         return Ok(result);
     }
@@ -964,6 +984,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>
     /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     [HttpGet("punch-card")]
     [RequireScope(Scope.GlucoseRead)]
@@ -1057,9 +1078,6 @@ public class StatisticsController : ControllerBase
             var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
             var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
 
-            var rangeStats = tir?.RangeStats;
-            var avgGlucose = rangeStats?.Target?.Mean ?? rangeStats?.Low?.Mean ?? 0;
-
             var dateStr = day.ToString("yyyy-MM-dd");
             var totals = treatment?.Totals;
             var totalCarbs = totals?.Food?.Carbs ?? 0;
@@ -1069,13 +1087,14 @@ public class StatisticsController : ControllerBase
             var carbToInsulinRatio = treatment?.CarbToInsulinRatio ?? 0;
 
             var entries = dayEntries
-                .Where(e => e.Mgdl > 0)
+                .Where(e => GlucoseStatistics.IsPlausibleReading(e.Mgdl))
                 .OrderBy(e => e.Mills)
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();
 
             // The counts are readings, so they come from the readings, not from durations.
             var totalReadings = entries.Count;
+            var avgGlucose = totalReadings > 0 ? entries.Average(e => e.Mgdl) : 0;
             var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
             var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
             var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
@@ -1122,7 +1141,6 @@ public class StatisticsController : ControllerBase
             var totalLow = daysWithData.Sum(d => d.LowCount);
             var totalHigh = daysWithData.Sum(d => d.HighCount);
             var totalReadings = daysWithData.Sum(d => d.TotalReadings);
-            var glucoseDays = daysWithData.Where(d => d.AverageGlucose > 0).ToList();
 
             month.Summary = new PunchCardMonthSummary
             {
@@ -1131,8 +1149,7 @@ public class StatisticsController : ControllerBase
                 InRangePercent = totalReadings > 0 ? (double)totalIR / totalReadings * 100 : 0,
                 LowPercent = totalReadings > 0 ? (double)totalLow / totalReadings * 100 : 0,
                 HighPercent = totalReadings > 0 ? (double)totalHigh / totalReadings * 100 : 0,
-                AvgGlucose = glucoseDays.Count > 0
-                    ? glucoseDays.Average(d => d.AverageGlucose) : 0,
+                AvgGlucose = daysWithData.Sum(d => d.AverageGlucose * d.TotalReadings) / totalReadings,
             };
         }
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { browser } from "$app/environment";
@@ -351,7 +352,7 @@
       history.clear();
     } catch (err) {
       console.error("Failed to load clock face:", err);
-      toast.error("Failed to load clock face");
+      toast.error(remoteErrorMessage(err, "Failed to load clock face"));
       goto(resolve("/clock"));
     } finally {
       loading = false;

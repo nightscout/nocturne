@@ -28,6 +28,7 @@ public class DataOverviewService : IDataOverviewService
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<DataOverviewService> _logger;
 
     private string TenantCacheId =>
@@ -44,6 +45,9 @@ public class DataOverviewService : IDataOverviewService
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
     /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
+    /// <param name="categoryReadContext">Says whether this request is history-clamped, in which
+    /// case the timeline cache is bypassed for the reason given on
+    /// <see cref="Nocturne.API.Services.Entries.EntryCacheAdapter"/>.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         ITenantDbContextFactory factory,
@@ -51,6 +55,7 @@ public class DataOverviewService : IDataOverviewService
         IStatisticsService statisticsService,
         ICacheService cacheService,
         ITenantAccessor tenantAccessor,
+        ICategoryReadContext categoryReadContext,
         ILogger<DataOverviewService> logger
     )
     {
@@ -59,6 +64,7 @@ public class DataOverviewService : IDataOverviewService
         _statisticsService = statisticsService;
         _cacheService = cacheService;
         _tenantAccessor = tenantAccessor;
+        _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
 
@@ -400,7 +406,10 @@ public class DataOverviewService : IDataOverviewService
 
         // Computed once per tenant/year/source combination and reused until it expires below —
         // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var cached = await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
+        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var cached = useCache
+            ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
+            : null;
         if (cached != null)
             return cached;
 
@@ -477,7 +486,8 @@ public class DataOverviewService : IDataOverviewService
         // Completed years don't change (barring rare backfills), so cache them for a long time; the
         // current year is still accumulating days, so refresh it more often.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
-        await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+        if (useCache)
+            await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
 
         return response;
     }

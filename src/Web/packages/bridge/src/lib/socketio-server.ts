@@ -388,9 +388,34 @@ class SocketIOServer {
     const token = stringField(payload, 'token');
     if (!secret && !token) return deny('no credentials supplied');
 
+    const tenantRelay = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
+    if (tenantRelay === null) return deny('API denied the credential');
+
+    socket.data.tenantSlug = tenantSlug;
+    socket.data.pendingTenantSlug = undefined;
+    socket.data.tenantRelay = tenantRelay;
+    this.joinTenantRoom(socket);
+    logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
+    callback?.({ read: true, write: false, write_treatment: false });
+  }
+
+  /** Replays a client credential against the API's realtime admission endpoint,
+   *  scoped to the connection's own tenant, and returns its `tenantRelay`
+   *  decision, or null when the API refused the credential or the probe failed.
+   *  The probe carries the client's credential and nothing else: the bridge's
+   *  instance key would authenticate any anonymous caller as a service. */
+  private async probeRealtimeAdmission(
+    tenantSlug: string,
+    credential: { apiSecret?: string; token?: string; accessToken?: string },
+  ): Promise<boolean | null> {
+    if (!this.apiBaseUrl) {
+      logger.warn('Realtime admission probe has no API base URL configured');
+      return null;
+    }
+
     try {
       const url = new URL(`${this.apiBaseUrl}${REALTIME_ADMISSION_PATH}`);
-      if (token) url.searchParams.set('token', token);
+      if (credential.token) url.searchParams.set('token', credential.token);
 
       const headers: Record<string, string> = {
         'X-Forwarded-Host': `${tenantSlug}.${this.baseDomain}`,
@@ -399,7 +424,8 @@ class SocketIOServer {
         // unauthenticated probe.
         'Cache-Control': 'no-cache, no-store',
       };
-      if (secret) headers['api-secret'] = secret;
+      if (credential.apiSecret) headers['api-secret'] = credential.apiSecret;
+      if (credential.accessToken) headers['Authorization'] = `Bearer ${credential.accessToken}`;
 
       const probe = await fetch(url, {
         method: 'GET',
@@ -407,18 +433,13 @@ class SocketIOServer {
         signal: AbortSignal.timeout(5000),
       });
 
-      if (!probe.ok) return deny(`API denied the credential (${probe.status})`);
+      if (!probe.ok) return null;
       const admission: unknown = await probe.json();
-
-      socket.data.tenantSlug = tenantSlug;
-      socket.data.pendingTenantSlug = undefined;
-      socket.data.tenantRelay = isRecord(admission) && admission.tenantRelay === true;
-      this.joinTenantRoom(socket);
-      logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
-      callback?.({ read: true, write: false, write_treatment: false });
+      return isRecord(admission) && admission.tenantRelay === true;
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      return deny(`credential probe failed: ${reason}`);
+      logger.warn(`Realtime admission probe failed: ${reason}`);
+      return null;
     }
   }
 
@@ -836,14 +857,11 @@ class SocketIOServer {
       return;
     }
 
-    // Probe the entries read endpoint — alarm subscription requires the same
-    // tenant read access as a storage subscription.
-    const authorized = await this.probeAccessToken(
-      accessToken,
-      tenantSlug,
-      COLLECTION_READ_ENDPOINT.entries,
-    );
-    if (!authorized) {
+    // The alarm room carries every category and every member's alert state, so
+    // the subscriber must be a credential the API admits to the tenant relay,
+    // not merely one that can read entries.
+    const admitted = await this.probeRealtimeAdmission(tenantSlug, { accessToken });
+    if (admitted !== true) {
       logger.warn(`/alarm subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);

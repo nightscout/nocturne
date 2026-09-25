@@ -201,6 +201,53 @@ public class MembershipRequestServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ApproveRequestAsync_ByAClampedApprover_AddsAClampedMember()
+    {
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+        var roleIds = new List<Guid> { _adminRoleId };
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, roleIds, _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+
+        result.Success.Should().BeTrue();
+        _tenantService.Verify(t => t.AddMemberAsync(
+            _tenantId, _subjectId, roleIds,
+            null, null, true, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveRequestAsync_ClampedIntoAnAdministeringRole_IsRefused()
+    {
+        var settingsRoleId = Guid.CreateVersion7();
+        _dbContext.TenantRoles.Add(new TenantRoleEntity
+        {
+            Id = settingsRoleId,
+            TenantId = _tenantId,
+            Name = "Settings",
+            Slug = "settings",
+            Permissions = [Scope.TenantSettings],
+            SysCreatedAt = DateTime.UtcNow,
+            SysUpdatedAt = DateTime.UtcNow,
+        });
+        await _dbContext.SaveChangesAsync();
+        await _service.CreateRequestAsync(_tenantId, _subjectId, null);
+        var request = await _dbContext.MembershipRequests.FirstAsync();
+
+        var result = await _service.ApproveRequestAsync(
+            request.Id, _tenantId, [settingsRoleId], _adminSubjectId, [Scope.FullAccess], limitTo24Hours: true);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be(MemberScopeResolver.ExemptFromHistoryClampDetail);
+        _tenantService.Verify(t => t.AddMemberAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<List<Guid>>(),
+            It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        await _dbContext.Entry(request).ReloadAsync();
+        request.Status.Should().Be("pending");
+    }
+
+    [Fact]
     public async Task ApproveRequestAsync_RequestNotFound_ReturnsFailure()
     {
         var result = await _service.ApproveRequestAsync(

@@ -5,6 +5,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
@@ -252,12 +253,14 @@ public class ExcursionTrackerSeamTests
     [Theory]
     [InlineData(ExcursionCloseReason.Manual)]
     [InlineData(ExcursionCloseReason.AutoResolve)]
+    [InlineData(ExcursionCloseReason.RuleDisabled)]
     public Task Force_close_closes_from_any_open_state_managed(ExcursionCloseReason reason) =>
         Force_close_closes_from_any_open_state(Engine.Managed, reason);
 
     [NativeTheory]
     [InlineData(ExcursionCloseReason.Manual)]
     [InlineData(ExcursionCloseReason.AutoResolve)]
+    [InlineData(ExcursionCloseReason.RuleDisabled)]
     public Task Force_close_closes_from_any_open_state_rust(ExcursionCloseReason reason) =>
         Force_close_closes_from_any_open_state(Engine.Rust, reason);
 
@@ -284,6 +287,15 @@ public class ExcursionTrackerSeamTests
 
         fromHysteresis.Should().Be(new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, second.ExcursionId, reason));
         f.State!.HysteresisStartedAt.Should().BeNull();
+    }
+
+    [Fact]
+    public void Rule_disabled_crosses_the_rust_close_reason_wire()
+    {
+        RustEnvelopeMapper.CloseReasonToRust(ExcursionCloseReason.RuleDisabled)
+            .Should().Be(RustCloseReason.RuleDisabled);
+        RustEnvelopeMapper.CloseReasonFromWire(RustCloseReason.RuleDisabled)
+            .Should().Be(ExcursionCloseReason.RuleDisabled);
     }
 
     [Fact] public Task Force_close_without_an_excursion_writes_nothing_managed() =>

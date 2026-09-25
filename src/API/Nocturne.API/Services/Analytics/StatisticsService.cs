@@ -775,7 +775,7 @@ public class StatisticsService : IStatisticsService
 
     private static bool IsPlausibleReading(SensorGlucose entry) => IsPlausibleReading(entry.Mgdl);
 
-    private static bool IsPlausibleReading(double mgdl) => mgdl > 0 && mgdl < 600;
+    private static bool IsPlausibleReading(double mgdl) => GlucoseStatistics.IsPlausibleReading(mgdl);
 
     #endregion
 
@@ -1151,31 +1151,6 @@ public class StatisticsService : IStatisticsService
     #region Time in Range
 
     /// <summary>
-    /// The mutually excluding zones <see cref="CalculateTimeInRange"/> counts against, listed in
-    /// the order it has always tested them: very-high before high, so a tenant who configures
-    /// <c>VeryHigh</c> below <c>TargetTop</c> keeps seeing the reading reported as very high.
-    /// <see cref="Target"/> is the remainder and is not reported from here — the target percentage
-    /// comes from the closed <c>TargetBottom</c>..<c>TargetTop</c> band, which overlaps
-    /// <see cref="Low"/> when the two are configured apart.
-    /// </summary>
-    private enum ExcludingZone
-    {
-        VeryLow,
-        Low,
-        VeryHigh,
-        High,
-        Target,
-    }
-
-    private static GlucoseZoneScale ExcludingZones(GlycemicThresholds thresholds) =>
-        new(
-            GlucoseZoneBound.Under(thresholds.VeryLow),
-            GlucoseZoneBound.Under(thresholds.Low),
-            GlucoseZoneBound.Over(thresholds.VeryHigh),
-            GlucoseZoneBound.Over(thresholds.TargetTop)
-        );
-
-    /// <summary>
     /// The zones the per-range statistics partition on, which are not <see cref="ExcludingZone"/>:
     /// <see cref="Low"/> is everything below <c>Low</c>, so it holds the very-low readings as well,
     /// and <see cref="High"/> is everything above <c>TargetTop</c>.
@@ -1232,7 +1207,11 @@ public class StatisticsService : IStatisticsService
         // from and the minutes derived from the entry timestamps line up with it.
         var entriesList = entries.Where(IsPlausibleReading).OrderBy(e => e.Mills).ToList();
 
-        var glucoseValues = ExtractGlucoseValues(entriesList).ToList();
+        // Every figure here counts instants: readings two uploaders posted of one moment were never
+        // two readings, so each instant counts once, as the reading GlucoseCadence.Instants
+        // chooses for it.
+        var instants = GlucoseCadence.Instants(entriesList, thresholds);
+        var glucoseValues = instants.Select(reading => reading.Mgdl).ToList();
         var totalReadings = glucoseValues.Count;
 
         if (totalReadings == 0)
@@ -1249,27 +1228,25 @@ public class StatisticsService : IStatisticsService
         // The target and tight-target bands overlap each other, and overlap the excluding zones
         // whenever Low and TargetBottom are configured apart, so they are counted alongside the
         // scale rather than read off it.
-        var zones = ExcludingZones(thresholds);
+        var zones = GlucoseStatistics.ExcludingZones(thresholds);
         var zoneCounts = new int[zones.ZoneCount];
         var zoneMinutes = new double[zones.ZoneCount];
         int targetCount = 0, tightTargetCount = 0;
         double targetMinutes = 0, tightTargetMinutes = 0;
-        var readingMinutes = ReadingMinutes(entriesList);
+        var (instantMinutes, _) = GlucoseCadence.ReadingMinutes(instants);
         for (var i = 0; i < totalReadings; i++)
         {
             var v = glucoseValues[i];
-            var minutes = readingMinutes[i];
+            var minutes = instantMinutes[i];
 
             var zone = zones.Classify(v);
             zoneCounts[zone]++;
             zoneMinutes[zone] += minutes;
-
             if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
             {
                 targetCount++;
                 targetMinutes += minutes;
             }
-
             if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop)
             {
                 tightTargetCount++;
@@ -1305,7 +1282,7 @@ public class StatisticsService : IStatisticsService
                 zoneMinutes[(int)ExcludingZone.High] + zoneMinutes[(int)ExcludingZone.VeryHigh],
         };
 
-        var episodes = CalculateEpisodes(glucoseValues, thresholds);
+        var episodes = CalculateEpisodes(entriesList, thresholds);
 
         // Calculate per-range detailed statistics
         var rangeZones = RangeStatZones(thresholds);
@@ -1419,97 +1396,21 @@ public class StatisticsService : IStatisticsService
         };
     }
 
-    /// <summary>
-    /// A run of consecutive readings on the same side of target is one episode, counted against
-    /// the most extreme zone the run reached — so a rise through High into VeryHigh and back is
-    /// one very-high episode, not three. <see cref="ExcludingZone"/> lists the severe zone of each
-    /// side ahead of the milder one, so the most extreme zone of a run is the lowest-numbered.
-    /// </summary>
     private static TimeInRangeEpisodes CalculateEpisodes(
-        IList<double> glucoseValues,
+        IList<SensorGlucose> sortedEntries,
         GlycemicThresholds thresholds
     )
     {
-        var zones = ExcludingZones(thresholds);
-        var episodeCounts = new int[zones.ZoneCount];
-        var aboveRange = 0;
-        var side = 0;
-        var extreme = (int)ExcludingZone.Target;
-
-        foreach (var value in glucoseValues)
-        {
-            var zone = zones.Classify(value);
-            var zoneSide = Side(zone);
-
-            if (zoneSide != side)
-            {
-                CloseEpisode();
-                side = zoneSide;
-                extreme = zone;
-            }
-            else if (zone < extreme)
-            {
-                extreme = zone;
-            }
-        }
-
-        CloseEpisode();
-
+        var episodes = GlucoseEpisodeDetector.Detect(sortedEntries, thresholds);
         return new TimeInRangeEpisodes
         {
-            VeryLow = episodeCounts[(int)ExcludingZone.VeryLow],
-            Low = episodeCounts[(int)ExcludingZone.Low],
-            High = episodeCounts[(int)ExcludingZone.High],
-            VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh],
-            AboveRange = aboveRange,
+            VeryLow = episodes.Count(e => e.BelowRange && e.Severe),
+            Low = episodes.Count(e => e.BelowRange && !e.Severe),
+            High = episodes.Count(e => !e.BelowRange && !e.Severe),
+            VeryHigh = episodes.Count(e => !e.BelowRange && e.Severe),
+            AboveRange = episodes.Count(e => !e.BelowRange),
+            BelowRange = episodes.Count(e => e.BelowRange),
         };
-
-        void CloseEpisode()
-        {
-            if (side == 0)
-                return;
-
-            episodeCounts[extreme]++;
-            if (side > 0)
-                aboveRange++;
-        }
-
-        static int Side(int zone) =>
-            zone switch
-            {
-                (int)ExcludingZone.VeryLow or (int)ExcludingZone.Low => -1,
-                (int)ExcludingZone.VeryHigh or (int)ExcludingZone.High => 1,
-                _ => 0,
-            };
-    }
-
-    /// <summary>
-    /// The cadence assumed where nothing publishes one: a series showing no interval of its own,
-    /// or a device the catalogue carries no <see cref="CgmDeviceWindow.CadenceMinutes"/> for.
-    /// </summary>
-    private const double DefaultCadenceMinutes = 5;
-
-    /// <summary>
-    /// The minutes from each reading to the next, in series order; empty for a series of one.
-    /// </summary>
-    private static double[] ReadingIntervals(IList<SensorGlucose> sortedEntries)
-    {
-        var intervals = new double[Math.Max(sortedEntries.Count - 1, 0)];
-        for (var i = 1; i < sortedEntries.Count; i++)
-            intervals[i - 1] = (sortedEntries[i].Mills - sortedEntries[i - 1].Mills) / 60000.0;
-
-        return intervals;
-    }
-
-    /// <summary>
-    /// The cadence the series reports about itself: the median of its intervals, which a sensor
-    /// outage or a warmup cannot drag the way it would a mean. Intervals of no elapsed time are
-    /// excluded, and a series with none left falls back to <see cref="DefaultCadenceMinutes"/>.
-    /// </summary>
-    private static double SeriesCadenceMinutes(IEnumerable<double> intervals)
-    {
-        var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
-        return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
 
     /// <summary>
@@ -1549,26 +1450,8 @@ public class StatisticsService : IStatisticsService
             {
                 var ordered = stream.OrderBy(reading => reading.Mills).ToList();
                 var count = credited is null ? ordered.Count : ordered.Count(credited);
-                return count * SeriesCadenceMinutes(ReadingIntervals(ordered));
+                return count * GlucoseCadence.SeriesCadenceMinutes(GlucoseCadence.ReadingIntervals(ordered));
             });
-
-    /// <summary>
-    /// The minutes each reading stands for: the gap to the next reading, capped at twice the
-    /// series' median gap so that a stretch the sensor did not cover is not credited to the zone
-    /// the last reading before it happened to be in. The final reading stands for one median gap.
-    /// </summary>
-    private static double[] ReadingMinutes(IList<SensorGlucose> sortedEntries)
-    {
-        var intervals = ReadingIntervals(sortedEntries);
-        var cadence = SeriesCadenceMinutes(intervals);
-
-        var minutes = new double[sortedEntries.Count];
-        for (var i = 0; i < intervals.Length; i++)
-            minutes[i] = Math.Min(intervals[i], cadence * 2);
-        minutes[^1] = cadence;
-
-        return minutes;
-    }
 
     #endregion
 
@@ -1970,9 +1853,9 @@ public class StatisticsService : IStatisticsService
         // Calculate day count (minimum 1 to avoid division by zero)
         var dayCount = Math.Max(1, (int)Math.Round((endDate - startDate).TotalDays));
 
-        // All Bolus records are bolus insulin; basal comes from StateSpans.
+        // All Bolus records are bolus insulin; basal comes from TempBasals.
         // This overload only has bolus data, so basal stats will be 0.
-        // Use the StateSpan overload for complete basal/bolus analysis.
+        // Use the TempBasal overload for complete basal/bolus analysis.
         double totalBolus = 0;
         int bolusCount = 0;
         int correctionBoluses = 0;
@@ -2043,11 +1926,12 @@ public class StatisticsService : IStatisticsService
         return new InsulinDeliveryStatistics
         {
             TotalBolus = Math.Round(totalBolus * 100) / 100,
-            TotalBasal = 0, // Basal requires StateSpans
+            TotalBasal = 0, // Basal requires TempBasals
             TotalInsulin = Math.Round(totalBolus * 100) / 100,
             TotalCarbs = Math.Round(totalCarbs * 10) / 10,
             BolusCount = bolusCount,
             BasalCount = 0,
+            InsulinEventCount = bolusCount,
             BasalPercent = 0,
             BolusPercent = totalBolus > 0 ? 100 : 0,
             Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
@@ -2143,24 +2027,27 @@ public class StatisticsService : IStatisticsService
         // Start with bolus-based calculation (includes carb stats)
         var stats = CalculateBolusDeliveryStatistics(boluses, carbIntakes, startDate, endDate);
 
-        // Sum basal from TempBasals + algorithm boluses, splitting scheduled vs additional
+        // Delivered basal splits into scheduled and additional. A temp below the scheduled rate
+        // reduces the scheduled part only; a temp above it contributes the excess to additional.
+        // Additional never nets a below-schedule temp against a rising one.
         var tempBasalInsulin = 0.0;
         var scheduledBasalInsulin = 0.0;
         var additionalBasalInsulin = 0.0;
+        var tempBasalCount = 0;
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
             var insulin = GetTempBasalInsulin(tb, effectiveEndMills);
             if (insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
+            tempBasalCount++;
 
-            // Split into scheduled vs additional using ScheduledRate when available
             if (tb.ScheduledRate.HasValue)
             {
                 var durationHours = (effectiveEndMills - tb.StartMills) / (1000.0 * 60 * 60);
                 var scheduled = tb.ScheduledRate.Value * durationHours;
-                scheduledBasalInsulin += scheduled;
-                additionalBasalInsulin += insulin - scheduled;
+                scheduledBasalInsulin += Math.Min(insulin, scheduled);
+                additionalBasalInsulin += Math.Max(0, insulin - scheduled);
             }
             else if (tb.Origin == TempBasalOrigin.Scheduled)
             {
@@ -2212,6 +2099,8 @@ public class StatisticsService : IStatisticsService
         stats.MicroBolusInsulin = Math.Round(algorithmBolusInsulin * 100) / 100;
         stats.BasalInjectionInsulin = Math.Round(basalInjectionInsulin * 100) / 100;
         stats.BasalInjectionCount = basalInjectionCount;
+        stats.BasalCount = tempBasalCount + basalInjectionCount;
+        stats.InsulinEventCount = stats.BolusCount + stats.MicroBolusCount + stats.BasalCount;
 
         return stats;
     }
@@ -2773,10 +2662,6 @@ public class StatisticsService : IStatisticsService
     /// Master glucose analytics function that calculates comprehensive glucose metrics
     /// with sensor-specific optimizations
     /// </summary>
-    /// <param name="entries">Collection of glucose entries</param>
-    /// <param name="boluses">Collection of boluses</param>
-    /// <param name="carbIntakes">Collection of carb intakes</param>
-    /// <param name="config">Extended analysis configuration (optional)</param>
     /// <returns>Comprehensive glucose analytics</returns>
     public GlucoseAnalytics AnalyzeGlucoseData(
         IEnumerable<SensorGlucose> entries,
@@ -2862,8 +2747,8 @@ public class StatisticsService : IStatisticsService
         foreach (var stream in entries.GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal))
         {
             var readings = stream.ToList();
-            var intervals = ReadingIntervals(readings);
-            var cadence = SeriesCadenceMinutes(intervals);
+            var intervals = GlucoseCadence.ReadingIntervals(readings);
+            var cadence = GlucoseCadence.SeriesCadenceMinutes(intervals);
 
             streamSpanMinutes += intervals.Sum();
 
@@ -2944,7 +2829,7 @@ public class StatisticsService : IStatisticsService
                     continue;
 
                 windows.Add((windowStart, windowEnd));
-                cadences[device.DeviceId] = device.CadenceMinutes ?? DefaultCadenceMinutes;
+                cadences[device.DeviceId] = device.CadenceMinutes ?? GlucoseCadence.DefaultCadenceMinutes;
             }
 
             var period = MergeWindows(windows);

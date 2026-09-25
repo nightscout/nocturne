@@ -279,6 +279,7 @@ msgstr "Dringend hoch"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/dialogs/GlucoseInspectionDialog.svelte
 #: src/lib/components/reports/TIRStackedChart.svelte
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/FoodNutritionalForm.svelte
@@ -1762,7 +1763,6 @@ msgstr "Kohlenhydrate:"
 #. 0: totalCarbs
 #. 0: (snapshot.cob ?? 0).toFixed(0)
 #. 0: Math.round(d.averageDailyCarbs)
-#. 0: selectedDay.totalCarbs.toFixed(0)
 #. 0: d.totalCarbs.toFixed(0)
 #. 0: totalCarbs
 #. 0: actualUnattributed
@@ -1785,7 +1785,6 @@ msgstr "Kohlenhydrate:"
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/GlycemicRiskIndexChart.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodEntryEditDialog.svelte
@@ -2706,8 +2705,6 @@ msgstr "Inaktiv"
 msgid "Records (24h)"
 msgstr "Datensätze (24h)"
 
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 msgid "Total Records"
 msgstr "Datensätze gesamt"
@@ -2733,10 +2730,8 @@ msgstr "DIESE AKTION KANN NICHT RÜCKGÄNGIG GEMACHT WERDEN"
 msgid "You are about to permanently delete <0>all data</0> from <1/> . This includes:"
 msgstr "Du bist dabei, <0>alle Daten</0> von <1/> dauerhaft zu löschen. Dies umfasst:"
 
-#. 0: formatNumber( selectedDataSource.totalEntries )
-#: src/lib/components/connectors/DataSourceManageDialog.svelte
-msgid "All glucose records ({0} records)"
-msgstr "Alle Glukosedatensätze (Anzahl: {0})"
+#~ msgid "All glucose records ({0} records)"
+#~ msgstr "Alle Glukosedatensätze (Anzahl: {0})"
 
 #: src/lib/components/connectors/DataSourceManageDialog.svelte
 msgid "All treatments entered by this device"
@@ -3597,7 +3592,6 @@ msgstr "Letzte 24 Stunden"
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 #: src/lib/components/icons/TreatmentTypeIcon.svelte
 #: src/lib/components/reports/InsulinDeliveryChart.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
 #: src/lib/components/treatments/TreatmentsDataTable.svelte
@@ -3611,7 +3605,6 @@ msgstr "Bolus"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartTooltip.svelte
 #: src/lib/components/meals/MealsTable.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/routes/(authenticated)/food/Composer.svelte
@@ -4084,7 +4077,6 @@ msgstr "Ereignistyp"
 #: src/lib/components/status-pills/IOBPill.svelte
 #: src/lib/components/treatments/edit-dialog/BasalInjectionFormFields.svelte
 #: src/lib/components/treatments/edit-dialog/DeviceEventFormFields.svelte
-#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Notes"
 msgstr "Notizen"
@@ -4190,7 +4182,6 @@ msgid "Loading breakdown..."
 msgstr "Lade Aufschlüsselung..."
 
 #: src/lib/components/entries/FoodBreakdown.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 msgid "Total Carbs"
 msgstr "Gesamtkohlenhydrate"
@@ -4330,7 +4321,6 @@ msgstr "Snack"
 #: src/lib/components/reports/RetrospectiveStats.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
 #: src/lib/components/reports/sleep/single-night/Hypnogram.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/status-pills/BasalPill.svelte
 #: src/lib/components/treatments/TreatmentEditDialog.svelte
@@ -4766,7 +4756,6 @@ msgid "No meals match the current filters."
 msgstr "Keine Mahlzeiten entsprechen den aktuellen Filtern."
 
 #: src/lib/components/meals/MealsTable.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
@@ -4831,6 +4820,7 @@ msgstr "<0/> Direkte Berechtigungen (optional)"
 
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/settings/ApiTokens.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Only last 24 hours"
 msgstr "Nur die letzten 24 Stunden"
@@ -5387,6 +5377,7 @@ msgid "<0/> Save Changes"
 msgstr "<0/> Änderungen speichern"
 
 #: src/lib/components/members/MemberCard.svelte
+#: src/lib/components/settings/ApiTokens.svelte
 msgid "<0/> 24-hour limit"
 msgstr "<0/> 24-Stunden-Limit"
 
@@ -6879,10 +6870,8 @@ msgid "<0/> Inactive"
 msgstr "<0/> Inaktiv"
 
 #. 0: formatNumber(totalEntries)
-#. 0: formatNumber(totalEntries)
 #. 0: formatNumber(allRows.length)
 #. 0: formatCount(col.migrated)
-#: src/lib/components/settings/DataSourceRow.svelte
 #: src/lib/components/settings/DataSourceRow.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/ImportProgress.svelte
@@ -7460,7 +7449,6 @@ msgid "Diagnostic Info"
 msgstr "Diagnose-Info"
 
 #: src/lib/components/support/IssueCreatorDialog.svelte
-#: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "<0/> Copied"
 msgstr "<0/> Kopiert"
 
@@ -8719,6 +8707,7 @@ msgstr "Lebensmittel konnte nicht aktualisiert werden"
 msgid "Food deleted"
 msgstr "Lebensmittel gelöscht"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/routes/(authenticated)/food/food-state.svelte.ts
 msgid "Failed to delete food"
 msgstr "Lebensmittel konnte nicht gelöscht werden"
@@ -8960,6 +8949,7 @@ msgstr "Lebensmittel konnte nicht entkoppelt werden"
 msgid "Food added"
 msgstr "Lebensmittel hinzugefügt"
 
+#: src/lib/components/entries/FoodBreakdown.svelte
 #: src/routes/(authenticated)/meals/+page.svelte
 msgid "Failed to add food"
 msgstr "Lebensmittel konnte nicht hinzugefügt werden"
@@ -9806,13 +9796,11 @@ msgstr "Weiter zu Nocturne"
 msgid "Accept Invite"
 msgstr "Einladung annehmen"
 
-#: src/routes/(unauthenticated)/join/+page.svelte
-#: src/routes/(unauthenticated)/join/+page.svelte
+#: src/lib/components/members/InviteSummary.svelte
 msgid "<0/> has invited you to join"
 msgstr "<0/> hat dich eingeladen beizutreten"
 
-#: src/routes/(unauthenticated)/join/+page.svelte
-#: src/routes/(unauthenticated)/join/+page.svelte
+#: src/lib/components/members/InviteSummary.svelte
 msgid "You've been invited to join"
 msgstr "Du wurdest zum Beitritt eingeladen"
 
@@ -10131,26 +10119,21 @@ msgstr "Keine 90-Tage-Daten verfügbar"
 msgid "Failed to load data"
 msgstr "Daten konnten nicht geladen werden"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "Day Details"
-msgstr "Tagesdetails"
+#~ msgid "Day Details"
+#~ msgstr "Tagesdetails"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "Average Glucose"
-msgstr "Durchschnittlicher Blutzucker"
+#~ msgid "Average Glucose"
+#~ msgstr "Durchschnittlicher Blutzucker"
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
 msgid "Total Daily Dose"
 msgstr "Gesamte Tagesdosis"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "By Data Type"
-msgstr "Nach Datentyp"
+#~ msgid "By Data Type"
+#~ msgstr "Nach Datentyp"
 
-#: src/lib/components/reports/year-overview/DayDetailPanel.svelte
-msgid "View Day in Review <0/>"
-msgstr "Tag in der Übersicht ansehen <0/>"
+#~ msgid "View Day in Review <0/>"
+#~ msgstr "Tag in der Übersicht ansehen <0/>"
 
 #: src/lib/components/dashboard/widgets/TddWidget.svelte
 msgid "No insulin"
@@ -11546,9 +11529,8 @@ msgstr "Fehler beim Laden des Datenqualitätsberichts"
 msgid "Data Quality - Nocturne"
 msgstr "Datenqualität - Nocturne"
 
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
-msgid "Monitor and manage data exclusions"
-msgstr "Datenausschlüsse überwachen und verwalten"
+#~ msgid "Monitor and manage data exclusions"
+#~ msgstr "Datenausschlüsse überwachen und verwalten"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "Pending Review"
@@ -11593,9 +11575,8 @@ msgstr "Falsch niedrige Messwerte durch Schlafen auf dem Sensor"
 msgid "You have {0} item{1} waiting for review"
 msgstr ""
 
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
-msgid "Review detected compression lows to improve your statistics accuracy"
-msgstr "Überprüfe erkannte Kompressionstiefs, um die Genauigkeit deiner Statistiken zu verbessern"
+#~ msgid "Review detected compression lows to improve your statistics accuracy"
+#~ msgstr "Überprüfe erkannte Kompressionstiefs, um die Genauigkeit deiner Statistiken zu verbessern"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 msgid "Review Now"
@@ -12741,9 +12722,8 @@ msgstr "Neu generieren"
 msgid "New recovery codes"
 msgstr "Neue Wiederherstellungscodes"
 
-#: src/routes/(authenticated)/settings/account/+page.svelte
-msgid "<0/> Copy all codes"
-msgstr "<0/> Alle Codes kopieren"
+#~ msgid "<0/> Copy all codes"
+#~ msgstr "<0/> Alle Codes kopieren"
 
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Remove authenticator"
@@ -13159,9 +13139,8 @@ msgstr "Automatisch mögliche Kompressions-Lows während des Schlafs erkennen"
 msgid "Enable automatic detection"
 msgstr "Automatische Erkennung aktivieren"
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Exclude from statistics"
-msgstr "Von Statistiken ausschließen"
+#~ msgid "Exclude from statistics"
+#~ msgstr "Von Statistiken ausschließen"
 
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
@@ -14953,9 +14932,8 @@ msgstr "Kompressionstiefs – Nocturne"
 msgid "{0} pending review"
 msgstr "Zur Überprüfung ausstehend: {0}"
 
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
-msgid "Review history and manage exclusions"
-msgstr "Verlauf ansehen und Ausschlüsse verwalten"
+#~ msgid "Review history and manage exclusions"
+#~ msgstr "Verlauf ansehen und Ausschlüsse verwalten"
 
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Status:"
@@ -14990,9 +14968,8 @@ msgstr "Erholung (Min.)"
 msgid "Selected Range"
 msgstr "Ausgewählter Bereich"
 
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
-msgid "Exclusion Range"
-msgstr "Ausschlussbereich"
+#~ msgid "Exclusion Range"
+#~ msgstr "Ausschlussbereich"
 
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Drag the handles on the chart to adjust"
@@ -16841,9 +16818,8 @@ msgstr ""
 msgid "You cannot remove your only credential without an alternative sign-in method linked to your account."
 msgstr ""
 
-#: src/routes/(unauthenticated)/join/+page.svelte
-msgid "<0/> <1/>. Create an account or sign in to accept."
-msgstr ""
+#~ msgid "<0/> <1/>. Create an account or sign in to accept."
+#~ msgstr ""
 
 #: src/routes/(unauthenticated)/setup/StepSidebar.svelte
 msgid "Four short steps. Nothing to uninstall later, nothing sent off-server. You can change every choice in Settings afterwards."
@@ -18486,9 +18462,8 @@ msgstr ""
 msgid "This will invalidate all existing recovery codes and generate new ones. Make sure to save the new codes in a safe place."
 msgstr ""
 
-#: src/routes/(authenticated)/settings/account/+page.svelte
-msgid "Save these codes in a safe place. Each code can only be used once. This is the only time they will be shown."
-msgstr ""
+#~ msgid "Save these codes in a safe place. Each code can only be used once. This is the only time they will be shown."
+#~ msgstr ""
 
 #. 0: totpRemoveTarget?.label ?? "Unnamed authenticator"
 #: src/routes/(authenticated)/settings/account/+page.svelte
@@ -18630,13 +18605,11 @@ msgstr ""
 msgid "Nocturne will analyze your overnight data and notify you when potential compression lows are detected"
 msgstr ""
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Don't include accepted compression lows when calculating Time in Range and other statistics"
-msgstr ""
+#~ msgid "Don't include accepted compression lows when calculating Time in Range and other statistics"
+#~ msgstr ""
 
-#: src/routes/(authenticated)/settings/data-quality/+page.svelte
-msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
-msgstr ""
+#~ msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them."
+#~ msgstr ""
 
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Timezone History"
@@ -21188,9 +21161,8 @@ msgstr ""
 msgid "You already have access to <0/>."
 msgstr ""
 
-#: src/routes/(unauthenticated)/join/+page.svelte
-msgid "as <0/>"
-msgstr ""
+#~ msgid "as <0/>"
+#~ msgstr ""
 
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
 msgid "No events yet; playhead at start of window."
@@ -25045,4 +25017,171 @@ msgstr ""
 
 #: src/lib/components/alerts/conditionIssues.svelte.ts
 msgid "Part of this rule's conditions has a setting its kind of condition doesn't have, so it can't be saved."
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "Records in the last 30 days"
+msgstr ""
+
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "All glucose records"
+msgstr ""
+
+#. 0: formatNumber(selectedDataSource.totalEntries)
+#: src/lib/components/connectors/DataSourceManageDialog.svelte
+msgid "This source sent {0} records in the last 30 days."
+msgstr ""
+
+#. 0: inviterName; 1: url
+#: src/lib/components/members/CopyInvitationMessageButton.svelte
+msgid "{0} has invited you to Nocturne, a website for viewing diabetes information, such as glucose readings, that they've chosen to share with you. Open this link to sign in or create an account and join: {1}"
+msgstr ""
+
+#. 0: url
+#: src/lib/components/members/CopyInvitationMessageButton.svelte
+msgid "You've been invited to Nocturne, a website for viewing diabetes information, such as glucose readings, that someone has chosen to share with you. Open this link to sign in or create an account and join: {0}"
+msgstr ""
+
+#: src/lib/components/members/CopyInvitationMessageButton.svelte
+msgid "<0/> Message copied"
+msgstr ""
+
+#: src/lib/components/members/CopyInvitationMessageButton.svelte
+msgid "<0/> Copy invitation message"
+msgstr ""
+
+#: src/lib/components/members/CreateInviteCard.svelte
+msgid "Couldn't copy the message to the clipboard. Copy the link manually instead."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "the person who sent it"
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "This invite no longer gives access to anything. Ask <0/> for a new invite link."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "Your role: <0/>"
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "What you'll have access to:"
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "You can view this information. You can't change records, treatment settings or who has access."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "You'll only see the last 24 hours of data."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "While you have Nocturne open, you'll see alerts as they happen. Getting alerts when Nocturne isn't open, for example on your phone, depends on how alerts have been set up. Ask the person who invited you."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "You can press Acknowledge on an alert to mark it as seen. This stops the alert being passed on to other people."
+msgstr ""
+
+#. 0: siteName
+#: src/lib/components/members/InviteSummary.svelte
+msgid "Next, accept the invite below. You'll then go to the {0} dashboard."
+msgstr ""
+
+#. 0: siteName
+#: src/lib/components/members/InviteSummary.svelte
+msgid "Next, choose how you'd like to sign in below. Once you're in, you'll go to the {0} dashboard."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "Nocturne is a website for viewing diabetes information, such as glucose (blood sugar) readings, that someone has chosen to share with you."
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "<0/> <1/> on Nocturne."
+msgstr ""
+
+#. 0: formatNumber(totalEntries)
+#: src/lib/components/settings/DataSourceRow.svelte
+msgid "{0} records in the last 30 days"
+msgstr ""
+
+#: src/routes/(unauthenticated)/join/+page.svelte
+msgid "You're signed in as <0/>"
+msgstr ""
+
+#: src/lib/components/layout/HistoryLimitNotice.svelte
+msgid "You can see the last 24 hours only"
+msgstr ""
+
+#: src/lib/components/layout/HistoryLimitNotice.svelte
+msgid "The person who shared this data has limited you to the most recent 24 hours. Anything older, including longer report periods, is not shown."
+msgstr ""
+
+#: src/lib/components/settings/ApiTokens.svelte
+msgid "Restrict this token to only the most recent 24 hours of data."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Spot readings that may come from the sensor rather than your glucose"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/+page.svelte
+msgid "Accept each one as a false low from pressure on the sensor, or dismiss it as a real low. This is for your own record: your reports and statistics still include these readings."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/day-in-review/+page.svelte
+msgid "Edit treatment"
+msgstr ""
+
+#: src/routes/(authenticated)/settings/data-quality/+page.svelte
+msgid "Compression lows are falsely low CGM readings caused by sleeping on your sensor. When detected, you'll be notified to review and confirm them. Reviewing keeps a record for you; it does not remove the readings from your reports or statistics."
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During deep sleep"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During REM sleep"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "During light sleep"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "While awake"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "<0/> Overnight Lows"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "No lows lasting 15 minutes or more during this session"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "Very low"
+msgstr ""
+
+#. 0: bgLabel()
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "Lowest, {0}"
+msgstr ""
+
+#: src/lib/components/reports/sleep/single-night/OvernightLowsCard.svelte
+msgid "A low is counted when glucose stays below range for 15 minutes or more. Shorter dips still show in the time in range chart."
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+msgid "Suspected false lows from pressure on the sensor"
+msgstr ""
+
+#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
+msgid "Marked Range"
 msgstr ""

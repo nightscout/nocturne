@@ -194,6 +194,7 @@ public class AlertRulesControllerWebhookSecretTests
             new NoConditionIssues(),
             encryption,
             new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         return (controller, ctx, encryption);

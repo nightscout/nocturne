@@ -1,6 +1,9 @@
 /** The fields of an error body a status arm can route on. */
 export interface ParsedErrorBody {
-  /** RFC 7807 `detail` — the sentence written for a person. */
+  /**
+   * The sentence written for a person: RFC 7807 `detail`, or RFC 6749
+   * `error_description` from an OAuth endpoint, which fills the same role.
+   */
   detail?: string;
   /** RFC 7807 `title`, usually only the status phrase. */
   title?: string;
@@ -43,7 +46,7 @@ export function parseErrorBody(err: unknown): ParsedErrorBody | undefined {
   if (!isPlainObject(parsed)) return undefined;
 
   return {
-    detail: sentence(parsed.detail),
+    detail: sentence(parsed.detail) ?? sentence(parsed.error_description),
     title: sentence(parsed.title),
     message: sentence(parsed.message),
     errors: isPlainObject(parsed.errors) ? parsed.errors : undefined,

@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Identity;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -16,16 +18,27 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 /// </summary>
 public class MyPermissionsControllerTests
 {
-    private static MyPermissionsController ControllerWithScopes(params string[] grantedScopes)
+    private static MyPermissionsController ControllerWithScopes(params string[] grantedScopes) =>
+        Controller(new CategoryReadContext(), grantedScopes);
+
+    private static MyPermissionsController Controller(
+        ICategoryReadContext categoryReadContext, params string[] grantedScopes)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] =
             (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
 
-        return new MyPermissionsController
+        return new MyPermissionsController(categoryReadContext)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
+    }
+
+    private static MyPermissionsResponse Answer(MyPermissionsController controller)
+    {
+        var result = controller.GetMyPermissions().Result as OkObjectResult;
+        result.Should().NotBeNull();
+        return result!.Value.Should().BeOfType<MyPermissionsResponse>().Subject;
     }
 
     [Fact]
@@ -55,10 +68,7 @@ public class MyPermissionsControllerTests
             Scope.GlucoseRead,
             Scope.ReportsRead);
 
-        var result = controller.GetMyPermissions().Result as OkObjectResult;
-
-        result.Should().NotBeNull();
-        result!.Value.Should().BeEquivalentTo(
+        Answer(controller).Scopes.Should().BeEquivalentTo(
             new[] { Scope.GlucoseRead, Scope.ReportsRead });
     }
 
@@ -67,9 +77,36 @@ public class MyPermissionsControllerTests
     {
         var controller = ControllerWithScopes();
 
-        var result = controller.GetMyPermissions().Result as OkObjectResult;
+        Answer(controller).Scopes.Should().BeEmpty();
+    }
 
-        result.Should().NotBeNull();
-        result!.Value.Should().BeEquivalentTo(System.Array.Empty<string>());
+    [Fact]
+    public void GetMyPermissions_ReportsAClampedMember()
+    {
+        var category = new CategoryReadContext();
+        category.ClampMemberHistory();
+
+        Answer(Controller(category, Scope.GlucoseRead)).LimitTo24Hours.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetMyPermissions_ReportsAShareWithoutFullHistory()
+    {
+        var category = new CategoryReadContext();
+        category.MarkShare();
+
+        Answer(Controller(category, Scope.GlucoseRead)).LimitTo24Hours.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetMyPermissions_ReportsAnUnclampedViewer()
+    {
+        var member = new CategoryReadContext();
+        var fullHistoryShare = new CategoryReadContext();
+        fullHistoryShare.MarkShare();
+        fullHistoryShare.SetFullHistory(true);
+
+        Answer(Controller(member, Scope.GlucoseRead)).LimitTo24Hours.Should().BeFalse();
+        Answer(Controller(fullHistoryShare, Scope.GlucoseRead)).LimitTo24Hours.Should().BeFalse();
     }
 }

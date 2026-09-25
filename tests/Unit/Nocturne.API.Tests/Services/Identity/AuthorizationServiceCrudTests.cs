@@ -35,6 +35,7 @@ public class AuthorizationServiceCrudTests : IDisposable
     private readonly Mock<IDirectGrantService> _mockDirectGrantService;
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
+    private readonly Nocturne.Infrastructure.Data.Services.CategoryReadContext _categoryReadContext = new();
     private readonly AuthorizationService _authorizationService;
 
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -77,7 +78,8 @@ public class AuthorizationServiceCrudTests : IDisposable
             _mockRoleService.Object,
             _mockDirectGrantService.Object,
             _mockJwtService.Object,
-            _dbContext
+            _dbContext,
+            _categoryReadContext
         );
     }
 
@@ -234,7 +236,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         _mockDirectGrantService.Verify(
             d => d.CreateAsync(
                 It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
-                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
@@ -288,7 +290,7 @@ public class AuthorizationServiceCrudTests : IDisposable
         _mockDirectGrantService
             .Setup(d => d.CreateAsync(
                 It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
-                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
@@ -318,7 +320,50 @@ public class AuthorizationServiceCrudTests : IDisposable
                 _deviceSubjectId,
                 "New Device Subject",
                 It.Is<IReadOnlyCollection<string>>(scopes => scopes.Contains(Scope.GlucoseRead)),
-                null, null, null, null, It.IsAny<CancellationToken>()),
+                null, false, null, null, null, It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CreateSubjectAsync_ByAClampedCaller_MintsAClampedToken()
+    {
+        _categoryReadContext.ClampMemberHistory();
+        _mockRoleService
+            .Setup(r => r.GetAllRolesAsync())
+            .ReturnsAsync([new AuthRoleModel
+            {
+                Id = Guid.NewGuid(),
+                Name = "readable",
+                Permissions = ["*:*:read"],
+            }]);
+        _mockDirectGrantService
+            .Setup(d => d.CreateAsync(
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), It.IsAny<bool>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(DirectGrantCreationResult.Created(new CreateDirectGrantResponse
+            {
+                Id = Guid.CreateVersion7(),
+                Token = "noc_generated-token",
+                Label = "Clamped",
+                Scopes = [Scope.GlucoseRead],
+                CreatedAt = DateTime.UtcNow,
+            }));
+
+        await _authorizationService.CreateSubjectAsync(new LegacySubject
+        {
+            Name = "Clamped",
+            Roles = ["readable"],
+        });
+
+        _mockDirectGrantService.Verify(
+            d => d.CreateAsync(
+                It.IsAny<NocturneDbContext>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTime?>(), true,
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<AuthAuditActor>(),
+                It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

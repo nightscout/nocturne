@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
@@ -85,7 +87,7 @@
       tenants = (await tenantRemote.getAll().run()) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
-      tenantsError = "Failed to load tenants.";
+      tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
     } finally {
       tenantsLoading = false;
     }
@@ -112,7 +114,10 @@
       connectors = await getTenantConnectors(value).run();
     } catch (err) {
       console.error("Failed to load connectors:", err);
-      connectorsError = "Failed to load this tenant's connectors.";
+      connectorsError = remoteErrorMessage(
+        err,
+        "Failed to load this tenant's connectors."
+      );
     } finally {
       connectorsLoading = false;
     }
@@ -145,8 +150,10 @@
         return;
       }
     } catch (err) {
+      // Polling carries on through a failed tick. The warning shows from the
+      // first failure until another tenant is chosen or a new reset starts, even
+      // if later ticks succeed.
       console.error("Failed to poll reset job:", err);
-      // Keep polling through transient errors; surface persistent ones to the operator.
       resetError = "Lost contact with the reset job. Check the server logs.";
     }
     pollTimer = setTimeout(pollJob, 1500);
@@ -174,7 +181,10 @@
       await pollJob();
     } catch (err) {
       console.error("Cursor reset failed:", err);
-      resetError = "Failed to start the cursor reset. Check the server logs for details.";
+      resetError = describeSubmitError(
+        err,
+        "Failed to start the cursor reset. Check the server logs for details."
+      );
     } finally {
       resetting = false;
     }
@@ -189,7 +199,7 @@
       await pollJob();
     } catch (err) {
       console.error("Failed to cancel reset job:", err);
-      resetError = "Failed to cancel the reset job.";
+      resetError = describeSubmitError(err, "Failed to cancel the reset job.");
     } finally {
       cancelling = false;
     }

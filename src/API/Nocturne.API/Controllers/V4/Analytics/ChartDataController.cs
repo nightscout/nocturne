@@ -106,7 +106,7 @@ public class ChartDataController : ControllerBase
     [HttpGet("basal-series")]
     [RemoteQuery]
     [RequireScope(Scope.TreatmentsRead)]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

@@ -38,6 +38,7 @@
     status: DataSourceStatus;
     statusMessage?: string;
     totalEntries?: number;
+    totalCoversLast30Days?: boolean;
     entriesLast24h?: number;
     lastSeen?: string;
     lastSyncAttempt?: string;
@@ -60,6 +61,7 @@
     status,
     statusMessage,
     totalEntries,
+    totalCoversLast30Days = false,
     entriesLast24h,
     lastSeen,
     lastSyncAttempt,
@@ -151,6 +153,11 @@
 
   const iconColors = $derived(getIconColors(status));
   const itemVariant = $derived(getItemVariant(status));
+  const totalRecordsLabel = $derived(
+    totalCoversLast30Days
+      ? `${formatNumber(totalEntries)} records in the last 30 days`
+      : `${formatNumber(totalEntries)} records`
+  );
 </script>
 
 <!-- The row is the button, so the breakdown triggers are hover-only spans; the details dialog it opens lists the same breakdown. -->
@@ -278,12 +285,12 @@
           <p class="text-sm text-muted-foreground">
             {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
               {@render breakdownTerm(
-                `${formatNumber(totalEntries)} records`,
+                totalRecordsLabel,
                 "Breakdown by type:",
                 totalBreakdown
               )}
             {:else}
-              {formatNumber(totalEntries)} records
+              {totalRecordsLabel}
             {/if}
 
             {#if (entriesLast24h ?? 0) > 0}

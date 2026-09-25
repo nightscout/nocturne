@@ -1,5 +1,5 @@
 import type { LayoutServerLoad } from "./$types";
-import type { UserDisplayPreferences } from "$lib/api";
+import type { MyPermissionsResponse, UserDisplayPreferences } from "$lib/api";
 import { classifyRequestHost, isTenantlessHost } from "$lib/server/tenantless-host";
 import { getRequestStatus } from "$lib/server/request-status";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
@@ -13,20 +13,25 @@ import {
 } from "$lib/stores/appearance-store.svelte";
 
 /**
- * The viewer's granted scopes, which the UI uses to offer only what the viewer can load.
- * `authHandle` resolves them for a signed-in member; a public share link and a guest link never
- * reach that branch, so their grant — the share's shareable read categories, or the scopes on
- * the guest grant — is resolved here instead. Failure leaves the viewer with nothing rather
- * than an over-offer.
+ * The viewer's granted scopes and history window, which the UI uses to offer only what the
+ * viewer can load. `authHandle` resolves them for a signed-in member; a public share link and a
+ * guest link never reach that branch, so their grant (the share's shareable read categories, or
+ * the scopes on the guest grant) is resolved here instead. Failure leaves the viewer with
+ * nothing rather than an over-offer.
  */
-async function resolveEffectivePermissions(locals: App.Locals): Promise<string[]> {
-  if (locals.effectivePermissions) return locals.effectivePermissions;
-  if (!locals.isShareHost && !locals.isGuestSession) return [];
+async function resolvePermissions(locals: App.Locals): Promise<MyPermissionsResponse> {
+  if (locals.effectivePermissions) {
+    return {
+      scopes: locals.effectivePermissions,
+      limitTo24Hours: locals.limitTo24Hours ?? false,
+    };
+  }
+  if (!locals.isShareHost && !locals.isGuestSession) return {};
 
   try {
     return await locals.apiClient.myPermissions.getMyPermissions();
   } catch {
-    return [];
+    return {};
   }
 }
 
@@ -81,9 +86,9 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
   // Display preferences for SSR, in the same precedence the browser applies them
   // (backend blob over the mirrored cookie) so the markup matches hydration. Together with the
   // scopes because on a share host both are API round-trips and neither reads the other.
-  const [serverPrefs, effectivePermissions] = await Promise.all([
+  const [serverPrefs, permissions] = await Promise.all([
     resolveServerPreferences(locals),
-    resolveEffectivePermissions(locals),
+    resolvePermissions(locals),
   ]);
   const cookiePrefs = parsePrefsCookie(cookies.get(PREFS_COOKIE_NAME));
   const displayPreferences = [
@@ -102,7 +107,8 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     user: locals.user,
     isAuthenticated: locals.isAuthenticated,
     isShareHost: locals.isShareHost,
-    effectivePermissions,
+    effectivePermissions: permissions.scopes ?? [],
+    limitTo24Hours: permissions.limitTo24Hours ?? false,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     tenantSlug,

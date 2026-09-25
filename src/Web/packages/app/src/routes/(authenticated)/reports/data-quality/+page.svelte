@@ -84,7 +84,7 @@
 			</div>
 			<div>
 				<h1 class="text-2xl font-bold tracking-tight print:hidden">Data Quality</h1>
-				<p class="text-muted-foreground print:hidden">Monitor and manage data exclusions</p>
+				<p class="text-muted-foreground print:hidden">Spot readings that may come from the sensor rather than your glucose</p>
 				<h2 class="hidden text-lg font-semibold print:block">Compression lows by review status</h2>
 			</div>
 		</div>
@@ -158,7 +158,9 @@
 								You have {pendingCount} item{pendingCount !== 1 ? 's' : ''} waiting for review
 							</p>
 							<p class="text-sm text-muted-foreground">
-								Review detected compression lows to improve your statistics accuracy
+								Accept each one as a false low from pressure on the sensor, or dismiss it as a real
+								low. This is for your own record: your reports and statistics still include these
+								readings.
 							</p>
 						</div>
 					</div>

@@ -76,12 +76,16 @@ public class MemberInviteController : ControllerBase
         if (subjectId == null)
             return Unauthorized();
 
-        // The clamp is an access boundary enforced in RLS via app.share_full_history, so a
-        // clamped member minting an unclamped invite would widen past their own ceiling by
-        // handing the wider access to someone else. Lifting an existing member's clamp already
-        // requires members.manage and is refused for self-edits.
-        var authContext = HttpContext.GetAuthContext();
-        var limitTo24Hours = request.LimitTo24Hours || authContext?.LimitTo24Hours == true;
+        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+
+        if (limitTo24Hours)
+        {
+            var invitePermissions = (await _tenantRoleService.GetRolePermissionsAsync(
+                    _tenantAccessor.TenantId, request.RoleIds, HttpContext.RequestAborted))
+                .Concat(request.DirectPermissions ?? []);
+            if (MemberScopeResolver.IsExemptFromHistoryClamp(invitePermissions))
+                return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
+        }
 
         try
         {
@@ -161,14 +165,13 @@ public class MemberInviteController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Anonymous, because the invitee may have no account yet. A caller who does arrive signed in
-    /// is reported in <see cref="MemberInviteInfo.Viewer"/> so the join page can offer acceptance
+    /// is reported in <see cref="JoinInviteInfo.Viewer"/> so the join page can offer acceptance
     /// instead of a second registration — including when they are signed in as a member of some
     /// other tenant on this instance, whose session cookie is domain-wide.
     /// <para>
     /// The token is the whole of the authorization, so an invite that can no longer be accepted
     /// answers with the reason alone, as the sibling alert-invite lookup does. The record it would
-    /// otherwise return names the tenant, the inviter, the roles and permissions being granted and
-    /// every subject that has already joined through it.
+    /// otherwise return names the tenant, the inviter, and the roles and permissions being granted.
     /// </para>
     /// </remarks>
     [HttpGet("{token}/info")]
@@ -176,7 +179,7 @@ public class MemberInviteController : ControllerBase
     [EnableRateLimiting("invite-lookup")]
     [InviteTokenAuthorized]
     [RemoteQuery]
-    [ProducesResponseType(typeof(MemberInviteInfo), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(JoinInviteInfo), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetInviteInfo(string token, CancellationToken ct)
@@ -201,13 +204,24 @@ public class MemberInviteController : ControllerBase
 
         var subjectId = HttpContext.GetSubjectId();
         if (subjectId == null)
-            return Ok(invite);
+            return Ok(ToJoinInfo(invite, null));
 
         var authContext = HttpContext.GetAuthContext();
         var isMember = await _tenantMemberService.IsMemberAsync(subjectId.Value, tenantId, ct);
 
-        return Ok(invite with { Viewer = new InviteViewer(subjectId, authContext?.SubjectName, isMember) });
+        return Ok(ToJoinInfo(invite, new InviteViewer(subjectId, authContext?.SubjectName, isMember)));
     }
+
+    private static JoinInviteInfo ToJoinInfo(MemberInviteInfo invite, InviteViewer? viewer) => new(
+        invite.TenantName,
+        invite.CreatedByName,
+        invite.RoleNames,
+        invite.Permissions,
+        invite.LimitTo24Hours,
+        invite.ExpiresAt,
+        invite.Permissions.Count > 0,
+        Scope.IsViewOnlyForRecordsAndAccess(invite.Permissions),
+        viewer);
 
     /// <summary>
     /// Accept an invite and join the tenant.
@@ -323,6 +337,10 @@ public class MemberInviteController : ControllerBase
         if (!roleGrant.Ok)
             return RoleGrantProblem(roleGrant);
 
+        var rolesAfter = await _tenantRoleService.GetRolePermissionsAsync(tenantId, request.RoleIds, ct);
+        if (await WouldExemptAClampedMemberAsync(member, rolesAfter.Concat(member.DirectPermissions ?? []), ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         // Remove existing role assignments
         _dbContext.TenantMemberRoles.RemoveRange(member.MemberRoles);
 
@@ -411,6 +429,12 @@ public class MemberInviteController : ControllerBase
                 return GrantProblem(violation);
         }
 
+        var rolePermissions = await _tenantRoleService.GetRolePermissionsAsync(
+            tenantId, member.MemberRoles.Select(mr => mr.TenantRoleId).ToList(), ct);
+        if (await WouldExemptAClampedMemberAsync(
+                member, rolePermissions.Concat(request.DirectPermissions ?? []), ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         member.DirectPermissions = request.DirectPermissions;
         member.SysUpdatedAt = DateTime.UtcNow;
         await _dbContext.SaveChangesAsync(ct);
@@ -472,13 +496,21 @@ public class MemberInviteController : ControllerBase
         if (member == null)
             return NotFound();
 
-        // The clamp is enforced in RLS via app.share_full_history, so lifting your own is a
+        // The clamp is enforced in RLS via app.history_clamped, so lifting your own is a
         // self-widening edit — the same class the role and permission editors refuse.
         if (IsCallersOwnMembership(member))
             return Problem(detail: SelfEditDetail, statusCode: 400);
 
         if (DeviceHolderDetail(member) is { } deviceHolder)
             return Problem(detail: deviceHolder, statusCode: 400);
+
+        if (!request.LimitTo24Hours && HttpContext.IsCallerHistoryClamped())
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
+        if (request.LimitTo24Hours
+            && MemberScopeResolver.IsExemptFromHistoryClamp(
+                await _tenantRoleService.GetEffectivePermissionsAsync(id, ct)))
+            return Problem(detail: MemberScopeResolver.ExemptFromHistoryClampDetail, statusCode: 400);
 
         member.LimitTo24Hours = request.LimitTo24Hours;
         member.SysUpdatedAt = DateTime.UtcNow;
@@ -493,6 +525,19 @@ public class MemberInviteController : ControllerBase
 
     private const string SelfEditDetail =
         "Cannot change your own roles or permissions; ask another member with members.manage.";
+
+    /// <summary>
+    /// True when a history-clamped caller's edit would leave a clamped member holding permissions
+    /// that exempt it (<see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>), lifting the
+    /// clamp sideways. See <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
+    /// </summary>
+    private async Task<bool> WouldExemptAClampedMemberAsync(
+        TenantMemberEntity member, IEnumerable<string> permissionsAfter, CancellationToken ct) =>
+        member.LimitTo24Hours
+        && HttpContext.IsCallerHistoryClamped()
+        && MemberScopeResolver.IsExemptFromHistoryClamp(permissionsAfter)
+        && !MemberScopeResolver.IsExemptFromHistoryClamp(
+            await _tenantRoleService.GetEffectivePermissionsAsync(member.Id, ct));
 
     /// <summary>
     /// True when the target membership belongs to the calling subject. Role and permission

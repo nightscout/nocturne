@@ -150,7 +150,7 @@ public class OidcCallbackRedirectMiddlewareTests
     public async Task Passes_through_when_multitenancy_not_configured()
     {
         var called = false;
-        var config = new BaseDomainOptions { BaseDomain = null };
+        var config = new BaseDomainOptions { BaseDomain = "" };
         var middleware = new OidcCallbackRedirectMiddleware(
             _ => { called = true; return Task.CompletedTask; },
             NullLogger<OidcCallbackRedirectMiddleware>.Instance,

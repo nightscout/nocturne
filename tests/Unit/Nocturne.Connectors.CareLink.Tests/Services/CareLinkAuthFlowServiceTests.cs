@@ -67,6 +67,39 @@ public class CareLinkAuthFlowServiceTests
         handler.Requests.Should().OnlyContain(r => r.UserAgent != null);
     }
 
+    /// <summary>
+    /// The fake leaves the authorize endpoint unmodelled, so it answers 404 and never serves a login
+    /// form. That is the WAF-block or changed-markup case, which a repeat cannot clear.
+    /// </summary>
+    [Fact]
+    public async Task LoginAsync_WhenTheAuthorizeEndpointNeverYieldsAForm_ReturnsNonRetryableVerdict()
+    {
+        var handler = new CareLinkFakeHandler();
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var (result, shouldRetry) = await flow.LoginAsync(
+            "user@example.com", "hunter2", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenTheLoginFormHasNoAction_ReturnsNonRetryableVerdict()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            AuthorizeBody = "<html><form method=\"post\"><input type=\"hidden\" name=\"state\" value=\"s\" /></form></html>",
+        };
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var (result, shouldRetry) = await flow.LoginAsync(
+            "user@example.com", "hunter2", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
+    }
+
     [Fact]
     public async Task LoginAsync_AuthorizeReturns403WithNoForm_SendsOnlyOneAuthorizeRequest()
     {
@@ -80,9 +113,10 @@ public class CareLinkAuthFlowServiceTests
         };
         using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
 
-        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+        var (result, shouldRetry) = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
 
         result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
         handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(1);
     }
 
@@ -105,10 +139,11 @@ public class CareLinkAuthFlowServiceTests
         };
         using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
 
-        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+        var (result, shouldRetry) = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
 
         result.Should().NotBeNull();
         result!.AccessToken.Should().Be("new-access-token");
+        shouldRetry.Should().BeFalse();
         handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(3);
     }
 
@@ -125,9 +160,10 @@ public class CareLinkAuthFlowServiceTests
         };
         using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
 
-        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+        var (result, shouldRetry) = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
 
         result.Should().BeNull();
+        shouldRetry.Should().BeFalse();
         handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(10);
     }
 }

@@ -267,45 +267,6 @@ export class AuthStore {
   }
 
   /**
-   * Check if the user has a specific permission
-   * @param permission - Shiro-style permission string (e.g., "api:entries:read")
-   */
-  hasPermission(permission: string): boolean {
-    if (!this._user) return false;
-
-    // Check for admin wildcard
-    if (this._user.permissions.includes("*")) return true;
-
-    // Check for exact match
-    if (this._user.permissions.includes(permission)) return true;
-
-    // Check for wildcard matches (e.g., "api:entries:*" matches "api:entries:read")
-    const parts = permission.split(":");
-    for (const userPerm of this._user.permissions) {
-      const userParts = userPerm.split(":");
-
-      // Skip if user permission is longer than the requested permission
-      if (userParts.length > parts.length) continue;
-
-      let matches = true;
-      for (let i = 0; i < userParts.length; i++) {
-        if (userParts[i] === "*") {
-          // Wildcard matches everything at this level and below
-          return true;
-        }
-        if (userParts[i] !== parts[i]) {
-          matches = false;
-          break;
-        }
-      }
-
-      if (matches && userParts.length === parts.length) return true;
-    }
-
-    return false;
-  }
-
-  /**
    * Check if the user has a specific role
    * @param role - Role name (e.g., "admin", "readable")
    */

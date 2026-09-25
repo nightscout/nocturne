@@ -76,8 +76,6 @@ public class PatientRecordRepository : IPatientRecordRepository
     /// <summary>
     /// Updates the patient record.
     /// </summary>
-    /// <param name="model">The updated patient record data.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated patient record.</returns>
     public async Task<PatientRecord> UpdateAsync(PatientRecord model, WriteOrigin origin, CancellationToken ct = default)
     {
