@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Platform;
 using Nocturne.API.Services.Sleep;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -16,6 +18,7 @@ public class SleepReportServiceTests
     private readonly Mock<ISleepSessionRepository> _sessionRepo = new();
     private readonly Mock<ISensorGlucoseRepository> _glucoseRepo = new();
     private readonly Mock<IPatientRecordRepository> _patientRecord = new();
+    private readonly Mock<IPatientDeviceRepository> _patientDevices = new();
     private readonly SleepReportService _sut;
 
     public SleepReportServiceTests()
@@ -25,11 +28,107 @@ public class SleepReportServiceTests
             .Setup(r => r.GetAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync((PatientRecord?)null);
 
+        _patientDevices
+            .Setup(r => r.GetAllAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<PatientDevice>());
+        var demoMode = new Mock<IDemoModeService>();
+        demoMode.Setup(d => d.IsEnabled).Returns(false);
+
         _sut = new SleepReportService(
             _sessionRepo.Object,
             _glucoseRepo.Object,
+            new CanonicalGlucoseService(_glucoseRepo.Object, _patientDevices.Object, demoMode.Object),
             _patientRecord.Object,
             NullLogger<SleepReportService>.Instance);
+    }
+
+    /// <summary>
+    /// Two uploaders posting the same two-hour low, one of them <paramref name="offsetSeconds"/>
+    /// behind the other, then a return to range.
+    /// </summary>
+    private void SetupTwoSourceLow(DateTime lowStart, int offsetSeconds)
+    {
+        var readings = new List<SensorGlucose>();
+        for (var i = 0; i < 24; i++)
+        {
+            var at = lowStart.AddMinutes(i * 5);
+            readings.Add(new SensorGlucose { Timestamp = at, Mgdl = 60, DataSource = "xdrip" });
+            readings.Add(new SensorGlucose
+            {
+                Timestamp = at.AddSeconds(offsetSeconds), Mgdl = 60, DataSource = "dexcom-share",
+            });
+        }
+        for (var i = 0; i < 4; i++)
+        {
+            var at = lowStart.AddMinutes(120 + i * 5);
+            readings.Add(new SensorGlucose { Timestamp = at, Mgdl = 100, DataSource = "xdrip" });
+            readings.Add(new SensorGlucose
+            {
+                Timestamp = at.AddSeconds(offsetSeconds), Mgdl = 100, DataSource = "dexcom-share",
+            });
+        }
+
+        _glucoseRepo
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), 0, false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(readings.OrderBy(r => r.Mills).ToArray());
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(30)]
+    public async Task GetSingleNightReportAsync_FindsOneLowUploadedByTwoSources(int offsetSeconds)
+    {
+        var start = new DateTime(2026, 1, 15, 22, 0, 0, DateTimeKind.Utc);
+        _sessionRepo
+            .Setup(r => r.GetSessionByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SleepSession
+            {
+                Id = Guid.NewGuid().ToString(),
+                StartTime = start,
+                EndTime = start.AddHours(8),
+                Source = SleepSource.Oura,
+            });
+        SetupTwoSourceLow(start.AddHours(1), offsetSeconds);
+
+        var result = await _sut.GetSingleNightReportAsync(Guid.NewGuid());
+
+        var hypo = result!.HypoEvents.Should().ContainSingle().Subject;
+        hypo.DurationMinutes.Should().Be(120);
+        result.OvernightTir!.LowPct.Should().BeApproximately(120.0 / 140 * 100, 0.5);
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(30)]
+    public async Task GetTrendsReportAsync_CountsOneLowUploadedByTwoSources(int offsetSeconds)
+    {
+        var start = new DateTime(2026, 1, 15, 22, 0, 0, DateTimeKind.Utc);
+        _sessionRepo
+            .Setup(r => r.GetSessionsAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<SleepSessionType?>(),
+                It.IsAny<SleepSource?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[]
+            {
+                new SleepSession
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    StartTime = start,
+                    EndTime = start.AddHours(8),
+                    TotalSleepMs = 400L * 60_000,
+                    Source = SleepSource.Oura,
+                },
+            });
+        SetupTwoSourceLow(start.AddHours(1), offsetSeconds);
+
+        var result = await _sut.GetTrendsReportAsync(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc));
+
+        result.Nights.Should().ContainSingle().Which.HypoCount.Should().Be(1);
     }
 
     // ── GetSingleNightReportAsync ──────────────────────────────────────────

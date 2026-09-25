@@ -14,10 +14,9 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
 /// Accepting a suggestion writes a <see cref="StateSpanCategory.DataExclusion"/> span
-/// (<c>CompressionLowService.AcceptSuggestionAsync</c>), which decides whether the flagged readings
-/// count towards analytics and reports — the same category-to-scope mapping
-/// <c>StateSpanWriteScopeGuard</c> applies — and dismiss, delete and detection all write the
-/// suggestions that propose one. Each write therefore carries its own
+/// (<c>CompressionLowService.AcceptSuggestionAsync</c>) marking the flagged readings, which is the
+/// glucose category for the reason <c>StateSpanWriteScopeGuard</c> gives, and dismiss, delete and
+/// detection all write the suggestions that propose one. Each write therefore carries its own
 /// <see cref="Scope.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
 /// the matching <see cref="Scope.GlucoseRead"/>.
 /// <para>

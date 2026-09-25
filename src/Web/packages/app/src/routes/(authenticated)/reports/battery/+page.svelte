@@ -247,7 +247,7 @@
                   <span class="text-muted-foreground">Cycles:</span>
                   <span class="font-medium ml-1">{stat.chargeCycleCount}</span>
                 </div>
-                {#if stat.averageTimeBetweenChargesHours}
+                {#if stat.averageDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Avg life:</span>
                     <span class="font-medium ml-1">

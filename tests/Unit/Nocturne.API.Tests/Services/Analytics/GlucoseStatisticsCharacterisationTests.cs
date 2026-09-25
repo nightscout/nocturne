@@ -36,15 +36,6 @@ public class GlucoseStatisticsCharacterisationTests
         53, 54, 69, 70, 139, 140, 141, 179, 180, 181, 250, 251,
     ];
 
-    /// <summary>
-    /// One reading on each side of, and one exactly on, every bound of the extended hourly zone
-    /// set: 54, 63, 140, 180 and 200.
-    /// </summary>
-    private static readonly double[] ExtendedZoneEdges =
-    [
-        53, 54, 62, 63, 139, 140, 179, 180, 199, 200, 201,
-    ];
-
     #region Sample-divisor standard deviation
 
     [Fact]
@@ -316,12 +307,12 @@ public class GlucoseStatisticsCharacterisationTests
         result.Durations.High.Should().Be(10);
         result.Durations.VeryHigh.Should().Be(5);
 
-        // The ascending edges are one excursion below target and one above, each counted against
-        // the most extreme zone it reached.
-        result.Episodes.VeryLow.Should().Be(1);
-        result.Episodes.Low.Should().Be(0);
-        result.Episodes.High.Should().Be(0);
-        result.Episodes.VeryHigh.Should().Be(1);
+        // The ascending edges are one excursion below target and one above. Neither spends fifteen
+        // minutes beyond its level 2 bound, so both are level 1.
+        result.Episodes.VeryLow.Should().Be(0);
+        result.Episodes.Low.Should().Be(1);
+        result.Episodes.High.Should().Be(1);
+        result.Episodes.VeryHigh.Should().Be(0);
     }
 
     /// <summary>
@@ -400,11 +391,11 @@ public class GlucoseStatisticsCharacterisationTests
     {
         var thresholds = new GlycemicThresholds { TargetTop = 180, High = 180, VeryHigh = 100 };
 
-        var result = _service.CalculateTimeInRange(EntriesEveryFiveMinutes([120, 200]), thresholds);
+        var result = _service.CalculateTimeInRange(EntriesEveryFiveMinutes([120, 200, 200]), thresholds);
 
         result.Percentages.VeryHigh.Should().Be(100);
         result.Percentages.High.Should().Be(0);
-        result.Durations.VeryHigh.Should().Be(10);
+        result.Durations.VeryHigh.Should().Be(15);
         result.Durations.High.Should().Be(0);
         result.Episodes.VeryHigh.Should().Be(1);
         result.Episodes.High.Should().Be(0);
@@ -423,38 +414,49 @@ public class GlucoseStatisticsCharacterisationTests
 
     #endregion
 
-    #region Extended six-zone bucketing
+    #region Hourly consensus bands
 
     [Fact]
-    public void CalculateAveragedStats_PinsEveryExtendedZoneBoundAndItsInclusivity()
+    public void CalculateAveragedStats_PinsEveryConsensusBandBoundAndItsInclusivity()
     {
-        var midnight = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
-        var entries = ExtendedZoneEdges
-            .Select((value, index) => new SensorGlucose
-            {
-                Mgdl = value,
-                Timestamp = midnight.AddMinutes(index * 5),
-            })
-            .ToList();
+        var entries = EntriesEveryFiveMinutes(ZoneEdges);
 
-        var hour = _service.CalculateAveragedStats(entries).Single(stats => stats.Hour == 0);
+        var hour = _service.CalculateAveragedStats(entries, TimeZoneInfo.Utc).Single(stats => stats.Hour == 0);
 
-        // 53 | 54, 62 | 63, 139 | 140, 179 | 180, 199 | 200, 201
-        hour.Count.Should().Be(11);
-        hour.TimeInRange.VeryLow.Should().Be(9.1);
-        hour.TimeInRange.Low.Should().Be(18.2);
-        hour.TimeInRange.Normal.Should().Be(18.2);
-        hour.TimeInRange.AboveTarget.Should().Be(18.2);
-        hour.TimeInRange.High.Should().Be(18.2);
-        hour.TimeInRange.VeryHigh.Should().Be(18.2);
+        // 53 | 54, 69 | 70, 139, 140 | 141, 179, 180 | 181, 250 | 251
+        hour.Count.Should().Be(12);
+        hour.TimeInRange.VeryLow.Should().Be(8.3);
+        hour.TimeInRange.Low.Should().Be(16.7);
+        hour.TimeInRange.TightTarget.Should().Be(25);
+        hour.TimeInRange.AboveTightTarget.Should().Be(25);
+        hour.TimeInRange.High.Should().Be(16.7);
+        hour.TimeInRange.VeryHigh.Should().Be(8.3);
     }
 
     [Fact]
-    public void CalculateAveragedStats_PinsZeroedExtendedZonesForAnEmptyHour()
+    public void CalculateAveragedStats_HourlyBandsAgreeWithTheWindowTimeInRange()
     {
-        var hour = _service.CalculateAveragedStats([]).Single(stats => stats.Hour == 7);
+        var entries = EntriesEveryFiveMinutes(ZoneEdges);
+
+        var hour = _service.CalculateAveragedStats(entries, TimeZoneInfo.Utc).Single(stats => stats.Hour == 0);
+        var window = _service.CalculateTimeInRange(entries).Percentages;
+
+        hour.TimeInRange.VeryLow.Should().Be(Math.Round(window.VeryLow, 1));
+        hour.TimeInRange.Low.Should().Be(Math.Round(window.Low, 1));
+        hour.TimeInRange.TightTarget.Should().Be(Math.Round(window.TightTarget, 1));
+        (hour.TimeInRange.TightTarget + hour.TimeInRange.AboveTightTarget)
+            .Should().Be(Math.Round(window.Target, 1));
+        hour.TimeInRange.High.Should().Be(Math.Round(window.High, 1));
+        hour.TimeInRange.VeryHigh.Should().Be(Math.Round(window.VeryHigh, 1));
+    }
+
+    [Fact]
+    public void CalculateAveragedStats_PinsZeroedBandsForAnEmptyHour()
+    {
+        var hour = _service.CalculateAveragedStats([], TimeZoneInfo.Utc).Single(stats => stats.Hour == 7);
 
         hour.Count.Should().Be(0);
+        hour.DayCount.Should().Be(0);
         hour.TimeInRange.VeryLow.Should().Be(0);
         hour.TimeInRange.VeryHigh.Should().Be(0);
     }

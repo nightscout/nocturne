@@ -14,9 +14,9 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// </summary>
 /// <remarks>
 /// Create and update use the same <see cref="UpsertBolusCalculationRequest"/> shape.
-/// On update, the immutable fields <see cref="BolusCalculation.CorrelationId"/>,
-/// <see cref="BolusCalculation.LegacyId"/>, <see cref="BolusCalculation.CreatedAt"/>,
-/// and <see cref="BolusCalculation.AdditionalProperties"/> are preserved from the existing record.
+/// On update, the immutable fields <see cref="V4RecordBase.CorrelationId"/>,
+/// <see cref="V4RecordBase.LegacyId"/>, <see cref="V4RecordBase.CreatedAt"/>,
+/// and <see cref="V4RecordBase.AdditionalProperties"/> are preserved from the existing record.
 /// </remarks>
 /// <seealso cref="IBolusCalculationRepository"/>
 /// <seealso cref="BolusCalculation"/>

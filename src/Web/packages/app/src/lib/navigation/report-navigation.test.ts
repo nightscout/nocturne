@@ -130,8 +130,16 @@ describe("getSidebarReportItems", () => {
     });
 
     expect(items.map((i) => i.href)).not.toContain("/reports/steps");
-    // "Hourly Patterns" is coming-soon and never belongs in the sidebar.
-    expect(items.map((i) => i.href)).not.toContain("/reports/hourly-stats");
+    expect(items.map((i) => i.href)).toContain("/reports/hourly-stats");
     expect(items.map((i) => i.title)).toContain("AGP");
+  });
+
+  it("leaves a coming-soon report out even when the viewer holds its scopes", () => {
+    const items = getSidebarReportItems({
+      grantedScopes: [...VIEWER, "treatments.read", "food.read"],
+      anonymous: false,
+    });
+
+    expect(items.map((i) => i.href)).not.toContain("/reports/meals");
   });
 });

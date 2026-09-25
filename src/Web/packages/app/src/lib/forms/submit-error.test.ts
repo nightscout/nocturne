@@ -6,6 +6,7 @@ import { parseErrorBody } from "$lib/api/error-body";
 import {
   describeRemoteError,
   describeSubmitError,
+  errorIssues,
   errorMessage,
   GENERIC_SUBMIT_ERROR,
   MISSING_ITEM_ERROR,
@@ -91,6 +92,28 @@ describe("a thrown HttpError", () => {
     expect(thrown).not.toBeInstanceOf(Error);
     expect(thrown).not.toHaveProperty("message");
     expect(errorMessage(thrown)).toBe("We couldn't load your settings.");
+  });
+});
+
+describe("errorIssues", () => {
+  const issues = [
+    { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+  ];
+
+  it("reads a well-formed issue set off the body", () => {
+    expect(errorIssues({ status: 400, body: { issues } })).toEqual(issues);
+  });
+
+  it("drops a set holding anything that is not a validation issue", () => {
+    expect(
+      errorIssues({ status: 400, body: { issues: [{ reason: "x" }, "boom"] } })
+    ).toBeUndefined();
+  });
+
+  it("answers undefined without a body or a set", () => {
+    expect(errorIssues(new Error("offline"))).toBeUndefined();
+    expect(errorIssues({ status: 400, body: {} })).toBeUndefined();
+    expect(errorIssues({ status: 400, body: { issues: "boom" } })).toBeUndefined();
   });
 });
 

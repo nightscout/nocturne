@@ -163,6 +163,87 @@ public class ClientDeviceServiceTests
     }
 
     [Fact]
+    public async Task GetForSubjectAsync_names_the_app_a_granted_device_came_through_and_nulls_an_unlinked_one()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var appGrant = SeedAppGrant(ctx, "Prelude");
+
+        await svc.RegisterAsync(subject, Req("linked", DeviceKinds.Prelude), FullDeviceScopes, appGrant);
+        await svc.RegisterAsync(subject, Req("unlinked", DeviceKinds.Companion), FullDeviceScopes, null);
+
+        var mine = await svc.GetForSubjectAsync(subject);
+
+        mine.Single(d => d.InstallId == "linked").AppName.Should().Be("Prelude");
+        mine.Single(d => d.InstallId == "linked").LinkedToApp.Should().BeTrue();
+        mine.Single(d => d.InstallId == "unlinked").AppName.Should().BeNull();
+        mine.Single(d => d.InstallId == "unlinked").LinkedToApp.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetForSubjectAsync_marks_a_device_linked_when_its_grant_client_has_no_name()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var appGrant = SeedAppGrant(ctx, "Prelude");
+        ctx.OAuthClients.Single(c => c.DisplayName == "Prelude").DisplayName = null;
+        await ctx.SaveChangesAsync();
+
+        await svc.RegisterAsync(subject, Req("unnamed", DeviceKinds.Prelude), FullDeviceScopes, appGrant);
+
+        var device = (await svc.GetForSubjectAsync(subject)).Single();
+
+        device.AppName.Should().BeNull();
+        device.LinkedToApp.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetDeviceCountsByGrantAsync_counts_only_devices_under_each_grant()
+    {
+        using var ctx = CreateContext();
+        var subject = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var grantA = Guid.NewGuid();
+        var grantB = Guid.NewGuid();
+
+        await svc.RegisterAsync(subject, Req("a1", DeviceKinds.Prelude), FullDeviceScopes, grantA);
+        await svc.RegisterAsync(subject, Req("a2", DeviceKinds.Companion), FullDeviceScopes, grantA);
+        await svc.RegisterAsync(subject, Req("b1", DeviceKinds.Prelude), FullDeviceScopes, grantB);
+        await svc.RegisterAsync(subject, Req("none", DeviceKinds.Prelude), FullDeviceScopes, null);
+
+        var counts = await svc.GetDeviceCountsByGrantAsync([grantA, grantB, Guid.NewGuid()]);
+
+        counts[grantA].Should().Be(2);
+        counts[grantB].Should().Be(1);
+        counts.Should().HaveCount(2);
+    }
+
+    private static Guid SeedAppGrant(NocturneDbContext ctx, string displayName)
+    {
+        var client = new OAuthClientEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ClientId = $"client-{displayName.ToLowerInvariant()}",
+            DisplayName = displayName,
+        };
+        var grant = new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = Guid.NewGuid(),
+            GrantType = OAuthGrantTypes.App,
+            Scopes = [],
+            ClientEntityId = client.Id,
+            Client = client,
+        };
+        ctx.OAuthClients.Add(client);
+        ctx.OAuthGrants.Add(grant);
+        ctx.SaveChanges();
+        return grant.Id;
+    }
+
+    [Fact]
     public async Task RegisterAsync_rejects_cross_subject_takeover()
     {
         using var ctx = CreateContext();

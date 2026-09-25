@@ -248,8 +248,7 @@
                 <div class="flex justify-between">
                   <span class="text-muted-foreground">Low episodes</span>
                   <span class="font-medium tabular-nums">
-                    {(analysis.timeInRange.episodes.low ?? 0) +
-                      (analysis.timeInRange.episodes.veryLow ?? 0)}
+                    {analysis.timeInRange.episodes.belowRange ?? 0}
                   </span>
                 </div>
               </div>

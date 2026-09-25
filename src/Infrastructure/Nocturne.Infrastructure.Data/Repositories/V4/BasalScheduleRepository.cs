@@ -23,9 +23,6 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// <summary>
     /// Initializes a new instance of the <see cref="BasalScheduleRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public BasalScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<BasalScheduleRepository> logger, IV4RecordBroadcaster<BasalSchedule>? broadcaster = null)
         : base(contextFactory, auditContext, logger, broadcaster)
@@ -85,8 +82,6 @@ public class BasalScheduleRepository : V4RepositoryBase<BasalSchedule, BasalSche
     /// <summary>
     /// Deletes basal schedule records by legacy identifier prefix.
     /// </summary>
-    /// <param name="prefix">The legacy identifier prefix.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
     public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
     {

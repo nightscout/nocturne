@@ -277,7 +277,7 @@ public class StatisticsServiceClinicalAccuracyTests
         // 5 entries at 300 mg/dL (severe high: > 250)
         entries.AddRange(Enumerable.Range(0, 5).Select(_ => new SensorGlucose { Mgdl = 300 }));
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
         result.Percentages.VeryLow.Should().Be(5);
         result.Percentages.Low.Should().Be(10);
@@ -298,8 +298,9 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 300 }, // severe high
         };
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
+        result.Percentages.VeryLow.Should().Be(20);
         var totalPercentage =
             result.Percentages.VeryLow
             + result.Percentages.Low
@@ -351,7 +352,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 60 },  // low (54-63)
         };
 
-        var result = _sut.CalculateTimeInRange(entries, thresholds);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries), thresholds);
 
         // 1 of 3 in target = 33.33%
         result.Percentages.Target.Should().BeApproximately(33.33, 0.1);
@@ -369,7 +370,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 250 }, // > 180 and <= 250 → High
         };
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
         result.Percentages.VeryLow.Should().Be(0);
         result.Percentages.Low.Should().Be(25);     // 1/4 = 25%
@@ -381,17 +382,8 @@ public class StatisticsServiceClinicalAccuracyTests
     [Fact]
     public void CalculateTimeInRange_Episodes_ShouldCountTransitions()
     {
-        // Create a pattern: target → low → target → low → target
-        // Should count 2 low episodes
-        var entries = new[]
-        {
-            new SensorGlucose { Mgdl = 120 },
-            new SensorGlucose { Mgdl = 60 },  // low episode 1 starts
-            new SensorGlucose { Mgdl = 60 },
-            new SensorGlucose { Mgdl = 120 }, // back to target
-            new SensorGlucose { Mgdl = 55 },  // low episode 2 starts
-            new SensorGlucose { Mgdl = 120 },
-        };
+        // Target, fifteen minutes low, fifteen back in target, fifteen low again, target.
+        var entries = EveryFiveMinutes(120, 60, 60, 60, 120, 120, 120, 55, 55, 55, 120, 120, 120);
 
         var result = _sut.CalculateTimeInRange(entries);
 
@@ -1097,7 +1089,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = baseTime.AddMinutes(i * 30).UtcDateTime, // 2 readings per hour
         });
 
-        var result = _sut.CalculateAveragedStats(entries).ToList();
+        var result = _sut.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
 
         result.Should().HaveCount(24);
         result.Select(r => r.Hour).Should().BeEquivalentTo(Enumerable.Range(0, 24));
@@ -1114,7 +1106,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 140, Timestamp = baseTime.AddHours(8).AddMinutes(30).UtcDateTime },
         };
 
-        var result = _sut.CalculateAveragedStats(entries).ToList();
+        var result = _sut.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
 
         var hour8 = result.First(r => r.Hour == 8);
         hour8.Count.Should().Be(3);
@@ -1277,7 +1269,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 160 },
         };
 
-        var tir = _sut.CalculateTimeInRange(entries);
+        var tir = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
         var basicStats = _sut.CalculateBasicStats(new double[] { 80, 100, 120, 140, 160 });
 
         tir.RangeStats.Target.StandardDeviation.Should().Be(
@@ -1357,25 +1349,19 @@ public class StatisticsServiceClinicalAccuracyTests
 
     /// <summary>
     /// A drop from target through severe low, recovering through low, is one continuous
-    /// hypoglycemic event and is reported as one episode, against the severe zone it reached.
+    /// hypoglycemic event, graded severe once it spent 15 consecutive minutes below 54.
     /// </summary>
     [Fact]
     public void TimeInRange_Episodes_VeryLowToLowTransition_CountsOneEpisode()
     {
-        var entries = new[]
-        {
-            new SensorGlucose { Mgdl = 120 }, // target
-            new SensorGlucose { Mgdl = 45 },  // severe low — episode starts
-            new SensorGlucose { Mgdl = 45 },  // severe low — continues
-            new SensorGlucose { Mgdl = 60 },  // low — recovering, still the same event
-            new SensorGlucose { Mgdl = 60 },  // low — continues
-            new SensorGlucose { Mgdl = 120 }, // back to target — event ends
-        };
+        // Target, fifteen minutes severe low, ten recovering through low, then back to target.
+        var entries = EveryFiveMinutes(120, 45, 45, 45, 60, 60, 120, 120, 120);
 
         var result = _sut.CalculateTimeInRange(entries);
 
         result.Episodes.VeryLow.Should().Be(1);
         result.Episodes.Low.Should().Be(0);
+        result.Episodes.BelowRange.Should().Be(1);
 
         var totalHypoEpisodes = result.Episodes.VeryLow + result.Episodes.Low;
         totalHypoEpisodes.Should().Be(1, "one continuous hypo event is one episode");
@@ -1384,6 +1370,26 @@ public class StatisticsServiceClinicalAccuracyTests
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// The readings, each stamped five minutes after the one before: readings sharing a timestamp
+    /// are one instant, so percentage tests need every reading at its own time.
+    /// </summary>
+    private static SensorGlucose[] SpacedFiveMinutesApart(IEnumerable<SensorGlucose> readings)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        return readings
+            .Select((reading, i) => new SensorGlucose { Mgdl = reading.Mgdl, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
+    }
+
+    private static SensorGlucose[] EveryFiveMinutes(params int[] mgdl)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        return mgdl
+            .Select((value, i) => new SensorGlucose { Mgdl = value, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
+    }
 
     private static GlucoseAnalytics CreateAnalyticsWithTIR(
         double veryLow,

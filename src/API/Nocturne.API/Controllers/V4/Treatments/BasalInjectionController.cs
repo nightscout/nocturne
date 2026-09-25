@@ -12,11 +12,11 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// <summary>
 /// CRUD for long-acting basal insulin injections (MDI).
 /// Exposes standard V4 CRUD operations via <see cref="V4CrudControllerBase{TModel,TCreateRequest,TUpdateRequest,TRepository}"/>,
-/// with additional validation and idempotent upsert on (<see cref="BasalInjection.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
+/// with additional validation and idempotent upsert on (<see cref="V4RecordBase.DataSource"/>, <see cref="BasalInjection.SyncIdentifier"/>).
 /// </summary>
 /// <remarks>
 /// Both create and update enforce the same rules: <see cref="BasalInjection.Units"/> must be in (0, 500],
-/// <see cref="BasalInjection.Timestamp"/> must be set and no more than five minutes in the future, and —
+/// <see cref="V4RecordBase.Timestamp"/> must be set and no more than five minutes in the future, and —
 /// when the request carries a <c>PatientInsulinId</c> — the referenced <see cref="PatientInsulin"/> must
 /// exist with role <see cref="InsulinRole.Basal"/> or <see cref="InsulinRole.Both"/> and be active at the
 /// injection time. The server resolves <see cref="PatientInsulin"/> fresh on every write to populate the
@@ -26,8 +26,8 @@ namespace Nocturne.API.Controllers.V4.Treatments;
 /// know nothing about the patient's insulin catalog omit it, and the record is stored with a <c>null</c>
 /// <see cref="BasalInjection.InsulinContext"/>.
 ///
-/// On update, immutable fields (<see cref="BasalInjection.LegacyId"/>, <see cref="BasalInjection.CreatedAt"/>)
-/// are preserved from the existing record. <see cref="BasalInjection.CorrelationId"/> falls back to the
+/// On update, immutable fields (<see cref="V4RecordBase.LegacyId"/>, <see cref="V4RecordBase.CreatedAt"/>)
+/// are preserved from the existing record. <see cref="V4RecordBase.CorrelationId"/> falls back to the
 /// existing value if the request does not supply one.
 /// </remarks>
 /// <seealso cref="IBasalInjectionRepository"/>
@@ -80,7 +80,7 @@ public class BasalInjectionController(
 
     /// <summary>Maps a <see cref="CreateBasalInjectionRequest"/> to a new <see cref="BasalInjection"/>.</summary>
     /// <param name="request">The inbound create request.</param>
-    /// <returns>A new <see cref="BasalInjection"/> with all fields populated; <see cref="BasalInjection.CorrelationId"/> defaults to a new UUID v7 when not supplied. <see cref="BasalInjection.InsulinContext"/> is populated by the caller after PatientInsulin resolution.</returns>
+    /// <returns>A new <see cref="BasalInjection"/> with all fields populated; <see cref="V4RecordBase.CorrelationId"/> defaults to a new UUID v7 when not supplied. <see cref="BasalInjection.InsulinContext"/> is populated by the caller after PatientInsulin resolution.</returns>
     protected override BasalInjection MapCreateToModel(CreateBasalInjectionRequest request) => new()
     {
         Timestamp = request.Timestamp.UtcDateTime,
@@ -157,7 +157,7 @@ public class BasalInjectionController(
 
     /// <summary>
     /// Enforces the two rules every basal injection write shares: <see cref="BasalInjection.Units"/>
-    /// must be in (0, 500], and <see cref="BasalInjection.Timestamp"/> must be no more than five
+    /// must be in (0, 500], and <see cref="V4RecordBase.Timestamp"/> must be no more than five
     /// minutes in the future.
     /// </summary>
     /// <returns>A <c>400 Bad Request</c> problem naming the rule broken, or <c>null</c> when both hold.</returns>

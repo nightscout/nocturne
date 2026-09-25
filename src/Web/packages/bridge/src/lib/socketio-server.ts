@@ -6,6 +6,7 @@ import {
   verifyHandshakeTicket,
   normalizeHandshakeHost,
   REALTIME_ADMISSION_PATH,
+  canonicalSubjectId,
 } from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
 
@@ -21,6 +22,17 @@ interface BridgeSocketData {
    * link or anonymous share that holds single categories stays out of it.
    */
   tenantRelay?: boolean;
+  /**
+   * The subject whose per-subject room the socket joined, carried from the API
+   * admission via the handshake ticket. Absent for a credential that owns no
+   * subject, which then receives no per-subject notifications.
+   */
+  subjectId?: string;
+}
+
+/** Room a socket joins for one subject's per-subject payloads within a tenant. */
+function subjectRoom(tenantSlug: string, subjectId: string): string {
+  return `tenant:${tenantSlug}:subject:${subjectId}`;
 }
 
 type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
@@ -273,6 +285,7 @@ class SocketIOServer {
 
         socket.data.tenantSlug = tenantSlug;
         socket.data.tenantRelay = ticket.tenantRelay;
+        socket.data.subjectId = ticket.subjectId;
         return next();
       }
 
@@ -330,12 +343,12 @@ class SocketIOServer {
     });
   }
 
-  /** Join an authorized socket to its tenant room, unless its credential is
-   *  restricted. A restricted socket stays authorized and joins nothing, as the
-   *  API hub's Authorize does; the bridge has no per-category room for the
-   *  default namespace to offer it instead. */
+  /** Join an authorized socket to its tenant room and, when its credential owns a subject, that
+   *  subject's room. A restricted socket stays authorized and joins nothing, as the API hub's
+   *  Authorize does; the bridge has no per-category room for the default namespace to offer it
+   *  instead. A socket with no subject receives no per-subject notifications. */
   private joinTenantRoom(socket: BridgeSocket): void {
-    const { tenantSlug, tenantRelay } = socket.data;
+    const { tenantSlug, tenantRelay, subjectId } = socket.data;
     if (!tenantSlug) return;
 
     if (tenantRelay !== true) {
@@ -345,6 +358,11 @@ class SocketIOServer {
 
     socket.join(`tenant:${tenantSlug}`);
     logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+
+    if (subjectId) {
+      socket.join(subjectRoom(tenantSlug, subjectId));
+      logger.info(`Client ${socket.id} joined subject room: ${subjectId}`);
+    }
   }
 
   /** Handle the classic Nightscout `authorize` message.
@@ -388,12 +406,13 @@ class SocketIOServer {
     const token = stringField(payload, 'token');
     if (!secret && !token) return deny('no credentials supplied');
 
-    const tenantRelay = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
-    if (tenantRelay === null) return deny('API denied the credential');
+    const admission = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
+    if (admission === null) return deny('API denied the credential');
 
     socket.data.tenantSlug = tenantSlug;
     socket.data.pendingTenantSlug = undefined;
-    socket.data.tenantRelay = tenantRelay;
+    socket.data.tenantRelay = admission.tenantRelay;
+    socket.data.subjectId = admission.subjectId;
     this.joinTenantRoom(socket);
     logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
     callback?.({ read: true, write: false, write_treatment: false });
@@ -401,13 +420,13 @@ class SocketIOServer {
 
   /** Replays a client credential against the API's realtime admission endpoint,
    *  scoped to the connection's own tenant, and returns its `tenantRelay`
-   *  decision, or null when the API refused the credential or the probe failed.
+   *  decision and the admitted subject, or null when the API refused the credential or the probe failed.
    *  The probe carries the client's credential and nothing else: the bridge's
    *  instance key would authenticate any anonymous caller as a service. */
   private async probeRealtimeAdmission(
     tenantSlug: string,
     credential: { apiSecret?: string; token?: string; accessToken?: string },
-  ): Promise<boolean | null> {
+  ): Promise<{ tenantRelay: boolean; subjectId: string | undefined } | null> {
     if (!this.apiBaseUrl) {
       logger.warn('Realtime admission probe has no API base URL configured');
       return null;
@@ -435,7 +454,11 @@ class SocketIOServer {
 
       if (!probe.ok) return null;
       const admission: unknown = await probe.json();
-      return isRecord(admission) && admission.tenantRelay === true;
+      if (!isRecord(admission)) return { tenantRelay: false, subjectId: undefined };
+      return {
+        tenantRelay: admission.tenantRelay === true,
+        subjectId: canonicalSubjectId(admission.subjectId),
+      };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn(`Realtime admission probe failed: ${reason}`);
@@ -561,12 +584,28 @@ class SocketIOServer {
     }
   }
 
-  broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: unknown, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+  /** Emit an in-app notification only to the room of the subject it belongs to. A relayed event
+   *  that carries no recipient is dropped, never falling back to the tenant room: the tenant room
+   *  holds every member, so a fallback would deliver one member's notification to all of them. */
+  broadcastInAppNotification(
+    eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated',
+    data: unknown,
+    tenantSlug?: string,
+    subjectId?: string,
+  ): void {
+    if (!this.io) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
+    }
+    if (!subjectId) {
+      logger.debug(`Not broadcasting ${eventType}: no subject id for tenant ${tenantSlug}`);
+      return;
+    }
 
-    logger.debug(`Broadcasting ${eventType}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit(eventType, data);
+    const room = subjectRoom(tenantSlug, subjectId);
+    logger.debug(`Broadcasting ${eventType} to ${room}`);
+    this.io.to(room).emit(eventType, data);
   }
 
   broadcastSyncProgress(data: unknown, tenantSlug?: string): void {
@@ -861,7 +900,7 @@ class SocketIOServer {
     // the subscriber must be a credential the API admits to the tenant relay,
     // not merely one that can read entries.
     const admitted = await this.probeRealtimeAdmission(tenantSlug, { accessToken });
-    if (admitted !== true) {
+    if (admitted?.tenantRelay !== true) {
       logger.warn(`/alarm subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);

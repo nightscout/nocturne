@@ -29,8 +29,10 @@ public static class V4BulkValidation
     /// <summary>
     /// Rejects a payload that is absent, empty, or longer than <paramref name="maxItems"/>.
     /// </summary>
-    /// <param name="subject">The payload's name, as it opens the empty-payload message ("Bolus").</param>
-    /// <param name="plural">Many items ("boluses").</param>
+    /// <remarks>
+    /// <paramref name="subject"/> is the payload's name as it opens the empty-payload message
+    /// ("Bolus"); <paramref name="plural"/> names many items ("boluses").
+    /// </remarks>
     /// <returns>The error response to return, or <c>null</c> when the payload is usable.</returns>
     public static ObjectResult? ValidateBulkSize<TRequest>(
         this ControllerBase controller,

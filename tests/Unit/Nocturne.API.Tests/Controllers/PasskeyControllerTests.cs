@@ -1261,6 +1261,8 @@ public class PasskeyControllerTests : IDisposable
 
         var objectResult = Assert.IsType<ObjectResult>(result.Result);
         Assert.Equal(400, objectResult.StatusCode);
+        // The unknown username still goes through the same fixed-cost verify path.
+        _recoveryCodeService.Verify(s => s.VerifyAndConsumeAsync(null, "123456"), Times.Once);
     }
 
     #region Relying-party host

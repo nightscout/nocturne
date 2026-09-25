@@ -202,6 +202,9 @@ public class GuestSessionHandlerTests
         result.AuthContext!.LimitTo24Hours.Should().Be(limitTo24Hours);
     }
 
+    private static IReadOnlySet<string> Unbounded() =>
+        new HashSet<string>(StringComparer.Ordinal) { Scope.FullAccess };
+
     private async Task<Guid> SeedActivatedGrantAsync(Guid tenantId, bool limitTo24Hours = false)
     {
         await using var ctx = new NocturneDbContext(_dbOptions) { TenantId = tenantId };
@@ -210,7 +213,7 @@ public class GuestSessionHandlerTests
 
         var created = await service.CreateGuestLinkAsync(
             _dataOwnerId, _dataOwnerId, "Caregiver", "https://acme.example.test",
-            limitTo24Hours: limitTo24Hours);
+            Unbounded(), limitTo24Hours: limitTo24Hours);
         var activation = await service.ActivateAsync(created.Code, "1.2.3.4", "TestAgent");
 
         activation.Success.Should().BeTrue();

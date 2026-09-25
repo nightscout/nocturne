@@ -7,6 +7,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -242,6 +243,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            ValidationIssue = new RustValidationIssue("condition", "root", "conditions_empty", null),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
     }
@@ -488,6 +490,9 @@ public class AlertConditionTypesMetadata
 
     /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
     public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
+
+    /// <summary>A sample <see cref="RustValidationIssue"/>; pulls the type into the generated client.</summary>
+    public RustValidationIssue? ValidationIssue { get; set; }
 
     public string Description { get; set; } = string.Empty;
 }

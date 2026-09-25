@@ -17,6 +17,7 @@ import {
   Moon,
   PieChart,
   Sunrise,
+  SunMoon,
   Syringe,
   Utensils,
 } from "lucide-svelte";
@@ -183,8 +184,8 @@ export function reportCategories(): ReportCategory[] {
           description: "Find your best and worst hours",
           href: "/reports/hourly-stats",
           scopes: [READ.reports],
-          icon: Clock,
-          status: "coming-soon",
+          icon: SunMoon,
+          status: "available",
         },
       ],
     },

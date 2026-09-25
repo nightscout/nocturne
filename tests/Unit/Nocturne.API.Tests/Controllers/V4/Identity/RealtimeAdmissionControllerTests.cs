@@ -21,7 +21,10 @@ public class RealtimeAdmissionControllerTests
 {
     private static readonly Guid Tenant = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
-    private static bool TenantRelayFor(AuthContext authContext)
+    private static bool TenantRelayFor(AuthContext authContext) =>
+        AdmissionFor(authContext).TenantRelay;
+
+    private static RealtimeAdmission AdmissionFor(AuthContext authContext)
     {
         var httpContext = new DefaultHttpContext();
         httpContext.SetAuthContext(authContext);
@@ -36,7 +39,7 @@ public class RealtimeAdmissionControllerTests
 
         var result = controller.GetRealtimeAdmission().Result as OkObjectResult;
         result.Should().NotBeNull();
-        return result!.Value.Should().BeOfType<RealtimeAdmission>().Subject.TenantRelay;
+        return result!.Value.Should().BeOfType<RealtimeAdmission>().Subject;
     }
 
     [Fact]
@@ -74,6 +77,44 @@ public class RealtimeAdmissionControllerTests
             SubjectId = Guid.CreateVersion7(),
             TenantId = Tenant,
         }).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_member_session_admission_names_the_subject_to_room_on()
+    {
+        // The bridge carries this id into a per-subject room; without it the member's socket
+        // receives none of its own notifications.
+        var subject = Guid.CreateVersion7();
+
+        AdmissionFor(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.SessionCookie,
+            SubjectId = subject,
+        }).SubjectId.Should().Be(subject);
+    }
+
+    [Fact]
+    public void A_guest_session_admission_names_no_subject()
+    {
+        AdmissionFor(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = AuthType.Guest,
+            SubjectId = Guid.CreateVersion7(),
+        }).SubjectId.Should().BeNull();
+    }
+
+    [Fact]
+    public void An_anonymous_share_admission_names_no_subject()
+    {
+        AdmissionFor(new AuthContext
+        {
+            IsAuthenticated = false,
+            AuthType = AuthType.None,
+            SubjectId = Guid.CreateVersion7(),
+            TenantId = Tenant,
+        }).SubjectId.Should().BeNull();
     }
 
     [Fact]

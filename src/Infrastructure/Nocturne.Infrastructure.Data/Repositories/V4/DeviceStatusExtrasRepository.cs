@@ -39,8 +39,6 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
     /// <summary>
     /// Creates a new device status extras record.
     /// </summary>
-    /// <param name="model">The device status extras to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The created device status extras.</returns>
     /// <exception cref="RecreationBlockedException">
     /// The CorrelationId is held by a stored row, per the same

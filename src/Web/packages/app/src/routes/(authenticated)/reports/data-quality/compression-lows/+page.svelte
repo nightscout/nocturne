@@ -362,7 +362,7 @@
 						{#if pendingCount > 0}
 							{pendingCount} pending review
 						{:else}
-							<span class="print:hidden">Review history and manage exclusions</span>
+							<span class="print:hidden">Suspected false lows from pressure on the sensor</span>
 						{/if}
 					</p>
 					{#if statusFilter !== 'all'}
@@ -623,7 +623,7 @@
 								{#if brushDomain}
 									<div class="mb-6 border-b border-border pb-4">
 										<p class="text-sm text-muted-foreground">
-											{isPending ? 'Selected Range' : 'Exclusion Range'}
+											{isPending ? 'Selected Range' : 'Marked Range'}
 										</p>
 										<p class="font-medium tabular-nums">
 											{time(brushDomain[0])} - {time(brushDomain[1])}

@@ -189,21 +189,31 @@ class SignalRClient {
       this.messageHandler.handleStorageDelete(data);
     });
 
-    // Handle in-app notification events
-    this.dataConnection.on("notificationCreated", (data: unknown) => {
-      logger.debug("Received notificationCreated from SignalR:", data);
-      this.messageHandler.handleNotificationCreated(data);
-    });
+    // Handle in-app notification events. The relayed copy names the recipient as a second
+    // argument because the payload itself has no user id.
+    this.dataConnection.on(
+      "notificationCreated",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationCreated from SignalR:", data);
+        this.messageHandler.handleNotificationCreated(data, subjectId);
+      },
+    );
 
-    this.dataConnection.on("notificationArchived", (data: unknown) => {
-      logger.debug("Received notificationArchived from SignalR:", data);
-      this.messageHandler.handleNotificationArchived(data);
-    });
+    this.dataConnection.on(
+      "notificationArchived",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationArchived from SignalR:", data);
+        this.messageHandler.handleNotificationArchived(data, subjectId);
+      },
+    );
 
-    this.dataConnection.on("notificationUpdated", (data: unknown) => {
-      logger.debug("Received notificationUpdated from SignalR:", data);
-      this.messageHandler.handleNotificationUpdated(data);
-    });
+    this.dataConnection.on(
+      "notificationUpdated",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationUpdated from SignalR:", data);
+        this.messageHandler.handleNotificationUpdated(data, subjectId);
+      },
+    );
 
     this.dataConnection.on("trackerUpdate", (data: unknown) => {
       logger.debug("Received trackerUpdate from SignalR:", data);
