@@ -103,6 +103,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     [HttpPost("recorrect")]
     [RequireDeclaredWriteScope]
     [RemoteCommand]
+    [ProducesResponseType(typeof(RecorrectResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<RecorrectResult>> Recorrect(
         [FromBody] RecorrectRequest request,
