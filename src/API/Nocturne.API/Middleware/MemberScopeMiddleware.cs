@@ -61,9 +61,9 @@ public class MemberScopeMiddleware
         var authContext = context.GetAuthContext();
 
         // Only process authenticated users with a resolved tenant
-        if (authContext is { IsAuthenticated: true, TenantId: not null })
+        if (authContext is { IsAuthenticated: true, TenantId: { } tenantId })
         {
-            await ResolveAsync(context, authContext);
+            await ResolveAsync(context, authContext, tenantId);
             ApplyHistoryClamp(context, authContext);
         }
 
@@ -86,7 +86,7 @@ public class MemberScopeMiddleware
             db.HistoryClamped = true;
     }
 
-    private async Task ResolveAsync(HttpContext context, AuthContext authContext)
+    private async Task ResolveAsync(HttpContext context, AuthContext authContext, Guid tenantId)
     {
         // InstanceKey: infrastructure auth, always superuser — no membership lookup needed.
         // PlatformAccess: a platform-admin tenant-access grant, pinned to this tenant and verified
@@ -134,7 +134,7 @@ public class MemberScopeMiddleware
             .Include(tm => tm.MemberRoles)
                 .ThenInclude(mr => mr.TenantRole)
             .Where(tm => tm.SubjectId == authContext.SubjectId.Value
-                         && tm.TenantId == authContext.TenantId.Value)
+                         && tm.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
         if (membership == null)
@@ -208,7 +208,6 @@ public class MemberScopeMiddleware
                 || (DateTime.UtcNow - membership.LastUsedAt.Value).TotalMinutes > 5))
         {
             var membershipId = membership.Id;
-            var tenantId = authContext.TenantId.Value;
             var ip = context.Connection.RemoteIpAddress?.ToString();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
             var serviceScopeFactory = context.RequestServices.GetRequiredService<IServiceScopeFactory>();

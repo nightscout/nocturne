@@ -337,12 +337,14 @@ public class OAuthTokenServiceTests : IDisposable
         await SeedClientAsync(db);
         await SeedSubjectAsync(db);
         await SeedAuthorizationCodeAsync(db, testCodeHash, limitTo24Hours: limitTo24Hours);
+        var guestSessionCache = new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
         var grantService = new OAuthGrantService(
             db,
             _db.ContextFactory,
             Mock.Of<IOAuthClientService>(),
-            new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
-                new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())),
+            guestSessionCache,
+            new GrantRevocationService(guestSessionCache),
             Mock.Of<ILogger<OAuthGrantService>>());
 
         var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
