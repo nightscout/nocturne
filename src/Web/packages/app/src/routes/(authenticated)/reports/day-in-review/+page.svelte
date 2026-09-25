@@ -523,7 +523,7 @@
                   {/if}
                 </Table.Cell>
                 <Table.Cell class="print:hidden">
-                  <Button variant="ghost" size="icon-sm">
+                  <Button variant="ghost" size="icon-sm" aria-label="Edit treatment">
                     <Edit class="h-4 w-4" />
                   </Button>
                 </Table.Cell>

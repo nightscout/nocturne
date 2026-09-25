@@ -158,7 +158,7 @@
 								You have {pendingCount} item{pendingCount !== 1 ? 's' : ''} waiting for review
 							</p>
 							<p class="text-sm text-muted-foreground">
-								Mark each one as a false low from pressure on the sensor, or dismiss it as a real
+								Accept each one as a false low from pressure on the sensor, or dismiss it as a real
 								low. This is for your own record: your reports and statistics still include these
 								readings.
 							</p>
