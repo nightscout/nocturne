@@ -192,6 +192,7 @@ public class AlertRulesControllerWebhookSecretTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             encryption,
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         return (controller, ctx, encryption);

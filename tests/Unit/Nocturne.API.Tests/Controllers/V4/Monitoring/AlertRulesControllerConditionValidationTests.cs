@@ -40,6 +40,7 @@ public class AlertRulesControllerConditionValidationTests
             Mock.Of<IRuleScopeClassifier>(),
             validator,
             Mock.Of<ISecretEncryptionService>(),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             logger ?? Mock.Of<ILogger<AlertRulesController>>());
         return (controller, ctx);
     }

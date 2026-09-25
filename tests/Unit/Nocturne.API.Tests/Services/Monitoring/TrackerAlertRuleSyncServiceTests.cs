@@ -46,6 +46,7 @@ public class TrackerAlertRuleSyncServiceTests
             factory,
             classifier.Object,
             _referenceService.Object,
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             NullLogger<TrackerAlertRuleSyncService>.Instance);
     }
 
@@ -346,6 +347,62 @@ public class TrackerAlertRuleSyncServiceTests
             rule.Id.Should().Be(originalRuleId);
             Params(rule).GetProperty("minutes").GetInt32().Should().Be(36 * 60);
         }
+    }
+
+    private async Task HoldRearmAsync(Guid ruleId)
+    {
+        await using var db = Db();
+        db.AlertTrackerState.Add(new AlertTrackerStateEntity
+        {
+            AlertRuleId = ruleId, TenantId = _tenantId, State = "idle", AwaitingRearm = true,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task<bool> AwaitingRearmAsync(Guid ruleId)
+    {
+        await using var db = Db();
+        return (await db.AlertTrackerState.SingleAsync(s => s.AlertRuleId == ruleId)).AwaitingRearm;
+    }
+
+    [Fact]
+    public async Task Resync_drops_the_rearm_hold_only_of_a_rule_whose_condition_changed()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+        Guid ruleId;
+        await using (var db = Db())
+            ruleId = (await db.AlertRules.SingleAsync()).Id;
+        await HoldRearmAsync(ruleId);
+
+        await _sut.SyncDefinitionAsync(definition.Id);
+        (await AwaitingRearmAsync(ruleId)).Should().BeTrue("the condition is unchanged");
+
+        await using (var db = Db())
+        {
+            (await db.TrackerNotificationThresholds.SingleAsync()).Hours = 48;
+            await db.SaveChangesAsync();
+        }
+        await _sut.SyncDefinitionAsync(definition.Id);
+        (await AwaitingRearmAsync(ruleId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Disabling_a_referenced_orphan_drops_its_rearm_hold()
+    {
+        var definition = await SeedDefinitionAsync(thresholds: [Threshold(24)]);
+        await _sut.SyncDefinitionAsync(definition.Id);
+        Guid ruleId;
+        await using (var db = Db())
+            ruleId = (await db.AlertRules.SingleAsync()).Id;
+        await HoldRearmAsync(ruleId);
+        _referenceService
+            .Setup(r => r.FindReferencingRulesAsync(ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Guid.NewGuid()]);
+
+        await _sut.DeleteRulesForDefinitionAsync(definition.Id);
+
+        (await AwaitingRearmAsync(ruleId)).Should().BeFalse();
     }
 
     [Fact]

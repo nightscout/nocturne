@@ -29,7 +29,8 @@ public class AlertRulesControllerRearmTests
     private const string Body = """{"direction":"below","value":70}""";
     private const string Resolve = """{"type":"threshold","threshold":{"direction":"above","value":80}}""";
 
-    private static async Task<(AlertRulesController Controller, NocturneDbContext Db)> CreateAsync()
+    private static async Task<(AlertRulesController Controller, NocturneDbContext Db)> CreateAsync(
+        AlertRuleEvaluationGate? gate = null)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -69,6 +70,7 @@ public class AlertRulesControllerRearmTests
             Mock.Of<IRuleScopeClassifier>(),
             validator.Object,
             Mock.Of<ISecretEncryptionService>(),
+            new AlertRuleRearm(gate ?? new AlertRuleEvaluationGate()),
             Mock.Of<ILogger<AlertRulesController>>());
         return (controller, db);
     }
@@ -114,6 +116,23 @@ public class AlertRulesControllerRearmTests
         await controller.UpdateRule(RuleId, Unchanged(name: "Low glucose"), CancellationToken.None);
 
         (await AwaitingRearm(db)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task The_hold_is_cleared_only_once_an_evaluation_holding_the_rule_lets_go()
+    {
+        var gate = new AlertRuleEvaluationGate();
+        var (controller, db) = await CreateAsync(gate);
+        var evaluation = await gate.AcquireAsync(RuleId, CancellationToken.None);
+
+        var toggle = controller.ToggleRule(RuleId, CancellationToken.None);
+        await Task.Delay(100);
+        toggle.IsCompleted.Should().BeFalse();
+        (await AwaitingRearm(db)).Should().BeTrue();
+
+        evaluation.Dispose();
+        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
+        (await AwaitingRearm(db)).Should().BeFalse();
     }
 
     [Fact]

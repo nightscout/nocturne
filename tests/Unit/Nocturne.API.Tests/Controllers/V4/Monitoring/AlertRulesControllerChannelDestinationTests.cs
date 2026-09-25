@@ -47,6 +47,7 @@ public class AlertRulesControllerChannelDestinationTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         var http = new DefaultHttpContext();

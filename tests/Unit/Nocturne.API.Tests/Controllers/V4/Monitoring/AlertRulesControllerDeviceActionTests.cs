@@ -42,6 +42,7 @@ public class AlertRulesControllerDeviceActionTests
             Mock.Of<IRuleScopeClassifier>(),
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
+            new AlertRuleRearm(new AlertRuleEvaluationGate()),
             Mock.Of<ILogger<AlertRulesController>>());
     }
 

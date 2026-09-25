@@ -56,6 +56,7 @@ public class AlertRulesController : ControllerBase
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertRuleConditionValidator _conditionValidator;
     private readonly ISecretEncryptionService _encryption;
+    private readonly AlertRuleRearm _rearm;
     private readonly ILogger<AlertRulesController> _logger;
 
     /// <summary>
@@ -68,6 +69,7 @@ public class AlertRulesController : ControllerBase
         IRuleScopeClassifier scopeClassifier,
         IAlertRuleConditionValidator conditionValidator,
         ISecretEncryptionService encryption,
+        AlertRuleRearm rearm,
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
@@ -76,6 +78,7 @@ public class AlertRulesController : ControllerBase
         _scopeClassifier = scopeClassifier;
         _conditionValidator = conditionValidator;
         _encryption = encryption;
+        _rearm = rearm;
         _logger = logger;
     }
 
@@ -238,14 +241,11 @@ public class AlertRulesController : ControllerBase
 
         var conditionParamsJson = trees.ConditionParams;
 
-        if (rule.IsEnabled != request.IsEnabled
+        var conditionsChanged = rule.IsEnabled != request.IsEnabled
             || rule.ConditionType != request.ConditionType
             || rule.ConditionParams != conditionParamsJson
             || rule.AutoResolveEnabled != request.AutoResolveEnabled
-            || rule.AutoResolveParams != trees.AutoResolveParams)
-        {
-            await RearmAsync(db, id, ct);
-        }
+            || rule.AutoResolveParams != trees.AutoResolveParams;
 
         rule.Name = request.Name;
         rule.Description = request.Description;
@@ -279,6 +279,8 @@ public class AlertRulesController : ControllerBase
         }
 
         await db.SaveChangesAsync(ct);
+        if (conditionsChanged)
+            await _rearm.ClearAsync(db, [id], ct);
 
         foreach (var field in check.Stripped)
         {
@@ -356,8 +358,8 @@ public class AlertRulesController : ControllerBase
 
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
-        await RearmAsync(db, id, ct);
         await db.SaveChangesAsync(ct);
+        await _rearm.ClearAsync(db, [id], ct);
 
         return Ok(MapToResponse(rule));
     }
@@ -794,18 +796,6 @@ public class AlertRulesController : ControllerBase
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         PropertyNameCaseInsensitive = true,
     };
-
-    /// <summary>
-    /// Clears the rule's re-arm hold (docs/alerts/engine-semantics.md §6.3) with the save that
-    /// follows. The hold was taken against the conditions and enablement the rule had when an
-    /// auto-resolve closed it; once those change it no longer says anything about the rule.
-    /// </summary>
-    private static async Task RearmAsync(NocturneDbContext db, Guid ruleId, CancellationToken ct)
-    {
-        var tracker = await db.AlertTrackerState.FirstOrDefaultAsync(s => s.AlertRuleId == ruleId, ct);
-        if (tracker is { AwaitingRearm: true })
-            tracker.AwaitingRearm = false;
-    }
 
     /// <summary>
     /// Returns a <c>400 BadRequest</c> when the rule contains a <c>tracker_age</c> leaf whose
