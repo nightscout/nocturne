@@ -30,9 +30,8 @@
   import { Separator } from "$lib/components/ui/separator";
   import QRCode from "qrcode";
 
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
-  import { toast } from "svelte-sonner";
   import { describeSubmitError } from "$lib/forms/submit-error";
   interface Props {
     app: UploaderApp | null;
@@ -70,7 +69,7 @@
   let apiToken = $state<string | null>(null);
   let apiTokenLoading = $state(false);
   let apiTokenError = $state<string | null>(null);
-  let copiedField = $state<string | null>(null);
+  const copy = createCopyFeedback();
 
   async function generateApiToken() {
     if (!app || apiToken || apiTokenLoading) return;
@@ -90,17 +89,6 @@
     } finally {
       apiTokenLoading = false;
     }
-  }
-
-  async function copyField(text: string, field: string) {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    copiedField = field;
-    setTimeout(() => {
-      copiedField = null;
-    }, 2000);
   }
 
   // ── Connection polling ────────────────────────────────────────
@@ -495,9 +483,9 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => setupResponse?.baseUrl && copyField(setupResponse.baseUrl, 'url')}
+                onclick={() => setupResponse?.baseUrl && copy.copy(setupResponse.baseUrl, 'url')}
               >
-                {#if copiedField === 'url'}
+                {#if copy.isCopied('url')}
                   <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
@@ -522,9 +510,9 @@
                 <Button
                   variant="outline"
                   size="icon"
-                  onclick={() => apiToken && copyField(apiToken, 'token')}
+                  onclick={() => apiToken && copy.copy(apiToken, 'token')}
                 >
-                  {#if copiedField === 'token'}
+                  {#if copy.isCopied('token')}
                     <Check class="h-4 w-4 text-success" />
                   {:else}
                     <Copy class="h-4 w-4" />

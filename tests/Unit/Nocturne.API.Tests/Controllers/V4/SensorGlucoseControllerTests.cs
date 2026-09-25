@@ -96,7 +96,7 @@ public class SensorGlucoseControllerTests
 
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created);
+            .ReturnsAsync([.. created]);
 
         var controller = CreateController();
 
@@ -194,7 +194,7 @@ public class SensorGlucoseControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
-            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
 
         var controller = CreateController();
 
@@ -390,7 +390,7 @@ public class SensorGlucoseControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
-            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
 
         await CreateController().CreateBulk(requests);
 

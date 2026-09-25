@@ -1,25 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { mergeChartData } from "./chart-data-merge";
 import type { TransformedChartData } from "./chart-data-transform";
-import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 
 function thresholds(
   overrides: Partial<TransformedChartData["thresholds"]> = {}
 ): TransformedChartData["thresholds"] {
-  return {
-    ...resolveGlucoseThresholds(),
-    glucoseYMax: 300,
-    targetLow: null,
-    targetHigh: null,
-    ...overrides,
-  };
+  return { ...resolveChartThresholds(), ...overrides };
 }
 
 // The dashboard loads the most recent 6 hours blocking and streams hours 6→48
 // in a second payload, then merges the two. Anything the merge forgets is
 // silently truncated to the 6-hour window, so these tests assert on the
 // collections rather than on the merge helpers.
-function chartData(overrides: Partial<TransformedChartData> = {}): TransformedChartData {
+function chartData(
+  overrides: Partial<TransformedChartData> = {}
+): TransformedChartData {
   return {
     iobSeries: [],
     cobSeries: [],
@@ -81,11 +77,18 @@ describe("mergeChartData basal injections", () => {
 
   it("keeps injections from both halves", () => {
     const merged = mergeChartData(
-      chartData({ basalInjectionMarkers: [injection("late", "2026-08-29T21:00:00Z", 4)] }),
-      chartData({ basalInjectionMarkers: [injection("early", "2026-08-29T00:16:00Z", 22)] })
+      chartData({
+        basalInjectionMarkers: [injection("late", "2026-08-29T21:00:00Z", 4)],
+      }),
+      chartData({
+        basalInjectionMarkers: [injection("early", "2026-08-29T00:16:00Z", 22)],
+      })
     );
 
-    expect(merged.basalInjectionMarkers.map((m) => m.id)).toEqual(["early", "late"]);
+    expect(merged.basalInjectionMarkers.map((m) => m.id)).toEqual([
+      "early",
+      "late",
+    ]);
   });
 });
 

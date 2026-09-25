@@ -64,7 +64,7 @@ public class PublishRecordTypePathTests
             TestConfig config,
             CancellationToken cancellationToken)
         {
-            var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+            var result = new SyncResult { Success = true };
             await _syncBody(result, cancellationToken);
             return result;
         }

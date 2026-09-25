@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Connectors.CareLink.Configurations;
@@ -64,5 +65,69 @@ public class CareLinkAuthFlowServiceTests
         sso.TokenUrl.Should().Be(CareLinkFakeHandler.TokenUrl);
         sso.Audience.Should().Be(CareLinkFakeHandler.Audience);
         handler.Requests.Should().OnlyContain(r => r.UserAgent != null);
+    }
+
+    [Fact]
+    public async Task LoginAsync_AuthorizeReturns403WithNoForm_SendsOnlyOneAuthorizeRequest()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            AuthorizeResponses =
+            [
+                new CareLinkFakeHandler.AuthorizeResponse(
+                    HttpStatusCode.Forbidden, null, "<html><body>Request blocked</body></html>"),
+            ],
+        };
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task LoginAsync_RedirectChainEndsInForm_ExchangesCode()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            CredentialPostUrl = "https://carelink-login.example/login",
+            AuthorizeResponses =
+            [
+                new CareLinkFakeHandler.AuthorizeResponse(
+                    HttpStatusCode.Found, "https://carelink-login.example/authorize?step=2", null),
+                new CareLinkFakeHandler.AuthorizeResponse(
+                    HttpStatusCode.Found, "https://carelink-login.example/authorize?step=3", null),
+                new CareLinkFakeHandler.AuthorizeResponse(HttpStatusCode.OK, null,
+                    "<form action=\"https://carelink-login.example/login\">" +
+                    "<input type=\"hidden\" name=\"state\" value=\"abc\"></form>"),
+            ],
+        };
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+
+        result.Should().NotBeNull();
+        result!.AccessToken.Should().Be("new-access-token");
+        handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task LoginAsync_RedirectLoop_StopsAfterMaxRedirects()
+    {
+        var handler = new CareLinkFakeHandler
+        {
+            AuthorizeResponses =
+            [
+                new CareLinkFakeHandler.AuthorizeResponse(
+                    HttpStatusCode.Found, "https://carelink-login.example/authorize?loop=1", null),
+            ],
+        };
+        using var flow = new CareLinkAuthFlowService(NullLogger.Instance, handler);
+
+        var result = await flow.LoginAsync("user", "pass", "EU", CancellationToken.None);
+
+        result.Should().BeNull();
+        handler.Requests.Count(r => r.Method == HttpMethod.Get && r.Url.Contains("/authorize")).Should().Be(10);
     }
 }

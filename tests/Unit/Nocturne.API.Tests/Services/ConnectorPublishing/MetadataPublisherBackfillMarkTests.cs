@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -63,6 +64,7 @@ public class MetadataPublisherBackfillMarkTests
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             _db,
+            new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);
     }
 

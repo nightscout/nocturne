@@ -53,7 +53,7 @@
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
@@ -78,7 +78,7 @@
   );
   let selectedUploader = $state<UploaderApp | null>(null);
   let showSetupDialog = $state(false);
-  let copiedField = $state<string | null>(null);
+  const copy = createCopyFeedback();
 
   // Data source management dialog state
   let selectedDataSource = $state<DataSourceInfo | null>(null);
@@ -362,16 +362,6 @@
     }
   }
 
-  async function copyField(text: string, field: string) {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    copiedField = field;
-    setTimeout(() => {
-      copiedField = null;
-    }, 2000);
-  }
 </script>
 
 <svelte:head>
@@ -533,9 +523,9 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => copyField(window.location.origin, "baseUrl")}
+                onclick={() => copy.copy(window.location.origin, "baseUrl")}
               >
-                {#if copiedField === "baseUrl"}
+                {#if copy.isCopied("baseUrl")}
                   <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />

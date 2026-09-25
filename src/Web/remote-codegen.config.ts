@@ -52,14 +52,12 @@ export default {
     // may not have shared, each 401ing — so the default bounces them to login
     // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
     // normal error instead so unshared categories just fail their widget rather
-    // than navigating away. Host detection mirrors $lib/share-host's isShareHost
-    // (inlined — generated code can't import it). Commands/forms already throw
-    // error(401) and never redirected.
+    // than navigating away. Commands/forms already throw error(401) and never
+    // redirected.
     on401: (kind: string) =>
       kind === 'query'
-        ? `const { request, url } = getRequestEvent();\n` +
-          `    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';\n` +
-          `    if (/^[^.]+\\.share\\./i.test(shareHost)) throw error(401, 'Unauthorized');\n` +
+        ? `const { locals, url } = getRequestEvent();\n` +
+          `    if (locals.isShareHost) throw error(401, 'Unauthorized');\n` +
           '    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
         : `throw error(401, 'Unauthorized')`,
 

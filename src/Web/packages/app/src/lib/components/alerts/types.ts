@@ -217,11 +217,13 @@ export function withPayload<K extends ConditionKind>(
 	return node;
 }
 
+// randomUUID exists only in secure contexts; a LAN install served over plain
+// http still has getRandomValues.
 function newUid(): string {
-	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-		return crypto.randomUUID();
-	}
-	return Math.random().toString(36).slice(2);
+	if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+	return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+		b.toString(16).padStart(2, "0"),
+	).join("");
 }
 
 /**
@@ -247,14 +249,9 @@ export function ensureCompositeRoot(node: ConditionNode): ConditionNode {
  * single-leaf rules stay flat on the wire.
  */
 export function flattenSingleChildRoot(node: ConditionNode): ConditionNode {
-	if (
-		node.type === "composite" &&
-		node.composite &&
-		node.composite.conditions.length === 1
-	) {
-		return node.composite.conditions[0];
-	}
-	return node;
+	const conditions = node.type === "composite" ? node.composite?.conditions : undefined;
+	const only: unknown = conditions?.length === 1 ? conditions[0] : undefined;
+	return isConditionNode(only) ? only : node;
 }
 
 // ---------------------------------------------------------------------------
@@ -308,21 +305,11 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 			return { type: "trend", trend: { bucket: "falling" } };
 		case "time_of_day":
 			// Stamp the browser's IANA timezone at creation time so the saved rule JSON is
-			// self-documenting and survives a future tenant tz change. The backend
-			// evaluator also falls back to the tenant tz when this is null, but writing
-			// it here keeps "what hour did the rule author mean?" answerable from the
-			// rule payload alone. The Intl guard keeps server-rendered call sites safe
-			// even though defaultPayload is currently only invoked from event handlers.
+			// self-documenting and survives a future tenant tz change. Without one the
+			// backend evaluates in the tenant's zone.
 			return {
 				type: "time_of_day",
-				time_of_day: {
-					from: "22:00",
-					to: "06:00",
-					timezone:
-						typeof Intl !== "undefined"
-							? Intl.DateTimeFormat().resolvedOptions().timeZone
-							: undefined,
-				},
+				time_of_day: { from: "22:00", to: "06:00", timezone: browserTimeZone() },
 			};
 		case "iob":
 			return { type: "iob", iob: { operator: ">=", value: 1 } };
@@ -454,6 +441,72 @@ function makeDefault(kind: ConditionKind): ConditionNode {
 	}
 }
 
+/**
+ * The browser's IANA timezone, or `undefined` when it reports none a rule can be
+ * evaluated in (`Etc/Unknown`, or an id `Intl` itself rejects), so the rule
+ * falls back to the tenant's zone instead of being refused on save.
+ */
+export function browserTimeZone(): string | undefined {
+	if (typeof Intl === "undefined") return undefined;
+	const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	if (!zone || zone === "Etc/Unknown") return undefined;
+	try {
+		new Intl.DateTimeFormat("en", { timeZone: zone });
+		return zone;
+	} catch {
+		return undefined;
+	}
+}
+
+const comparisonShown = { operator: ">=", value: 0 };
+const inactiveShown = { is_active: false };
+
+/**
+ * What `RuleBuilderLeafEditor` shows for a leaf field a stored rule leaves out,
+ * which {@link nodeFromApi} writes into the model so that saving sends what was
+ * shown. A missing `is_active` is `false`, as the engines read it; a new leaf
+ * is created with it set.
+ */
+const SHOWN_DEFAULTS: Partial<Record<ConditionKind, Record<string, unknown>>> = {
+	threshold: { direction: "below", value: 0 },
+	predicted: { operator: "<=", value: 0, within_minutes: 0 },
+	rate_of_change: { direction: "falling", rate: 0 },
+	trend: { bucket: "falling" },
+	staleness: comparisonShown,
+	time_of_day: { from: "00:00", to: "23:59" },
+	iob: comparisonShown,
+	cob: comparisonShown,
+	reservoir: comparisonShown,
+	site_age: comparisonShown,
+	sensor_age: comparisonShown,
+	pump_battery: comparisonShown,
+	uploader_battery: comparisonShown,
+	sensitivity_ratio: comparisonShown,
+	loop_stale: { operator: ">", minutes: 0 },
+	loop_enaction_stale: { operator: ">", minutes: 0 },
+	signal_loss: { timeout_minutes: 0 },
+	temp_basal: { metric: TempBasalMetric.Rate, operator: ">=", value: 0 },
+	alert_state: { state: "firing" },
+	time_since_last_carb: { operator: AlertComparisonOperator.Gte, minutes: 0 },
+	time_since_last_bolus: { operator: AlertComparisonOperator.Gte, minutes: 0 },
+	pump_suspended: inactiveShown,
+	override_active: inactiveShown,
+	do_not_disturb: inactiveShown,
+	sleep_session_active: inactiveShown,
+	pump_state: { mode: PumpModeState.Suspended, is_active: false },
+	state_span_active: { category: StateSpanCategory.Override, is_active: false },
+	tracker_age: { operator: ">=", minutes: 0 },
+};
+
+function fillShownDefaults(node: ConditionNode): void {
+	const defaults = SHOWN_DEFAULTS[node.type];
+	const payload: unknown = Reflect.get(node, node.type);
+	if (!defaults || !isRecord(payload)) return;
+	for (const [field, value] of Object.entries(defaults)) {
+		if (payload[field] === undefined || payload[field] === null) payload[field] = value;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // (De)serialise to/from API conditionParams field
 // ---------------------------------------------------------------------------
@@ -476,6 +529,11 @@ export function nodeFromApiEnvelope(envelope: unknown): ConditionNode | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
+}
+
+/** A value the editor holds as a node: an object with a string `type`. */
+function isConditionNode(value: unknown): value is ConditionNode {
+	return isRecord(value) && typeof value.type === "string";
 }
 
 /**
@@ -505,9 +563,7 @@ export function nodeFromApi(
 	// render an unselectable value in the editor (the dropdown only offers `>`
 	// and `>=`). Coerce on inbound and warn so we notice if it ever happens.
 	coerceStalenessOperator(node);
-	// Recursively assign uids to nested nodes so keyed each-blocks have stable
-	// identity for every level of the tree, not just the root.
-	assignUidsRecursive(node);
+	adoptTree(node);
 	return node;
 }
 
@@ -528,13 +584,30 @@ function coerceStalenessOperator(node: ConditionNode): void {
 	}
 }
 
-function assignUidsRecursive(node: ConditionNode): void {
+/**
+ * Gives every node of a tree read off the wire a `_uid`, so keyed each-blocks
+ * have stable identity at every level, and its {@link SHOWN_DEFAULTS}.
+ */
+function adoptTree(node: ConditionNode): void {
 	if (!node._uid) node._uid = newUid();
-	if (node.composite?.conditions) {
-		for (const child of node.composite.conditions) assignUidsRecursive(child);
-	}
-	if (node.not?.child) assignUidsRecursive(node.not.child);
-	if (node.sustained?.child) assignUidsRecursive(node.sustained.child);
+	fillShownDefaults(node);
+	for (const child of childrenOf(node)) adoptTree(child);
+}
+
+/**
+ * The nodes directly under `node`. A stored group can lack its list or child,
+ * and a list can hold `null` slots; those contribute nothing.
+ */
+function childrenOf(node: ConditionNode): ConditionNode[] {
+	const children: unknown[] =
+		node.type === "composite"
+			? (node.composite?.conditions ?? [])
+			: node.type === "not"
+				? [node.not?.child]
+				: node.type === "sustained"
+					? [node.sustained?.child]
+					: [];
+	return children.filter(isConditionNode);
 }
 
 /**
@@ -548,23 +621,64 @@ export function stripEditorFields(node: ConditionNode): ConditionNode {
 	for (const [key, value] of Object.entries(cleaned)) {
 		if (value === undefined) Reflect.deleteProperty(cleaned, key);
 	}
-	// Recurse into nested children so uids in the subtree are also stripped.
+	// Recurse into nested children so uids in the subtree are also stripped. A
+	// stored group missing its list or child keeps it missing, for the save to report.
 	if (node.composite) {
 		cleaned.composite = {
-			operator: node.composite.operator,
-			conditions: node.composite.conditions.map(stripEditorFields),
+			...node.composite,
+			conditions: node.composite.conditions?.map((c) =>
+				isConditionNode(c) ? stripEditorFields(c) : c,
+			),
 		};
 	}
 	if (node.not) {
-		cleaned.not = { child: stripEditorFields(node.not.child) };
+		const child: unknown = node.not.child;
+		cleaned.not = { ...node.not, child: isConditionNode(child) ? stripEditorFields(child) : node.not.child };
 	}
 	if (node.sustained) {
+		const child: unknown = node.sustained.child;
 		cleaned.sustained = {
-			minutes: node.sustained.minutes,
-			child: stripEditorFields(node.sustained.child),
+			...node.sustained,
+			child: isConditionNode(child) ? stripEditorFields(child) : node.sustained.child,
 		};
 	}
 	return cleaned;
+}
+
+/**
+ * Removes every group the editor has left with no conditions, and any NOT or
+ * sustained wrapper whose child that removes. An empty group is not part of the
+ * rule the person sees, and the server rejects one. Returns `null` when nothing
+ * is left.
+ */
+function withoutEmptyGroups(node: ConditionNode): ConditionNode | null {
+	if (node.type === "composite" && node.composite) {
+		const conditions = childrenOf(node)
+			.map(withoutEmptyGroups)
+			.filter((c): c is ConditionNode => c !== null);
+		if (conditions.length === 0) return null;
+		return { ...node, composite: { ...node.composite, conditions } };
+	}
+	if (node.type === "not" && node.not) {
+		const [inner] = childrenOf(node);
+		const child = inner ? withoutEmptyGroups(inner) : null;
+		return child ? { ...node, not: { ...node.not, child } } : null;
+	}
+	if (node.type === "sustained" && node.sustained) {
+		const [inner] = childrenOf(node);
+		const child = inner ? withoutEmptyGroups(inner) : null;
+		return child ? { ...node, sustained: { ...node.sustained, child } } : null;
+	}
+	return node;
+}
+
+/**
+ * {@link flattenSingleChildRoot} after {@link withoutEmptyGroups}. A root with
+ * nothing left keeps its empty group, so the save reports that the rule has no
+ * conditions rather than sending none.
+ */
+function serialisableRoot(node: ConditionNode): ConditionNode {
+	return flattenSingleChildRoot(withoutEmptyGroups(node) ?? node);
 }
 
 /**
@@ -589,8 +703,7 @@ export function nodeToApi(
  * dirty detection (compare `JSON.stringify` of current vs. saved body).
  */
 export function buildBody(state: RuleEditorState) {
-	const flat = flattenSingleChildRoot(state.condition!);
-	const api = nodeToApi(flat);
+	const api = nodeToApi(stripEditorFields(serialisableRoot(state.condition!)));
 	return {
 		name: state.name,
 		description: state.description || undefined,
@@ -602,15 +715,16 @@ export function buildBody(state: RuleEditorState) {
 		allowThroughDnd: state.allowThroughDnd,
 		autoResolveEnabled: state.autoResolveEnabled,
 		autoResolveParams: state.autoResolveCondition
-			? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
+			? stripEditorFields(serialisableRoot(state.autoResolveCondition))
 			: undefined,
 		clientConfiguration: {
 			...state.clientConfig,
 			snooze: {
 				...state.clientConfig.snooze,
-				conditions: state.clientConfig.snooze.conditions.map((c) =>
-					stripEditorFields(flattenSingleChildRoot(c))
-				),
+				conditions: state.clientConfig.snooze.conditions
+					.map(withoutEmptyGroups)
+					.filter((c): c is ConditionNode => c !== null)
+					.map((c) => stripEditorFields(flattenSingleChildRoot(c))),
 			},
 		},
 		channels: state.channels.map((c) => ({
@@ -825,7 +939,7 @@ function parseSnoozeConditions(snooze: unknown): ConditionNode[] {
 			const node = ensureCompositeRoot(
 				adoptWireNode({ ...entry, type: entry.type }),
 			);
-			assignUidsRecursive(node);
+			adoptTree(node);
 			out.push(node);
 		}
 	}

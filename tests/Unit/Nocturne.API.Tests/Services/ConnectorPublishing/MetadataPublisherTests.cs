@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -72,6 +73,7 @@ public class MetadataPublisherTests
             _mockTenantAccessor.Object,
             new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
                 .UseInMemoryDatabase($"metadata-publisher-{Guid.NewGuid():N}").Options),
+            new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance
         );
     }

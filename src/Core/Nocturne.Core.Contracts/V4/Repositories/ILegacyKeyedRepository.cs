@@ -14,8 +14,11 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <typeparam name="TRecord">The record type stored by this repository.</typeparam>
 public interface IBulkCreateRepository<TRecord>
 {
-    /// <returns>The inserted records with server-assigned fields populated.</returns>
-    Task<IEnumerable<TRecord>> BulkCreateAsync(
+    /// <returns>
+    /// The written records with server-assigned fields populated, as a <see cref="BulkWrite{TRecord}"/>
+    /// carrying how many records were withheld because the user had deleted them.
+    /// </returns>
+    Task<BulkWrite<TRecord>> BulkCreateAsync(
         IEnumerable<TRecord> records, WriteOrigin origin, CancellationToken ct = default);
 }
 
@@ -41,7 +44,8 @@ public interface ILegacyKeyedRepository<TRecord> : IV4Repository<TRecord>, IBulk
     /// query for the stored rows, one for the identities that block re-creation, one save. A stored
     /// row is updated in place (its <see cref="IV4Record.Id"/> is written back onto the record); a
     /// record with no stored row is inserted; a record whose identity is held by a row the user
-    /// deleted is dropped and absent from the result. Records without a legacy id are ignored, and a
+    /// deleted is dropped, absent from the outcomes and counted in
+    /// <see cref="LegacyUpsertBatch{TRecord}.SkippedDeleted"/>. Records without a legacy id are ignored, and a
     /// legacy id repeated in the batch keeps its last record.
     /// </summary>
     /// <remarks>
@@ -54,8 +58,8 @@ public interface ILegacyKeyedRepository<TRecord> : IV4Repository<TRecord>, IBulk
     /// Whether a stored, non-empty correlation id outlives the record's own. Only an anchor record
     /// whose group is then stamped from what it reads back may ask for this.
     /// </param>
-    /// <returns>The outcomes keyed by legacy id.</returns>
-    Task<IReadOnlyDictionary<string, LegacyUpsert<TRecord>>> BulkUpsertByLegacyIdAsync(
+    /// <returns>The outcomes keyed by legacy id, and the count withheld.</returns>
+    Task<LegacyUpsertBatch<TRecord>> BulkUpsertByLegacyIdAsync(
         IReadOnlyList<TRecord> records,
         WriteOrigin origin,
         bool preserveStoredCorrelationId = false,

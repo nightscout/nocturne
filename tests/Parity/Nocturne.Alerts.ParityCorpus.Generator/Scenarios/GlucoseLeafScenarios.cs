@@ -24,6 +24,19 @@ public static class GlucoseLeafScenarios
             ]);
 
         yield return Scenario(
+            "threshold-clears-and-fires-again",
+            "a low opens, enters hysteresis on the first false reading and closes on the second, then opens a new excursion; pinned against the replay scenario replay-threshold-clears-and-fires-again",
+            [Rule(1, "threshold", """{"direction": "below", "value": 70}""")],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 100m)),
+                Tick(T(5), Ctx(T(5), glucose: 65m)),    // opened
+                Tick(T(10), Ctx(T(10), glucose: 65m)),  // continues
+                Tick(T(15), Ctx(T(15), glucose: 100m)), // hysteresis started
+                Tick(T(20), Ctx(T(20), glucose: 100m)), // closed
+                Tick(T(25), Ctx(T(25), glucose: 65m)),  // opened
+            ]);
+
+        yield return Scenario(
             "threshold-above-boundaries",
             "above is strictly greater-than: 250 does not fire, 250.1 does",
             [Rule(1, "threshold", """{"direction": "above", "value": 250}""")],
@@ -131,6 +144,48 @@ public static class GlucoseLeafScenarios
             "an unrecognised operator string evaluates false",
             [Rule(1, "staleness", """{"operator": "!=", "value": 15}""")],
             [Tick(T(30), Ctx(T(30)) with { LastReadingAt = T(0), LatestTimestamp = T(0) })]);
+
+        // ---- signal_loss ---------------------------------------------------------------
+        yield return Scenario(
+            "signal-loss-timeout-lifecycle",
+            "true once now - LastReadingAt reaches timeout_minutes (inclusive); resumed readings feed false, starting hysteresis and then closing (hysteresis_minutes 0)",
+            [Rule(1, "signal_loss", """{"timeout_minutes": 15}""")],
+            [
+                Tick(T(14), Ctx(T(14)) with { LastReadingAt = T(0), LatestTimestamp = T(0) }),   // 14 min: false
+                Tick(T(15), Ctx(T(15)) with { LastReadingAt = T(0), LatestTimestamp = T(0) }),   // boundary: opened
+                Tick(T(40), Ctx(T(40)) with { LastReadingAt = T(0), LatestTimestamp = T(0) }),   // continues
+                Tick(T(41), Ctx(T(41))),                                                          // reading resumes: hysteresis started
+                Tick(T(42), Ctx(T(42))),                                                          // closed
+            ]);
+
+        yield return Scenario(
+            "signal-loss-hysteresis-on-resume",
+            "with hysteresis, a resumed reading moves the excursion into hysteresis rather than closing it; a relapse resumes it",
+            [Rule(1, "signal_loss", """{"timeout_minutes": 15}""", hysteresis: 30)],
+            [
+                Tick(T(20), Ctx(T(20)) with { LastReadingAt = T(0), LatestTimestamp = T(0) }),   // opened
+                Tick(T(21), Ctx(T(21))),                                                          // hysteresis started
+                Tick(T(40), Ctx(T(40)) with { LastReadingAt = T(21), LatestTimestamp = T(21) }), // stale again: resumed
+            ]);
+
+        yield return Scenario(
+            "signal-loss-cold-start-and-infinity",
+            "no reading history is false; LastReadingAt null with LatestTimestamp set is infinitely stale (true)",
+            [Rule(1, "signal_loss", """{"timeout_minutes": 15}""")],
+            [
+                Tick(T(0), Empty()),
+                Tick(T(5), Empty() with { LatestTimestamp = T(4) }),
+            ]);
+
+        yield return Scenario(
+            "signal-loss-non-positive-timeout",
+            "timeout_minutes of zero or less (or absent) is false, even when the last reading is hours old",
+            [
+                Rule(1, "signal_loss", """{"timeout_minutes": 0}"""),
+                Rule(2, "signal_loss", """{"timeout_minutes": -5}"""),
+                Rule(3, "signal_loss", "{}"),
+            ],
+            [Tick(T(120), Ctx(T(120)) with { LastReadingAt = T(0), LatestTimestamp = T(0) })]);
 
         // ---- predicted -----------------------------------------------------------------
         yield return Scenario(

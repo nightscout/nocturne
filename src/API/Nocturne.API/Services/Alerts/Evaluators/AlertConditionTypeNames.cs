@@ -41,6 +41,14 @@ internal static class AlertConditionTypeNames
     public static AlertConditionType? FromWireString(string wire) =>
         FromWire.TryGetValue(wire, out var t) ? t : null;
 
+    /// <summary>
+    /// Resolves a <see cref="ConditionNode.Type"/> the way node dispatch does: the wire string
+    /// first, then the enum member name or ordinal, case-insensitively.
+    /// </summary>
+    public static AlertConditionType? Resolve(string type) =>
+        FromWireString(type)
+        ?? (Enum.TryParse<AlertConditionType>(type, ignoreCase: true, out var parsed) ? parsed : null);
+
     private static Dictionary<AlertConditionType, string> BuildToWire()
     {
         var values = Enum.GetValues<AlertConditionType>();

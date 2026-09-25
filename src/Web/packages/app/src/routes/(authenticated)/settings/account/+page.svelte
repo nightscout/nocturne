@@ -53,7 +53,7 @@
     describeTotpSetupStartError,
   } from "$lib/components/account/totp-errors";
   import { page } from "$app/state";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   const { data }: { data: PageData } = $props();
 
@@ -88,7 +88,7 @@
   let isRegenerating = $state(false);
   let showNewCodesDialog = $state(false);
   let newRecoveryCodes = $state<string[]>([]);
-  let copiedCodes = $state(false);
+  const copy = createCopyFeedback();
 
   // ============================================================================
   // TOTP Authenticator State
@@ -254,13 +254,7 @@
   }
 
   async function copyRecoveryCodes() {
-    const text = newRecoveryCodes.join("\n");
-    if (!(await copyToClipboard(text))) {
-      errorMessage = "Couldn't copy the codes to the clipboard. Copy them manually instead.";
-      return;
-    }
-    copiedCodes = true;
-    setTimeout(() => (copiedCodes = false), 2000);
+    await copy.copy(newRecoveryCodes.join("\n"));
   }
 
   // ============================================================================
@@ -678,7 +672,7 @@
         {/each}
       </div>
       <Button variant="outline" class="w-full" onclick={copyRecoveryCodes}>
-        {#if copiedCodes}
+        {#if copy.isCopied()}
           <Check class="mr-1.5 h-4 w-4 text-success" />
           Copied
         {:else}
@@ -692,7 +686,6 @@
         onclick={() => {
           showNewCodesDialog = false;
           newRecoveryCodes = [];
-          copiedCodes = false;
         }}
       >
         Done

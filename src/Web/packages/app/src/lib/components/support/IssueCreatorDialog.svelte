@@ -26,8 +26,7 @@
   import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";
   import { page } from "$app/state";
   import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "$api-clients";
-  import { copyToClipboard } from "$lib/utils";
-  import { toast } from "svelte-sonner";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   interface Props {
     open: boolean;
@@ -92,7 +91,7 @@
   let issueNumber = $state(0);
   let isDragging = $state(false);
   let fileInput = $state<HTMLInputElement | null>(null);
-  let previewCopied = $state(false);
+  const copy = createCopyFeedback();
 
   const config = $derived(templateConfigs[template] ?? templateConfigs.bug);
 
@@ -318,14 +317,7 @@
   }
 
   async function copyPreview() {
-    if (!(await copyToClipboard(generatePreviewMarkdown()))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    previewCopied = true;
-    setTimeout(() => {
-      previewCopied = false;
-    }, 2000);
+    await copy.copy(generatePreviewMarkdown());
   }
 
   async function openFallback() {
@@ -783,7 +775,7 @@
             </Button>
             <div class="flex-1"></div>
             <Button type="button" variant="outline" onclick={copyPreview}>
-              {#if previewCopied}
+              {#if copy.isCopied()}
                 <CheckCircle class="h-4 w-4 mr-2" />
                 Copied
               {:else}

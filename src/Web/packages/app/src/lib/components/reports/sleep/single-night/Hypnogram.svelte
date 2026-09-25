@@ -6,6 +6,7 @@
   import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
   import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
   import { resolveChartColor } from "$lib/utils/chart-colors";
+  import { FALLBACK_GLUCOSE_Y_MAX } from "$lib/constants/glucose-thresholds";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
@@ -53,7 +54,7 @@
   const glucosePoints = $derived(
     actogramQuery.error ? [] : (actogramQuery.current?.glucoseData ?? [])
   );
-  const glucoseYMax = $derived(actogramQuery.current?.thresholds?.glucoseYMax ?? 300);
+  const glucoseYMax = $derived(actogramQuery.current?.thresholds?.glucoseYMax ?? FALLBACK_GLUCOSE_Y_MAX);
   const hasGlucose = $derived(glucosePoints.length > 0);
 
   const basalPoints = $derived.by(() => {

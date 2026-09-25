@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+	browserTimeZone,
 	defaultClientConfig,
 	defaultPayload,
 	nodeFromApi,
@@ -13,6 +14,7 @@ import {
 	type ConditionNode,
 } from "./types";
 import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
+import type { AlertRuleResponse } from "$api-clients";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -403,6 +405,13 @@ describe("buildBody", () => {
 		expect(json).not.toContain("_uid");
 	});
 
+	it("sends a group-rooted rule's conditions without _uid fields", () => {
+		const state = parseRule(null);
+		state.condition = defaultPayload("composite");
+		state.condition.composite?.conditions.push(defaultPayload("iob"));
+		expect(JSON.stringify(buildBody(state).conditionParams)).not.toContain("_uid");
+	});
+
 	it("two semantically-identical states with different _uids produce the same JSON", () => {
 		// parseRule stamps fresh _uids on every call, so two invocations with the
 		// same input will have different internal identities.
@@ -480,6 +489,50 @@ describe("buildBody", () => {
 		// Metadata is a JSON object (not a pre-stringified string) — the server
 		// serialises it to JSONB.
 		expect(ch.metadata).toEqual({ capabilities: ["notify", "tray_flash"] });
+	});
+
+	it("drops a nested group left with no conditions, and any wrapper around it", () => {
+		const state = parseRule(null);
+		state.condition = {
+			type: "composite",
+			composite: {
+				operator: "and",
+				conditions: [
+					defaultPayload("threshold"),
+					{ type: "composite", composite: { operator: "or", conditions: [] } },
+					{
+						type: "not",
+						not: { child: { type: "composite", composite: { operator: "and", conditions: [] } } },
+					},
+				],
+			},
+		};
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("threshold");
+		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+	});
+
+	it("keeps an empty root group so saving reports it", () => {
+		const state = parseRule(null);
+		state.condition = { type: "composite", composite: { operator: "and", conditions: [] } };
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("composite");
+		expect(body.conditionParams).toEqual({ operator: "and", conditions: [] });
+	});
+
+	it("drops empty groups from auto-resolve and snooze conditions", () => {
+		const state = parseRule(null);
+		const empty: ConditionNode = { type: "composite", composite: { operator: "or", conditions: [] } };
+		state.autoResolveCondition = {
+			type: "composite",
+			composite: { operator: "and", conditions: [defaultPayload("iob"), empty] },
+		};
+		state.clientConfig.snooze.conditions = [empty, defaultPayload("trend")];
+		const body = buildBody(state);
+		expect(body.autoResolveParams).toEqual({ type: "iob", iob: { operator: ">=", value: 1 } });
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "trend", trend: { bucket: "falling" } },
+		]);
 	});
 
 	it("omits metadata for channels without it", () => {
@@ -585,5 +638,106 @@ describe("validateChannels", () => {
 
 	it("accepts an empty channel list", () => {
 		expect(validateChannels([])).toBeNull();
+	});
+});
+
+describe("browserTimeZone", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	const reporting = (timeZone: string) =>
+		vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+			...new Intl.DateTimeFormat().resolvedOptions(),
+			timeZone,
+		});
+
+	it("is the zone the browser reports", () => {
+		reporting("Europe/London");
+		expect(browserTimeZone()).toBe("Europe/London");
+	});
+
+	it("is undefined when the browser cannot tell, so the rule uses the tenant's zone", () => {
+		reporting("Etc/Unknown");
+		expect(browserTimeZone()).toBeUndefined();
+		expect(defaultPayload("time_of_day").time_of_day?.timezone).toBeUndefined();
+	});
+
+	it("is undefined for an id Intl rejects", () => {
+		reporting("Not/AZone");
+		expect(browserTimeZone()).toBeUndefined();
+	});
+});
+
+describe("reading a stored rule", () => {
+	const stored = (overrides: Partial<AlertRuleResponse>): AlertRuleResponse => ({
+		name: "Stored",
+		conditionType: AlertConditionType.Threshold,
+		conditionParams: { direction: "below", value: 70 },
+		...overrides,
+	});
+
+	it("writes the values the editor shows for fields the rule leaves out", () => {
+		const state = parseRule(
+			stored({
+				conditionType: AlertConditionType.Composite,
+				conditionParams: {
+					operator: "and",
+					conditions: [
+						{ type: "iob", iob: { value: 2 } },
+						{ type: "not", not: { child: { type: "threshold", threshold: { value: 70 } } } },
+						{ type: "time_of_day", time_of_day: { timezone: "Europe/London" } },
+					],
+				},
+			}),
+		);
+
+		expect(buildBody(state).conditionParams).toEqual({
+			operator: "and",
+			conditions: [
+				{ type: "iob", iob: { operator: ">=", value: 2 } },
+				{ type: "not", not: { child: { type: "threshold", threshold: { direction: "below", value: 70 } } } },
+				{ type: "time_of_day", time_of_day: { from: "00:00", to: "23:59", timezone: "Europe/London" } },
+			],
+		});
+	});
+
+	it("fills auto-resolve and snooze leaves too", () => {
+		const state = parseRule(
+			stored({
+				autoResolveEnabled: true,
+				autoResolveParams: { type: "staleness", staleness: { value: 20 } },
+				clientConfiguration: {
+					snooze: { smartSnooze: true, conditions: [{ type: "pump_suspended", pump_suspended: {} }] },
+				},
+			}),
+		);
+		const body = buildBody(state);
+
+		expect(body.autoResolveParams).toEqual({ type: "staleness", staleness: { operator: ">=", value: 20 } });
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "pump_suspended", pump_suspended: { is_active: false } },
+		]);
+	});
+
+	it("saves a group with no list or child without throwing, keeping a root one for the save to report", () => {
+		const state = parseRule(
+			stored({
+				conditionType: AlertConditionType.Composite,
+				conditionParams: {
+					operator: "and",
+					conditions: [
+						{ type: "threshold", threshold: { direction: "below", value: 70 } },
+						{ type: "composite", composite: { operator: "or" } },
+						{ type: "not", not: {} },
+						null,
+					],
+				},
+				autoResolveEnabled: true,
+				autoResolveParams: { type: "composite", composite: { operator: "and" } },
+			}),
+		);
+		const body = buildBody(state);
+
+		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+		expect(body.autoResolveParams).toEqual({ type: "composite", composite: { operator: "and" } });
 	});
 });

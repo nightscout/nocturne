@@ -13,6 +13,7 @@
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { SkippedRecordsNote } from "$lib/components/shared";
 
   let {
     jobId,
@@ -47,6 +48,8 @@
       migrated: number;
       pct: number;
       isComplete: boolean;
+      skippedDeleted: number;
+      skippedUnsupported: number;
     }[]
   >([]);
   let etaText = $state<string | null>(null);
@@ -158,14 +161,17 @@
             const meta = COLLECTION_META[key] ?? { icon: Database, label: key };
             const total = col.totalDocuments ?? 0;
             const migrated = col.documentsMigrated ?? 0;
+            const pct = Math.round(col.progressPercentage ?? 0);
             return {
               key,
               icon: meta.icon,
               label: meta.label,
               total,
               migrated,
-              pct: total > 0 ? Math.round((migrated / total) * 100) : 0,
+              pct,
               isComplete: col.isComplete ?? false,
+              skippedDeleted: col.recordsSkippedDeleted ?? 0,
+              skippedUnsupported: col.documentsSkippedUnsupported ?? 0,
             };
           });
 
@@ -429,6 +435,12 @@
                 {/if}
               </div>
             </div>
+
+            <SkippedRecordsNote
+              deleted={col.skippedDeleted}
+              unsupported={col.skippedUnsupported}
+              class="text-xs text-white/60"
+            />
 
             <!-- Progress bar -->
             <div

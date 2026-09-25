@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -106,7 +107,7 @@ public class AlertReplayServicePagingTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(options),
-            NullLogger<AlertReplayService>.Instance);
+            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
     }
 
     /// <summary>

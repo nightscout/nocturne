@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "unknown-and-signal-loss-in-tree",
-  "description": "unknown node kinds and signal_loss nodes inside a tree evaluate false (signal_loss has no evaluator)",
+  "description": "an unknown node kind inside a tree evaluates false; a signal_loss node evaluates like any other leaf",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",

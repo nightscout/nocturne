@@ -93,11 +93,13 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled} class="w-full">
-    <Button variant="outline" class="w-full justify-start" {disabled}>
-      <CurrentIcon class="h-4 w-4" />
-      <span>{currentIconName}</span>
-    </Button>
+  <Popover.Trigger {disabled}>
+    {#snippet child({ props }: { props: Record<string, unknown> })}
+      <Button {...props} variant="outline" class="w-full justify-start">
+        <CurrentIcon class="h-4 w-4" />
+        <span>{currentIconName}</span>
+      </Button>
+    {/snippet}
   </Popover.Trigger>
   <Popover.Content class="w-80 p-3" align="start">
     <div class="space-y-2">
@@ -112,7 +114,12 @@
       >
         {#each PROFILE_ICONS as icon (icon.id)}
           {@const IconComponent = iconComponents[icon.id] ?? User}
-          <ToggleGroup.Item value={icon.id} class="w-9" title={icon.name} aria-label={icon.name}>
+          <ToggleGroup.Item
+            value={icon.id}
+            class="w-9"
+            title={icon.name}
+            aria-label={icon.name}
+          >
             <IconComponent class="h-4 w-4" />
           </ToggleGroup.Item>
         {/each}

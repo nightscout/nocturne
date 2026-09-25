@@ -161,7 +161,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         TConfig config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -315,7 +315,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

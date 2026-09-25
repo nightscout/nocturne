@@ -1,144 +1,141 @@
-//! Node dispatch and container evaluation.
+//! Node dispatch and container evaluation (engine-semantics.md §2.4, §3).
 //!
-//! Mirrors `ConditionEvaluatorRegistry.EvaluateNodeAsync` + the recursive
-//! container evaluators. The universal failure mode is silent-false: unknown
-//! kinds, missing payloads and conditions that would throw in C# inside a
-//! caught context all evaluate `false` rather than erroring. (Where C# would
-//! throw *uncaught*, the scenario cannot exist in the corpus — the generator
-//! itself would have crashed — so false is observably equivalent.)
+//! Evaluation cannot fail: the shapes whose evaluation fails (§1.4) are
+//! rejected when a tree is parsed. Anything else malformed, such as an unknown
+//! kind, operator or direction, a `not` or `sustained` with no child, or a
+//! composite with an empty list, is `false`, which `not` inverts.
 
-mod clock;
+pub(crate) mod clock;
 mod device;
 mod glucose;
 mod insulin;
+mod signal;
 mod spans;
 
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 
+use crate::compare::{Unit, decimal_from_f64_cs, elapsed};
 use crate::context::SensorContext;
-use crate::model::{ConditionKind, Node, Payload, default_payload};
-use crate::paths::child_path;
+use crate::enums::{CmpOp, CompositeOp, holds};
+use crate::model::{Node, Payload};
+use crate::paths::node_child_path;
 use crate::sustained::{TimerStore, eval_sustained};
 
 /// Per-evaluation environment: the clock instant, the rule whose timers are
 /// keyed, the sensor context, and the mutable timer store.
 pub struct Env<'a> {
-    pub now: DateTime<Utc>,
-    pub rule_id: Uuid,
-    pub ctx: &'a SensorContext,
-    pub timers: &'a mut TimerStore,
+    pub(crate) now: DateTime<Utc>,
+    pub(crate) rule_id: Uuid,
+    pub(crate) ctx: &'a SensorContext,
+    pub(crate) timers: &'a mut TimerStore,
+}
+
+impl<'a> Env<'a> {
+    pub fn new(
+        now: DateTime<Utc>,
+        rule_id: Uuid,
+        ctx: &'a SensorContext,
+        timers: &'a mut TimerStore,
+    ) -> Self {
+        Self {
+            now,
+            rule_id,
+            ctx,
+            timers,
+        }
+    }
+
+    /// Whether `since` is at least `minutes` ago, in fractional minutes.
+    pub(crate) fn held_for(&self, since: DateTime<Utc>, minutes: i32) -> bool {
+        elapsed(self.now, since, Unit::Minutes).is_some_and(|m| m >= f64::from(minutes))
+    }
+
+    /// The time since `anchor` in `unit`, converted to decimal
+    /// (engine-semantics.md §1.3), compared against `threshold`.
+    fn compare_elapsed(
+        &self,
+        anchor: DateTime<Utc>,
+        unit: Unit,
+        op: Option<CmpOp>,
+        threshold: impl Into<Decimal>,
+    ) -> bool {
+        let actual = elapsed(self.now, anchor, unit).and_then(decimal_from_f64_cs);
+        holds(op, actual, threshold.into())
+    }
+
+    /// Whether a span's presence matches `is_active` and, on the active side,
+    /// it has held for `for_minutes` when that is set.
+    fn active_for(
+        &self,
+        is_active: bool,
+        for_minutes: Option<i32>,
+        started_at: Option<DateTime<Utc>>,
+    ) -> bool {
+        match started_at {
+            Some(at) if is_active => for_minutes.is_none_or(|m| self.held_for(at, m)),
+            Some(_) => false,
+            None => !is_active,
+        }
+    }
 }
 
 /// Evaluates a condition node at `path`. `None` (a JSON-null child slot)
 /// evaluates false.
 pub fn eval_node(node: Option<&Node>, path: &str, env: &mut Env) -> bool {
-    let Some(node) = node else {
-        return false;
-    };
-    let Some(type_str) = node.type_str.as_deref() else {
-        return false;
-    };
-    let Some(kind) = ConditionKind::resolve(type_str) else {
-        return false;
-    };
-    // The payload switch in ConditionNodePayloads matches the lowercased type
-    // against the canonical snake_case names only — a kind resolved through
-    // the lenient enum-name path (e.g. "RateOfChange") finds no payload and
-    // evaluates with constructor defaults.
-    let lower = type_str.to_lowercase();
-    let payload = if lower == kind.wire() {
-        node.payload(&lower)
-    } else {
-        None
-    };
-    eval_kind(kind, payload, path, env)
+    node.and_then(Node::dispatch)
+        .is_some_and(|payload| eval_payload(&payload, path, env))
 }
 
-/// Evaluates `kind` with the given payload (or the `{}`-defaults when absent).
-pub fn eval_kind(
-    kind: ConditionKind,
-    payload: Option<&Payload>,
-    path: &str,
-    env: &mut Env,
-) -> bool {
-    let default;
-    let payload = match payload {
-        Some(p) => p,
-        None => {
-            default = default_payload(kind);
-            &default
-        }
-    };
-    match (kind, payload) {
-        (ConditionKind::Threshold, Payload::Threshold(p)) => glucose::threshold(p, env),
-        (ConditionKind::RateOfChange, Payload::RateOfChange(p)) => glucose::rate_of_change(p, env),
-        // signal_loss has no registered evaluator: false inside trees, the
-        // real behaviour is a host-side sweep (§5 of the semantics doc).
-        (ConditionKind::SignalLoss, _) => false,
-        (ConditionKind::Composite, Payload::Composite(p)) => composite(p, path, env),
-        (ConditionKind::Not, Payload::Not(p)) => not(p, path, env),
-        (ConditionKind::Sustained, Payload::Sustained(p)) => eval_sustained(p, path, env),
-        (ConditionKind::Staleness, Payload::Staleness(p)) => glucose::staleness(p, env),
-        (ConditionKind::Predicted, Payload::Predicted(p)) => glucose::predicted(p, env),
-        (ConditionKind::Trend, Payload::Trend(p)) => glucose::trend(p, env),
-        (ConditionKind::TimeOfDay, Payload::TimeOfDay(p)) => clock::time_of_day(p, env),
-        (ConditionKind::Iob, Payload::Compare(p)) => insulin::iob(p, env),
-        (ConditionKind::Cob, Payload::Compare(p)) => insulin::cob(p, env),
-        (ConditionKind::Reservoir, Payload::Compare(p)) => insulin::reservoir(p, env),
-        (ConditionKind::SiteAge, Payload::Compare(p)) => device::site_age(p, env),
-        (ConditionKind::SensorAge, Payload::Compare(p)) => device::sensor_age(p, env),
-        (ConditionKind::AlertState, Payload::AlertState(p)) => spans::alert_state(p, env),
-        (ConditionKind::LoopStale, Payload::MinutesCompare(p)) => device::loop_stale(p, env),
-        (ConditionKind::LoopEnactionStale, Payload::MinutesCompare(p)) => {
-            device::loop_enaction_stale(p, env)
-        }
-        (ConditionKind::PumpSuspended, Payload::ActiveFor(p)) => device::pump_suspended(p, env),
-        (ConditionKind::PumpBattery, Payload::Compare(p)) => device::pump_battery(p, env),
-        (ConditionKind::TempBasal, Payload::TempBasal(p)) => insulin::temp_basal(p, env),
-        (ConditionKind::UploaderBattery, Payload::Compare(p)) => device::uploader_battery(p, env),
-        (ConditionKind::OverrideActive, Payload::ActiveFor(p)) => spans::override_active(p, env),
-        (ConditionKind::SensitivityRatio, Payload::Compare(p)) => device::sensitivity_ratio(p, env),
-        (ConditionKind::DoNotDisturb, Payload::ActiveFor(p)) => spans::do_not_disturb(p, env),
-        (ConditionKind::GlucoseBucket, Payload::GlucoseBucket(p)) => {
-            glucose::glucose_bucket(p, env)
-        }
-        (ConditionKind::TimeSinceLastCarb, Payload::TimeSince(p)) => {
-            clock::time_since(p, env.ctx.last_carb_at, env)
-        }
-        (ConditionKind::TimeSinceLastBolus, Payload::TimeSince(p)) => {
-            clock::time_since(p, env.ctx.last_bolus_at, env)
-        }
-        (ConditionKind::DayOfWeek, Payload::DayOfWeek(p)) => clock::day_of_week(p, env),
-        (ConditionKind::PumpState, Payload::PumpState(p)) => spans::pump_state(p, env),
-        (ConditionKind::StateSpanActive, Payload::StateSpan(p)) => spans::state_span_active(p, env),
-        (ConditionKind::SleepSessionActive, Payload::SleepSession(p)) => {
-            spans::sleep_session_active(p, env)
-        }
-        (ConditionKind::TrackerAge, Payload::TrackerAge(p)) => device::tracker_age(p, env),
-        // A payload variant can only be stored under its own kind's key, so a
-        // mismatch is unreachable; fail closed regardless.
-        _ => false,
+/// Evaluates a payload as the node at `path`.
+pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
+    match payload {
+        Payload::Threshold(p) => glucose::threshold(p, env),
+        Payload::RateOfChange(p) => glucose::rate_of_change(p, env),
+        Payload::SignalLoss(p) => signal::signal_loss(p, env),
+        Payload::Composite(p) => composite(p, path, env),
+        Payload::Not(p) => not(p, path, env),
+        Payload::Sustained(p) => eval_sustained(p, path, env),
+        Payload::Staleness(p) => glucose::staleness(p, env),
+        Payload::Predicted(p) => glucose::predicted(p, env),
+        Payload::Trend(p) => glucose::trend(p, env),
+        Payload::TimeOfDay(p) => clock::time_of_day(p, env),
+        Payload::Iob(p) => insulin::iob(p, env),
+        Payload::Cob(p) => insulin::cob(p, env),
+        Payload::Reservoir(p) => insulin::reservoir(p, env),
+        Payload::SiteAge(p) => device::site_age(p, env),
+        Payload::SensorAge(p) => device::sensor_age(p, env),
+        Payload::AlertState(p) => spans::alert_state(p, env),
+        Payload::LoopStale(p) => device::loop_stale(p, env.ctx.last_aps_cycle_at, env),
+        Payload::LoopEnactionStale(p) => device::loop_stale(p, env.ctx.last_aps_enacted_at, env),
+        Payload::PumpSuspended(p) => device::pump_suspended(p, env),
+        Payload::PumpBattery(p) => device::pump_battery(p, env),
+        Payload::TempBasal(p) => insulin::temp_basal(p, env),
+        Payload::UploaderBattery(p) => device::uploader_battery(p, env),
+        Payload::OverrideActive(p) => spans::override_active(p, env),
+        Payload::SensitivityRatio(p) => device::sensitivity_ratio(p, env),
+        Payload::DoNotDisturb(p) => spans::do_not_disturb(p, env),
+        Payload::GlucoseBucket(p) => glucose::glucose_bucket(p, env),
+        Payload::TimeSinceLastCarb(p) => clock::time_since(p, env.ctx.last_carb_at, env),
+        Payload::TimeSinceLastBolus(p) => clock::time_since(p, env.ctx.last_bolus_at, env),
+        Payload::DayOfWeek(p) => clock::day_of_week(p, env),
+        Payload::PumpState(p) => spans::pump_state(p, env),
+        Payload::StateSpanActive(p) => spans::state_span_active(p, env),
+        Payload::SleepSessionActive(p) => spans::sleep_session_active(p, env),
+        Payload::TrackerAge(p) => device::tracker_age(p, env),
     }
 }
 
-/// `CompositeEvaluator`: operator lowercased, only `and`/`or` recognised,
-/// document-order short-circuit. Children skipped by short-circuit are not
-/// evaluated at all (observable through sustained timers).
+/// `and` / `or` short-circuit in document order; a child the short-circuit
+/// skips is not evaluated at all, which its sustained timers show. An absent
+/// or empty list, or an unknown operator, is false.
 fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> bool {
-    // C# checks `condition is null || condition.Conditions.Count == 0` first:
-    // a null list NREs (observed false), an empty list is false.
-    let Some(conditions) = &p.conditions else {
+    let Some(conditions) = p.conditions.as_deref().filter(|c| !c.is_empty()) else {
         return false;
     };
-    if conditions.is_empty() {
-        return false;
-    }
-    let Some(operator) = p.operator.as_deref() else {
-        return false;
-    };
-    match operator.to_lowercase().as_str() {
-        "and" => {
+    match p.operator.value {
+        Some(CompositeOp::And) => {
             for (i, child) in conditions.iter().enumerate() {
                 if !eval_composite_child(child.as_ref(), i, path, env) {
                     return false;
@@ -146,7 +143,7 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> b
             }
             true
         }
-        "or" => {
+        Some(CompositeOp::Or) => {
             for (i, child) in conditions.iter().enumerate() {
                 if eval_composite_child(child.as_ref(), i, path, env) {
                     return true;
@@ -154,7 +151,7 @@ fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> b
             }
             false
         }
-        _ => false,
+        None => false,
     }
 }
 
@@ -162,16 +159,14 @@ fn eval_composite_child(child: Option<&Node>, index: usize, path: &str, env: &mu
     let Some(node) = child else {
         return false;
     };
-    let child_path = child_path(path, index, node.type_str.as_deref());
-    eval_node(Some(node), &child_path, env)
+    eval_node(Some(node), &node_child_path(path, index, Some(node)), env)
 }
 
-/// `NotEvaluator`: missing child → false (not true). Otherwise inverts the
-/// child — so `not` over an unknown child kind yields true. **[normative]**
+/// A missing child is false, not true; otherwise the child inverted, so
+/// `not` over an unknown kind is true.
 fn not(p: &crate::model::NotPayload, path: &str, env: &mut Env) -> bool {
     let Some(child) = &p.child else {
         return false;
     };
-    let child_path = child_path(path, 0, child.type_str.as_deref());
-    !eval_node(Some(child), &child_path, env)
+    !eval_node(Some(child), &node_child_path(path, 0, Some(child)), env)
 }

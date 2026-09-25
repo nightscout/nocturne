@@ -58,9 +58,18 @@ public interface IExcursionTracker
     /// </summary>
     /// <param name="alertRuleId">The <see cref="Nocturne.Core.Models.AlertRule"/> being evaluated.</param>
     /// <param name="conditionMet">Whether the alert condition is currently met.</param>
+    /// <param name="autoResolveMet">
+    /// Evaluates the rule's auto-resolve tree for this evaluation. Called, under the rule's lease,
+    /// only while the rule is idle awaiting re-arm (docs/alerts/engine-semantics.md §6.3);
+    /// <see langword="null"/> for a rule without one, which reads as false.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>An <see cref="ExcursionTransition"/> describing the state change.</returns>
-    Task<ExcursionTransition> ProcessEvaluationAsync(Guid alertRuleId, bool conditionMet, CancellationToken ct);
+    Task<ExcursionTransition> ProcessEvaluationAsync(
+        Guid alertRuleId,
+        bool conditionMet,
+        Func<CancellationToken, Task<bool>>? autoResolveMet,
+        CancellationToken ct);
 
     /// <summary>
     /// Closes any active excursion for the rule out-of-band from the per-reading
@@ -76,6 +85,21 @@ public interface IExcursionTracker
     /// <see cref="ExcursionTransitionType.None"/> if the rule had no active excursion.
     /// </returns>
     Task<ExcursionTransition> ForceCloseAsync(Guid alertRuleId, ExcursionCloseReason reason, CancellationToken ct);
+
+    /// <summary>
+    /// Closes the rule's excursion with reason <see cref="ExcursionCloseReason.Hysteresis"/> when
+    /// it is in hysteresis and <c>HysteresisMinutes</c> have elapsed since it entered, without
+    /// evaluating the condition. The periodic counterpart of the expiry check
+    /// <see cref="ProcessEvaluationAsync"/> makes on a false evaluation, so a window still
+    /// expires when no evaluation arrives.
+    /// </summary>
+    /// <param name="alertRuleId">The rule whose hysteresis window to check.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// <see cref="ExcursionTransitionType.ExcursionClosed"/> when the window had elapsed; otherwise
+    /// <see cref="ExcursionTransitionType.None"/>.
+    /// </returns>
+    Task<ExcursionTransition> CloseElapsedHysteresisAsync(Guid alertRuleId, CancellationToken ct);
 
     /// <summary>
     /// Returns the open excursion id for the rule, or <see langword="null"/>

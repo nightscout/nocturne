@@ -76,7 +76,7 @@ export interface StatusEvent {
 }
 
 export interface TrackerUpdateEvent {
-  action: 'create' | 'update' | 'delete' | 'complete' | 'ack';
+  action: 'create' | 'delete' | 'complete' | 'ack';
   instance: TrackerInstanceDto;
 }
 

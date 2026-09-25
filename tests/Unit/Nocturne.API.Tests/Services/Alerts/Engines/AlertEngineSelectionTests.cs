@@ -8,6 +8,7 @@ using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Repositories;
 using Xunit;
@@ -15,12 +16,15 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Engines;
 
 /// <summary>
-/// The <c>Alerts:Engine</c> flag: default resolves the managed engine; <c>rust</c>/<c>shadow</c>
-/// require the native library and degrade gracefully (logged warning + managed fallback)
-/// when it can't load; unknown values fall back to managed.
+/// The <c>Alerts:Engine</c> flag: default resolves the managed engine; <c>rust</c> refuses to
+/// start without a native library that passes its probe; <c>shadow</c> falls back to managed
+/// with an Error; unknown values refuse to start.
 /// </summary>
 public class AlertEngineSelectionTests
 {
+    private static readonly Func<NativeProbeResult> Present = () => NativeProbeResult.Available;
+    private static readonly Func<NativeProbeResult> Absent = () => NativeProbeResult.Unavailable("not found");
+
     // -----------------------------------------------------------------------
     // Selector unit tests
     // -----------------------------------------------------------------------
@@ -35,7 +39,7 @@ public class AlertEngineSelectionTests
         var logger = new ListLogger<object>();
         var probed = false;
 
-        var selection = AlertEngineSelector.Select(configured, () => { probed = true; return true; }, logger);
+        var selection = AlertEngineSelector.Select(configured, () => { probed = true; return NativeProbeResult.Available; }, logger);
 
         selection.Mode.Should().Be(AlertEngineMode.Managed);
         probed.Should().BeFalse("managed mode must not touch the native library");
@@ -50,54 +54,64 @@ public class AlertEngineSelectionTests
     {
         var logger = new ListLogger<object>();
 
-        var selection = AlertEngineSelector.Select(configured, () => true, logger);
+        var selection = AlertEngineSelector.Select(configured, Present, logger);
 
         selection.Mode.Should().Be(Enum.Parse<AlertEngineMode>(expected));
         logger.Entries.Should().NotContain(e => e.Level == LogLevel.Warning);
     }
 
-    [Theory]
-    [InlineData("rust")]
-    [InlineData("shadow")]
-    public void Rust_and_shadow_fall_back_to_managed_with_a_warning_when_the_native_library_is_absent(string configured)
+    [Fact]
+    public void Rust_refuses_to_start_when_the_native_library_fails_its_probe()
     {
-        var logger = new ListLogger<object>();
+        var act = () => AlertEngineSelector.Select("rust", Absent, new ListLogger<object>());
 
-        var selection = AlertEngineSelector.Select(configured, () => false, logger);
-
-        selection.Mode.Should().Be(AlertEngineMode.Managed);
-        logger.Entries.Should().ContainSingle(e =>
-            e.Level == LogLevel.Warning && e.Message.Contains("falling back to the managed engine"));
+        act.Should().Throw<InvalidOperationException>().WithMessage("*failed its probe: not found*");
     }
 
     [Fact]
-    public void A_throwing_probe_falls_back_to_managed_with_a_warning()
+    public void Rust_refuses_to_start_when_the_probe_throws()
     {
-        var logger = new ListLogger<object>();
+        var act = () => AlertEngineSelector.Select("rust", () => throw new DllNotFoundException("nope"), new ListLogger<object>());
 
-        var selection = AlertEngineSelector.Select("rust", () => throw new DllNotFoundException("nope"), logger);
-
-        selection.Mode.Should().Be(AlertEngineMode.Managed);
-        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Warning && e.Exception is DllNotFoundException);
+        act.Should().Throw<InvalidOperationException>().WithInnerException<DllNotFoundException>();
     }
 
     [Fact]
-    public void Unknown_values_fall_back_to_managed_with_a_warning()
+    public void Shadow_falls_back_to_managed_with_an_error_when_the_native_library_fails_its_probe()
     {
         var logger = new ListLogger<object>();
 
-        var selection = AlertEngineSelector.Select("kotlin", () => true, logger);
+        var selection = AlertEngineSelector.Select("shadow", Absent, logger);
 
         selection.Mode.Should().Be(AlertEngineMode.Managed);
         logger.Entries.Should().ContainSingle(e =>
-            e.Level == LogLevel.Warning && e.Message.Contains("Unknown Alerts:Engine value"));
+            e.Level == LogLevel.Error && e.Message.Contains("shadow comparison is off"));
+    }
+
+    [Fact]
+    public void Shadow_falls_back_to_managed_with_an_error_when_the_probe_throws()
+    {
+        var logger = new ListLogger<object>();
+
+        var selection = AlertEngineSelector.Select("shadow", () => throw new DllNotFoundException("nope"), logger);
+
+        selection.Mode.Should().Be(AlertEngineMode.Managed);
+        logger.Entries.Should().ContainSingle(e => e.Level == LogLevel.Error && e.Exception is DllNotFoundException);
+    }
+
+    [Fact]
+    public void Unknown_values_refuse_to_start()
+    {
+        var act = () => AlertEngineSelector.Select("rsut", Present, new ListLogger<object>());
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Unknown Alerts:Engine value 'rsut'*");
     }
 
     // -----------------------------------------------------------------------
     // DI registration tests
     // -----------------------------------------------------------------------
 
-    private static ServiceProvider BuildProvider(string? engineFlag, Func<bool> nativeProbe)
+    private static ServiceProvider BuildProvider(string? engineFlag, Func<NativeProbeResult> nativeProbe)
     {
         var configValues = new Dictionary<string, string?>();
         if (engineFlag is not null) configValues["Alerts:Engine"] = engineFlag;
@@ -108,7 +122,6 @@ public class AlertEngineSelectionTests
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(Mock.Of<IConditionTimerStore>());
         services.AddSingleton(Mock.Of<IAlertTrackerRepository>());
-        services.AddSingleton(Mock.Of<IExcursionTracker>());
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
@@ -119,7 +132,7 @@ public class AlertEngineSelectionTests
     [Fact]
     public void Default_registration_resolves_the_managed_engine()
     {
-        using var provider = BuildProvider(engineFlag: null, nativeProbe: () => true);
+        using var provider = BuildProvider(engineFlag: null, nativeProbe: Present);
         using var scope = provider.CreateScope();
 
         scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>()
@@ -127,20 +140,19 @@ public class AlertEngineSelectionTests
     }
 
     [Fact]
-    public void Rust_flag_without_the_native_library_falls_back_to_the_managed_engine()
+    public void Rust_flag_without_the_native_library_fails_to_resolve_the_selection()
     {
-        using var provider = BuildProvider("rust", nativeProbe: () => false);
-        using var scope = provider.CreateScope();
+        using var provider = BuildProvider("rust", nativeProbe: Absent);
 
-        scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>()
-            .Should().BeOfType<ManagedAlertEngine>();
-        provider.GetRequiredService<AlertEngineSelection>().Mode.Should().Be(AlertEngineMode.Managed);
+        var act = () => provider.GetRequiredService<AlertEngineSelection>();
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]
     public void Rust_flag_with_the_native_library_resolves_the_rust_engine()
     {
-        using var provider = BuildProvider("rust", nativeProbe: () => true);
+        using var provider = BuildProvider("rust", nativeProbe: Present);
         using var scope = provider.CreateScope();
 
         scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>()
@@ -150,10 +162,24 @@ public class AlertEngineSelectionTests
     [Fact]
     public void Shadow_flag_with_the_native_library_resolves_the_shadow_engine()
     {
-        using var provider = BuildProvider("shadow", nativeProbe: () => true);
+        using var provider = BuildProvider("shadow", nativeProbe: Present);
         using var scope = provider.CreateScope();
 
         scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>()
             .Should().BeOfType<ShadowAlertEngine>();
+    }
+
+    [Theory]
+    [InlineData(null, typeof(ManagedExcursionDecider))]
+    [InlineData("rust", typeof(RustExcursionDecider))]
+    [InlineData("shadow", typeof(ShadowExcursionDecider))]
+    public void The_excursion_tracker_decides_with_the_selected_engine(string? engineFlag, Type decider)
+    {
+        using var provider = BuildProvider(engineFlag, nativeProbe: Present);
+        using var scope = provider.CreateScope();
+
+        scope.ServiceProvider.GetRequiredService<IExcursionTracker>()
+            .Should().BeOfType<ExcursionTracker>()
+            .Which.Decider.Should().BeOfType(decider);
     }
 }

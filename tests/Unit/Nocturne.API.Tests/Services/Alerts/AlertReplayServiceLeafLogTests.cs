@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -87,7 +88,7 @@ public class AlertReplayServiceLeafLogTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(new AlertEvaluationOptions()),
-            NullLogger<AlertReplayService>.Instance);
+            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
     }
 
     private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value) =>

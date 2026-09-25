@@ -17,6 +17,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Version>0.1.0</Version>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- The self-contained WindowsAppSDK unzips its runtime MSIX under obj, and past MAX_PATH
+         MSBuild reports those files as missing (MSB3030). The TFM segment is the one this
+         single-target project can drop. -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <!-- Publish configuration -->

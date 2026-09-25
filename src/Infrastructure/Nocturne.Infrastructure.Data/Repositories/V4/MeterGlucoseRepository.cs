@@ -29,7 +29,7 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 
