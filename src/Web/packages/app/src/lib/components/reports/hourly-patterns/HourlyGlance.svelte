@@ -69,9 +69,10 @@
     {#if comparison === HourlyComparison.CloseTogether}
       The compared hours were all within {spread} percentage points of each other in time
       in range, too close to call any of them better or worse.
+    {:else if direction === "above"}
+      No hour stood out on its own above the rest. The hours at that end tied with one another.
     {:else}
-      No hour stood out on its own {direction} the rest. The hours at that end either tied
-      with others or were within {spread} percentage points of them.
+      No hour stood out on its own below the rest. The hours at that end tied with one another.
     {/if}
   </p>
 {/snippet}
