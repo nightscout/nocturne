@@ -486,7 +486,6 @@
               {@render sortableHeader("type", "Type")}
               {@render sortableHeader("carbs", "Carbs", true)}
               {@render sortableHeader("insulin", "Insulin", true)}
-              <Table.Head>Notes</Table.Head>
               <Table.Head class="w-[50px] print:hidden"></Table.Head>
             </Table.Row>
           </Table.Header>
@@ -522,12 +521,6 @@
                   {:else}
                     —
                   {/if}
-                </Table.Cell>
-                <Table.Cell
-                  variant="muted"
-                  class="truncate max-w-[200px]"
-                >
-                  —
                 </Table.Cell>
                 <Table.Cell class="print:hidden">
                   <Button variant="ghost" size="icon-sm">
