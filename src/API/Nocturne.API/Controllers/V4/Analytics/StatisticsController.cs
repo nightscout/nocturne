@@ -278,20 +278,22 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
-    /// Calculate averaged statistics for each hour of the day (0-23)
+    /// Calculate averaged statistics for each hour of the day (0-23), on the tenant's local clock
     /// </summary>
     /// <param name="entries">Array of sensor glucose readings</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
-        [FromBody] SensorGlucose[] entries
+    public async Task<ActionResult<IEnumerable<AveragedStats>>> CalculateAveragedStats(
+        [FromBody] SensorGlucose[] entries,
+        CancellationToken cancellationToken = default
     )
     {
-        var result = _statisticsService.CalculateAveragedStats(entries);
-        return Ok(result);
+        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+        return Ok(_statisticsService.CalculateAveragedStats(entries, tz));
     }
 
     /// <summary>
@@ -462,10 +464,12 @@ public class StatisticsController : ControllerBase
             });
         }
 
+        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+
         var result = new ReportAnalysisResult
         {
             Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
-            AveragedStats = _statisticsService.CalculateAveragedStats(entries).ToList(),
+            AveragedStats = _statisticsService.CalculateAveragedStats(entries, tz).ToList(),
             ContributingDevices = contributingDevices,
             PersonalRange = await CalculatePersonalRangeAsync(entries, cancellationToken),
         };
@@ -497,11 +501,13 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
+        var tz = await GetTenantTimeZoneAsync(cancellationToken);
 
         return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
     }
+
+    private async Task<TimeZoneInfo> GetTenantTimeZoneAsync(CancellationToken ct) =>
+        TimeZoneHelper.GetTimeZoneInfoFromId(await _therapySettingsResolver.GetTimezoneAsync(ct: ct));
 
     /// <summary>
     /// Returns the target range schedule active for the tenant's active profile right now, or null

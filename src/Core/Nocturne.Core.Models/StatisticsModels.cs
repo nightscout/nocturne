@@ -298,37 +298,39 @@ public class TimeInRangePercentages
 }
 
 /// <summary>
-/// Extended time in range percentages with 7 glucose ranges for hourly distribution
+/// Time in each consensus glucose band for one hour of the day. The bands partition the hour's
+/// readings on the <see cref="GlycemicThresholds"/> defaults, not a tenant's own targets, and
+/// split the target range at the tight-target top so the six can be stacked.
 /// </summary>
 public class ExtendedTimeInRangePercentages
 {
     /// <summary>
-    /// Percentage of time in very low range (less than 54 mg/dL)
+    /// Percentage of readings below 54 mg/dL
     /// </summary>
     public double VeryLow { get; set; }
 
     /// <summary>
-    /// Percentage of time in low range (54-63 mg/dL)
+    /// Percentage of readings from 54 to below 70 mg/dL
     /// </summary>
     public double Low { get; set; }
 
     /// <summary>
-    /// Percentage of time in normoglycemic range (63-140 mg/dL)
+    /// Percentage of readings from 70 to 140 mg/dL inclusive (the tight target range)
     /// </summary>
-    public double Normal { get; set; }
+    public double TightTarget { get; set; }
 
     /// <summary>
-    /// Percentage of time above target but not high (140-180 mg/dL)
+    /// Percentage of readings above 140 and up to 180 mg/dL: in range, above the tight target
     /// </summary>
-    public double AboveTarget { get; set; }
+    public double AboveTightTarget { get; set; }
 
     /// <summary>
-    /// Percentage of time in high range (180-200 mg/dL)
+    /// Percentage of readings above 180 and up to 250 mg/dL
     /// </summary>
     public double High { get; set; }
 
     /// <summary>
-    /// Percentage of time in very high range (200+ mg/dL)
+    /// Percentage of readings above 250 mg/dL
     /// </summary>
     public double VeryHigh { get; set; }
 }
@@ -908,7 +910,12 @@ public class AveragedStats : BasicGlucoseStats
     public int Hour { get; set; }
 
     /// <summary>
-    /// Extended time in range percentages with 7 glucose ranges for this hour
+    /// Number of distinct local days with at least one reading in this hour
+    /// </summary>
+    public int DayCount { get; set; }
+
+    /// <summary>
+    /// Time in each consensus band for this hour
     /// </summary>
     public ExtendedTimeInRangePercentages TimeInRange { get; set; } = new();
 }

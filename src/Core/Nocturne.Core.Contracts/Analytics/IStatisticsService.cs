@@ -210,11 +210,16 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// Calculate averaged statistics bucketed by time of day from <see cref="SensorGlucose"/> entries.
+    /// Averaged statistics for each hour of the day, bucketed on the tenant's local clock rather
+    /// than on each reading's own recorded offset.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <returns>Time-of-day averaged statistics for AGP-style charts.</returns>
-    IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries);
+    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <returns>All 24 hours in order, midnight first.</returns>
+    IEnumerable<AveragedStats> CalculateAveragedStats(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    );
 
     /// <summary>
     /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's

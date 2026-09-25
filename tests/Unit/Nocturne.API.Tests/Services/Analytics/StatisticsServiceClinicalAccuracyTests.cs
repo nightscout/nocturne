@@ -1097,7 +1097,7 @@ public class StatisticsServiceClinicalAccuracyTests
             Timestamp = baseTime.AddMinutes(i * 30).UtcDateTime, // 2 readings per hour
         });
 
-        var result = _sut.CalculateAveragedStats(entries).ToList();
+        var result = _sut.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
 
         result.Should().HaveCount(24);
         result.Select(r => r.Hour).Should().BeEquivalentTo(Enumerable.Range(0, 24));
@@ -1114,7 +1114,7 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 140, Timestamp = baseTime.AddHours(8).AddMinutes(30).UtcDateTime },
         };
 
-        var result = _sut.CalculateAveragedStats(entries).ToList();
+        var result = _sut.CalculateAveragedStats(entries, TimeZoneInfo.Utc).ToList();
 
         var hour8 = result.First(r => r.Hour == 8);
         hour8.Count.Should().Be(3);

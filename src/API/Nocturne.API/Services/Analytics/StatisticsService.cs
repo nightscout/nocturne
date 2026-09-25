@@ -1194,26 +1194,31 @@ public class StatisticsService : IStatisticsService
         );
 
     /// <summary>
-    /// The hourly zone set, which splits the target band at 63 and 140 and hyperglycaemia at 200
-    /// rather than following the tenant's thresholds.
+    /// The per-hour consensus bands: the default <see cref="GlycemicThresholds"/>, never a tenant's,
+    /// with each edge on the side <see cref="CalculateTimeInRange"/> puts it (the target and
+    /// tight-target bands closed), and the target band split at the tight-target top so the six
+    /// partition the hour.
     /// </summary>
-    private enum ExtendedZone
+    private enum HourlyBand
     {
         VeryLow,
         Low,
-        Normal,
-        AboveTarget,
+        TightTarget,
+        AboveTightTarget,
         High,
         VeryHigh,
     }
 
-    private static readonly GlucoseZoneScale ExtendedZones = new(
-        GlucoseZoneBound.Under(GlucoseConstants.VeryLowMgdl),
-        GlucoseZoneBound.Under(63),
-        GlucoseZoneBound.Under(140),
-        GlucoseZoneBound.Under(GlucoseConstants.TargetTopMgdl),
-        GlucoseZoneBound.Under(200)
-    );
+    private static readonly GlucoseZoneScale HourlyBands = HourlyBandScale(new GlycemicThresholds());
+
+    private static GlucoseZoneScale HourlyBandScale(GlycemicThresholds consensus) =>
+        new(
+            GlucoseZoneBound.Under(consensus.VeryLow),
+            GlucoseZoneBound.Under(consensus.Low),
+            GlucoseZoneBound.UpTo(consensus.TightTargetTop),
+            GlucoseZoneBound.UpTo(consensus.TargetTop),
+            GlucoseZoneBound.UpTo(consensus.VeryHigh)
+        );
 
     /// <summary>
     /// Calculate time in range metrics
@@ -1641,83 +1646,82 @@ public class StatisticsService : IStatisticsService
         return CalculateEstimatedA1C(CalculateMean(valuesList)).ToString("F1");
     }
 
-    /// <summary>
-    /// Calculate averaged statistics for each hour of the day (0-23)
-    /// Groups glucose readings by hour across multiple days and calculates BasicGlucoseStats for each hour
-    /// </summary>
-    /// <param name="entries">Collection of glucose entries</param>
-    /// <returns>Collection of averaged statistics for each hour</returns>
-    public IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries)
+    /// <inheritdoc/>
+    public IEnumerable<AveragedStats> CalculateAveragedStats(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    )
     {
-        var entriesList = entries.ToList();
-
-        // Group entries by hour of day
-        var hourlyGroups = new Dictionary<int, List<SensorGlucose>>();
-
-        // Initialize all 24 hours
-        for (int hour = 0; hour < 24; hour++)
-        {
-            hourlyGroups[hour] = new List<SensorGlucose>(entriesList.Count / 24 + 1);
-        }
-
-        // Group entries by hour (only if we have entries)
-        if (entriesList.Any())
-        {
-            foreach (var entry in entriesList)
-            {
-                if (entry.Mills <= 0)
-                {
-                    continue; // Skip entries without valid timestamps
-                }
-
-                var dateTimeOffset = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
-                if (entry.UtcOffset.HasValue)
-                {
-                    dateTimeOffset = dateTimeOffset.ToOffset(
-                        TimeSpan.FromMinutes(entry.UtcOffset.Value)
-                    );
-                }
-
-                var hour = dateTimeOffset.Hour;
-                if (hour >= 0 && hour < 24)
-                {
-                    hourlyGroups[hour].Add(entry);
-                }
-            }
-        }
-
-        // Calculate statistics for each hour
-        var averagedStats = new List<AveragedStats>();
-
-        for (int hourIndex = 0; hourIndex < 24; hourIndex++)
-        {
-            var hourEntries = hourlyGroups[hourIndex];
-
-            // Extract glucose values and calculate basic stats
-            var glucoseValues = ExtractGlucoseValues(hourEntries).ToList();
-            var basicStats = CalculateBasicStats(glucoseValues);
-
-            // Calculate extended 7-range time in range percentages for this hour
-            var extendedTir = CalculateExtendedTimeInRange(glucoseValues);
-
-            var hourlyStats = new AveragedStats
-            {
-                Hour = hourIndex,
-                Count = basicStats.Count,
-                Mean = basicStats.Mean,
-                Median = basicStats.Median,
-                Min = basicStats.Min,
-                Max = basicStats.Max,
-                StandardDeviation = basicStats.StandardDeviation,
-                Percentiles = basicStats.Percentiles,
-                TimeInRange = extendedTir,
-            };
-
-            averagedStats.Add(hourlyStats);
-        }
-
-        return averagedStats;
+        var byHour = GroupByLocalHour(entries, tenantTimeZone);
+        return Enumerable.Range(0, 24).Select(hour => HourStats<AveragedStats>(hour, byHour[hour], out _)).ToList();
     }
+
+    private readonly record struct LocalReading(double Mgdl, DateOnly Day);
+
+    /// <summary>
+    /// Plausible readings grouped by hour of the tenant's local clock. A reading's own
+    /// <c>UtcOffset</c> is ignored: it records the uploader's offset, which
+    /// differs between devices and would split one local hour across several buckets.
+    /// </summary>
+    private static List<LocalReading>[] GroupByLocalHour(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone
+    )
+    {
+        var byHour = new List<LocalReading>[24];
+        for (var hour = 0; hour < 24; hour++)
+            byHour[hour] = [];
+
+        foreach (var entry in entries)
+        {
+            if (entry.Mills <= 0 || !IsPlausibleReading(entry))
+                continue;
+
+            var local = TimeZoneInfo.ConvertTime(
+                DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills),
+                tenantTimeZone
+            );
+            byHour[local.Hour].Add(new LocalReading(entry.Mgdl, DateOnly.FromDateTime(local.DateTime)));
+        }
+
+        return byHour;
+    }
+
+    private T HourStats<T>(int hour, List<LocalReading> readings, out int[] bandCounts)
+        where T : AveragedStats, new()
+    {
+        var values = readings.Select(r => r.Mgdl).ToList();
+        var basicStats = CalculateBasicStats(values);
+        bandCounts = HourlyBands.Count(values);
+        var counts = bandCounts;
+
+        double Percent(HourlyBand band) => RoundedPercent(counts[(int)band], values.Count);
+
+        return new T
+        {
+            Hour = hour,
+            Count = basicStats.Count,
+            DayCount = readings.Select(r => r.Day).Distinct().Count(),
+            Mean = basicStats.Mean,
+            Median = basicStats.Median,
+            Min = basicStats.Min,
+            Max = basicStats.Max,
+            StandardDeviation = basicStats.StandardDeviation,
+            Percentiles = basicStats.Percentiles,
+            TimeInRange = new ExtendedTimeInRangePercentages
+            {
+                VeryLow = Percent(HourlyBand.VeryLow),
+                Low = Percent(HourlyBand.Low),
+                TightTarget = Percent(HourlyBand.TightTarget),
+                AboveTightTarget = Percent(HourlyBand.AboveTightTarget),
+                High = Percent(HourlyBand.High),
+                VeryHigh = Percent(HourlyBand.VeryHigh),
+            },
+        };
+    }
+
+    private static double RoundedPercent(int count, int total) =>
+        total == 0 ? 0 : Math.Round((double)count / total * 100, 1);
 
     /// <inheritdoc/>
     public IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
@@ -1755,35 +1759,6 @@ public class StatisticsService : IStatisticsService
                 Mean = slot.Value.ToDictionary(w => w.Key, w => w.Value.Sum / w.Value.Count),
             })
             .ToList();
-    }
-
-    /// <summary>
-    /// Calculate extended time in range percentages over the hourly zone set
-    /// Ranges: &lt;54, 54-63, 63-140, 140-180, 180-200, &gt;=200
-    /// </summary>
-    /// <param name="glucoseValues">Collection of glucose values in mg/dL</param>
-    /// <returns>Extended time in range percentages</returns>
-    private ExtendedTimeInRangePercentages CalculateExtendedTimeInRange(IList<double> glucoseValues)
-    {
-        if (glucoseValues.Count == 0)
-        {
-            return new ExtendedTimeInRangePercentages();
-        }
-
-        var total = glucoseValues.Count;
-        var counts = ExtendedZones.Count(glucoseValues);
-
-        double Percent(ExtendedZone zone) => Math.Round((double)counts[(int)zone] / total * 100, 1);
-
-        return new ExtendedTimeInRangePercentages
-        {
-            VeryLow = Percent(ExtendedZone.VeryLow),
-            Low = Percent(ExtendedZone.Low),
-            Normal = Percent(ExtendedZone.Normal),
-            AboveTarget = Percent(ExtendedZone.AboveTarget),
-            High = Percent(ExtendedZone.High),
-            VeryHigh = Percent(ExtendedZone.VeryHigh),
-        };
     }
 
     #endregion

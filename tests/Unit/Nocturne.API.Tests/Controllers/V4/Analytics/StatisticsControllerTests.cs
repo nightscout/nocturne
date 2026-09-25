@@ -159,7 +159,7 @@ public class StatisticsControllerTests
                 (entries, _, _, _, _) => analysedEntries = entries.ToList())
             .Returns(analysis);
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(averaged);
 
         var controller = CreateController();
@@ -199,7 +199,7 @@ public class StatisticsControllerTests
                 It.IsAny<ExtendedAnalysisConfig?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(new List<AveragedStats>());
 
         var controller = CreateController();
@@ -227,7 +227,7 @@ public class StatisticsControllerTests
                 It.IsAny<ExtendedAnalysisConfig?>()))
             .Returns(new ExtendedGlucoseAnalytics());
         _statsServiceMock
-            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>()))
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
             .Returns(new List<AveragedStats>());
     }
 
@@ -354,6 +354,48 @@ public class StatisticsControllerTests
             new DateTime(2026, 1, 8, 0, 0, 0, DateTimeKind.Utc));
 
         usedTz.Should().Be(TimeZoneInfo.Utc);
+    }
+
+    [Fact]
+    public async Task GetRangeAnalytics_BucketsTheHourlyStatsOnTheTherapyTimezone()
+    {
+        SetupGlucose(new List<SensorGlucose>());
+        SetupEmptyTreatments();
+        SetupAnalysis();
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Europe/Stockholm");
+        TimeZoneInfo? usedTz = null;
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo>((_, tz) => usedTz = tz)
+            .Returns(new List<AveragedStats>());
+
+        await CreateController().GetRangeAnalytics(
+            new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Europe/Stockholm"));
+    }
+
+    [Fact]
+    public async Task CalculateAveragedStats_BucketsThePostedReadingsOnTheTherapyTimezone()
+    {
+        var posted = new[] { new SensorGlucose { Mgdl = 100 } };
+        _therapySettingsResolverMock
+            .Setup(r => r.GetTimezoneAsync(null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Australia/Sydney");
+        TimeZoneInfo? usedTz = null;
+        var averaged = new List<AveragedStats> { new() { Hour = 3 } };
+        _statsServiceMock
+            .Setup(s => s.CalculateAveragedStats(posted, It.IsAny<TimeZoneInfo>()))
+            .Callback<IEnumerable<SensorGlucose>, TimeZoneInfo>((_, tz) => usedTz = tz)
+            .Returns(averaged);
+
+        var result = await CreateController().CalculateAveragedStats(posted);
+
+        result.Result.Should().BeOfType<OkObjectResult>().Subject.Value.Should().BeSameAs(averaged);
+        usedTz.Should().Be(TimeZoneHelper.GetTimeZoneInfoFromId("Australia/Sydney"));
     }
 
     [Fact]

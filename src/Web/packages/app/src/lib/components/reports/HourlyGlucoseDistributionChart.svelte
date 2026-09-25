@@ -1,15 +1,10 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import { timeFormat } from "$lib/stores/appearance-store.svelte";
-  import { bg } from "$lib/utils/formatting";
   import { BarChart2 } from "lucide-svelte";
   import type { AveragedStats } from "$lib/api";
-  import {
-    CHART_TEXTURES,
-    patternClass,
-    type GlucoseRange,
-  } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { hourlyBandSeries } from "./hourly-bands";
 
   interface Props {
     averagedStats?: AveragedStats[];
@@ -19,8 +14,8 @@
     hour: number;
     veryLow: number;
     low: number;
-    normal: number;
-    aboveTarget: number;
+    tightTarget: number;
+    aboveTightTarget: number;
     high: number;
     veryHigh: number;
     count: number;
@@ -33,8 +28,8 @@
       hour: s.hour ?? 0,
       veryLow: s.timeInRange?.veryLow ?? 0,
       low: s.timeInRange?.low ?? 0,
-      normal: s.timeInRange?.normal ?? 0,
-      aboveTarget: s.timeInRange?.aboveTarget ?? 0,
+      tightTarget: s.timeInRange?.tightTarget ?? 0,
+      aboveTightTarget: s.timeInRange?.aboveTightTarget ?? 0,
       high: s.timeInRange?.high ?? 0,
       veryHigh: s.timeInRange?.veryHigh ?? 0,
       count: s.count ?? 0,
@@ -52,22 +47,7 @@
     return `${hour - 12}PM`;
   }
 
-  const band = (key: string, label: string, texture: GlucoseRange) => ({
-    key,
-    label,
-    texture,
-    color: CHART_TEXTURES[texture].color,
-    props: { class: patternClass(texture) },
-  });
-
-  const chartSeries = $derived([
-    band("veryLow", `<${bg(54)}`, "very-low"),
-    band("low", `${bg(54)}-${bg(63)}`, "low"),
-    band("normal", `${bg(63)}-${bg(140)}`, "tight-range"),
-    band("aboveTarget", `${bg(140)}-${bg(180)}`, "in-range"),
-    band("high", `${bg(180)}-${bg(200)}`, "high"),
-    band("veryHigh", `>${bg(200)}`, "very-high"),
-  ]);
+  const chartSeries = $derived(hourlyBandSeries());
 
   // Derived chart data
   const chartData = $derived(
