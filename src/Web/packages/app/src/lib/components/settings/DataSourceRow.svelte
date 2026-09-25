@@ -14,7 +14,11 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import type { SyncProgressEvent } from "$lib/websocket/types";
-  import { formatNumber, formatNumericDate, lastSeen as formatAge } from "$lib/utils/formatting";
+  import {
+    formatNumber,
+    formatNumericDate,
+    lastSeen as formatAge,
+  } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
     | "active"
@@ -126,7 +130,6 @@
     }
   }
 
-
   function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Never";
     const d = new Date(date);
@@ -141,8 +144,7 @@
       return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
     if (diffHours < 24)
       return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
-    if (diffDays < 7)
-      return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
 
     return formatNumericDate(d);
   }
@@ -150,6 +152,40 @@
   const iconColors = $derived(getIconColors(status));
   const itemVariant = $derived(getItemVariant(status));
 </script>
+
+<!-- The row is the button, so the breakdown triggers are hover-only spans; the details dialog it opens lists the same breakdown. -->
+{#snippet breakdownTerm(
+  label: string,
+  heading: string,
+  breakdown: Record<string, number>
+)}
+  <Tooltip.Root>
+    <Tooltip.Trigger variant="term">
+      {#snippet child({
+        props: { tabindex: _tabindex, ...props },
+      }: {
+        props: Record<string, unknown>;
+      })}
+        <span {...props}>{label}</span>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content variant="popover" class="z-50 overflow-hidden">
+      <div class="space-y-1">
+        <div class="font-medium text-xs text-muted-foreground mb-1">
+          {heading}
+        </div>
+        {#each Object.entries(breakdown) as [type, count] (type)}
+          <div class="flex justify-between gap-4 text-xs">
+            <span>{getDataTypeLabel(type)}</span>
+            <span class="font-mono">
+              {formatNumber(count)}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </Tooltip.Content>
+  </Tooltip.Root>
+{/snippet}
 
 <div class="relative">
   <Item variant={itemVariant} size="lg" class="justify-between" {onclick}>
@@ -231,77 +267,42 @@
         </div>
 
         <!-- Metrics line -->
-        {#if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
-        <p class="text-sm text-info">
-          {formatSyncMessage(syncProgress.messageType, syncProgress.messageParams)}
-        </p>
+        {#if syncProgress?.phase === "Syncing" && syncProgress.messageType}
+          <p class="text-sm text-info">
+            {formatSyncMessage(
+              syncProgress.messageType,
+              syncProgress.messageParams
+            )}
+          </p>
         {:else}
-        <p class="text-sm text-muted-foreground">
-          {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
-            <Tooltip.Root>
-              <Tooltip.Trigger variant="term">
-                {formatNumber(totalEntries)} records
-              </Tooltip.Trigger>
-              <Tooltip.Content
-                variant="popover"
-                class="z-50 overflow-hidden"
-              >
-                <div class="space-y-1">
-                  <div class="font-medium text-xs text-muted-foreground mb-1">
-                    Breakdown by type:
-                  </div>
-                  {#each Object.entries(totalBreakdown) as [type, count] (type)}
-                    <div class="flex justify-between gap-4 text-xs">
-                      <span>{getDataTypeLabel(type)}</span>
-                      <span class="font-mono">
-                        {formatNumber(count)}
-                      </span>
-                    </div>
-                  {/each}
-                </div>
-              </Tooltip.Content>
-            </Tooltip.Root>
-          {:else}
-            {formatNumber(totalEntries)} records
-          {/if}
-
-          {#if (entriesLast24h ?? 0) > 0}
-            <span class="mx-1">&middot;</span>
-            {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
-              <Tooltip.Root>
-                <Tooltip.Trigger variant="term">
-                  {formatNumber(entriesLast24h)} in 24h
-                </Tooltip.Trigger>
-                <Tooltip.Content
-                  variant="popover"
-                  class="z-50 overflow-hidden"
-                >
-                  <div class="space-y-1">
-                    <div
-                      class="font-medium text-xs text-muted-foreground mb-1"
-                    >
-                      Last 24h by type:
-                    </div>
-                    {#each Object.entries(last24hBreakdown) as [type, count] (type)}
-                      <div class="flex justify-between gap-4 text-xs">
-                        <span>{getDataTypeLabel(type)}</span>
-                        <span class="font-mono">
-                          {formatNumber(count)}
-                        </span>
-                      </div>
-                    {/each}
-                  </div>
-                </Tooltip.Content>
-              </Tooltip.Root>
+          <p class="text-sm text-muted-foreground">
+            {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
+              {@render breakdownTerm(
+                `${formatNumber(totalEntries)} records`,
+                "Breakdown by type:",
+                totalBreakdown
+              )}
             {:else}
-              {formatNumber(entriesLast24h)} in 24h
+              {formatNumber(totalEntries)} records
             {/if}
-          {/if}
 
-          <span class="mx-1">&middot;</span>
-          <Clock class="inline h-3 w-3" />
-          {formatAge(lastSuccessfulSync ?? lastSeen)}
-        </p>
+            {#if (entriesLast24h ?? 0) > 0}
+              <span class="mx-1">&middot;</span>
+              {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
+                {@render breakdownTerm(
+                  `${formatNumber(entriesLast24h)} in 24h`,
+                  "Last 24h by type:",
+                  last24hBreakdown
+                )}
+              {:else}
+                {formatNumber(entriesLast24h)} in 24h
+              {/if}
+            {/if}
+
+            <span class="mx-1">&middot;</span>
+            <Clock class="inline h-3 w-3" />
+            {formatAge(lastSuccessfulSync ?? lastSeen)}
+          </p>
         {/if}
 
         <!-- Error detail -->
@@ -310,19 +311,13 @@
             class="mt-2 rounded-md bg-destructive/10 p-2 border border-destructive/30"
           >
             <div class="flex items-start gap-2">
-              <AlertCircle
-                class="h-4 w-4 text-destructive shrink-0 mt-0.5"
-              />
+              <AlertCircle class="h-4 w-4 text-destructive shrink-0 mt-0.5" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-destructive">
-                  Error
-                </p>
+                <p class="text-sm font-medium text-destructive">Error</p>
                 <p class="text-xs text-destructive mt-1">
                   {statusMessage}
                 </p>
-                <p
-                  class="text-xs text-destructive/80 mt-1"
-                >
+                <p class="text-xs text-destructive/80 mt-1">
                   {#if lastSyncAttempt}
                     Last attempted: {formatRelativeTime(lastSyncAttempt)}
                   {/if}

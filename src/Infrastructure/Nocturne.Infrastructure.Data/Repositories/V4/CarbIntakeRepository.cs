@@ -25,7 +25,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<CarbIntakeRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CarbIntakeRepository"/> class.
@@ -40,10 +39,9 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
         IV4RecordBroadcaster<CarbIntake>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -182,7 +180,7 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
         }
     }
 }

@@ -60,7 +60,8 @@
           "tracker": {
             "state": "hysteresis",
             "confirmation_count": 0,
-            "excursion": 1
+            "excursion": 1,
+            "hysteresis_started_at": "2026-10-25T02:30:00Z"
           }
         }
       ]

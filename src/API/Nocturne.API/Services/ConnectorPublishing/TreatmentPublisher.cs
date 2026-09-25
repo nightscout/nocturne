@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -51,8 +52,9 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         ITherapySettingsResolver therapySettingsResolver,
         IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
+        PublishSkipTally skips,
         ILogger<TreatmentPublisher> logger)
-        : base(auditContext, logger)
+        : base(auditContext, skips, logger)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _treatmentService = treatmentService ?? throw new ArgumentNullException(nameof(treatmentService));
@@ -77,7 +79,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     {
         try
         {
-            await _treatmentService.CreateTreatmentsAsync(treatments, cancellationToken);
+            var written = await _treatmentService.CreateTreatmentsAsync(treatments, cancellationToken);
+            RecordSkippedDeleted(written.SkippedDeleted);
             return true;
         }
         catch (OperationCanceledException) { throw; }

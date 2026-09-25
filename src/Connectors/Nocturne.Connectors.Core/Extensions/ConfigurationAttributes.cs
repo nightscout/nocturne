@@ -18,11 +18,11 @@ public class SecretAttribute : Attribute
 [AttributeUsage(AttributeTargets.Property)]
 public class ConfigSchemaAttribute : Attribute
 {
-    private const int NotSet = int.MinValue;
-
     /// <summary>
     ///     Sentinel value indicating "not set" for numeric constraints.
     /// </summary>
+    private const int NotSet = int.MinValue;
+
     /// <summary>
     ///     Minimum value for numeric properties. Use NotSet (-2147483648) if not applicable.
     /// </summary>

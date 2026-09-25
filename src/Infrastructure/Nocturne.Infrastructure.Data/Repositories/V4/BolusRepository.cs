@@ -24,7 +24,6 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<BolusRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusRepository"/> class.
@@ -39,10 +38,9 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         IAuditContext auditContext,
         ILogger<BolusRepository> logger,
         IV4RecordBroadcaster<Bolus>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -185,7 +183,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
         }
     }
 

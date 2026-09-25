@@ -54,6 +54,9 @@ public class AlertSweepServiceSnoozeTests
         _canonical
             .Setup(c => c.GetRecentAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => _readings.OrderByDescending(r => r.Timestamp).ToList());
+        _canonical
+            .Setup(c => c.GetLatestAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _readings.MaxBy(r => r.Timestamp));
     }
 
     private static SnoozedInstanceSnapshot Instance(
@@ -103,7 +106,9 @@ public class AlertSweepServiceSnoozeTests
         services.AddSingleton(_canonical.Object);
         services.AddSingleton(enricher.Object);
         services.AddSingleton(Mock.Of<IConditionTimerStore>());
-        services.AddSingleton(Mock.Of<IExcursionTracker>());
+        services.AddSingleton(Mock.Of<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>());
+        services.AddSingleton<AlertRuleEvaluationGate>();
+        services.AddScoped<ExcursionTracker>();
         services.AddScoped<ITenantAccessor>(_ => Mock.Of<ITenantAccessor>());
         services.AddScoped<IAuditContext, AuditContext>();
         services.AddScoped(_ => new NocturneDbContext(
@@ -113,6 +118,7 @@ public class AlertSweepServiceSnoozeTests
                 .Options));
         services.AddAlertEvaluators();
         services.AddScoped<ConditionEvaluatorRegistry>();
+        services.AddSingleton<ConditionVersionLog>();
         services.AddScoped<IAlertEvaluationEngine, ManagedAlertEngine>();
 
         await using var provider = services.BuildServiceProvider();
@@ -177,6 +183,17 @@ public class AlertSweepServiceSnoozeTests
         var low = Instance(SmartOn);
         await SweepAsync(low);
         ShouldBeCleared(low);
+    }
+
+    [Fact]
+    public async Task HighSnooze_ASensorErrorReading_IsNotAFall()
+    {
+        FiveMinuteReadings(200, 200, 0);
+        var instance = Instance(SmartOn, conditionParams: HighRule);
+
+        await SweepAsync(instance);
+
+        ShouldBeCleared(instance);
     }
 
     [Fact]
@@ -347,6 +364,35 @@ public class AlertSweepServiceSnoozeTests
         await SweepAsync(instance);
 
         ShouldBeCleared(instance);
+    }
+
+    [Fact]
+    public async Task SignalLossCondition_CountsErrorReadingsAsNoSignal()
+    {
+        _readings = [Reading(1, 0), Reading(6, 0), Reading(12, 90)];
+        var instance = Instance("""
+            {"snooze":{"smartSnooze":true,"conditions":[
+              {"type":"signal_loss","signal_loss":{"timeout_minutes":10}}]}}
+            """);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
+        var context = _enricherInputs.Should().ContainSingle().Subject;
+        context.LastReadingAt.Should().Be(Now.AddMinutes(-12));
+        context.LatestValue.Should().BeNull("the last usable reading is older than a snooze reads glucose from");
+    }
+
+    [Fact]
+    public async Task ThresholdCondition_ReadsTheLastUsableValue_NotAnErrorReading()
+    {
+        _readings = [Reading(1, 0), Reading(4, 72)];
+        var instance = Instance(ExtendWhileAbove65);
+
+        await SweepAsync(instance);
+
+        ShouldBeExtended(instance);
+        _enricherInputs.Should().ContainSingle().Which.LatestValue.Should().Be(72m);
     }
 
     // ---- robustness ----

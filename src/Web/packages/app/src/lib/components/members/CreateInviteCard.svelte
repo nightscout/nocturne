@@ -18,7 +18,7 @@
   import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { describeSubmitError } from "$lib/forms";
 
   interface Props {
@@ -55,7 +55,7 @@
   let limitTo24Hours = $state(false);
   let createdInviteUrl = $state<string | null>(null);
   let createdByName = $state<string | undefined>(undefined);
-  let copiedInvite = $state(false);
+  const copy = createCopyFeedback();
   let isCreatingInvite = $state(false);
   let errorMessage = $state<string | null>(null);
 
@@ -69,13 +69,9 @@
 
   async function copyInviteUrl() {
     if (createdInviteUrl) {
-      if (!(await copyToClipboard(createdInviteUrl))) {
-        errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
-        return;
+      if (await copy.copy(createdInviteUrl)) {
+        errorMessage = null;
       }
-      errorMessage = null;
-      copiedInvite = true;
-      setTimeout(() => (copiedInvite = false), 2000);
     }
   }
 
@@ -166,7 +162,7 @@
             class="font-mono"
           />
           <Button variant="outline" size="icon" onclick={copyInviteUrl}>
-            {#if copiedInvite}
+            {#if copy.isCopied()}
               <Check class="h-4 w-4 text-success" />
             {:else}
               <Copy class="h-4 w-4" />

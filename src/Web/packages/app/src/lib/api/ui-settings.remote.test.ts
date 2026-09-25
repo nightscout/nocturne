@@ -3,12 +3,13 @@ import { ApiException } from "$api-clients";
 import { errorMessage } from "$lib/forms/submit-error";
 
 let upstream: () => Promise<unknown>;
-let headers: Map<string, string>;
+let isShareHost: boolean;
 const save = vi.fn();
 
 vi.mock("$app/server", () => ({
   getRequestEvent: () => ({
     locals: {
+      isShareHost,
       apiClient: {
         uiSettings: {
           getUISettings: () => upstream(),
@@ -16,7 +17,6 @@ vi.mock("$app/server", () => ({
         },
       },
     },
-    request: { headers: { get: (name: string) => headers.get(name) ?? null } },
     url: new URL("https://app.example.test/settings/appearance?tab=theme"),
   }),
   query: (fn: unknown) => fn,
@@ -61,7 +61,7 @@ const reasonFor = async (failure: unknown) =>
  */
 describe("a failed UI settings read", () => {
   beforeEach(() => {
-    headers = new Map();
+    isShareHost = false;
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -139,7 +139,7 @@ describe("a failed UI settings read", () => {
   });
 
   it("refuses a share host rather than redirecting it", async () => {
-    headers = new Map([["x-forwarded-host", "abc123.share.example.test"]]);
+    isShareHost = true;
 
     const rejection = await rejectionFor(
       apiException("Not authenticated.", 401, "")
@@ -158,7 +158,7 @@ describe("a failed UI settings read", () => {
  */
 describe("a section save whose read refuses", () => {
   beforeEach(() => {
-    headers = new Map();
+    isShareHost = false;
     save.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });

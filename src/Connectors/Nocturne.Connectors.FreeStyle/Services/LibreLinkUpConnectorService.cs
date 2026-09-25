@@ -163,12 +163,11 @@ public class LibreConnectorService(
         LibreLinkUpConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
         if (!activeTypes.Contains(SyncDataType.Glucose))
         {
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
@@ -179,7 +178,6 @@ public class LibreConnectorService(
             if (sensorGlucose == null)
             {
                 RecordFetchFailure(result, SyncDataType.Glucose, activeTypes);
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -193,7 +191,6 @@ public class LibreConnectorService(
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

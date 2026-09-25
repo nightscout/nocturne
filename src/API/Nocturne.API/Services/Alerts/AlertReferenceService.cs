@@ -80,7 +80,7 @@ internal sealed class AlertReferenceService(
         // peers reference the same id — keeps the loop linear in the rule graph size.
         var visited = new HashSet<Guid>();
         var queue = new Queue<Guid>();
-        foreach (var refId in ExtractAlertStateRefs(proposedRoot))
+        foreach (var refId in ConditionTreeWalker.AlertStateReferences(proposedRoot))
         {
             if (visited.Add(refId)) queue.Enqueue(refId);
         }
@@ -91,7 +91,7 @@ internal sealed class AlertReferenceService(
             if (current == ruleId.Value) return true;
             if (!byId.TryGetValue(current, out var nextRoot) || nextRoot is null) continue;
 
-            foreach (var nextRef in ExtractAlertStateRefs(nextRoot))
+            foreach (var nextRef in ConditionTreeWalker.AlertStateReferences(nextRoot))
             {
                 if (visited.Add(nextRef)) queue.Enqueue(nextRef);
             }
@@ -160,28 +160,11 @@ internal sealed class AlertReferenceService(
 
     private static bool TreeReferences(ConditionNode node, Guid targetId)
     {
-        foreach (var refId in ExtractAlertStateRefs(node))
+        foreach (var refId in ConditionTreeWalker.AlertStateReferences(node))
         {
             if (refId == targetId) return true;
         }
         return false;
     }
 
-    private static IEnumerable<Guid> ExtractAlertStateRefs(ConditionNode node)
-    {
-        if (node.AlertState is { } alertState) yield return alertState.AlertId;
-        if (node.Composite is { } composite)
-        {
-            foreach (var child in composite.Conditions)
-                foreach (var id in ExtractAlertStateRefs(child)) yield return id;
-        }
-        if (node.Not is { Child: { } notChild })
-        {
-            foreach (var id in ExtractAlertStateRefs(notChild)) yield return id;
-        }
-        if (node.Sustained is { Child: { } sustainedChild })
-        {
-            foreach (var id in ExtractAlertStateRefs(sustainedChild)) yield return id;
-        }
-    }
 }

@@ -35,3 +35,6 @@ uuid = { version = "1", features = ["serde"] }
 # Pinned exactly: the generated Kotlin bindings and the compiled library must
 # come from the same uniffi version (the bindings checksum the API at load).
 uniffi = { version = "=0.31.1", optional = true }
+
+[lints]
+workspace = true

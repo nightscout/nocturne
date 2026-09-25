@@ -328,7 +328,7 @@ public class BolusControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Bolus>, WriteOrigin, CancellationToken>((b, _, _) => persisted = b.ToList())
-            .ReturnsAsync((IEnumerable<Bolus> b, WriteOrigin _, CancellationToken _) => b);
+            .ReturnsAsync((IEnumerable<Bolus> b, WriteOrigin _, CancellationToken _) => [.. b]);
 
         await CreateController().CreateBulk(requests);
 

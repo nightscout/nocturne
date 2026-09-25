@@ -7,17 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * with no error shown and no recovery short of a page reload.
  */
 
-const probe = vi.fn();
+const probe = vi.fn<typeof fetch>();
 
 vi.mock("@nocturne/bridge/ticket", () => ({
-  signHandshakeTicket: (_secret: string, host: string) => `ticket-for-${host}`,
+  REALTIME_ADMISSION_PATH: "/api/v4/me/realtime-admission",
+  signHandshakeTicket: (_secret: string, host: string, tenantRelay: boolean) =>
+    `${tenantRelay ? "member" : "restricted"}-ticket-for-${host}`,
 }));
-vi.mock("$lib/server/api-client-factory", () => ({
+vi.mock("$env/dynamic/public", () => ({ env: {} }));
+vi.mock("$lib/server/api-client-factory", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("$lib/server/api-client-factory")>()),
   getApiBaseUrl: () => apiBaseUrl,
-  createServerHttpClient: () => ({ fetch: probe }),
-}));
-vi.mock("$lib/server/instance-key", () => ({
-  getHashedInstanceKey: () => "hashed-key",
 }));
 vi.mock("$lib/server/request-host", () => ({
   getEffectiveHost: () => effectiveHost,
@@ -38,11 +38,13 @@ let effectiveHost: string | undefined = "sleepy.nocturne.run";
 const { GET } = await import("./+server");
 
 /** The endpoint's answer, which is always a 200 whatever it decided. */
-async function mint(): Promise<{ token: string | null; retry?: boolean }> {
+async function mint(
+  cookies: Record<string, string> = {}
+): Promise<{ token: string | null; retry?: boolean }> {
   const event = {
     request: new Request("https://sleepy.nocturne.run/realtime/ticket"),
-    cookies: { get: () => undefined },
-    fetch: vi.fn(),
+    cookies: { get: (name: string) => cookies[name], set: vi.fn() },
+    fetch: probe,
     locals: { rawSetCookies: [] },
   };
   // The handler only uses the slice of RequestEvent built above.
@@ -58,25 +60,67 @@ beforeEach(() => {
   probe.mockReset();
 });
 
+function admits(body: unknown) {
+  return new Response(JSON.stringify(body), { status: 200 });
+}
+
+function refuses(status: number) {
+  return new Response(null, { status });
+}
+
 afterEach(() => {
   delete process.env.INSTANCE_KEY;
 });
 
 describe("realtime ticket endpoint", () => {
-  it("mints a ticket when the read policy admits the caller", async () => {
-    probe.mockResolvedValue({ ok: true, status: 200 });
+  it("mints a tenant-room ticket for a member session", async () => {
+    probe.mockResolvedValue(admits({ tenantRelay: true }));
 
-    expect(await mint()).toEqual({ token: "ticket-for-sleepy.nocturne.run" });
+    expect(await mint({ access: "member-session" })).toEqual({
+      token: "member-ticket-for-sleepy.nocturne.run",
+    });
+    expect(probe.mock.calls[0][0]).toBe(
+      "http://api.internal/api/v4/me/realtime-admission"
+    );
+  });
+
+  it("mints a restricted ticket for a guest session", async () => {
+    probe.mockResolvedValue(admits({ tenantRelay: false }));
+
+    expect(await mint({ guest: "guest-session" })).toEqual({
+      token: "restricted-ticket-for-sleepy.nocturne.run",
+    });
+  });
+
+  it("mints a restricted ticket when the admission is silent on the tenant room", async () => {
+    probe.mockResolvedValue(admits({}));
+
+    expect(await mint()).toEqual({
+      token: "restricted-ticket-for-sleepy.nocturne.run",
+    });
+  });
+
+  it("asks with the caller's own credential and never the instance key", async () => {
+    // With the instance key and no cookie, the API would authenticate the
+    // visitor as the instance service and admit them to the tenant room.
+    probe.mockResolvedValue(admits({ tenantRelay: true }));
+
+    await mint({ guest: "guest-session" });
+
+    const sent = new Headers(probe.mock.calls[0][1]?.headers);
+    expect(sent.get("Cookie")).toBe("guest=guest-session");
+    expect(sent.has("X-Instance-Key")).toBe(false);
+    expect(sent.has("X-Instance-Service")).toBe(false);
   });
 
   it("reports a refused read as a denial the client should not retry", async () => {
-    probe.mockResolvedValue({ ok: false, status: 401 });
+    probe.mockResolvedValue(refuses(401));
 
     expect(await mint()).toEqual({ token: null, retry: false });
   });
 
   it("reports an API fault as retryable", async () => {
-    probe.mockResolvedValue({ ok: false, status: 503 });
+    probe.mockResolvedValue(refuses(503));
 
     expect(await mint()).toEqual({ token: null, retry: true });
   });

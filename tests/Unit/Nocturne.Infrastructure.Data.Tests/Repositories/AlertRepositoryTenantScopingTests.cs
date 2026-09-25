@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.InMemory.Storage.Internal;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -49,7 +50,7 @@ public class AlertRepositoryTenantScopingTests
     }
 
     [Fact]
-    public async Task GetEnabledSignalLossRulesAsync_ReturnsRulesAcrossEveryActiveTenant()
+    public async Task GetAllEnabledRulesAsync_ReturnsRulesAcrossEveryActiveTenant()
     {
         var options = NewStore();
         await SeedAsync(options, ctx =>
@@ -58,16 +59,56 @@ public class AlertRepositoryTenantScopingTests
             ctx.AlertRules.AddRange(
                 NewRule(TenantA, "Signal loss A", AlertConditionType.SignalLoss),
                 NewRule(TenantB, "Signal loss B", AlertConditionType.SignalLoss),
-                NewRule(TenantA, "Unrelated threshold")); // must not appear
+                NewRule(TenantA, "Threshold A"));
         });
 
         // Starts from an unset (Guid.Empty) context — the cross-tenant sweep must enumerate
         // tenants itself rather than depending on whatever tenant the pool last left behind.
         var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
 
-        var rules = await repo.GetEnabledSignalLossRulesAsync(CancellationToken.None);
+        var rules = await repo.GetAllEnabledRulesAsync(CancellationToken.None);
 
-        rules.Select(r => r.TenantId).Should().BeEquivalentTo([TenantA, TenantB]);
+        rules.Select(r => (r.TenantId, r.Name)).Should().BeEquivalentTo(
+            [(TenantA, "Signal loss A"), (TenantA, "Threshold A"), (TenantB, "Signal loss B")]);
+    }
+
+    [Fact]
+    public async Task GetExcursionsInHysteresisAsync_SelectsByTrackerState()
+    {
+        var options = NewStore();
+        var legacy = NewRule(TenantA, "Legacy hysteresis");
+        var resumed = NewRule(TenantB, "Resumed");
+        var legacyExcursion = Guid.NewGuid();
+        var resumedExcursion = Guid.NewGuid();
+        var start = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc);
+        await SeedAsync(options, ctx =>
+        {
+            ctx.Tenants.AddRange(NewTenant(TenantA), NewTenant(TenantB));
+            ctx.AlertRules.AddRange(legacy, resumed);
+            ctx.AlertExcursions.AddRange(
+                new AlertExcursionEntity { Id = legacyExcursion, TenantId = TenantA, AlertRuleId = legacy.Id, StartedAt = start },
+                new AlertExcursionEntity
+                {
+                    Id = resumedExcursion, TenantId = TenantB, AlertRuleId = resumed.Id, StartedAt = start,
+                    HysteresisStartedAt = start.AddMinutes(5),
+                });
+            ctx.AlertTrackerState.AddRange(
+                new AlertTrackerStateEntity
+                {
+                    AlertRuleId = legacy.Id, TenantId = TenantA, State = "hysteresis",
+                    ActiveExcursionId = legacyExcursion, UpdatedAt = start.AddMinutes(5),
+                },
+                new AlertTrackerStateEntity
+                {
+                    AlertRuleId = resumed.Id, TenantId = TenantB, State = "active",
+                    ActiveExcursionId = resumedExcursion, UpdatedAt = start.AddMinutes(6),
+                });
+        });
+        var repo = new AlertRepository(new InMemoryContextFactory(options, staleTenantId: Guid.Empty));
+
+        var inHysteresis = await repo.GetExcursionsInHysteresisAsync(CancellationToken.None);
+
+        inHysteresis.Should().BeEquivalentTo([new HysteresisExcursionSnapshot(legacyExcursion, TenantA, legacy.Id, null)]);
     }
 
     private static DbContextOptions<NocturneDbContext> NewStore() =>

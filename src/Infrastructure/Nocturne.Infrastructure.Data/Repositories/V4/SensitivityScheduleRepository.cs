@@ -28,7 +28,7 @@ public class SensitivityScheduleRepository : V4RepositoryBase<SensitivitySchedul
     /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public SensitivityScheduleRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<SensitivityScheduleRepository> logger, IV4RecordBroadcaster<SensitivitySchedule>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 

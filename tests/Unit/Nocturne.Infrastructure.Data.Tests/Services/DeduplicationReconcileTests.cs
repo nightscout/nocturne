@@ -889,6 +889,21 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public void PrimariesOf_OnPostgres_BindsTheCandidateSetAsOneArray()
+    {
+        using var context = OfflineDbContext.Create();
+        var service = new DeduplicationService(
+            context, new Mock<IServiceScopeFactory>().Object, NullLogger<DeduplicationService>.Instance);
+        IReadOnlySet<Guid> candidates = new HashSet<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+
+        var sql = service.PrimariesOf("carbintake", candidates).ToQueryString();
+
+        sql.Should().MatchRegex(@"l\.canonical_id = ANY \(@\w+\)",
+            "one uuid[] parameter keeps one statement for every candidate count");
+        sql.Should().NotContain("IN (");
+    }
+
+    [Fact]
     public async Task Cursor_RoundTrips_DefaultsToNull()
     {
         (await _service.GetCursorAsync(CancellationToken.None)).Should().BeNull();

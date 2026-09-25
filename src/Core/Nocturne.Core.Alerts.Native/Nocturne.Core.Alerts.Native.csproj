@@ -7,6 +7,25 @@
         <Description>P/Invoke bindings for the nocturne_alerts Rust library (crates/nocturne-alerts-ffi)</Description>
     </PropertyGroup>
 
+    <!-- The crate version this binding was built against, stamped into the assembly so
+         AlertsInterop.Probe rejects a native library from another version. -->
+    <PropertyGroup>
+        <NocturneAlertsFfiCargoToml>$(MSBuildThisFileDirectory)..\..\..\crates\nocturne-alerts-ffi\Cargo.toml</NocturneAlertsFfiCargoToml>
+        <_NocturneAlertsVersionLine>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(NocturneAlertsFfiCargoToml)')), '(?m)^version\s*=\s*"[^"]+"').Value)</_NocturneAlertsVersionLine>
+        <NocturneAlertsExpectedVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(_NocturneAlertsVersionLine)', '^version\s*=\s*"|"$', ''))</NocturneAlertsExpectedVersion>
+    </PropertyGroup>
+    <Target Name="CheckNocturneAlertsExpectedVersion" BeforeTargets="BeforeBuild">
+        <Error Condition="'$(NocturneAlertsExpectedVersion)' == ''"
+               Text="Could not read the package version from $(NocturneAlertsFfiCargoToml)." />
+    </Target>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Alerts.Native.Tests" />
+        <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+            <_Parameter1>NocturneAlertsExpectedVersion</_Parameter1>
+            <_Parameter2>$(NocturneAlertsExpectedVersion)</_Parameter2>
+        </AssemblyAttribute>
+    </ItemGroup>
+
     <!-- Native library deployment, mirroring Nocturne.Core.Oref: pack the cdylib from the
          cargo workspace target dir (or $(NocturneAlertsNativeDir) override) into
          runtimes/{rid}/native when it has been built. At runtime AlertsInterop also probes

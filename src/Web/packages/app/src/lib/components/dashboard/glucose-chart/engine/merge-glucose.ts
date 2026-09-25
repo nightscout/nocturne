@@ -1,10 +1,12 @@
 import type { Entry } from "$lib/websocket/types";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
-import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
 import type { GlucosePoint } from "./chart-data-engine.svelte";
 
-/** The server's glucose series with the realtime readings in [fromMs, toMs] it lacks, by time. */
+/**
+ * The server's glucose series with the realtime readings in [fromMs, toMs] it
+ * lacks, by time.
+ */
 export function mergeRealtimeGlucose(
   chartData: TransformedChartData | null,
   entries: readonly Entry[],
@@ -13,8 +15,6 @@ export function mergeRealtimeGlucose(
 ): GlucosePoint[] {
   const base = chartData?.glucoseData ?? [];
   if (!chartData) return base;
-
-  const thresholds = resolveGlucoseThresholds(chartData.thresholds);
 
   const byMills = new Map<number, GlucosePoint>();
   for (const p of base) byMills.set(p.time.getTime(), p);
@@ -35,7 +35,7 @@ export function mergeRealtimeGlucose(
       sgv: e.sgv,
       direction: e.direction,
       dataSource: e.data_source,
-      color: getGlucoseColor(e.sgv, thresholds),
+      color: getGlucoseColor(e.sgv, chartData.thresholds),
     });
   }
 

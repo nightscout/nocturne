@@ -25,7 +25,19 @@ internal static class ConditionNodePayloads
     /// <param name="options">JSON options used by the caller (snake_case naming, case-insensitive read).</param>
     public static string SerializeChildPayload(ConditionNode node, JsonSerializerOptions options)
     {
-        var payload = node.Type.ToLowerInvariant() switch
+        var payload = Select(node);
+
+        // Use payload.GetType() rather than <object?> so System.Text.Json serialises the
+        // concrete record's properties — passing object would serialise an empty {}.
+        return payload is null ? "{}" : JsonSerializer.Serialize(payload, payload.GetType(), options);
+    }
+
+    /// <summary>
+    /// The payload field on <paramref name="node"/> named by its lowercased
+    /// <see cref="ConditionNode.Type"/>, or null when the type names no field or the field is null.
+    /// </summary>
+    public static object? Select(ConditionNode node) =>
+        node.Type.ToLowerInvariant() switch
         {
             "threshold" => (object?)node.Threshold,
             "rate_of_change" => node.RateOfChange,
@@ -62,9 +74,4 @@ internal static class ConditionNodePayloads
             "tracker_age" => node.TrackerAge,
             _ => null,
         };
-
-        // Use payload.GetType() rather than <object?> so System.Text.Json serialises the
-        // concrete record's properties — passing object would serialise an empty {}.
-        return payload is null ? "{}" : JsonSerializer.Serialize(payload, payload.GetType(), options);
-    }
 }

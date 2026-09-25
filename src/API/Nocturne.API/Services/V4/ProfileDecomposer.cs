@@ -105,8 +105,8 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         Record(result, anchors);
 
         var groups = entries
-            .Where(e => anchors.ContainsKey(e.LegacyId))
-            .Select(e => (Entry: e, CorrelationId: anchors[e.LegacyId].Record.CorrelationId ?? e.MintedCorrelationId))
+            .Where(e => anchors.Outcomes.ContainsKey(e.LegacyId))
+            .Select(e => (Entry: e, CorrelationId: anchors.Outcomes[e.LegacyId].Record.CorrelationId ?? e.MintedCorrelationId))
             .ToList();
         if (groups.Count < entries.Count)
         {
@@ -139,10 +139,11 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         Profile Profile, string StoreName, ProfileData Data, string LegacyId, Guid MintedCorrelationId);
 
     private static void Record<TRecord>(
-        V4Models.DecompositionResult result, IReadOnlyDictionary<string, LegacyUpsert<TRecord>> outcomes)
+        V4Models.DecompositionResult result, LegacyUpsertBatch<TRecord> batch)
         where TRecord : class, V4Models.IV4Record
     {
-        foreach (var outcome in outcomes.Values)
+        result.SkippedDeleted += batch.SkippedDeleted;
+        foreach (var outcome in batch.Outcomes.Values)
         {
             if (outcome.Created)
                 result.CreatedRecords.Add(outcome.Record);

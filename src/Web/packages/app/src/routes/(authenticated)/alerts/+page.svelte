@@ -3,6 +3,7 @@
   import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { toast } from "svelte-sonner";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { permissionGatedMutationError } from "$lib/forms";
@@ -44,14 +45,10 @@
   import { isDndActiveNow } from "$lib/components/alerts/dnd";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
 
-  const effectivePermissions: string[] = $derived(
-    page.data.effectivePermissions ?? [],
-  );
   // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
   // clearing the manual mute — is gated on alerts.readwrite server-side.
   const canManageAlerts = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("alerts.readwrite"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
   const NEEDS_ALERTS_READWRITE =
     "Changing alerts requires the alerts.readwrite permission.";

@@ -367,6 +367,44 @@ public class EntryDecomposerTests : IDisposable
         result.CreatedRecords.Should().BeEmpty();
         result.UpdatedRecords.Should().BeEmpty();
         result.CorrelationId.Should().NotBeNull("a correlation ID is always generated");
+        result.SkippedUnsupported.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CountsAnEntryOfAnUnsupportedTypeAsSkipped()
+    {
+        var entries = new[]
+        {
+            new Entry { Id = "batch-sgv", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 },
+            new Entry { Id = "batch-sensor", Type = "sensor", Mills = 1700000060000 },
+        };
+
+        var result = await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Backfill);
+
+        result.CreatedRecords.Should().ContainSingle();
+        result.SkippedUnsupported.Should().Be(1);
+        result.SkippedDeleted.Should().Be(0);
+    }
+
+    /// <summary>
+    /// The re-import the user expects to restore a deleted reading does not, and the batch has to
+    /// say so rather than finish as if it had.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_CountsAReadingTheUserDeletedAsSkipped()
+    {
+        var entry = new Entry { Id = "batch-deleted", Type = "sgv", Mills = 1700000000000, Sgv = 120.0 };
+        await _decomposer.DecomposeBatchAsync([entry], WriteOrigin.Backfill);
+        var stored = _context.SensorGlucose.Single(e => e.LegacyId == "batch-deleted");
+        stored.DeletedAt = DateTime.UtcNow;
+        _context.Entry(stored).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _decomposer.DecomposeBatchAsync([entry], WriteOrigin.Backfill);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
     }
 
     [Fact]

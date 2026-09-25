@@ -31,7 +31,7 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
         IAuditContext auditContext,
         ILogger<ApsSnapshotRepository> logger,
         IV4RecordBroadcaster<ApsSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 

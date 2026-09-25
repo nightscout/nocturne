@@ -57,8 +57,10 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
             new TestTenantDbContextFactory(_contextA), NullLogger<PatientDeviceRepository>.Instance);
         _devicesB = new PatientDeviceRepository(
             new TestTenantDbContextFactory(_contextB), NullLogger<PatientDeviceRepository>.Instance);
-        _basalInjectionsA = new BasalInjectionRepository(new TestTenantDbContextFactory(_contextA), audit);
-        _basalInjectionsB = new BasalInjectionRepository(new TestTenantDbContextFactory(_contextB), audit);
+        _basalInjectionsA = new BasalInjectionRepository(
+            new TestTenantDbContextFactory(_contextA), audit, NullLogger<BasalInjectionRepository>.Instance);
+        _basalInjectionsB = new BasalInjectionRepository(
+            new TestTenantDbContextFactory(_contextB), audit, NullLogger<BasalInjectionRepository>.Instance);
     }
 
     public void Dispose()

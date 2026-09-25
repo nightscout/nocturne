@@ -306,8 +306,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var result = new SyncResult
         {
             Success = true,
-            Message = SyncSucceededMessage,
-            StartTime = DateTime.UtcNow
+            Message = SyncSucceededMessage
         };
 
         try
@@ -394,7 +393,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
                 }
             }
 
-            result.EndTime = DateTime.UtcNow;
             return result;
         }
         catch (Exception ex)
@@ -403,7 +401,6 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             result.Success = false;
             result.Message = "Sync failed with exception";
             result.Errors.Add(ex.Message);
-            result.EndTime = DateTime.UtcNow;
             return result;
         }
     }

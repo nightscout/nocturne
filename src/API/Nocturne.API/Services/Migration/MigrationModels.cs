@@ -133,8 +133,54 @@ public record CollectionProgress
 {
     public required string CollectionName { get; init; }
     public long TotalDocuments { get; init; }
+
+    /// <summary>
+    /// Documents Nocturne took in. Excludes <see cref="DocumentsSkippedUnsupported"/> and
+    /// <see cref="DocumentsSkippedDeleted"/>.
+    /// </summary>
     public long DocumentsMigrated { get; init; }
+
     public long DocumentsFailed { get; init; }
+
+    /// <summary>
+    /// Documents of a kind Nocturne does not store, so nothing was written for them.
+    /// </summary>
+    public long DocumentsSkippedUnsupported { get; init; }
+
+    /// <summary>
+    /// Documents whose one record was not written because the user had deleted it. Only a collection
+    /// whose documents each become a single record can say this; elsewhere see
+    /// <see cref="RecordsSkippedDeleted"/>.
+    /// </summary>
+    public long DocumentsSkippedDeleted { get; init; }
+
+    /// <summary>
+    /// Documents that need no further work: migrated or skipped. What the collection's progress is
+    /// measured by.
+    /// </summary>
+    public long DocumentsProcessed => DocumentsMigrated + DocumentsSkippedUnsupported + DocumentsSkippedDeleted;
+
+    /// <summary>
+    /// <see cref="DocumentsProcessed"/> as a share of <see cref="TotalDocuments"/>; a finished
+    /// collection whose total was never known reads 100.
+    /// </summary>
+    public double ProgressPercentage => TotalDocuments > 0
+        ? Math.Min(100, (double)DocumentsProcessed / TotalDocuments * 100)
+        : IsComplete ? 100 : 0;
+
+    /// <summary>
+    /// Records this collection's documents were written or updated as. A document can become
+    /// several records, and one Nocturne already held unchanged may not be counted, so this is not
+    /// comparable with the document counts.
+    /// </summary>
+    public long RecordsStored { get; init; }
+
+    /// <summary>
+    /// Records not written because the user had deleted them, so a re-import does not bring them
+    /// back. Counted in records rather than documents: one treatment can hold several records.
+    /// </summary>
+    public long RecordsSkippedDeleted { get; init; }
+
     public bool IsComplete { get; init; }
 
     /// <summary>

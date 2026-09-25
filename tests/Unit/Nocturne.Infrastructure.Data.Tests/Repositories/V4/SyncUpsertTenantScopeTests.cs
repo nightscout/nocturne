@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Repositories.V4;
@@ -91,7 +92,7 @@ public class SyncUpsertTenantScopeTests : IDisposable
     private static Bolus OnTheSyncKey(double insulin) =>
         new() { Timestamp = T0, DataSource = DataSource, SyncIdentifier = SyncIdentifier, Insulin = insulin };
 
-    private Task<IEnumerable<Bolus>> UpsertFromTenantAAsync(double insulin) =>
+    private Task<BulkWrite<Bolus>> UpsertFromTenantAAsync(double insulin) =>
         _repoA.BulkCreateAsync([OnTheSyncKey(insulin)], WriteOrigin.Live);
 
     private Task<Bolus> CreateFromTenantAAsync(double insulin) =>
