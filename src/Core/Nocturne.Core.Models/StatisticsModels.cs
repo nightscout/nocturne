@@ -389,9 +389,10 @@ public class TimeInRangeDurations
 /// or <see cref="VeryHigh"/>) only if it also spent at least 15 consecutive minutes beyond the
 /// level 2 threshold; each episode is counted once, at the higher level it reached.
 /// <para>
-/// A reading stands for the minutes until the next one. A stretch without readings longer than
-/// both 15 minutes and twice the sensor's local cadence is a gap: it ends a run rather than
-/// bridging it, and the reading before it stands for one cadence.
+/// A reading stands for the minutes until the next one, up to twice the sensor's local cadence
+/// (at most 15 minutes). A stretch without readings longer than both 15 minutes and twice that
+/// cadence is a gap: it ends a run rather than bridging it, and the reading before it stands for
+/// one cadence.
 /// </para>
 /// </summary>
 public class TimeInRangeEpisodes
