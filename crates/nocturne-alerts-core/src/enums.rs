@@ -342,6 +342,33 @@ mod tests {
         }
     }
 
+    /// A property the Rust payload does not declare is stripped from a saved
+    /// tree, so each payload must declare exactly what the C# model reads.
+    #[test]
+    fn payload_fields_match_the_csharp_models() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../tests/Parity/AlertEngineEnums.json"
+        );
+        let text = std::fs::read_to_string(path).expect("read enum manifest");
+        let manifest: Value = serde_json::from_str(&text).expect("parse enum manifest");
+        let listed = manifest["PayloadFields"]
+            .as_object()
+            .expect("PayloadFields missing from manifest");
+        assert_eq!(listed.len(), ConditionKind::ALL.len(), "one entry per kind");
+        for &kind in ConditionKind::ALL {
+            let theirs: Vec<&str> = listed[kind.name()]
+                .as_array()
+                .unwrap_or_else(|| panic!("{} missing from PayloadFields", kind.name()))
+                .iter()
+                .map(|v| v.as_str().expect("field name is a string"))
+                .collect();
+            let mut ours = crate::model::Payload::default_for(kind).fields().to_vec();
+            ours.sort_unstable();
+            assert_eq!(ours, theirs, "{} fields drifted from C#", kind.name());
+        }
+    }
+
     #[test]
     fn words_fold_per_enum() {
         assert_eq!(

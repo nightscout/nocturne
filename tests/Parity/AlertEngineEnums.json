@@ -144,5 +144,141 @@
     "pump_state",
     "state_span_active",
     "tracker_age"
-  ]
+  ],
+  "PayloadFields": {
+    "alert_state": [
+      "alert_id",
+      "for_minutes",
+      "state"
+    ],
+    "cob": [
+      "operator",
+      "value"
+    ],
+    "composite": [
+      "conditions",
+      "operator"
+    ],
+    "day_of_week": [
+      "days"
+    ],
+    "do_not_disturb": [
+      "for_minutes",
+      "is_active"
+    ],
+    "glucose_bucket": [
+      "buckets"
+    ],
+    "iob": [
+      "operator",
+      "value"
+    ],
+    "loop_enaction_stale": [
+      "minutes",
+      "operator"
+    ],
+    "loop_stale": [
+      "minutes",
+      "operator"
+    ],
+    "not": [
+      "child"
+    ],
+    "override_active": [
+      "for_minutes",
+      "is_active"
+    ],
+    "predicted": [
+      "operator",
+      "value",
+      "within_minutes"
+    ],
+    "pump_battery": [
+      "operator",
+      "value"
+    ],
+    "pump_state": [
+      "for_minutes",
+      "is_active",
+      "mode"
+    ],
+    "pump_suspended": [
+      "for_minutes",
+      "is_active"
+    ],
+    "rate_of_change": [
+      "direction",
+      "rate"
+    ],
+    "reservoir": [
+      "operator",
+      "value"
+    ],
+    "sensitivity_ratio": [
+      "operator",
+      "value"
+    ],
+    "sensor_age": [
+      "operator",
+      "value"
+    ],
+    "signal_loss": [
+      "timeout_minutes"
+    ],
+    "site_age": [
+      "operator",
+      "value"
+    ],
+    "sleep_session_active": [
+      "is_active"
+    ],
+    "staleness": [
+      "operator",
+      "value"
+    ],
+    "state_span_active": [
+      "category",
+      "for_minutes",
+      "is_active",
+      "state"
+    ],
+    "sustained": [
+      "child",
+      "minutes"
+    ],
+    "temp_basal": [
+      "metric",
+      "operator",
+      "value"
+    ],
+    "threshold": [
+      "direction",
+      "value"
+    ],
+    "time_of_day": [
+      "from",
+      "timezone",
+      "to"
+    ],
+    "time_since_last_bolus": [
+      "minutes",
+      "operator"
+    ],
+    "time_since_last_carb": [
+      "minutes",
+      "operator"
+    ],
+    "tracker_age": [
+      "minutes",
+      "operator",
+      "tracker_definition_id"
+    ],
+    "trend": [
+      "bucket"
+    ],
+    "uploader_battery": [
+      "operator",
+      "value"
+    ]
+  }
 }

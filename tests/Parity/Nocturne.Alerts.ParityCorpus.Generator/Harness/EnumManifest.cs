@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 
@@ -13,6 +14,11 @@ namespace Nocturne.Alerts.ParityCorpus.Generator.Harness;
 /// ordinal-indexed table, plus the wall-clock condition kinds it mirrors as a set. The Rust suite asserts each of its tables equals the committed
 /// manifest. A reordered, inserted or removed member then fails that test instead of
 /// silently shifting integer-form payloads onto the wrong member.
+/// <para>
+/// <c>PayloadFields</c> is each condition kind's payload property names as the evaluators'
+/// models read them. The Rust engine strips a property its payload does not declare from a
+/// saved tree (docs/alerts/engine-semantics.md §1.4), so its tables must match these.
+/// </para>
 /// </summary>
 public static class EnumManifest
 {
@@ -38,6 +44,7 @@ public static class EnumManifest
             ["TempBasalMetric"] = WireNames<TempBasalMetric>(),
             ["TrendBucket"] = WireNames<TrendBucket>(),
             ["WallClockConditionTypes"] = WallClockWireNames(),
+            ["PayloadFields"] = PayloadFields(),
         };
         var json = root.ToJsonString(new JsonSerializerOptions
         {
@@ -64,6 +71,28 @@ public static class EnumManifest
             .Where(WallClockConditions.Kinds.Contains)
             .Select(v => (JsonNode)wire[(int)v]!.GetValue<string>())
             .ToArray());
+    }
+
+    /// <summary>
+    /// Per payload property of <see cref="ConditionNode"/>, the JSON property names of its model
+    /// under <see cref="EvaluatorJson.Options"/>, sorted.
+    /// </summary>
+    private static JsonObject PayloadFields()
+    {
+        var options = EvaluatorJson.Options;
+        options.MakeReadOnly(populateMissingResolver: true);
+        var fields = new JsonObject();
+        foreach (var payload in options.GetTypeInfo(typeof(ConditionNode)).Properties
+                     .Where(p => p.Name != "type")
+                     .OrderBy(p => p.Name, StringComparer.Ordinal))
+        {
+            fields[payload.Name] = new JsonArray(options.GetTypeInfo(payload.PropertyType).Properties
+                .Select(p => p.Name)
+                .OrderBy(n => n, StringComparer.Ordinal)
+                .Select(n => (JsonNode)n)
+                .ToArray());
+        }
+        return fields;
     }
 
     private static JsonArray MemberNames<TEnum>() where TEnum : struct, Enum =>
