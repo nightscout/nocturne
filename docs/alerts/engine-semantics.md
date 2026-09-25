@@ -445,7 +445,11 @@ resolved it no longer does — alerts at once. An auto-resolve that is disabled,
 malformed or cannot be evaluated reads as false and re-arms.
 
 Nothing flips while both trees hold, so evaluations against one stale reading (§5.1) stay
-quiet. An auto-resolve close from `hysteresis` (the last evaluation found the condition
+quiet. An auto-resolve tree that flaps while the body holds re-arms on every false
+evaluation, so each flip back and forth opens and dispatches again. Wrapping the tree in
+`sustained` damps that, as does `ConfirmationReadings > 1` on a host that carries it.
+
+An auto-resolve close from `hysteresis` (the last evaluation found the condition
 false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
 the condition holds re-opens on the next evaluation, once.
 
