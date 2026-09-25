@@ -153,7 +153,7 @@
       </Card>
 
       {#if tirPercentages}
-        <OvernightLowsCard events={report.hypoEvents ?? []} />
+        <OvernightLowsCard lows={report.hypoEvents ?? []} />
       {/if}
 
       <StageCompositionCard breakdown={report.stageBreakdown} />
