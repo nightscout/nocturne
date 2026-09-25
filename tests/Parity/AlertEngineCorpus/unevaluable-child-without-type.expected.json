@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "scenario": "unevaluable-child-without-type",
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",
+      "rules": [
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000001",
+          "skipped": true
+        },
+        {
+          "rule_id": "00000000-0000-0000-0000-000000000002",
+          "skipped": true
+        }
+      ]
+    }
+  ]
+}

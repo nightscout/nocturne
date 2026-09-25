@@ -671,6 +671,7 @@ public class TandemE2eSyncTests
         public ITreatmentPublisher Treatments => this;
         public IDevicePublisher Device => this;
         public IMetadataPublisher Metadata => this;
+        public int SkippedDeleted => 0;
 
         private static Task<bool> Record<T>(List<T> sink, IEnumerable<T> records)
         {

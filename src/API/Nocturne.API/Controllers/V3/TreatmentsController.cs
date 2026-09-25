@@ -155,7 +155,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
         // Set appropriate headers
         Response.Headers["ETag"] = FormatCursorETag(treatment.SrvModified ?? treatment.Mills);
-        Response.Headers["Cache-Control"] = "public, max-age=60";
+        Response.Headers["Cache-Control"] = "private, max-age=60";
 
         return Ok(treatment);
     }

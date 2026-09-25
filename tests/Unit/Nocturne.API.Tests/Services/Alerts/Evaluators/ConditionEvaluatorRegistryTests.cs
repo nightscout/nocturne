@@ -54,8 +54,8 @@ public class ConditionEvaluatorRegistryTests
     {
         // Build a registry containing every IConditionEvaluator the production DI registers,
         // then assert that GetEvaluator returns non-null for every leaf AlertConditionType.
-        // The recursive wrappers (Composite/Not/Sustained) and the legacy SignalLoss are
-        // intentionally excluded — they don't have leaf evaluators in the same sense.
+        // The recursive wrappers (Composite/Not/Sustained) are intentionally excluded —
+        // they don't have leaf evaluators in the same sense.
         // Drive the registration off the same extension method production uses so this
         // test fails the moment a new evaluator ships without a corresponding DI entry.
         var services = new ServiceCollection();
@@ -75,8 +75,7 @@ public class ConditionEvaluatorRegistryTests
             .Where(t => t is not (
                 AlertConditionType.Composite
                 or AlertConditionType.Not
-                or AlertConditionType.Sustained
-                or AlertConditionType.SignalLoss));
+                or AlertConditionType.Sustained));
 
         foreach (var t in nonWrapper)
         {

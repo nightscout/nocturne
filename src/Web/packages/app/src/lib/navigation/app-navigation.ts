@@ -40,7 +40,7 @@ import {
   History as HistoryIcon,
 } from "lucide-svelte";
 import { satisfiesScope } from "$lib/authorization/scopes";
-import { getSidebarReportItems } from "$lib/navigation/report-navigation";
+import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export interface NavItem {

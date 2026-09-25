@@ -52,7 +52,7 @@ public abstract class DecomposerBase
     /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
     /// when the write was refused because the record's identity is already held
     /// (<see cref="RecreationBlockedException"/>) — the outcome the batch path reaches by dropping
-    /// the record from its insert set.
+    /// the record from its insert set. It is counted in <see cref="DecompositionResult.SkippedDeleted"/>.
     /// </returns>
     protected async Task<(TRecord Record, bool Created)?> UpsertByLegacyIdAsync<TRecord>(
         ILegacyKeyedRepository<TRecord> repository,
@@ -81,9 +81,9 @@ public abstract class DecomposerBase
             }
             catch (RecreationBlockedException)
             {
-                Logger.LogDebug(
-                    "Skipped {RecordType} from legacy record {LegacyId}: its identity is already held",
-                    recordType, legacyId);
+                // No live row carries the legacy id, so what holds it is the user's deletion.
+                result.SkippedDeleted++;
+                Logger.LogDebug("Skipped a {RecordType}: its identity is held by a deleted record", recordType);
                 return null;
             }
 
@@ -159,6 +159,8 @@ public abstract class DecomposerBase
         if (records.Count == 0)
             return;
 
-        result.CreatedRecords.AddRange(await repository.BulkCreateAsync(records, origin, ct));
+        var written = await repository.BulkCreateAsync(records, origin, ct);
+        result.CreatedRecords.AddRange(written);
+        result.SkippedDeleted += written.SkippedDeleted;
     }
 }

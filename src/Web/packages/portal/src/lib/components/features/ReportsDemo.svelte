@@ -19,7 +19,6 @@
 
     // Deterministic shapes so the demo renders identically on every load.
     const WEEK_TIR: [string, number][] = [["M", 0.71], ["T", 0.58], ["W", 0.83], ["T", 0.66], ["F", 0.74], ["S", 0.52], ["S", 0.79]];
-    const MONTHS: [string, number][] = [["Oct", 138], ["Nov", 146], ["Dec", 152], ["Jan", 141], ["Feb", 134], ["Mar", 129]];
     const STEPS: number[] = [6200, 9800, 4100, 11200, 8400, 12600, 7300];
     const DAY_TRACES = [
         "M0,22 C20,10 40,30 60,18 S100,26 130,14 S160,30 180,20",
@@ -199,16 +198,6 @@
                     {#each [0, 6, 12, 18, 24] as h, i (h)}
                         <text x={20 + i * 88} y="190" fill={INK_FAINT} font-size="9" font-family={UI_FONT}>{String(h).padStart(2, '0')}:00</text>
                     {/each}
-
-                {:else if current.preview === "month"}
-                    {#each MONTHS as [m, avg], i (i)}
-                        {@const h = (avg - 100) * 1.6}
-                        <rect x={28 + i * 60} y={150 - h} width="40" height={h} fill={avg > 145 ? HIGH : IN_RANGE} opacity="0.75" rx="3"/>
-                        <text x={48 + i * 60} y="170" text-anchor="middle" fill={INK_SOFT} font-size="11" font-family={UI_FONT}>{m}</text>
-                        <text x={48 + i * 60} y="185" text-anchor="middle" fill={INK_FAINT} font-size="10" font-family={UI_FONT}>{avg}</text>
-                    {/each}
-                    <text x="20" y="32" fill={INK} font-size="14" font-weight="700" font-family={SANS}>Average glucose by month</text>
-                    <text x="20" y="48" fill={INK_SOFT} font-size="10" font-family={UI_FONT}>down 23 mg/dL since December</text>
 
                 {:else if current.preview === "comparison"}
                     <rect x="20" y="78" width="360" height="50" class="fill-glucose-in-range/12"/>

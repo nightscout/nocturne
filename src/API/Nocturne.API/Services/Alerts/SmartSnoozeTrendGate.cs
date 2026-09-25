@@ -65,7 +65,10 @@ internal static class SmartSnoozeTrendGate
 
     /// <param name="conditionType">The rule's root condition type.</param>
     /// <param name="conditionParams">The rule's root condition params, as stored.</param>
-    /// <param name="readings">Canonical readings in any order, mg/dL.</param>
+    /// <param name="readings">
+    /// Canonical readings in any order, mg/dL. One without a glucose value (<c>Mgdl &lt;= 0</c>, a
+    /// sensor error or warm-up) is not a point: a 0 as the newest would read as a steep fall.
+    /// </param>
     /// <param name="now">Evaluation instant; the newest reading's age is measured from it.</param>
     public static TrendGateOutcome Evaluate(
         AlertConditionType conditionType,
@@ -73,6 +76,7 @@ internal static class SmartSnoozeTrendGate
         IReadOnlyList<GlucosePoint> readings,
         DateTime now)
     {
+        readings = readings.Where(r => r.Mgdl > 0).ToList();
         if (conditionType != AlertConditionType.Threshold)
             return TrendGateOutcome.NotApplicable;
 

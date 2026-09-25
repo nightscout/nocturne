@@ -73,11 +73,6 @@ public record TenantAlertContext(Guid TenantId, string SubjectName, string? Slug
     bool IsActive, DateTime? LastReadingAt);
 
 /// <summary>
-/// Snapshot of a signal-loss <see cref="AlertRule"/> for timeout evaluation without loading the full rule.
-/// </summary>
-public record SignalLossRuleSnapshot(Guid Id, Guid TenantId, string ConditionParams);
-
-/// <summary>
 /// Snapshot of a snoozed alert instance, combining instance and rule data for post-snooze re-evaluation.
 /// </summary>
 public record SnoozedInstanceSnapshot(Guid InstanceId, Guid TenantId, Guid AlertExcursionId,

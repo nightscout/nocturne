@@ -2,7 +2,11 @@ import { Server as SocketIOServerClass, Socket, Namespace, type DefaultEventsMap
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
-import { verifyHandshakeTicket, normalizeHandshakeHost } from './handshake-ticket.js';
+import {
+  verifyHandshakeTicket,
+  normalizeHandshakeHost,
+  REALTIME_ADMISSION_PATH,
+} from './handshake-ticket.js';
 import { isRecord, stringField, type Payload } from './payload.js';
 
 /** What a socket carries from its handshake to its handlers. */
@@ -11,6 +15,12 @@ interface BridgeSocketData {
   tenantSlug?: string;
   /** The tenant the socket's host resolved to, before it has authorized. */
   pendingTenantSlug?: string;
+  /**
+   * Whether the socket's credential may join the tenant-wide room. The room
+   * carries every category and every member's in-app notifications, so a guest
+   * link or anonymous share that holds single categories stays out of it.
+   */
+  tenantRelay?: boolean;
 }
 
 type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
@@ -217,11 +227,10 @@ class SocketIOServer {
   /** Authorize every handshake before it can join a tenant room. The tenant is
    *  resolved from the connection's Host, and the connection must present a valid
    *  handshake ticket (see handshake-ticket.ts) in its Socket.IO `auth` payload.
-   *  The ticket is minted by the web app's `/realtime/ticket` endpoint only after
-   *  it has replayed the connection's read against the API's per-tenant read
-   *  policy, so verifying the ticket here mirrors that policy without a
-   *  per-connection API call. Unauthorized handshakes are rejected so the socket
-   *  never receives broadcasts. */
+   *  The web app's `/realtime/ticket` endpoint mints it from the API's realtime
+   *  admission for the connection, so verifying it here applies the API's
+   *  policy without a per-connection API call. Unauthorized handshakes are
+   *  rejected so the socket never receives broadcasts. */
   private setupHandshakeAuth(): void {
     if (!this.io) return;
     this.io.use((socket, next) => this.authorizeHandshake(socket, next));
@@ -263,6 +272,7 @@ class SocketIOServer {
         }
 
         socket.data.tenantSlug = tenantSlug;
+        socket.data.tenantRelay = ticket.tenantRelay;
         return next();
       }
 
@@ -296,13 +306,7 @@ class SocketIOServer {
       logger.info(`Client connected: ${clientId} from ${clientInfo.address}`);
       logger.debug(`Total connected clients: ${this.clients.size}`);
 
-      // Join the client to the tenant room resolved and authorized during the
-      // handshake (see setupHandshakeAuth).
-      const tenantSlug = socket.data.tenantSlug;
-      if (tenantSlug) {
-        socket.join(`tenant:${tenantSlug}`);
-        logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
-      }
+      this.joinTenantRoom(socket);
 
       // Classic Nightscout authorization: legacy clients connect first and then
       // send their credentials in an `authorize` message.
@@ -326,18 +330,34 @@ class SocketIOServer {
     });
   }
 
+  /** Join an authorized socket to its tenant room, unless its credential is
+   *  restricted. A restricted socket stays authorized and joins nothing, as the
+   *  API hub's Authorize does; the bridge has no per-category room for the
+   *  default namespace to offer it instead. */
+  private joinTenantRoom(socket: BridgeSocket): void {
+    const { tenantSlug, tenantRelay } = socket.data;
+    if (!tenantSlug) return;
+
+    if (tenantRelay !== true) {
+      logger.info(`Client ${socket.id} is restricted; not joining tenant room: ${tenantSlug}`);
+      return;
+    }
+
+    socket.join(`tenant:${tenantSlug}`);
+    logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+  }
+
   /** Handle the classic Nightscout `authorize` message.
    *
    *  Legacy clients (LoopFollow, Nightscout watchfaces) don't have — and can't
-   *  obtain — a handshake ticket, because /realtime/ticket mints one only after
-   *  replaying the read against the API with the caller's browser session. They
+   *  obtain — a handshake ticket, because /realtime/ticket mints one only for a
+   *  browser session the API admits to realtime. They
    *  authenticate the way they do against classic Nightscout instead: an API
    *  secret (already SHA-1 hashed by the client) and/or a subject token.
    *
    *  Rather than interpret those credentials here, replay them against the same
-   *  read the ticket endpoint probes. The API applies its own per-tenant policy,
-   *  so this grants exactly what a REST read with the same credential would.
-   *  Only on success does the socket join its tenant room.
+   *  admission the ticket endpoint asks for. The API applies its own per-tenant
+   *  policy and decides whether the credential may join the tenant room.
    *
    *  The probe carries the client's credential and nothing else — never the
    *  bridge's instance key, which would authenticate any anonymous caller as a
@@ -369,8 +389,7 @@ class SocketIOServer {
     if (!secret && !token) return deny('no credentials supplied');
 
     try {
-      const url = new URL(`${this.apiBaseUrl}/api/v1/entries`);
-      url.searchParams.set('count', '1');
+      const url = new URL(`${this.apiBaseUrl}${REALTIME_ADMISSION_PATH}`);
       if (token) url.searchParams.set('token', token);
 
       const headers: Record<string, string> = {
@@ -389,10 +408,12 @@ class SocketIOServer {
       });
 
       if (!probe.ok) return deny(`API denied the credential (${probe.status})`);
+      const admission: unknown = await probe.json();
 
       socket.data.tenantSlug = tenantSlug;
       socket.data.pendingTenantSlug = undefined;
-      socket.join(`tenant:${tenantSlug}`);
+      socket.data.tenantRelay = isRecord(admission) && admission.tenantRelay === true;
+      this.joinTenantRoom(socket);
       logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
       callback?.({ read: true, write: false, write_treatment: false });
     } catch (error) {

@@ -1,11 +1,8 @@
 //! Scope classification for scoped Do Not Disturb (ADR 0004).
 //!
-//! A rule's *scope class* — `low` | `high` | `composite` | `undirected` — is
-//! derived from the **directional leaves** of its condition tree, so a scoped
-//! `lows`/`highs` mute can decide whether it silences the rule. This lives in the
-//! crate (not a host) because each directional leaf encodes its direction in its
-//! own field, and the crate already owns condition-tree parsing — re-encoding all
-//! of that in C#/Kotlin is exactly the drift this avoids.
+//! A rule's scope class (`low`, `high`, `composite` or `undirected`) is
+//! derived from the directional leaves of its condition tree, so a scoped
+//! `lows`/`highs` mute can decide whether it silences the rule.
 //!
 //! Directional leaves and their low/high side:
 //! - `threshold.direction`      `below` → low,       `above` → high
@@ -14,16 +11,18 @@
 //! - `glucose_bucket.buckets`   very_low/low → low,  high/very_high → high
 //!   (in_range/tight_range → neither; a set leaf can span both)
 //!
-//! `composite`/`sustained` recurse; everything else is non-directional. Any
-//! directional leaf reached **under a `not`** taints the whole rule to
-//! `undirected` (negation flips the clinical meaning — conservative, rare).
+//! Containers are unwrapped; everything else is non-directional. A
+//! directional leaf under a `not` makes the whole rule `undirected`, since
+//! negation flips its clinical meaning.
 
-use crate::model::{ConditionKind, Node, Payload, parse_payload};
 use serde_json::Value;
 
-/// A rule's low/high classification. Wire strings match the server
-/// `RuleScopeClass` and the device's `RuleScopeClass`.
+use crate::enums::{CmpOp, EnumValue, GlucoseBucket, RateDirection, ThresholdDirection};
+use crate::model::{ConditionKind, Container, Node, Payload, parse_payload};
+
+/// A rule's low/high classification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ScopeClass {
     Low,
     High,
@@ -32,6 +31,7 @@ pub enum ScopeClass {
 }
 
 impl ScopeClass {
+    #[must_use]
     pub fn wire(self) -> &'static str {
         match self {
             ScopeClass::Low => "low",
@@ -42,16 +42,16 @@ impl ScopeClass {
     }
 }
 
-/// Classifies a rule from its root `condition_type` + `condition_params`. Mirrors
-/// the engine's root handling (`parse_payload` then walk), and silent-fails to
-/// `Undirected` (all-only) on an unknown type or malformed params — the safe
-/// default that never lets a scoped mute silence an unclassifiable rule.
+/// Classifies a rule from its root `condition_type` + `condition_params`. An
+/// unknown type or a body that cannot be evaluated is `Undirected`, so a
+/// scoped mute never silences a rule it cannot classify.
+#[must_use]
 pub fn classify(condition_type: &str, condition_params: &Value) -> ScopeClass {
     let mut acc = Acc::default();
     if let Some(kind) = ConditionKind::resolve(condition_type)
         && let Ok(payload) = parse_payload(kind, condition_params)
     {
-        walk_kind(kind, Some(&payload), false, &mut acc);
+        walk(&Node::from_rule(kind, Some(payload)), false, &mut acc);
     }
     acc.resolve()
 }
@@ -66,135 +66,74 @@ enum Side {
 struct Acc {
     low: bool,
     high: bool,
-    /// A directional leaf was reached under a `not` — forces `undirected`.
-    tainted_by_not: bool,
+    under_not: bool,
 }
 
 impl Acc {
-    fn mark(&mut self, side: Side, under_not: bool) {
-        if under_not {
-            self.tainted_by_not = true;
-        } else {
-            match side {
-                Side::Low => self.low = true,
-                Side::High => self.high = true,
-            }
+    fn mark(&mut self, side: Option<Side>, under_not: bool) {
+        match side {
+            None => {}
+            Some(_) if under_not => self.under_not = true,
+            Some(Side::Low) => self.low = true,
+            Some(Side::High) => self.high = true,
         }
     }
 
     fn resolve(&self) -> ScopeClass {
-        if self.tainted_by_not {
-            return ScopeClass::Undirected;
-        }
-        match (self.low, self.high) {
-            (true, false) => ScopeClass::Low,
-            (false, true) => ScopeClass::High,
-            (true, true) => ScopeClass::Composite,
-            (false, false) => ScopeClass::Undirected,
+        match (self.under_not, self.low, self.high) {
+            (false, true, false) => ScopeClass::Low,
+            (false, false, true) => ScopeClass::High,
+            (false, true, true) => ScopeClass::Composite,
+            _ => ScopeClass::Undirected,
         }
     }
 }
 
-/// Walks a child node, mirroring `eval_node`: resolve its kind, take the payload
-/// only when the type matches the canonical wire name, recurse.
-fn walk_node(node: Option<&Node>, under_not: bool, acc: &mut Acc) {
-    let Some(node) = node else { return };
-    let Some(type_str) = node.type_str.as_deref() else {
+fn walk(node: &Node, under_not: bool, acc: &mut Acc) {
+    if let Some(container) = node.container() {
+        let under_not = under_not || matches!(container, Container::Not(_));
+        for child in container.children().flatten() {
+            walk(child, under_not, acc);
+        }
         return;
-    };
-    let Some(kind) = ConditionKind::resolve(type_str) else {
-        return;
-    };
-    let lower = type_str.to_lowercase();
-    let payload = if lower == kind.wire() {
-        node.payload(&lower)
-    } else {
-        None
-    };
-    walk_kind(kind, payload, under_not, acc);
-}
-
-fn walk_kind(kind: ConditionKind, payload: Option<&Payload>, under_not: bool, acc: &mut Acc) {
-    // No payload (absent, or an enum-name-spelled type that finds no snake_case
-    // payload) contributes nothing — the engine's `default_payload` likewise has
-    // no direction, so classify and the engine agree.
-    let Some(payload) = payload else { return };
-    match (kind, payload) {
-        (ConditionKind::Threshold, Payload::Threshold(p)) => {
-            if let Some(s) = threshold_side(p.direction.as_deref()) {
-                acc.mark(s, under_not);
+    }
+    match node.dispatch().as_deref() {
+        Some(Payload::Threshold(p)) => acc.mark(
+            p.direction.value.map(|d| match d {
+                ThresholdDirection::Below => Side::Low,
+                ThresholdDirection::Above => Side::High,
+            }),
+            under_not,
+        ),
+        Some(Payload::RateOfChange(p)) => acc.mark(
+            p.direction.value.map(|d| match d {
+                RateDirection::Falling => Side::Low,
+                RateDirection::Rising => Side::High,
+            }),
+            under_not,
+        ),
+        Some(Payload::Predicted(p)) => acc.mark(
+            match p.operator.value {
+                Some(CmpOp::Lt | CmpOp::Le) => Some(Side::Low),
+                Some(CmpOp::Gt | CmpOp::Ge) => Some(Side::High),
+                Some(CmpOp::Eq) | None => None,
+            },
+            under_not,
+        ),
+        Some(Payload::GlucoseBucket(p)) => {
+            for bucket in p.buckets.iter().flatten() {
+                acc.mark(bucket_side(*bucket), under_not);
             }
         }
-        (ConditionKind::RateOfChange, Payload::RateOfChange(p)) => {
-            if let Some(s) = roc_side(p.direction.as_deref()) {
-                acc.mark(s, under_not);
-            }
-        }
-        (ConditionKind::Predicted, Payload::Predicted(p)) => {
-            if let Some(s) = operator_side(p.operator.as_deref()) {
-                acc.mark(s, under_not);
-            }
-        }
-        (ConditionKind::GlucoseBucket, Payload::GlucoseBucket(p)) => {
-            if let Some(buckets) = p.buckets.as_deref() {
-                for &b in buckets {
-                    if let Some(s) = bucket_side(b) {
-                        acc.mark(s, under_not);
-                    }
-                }
-            }
-        }
-        (ConditionKind::Composite, Payload::Composite(p)) => {
-            if let Some(conditions) = &p.conditions {
-                for child in conditions.iter().flatten() {
-                    walk_node(Some(child), under_not, acc);
-                }
-            }
-        }
-        (ConditionKind::Not, Payload::Not(p)) => {
-            walk_node(p.child.as_deref(), true, acc);
-        }
-        (ConditionKind::Sustained, Payload::Sustained(p)) => {
-            walk_node(p.child.as_deref(), under_not, acc);
-        }
-        // Every other kind is non-directional and contributes nothing.
         _ => {}
     }
 }
 
-fn threshold_side(direction: Option<&str>) -> Option<Side> {
-    match direction.map(str::to_lowercase).as_deref() {
-        Some("below") => Some(Side::Low),
-        Some("above") => Some(Side::High),
-        _ => None,
-    }
-}
-
-fn roc_side(direction: Option<&str>) -> Option<Side> {
-    match direction.map(str::to_lowercase).as_deref() {
-        Some("falling") => Some(Side::Low),
-        Some("rising") => Some(Side::High),
-        _ => None,
-    }
-}
-
-fn operator_side(operator: Option<&str>) -> Option<Side> {
-    // Exact-match on the comparison symbols, mirroring `compare.rs` — do NOT
-    // lowercase/trim (these are symbols, not words; the engine matches exactly).
-    match operator {
-        Some("<") | Some("<=") => Some(Side::Low),
-        Some(">") | Some(">=") => Some(Side::High),
-        _ => None,
-    }
-}
-
-/// `GlucoseBucket` ordinals (declaration order): 0 very_low, 1 low, 2 tight_range,
-/// 3 in_range, 4 high, 5 very_high. In-range buckets are neither side.
-fn bucket_side(ordinal: i64) -> Option<Side> {
-    match ordinal {
-        0 | 1 => Some(Side::Low),
-        4 | 5 => Some(Side::High),
-        _ => None,
+fn bucket_side(bucket: EnumValue<GlucoseBucket>) -> Option<Side> {
+    match bucket.known()? {
+        GlucoseBucket::VeryLow | GlucoseBucket::Low => Some(Side::Low),
+        GlucoseBucket::High | GlucoseBucket::VeryHigh => Some(Side::High),
+        GlucoseBucket::TightRange | GlucoseBucket::InRange => None,
     }
 }
 

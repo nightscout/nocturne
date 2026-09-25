@@ -65,6 +65,17 @@ public static class AutoResolveScenarios
             ]);
 
         yield return Scenario(
+            "auto-resolve-unknown-enum-name",
+            "an enum name the C# enum does not declare makes the resolve tree unparseable, so it is skipped silently",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "state_span_active", "state_span_active": {"category": "Sleep", "state": null, "is_active": false}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 65m)),    // opened; resolve tree unparseable -> stays active
+                Tick(T(5), Ctx(T(5), glucose: 64m)),    // continues
+            ]);
+
+        yield return Scenario(
             "auto-resolve-only-while-excursion-active",
             "the resolve tree is only consulted while the tracker holds an active excursion (active or hysteresis)",
             [Rule(1, "threshold", Low70, autoResolveParams: """
@@ -73,7 +84,59 @@ public static class AutoResolveScenarios
             [
                 Tick(T(0), Ctx(T(0), glucose: 100m) with { TrendBucket = "flat" }),  // idle: resolve pass does nothing
                 Tick(T(5), Ctx(T(5), glucose: 65m) with { TrendBucket = "flat" }),   // opened, then resolve true -> closed same tick
-                Tick(T(10), Ctx(T(10), glucose: 65m) with { TrendBucket = "flat" }), // re-opens and closes again
+                Tick(T(10), Ctx(T(10), glucose: 65m) with { TrendBucket = "flat" }), // body and resolve still true: awaits re-arm, opens nothing
+            ]);
+
+        yield return Scenario(
+            "auto-resolve-waits-for-rearm",
+            "an auto-resolve that closes an active excursion leaves the rule idle awaiting re-arm: while the body and the resolve tree both hold it opens nothing, however often it is evaluated against the same reading, and an evaluation that finds the body false re-arms it",
+            [Rule(1, "iob", """{"operator": ">=", "value": 3}""", autoResolveParams: """
+                {"type": "trend", "trend": {"bucket": "flat"}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // opened, auto-resolved on the same tick
+                Tick(T(1), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // a wall-clock evaluation against the same reading: resolve read, none
+                Tick(T(2), Ctx(T(0)) with { IobUnits = 4m, TrendBucket = "flat" }),     // none
+                Tick(T(5), Ctx(T(5)) with { IobUnits = 2m, TrendBucket = "flat" }),     // body false: re-armed
+                Tick(T(10), Ctx(T(10)) with { IobUnits = 4m, TrendBucket = "rising" }), // opens again; resolve false
+                Tick(T(15), Ctx(T(15)) with { IobUnits = 2m, TrendBucket = "flat" }),   // hysteresis, then auto-resolved: body already false, so armed
+                Tick(T(20), Ctx(T(20)) with { IobUnits = 4m, TrendBucket = "rising" }), // opens
+            ]);
+
+        yield return Scenario(
+            "auto-resolve-read-while-body-false",
+            "awaiting re-arm, the auto-resolve tree is evaluated on an evaluation whose body is false too, so its sustained timer clears there and the next excursion's resolve hold starts over; pinned against the replay scenario replay-auto-resolve-read-while-body-false",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "sustained", "sustained": {"minutes": 10, "child":
+                    {"type": "composite", "composite": {"operator": "and", "conditions": [
+                        {"type": "threshold", "threshold": {"direction": "above", "value": 60}},
+                        {"type": "threshold", "threshold": {"direction": "below", "value": 75}}]}}}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 65m)),   // opened; the resolve timer is set
+                Tick(T(5), Ctx(T(5), glucose: 65m)),
+                Tick(T(10), Ctx(T(10), glucose: 65m)), // resolve has held 10 minutes: auto-resolved
+                Tick(T(15), Ctx(T(15), glucose: 80m)), // body false: re-armed; the resolve child is false, so its timer clears
+                Tick(T(20), Ctx(T(20), glucose: 65m)), // opened; the resolve hold starts over
+                Tick(T(25), Ctx(T(25), glucose: 65m)), // continues
+            ]);
+
+        yield return Scenario(
+            "auto-resolve-relapse-reopens",
+            "a rule awaiting re-arm evaluates its auto-resolve tree on every evaluation, under the same auto_resolve root and timers: a sustained resolve that keeps holding against the same reading opens nothing, and one that goes false while the body holds re-arms and opens in that evaluation",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "sustained", "sustained": {"minutes": 10, "child":
+                    {"type": "threshold", "threshold": {"direction": "above", "value": 60}}}}
+                """)],
+            [
+                Tick(T(0), Ctx(T(0), glucose: 65m)),   // opened; the resolve timer is set
+                Tick(T(5), Ctx(T(5), glucose: 65m)),   // continues; resolve has held 5 of 10 minutes
+                Tick(T(10), Ctx(T(10), glucose: 65m)), // resolve has held 10 minutes: auto-resolved, awaiting re-arm
+                Tick(T(11), Ctx(T(10), glucose: 65m)), // wall-clock evaluations against the same reading: the resolve timer
+                Tick(T(12), Ctx(T(10), glucose: 65m)), //   keeps running, so both trees hold and nothing opens
+                Tick(T(15), Ctx(T(15), glucose: 66m)), // none
+                Tick(T(20), Ctx(T(20), glucose: 45m)), // resolve false, body true: re-armed and opened in this evaluation
+                Tick(T(25), Ctx(T(25), glucose: 45m)), // continues; resolve false
             ]);
     }
 }

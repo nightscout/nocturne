@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
@@ -59,6 +60,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
+                HysteresisStartedAt = state.HysteresisStartedAt,
+                AwaitingRearm = state.AwaitingRearm,
             });
         }
         else
@@ -67,6 +70,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.ConfirmationCount = state.ConfirmationCount;
             existing.ActiveExcursionId = state.ActiveExcursionId;
             existing.UpdatedAt = state.UpdatedAt;
+            existing.HysteresisStartedAt = state.HysteresisStartedAt;
+            existing.AwaitingRearm = state.AwaitingRearm;
         }
 
         await _context.SaveChangesAsync(ct);
@@ -86,6 +91,15 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             .FirstOrDefaultAsync(r => r.Id == alertRuleId, ct);
 
         return entity == null ? null : MapAlertRule(entity);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
+    {
+        var entity = await _context.AlertExcursions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        return entity is null ? null : MapAlertExcursion(entity);
     }
 
     /// <summary>
@@ -173,6 +187,93 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         }
     }
 
+    /// <summary>
+    /// First key of the two-key advisory lock form, naming the alert rule transition lock. The
+    /// second is <see cref="LockKey"/>.
+    /// </summary>
+    private const int TransitionLockClass = 0x4E41_5254;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A PostgreSQL transaction-scoped advisory lock, so replicas sharing the database serialise
+    /// on a rule and the lock goes with the commit or rollback. Other providers have no other
+    /// process to exclude and take nothing. Two rules whose keys collide only wait for each other.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public virtual async Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default)
+    {
+        if (!_context.Database.IsNpgsql())
+            return;
+        if (_context.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("A rule's transition lock is taken inside a transaction");
+
+        await _context.Database.ExecuteSqlAsync(
+            $"SELECT pg_advisory_xact_lock({TransitionLockClass}, {LockKey(alertRuleId)})", ct);
+    }
+
+    private static int LockKey(Guid alertRuleId)
+    {
+        Span<byte> bytes = stackalloc byte[16];
+        alertRuleId.TryWriteBytes(bytes);
+        return BitConverter.ToInt32(bytes[..4]) ^ BitConverter.ToInt32(bytes[4..8])
+            ^ BitConverter.ToInt32(bytes[8..12]) ^ BitConverter.ToInt32(bytes[12..]);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Joins a transaction already open on the context, and runs the work as is on a provider
+    /// without transactions. Otherwise opens one under the context's
+    /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
+    /// so every statement in the transaction runs under the context's tenant. Each attempt, and
+    /// the verification, starts with no tracker state or excursion tracked: an entity an earlier
+    /// attempt saved stays tracked as unchanged after its transaction rolls back, so a retry
+    /// setting it to the same values would write nothing. Only those two entity types are
+    /// detached; the context is the scope's, and what else it tracks is its other users'.
+    /// </remarks>
+    public virtual async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default)
+    {
+        if (_context.Database.CurrentTransaction is not null || !_context.Database.IsRelational())
+            return await work(ct);
+
+        var completed = false;
+        T result = default!;
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(
+            (object?)null,
+            async (_, _, token) =>
+            {
+                completed = false;
+                DetachTransitionRows();
+                await using var transaction = await _context.Database.BeginTransactionAsync(token);
+                result = await work(token);
+                completed = true;
+                await transaction.CommitAsync(token);
+                return result;
+            },
+            verifySucceeded is null
+                ? null
+                : async (_, _, token) =>
+                {
+                    if (!completed)
+                        return new ExecutionResult<T>(false, default!);
+                    DetachTransitionRows();
+                    return new ExecutionResult<T>(await verifySucceeded(result, token), result);
+                },
+            ct);
+    }
+
+    private void DetachTransitionRows()
+    {
+        var rows = _context.ChangeTracker.Entries()
+            .Where(e => e.Entity is AlertTrackerStateEntity or AlertExcursionEntity)
+            .ToList();
+        foreach (var row in rows)
+            row.State = EntityState.Detached;
+    }
+
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()
     {
         AlertRuleId = entity.AlertRuleId,
@@ -180,6 +281,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         ConfirmationCount = entity.ConfirmationCount,
         ActiveExcursionId = entity.ActiveExcursionId,
         UpdatedAt = entity.UpdatedAt,
+        HysteresisStartedAt = entity.HysteresisStartedAt,
+        AwaitingRearm = entity.AwaitingRearm,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

@@ -126,15 +126,12 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     private SyncResult UnansweredResult()
     {
         var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer";
-        var now = DateTimeOffset.UtcNow;
 
         _logger.LogError("[{ConnectorSource}] {Detail}", ConnectorSource, unanswered);
 
         return new SyncResult
         {
             Success = false,
-            StartTime = now,
-            EndTime = now,
             Message = unanswered,
             Errors = { unanswered },
         };
@@ -151,7 +148,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         if (await AuthenticateWithConfigAsync(config, cancellationToken) is { } refused)
             return refused;
 
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -228,7 +225,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

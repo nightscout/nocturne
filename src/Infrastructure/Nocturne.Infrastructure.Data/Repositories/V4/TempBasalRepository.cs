@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 using Nocturne.Infrastructure.Data.Services;
@@ -337,21 +338,21 @@ public class TempBasalRepository : ITempBasalRepository
     /// <param name="records">The collection of records to create.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of created records.</returns>
-    public async Task<IEnumerable<TempBasal>> BulkCreateAsync(
+    public async Task<BulkWrite<TempBasal>> BulkCreateAsync(
         IEnumerable<TempBasal> records,
         WriteOrigin origin, CancellationToken ct = default
     )
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        var written = await strategy.ExecuteAsync(async () =>
         {
             await using var tx = await ctx.Database.BeginTransactionAsync(ct);
             var entities = records.Select(TempBasalMapper.ToEntity).ToList();
             if (entities.Count == 0)
             {
                 await tx.CommitAsync(ct);
-                return [];
+                return new BulkWrite<TempBasal>([], 0);
             }
 
             // Batch-level dedup: keep first occurrence per LegacyId
@@ -366,19 +367,21 @@ public class TempBasalRepository : ITempBasalRepository
                 .Select(e => e.LegacyId!)
                 .ToHashSet();
 
+            var skippedDeleted = 0;
             if (legacyIds.Count > 0)
             {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(legacyIds, ct);
+                var blocked = await ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(legacyIds, ct);
 
+                skippedDeleted = entities.Count(e => e.LegacyId is { } id && blocked.DeletedByUser.Contains(id));
                 entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
+                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blocked.Held.Contains(e.LegacyId))
                     .ToList();
             }
 
             if (entities.Count == 0)
             {
                 await tx.CommitAsync(ct);
-                return [];
+                return new BulkWrite<TempBasal>([], skippedDeleted);
             }
 
             const int batchSize = 500;
@@ -410,8 +413,11 @@ public class TempBasalRepository : ITempBasalRepository
 
             var created = entities.Select(TempBasalMapper.ToDomainModel).ToList();
             await RaiseBroadcastAsync(created, [], [], origin, ct);
-            return created;
+            return new BulkWrite<TempBasal>(created, skippedDeleted);
         });
+
+        _logger.LogSkippedDeleted(nameof(TempBasal), written.SkippedDeleted);
+        return written;
     }
 
     /// <inheritdoc />
@@ -428,10 +434,21 @@ public class TempBasalRepository : ITempBasalRepository
         // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
         // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.TempBasals.Where(e => e.DataSource == source
-                && e.StartTimestamp >= from && e.StartTimestamp <= to
-                && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
+            AbsentFromSource(ctx, source, from, to, keepLegacyIds),
             _auditContext, $"data_source={source}", ct);
+    }
+
+    /// <summary>
+    /// The rows <see cref="SoftDeleteAbsentBySourceAndDateRangeAsync"/> removes. The set is bound as
+    /// an array for the reason given on <see cref="DeduplicationService.PrimariesOf"/>.
+    /// </summary>
+    internal static IQueryable<TempBasalEntity> AbsentFromSource(
+        NocturneDbContext ctx, string source, DateTime from, DateTime to, IReadOnlySet<string> keepLegacyIds)
+    {
+        var keep = keepLegacyIds.ToArray();
+        return ctx.TempBasals.Where(e => e.DataSource == source
+            && e.StartTimestamp >= from && e.StartTimestamp <= to
+            && (e.LegacyId == null || !keep.Contains(e.LegacyId)));
     }
 
     /// <inheritdoc />

@@ -138,12 +138,9 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     /// </remarks>
     protected SyncResult AuthenticationFailedResult()
     {
-        var now = DateTimeOffset.UtcNow;
         return new SyncResult
         {
             Success = false,
-            StartTime = now,
-            EndTime = now,
             Message = _authenticationFailureReason ?? "Authentication failed",
             Errors = { _authenticationFailureReason ?? $"Authentication failed for {ConnectorSource}" },
         };
@@ -162,9 +159,11 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         _progressReporter = progressReporter;
+        var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         try
         {
             var result = await body();
+            result.ItemsSkipped = (_publisher?.SkippedDeleted ?? 0) - skippedBefore;
             StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
@@ -578,9 +577,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits glucose data directly to the API via HTTP
-    /// </summary>
-    /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
     ///     doesn't flood clients), else <see cref="WriteOrigin.Live"/>. Memoized for the run.
@@ -846,7 +842,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     page cannot erase what an earlier one landed. Callers report the count once the publish has
     ///     returned, so a publish that throws records nothing while one that reports failure records
     ///     the batch it handed over — the count is what reached the publisher, not what the publisher
-    ///     accepted.
+    ///     accepted. What it withheld as deleted is <see cref="SyncResult.ItemsSkipped"/>.
     /// </remarks>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
@@ -1323,9 +1319,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Main sync method that handles data synchronization based on connector mode
-    /// </summary>
-    /// <summary>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
@@ -1408,8 +1401,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return new SyncResult
             {
                 Success = false,
-                StartTime = DateTimeOffset.UtcNow,
-                EndTime = DateTimeOffset.UtcNow,
                 Errors = { ex.Message }
             };
         }

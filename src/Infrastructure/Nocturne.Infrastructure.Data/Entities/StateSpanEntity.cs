@@ -13,9 +13,6 @@ public class StateSpanEntity : ITenantScoped, IAuditable, IEntityTimestamped, IS
     /// <summary>
     /// Identifier of the tenant this state span belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 

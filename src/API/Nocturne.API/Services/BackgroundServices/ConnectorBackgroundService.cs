@@ -78,17 +78,22 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     private readonly ConnectorSyncBudget _budget;
     private readonly ConnectorSyncMetrics? _metrics;
 
+    /// <summary>The active tenants, shared by every poller.</summary>
+    protected readonly ActiveTenantSnapshot ActiveTenants;
+
     /// <summary>
     /// Initialises a new <see cref="ConnectorBackgroundService{TConfig}"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant sync.</param>
     /// <param name="budget">The process-wide budget.</param>
+    /// <param name="activeTenants">The active tenants every poller reads.</param>
     /// <param name="logger">Logger instance.</param>
     /// <param name="nudge">Delivers configuration writes for this connector; absent, a change is noticed on the tenant's next scheduled look.</param>
     /// <param name="metrics">Connector sync instruments; absent, the sync runs unmeasured.</param>
     protected ConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        ActiveTenantSnapshot activeTenants,
         ILogger logger,
         ConnectorPollerNudge? nudge = null,
         ConnectorSyncMetrics? metrics = null
@@ -96,6 +101,7 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
     {
         ServiceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         _budget = budget ?? throw new ArgumentNullException(nameof(budget));
+        ActiveTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _metrics = metrics;
         nudge?.Subscribe(ConnectorName, RequestImmediateSync);
@@ -370,14 +376,9 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 
     private async Task SyncAllTenantsAsync(CancellationToken stoppingToken)
     {
-        using var lookupScope = ServiceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(stoppingToken);
+        var activeTenants = await ActiveTenants.GetAsync(stoppingToken);
         var now = DateTime.UtcNow;
-        var tenants = (await lookupContext.Tenants.AsNoTracking()
-                .Where(t => t.IsActive)
-                .Select(t => new { t.Id, t.Slug, t.DisplayName })
-                .ToListAsync(stoppingToken))
+        var tenants = activeTenants
             .Where(t => !_nextCheckByTenant.TryGetValue(t.Id, out var nextCheck) || nextCheck <= now)
             .ToList();
 
@@ -617,10 +618,11 @@ public abstract class ConnectorBackgroundService<TConfig> : BackgroundService
 public class ConnectorBackgroundService<TService, TConfig>(
     IServiceProvider serviceProvider,
     ConnectorSyncBudget budget,
+    ActiveTenantSnapshot activeTenants,
     ILogger<ConnectorBackgroundService<TService, TConfig>> logger,
     ConnectorPollerNudge? nudge = null,
     ConnectorSyncMetrics? metrics = null)
-    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, logger, nudge, metrics)
+    : ConnectorBackgroundService<TConfig>(serviceProvider, budget, activeTenants, logger, nudge, metrics)
     where TService : class, IConnectorService<TConfig>
     where TConfig : BaseConnectorConfiguration
 {

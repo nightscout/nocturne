@@ -294,9 +294,8 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                     completionReason
                 );
 
-                // Broadcast the completion
                 await _broadcastService.BroadcastTrackerUpdateAsync(
-                    "update",
+                    "complete",
                     TrackerInstanceDto.FromEntity(completedInstance),
                     completedInstance.UserId,
                     definition.Visibility

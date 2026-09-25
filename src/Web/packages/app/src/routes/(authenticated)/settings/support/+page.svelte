@@ -40,7 +40,7 @@
   import IssueCreatorDialog from "$lib/components/support/IssueCreatorDialog.svelte";
   import { getCoachMarkContext } from "@nocturne/coach";
   import { toast } from "svelte-sonner";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     buildDiagnosticReport,
@@ -49,7 +49,7 @@
 
   let includeDeviceInfo = $state(true);
   let additionalDetails = $state("");
-  let logsCopied = $state(false);
+  const copy = createCopyFeedback();
 
   let dialogOpen = $state(false);
   let selectedTemplate = $state("bug");
@@ -146,13 +146,7 @@
   ];
 
   async function copyLogs() {
-    const logs = generateDiagnosticReport();
-    if (!(await copyToClipboard(logs))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    logsCopied = true;
-    setTimeout(() => (logsCopied = false), 2000);
+    await copy.copy(generateDiagnosticReport());
   }
 
   function downloadLogs() {
@@ -401,7 +395,7 @@
 
       <div class="flex flex-wrap gap-2">
         <Button variant="outline" onclick={copyLogs}>
-          {#if logsCopied}
+          {#if copy.isCopied()}
             <CheckCircle class="h-4 w-4 text-success" />
             Copied!
           {:else}

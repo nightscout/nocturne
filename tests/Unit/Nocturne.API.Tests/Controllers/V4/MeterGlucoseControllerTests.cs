@@ -178,7 +178,7 @@ public class MeterGlucoseControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<MeterGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<MeterGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
-            .ReturnsAsync((IEnumerable<MeterGlucose> m, WriteOrigin _, CancellationToken _) => m);
+            .ReturnsAsync((IEnumerable<MeterGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
 
         await CreateController().CreateBulk(
         [

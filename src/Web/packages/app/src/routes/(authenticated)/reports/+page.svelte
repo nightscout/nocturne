@@ -13,7 +13,7 @@
   import {
     reportsOverviewScopes,
     visibleReportCategories,
-  } from "$lib/navigation/report-navigation";
+  } from "$lib/navigation/report-navigation.svelte";
   import { satisfiesAllScopes } from "$lib/authorization/scopes";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
@@ -31,7 +31,7 @@
   // Default: 14 days is standard for reports overview
   const reportsParams = requireDateParamsContext(14);
 
-  const grantedScopes: string[] = $derived(
+  const grantedScopes = $derived(
     page.data.effectivePermissions ?? []
   );
   const viewer = $derived({
@@ -266,7 +266,7 @@
             {#each category.reports as report (report.href)}
               <li>
                 {#if report.status === "available"}
-                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.ts -->
+                  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- report.href is a literal in-app path from report-navigation.svelte.ts -->
                   <a href={report.href}
                     class="group/report -mx-2 flex items-center gap-3 rounded-md px-2 py-3 transition-colors hover:bg-accent/50"
                   >

@@ -13,12 +13,11 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 /// PumpConnectivity).
 /// </summary>
 /// <remarks>
-/// Pump-mode rules must use <see cref="PumpStateEvaluator"/> instead — both because pump-mode
-/// has dedicated context plumbing and because the controller-level validator rejects
-/// <see cref="StateSpanCategory.PumpMode"/> in this leaf. As a defense-in-depth, this evaluator
-/// also short-circuits to false for the PumpMode category so a malformed payload that bypassed
-/// validation (e.g. a hand-edited DB row) cannot accidentally read pump state through the
-/// generic dictionary.
+/// Pump-mode rules must use <see cref="PumpStateEvaluator"/> instead: pump mode has dedicated
+/// context plumbing, and a save rejects <see cref="StateSpanCategory.PumpMode"/> in this leaf
+/// (<c>pump_mode_category</c>, <see cref="AlertRuleConditionValidator"/>). A stored leaf that
+/// bypassed that check (e.g. a hand-edited DB row) evaluates false rather than reading pump
+/// state through the generic dictionary.
 ///
 /// State filter semantics: a null <see cref="StateSpanActiveCondition.State"/> matches any
 /// state of the category — the enricher loaded <c>(category, null)</c> for that exact pair,

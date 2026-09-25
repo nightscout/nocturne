@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.Profiles;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
@@ -35,6 +36,7 @@ public class CompressionLowDetectionServiceTests
     {
         var sut = new CompressionLowDetectionService(
             await BrokenSettingsProviderAsync(),
+            ActiveTenantSnapshotTestDoubles.Unread(),
             NullLogger<CompressionLowDetectionService>.Instance
         );
 

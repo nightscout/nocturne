@@ -3,6 +3,9 @@
   import * as Select from "$lib/components/ui/select";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Switch } from "$lib/components/ui/switch";
+  import { Button } from "$lib/components/ui/button";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import { X } from "lucide-svelte";
   import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { untrack } from "svelte";
@@ -349,6 +352,27 @@
         if (node.time_of_day) node.time_of_day.to = e.currentTarget.value;
       }}
     />
+    <TimezoneCombobox
+      class="w-44"
+      placeholder="Profile time zone"
+      value={node.time_of_day.timezone ?? undefined}
+      onValueChange={(zone) => {
+        if (node.time_of_day) node.time_of_day.timezone = zone;
+      }}
+    />
+    {#if node.time_of_day.timezone}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Use the profile time zone"
+        onclick={() => {
+          if (node.time_of_day) node.time_of_day.timezone = undefined;
+        }}
+      >
+        <X class="h-3.5 w-3.5" />
+      </Button>
+    {/if}
   {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio") && node[node.type]}
     {@const payload = node[node.type]!}
     {@const suffix = leafSuffix(node.type)}
@@ -476,7 +500,7 @@
     {@const payload = node[node.type]!}
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={payload.is_active ?? true}
+      checked={payload.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         payload.is_active = checked;
         if (!checked) payload.for_minutes = undefined;
@@ -635,7 +659,7 @@
     </Select.Root>
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.pump_state.is_active ?? true}
+      checked={node.pump_state.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.pump_state) return;
         node.pump_state.is_active = checked;
@@ -693,7 +717,7 @@
     />
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.state_span_active.is_active ?? true}
+      checked={node.state_span_active.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.state_span_active) return;
         node.state_span_active.is_active = checked;
@@ -721,7 +745,7 @@
   {:else if node.type === "sleep_session_active" && node.sleep_session_active}
     <span class="text-xs text-muted-foreground">sleep session is</span>
     <Switch
-      checked={node.sleep_session_active.is_active ?? true}
+      checked={node.sleep_session_active.is_active ?? false}
       onCheckedChange={(checked) => {
         if (node.sleep_session_active)
           node.sleep_session_active.is_active = checked;

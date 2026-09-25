@@ -49,14 +49,15 @@ name equals the type string for every kind (e.g. `"threshold": {…}`,
 `"rate_of_change": {…}`, `"alert_state": {…}`). Exactly one payload is expected; the
 engine only ever reads the payload matching `type`.
 
-- `type` is matched **lowercase-invariant** (`"Threshold"` and `"threshold"` are the same
-  kind) at every dispatch site.
-- **Unknown `type` ⇒ the node evaluates `false`** (never throws). Same for a known type
-  whose payload field is null/absent: the dispatcher serialises the missing payload as
-  `{}`, and every payload deserialisation that yields null (or a record failing its
-  null-guards) returns `false`. "Silent-false" is the universal failure mode: malformed
-  rules never crash evaluation, they just never fire.
-- The full discriminator set (30 kinds + `signal_loss`, see §5) is the
+- `type` resolves to a kind by its wire string (case-insensitive), else by its
+  `AlertConditionType` member name or integer ordinal (case-insensitive, trimmed). The
+  payload, though, is read from the field named by the **lowercased `type`**, which exists
+  only for wire strings: `"Threshold"` reads `threshold`, but `"RateOfChange"` and `"3"`
+  resolve a kind and find no payload.
+- **Unknown `type` ⇒ the node evaluates `false`.** A known type whose payload is
+  null/absent (or unreachable, as above) evaluates the record built from `{}`, with every
+  field at its constructor default. Whether that default evaluates or throws is §1.4.
+- The full discriminator set is the
   `AlertConditionType` enum's `EnumMember` values.
 
 ### 1.3 Numerics
@@ -81,6 +82,72 @@ The corpus pins boundary behaviour; the practical rule for the port is: replicat
 *comparison operator and inclusivity*, and keep elapsed-time math in f64 where C# used
 double, converting to decimal only where C# casts.
 
+### 1.4 Evaluability
+
+Some trees cannot be evaluated: the C# evaluators throw on them, and the orchestrator's
+per-rule catch skips the rule for that tick with its timers and tracker untouched (§7).
+The throw depends on what evaluation reaches, but a rule holding one is broken whether
+or not a given tick reaches it. So both engines reject these shapes **before evaluating
+anything**, anywhere in the tree, including behind a short-circuit, a `sustained` whose
+`minutes <= 0`, or a leaf whose input is null this tick:
+
+| Reason code | Shape | C# throw site |
+|---|---|---|
+| `type_missing` | a node with no `type` (a child, or an auto-resolve / snooze root) | `ConditionEvaluatorRegistry.GetEvaluator(null)` → `FromWireString(null)` |
+| `condition_missing` | a `null` slot in a composite's `conditions` | `CompositeEvaluator.EvaluateNodeAsync` reads `node.Type` |
+| `conditions_missing` | a composite with no `conditions` list, including a `composite` child with no payload | `CompositeEvaluator`: `condition.Conditions.Count` |
+| `operator_missing` | a composite with non-empty `conditions` and no `operator` | `CompositeEvaluator`: `condition.Operator.ToLowerInvariant()` |
+| `direction_missing` | a `threshold` or `rate_of_change` with no `direction` (including the `{}` default, §1.2) | `ThresholdEvaluator` / `RateOfChangeEvaluator`: `Direction.ToLowerInvariant()`, when a reading or trend rate is present |
+| `state_missing` | an `alert_state` with no `state` | `AlertStateEvaluator`: `State.ToLowerInvariant()`, when the referenced alert is active |
+
+Together with the reader's own failures (`not_an_object`, `invalid_field`, `too_deep`:
+the `JsonException` class of §1.1), these are the problems that **fail evaluation**:
+
+- Rule body: the rule is skipped — no root, leaves, tracker transition, auto-resolve or
+  timer writes. The C# engine throws `ConditionTreeFaultException` into the per-rule
+  catch; the crate's driver returns `skipped` and its `evaluate` envelope returns an
+  error, which the host treats as the same skip.
+- Auto-resolve tree: never resolves (§7 step 5, as for malformed JSON).
+- Snooze conditions: evaluate false, so the snooze clears.
+
+Everything else malformed stays evaluable and silently false (or true under `not`). A
+rule save rejects those too, together with the shapes above:
+
+| Reason code | Shape |
+|---|---|
+| `unknown_kind` | `type` names no kind |
+| `non_canonical_type` | `type` resolves but is not the exact wire string (`"Threshold"`, `"RateOfChange"`) — stored rules keep the §1.2 resolution |
+| `unknown_operator` | composite operator other than `and`/`or` (case-insensitive); comparison operator other than the exact `<` `<=` `>` `>=` `==`, or missing; `time_since_*` operator ordinal outside the enum |
+| `unknown_direction` | `threshold` direction other than `above`/`below`, `rate_of_change` other than `rising`/`falling` (case-insensitive) |
+| `unknown_state` | `alert_state` state other than `firing`/`unacknowledged`/`acknowledged` (case-insensitive) |
+| `conditions_empty` | a composite with an empty `conditions` list |
+| `child_missing` | a `not` or `sustained` with no `child` |
+| `minutes_not_positive` | a duration `<= 0` that leaves its node never true: `sustained` `minutes`, `signal_loss` `timeout_minutes`, `predicted` `within_minutes` (no prediction is at or before now). An absent `timeout_minutes` or `within_minutes` is `field_missing` instead |
+| `minutes_negative` | a negative bound on an elapsed time: `staleness` `value`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`. Elapsed time is never negative and an absent anchor reads as infinite, so every operator compares the same way on every tick. `tracker_age` is exempt: its elapsed time is negative before a scheduled event |
+| `payload_missing` | a rule body whose `condition_params` is JSON `null` |
+| `unknown_field` | a node property other than `type` and the kinds' payload names, or a payload property its kind does not read (names match case-insensitively, as §1.1 reads them), so a misspelt operand such as `timeoutMinutes` is not silently dropped. No field is named: the property is the author's text |
+| `field_missing` | a required operand is absent (or `null` where that reads as absent): `value` on `threshold`, `staleness` and the `{operator, value}` kinds, `rate`, `timeout_minutes`, `predicted` `value`/`within_minutes`, `alert_id`, `minutes` on `loop_stale`/`loop_enaction_stale`/`time_since_*`/`tracker_age`, `is_active`, `temp_basal` `metric`, `time_since_*` `operator`, `pump_state` `mode`, `state_span_active` `category`, `tracker_definition_id`, `trend` `bucket`, `time_of_day` `from`/`to`. Each would read as its default (§1.2), which is never what was meant. A node whose payload property is absent is checked as an empty payload |
+| `unknown_value` | an enum operand no member has: an ordinal outside `temp_basal` `metric`, a `glucose_bucket` or `day_of_week` list member, `pump_state` `mode`, `state_span_active` `category`; a `trend` `bucket` naming no bucket |
+| `invalid_time` | a `time_of_day` `from` or `to` that is not exactly `HH:mm` (`"9:00"`, `"24:00"`) |
+| `empty_window` | a `time_of_day` whose `from` equals its `to`, a window that never opens |
+| `list_empty` | a `glucose_bucket` `buckets` or `day_of_week` `days` list that is absent, `null` or empty |
+| `pump_mode_category` | a `state_span_active` on the `PumpMode` category, which evaluates false (§3); pump modes are `pump_state`'s |
+
+Optional operands (`for_minutes`, `timezone`, `state_span_active` `state`) and a node's
+payloads for kinds other than its `type` are not reported. Stored rules keep evaluating
+every shape in this table as §3 describes.
+
+The crate's `validate` entry point is the single implementation of the save-time check;
+`AlertRulesController` returns its issues as a 400. Each issue carries its scope
+(`condition`, `auto_resolve`, `snooze`), the node's condition path (§2.3; a null slot's
+path ends in `.`), the reason code and, where there is one, the payload field. Reason
+codes never carry payload values.
+
+An edit of a stored rule does not reject an `unknown_field` property the stored rule
+already has at the same scope, path and object: it is removed from the saved tree, which
+cannot change what either engine does, since neither reads it. A property the stored rule
+lacks is still rejected.
+
 ---
 
 ## 2. Tree structure, leaf identity, and paths
@@ -90,10 +157,10 @@ double, converting to decimal only where C# casts.
 Exactly three kinds are containers: `composite` (N children), `not` (1 child),
 `sustained` (1 child). Everything else is a leaf.
 
-A container whose payload is null/absent (e.g. `{"type":"composite"}` with no
-`composite` field) is **treated as a leaf** by the identity walk and the path walk (the
-`when`-guards fail, so the walkers fall through to the leaf branch). It still evaluates
-`false`. **[anomaly — but normative]**
+A container whose payload is null/absent (e.g. `{"type":"not"}` with no `not` field) is
+**treated as a leaf** by the identity walk and the path walk (the `when`-guards fail, so
+the walkers fall through to the leaf branch). A `not` or `sustained` so shaped evaluates
+`false`; a `composite` cannot be evaluated (§1.4). **[anomaly — but normative]**
 
 ### 2.2 Leaf IDs (`LeafIdentity.AssignLeafIds`)
 
@@ -174,8 +241,9 @@ below are non-strict/strict exactly as written.
 
 `composite` / `not` / `sustained` (containers):
 
-- **`composite`** — `{operator, conditions[]}`. Null payload or empty `conditions` ⇒
-  false. Operator lowercased; only `and` / `or` are recognised, anything else ⇒ false.
+- **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
+  list, missing operator or null slot cannot be evaluated, §1.4). Operator lowercased;
+  only `and` / `or` are recognised, anything else ⇒ false.
   Short-circuits (§2.4). A child of unknown kind evaluates false (which makes an `and`
   false and leaves an `or` undecided).
 - **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
@@ -222,8 +290,11 @@ in §3 plus:
   - **C# resolves more:** `TimeZoneHelper` accepts Windows ids
     (`AUS Eastern Standard Time`) via `TryConvertWindowsIdToIanaId`. `chrono_tz` has no
     equivalent, so the crate leaves them unresolved (per-rule ⇒ false, tenant ⇒ UTC).
-    Closing it means carrying a CLDR Windows↔IANA mapping in the crate, which would then
-    need its own drift check against .NET's.
+    The .NET host closes this at its boundary instead of carrying a CLDR mapping in the
+    crate: it rewrites a Windows id to IANA in every request it sends the crate (tenant tz
+    and per-rule `time_of_day.timezone`), and a rule save stores the IANA id and rejects a
+    `timezone` no zone resolves from (`invalid_field` on `timezone`). Another host of the
+    crate must do the same.
   - **Rust resolves more:** the crate scans `chrono_tz::TZ_VARIANTS`, which includes tzdb
     *backward links* (`Etc/Greenwich`, `Etc/Zulu`, `US/Pacific`, `Asia/Calcutta`,
     `Australia/ACT`). C# scans `TimeZoneInfo.GetSystemTimeZones()` — the ICU canonical
@@ -235,73 +306,158 @@ in §3 plus:
 
 ---
 
-## 5. `signal_loss` is not part of the evaluation core
+## 5. `signal_loss` and wall-clock evaluation
 
-`signal_loss` exists in the type enum and payload model but **has no registered
-evaluator**:
+`signal_loss` is an ordinary leaf, at the root or inside a tree:
 
-- As a rule's root `ConditionType`, the orchestrator finds no evaluator, logs a warning,
-  and **skips the rule entirely** (no tracker call).
-- As a node inside a tree, dispatch returns **false** (silent-fail path).
-- The real signal-loss behaviour lives in `AlertSweepService.EvaluateSignalLossAsync`
-  (30 s cadence): for each enabled rule with `ConditionType == SignalLoss`, parse
-  `{timeout_minutes}`, compare `now - tenant.LastReadingAt` (null ⇒ `DateTime.MinValue`,
-  i.e. infinitely stale) against the timeout, and on breach call
-  `ProcessEvaluationAsync(rule, conditionMet: true)`.
-- **The sweep never feeds `false`** — a signal-loss excursion is never closed by signal
-  restoration through this path. **[anomaly — host-side]**
+| Payload | Inputs | Semantics | Null / guard behaviour |
+|---|---|---|---|
+| `timeout_minutes` (int) | `LastReadingAt`, `LatestTimestamp`, now | `now - LastReadingAt >= timeout_minutes`, compared as exact durations (no minute rounding) | `timeout_minutes <= 0` (including an absent field) ⇒ false; both `LastReadingAt` and `LatestTimestamp` null ⇒ false (cold start); only `LastReadingAt` null ⇒ infinitely stale ⇒ true |
 
-For the port: `signal_loss` stays host-side (it needs wall-clock scheduling, not a
-reading). The crate treats it as an unknown kind (false in trees). Prelude's local
-engine should implement the equivalent staleness watchdog host-side too.
+It is `staleness{operator: ">=", value: timeout_minutes}` with an exact-duration compare
+and the non-positive-timeout guard.
+
+The leaf can only turn true *between* readings — a reading arriving sets `LastReadingAt`
+to the reading's time — so per-reading evaluation alone never fires it. It is one of the
+wall-clock kinds below.
+
+### 5.1 Wall-clock evaluation
+
+A **wall-clock kind** is one whose truth can change while every fact except `now` stands
+still: it measures elapsed time against an anchor that a reading does not move.
+
+| Wall-clock | Anchor |
+|---|---|
+| `signal_loss`, `staleness` | newest reading |
+| `loop_stale`, `loop_enaction_stale` | last loop cycle / enactment |
+| `site_age`, `sensor_age`, `tracker_age` | site change, sensor start, tracker start or schedule |
+| `time_since_last_carb`, `time_since_last_bolus` | last treatment |
+| `alert_state` | the other alert's trigger or acknowledgement (`for_minutes`) |
+| `pump_suspended`, `override_active`, `do_not_disturb`, `pump_state`, `state_span_active` | start of the span (`for_minutes`) |
+
+Every other kind is not wall-clock. Two cases are deliberate:
+
+- **`sustained`** is a container. Over a reading-driven child its timer only extrapolates
+  the last reading, so it does not by itself make a rule wall-clock.
+- **`time_of_day`, `day_of_week`** are calendar gates over reading-driven leaves; the next
+  reading bounds how late a gate opening is noticed.
+
+A rule is wall-clock when its root kind, or any node of its condition tree, is a
+wall-clock kind. Every host must evaluate enabled wall-clock rules periodically as well as
+per reading, through the normal driver sequence (§7). Otherwise such a rule stays unfired
+for as long as no reading arrives. The backend does this from `AlertSweepService` every
+30 s; Prelude needs an equivalent periodic evaluation. The crate's
+`wall_clock::references_wall_clock` and the backend's `WallClockConditions` hold the
+classification; the enum manifest's `WallClockConditionTypes` keeps them equal.
+
+A periodic evaluation uses the context the per-reading path builds for the newest
+reading, with only `now` advanced. Its `LastReadingAt` / `LatestTimestamp` are that
+reading's (null when there has never been one), and its glucose facts are that reading's
+however old. Reading-driven leaves therefore repeat the verdict of the last per-reading
+evaluation. A context without the glucose facts would read them false and move an excursion
+they hold open into hysteresis.
+
+The excursion tracker dedupes: a continuing outage is `continues`, and the first evaluation
+after readings resume feeds false, so the excursion goes through hysteresis and closes like
+any other.
+
+A periodic evaluation is an evaluation to the tracker, so it advances confirmation (§6).
+The backend stores no `ConfirmationReadings` or `HysteresisMinutes`: every rule reads 1
+and 0, and the alerts redesign migrated both into `sustained` wrappers, which are
+cadence-independent. So no stored rule is affected. A host that does carry `confirmation_readings > 1` for a wall-clock rule would
+confirm it N× faster at a shorter periodic cadence. It should express that confirmation as
+`sustained` instead.
 
 ---
 
 ## 6. Excursion state machine (`ExcursionTracker`)
 
-Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt}` with
-states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
+Per-rule persisted state: `{State, ConfirmationCount, ActiveExcursionId, UpdatedAt,
+HysteresisStartedAt, AwaitingRearm}` with states `idle | confirming | active | hysteresis`. Rule inputs: `ConfirmationReadings`
 (default 1), `HysteresisMinutes`. One evaluation = one `ProcessEvaluationAsync(ruleId,
-conditionMet)` call. **After every call**, regardless of transition, `state.UpdatedAt =
-now` is persisted. Unknown stored state string ⇒ no-op transition `None`.
+conditionMet, autoResolveMet)` call, where `autoResolveMet` is read only while the rule
+awaits re-arm (§6.3). **Every call**, regardless of transition, decides `state.UpdatedAt =
+now`. The host persists a decision only when it changes another field: the only reader of
+`UpdatedAt` is the hysteresis-start adoption below, and the decision that adopts it persists
+the start. A stored state string naming none of the four states is read as
+`active` when the row holds an `ActiveExcursionId`, so that excursion goes on to close,
+and as `idle` otherwise, so the rule can fire again; its confirmation count, hysteresis
+start and re-arm flag (§6.3) are dropped. Every operation reads it so.
 
 | State | met | Result |
 |---|---|---|
+| idle, awaiting re-arm | true, and `autoResolveMet` | None (§6.3) |
+| idle, awaiting re-arm | false, or not `autoResolveMet` | clear `AwaitingRearm`, then as idle below in the same call |
 | idle | false | None |
 | idle | true | `ConfirmationReadings <= 1` ⇒ open excursion → **active**, emit `ExcursionOpened`. Else → **confirming**, `ConfirmationCount = 1`, emit None |
 | confirming | false | → **idle**, count reset, None (a single false fully resets confirmation) |
 | confirming | true | `++ConfirmationCount`; if `count >= ConfirmationReadings` ⇒ open → **active**, `ExcursionOpened` (count resets to 0 on open) |
 | active | true | `ExcursionContinues` |
-| active | false | → **hysteresis**, stamp `HysteresisStartedAt = now` on the excursion row, emit `HysteresisStarted` |
-| hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` |
-| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, emit `ExcursionClosed(reason: hysteresis)`; else None |
+| active | false | → **hysteresis**, `HysteresisStartedAt = now` (state and excursion row), emit `HysteresisStarted` |
+| hysteresis | true | → **active**, clear `HysteresisStartedAt`, emit `HysteresisResumed` (same excursion) |
+| hysteresis | false | expiry check (below). Expired ⇒ close excursion → **idle**, clear `HysteresisStartedAt`, emit `ExcursionClosed(reason: hysteresis)`; else None |
 
-### 6.1 Hysteresis expiry quirk **[anomaly — but normative]**
+### 6.1 Hysteresis expiry
 
-The per-evaluation expiry check uses `state.UpdatedAt` as the "hysteresis start" proxy:
-`expired = now >= state.UpdatedAt + HysteresisMinutes`. But `UpdatedAt` is rewritten
-after **every** evaluation — so on consecutive evaluations in hysteresis the proxy
-slides forward. Effective per-reading behaviour: the window expires only when the gap
-between two consecutive evaluations is `>= HysteresisMinutes`. With 5-minute readings,
-`HysteresisMinutes <= 5` closes on the next reading; `HysteresisMinutes > 5` would
-*never* close via this path.
+`expired = now >= HysteresisStartedAt + HysteresisMinutes`, with the window an exact
+whole-minute duration. The start is the instant of the evaluation that entered hysteresis
+and does not move until the excursion resumes or closes, so a window closes on the first
+false evaluation at or past its end, whatever the evaluation cadence. A non-positive
+`HysteresisMinutes` has always expired: the excursion closes on the first false evaluation
+after the one that entered hysteresis. A window whose end is past the representable
+calendar never expires. A re-entry (a true evaluation) resumes the same excursion; the
+next false evaluation starts a fresh window.
 
-In production that is masked by the sweep: `CloseHysteresisWindowsAsync` (every 30 s)
-force-closes **every** open excursion with `HysteresisStartedAt != null` — it does
-**not** check `HysteresisMinutes` at all. Net live behaviour today: hysteresis ends
-within ~30 seconds of the condition clearing, regardless of configuration.
+State persisted before `HysteresisStartedAt` existed has none while in hysteresis. Both
+engines adopt that state's `UpdatedAt` as the start, once, and persist it.
 
-Port boundary: the crate reproduces the tracker exactly (including the sliding proxy);
-the sweep's force-close-all stays a host decision. The corpus pins the tracker; the
-sweep anomaly is recorded here so nobody "fixes" the tracker to match the comment above
-it.
+A host must also expire windows when no evaluation arrives. The backend sweep
+(`CloseHysteresisWindowsAsync`, every 30 s) asks the tracker to close each excursion in
+hysteresis whose window has elapsed (`CloseElapsedHysteresisAsync`), without evaluating
+the condition. A window is therefore at most ~30 s late.
 
 ### 6.2 Force-close
 
-`ForceCloseAsync(ruleId, reason)` (used by auto-resolve, manual close, sweep): if the
-tracker has an `ActiveExcursionId` (any state), close the excursion, reset to idle,
-emit `ExcursionClosed(reason)`; otherwise None. `GetActiveExcursionIdAsync` returns the
+`ForceCloseAsync(ruleId, reason)` (used by auto-resolve, manual close, rule disable): if
+the tracker has an `ActiveExcursionId` (any state), close the excursion, reset to idle
+(clearing `HysteresisStartedAt`), emit `ExcursionClosed(reason)`; otherwise None. The
+reset sets `AwaitingRearm` exactly when the reason is `auto` and the state was `active`
+(§6.3). `GetActiveExcursionIdAsync` returns the
 id only in `active`/`hysteresis` states.
+
+### 6.3 Re-arm after auto-resolve
+
+An auto-resolve can close an excursion whose condition still holds: the resolve tree is
+evaluated after the tracker on every evaluation (§7 step 5), including the one that opened
+it. Without a guard the next evaluation would open a new excursion and dispatch again, and
+since wall-clock rules are evaluated every 30 s against the newest reading (§5.1), that
+would repeat for as long as both trees hold.
+
+So an auto-resolve close from `active` (the last evaluation found the condition true)
+leaves the rule idle with `AwaitingRearm` set. While it is set, every evaluation also
+evaluates the auto-resolve tree, before the tracker, at the same `auto_resolve` root and
+against the same timers as the post-tracker pass (§7 step 5), so a `sustained` inside it
+keeps its first-true instant and keeps running. An evaluation that finds both the condition
+and the auto-resolve tree true opens nothing. The first that finds either false clears
+`AwaitingRearm` and carries on as an idle evaluation: a true condition then opens (or starts
+confirming) in that same evaluation, so a relapse — the condition still holding while what
+resolved it no longer does — alerts at once. An auto-resolve that is disabled, absent,
+malformed or cannot be evaluated reads as false and re-arms.
+
+Nothing flips while both trees hold, so evaluations against one stale reading (§5.1) stay
+quiet. An auto-resolve tree that flaps while the body holds re-arms on every false
+evaluation, so each flip back and forth opens and dispatches again. Wrapping the tree in
+`sustained` damps that, as does `ConfirmationReadings > 1` on a host that carries it.
+
+An auto-resolve close from `hysteresis` (the last evaluation found the condition
+false) does not set `AwaitingRearm`, nor does any other close reason. A manual close while
+the condition holds re-opens on the next evaluation, once.
+
+The host clears `AwaitingRearm` when a rule's condition, auto-resolve configuration or
+enablement changes: the hold was taken against the rule as it was when the auto-resolve
+closed it.
+
+State persisted before `AwaitingRearm` existed has none and reads as armed.
 
 ---
 
@@ -312,17 +468,23 @@ drops `alert_state` chains whose parents are disabled/deleted — host-side):
 
 1. Root context: `CurrentRuleId = rule.Id`, `CurrentPath = wire(rule.ConditionType)`.
 2. `conditionMet` = evaluate the rule tree.
-3. `transition` = tracker.ProcessEvaluation(rule, conditionMet).
+3. `transition` = tracker.ProcessEvaluation(rule, conditionMet, autoResolveMet). Only when
+   the stored state is idle awaiting re-arm, `autoResolveMet` is the auto-resolve tree
+   evaluated first, exactly as in step 5; otherwise it is not evaluated here.
 4. Open/close side effects (instances, delivery, DND suppression, info auto-ack) —
    host-side, out of crate scope.
 5. **Unconditionally** (even on the same tick as an open), if `AutoResolveEnabled` and
-   `AutoResolveParams` non-blank and an active excursion exists: deserialise the
-   auto-resolve tree; evaluate it with `CurrentPath = "auto_resolve"`; if true,
-   force-close with reason `auto`. A malformed auto-resolve JSON is skipped silently.
-   Consequence: a rule whose resolve predicate is already true when its body opens
-   produces an open + close pair on the same tick.
+   `AutoResolveParams` non-blank and an active excursion exists, and step 3 did not
+   evaluate the tree: deserialise the auto-resolve tree; evaluate it with
+   `CurrentPath = "auto_resolve"`; if true, force-close with reason `auto`. A malformed
+   auto-resolve JSON is skipped silently. An evaluation therefore reads the tree at most
+   once; one that re-armed and opened in step 3 found it false. Consequence: a rule whose
+   resolve predicate is already true when its body opens produces an open + close pair on
+   the same tick, then opens nothing while both trees hold (§6.3).
 
-Evaluation errors in one rule are caught and logged; remaining rules still evaluate.
+Evaluation errors in one rule are caught and logged; remaining rules still evaluate. A
+rule whose tree cannot be evaluated (§1.4) is skipped before step 2, so it writes no
+timers.
 
 DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 `ActiveDoNotDisturb != null`) is a dispatch-time decision and stays host-side; the
@@ -330,33 +492,61 @@ DND suppression of **delivery** (non-critical, non-`AllowThroughDnd` rules while
 
 ---
 
-## 8. Replay semantics (crate's replay driver)
+## 8. Replay semantics (the replay driver)
 
-Replay re-evaluates stored rules over a historical window at a fixed **5-minute tick**
-with a fake clock, a **fresh in-memory timer store**, and these conventions:
+Replay answers "what would these rules have done over this window": the rule set is
+re-evaluated at a fixed **5-minute tick** over a historical window. The host builds each
+tick's context and the driver evaluates every tick in one call — `replay::replay` in the
+crate, `nocturne_alerts_replay` over the C ABI and UniFFI, `IAlertReplayEngine` in the
+backend (`Alerts:Engine` selects managed, Rust, or shadow, as for evaluation). The
+machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
 
-- Rules are **topologically sorted** by `alert_state` references (parents before
-  children); cycles fall back to insertion order.
-- Per tick, glucose is snapped to the most recent reading at-or-before the tick;
-  no-data ticks clamp `LastReadingAt = tick` (staleness reads as 0, not ∞).
-- Root truth uses the normal evaluators (short-circuit, shared timer store); leaf log
-  uses force-eval of every leaf (no short-circuit, same context, root path). Points are
-  recorded on first observation and on every flip (`LeafTransitionPoint(atMs, value)`,
-  unix-ms).
-- Firing state is tracked per rule replay-locally: `met && !wasFiring` ⇒ `Fired` event
-  (or `SuppressedByDnd` under the same gate as live delivery suppression — but the
-  active-alerts entry is seeded either way); `!met && wasFiring` ⇒ silent clear (no
-  event) **plus `ClearAllForRule` on the timer store**; auto-resolve mirrors §7 step 5
-  (evaluated only while firing) and emits `AutoResolved`, removes the active-alerts
-  entry, and clears the rule's timers.
-- `ActiveAlerts` is a single mutable map shared across the whole replay pass so
-  same-tick parent fires are visible to children later in the topo order
-  (`ActiveAlertSnapshot("firing", tick, null)`).
-- The excursion tracker (confirmation/hysteresis) is **not** consulted in replay —
-  replay events are condition-truth edges, not tracker transitions.
+**Host side** (`AlertReplayService`; out of the driver's scope):
 
-The crate exposes this as a deterministic replay driver taking pre-enriched per-tick
-contexts; window resolution, reading fetch, and fact-timeline capture stay host-side.
+- Window resolution, the canonical reading stream, and per-tick enrichment as of the tick.
+  Glucose is the most recent reading at or before the tick, and `LastReadingAt` is that
+  reading's time, so a gap after a reading reads as stale.
+- Do Not Disturb: for each tick, the rules a fire opening on it is recorded for as
+  suppressed (the gate live delivery applies on open, receipt-gated to the tick).
+- Fact timelines, and mapping the driver's output to the API's events and leaf log.
+
+**Driver**, given the rules in any order and the ticks in time order:
+
+- **Order.** Rules are topologically sorted by `alert_state` references (parents first).
+  References are read from every payload property a node carries, whatever its `type`,
+  and only to rules in the set. A cycle keeps the given order for every rule. Two rules
+  with one id are an error.
+- **State.** One fresh timer store for the whole call; nothing is read from or written to
+  persistent state. The excursion tracker is **not** consulted: confirmation and
+  hysteresis do not apply, and replay's firing state is replay-local.
+- **No reading.** A tick context with neither `LatestTimestamp` nor `LastReadingAt` reads
+  `LastReadingAt = tick`, so a tick before the window's first reading reads as zero
+  staleness and `signal_loss` cannot fire on an outage that began before the window.
+- **Active alerts.** One map for the whole call replaces each tick context's
+  `ActiveAlerts`. A rule enters it as `ActiveAlertSnapshot("firing", tick, null)` when it
+  fires and leaves it when it clears or auto-resolves, so a parent's change is visible to
+  children later in the order on the same tick.
+- **Per rule per tick**, in order:
+  1. A rule whose body cannot be evaluated (§1.4), or whose `condition_params` is not a
+     payload, is **skipped**: no leaf log, no firing change. Its `alert_state` children
+     never see it fire.
+  2. Root truth `met` by the normal evaluators at the rule's root path (short-circuit,
+     shared timer store). The leaf log force-evaluates every leaf alone at the same root
+     path and records each leaf's first observation and every flip
+     (`LeafTransitionPoint(atMs, value)`, unix ms).
+  3. A rule awaiting re-arm (step 5) evaluates its enabled, evaluable auto-resolve tree at
+     `auto_resolve`; when `met` is false or the tree is, it re-arms on this tick (§6.3).
+  4. `met && !firing` ⇒ `fired`, or `suppressed_by_dnd` when the host named the rule for
+     the tick, unless the rule still awaits re-arm; the rule becomes firing either way.
+     `!met && firing` ⇒ `cleared`: the rule stops firing and **all its timers are
+     cleared**, the auto-resolve tree's included.
+  5. While firing — including on the tick it fired — and unless step 3 evaluated it, an
+     enabled auto-resolve tree that parses and is evaluable is evaluated at `auto_resolve`
+     (§7 step 5); true ⇒ `auto_resolved`: the rule stops firing and awaits re-arm, and its
+     timers are kept, as the tracker keeps them.
+- **Output**: the evaluation order; events by tick then evaluation order; the leaf log per
+  rule in evaluation order; and, on request, each rule's `met`/`firing` (or `skipped`)
+  after every tick. The backend's API drops `cleared`, which has no event kind there.
 
 ---
 
@@ -365,7 +555,7 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 - Context enrichment (`SensorContextEnricher` / Prelude's local assembler)
 - Persistence of timers (`alert_condition_timers`), tracker state, excursions, instances
 - Delivery channels, DND dispatch suppression, info auto-ack
-- Sweep scheduling (30 s cadence), signal-loss watchdog (§5), hysteresis force-close (§6.1)
+- Sweep scheduling (30 s cadence) — including the wall-clock evaluation of §5.1 and the hysteresis expiry of §6.1
 - Smart snooze policy (extend/clear, max counts, trend-favorable heuristic) — but note
   snooze *conditions* are evaluated through the normal node dispatch with
   `CurrentPath = "snooze"`, wrapped as `composite{and, [conditions]}`; that evaluation
@@ -376,14 +566,15 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
     clears.
   - The trend fallback (smart snooze on, no conditions) applies to `threshold` rules only
     and compares the newest reading (at most 11 minutes old) with the readings closest to
-    5 and 10 minutes before it (each within ±2.5 minutes; both must exist). Extend when,
+    5 and 10 minutes before it (each within ±2.5 minutes; both must exist), all of them
+    readings with a glucose value: a sensor-error or warm-up reading is not a point. Extend when,
     in mg/dL and strictly greater: `below` — rise over 5 min > 4 or over 10 min > 10;
     `above` — fall over 5 min > 1 or over 10 min > 2 (xDrip's `trendingToAlertEnd`, on
     wall-clock spans rather than reading counts). Every other case clears. A second host
     (Prelude) must implement the same predicate; `SmartSnoozeTrendGate` is the reference.
   - `client_configuration.snooze.maxCount` (default 3) caps one count shared by manual
     snoozes and automatic extensions.
-- Rule CRUD, validation, `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs
+- Rule CRUD, host-specific validation (channels, tracker and alert references), `RuleReferenceResolver.FilterEvaluable`, topo-sort inputs; the condition-tree check itself is the crate's `validate` (§1.4)
 
 ## 10. Known anomalies index
 
@@ -392,8 +583,9 @@ contexts; window resolution, reading fetch, and fact-timeline capture stay host-
 | 1 | Malformed container (null payload) is treated as a leaf by identity/path walks | §2.1 | normative |
 | 2 | Path segments preserve the stored JSON's casing of `type` | §2.3 | normative |
 | 3 | `not` over an unknown child kind yields true | §3 | normative |
-| 4 | `signal_loss` has no evaluator; sweep feeds only `true`, never `false` | §5 | host-side, normative |
-| 5 | Hysteresis expiry proxy slides with every evaluation; sweep force-closes all hysteresis excursions regardless of `HysteresisMinutes` | §6.1 | tracker part normative for crate; sweep host-side |
+| 4 | *(retired: `signal_loss` is an ordinary leaf evaluated on the wall clock)* | §5 | resolved |
+| 5 | *(retired: hysteresis expires against a persisted `HysteresisStartedAt`, in the tracker and the sweep)* | §6.1 | resolved |
 | 6 | Elapsed-time math mixes double→decimal casts (per-leaf, §1.3) | §1.3 | normative |
 | 7 | `loop_enaction_stale` cold-start guard is `HasEverApsCycled`, not an enaction-specific flag | §3 | normative |
 | 8 | `time_since_last_*` treats a missing anchor as +∞ (fires on cold start) — deliberately opposite to `loop_stale`'s guard | §3 | normative |
+| 9 | A multi-word kind spelled by its member name (`"RateOfChange"`, `"PumpState"`) or ordinal resolves the kind but not its payload, and evaluates the `{}` defaults | §1.2 | normative for stored rules; rejected on save (§1.4) |
