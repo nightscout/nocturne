@@ -381,17 +381,8 @@ public class StatisticsServiceClinicalAccuracyTests
     [Fact]
     public void CalculateTimeInRange_Episodes_ShouldCountTransitions()
     {
-        // Create a pattern: target → low → target → low → target
-        // Should count 2 low episodes
-        var entries = new[]
-        {
-            new SensorGlucose { Mgdl = 120 },
-            new SensorGlucose { Mgdl = 60 },  // low episode 1 starts
-            new SensorGlucose { Mgdl = 60 },
-            new SensorGlucose { Mgdl = 120 }, // back to target
-            new SensorGlucose { Mgdl = 55 },  // low episode 2 starts
-            new SensorGlucose { Mgdl = 120 },
-        };
+        // Target, fifteen minutes low, fifteen back in target, fifteen low again, target.
+        var entries = EveryFiveMinutes(120, 60, 60, 60, 120, 120, 120, 55, 55, 55, 120, 120, 120);
 
         var result = _sut.CalculateTimeInRange(entries);
 
@@ -1362,15 +1353,8 @@ public class StatisticsServiceClinicalAccuracyTests
     [Fact]
     public void TimeInRange_Episodes_VeryLowToLowTransition_CountsOneEpisode()
     {
-        var entries = new[]
-        {
-            new SensorGlucose { Mgdl = 120 }, // target
-            new SensorGlucose { Mgdl = 45 },  // severe low — episode starts
-            new SensorGlucose { Mgdl = 45 },  // severe low — continues
-            new SensorGlucose { Mgdl = 60 },  // low — recovering, still the same event
-            new SensorGlucose { Mgdl = 60 },  // low — continues
-            new SensorGlucose { Mgdl = 120 }, // back to target — event ends
-        };
+        // Target, ten minutes severe low, ten recovering through low, then back to target.
+        var entries = EveryFiveMinutes(120, 45, 45, 60, 60, 120, 120, 120);
 
         var result = _sut.CalculateTimeInRange(entries);
 
@@ -1384,6 +1368,14 @@ public class StatisticsServiceClinicalAccuracyTests
     #endregion
 
     #region Helper Methods
+
+    private static SensorGlucose[] EveryFiveMinutes(params int[] mgdl)
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        return mgdl
+            .Select((value, i) => new SensorGlucose { Mgdl = value, Timestamp = start.AddMinutes(i * 5) })
+            .ToArray();
+    }
 
     private static GlucoseAnalytics CreateAnalyticsWithTIR(
         double veryLow,

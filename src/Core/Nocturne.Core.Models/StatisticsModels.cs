@@ -380,9 +380,13 @@ public class TimeInRangeDurations
 }
 
 /// <summary>
-/// Time in range episodes. A run of consecutive readings on the same side of target is one
-/// episode, counted against the most extreme zone the run reached: a rise from high into very
-/// high and back is one very-high episode, not a high one and a very-high one.
+/// Time in range episodes, on the international consensus CGM event definition (Battelino et al.,
+/// "Clinical Targets for Continuous Glucose Monitoring Data Interpretation", Diabetes Care
+/// 2019;42:1593-1603, and its 2023 update): an episode begins after at least 15 consecutive
+/// minutes beyond a threshold and ends after at least 15 consecutive minutes back within it. A
+/// break in the data longer than 15 minutes ends a run instead of bridging it. Each episode is
+/// counted against the most extreme zone it reached, so a rise from high into very high and back
+/// is one very-high episode, not a high one and a very-high one.
 /// </summary>
 public class TimeInRangeEpisodes
 {

@@ -287,54 +287,137 @@ public class StatisticsServiceTests
         result.Durations.VeryHigh.Should().Be(5);
         result.Durations.Low.Should().Be(5);
         result.Durations.AboveRange.Should().Be(15);
-        // 200 then 300 is one excursion, counted against the very-high zone it reached; the
-        // later 200 is a second, counted against high.
-        result.Episodes.High.Should().Be(1);
-        result.Episodes.VeryHigh.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotCountASingleReadingDip()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(0);
+        result.Episodes.VeryLow.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotCountADipShorterThanFifteenMinutes()
+    {
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAFifteenMinuteDip()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(100, 60, 60, 60, 100, 100, 100, 100));
+
         result.Episodes.Low.Should().Be(1);
-        result.Episodes.AboveRange.Should().Be(2);
+        result.Episodes.VeryLow.Should().Be(0);
     }
 
     [Fact]
-    public void CalculateTimeInRange_Episodes_CountAnExcursionOnceAgainstTheMostExtremeZoneItReached()
+    public void CalculateTimeInRange_Episodes_CountADipStillUnderwayAtTheEndOfTheData()
     {
-        // High, VeryHigh, High, Target, High.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(180, 260, 190, 100, 190));
+        var result = _statisticsService.CalculateTimeInRange(Sequence(100, 60, 60, 60));
 
-        result.Episodes.High.Should().Be(1);
-        result.Episodes.VeryHigh.Should().Be(1);
-        result.Episodes.AboveRange.Should().Be(2);
+        result.Episodes.Low.Should().Be(1);
     }
 
     [Fact]
-    public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnce()
+    public void CalculateTimeInRange_Episodes_KeepADipInterruptedByABriefReturnAsOneEpisode()
     {
-        // Low, VeryLow, Low: one excursion below target, at its worst very low.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(65, 45, 65, 100));
+        // Ten minutes back in range is short of the fifteen that end an episode.
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(60, 60, 60, 60, 100, 100, 60, 60, 60, 60, 100, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_SplitDipsSeparatedByFifteenMinutesInRange()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(60, 60, 60, 60, 100, 100, 100, 60, 60, 60, 60, 100, 100, 100));
+
+        result.Episodes.Low.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_SplitADipAcrossAGapInTheData()
+    {
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] minutes = [0, 5, 10, 15, 45, 50, 55, 60, 65, 70, 75];
+        int[] mgdl = [60, 60, 60, 60, 60, 60, 60, 60, 100, 100, 100];
+        var entries = minutes
+            .Select((m, i) => new SensorGlucose { Mgdl = mgdl[i], Timestamp = start.AddMinutes(m) })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(2);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_DoNotBridgeAGapToReachFifteenMinutes()
+    {
+        // Ten minutes low, a half-hour gap, five minutes low: neither side lasted fifteen.
+        var start = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+        int[] minutes = [0, 5, 35, 40, 45, 50, 55];
+        int[] mgdl = [60, 60, 60, 100, 100, 100, 100];
+        var entries = minutes
+            .Select((m, i) => new SensorGlucose { Mgdl = mgdl[i], Timestamp = start.AddMinutes(m) })
+            .ToArray();
+
+        var result = _statisticsService.CalculateTimeInRange(entries);
+
+        result.Episodes.Low.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_CountAHypoThatDeepensAndRecoversOnceAgainstItsWorstZone()
+    {
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(65, 45, 45, 65, 100, 100, 100, 100));
 
         result.Episodes.VeryLow.Should().Be(1);
         result.Episodes.Low.Should().Be(0);
     }
 
     [Fact]
-    public void CalculateTimeInRange_Episodes_CountAReturnToTargetAsTheEndOfTheExcursion()
+    public void CalculateTimeInRange_Episodes_ApplyTheSameRulesAboveRange()
     {
-        // High, Target, High: two excursions, because target separates them.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 100, 200));
+        // A single high reading, then a 15-minute rise into very high with a brief dip back to
+        // range inside it, then fifteen minutes in range, then a 15-minute high.
+        var result = _statisticsService.CalculateTimeInRange(Sequence(
+            100, 200, 100, 100, 100,
+            200, 260, 200, 100, 200, 200, 100, 100, 100,
+            200, 200, 200, 100, 100, 100));
 
-        result.Episodes.High.Should().Be(2);
+        result.Episodes.VeryHigh.Should().Be(1);
+        result.Episodes.High.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(2);
     }
 
     [Fact]
     public void CalculateTimeInRange_Episodes_CountACrossingFromHighStraightToLowOnEachSide()
     {
-        // No target reading separates them, but they are excursions on opposite sides.
-        var result = _statisticsService.CalculateTimeInRange(Sequence(200, 60));
+        var result = _statisticsService.CalculateTimeInRange(
+            Sequence(200, 200, 200, 60, 60, 60, 100, 100, 100));
 
         result.Episodes.High.Should().Be(1);
         result.Episodes.Low.Should().Be(1);
         result.Episodes.AboveRange.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateTimeInRange_Episodes_NeedFifteenReadingsFromAOneMinuteSensor()
+    {
+        var fourteen = Enumerable.Repeat(60, 14).Concat(Enumerable.Repeat(100, 20)).ToArray();
+        var fifteen = Enumerable.Repeat(60, 15).Concat(Enumerable.Repeat(100, 20)).ToArray();
+
+        _statisticsService.CalculateTimeInRange(Sequence(1, fourteen)).Episodes.Low.Should().Be(0);
+        _statisticsService.CalculateTimeInRange(Sequence(1, fifteen)).Episodes.Low.Should().Be(1);
     }
 
     [Fact]

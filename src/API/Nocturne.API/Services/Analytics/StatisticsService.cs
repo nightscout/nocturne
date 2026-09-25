@@ -1305,7 +1305,7 @@ public class StatisticsService : IStatisticsService
                 zoneMinutes[(int)ExcludingZone.High] + zoneMinutes[(int)ExcludingZone.VeryHigh],
         };
 
-        var episodes = CalculateEpisodes(glucoseValues, thresholds);
+        var episodes = CalculateEpisodes(entriesList, glucoseValues, thresholds);
 
         // Calculate per-range detailed statistics
         var rangeZones = RangeStatZones(thresholds);
@@ -1420,12 +1420,12 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// A run of consecutive readings on the same side of target is one episode, counted against
-    /// the most extreme zone the run reached — so a rise through High into VeryHigh and back is
-    /// one very-high episode, not three. <see cref="ExcludingZone"/> lists the severe zone of each
-    /// side ahead of the milder one, so the most extreme zone of a run is the lowest-numbered.
+    /// Counts episodes as <see cref="TimeInRangeEpisodes"/> defines them, each against the most
+    /// extreme zone reached while it lasted. <see cref="ExcludingZone"/> lists the severe zone of
+    /// each side ahead of the milder one, so the most extreme zone is the lowest-numbered.
     /// </summary>
     private static TimeInRangeEpisodes CalculateEpisodes(
+        IList<SensorGlucose> sortedEntries,
         IList<double> glucoseValues,
         GlycemicThresholds thresholds
     )
@@ -1433,23 +1433,57 @@ public class StatisticsService : IStatisticsService
         var zones = ExcludingZones(thresholds);
         var episodeCounts = new int[zones.ZoneCount];
         var aboveRange = 0;
-        var side = 0;
-        var extreme = (int)ExcludingZone.Target;
 
-        foreach (var value in glucoseValues)
+        var intervals = ReadingIntervals(sortedEntries);
+        var cadence = SeriesCadenceMinutes(intervals);
+
+        int runSide = 0, runExtreme = (int)ExcludingZone.Target;
+        double runMinutes = 0;
+        int episodeSide = 0, episodeExtreme = (int)ExcludingZone.Target;
+        double returnMinutes = 0;
+
+        for (var i = 0; i < glucoseValues.Count; i++)
         {
-            var zone = zones.Classify(value);
-            var zoneSide = Side(zone);
+            var zone = zones.Classify(glucoseValues[i]);
+            var side = Side(zone);
+            var gapFollows = i < intervals.Length && intervals[i] > EpisodeGapMinutes;
+            var minutes = i < intervals.Length && !gapFollows
+                ? Math.Min(intervals[i], cadence * 2)
+                : cadence;
 
-            if (zoneSide != side)
+            if (side != runSide)
+            {
+                runSide = side;
+                runExtreme = zone;
+                runMinutes = 0;
+            }
+            runMinutes += minutes;
+            runExtreme = Math.Min(runExtreme, zone);
+
+            if (episodeSide != 0)
+            {
+                if (side == episodeSide)
+                {
+                    returnMinutes = 0;
+                    episodeExtreme = Math.Min(episodeExtreme, zone);
+                }
+                else if ((returnMinutes += minutes) >= EpisodeMinutes)
+                {
+                    CloseEpisode();
+                }
+            }
+
+            if (episodeSide == 0 && runSide != 0 && runMinutes >= EpisodeMinutes)
+            {
+                episodeSide = runSide;
+                episodeExtreme = runExtreme;
+                returnMinutes = 0;
+            }
+
+            if (gapFollows)
             {
                 CloseEpisode();
-                side = zoneSide;
-                extreme = zone;
-            }
-            else if (zone < extreme)
-            {
-                extreme = zone;
+                runSide = 0;
             }
         }
 
@@ -1466,12 +1500,13 @@ public class StatisticsService : IStatisticsService
 
         void CloseEpisode()
         {
-            if (side == 0)
+            if (episodeSide == 0)
                 return;
 
-            episodeCounts[extreme]++;
-            if (side > 0)
+            episodeCounts[episodeExtreme]++;
+            if (episodeSide > 0)
                 aboveRange++;
+            episodeSide = 0;
         }
 
         static int Side(int zone) =>
@@ -1482,6 +1517,18 @@ public class StatisticsService : IStatisticsService
                 _ => 0,
             };
     }
+
+    /// <summary>
+    /// The consensus event duration <see cref="TimeInRangeEpisodes"/> is defined by: the minutes
+    /// beyond a threshold that begin an episode, and the minutes back within it that end one.
+    /// </summary>
+    private const double EpisodeMinutes = 15;
+
+    /// <summary>
+    /// A stretch without readings longer than an episode's own minimum ends a run rather than
+    /// bridging it, since nothing says which side of the threshold it was spent on.
+    /// </summary>
+    private const double EpisodeGapMinutes = EpisodeMinutes;
 
     /// <summary>
     /// The cadence assumed where nothing publishes one: a series showing no interval of its own,
