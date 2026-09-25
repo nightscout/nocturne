@@ -217,11 +217,13 @@ export function withPayload<K extends ConditionKind>(
 	return node;
 }
 
+// randomUUID exists only in secure contexts; a LAN install served over plain
+// http still has getRandomValues.
 function newUid(): string {
-	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-		return crypto.randomUUID();
-	}
-	return Math.random().toString(36).slice(2);
+	if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+	return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+		b.toString(16).padStart(2, "0"),
+	).join("");
 }
 
 /**
