@@ -87,7 +87,7 @@ public static class ReplayScenarios
 
         yield return Replay(
             "replay-auto-resolve-relapse",
-            "a rule awaiting re-arm evaluates its auto-resolve tree every tick, keeping that tree's timers, and fires again on the tick the tree goes false while the body still holds",
+            "a rule awaiting re-arm evaluates its auto-resolve tree on every tick, whatever its body, keeping that tree's timers, and fires again on the tick the tree goes false while the body holds",
             [Rule(1, "threshold", Low70, autoResolveParams: """
                 {"type": "sustained", "sustained": {"minutes": 10, "child":
                     {"type": "threshold", "threshold": {"direction": "above", "value": 60}}}}
@@ -100,6 +100,24 @@ public static class ReplayScenarios
                 Reading(20, 66m), // no fire
                 Reading(25, 45m), // resolve false, body true: re-armed and fires on this tick
                 Reading(30, 45m), // still firing; the resolve child is false
+            ]);
+
+        yield return Replay(
+            "replay-auto-resolve-read-while-body-false",
+            "awaiting re-arm, the auto-resolve tree is evaluated on a tick whose body is false too, so its sustained timer clears there as the live engine's does and a later fire starts the hold over; pinned against the live scenario auto-resolve-read-while-body-false",
+            [Rule(1, "threshold", Low70, autoResolveParams: """
+                {"type": "sustained", "sustained": {"minutes": 10, "child":
+                    {"type": "composite", "composite": {"operator": "and", "conditions": [
+                        {"type": "threshold", "threshold": {"direction": "above", "value": 60}},
+                        {"type": "threshold", "threshold": {"direction": "below", "value": 75}}]}}}}
+                """)],
+            [
+                Reading(0, 65m),  // fires; the resolve timer is set
+                Reading(5, 65m),
+                Reading(10, 65m), // resolve has held 10 minutes: auto-resolved
+                Reading(15, 80m), // body false: re-armed; the resolve child is false, so its timer clears
+                Reading(20, 65m), // fires; the resolve hold starts over
+                Reading(25, 65m), // resolve has held 5 of 10 minutes: still firing
             ]);
 
         yield return Replay(

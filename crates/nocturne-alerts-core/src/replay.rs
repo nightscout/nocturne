@@ -176,14 +176,14 @@ pub fn replay(
             let met = body.root;
             let rearm_read_resolve = firing.awaiting_rearm;
             if rearm_read_resolve {
-                firing.awaiting_rearm = met
-                    && auto_resolve_holds(
-                        rule.id,
-                        prepared.auto_resolve.as_ref(),
-                        &ctx,
-                        at,
-                        &mut timers,
-                    );
+                let resolve_met = auto_resolve_holds(
+                    rule.id,
+                    prepared.auto_resolve.as_ref(),
+                    &ctx,
+                    at,
+                    &mut timers,
+                );
+                firing.awaiting_rearm = met && resolve_met;
             }
             let mut now_firing = met && !firing.awaiting_rearm;
             if now_firing && !firing.firing {

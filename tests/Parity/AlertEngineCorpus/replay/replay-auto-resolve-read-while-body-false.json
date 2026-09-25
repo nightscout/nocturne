@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "replay-auto-resolve-relapse",
-  "description": "a rule awaiting re-arm evaluates its auto-resolve tree on every tick, whatever its body, keeping that tree\u0027s timers, and fires again on the tick the tree goes false while the body holds",
+  "name": "replay-auto-resolve-read-while-body-false",
+  "description": "awaiting re-arm, the auto-resolve tree is evaluated on a tick whose body is false too, so its sustained timer clears there as the live engine\u0027s does and a later fire starts the hold over; pinned against the live scenario auto-resolve-read-while-body-false",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
@@ -19,10 +19,25 @@
         "sustained": {
           "minutes": 10,
           "child": {
-            "type": "threshold",
-            "threshold": {
-              "direction": "above",
-              "value": 60
+            "type": "composite",
+            "composite": {
+              "operator": "and",
+              "conditions": [
+                {
+                  "type": "threshold",
+                  "threshold": {
+                    "direction": "above",
+                    "value": 60
+                  }
+                },
+                {
+                  "type": "threshold",
+                  "threshold": {
+                    "direction": "below",
+                    "value": 75
+                  }
+                }
+              ]
             }
           }
         }
@@ -75,7 +90,7 @@
     {
       "at": "2026-01-05T12:15:00Z",
       "context": {
-        "latest_value": 66,
+        "latest_value": 80,
         "latest_timestamp": "2026-01-05T12:15:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:15:00Z",
@@ -89,7 +104,7 @@
     {
       "at": "2026-01-05T12:20:00Z",
       "context": {
-        "latest_value": 66,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:20:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:20:00Z",
@@ -103,24 +118,10 @@
     {
       "at": "2026-01-05T12:25:00Z",
       "context": {
-        "latest_value": 45,
+        "latest_value": 65,
         "latest_timestamp": "2026-01-05T12:25:00Z",
         "trend_rate": 0,
         "last_reading_at": "2026-01-05T12:25:00Z",
-        "has_ever_aps_cycled": false,
-        "has_ever_pump_snapshot": false,
-        "has_ever_uploader_snapshot": false,
-        "has_ever_aps_sensitivity": false,
-        "sleep_session_active": false
-      }
-    },
-    {
-      "at": "2026-01-05T12:30:00Z",
-      "context": {
-        "latest_value": 45,
-        "latest_timestamp": "2026-01-05T12:30:00Z",
-        "trend_rate": 0,
-        "last_reading_at": "2026-01-05T12:30:00Z",
         "has_ever_aps_cycled": false,
         "has_ever_pump_snapshot": false,
         "has_ever_uploader_snapshot": false,

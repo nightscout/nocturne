@@ -99,9 +99,9 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                 var rearmReadResolve = awaitingRearm[i];
                 if (rearmReadResolve)
                 {
-                    awaitingRearm[i] = met
-                        && resolvers[i] is { } heldNode
+                    var resolveMet = resolvers[i] is { } heldNode
                         && await AutoResolveHoldsAsync(registry, heldNode, ruleContext, rule.Id, tick, ct);
+                    awaitingRearm[i] = met && resolveMet;
                 }
                 var currentlyFiring = met && !awaitingRearm[i];
                 if (currentlyFiring && !firing[i])
