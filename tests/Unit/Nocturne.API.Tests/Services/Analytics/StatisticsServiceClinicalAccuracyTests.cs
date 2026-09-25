@@ -298,8 +298,9 @@ public class StatisticsServiceClinicalAccuracyTests
             new SensorGlucose { Mgdl = 300 }, // severe high
         };
 
-        var result = _sut.CalculateTimeInRange(entries);
+        var result = _sut.CalculateTimeInRange(SpacedFiveMinutesApart(entries));
 
+        result.Percentages.VeryLow.Should().Be(20);
         var totalPercentage =
             result.Percentages.VeryLow
             + result.Percentages.Low
