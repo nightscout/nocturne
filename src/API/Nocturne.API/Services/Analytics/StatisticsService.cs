@@ -1970,9 +1970,9 @@ public class StatisticsService : IStatisticsService
         // Calculate day count (minimum 1 to avoid division by zero)
         var dayCount = Math.Max(1, (int)Math.Round((endDate - startDate).TotalDays));
 
-        // All Bolus records are bolus insulin; basal comes from StateSpans.
+        // All Bolus records are bolus insulin; basal comes from TempBasals.
         // This overload only has bolus data, so basal stats will be 0.
-        // Use the StateSpan overload for complete basal/bolus analysis.
+        // Use the TempBasal overload for complete basal/bolus analysis.
         double totalBolus = 0;
         int bolusCount = 0;
         int correctionBoluses = 0;
@@ -2043,11 +2043,12 @@ public class StatisticsService : IStatisticsService
         return new InsulinDeliveryStatistics
         {
             TotalBolus = Math.Round(totalBolus * 100) / 100,
-            TotalBasal = 0, // Basal requires StateSpans
+            TotalBasal = 0, // Basal requires TempBasals
             TotalInsulin = Math.Round(totalBolus * 100) / 100,
             TotalCarbs = Math.Round(totalCarbs * 10) / 10,
             BolusCount = bolusCount,
             BasalCount = 0,
+            InsulinEventCount = bolusCount,
             BasalPercent = 0,
             BolusPercent = totalBolus > 0 ? 100 : 0,
             Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
@@ -2143,24 +2144,27 @@ public class StatisticsService : IStatisticsService
         // Start with bolus-based calculation (includes carb stats)
         var stats = CalculateBolusDeliveryStatistics(boluses, carbIntakes, startDate, endDate);
 
-        // Sum basal from TempBasals + algorithm boluses, splitting scheduled vs additional
+        // Delivered basal splits into scheduled and additional. A temp below the scheduled rate
+        // reduces the scheduled part only; a temp above it contributes the excess to additional.
+        // Additional never nets a below-schedule temp against a rising one.
         var tempBasalInsulin = 0.0;
         var scheduledBasalInsulin = 0.0;
         var additionalBasalInsulin = 0.0;
+        var tempBasalCount = 0;
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
             var insulin = GetTempBasalInsulin(tb, effectiveEndMills);
             if (insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
+            tempBasalCount++;
 
-            // Split into scheduled vs additional using ScheduledRate when available
             if (tb.ScheduledRate.HasValue)
             {
                 var durationHours = (effectiveEndMills - tb.StartMills) / (1000.0 * 60 * 60);
                 var scheduled = tb.ScheduledRate.Value * durationHours;
-                scheduledBasalInsulin += scheduled;
-                additionalBasalInsulin += insulin - scheduled;
+                scheduledBasalInsulin += Math.Min(insulin, scheduled);
+                additionalBasalInsulin += Math.Max(0, insulin - scheduled);
             }
             else if (tb.Origin == TempBasalOrigin.Scheduled)
             {
@@ -2212,6 +2216,8 @@ public class StatisticsService : IStatisticsService
         stats.MicroBolusInsulin = Math.Round(algorithmBolusInsulin * 100) / 100;
         stats.BasalInjectionInsulin = Math.Round(basalInjectionInsulin * 100) / 100;
         stats.BasalInjectionCount = basalInjectionCount;
+        stats.BasalCount = tempBasalCount + basalInjectionCount;
+        stats.InsulinEventCount = stats.BolusCount + stats.MicroBolusCount + stats.BasalCount;
 
         return stats;
     }

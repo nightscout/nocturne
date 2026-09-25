@@ -1513,14 +1513,21 @@ public class InsulinDeliveryStatistics
     public double TotalCarbs { get; set; }
 
     /// <summary>
-    /// Number of bolus treatments
+    /// Number of manually initiated boluses in the period. Algorithm-delivered micro-boluses
+    /// are excluded and counted by <see cref="MicroBolusCount"/>.
     /// </summary>
     public int BolusCount { get; set; }
 
     /// <summary>
-    /// Number of basal treatments
+    /// Number of basal delivery records in the period: TempBasal segments plus discrete
+    /// long-acting basal injections.
     /// </summary>
     public int BasalCount { get; set; }
+
+    /// <summary>
+    /// Total insulin events in the period: manual boluses, micro-boluses, and basal deliveries.
+    /// </summary>
+    public int InsulinEventCount { get; set; }
 
     /// <summary>
     /// Percentage of total insulin that is basal (0-100)

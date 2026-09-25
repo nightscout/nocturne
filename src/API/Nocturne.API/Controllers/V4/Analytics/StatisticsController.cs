@@ -795,13 +795,20 @@ public class StatisticsController : ControllerBase
                 {
                     var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
                     var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var profileSegments = await _basalSegments
+                        .GetSegmentsAsync(fromMs, toMs, cancellationToken)
+                        .ToListAsync(cancellationToken);
                     var profileBasal = Math.Round(
-                        await _basalSegments.GetSegmentsAsync(fromMs, toMs, cancellationToken).SumUnitsAsync(cancellationToken)
-                        * 100) / 100;
+                        profileSegments.Sum(s => s.Units) * 100) / 100;
                     var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
                     insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.ScheduledBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.AdditionalBasal = 0;
+                    insulinDelivery.BasalCount = profileSegments.Count;
+                    insulinDelivery.InsulinEventCount =
+                        insulinDelivery.BolusCount
+                        + insulinDelivery.MicroBolusCount
+                        + insulinDelivery.BasalCount;
                     insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
                     insulinDelivery.Tdd =
                         Math.Round(
