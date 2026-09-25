@@ -968,7 +968,7 @@ public static class ServiceRegistrationExtensions
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
         services.AddScoped<AlertRuleRearm>();
-        services.AddScoped<AlertRuleDisableHandler>();
+        services.AddScoped<AlertRuleRetirement>();
 
         // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
         services.AddAlertEvaluationEngine(configuration);

@@ -4,11 +4,10 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts;
 
 /// <summary>
-/// Closes each just-disabled rule's open excursion and resolves its instance
-/// (docs/alerts/engine-semantics.md §6.2). Every writer that disables a rule calls this after the
-/// save lands.
+/// Closes a retiring rule's open excursion and resolves its instance
+/// (docs/alerts/engine-semantics.md §6.2). Every writer that disables or deletes a rule calls this.
 /// </summary>
-public sealed class AlertRuleDisableHandler(
+public sealed class AlertRuleRetirement(
     IExcursionTracker excursionTracker,
     IExcursionResolutionHandler resolutionHandler)
 {
@@ -17,6 +16,10 @@ public sealed class AlertRuleDisableHandler(
     /// hands the transition to <see cref="IExcursionResolutionHandler"/>, which ignores a rule that
     /// held no excursion.
     /// </summary>
+    /// <remarks>
+    /// For a delete the rule must still exist: once it is gone the FK cascade takes the excursion
+    /// with it and there is nothing left to close.
+    /// </remarks>
     public async Task CloseAsync(
         IReadOnlyCollection<Guid> ruleIds, Guid tenantId, CancellationToken ct)
     {

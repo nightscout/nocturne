@@ -40,7 +40,7 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     private readonly IRuleScopeClassifier _scopeClassifier;
     private readonly IAlertReferenceService _referenceService;
     private readonly AlertRuleRearm _rearm;
-    private readonly AlertRuleDisableHandler _disableHandler;
+    private readonly AlertRuleRetirement _retirement;
     private readonly ILogger<TrackerAlertRuleSyncService> _logger;
 
     /// <summary>Initialises a new <see cref="TrackerAlertRuleSyncService"/>.</summary>
@@ -49,14 +49,14 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         IRuleScopeClassifier scopeClassifier,
         IAlertReferenceService referenceService,
         AlertRuleRearm rearm,
-        AlertRuleDisableHandler disableHandler,
+        AlertRuleRetirement retirement,
         ILogger<TrackerAlertRuleSyncService> logger)
     {
         _contextFactory = contextFactory;
         _scopeClassifier = scopeClassifier;
         _referenceService = referenceService;
         _rearm = rearm;
-        _disableHandler = disableHandler;
+        _retirement = retirement;
         _logger = logger;
     }
 
@@ -215,11 +215,16 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         SyncReservoirLevelRule(db, tenantId, definition, tag, managedRules, keptRuleIds, changed);
 
         var orphaned = managedRules.Values.Where(r => !keptRuleIds.Contains(r.Id)).ToList();
-        var removed = await RemoveOrDisableAsync(db, orphaned, disabled, ct);
+        var deleted = new List<Guid>();
+        var removed = await RemoveOrDisableAsync(db, orphaned, disabled, deleted, ct);
+
+        // AlertRuleRetirement's remarks: a delete closes before the save that removes the rule.
+        if (deleted.Count > 0)
+            await _retirement.CloseAsync(deleted, tenantId, ct);
 
         await db.SaveChangesAsync(ct);
         if (disabled.Count > 0)
-            await _disableHandler.CloseAsync(disabled, tenantId, CancellationToken.None);
+            await _retirement.CloseAsync(disabled, tenantId, CancellationToken.None);
         await _rearm.ClearAsync([.. changed, .. disabled], ct);
 
         _logger.LogInformation(
@@ -239,10 +244,14 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
         if (rules.Count == 0) return;
 
         var disabled = new List<Guid>();
-        var removed = await RemoveOrDisableAsync(db, rules, disabled, ct);
+        var deleted = new List<Guid>();
+        var removed = await RemoveOrDisableAsync(db, rules, disabled, deleted, ct);
+        // AlertRuleRetirement's remarks: a delete closes before the save that removes the rule.
+        if (deleted.Count > 0)
+            await _retirement.CloseAsync(deleted, db.TenantId, ct);
         await db.SaveChangesAsync(ct);
         if (disabled.Count > 0)
-            await _disableHandler.CloseAsync(disabled, db.TenantId, CancellationToken.None);
+            await _retirement.CloseAsync(disabled, db.TenantId, CancellationToken.None);
         await _rearm.ClearAsync(disabled, ct);
 
         _logger.LogInformation(
@@ -257,10 +266,12 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
     /// disabled: the referencing rule visibly stops (disabled-parent semantics, the same
     /// state a user creates by toggling the parent off) instead of dying invisibly, and
     /// the stale condition can no longer fire. Each disabled rule is added to
-    /// <paramref name="disabled"/>.
+    /// <paramref name="disabled"/>; each enabled rule removed is added to
+    /// <paramref name="deleted"/> so the caller can close its excursion before the save.
     /// </summary>
     private async Task<int> RemoveOrDisableAsync(
-        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules, List<Guid> disabled, CancellationToken ct)
+        NocturneDbContext db, IReadOnlyList<AlertRuleEntity> rules,
+        List<Guid> disabled, List<Guid> deleted, CancellationToken ct)
     {
         var removed = 0;
         foreach (var rule in rules)
@@ -278,6 +289,8 @@ public sealed class TrackerAlertRuleSyncService : ITrackerAlertRuleSyncService
                 continue;
             }
 
+            if (rule.IsEnabled)
+                deleted.Add(rule.Id);
             db.AlertRules.Remove(rule);
             removed++;
         }

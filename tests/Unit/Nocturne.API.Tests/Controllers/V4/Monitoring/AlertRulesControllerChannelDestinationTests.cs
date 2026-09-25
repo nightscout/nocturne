@@ -49,7 +49,7 @@ public class AlertRulesControllerChannelDestinationTests
             new NoConditionIssues(),
             Mock.Of<ISecretEncryptionService>(),
             new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
-            new AlertRuleDisableHandler(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         var http = new DefaultHttpContext();
