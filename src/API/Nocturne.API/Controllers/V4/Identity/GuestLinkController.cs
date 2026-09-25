@@ -41,7 +41,7 @@ public class GuestLinkController : ControllerBase
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateGuestLink(
         [FromBody] CreateGuestLinkRequest request,
@@ -51,8 +51,7 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HttpContext.HasScope(Scope.SharingGuest)
-            && auth.SubjectId != auth.EffectiveSubjectId)
+        if (!HttpContext.HasScope(Scope.SharingGuest))
             return Forbid();
 
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
@@ -65,11 +64,19 @@ public class GuestLinkController : ControllerBase
                 auth.SubjectId.Value,
                 request.Label,
                 baseUrl,
+                HttpContext.GetGrantedScopes(),
                 request.Scopes,
                 limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
                 ct: ct);
 
             return Ok(result);
+        }
+        catch (GrantCeilingViolationException ex)
+        {
+            return Problem(
+                detail: ex.Violation.Description,
+                statusCode: StatusCodes.Status403Forbidden,
+                title: ex.Violation.Code);
         }
         catch (ArgumentException ex)
         {
