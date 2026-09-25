@@ -1,3 +1,5 @@
+import type { RustValidationIssue } from "$api-clients";
+import { parseIssues } from "$lib/api/error-body";
 import { recordApiFailure } from "$lib/support/api-failure-log";
 
 /** Fallback shown when a submission fails for a reason we can't safely surface. */
@@ -21,20 +23,41 @@ export function errorStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+/** The `body` a thrown `HttpError` carries, when it has one. */
+function errorBody(err: unknown): object | undefined {
+  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
+
+  const { body } = err;
+  if (!body || typeof body !== "object") return undefined;
+
+  return body;
+}
+
 /**
  * The message a remote handler put in `error(status, message)`. SvelteKit
  * delivers it as `HttpError.body.message`.
  */
 export function errorMessage(err: unknown): string | undefined {
-  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
-
-  const { body } = err;
-  if (!body || typeof body !== "object" || !("message" in body)) return undefined;
+  const body = errorBody(err);
+  if (body === undefined || !("message" in body)) return undefined;
 
   const { message } = body;
   if (typeof message !== "string" || message.trim() === "") return undefined;
 
   return message;
+}
+
+/**
+ * The structured validation issues a body carries, when every entry has the
+ * shape one declares.
+ */
+export function errorIssues(
+  err: unknown
+): RustValidationIssue[] | undefined {
+  const body = errorBody(err);
+  if (body === undefined || !("issues" in body)) return undefined;
+
+  return parseIssues(body.issues);
 }
 
 /**

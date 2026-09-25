@@ -1,11 +1,11 @@
-import { errorMessage, errorStatus } from "$lib/forms/submit-error";
+import { errorIssues } from "$lib/forms/submit-error";
 
 const MALFORMED = "Part of this rule's conditions is malformed, so it can't be saved.";
 
 /**
  * Sentences for the reason codes a rule save is rejected with
- * (docs/alerts/engine-semantics.md §1.4). A code arrives alone or as
- * `reason:field`; the specific form wins.
+ * (docs/alerts/engine-semantics.md §1.4). A code arrives with a field or
+ * without one; the field-specific form wins.
  */
 const ISSUE_MESSAGES: Record<string, string> = {
 	conditions_missing: "Every group needs at least one condition.",
@@ -49,17 +49,23 @@ const ISSUE_MESSAGES: Record<string, string> = {
 
 /**
  * What to tell the person when a rule save was rejected for its conditions, or
- * `null` when the rejection was for something else. The generated command
- * forwards the rejection's codes as its message, joined by `, ` and `; `.
+ * `null` when the rejection was for something else.
  */
 export function conditionIssuesMessage(err: unknown): string | null {
-	if (errorStatus(err) !== 400) return null;
-	const message = errorMessage(err);
-	if (message === undefined) return null;
+	const issues = errorIssues(err);
+	if (issues === undefined || issues.length === 0) return null;
 
 	const sentences: string[] = [];
-	for (const code of message.split(/[;,]\s*/)) {
-		const sentence = ISSUE_MESSAGES[code] ?? ISSUE_MESSAGES[code.split(":")[0]];
+	for (const issue of issues) {
+		const reason = issue.reason;
+		const key = reason && issue.field ? `${reason}:${issue.field}` : undefined;
+		const sentence =
+			(key !== undefined && Object.hasOwn(ISSUE_MESSAGES, key)
+				? ISSUE_MESSAGES[key]
+				: undefined) ??
+			(reason !== undefined && Object.hasOwn(ISSUE_MESSAGES, reason)
+				? ISSUE_MESSAGES[reason]
+				: undefined);
 		if (sentence === undefined) return null;
 		if (!sentences.includes(sentence)) sentences.push(sentence);
 	}
