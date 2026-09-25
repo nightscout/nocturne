@@ -44,15 +44,17 @@ public class NightscoutConnectorBackgroundService
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
     /// <param name="metrics">Connector sync instruments.</param>
+    /// <param name="runGuard">Refuses a sync for a key another run already holds.</param>
     public NightscoutConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
         ActiveTenantSnapshot activeTenants,
         ILogger<NightscoutConnectorBackgroundService> logger,
         ConnectorPollerNudge? nudge = null,
-        ConnectorSyncMetrics? metrics = null
+        ConnectorSyncMetrics? metrics = null,
+        TenantRunGuard? runGuard = null
     )
-        : base(serviceProvider, budget, activeTenants, logger, nudge, metrics) { }
+        : base(serviceProvider, budget, activeTenants, logger, nudge, metrics, runGuard) { }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)

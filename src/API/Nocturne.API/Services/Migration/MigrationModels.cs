@@ -39,6 +39,17 @@ public enum MigrationJobState
 }
 
 /// <summary>
+/// A migration start was refused because the tenant already has a job in flight. The running
+/// job's id is carried so the caller can point the person at it.
+/// </summary>
+public sealed class MigrationAlreadyRunningException(Guid jobId)
+    : InvalidOperationException($"A migration is already running for this tenant (job {jobId}).")
+{
+    /// <summary>The job that already holds the tenant's migration slot.</summary>
+    public Guid JobId { get; } = jobId;
+}
+
+/// <summary>
 /// Parameters for starting a new data migration from Nightscout or MongoDB.
 /// </summary>
 public record StartMigrationRequest

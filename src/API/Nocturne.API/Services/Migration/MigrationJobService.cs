@@ -26,6 +26,7 @@ namespace Nocturne.API.Services.Migration;
 /// </summary>
 public interface IMigrationJobService
 {
+    /// <exception cref="MigrationAlreadyRunningException">Thrown when the tenant already has a job in flight.</exception>
     Task<MigrationJobInfo> StartMigrationAsync(
         StartMigrationRequest request,
         TenantContext? tenantContext,
@@ -67,16 +68,21 @@ public class MigrationJobService : IMigrationJobService
     private readonly IServiceProvider _serviceProvider;
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<Guid, MigrationJob> _jobs = new();
+    private readonly TenantRunGuard _runGuard;
+
+    private const string MigrationRunName = "migration";
 
     public MigrationJobService(
         ILogger<MigrationJobService> logger,
         IServiceProvider serviceProvider,
-        IConfiguration configuration
+        IConfiguration configuration,
+        TenantRunGuard runGuard
     )
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _configuration = configuration;
+        _runGuard = runGuard;
     }
 
     public async Task<MigrationJobInfo> StartMigrationAsync(
@@ -111,12 +117,33 @@ public class MigrationJobService : IMigrationJobService
 
         var job = new MigrationJob(jobId, tenantId, request, jobInfo, tenantContext, _logger, _serviceProvider);
 
+        // One migration per tenant at a time: two runs over the same target race on their inserts.
+        // The lease is held for the whole run and records the job id, so a refused start can report
+        // which job it collided with rather than a bare conflict.
+        IDisposable lease;
+        while ((lease = _runGuard.TryAcquire(tenantId, MigrationRunName, jobId)) is null)
+        {
+            if (_runGuard.TryGetHolder(tenantId, MigrationRunName, out var runningJobId))
+                throw new MigrationAlreadyRunningException(runningJobId);
+
+            // The holder released between the failed acquire and the read; try again.
+        }
+
         // Record the job (and its source) before the work starts. The in-process task cannot
-        // survive an API restart, but its record must — job history and "was this source ever
+        // survive an API restart, but its record must: job history and "was this source ever
         // migrated?" checks read these rows, and without them a restart erases all evidence
         // that the run happened. Registered in the job map only after the record exists, so a
         // failed persist doesn't leave a phantom Pending job answering status probes.
-        await job.PersistSnapshotAsync(ct);
+        try
+        {
+            await job.PersistSnapshotAsync(ct);
+        }
+        catch
+        {
+            lease.Dispose();
+            throw;
+        }
+
         _jobs[jobId] = job;
 
         // Start migration on a detached background task. This deliberately does NOT use the
@@ -127,13 +154,16 @@ public class MigrationJobService : IMigrationJobService
         _ = Task.Run(
             async () =>
             {
-                try
+                using (lease)
                 {
-                    await job.ExecuteAsync(CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Migration job {JobId} failed", jobId);
+                    try
+                    {
+                        await job.ExecuteAsync(CancellationToken.None);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Migration job {JobId} failed", jobId);
+                    }
                 }
             },
             CancellationToken.None

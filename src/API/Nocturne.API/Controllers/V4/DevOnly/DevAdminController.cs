@@ -625,6 +625,7 @@ public class DevAdminController : ControllerBase
                         connectorName = config.ConnectorName,
                         connectorConfigId = config.Id,
                         success = result.Success,
+                        alreadyRunning = result.AlreadyRunning,
                         message = result.Message,
                         itemsSynced = result.ItemsSynced,
                     });

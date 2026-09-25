@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
@@ -34,7 +35,8 @@ public class MigrationJobServiceTests
         var service = new MigrationJobService(
             NullLogger<MigrationJobService>.Instance,
             provider,
-            new ConfigurationBuilder().Build());
+            new ConfigurationBuilder().Build(),
+            new TenantRunGuard());
 
         return (service, provider);
     }
@@ -164,5 +166,83 @@ public class MigrationJobServiceTests
 
         var sourcesC = await service.GetSourcesAsync(Guid.NewGuid());
         sourcesC.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A second start while the tenant's job is still live is refused, and the refusal names the
+    /// running job; once that job reaches a terminal state the slot is free again.
+    /// </summary>
+    [Fact]
+    public async Task StartMigrationAsync_WhenTheTenantAlreadyHasALiveJob_IsRefusedUntilItFinishes()
+    {
+        var handler = new BlockingHandler();
+        var service = new MigrationJobService(
+            NullLogger<MigrationJobService>.Instance,
+            MigrationJobHarness.BuildProvider(handler),
+            new ConfigurationBuilder().Build(),
+            new TenantRunGuard());
+        var tenant = Tenant(Guid.NewGuid());
+
+        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+
+        var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
+            () => service.StartMigrationAsync(ApiRequest(), tenant));
+
+        refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
+
+        handler.Release();
+        await WaitUntilTerminalAsync(service, tenant.TenantId, first.Id);
+
+        var afterFinish = await service.StartMigrationAsync(ApiRequest(), tenant);
+        afterFinish.Id.Should().NotBe(first.Id, "the slot is free once the first job is terminal");
+    }
+
+    [Fact]
+    public async Task StartMigrationAsync_ForDifferentTenants_RunsConcurrently()
+    {
+        var handler = new BlockingHandler();
+        var service = new MigrationJobService(
+            NullLogger<MigrationJobService>.Instance,
+            MigrationJobHarness.BuildProvider(handler),
+            new ConfigurationBuilder().Build(),
+            new TenantRunGuard());
+
+        var first = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
+        var second = await service.StartMigrationAsync(ApiRequest(), Tenant(Guid.NewGuid()));
+
+        second.Id.Should().NotBe(first.Id);
+        handler.Release();
+    }
+
+    private static async Task WaitUntilTerminalAsync(
+        MigrationJobService service, Guid tenantId, Guid jobId)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var status = await service.GetStatusAsync(tenantId, jobId);
+            if (status.State is MigrationJobState.Completed or MigrationJobState.Failed
+                or MigrationJobState.Cancelled or MigrationJobState.Interrupted)
+                return;
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException($"Migration job {jobId} did not reach a terminal state");
+    }
+
+    /// <summary>Holds every source request until released, keeping the job in a live state.</summary>
+    private sealed class BlockingHandler : HttpMessageHandler
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Release() => _released.TrySetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await _released.Task.WaitAsync(cancellationToken);
+            throw new HttpRequestException("released");
+        }
     }
 }

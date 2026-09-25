@@ -4,6 +4,13 @@ public class SyncResult
 {
     public bool Success { get; set; }
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Set when the run was refused because another run of the same connector and tenant was
+    /// already in flight. Distinct from <see cref="Success"/> being false, which reports a run
+    /// that was attempted and failed.
+    /// </summary>
+    public bool AlreadyRunning { get; set; }
     public Dictionary<SyncDataType, int> ItemsSynced { get; init; } = new();
 
     /// <summary>

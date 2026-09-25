@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
 using Nocturne.Infrastructure.Data.Entities;
 
@@ -49,7 +50,7 @@ public class MigrationFailureReportingTests
         new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static MigrationJobService BuildService(IServiceProvider provider) =>
-        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build());
+        new(NullLogger<MigrationJobService>.Instance, provider, new ConfigurationBuilder().Build(), new TenantRunGuard());
 
     private static TestMigrationConnectionRequest TestRequest() => new()
     {

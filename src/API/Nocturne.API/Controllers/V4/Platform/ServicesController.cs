@@ -448,6 +448,7 @@ public class ServicesController : ControllerBase
     )]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(409)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > TriggerConnectorSync(
@@ -460,7 +461,7 @@ public class ServicesController : ControllerBase
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, request, cancellationToken);
-        return Ok(result);
+        return SyncOrConflict(result);
     }
 
     /// <summary>
@@ -499,6 +500,7 @@ public class ServicesController : ControllerBase
     )]
     [ProducesResponseType(typeof(Nocturne.Connectors.Core.Models.SyncResult), 200)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(409)]
     public async Task<
         ActionResult<Nocturne.Connectors.Core.Models.SyncResult>
     > ResetConnectorCursor(
@@ -526,7 +528,7 @@ public class ServicesController : ControllerBase
             request.From?.ToString("o") ?? "beginning");
 
         var result = await _connectorSyncService.TriggerSyncAsync(id, syncRequest, cancellationToken);
-        return Ok(result);
+        return SyncOrConflict(result);
     }
 
     /// <summary>
@@ -626,6 +628,12 @@ public class ServicesController : ControllerBase
             _ => $"{connectorId.ToLowerInvariant()}-connector",
         };
     }
+
+    private ActionResult<Nocturne.Connectors.Core.Models.SyncResult> SyncOrConflict(
+        Nocturne.Connectors.Core.Models.SyncResult result) =>
+        result.AlreadyRunning
+            ? Problem(detail: result.Message, statusCode: 409, title: "Conflict")
+            : Ok(result);
 
     private string GetBaseUrl()
     {

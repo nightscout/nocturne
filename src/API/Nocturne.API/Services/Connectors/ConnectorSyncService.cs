@@ -42,6 +42,7 @@ public class ConnectorSyncService : IConnectorSyncService
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<ConnectorSyncService> _logger;
     private readonly ISyncProgressReporter _progressReporter;
+    private readonly TenantRunGuard _runGuard;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ConnectorSyncService"/>.
@@ -50,17 +51,20 @@ public class ConnectorSyncService : IConnectorSyncService
     /// <param name="tenantAccessor">Provides the current tenant context to propagate into each sync scope.</param>
     /// <param name="logger">The logger instance.</param>
     /// <param name="progressReporter">Reporter for streaming sync progress events to clients via SignalR.</param>
+    /// <param name="runGuard">Refuses a sync for a connector and tenant that is already running.</param>
     public ConnectorSyncService(
         IServiceProvider serviceProvider,
         ITenantAccessor tenantAccessor,
         ILogger<ConnectorSyncService> logger,
-        ISyncProgressReporter progressReporter
+        ISyncProgressReporter progressReporter,
+        TenantRunGuard runGuard
     )
     {
         _serviceProvider = serviceProvider;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
         _progressReporter = progressReporter;
+        _runGuard = runGuard;
     }
 
     public async Task<SyncResult> TriggerSyncAsync(
@@ -69,6 +73,21 @@ public class ConnectorSyncService : IConnectorSyncService
         CancellationToken ct
     )
     {
+        var tenantId = _tenantAccessor.Context?.TenantId ?? Guid.Empty;
+        using var lease = _runGuard.TryAcquire(tenantId, connectorId);
+        if (lease is null)
+        {
+            _logger.LogInformation(
+                "Refused manual sync for connector {ConnectorId}: a sync for this connector is already running",
+                connectorId);
+            return new SyncResult
+            {
+                Success = false,
+                AlreadyRunning = true,
+                Message = $"A sync for connector '{connectorId}' is already running",
+            };
+        }
+
         _logger.LogInformation("Manual sync triggered for connector {ConnectorId}", connectorId);
 
         try

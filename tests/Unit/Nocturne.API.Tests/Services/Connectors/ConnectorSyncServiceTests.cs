@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Connectors;
 using Nocturne.Connectors.Core.Interfaces;
@@ -24,7 +25,7 @@ public class ConnectorSyncServiceTests
         var ta = tenantAccessor ?? CreateTenantAccessor();
         var logger = NullLogger<ConnectorSyncService>.Instance;
         var progressReporter = Mock.Of<ISyncProgressReporter>();
-        return new ConnectorSyncService(serviceProvider, ta, logger, progressReporter);
+        return new ConnectorSyncService(serviceProvider, ta, logger, progressReporter, new TenantRunGuard());
     }
 
     private static ITenantAccessor CreateTenantAccessor(TenantContext? context = null)
@@ -241,5 +242,121 @@ public class ConnectorSyncServiceTests
                 CancellationToken.None,
                 It.IsAny<ISyncProgressReporter?>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_WhenTheSameConnectorIsAlreadyRunning_RefusesTheSecondRunAndRunsTheExecutorOnce()
+    {
+        var tenant = new TenantContext(Guid.NewGuid(), "test-tenant", "Test", true, false);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var executor = new Mock<IConnectorSyncExecutor>();
+        executor.Setup(x => x.ConnectorId).Returns("test");
+        executor.Setup(x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()))
+            .Returns(async (IServiceProvider _, SyncRequest _, CancellationToken _, ISyncProgressReporter? _) =>
+            {
+                entered.TrySetResult();
+                await release.Task;
+                return new SyncResult { Success = true, Message = "OK" };
+            });
+
+        var sut = CreateService(BuildProvider(executor.Object), CreateTenantAccessor(tenant));
+
+        var first = sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+        await entered.Task;
+
+        var second = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        second.Success.Should().BeFalse("the run was refused, not attempted");
+        second.AlreadyRunning.Should().BeTrue();
+        second.Message.Should().Contain("already running");
+
+        release.SetResult();
+        (await first).Success.Should().BeTrue();
+
+        executor.Verify(
+            x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()),
+            Times.Once,
+            "the refused run must not reach the executor");
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_DifferentConnectors_RunConcurrently()
+    {
+        var tenant = new TenantContext(Guid.NewGuid(), "test-tenant", "Test", true, false);
+        var enteredA = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var enteredB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        static IConnectorSyncExecutor Blocking(string id, TaskCompletionSource entered, TaskCompletionSource release)
+        {
+            var mock = new Mock<IConnectorSyncExecutor>();
+            mock.Setup(x => x.ConnectorId).Returns(id);
+            mock.Setup(x => x.ExecuteSyncAsync(
+                    It.IsAny<IServiceProvider>(),
+                    It.IsAny<SyncRequest>(),
+                    It.IsAny<CancellationToken>(),
+                    It.IsAny<ISyncProgressReporter?>()))
+                .Returns(async (IServiceProvider _, SyncRequest _, CancellationToken _, ISyncProgressReporter? _) =>
+                {
+                    entered.TrySetResult();
+                    await release.Task;
+                    return new SyncResult { Success = true };
+                });
+            return mock.Object;
+        }
+
+        var sut = CreateService(
+            BuildProvider(
+                Blocking("dexcom", enteredA, release),
+                Blocking("libre", enteredB, release)),
+            CreateTenantAccessor(tenant));
+
+        var first = sut.TriggerSyncAsync("dexcom", new SyncRequest(), CancellationToken.None);
+        var second = sut.TriggerSyncAsync("libre", new SyncRequest(), CancellationToken.None);
+
+        var bothEntered = Task.WhenAll(enteredA.Task, enteredB.Task);
+        (await Task.WhenAny(bothEntered, Task.Delay(TimeSpan.FromSeconds(5))))
+            .Should().Be(bothEntered, "unrelated connectors must not block each other");
+
+        release.SetResult();
+        await Task.WhenAll(first, second);
+    }
+
+    [Fact]
+    public async Task TriggerSyncAsync_WhenTheExecutorThrows_ReleasesTheKeyForALaterRun()
+    {
+        var tenant = new TenantContext(Guid.NewGuid(), "test-tenant", "Test", true, false);
+        var calls = 0;
+
+        var executor = new Mock<IConnectorSyncExecutor>();
+        executor.Setup(x => x.ConnectorId).Returns("test");
+        executor.Setup(x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()))
+            .ReturnsAsync(() => Interlocked.Increment(ref calls) == 1
+                ? throw new InvalidOperationException("executor exploded")
+                : new SyncResult { Success = true, Message = "OK" });
+
+        var sut = CreateService(BuildProvider(executor.Object), CreateTenantAccessor(tenant));
+
+        var failed = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+        failed.Success.Should().BeFalse();
+
+        var succeeded = await sut.TriggerSyncAsync("test", new SyncRequest(), CancellationToken.None);
+
+        succeeded.Success.Should().BeTrue("the key the failed run held must have been released");
+        calls.Should().Be(2);
     }
 }

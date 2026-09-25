@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
@@ -59,8 +60,9 @@ public class ConnectorBackgroundServiceTests
             ConnectorSyncBudget? budget = null,
             ConnectorPollerNudge? nudge = null,
             TimeSpan? unconfiguredRecheck = null,
-            ConnectorSyncMetrics? metrics = null)
-            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, nudge, metrics)
+            ConnectorSyncMetrics? metrics = null,
+            TenantRunGuard? runGuard = null)
+            : base(serviceProvider, budget ?? new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger, nudge, metrics, runGuard)
         {
             _syncResult = syncResult;
             _onSync = onSync;
@@ -1423,6 +1425,34 @@ public class ConnectorBackgroundServiceTests
             Events.Enqueue("sync");
             return Task.FromResult(new SyncResult { Success = true });
         }
+    }
+
+    /// <summary>
+    /// A manual sync holds the same (tenant, connector) key the poller uses, so the cycle must
+    /// skip that tenant rather than queue behind it.
+    /// </summary>
+    [Fact]
+    public async Task SyncAllTenants_WhenASyncIsAlreadyRunning_SkipsThatTenantWithoutWaiting()
+    {
+        var tenantId = Guid.NewGuid();
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(tenantId, "test-tenant");
+
+        var guard = new TenantRunGuard();
+        using var held = guard.TryAcquire(tenantId, "testconnector");
+        held.Should().NotBeNull();
+
+        var logger = new MessageRecordingLogger();
+        var sut = new TestConnectorBackgroundService(
+            BuildServiceProvider(
+                db, BuildEnabledConfigMock(), new TestConnectorConfig { Enabled = true, SyncIntervalMinutes = 5 }),
+            new SyncResult { Success = true },
+            logger,
+            runGuard: guard);
+
+        await sut.ExecuteOnceAsync(CancellationToken.None);
+
+        sut.CallCount.Should().Be(0, "a held key makes the cycle skip the tenant, not run it");
+        logger.Messages.Should().Contain(m => m.Contains("skipped"));
     }
 
     /// <summary>
