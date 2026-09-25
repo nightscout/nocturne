@@ -21,6 +21,19 @@ internal static class GlucoseCadence
     private const int LocalCadenceRadius = 3;
 
     /// <summary>
+    /// The slowest cadence any CGM reports at: fifteen-minute history. No local cadence is taken
+    /// to be slower, so an interval longer than twice this is always a gap.
+    /// </summary>
+    private const double MaxCadenceMinutes = 15;
+
+    /// <summary>
+    /// The longest interval that counts as evidence of a cadence: the slowest cadence plus half
+    /// of it again for jitter. A longer interval is a dropout, and dropouts next to each other
+    /// must not set the cadence that would excuse them.
+    /// </summary>
+    private const double MaxCadenceEvidenceMinutes = MaxCadenceMinutes * 1.5;
+
+    /// <summary>
     /// The minutes from each reading to the next, in series order; empty for a series of one.
     /// </summary>
     internal static double[] ReadingIntervals(IList<SensorGlucose> sortedEntries)
@@ -45,10 +58,13 @@ internal static class GlucoseCadence
 
     /// <summary>
     /// The minutes each reading of a time-ordered series stands for, and whether a gap follows it.
-    /// A reading stands for the interval to the next one, unless that interval is a gap: longer
-    /// than both <see cref="GlucoseEpisodeDetector.EpisodeMinutes"/> and twice the cadence of the
-    /// intervals around it. A reading before a gap, like the final reading, stands for one such
-    /// cadence, so time the sensor did not cover is credited to no zone.
+    /// A reading stands for the interval to the next one, up to twice the cadence of the intervals
+    /// around it, unless that interval is a gap: longer than both
+    /// <see cref="GlucoseEpisodeDetector.EpisodeMinutes"/> and twice that cadence. A reading before
+    /// a gap, like the final reading, stands for one cadence, so time the sensor did not cover is
+    /// credited to no zone. The cap makes the credit continuous across the gap boundary: a
+    /// five-minute sensor missing two readings credits the reading before them at most ten
+    /// minutes whether the interval is a hair under fifteen or a hair over.
     /// <para>
     /// The cadence is local rather than the series median because one window can hold several —
     /// a switch from a one-minute sensor to a five-minute one, or fifteen-minute history among a
@@ -63,15 +79,14 @@ internal static class GlucoseCadence
         var minutes = new double[sortedEntries.Count];
         var gapAfter = new bool[sortedEntries.Count];
         var intervals = ReadingIntervals(sortedEntries);
-        var seriesCadence = SeriesCadenceMinutes(intervals);
 
         for (var i = 0; i < sortedEntries.Count; i++)
         {
-            var cadence = LocalCadenceMinutes(intervals, i, seriesCadence);
+            var cadence = LocalCadenceMinutes(intervals, i);
             if (i < intervals.Length
                 && intervals[i] <= Math.Max(GlucoseEpisodeDetector.EpisodeMinutes, cadence * 2))
             {
-                minutes[i] = intervals[i];
+                minutes[i] = Math.Min(intervals[i], cadence * 2);
             }
             else
             {
@@ -84,23 +99,28 @@ internal static class GlucoseCadence
     }
 
     /// <summary>
-    /// The median of the elapsed intervals within <see cref="LocalCadenceRadius"/> of the interval
-    /// following reading <paramref name="index"/>, that interval itself excluded so a gap does not
-    /// vouch for itself.
+    /// The median of the intervals within <see cref="LocalCadenceRadius"/> of the interval following
+    /// reading <paramref name="index"/> that are evidence of a cadence (elapsed, and no longer than
+    /// <see cref="MaxCadenceEvidenceMinutes"/>), capped at <see cref="MaxCadenceMinutes"/>. The
+    /// interval itself is excluded so a gap does not vouch for itself. With no evidence nearby,
+    /// <see cref="DefaultCadenceMinutes"/>.
     /// </summary>
-    private static double LocalCadenceMinutes(double[] intervals, int index, double fallback)
+    private static double LocalCadenceMinutes(double[] intervals, int index)
     {
         var around = new List<double>(LocalCadenceRadius * 2);
         for (var j = index - LocalCadenceRadius; j <= index + LocalCadenceRadius; j++)
         {
-            if (j != index && j >= 0 && j < intervals.Length && intervals[j] > 0)
+            if (j != index && j >= 0 && j < intervals.Length
+                && intervals[j] > 0 && intervals[j] <= MaxCadenceEvidenceMinutes)
+            {
                 around.Add(intervals[j]);
+            }
         }
 
         if (around.Count == 0)
-            return fallback;
+            return DefaultCadenceMinutes;
 
         around.Sort();
-        return GlucoseStatistics.Median(around);
+        return Math.Min(GlucoseStatistics.Median(around), MaxCadenceMinutes);
     }
 }

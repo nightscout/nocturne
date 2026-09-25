@@ -457,6 +457,38 @@ public class SleepReportCalculatorTests
     // ── Score Resolution ──────────────────────────────────────────────────
 
     [Fact]
+    public void ComputeNightSummary_ScoresOnlyConsensusLowsAsDisruption()
+    {
+        static SleepSession Night()
+        {
+            var session = MakeSession();
+            session.DeepSleepMs  = 90  * 60_000L;
+            session.RemSleepMs   = 100 * 60_000L;
+            session.LightSleepMs = 220 * 60_000L;
+            session.TotalAwakeMs = 10  * 60_000L;
+            return session;
+        }
+
+        SensorGlucose[] Readings(params int[] mgdl)
+        {
+            var t0 = _sessionStart.AddMinutes(60);
+            return mgdl.Select((value, i) => MakeGlucose(t0.AddMinutes(i * 5), value)).ToArray();
+        }
+
+        var clean = API.Services.Sleep.SleepReportCalculator.ComputeNightSummary(
+            Night(), Readings(100, 100, 100, 100, 100, 100, 100), _thresholds);
+        var briefDip = API.Services.Sleep.SleepReportCalculator.ComputeNightSummary(
+            Night(), Readings(100, 60, 100, 100, 100, 100, 100), _thresholds);
+        var sustained = API.Services.Sleep.SleepReportCalculator.ComputeNightSummary(
+            Night(), Readings(100, 60, 60, 60, 100, 100, 100), _thresholds);
+
+        briefDip.HypoCount.Should().Be(0);
+        briefDip.SleepScore.Should().Be(clean.SleepScore);
+        sustained.HypoCount.Should().Be(1);
+        sustained.SleepScore.Should().Be(clean.SleepScore - 4);
+    }
+
+    [Fact]
     public void ResolveScore_UsesDeviceScore_WhenPresent()
     {
         var session = new SleepSession { SleepScore = 82 };
