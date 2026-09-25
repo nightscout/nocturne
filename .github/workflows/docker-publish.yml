@@ -15,6 +15,11 @@ env:
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
 
+# A newer push supersedes a branch's image, but a tag's is a release and always finishes.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build-and-push:
     # The native library is built on the runner and links against its glibc, which must be
@@ -34,9 +39,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install Aspire CLI
-        run: dotnet tool install --global aspire.cli
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -52,10 +54,6 @@ jobs:
       - name: Install web dependencies
         working-directory: src/Web
         run: pnpm install --frozen-lockfile
-
-      - name: Build bridge package
-        working-directory: src/Web/packages/bridge
-        run: pnpm run build
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
