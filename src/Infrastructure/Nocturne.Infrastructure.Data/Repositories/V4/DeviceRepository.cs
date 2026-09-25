@@ -56,8 +56,6 @@ public class DeviceRepository : IDeviceRepository
     /// <summary>
     /// Creates a new device record.
     /// </summary>
-    /// <param name="model">The device to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The created device.</returns>
     public async Task<Device> CreateAsync(Device model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -71,9 +69,6 @@ public class DeviceRepository : IDeviceRepository
     /// <summary>
     /// Updates an existing device record.
     /// </summary>
-    /// <param name="id">The unique identifier of the device to update.</param>
-    /// <param name="model">The updated device data.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated device.</returns>
     public async Task<Device> UpdateAsync(Guid id, Device model, WriteOrigin origin, CancellationToken ct = default)
     {

@@ -54,7 +54,7 @@ public class GlucoseProcessingConfigProvider(ISettingsRepository settingsReposit
         if (existing is not null)
         {
             existing.Value = value;
-            await settingsRepository.UpdateSettingsAsync(existing.Id, existing, ct);
+            await settingsRepository.UpdateSettingsAsync(existing.Id!, existing, ct);
         }
         else if (value is not null)
         {
@@ -73,7 +73,7 @@ public class GlucoseProcessingConfigProvider(ISettingsRepository settingsReposit
         if (existing is not null)
         {
             existing.Value = json;
-            await settingsRepository.UpdateSettingsAsync(existing.Id, existing, ct);
+            await settingsRepository.UpdateSettingsAsync(existing.Id!, existing, ct);
         }
         else
         {

@@ -99,6 +99,7 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     /// confirms the affected window. Runs synchronously; the window is bounded.
     /// </summary>
     /// <param name="request">Optional lower bound (UTC). When null, the connector's default window is used.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("recorrect")]
     [RequireDeclaredWriteScope]
     [RemoteCommand]

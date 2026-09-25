@@ -81,8 +81,6 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// <summary>
     /// Creates a new patient insulin record.
     /// </summary>
-    /// <param name="model">The patient insulin to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The created patient insulin record.</returns>
     public async Task<PatientInsulin> CreateAsync(PatientInsulin model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -96,9 +94,6 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// <summary>
     /// Updates an existing patient insulin record.
     /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated patient insulin record.</returns>
     public async Task<PatientInsulin> UpdateAsync(Guid id, PatientInsulin model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -114,8 +109,6 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     /// <summary>
     /// Deletes a patient insulin record by its unique identifier.
     /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
     public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);

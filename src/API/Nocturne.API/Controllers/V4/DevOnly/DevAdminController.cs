@@ -972,18 +972,19 @@ public class DevAdminController : ControllerBase
         [FromServices] IOptions<BaseDomainOptions> baseDomainOptions,
         CancellationToken ct)
     {
-        var sanitizedSlugForLog = (request.Slug ?? string.Empty)
+        var slug = request.Slug ?? string.Empty;
+        var sanitizedSlugForLog = slug
             .Replace("\r", string.Empty)
             .Replace("\n", string.Empty);
         _logger.LogInformation("Dev seed-tenant: slug={Slug}", sanitizedSlugForLog);
 
-        var validation = await _tenantService.ValidateSlugAsync(request.Slug, ct);
+        var validation = await _tenantService.ValidateSlugAsync(slug, ct);
         if (!validation.IsValid)
-            return await SlugRejectionAsync(request.Slug, validation.Message, ct);
+            return await SlugRejectionAsync(slug, validation.Message, ct);
 
         // 1. Tenant (seeds roles, public subject, OAuth clients)
         var tenant = await _tenantService.CreateWithoutOwnerAsync(
-            request.Slug, request.DisplayName, ct: ct);
+            slug, request.DisplayName, ct: ct);
 
         // 2. Owner subject
         var subjectResult = await subjectService.CreateSubjectAsync(new Subject

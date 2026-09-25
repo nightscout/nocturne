@@ -66,22 +66,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         "TempBasal"
     ];
 
-    /// <param name="dbContext">EF Core context used to look up treatment entity PKs and run bulk deletes.</param>
-    /// <param name="bolusRepository">Repository for <see cref="V4Models.Bolus"/> records.</param>
-    /// <param name="tempBasalRepository">Repository for <see cref="V4Models.TempBasal"/> records.</param>
-    /// <param name="carbIntakeRepository">Repository for <see cref="V4Models.CarbIntake"/> records.</param>
-    /// <param name="bgCheckRepository">Repository for <see cref="V4Models.BGCheck"/> records.</param>
-    /// <param name="noteRepository">Repository for <see cref="V4Models.Note"/> records.</param>
-    /// <param name="deviceEventRepository">Repository for <see cref="V4Models.DeviceEvent"/> records.</param>
-    /// <param name="bolusCalculationRepository">Repository for <see cref="V4Models.BolusCalculation"/> records.</param>
-    /// <param name="stateSpanService">Service used to upsert state spans for TempBasal, ProfileSwitch, Override, and TemporaryTarget treatments.</param>
-    /// <param name="treatmentFoodService">Service for preserving legacy <see cref="Treatment.FoodType"/> as a <see cref="TreatmentFood"/> entry.</param>
-    /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
-    /// <param name="patientDeviceStamper">Fallback attribution for records whose upload carries no pump serial.</param>
-    /// <param name="profileDecomposer">Decomposes inline profile JSON from profile switch treatments into V4 schedule records.</param>
-    /// <param name="activeProfileResolver">Resolves insulin context from profile switches active at a given timestamp.</param>
-    /// <param name="insulinRepo">Repository for patient insulin records, used as fallback for insulin context resolution.</param>
-    /// <param name="logger">Logger instance for this decomposer.</param>
     public TreatmentDecomposer(
         NocturneDbContext dbContext,
         IBolusRepository bolusRepository,

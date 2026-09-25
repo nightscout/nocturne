@@ -38,13 +38,6 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    /// <param name="apsRepo">Repository for <see cref="V4Models.ApsSnapshot"/> records.</param>
-    /// <param name="pumpRepo">Repository for <see cref="V4Models.PumpSnapshot"/> records.</param>
-    /// <param name="uploaderRepo">Repository for <see cref="V4Models.UploaderSnapshot"/> records.</param>
-    /// <param name="extrasRepo">Repository for <see cref="V4Models.DeviceStatusExtras"/> records.</param>
-    /// <param name="stateSpanService">Service used to upsert override state spans extracted from device status.</param>
-    /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
-    /// <param name="logger">Logger instance for this decomposer.</param>
     public DeviceStatusDecomposer(
         IApsSnapshotRepository apsRepo,
         IPumpSnapshotRepository pumpRepo,

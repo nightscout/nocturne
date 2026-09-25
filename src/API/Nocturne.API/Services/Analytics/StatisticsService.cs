@@ -2773,10 +2773,6 @@ public class StatisticsService : IStatisticsService
     /// Master glucose analytics function that calculates comprehensive glucose metrics
     /// with sensor-specific optimizations
     /// </summary>
-    /// <param name="entries">Collection of glucose entries</param>
-    /// <param name="boluses">Collection of boluses</param>
-    /// <param name="carbIntakes">Collection of carb intakes</param>
-    /// <param name="config">Extended analysis configuration (optional)</param>
     /// <returns>Comprehensive glucose analytics</returns>
     public GlucoseAnalytics AnalyzeGlucoseData(
         IEnumerable<SensorGlucose> entries,
