@@ -9,7 +9,6 @@ using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host;
 using Nocturne.Aspire.Host.Publishing;
 using Nocturne.Aspire.Hosting;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
 using Yarp.ReverseProxy.Transforms;
 
@@ -539,21 +538,6 @@ class Program
 
         // API needs WEB_URL to POST chat bot alert dispatches to the SvelteKit app
         api.WithEnvironment("WEB_URL", web.GetEndpoint("http"));
-        // In run mode `dotnet watch` launches the API with every environment
-        // variable as a `-e` argument, and ~23 KB of CSS on top of a large
-        // parent environment overflows Windows' 32,767-character command line
-        // ("The filename or extension is too long"). Pass a path instead.
-        if (builder.ExecutionContext.IsRunMode)
-        {
-            var scalarCssPath = Path.Combine(builder.AppHostDirectory, "obj", "scalar-custom.css");
-            Directory.CreateDirectory(Path.GetDirectoryName(scalarCssPath)!);
-            File.WriteAllText(scalarCssPath, NocturneScalarTheme.Build(solutionRoot));
-            api.WithEnvironment("SCALAR_CUSTOM_CSS_FILE", scalarCssPath);
-        }
-        else
-        {
-            api.WithEnvironment("SCALAR_CUSTOM_CSS", NocturneScalarTheme.Build(solutionRoot));
-        }
 
         var webEndpoints = (IResourceBuilder<IResourceWithEndpoints>)web;
 

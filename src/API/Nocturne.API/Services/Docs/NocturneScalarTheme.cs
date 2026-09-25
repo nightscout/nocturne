@@ -1,41 +1,40 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Nocturne.Aspire.Scalar;
+namespace Nocturne.API.Services.Docs;
 
 /// <summary>
-/// Builds the custom CSS passed to Scalar via <c>WithCustomCss</c>. Reads
-/// the canonical Nocturne theme files from the web app and adapts them
-/// for Scalar's <c>--scalar-*</c> variable surface so the docs page
-/// shares one source of truth with the rest of the UI.
+/// Builds the custom CSS passed to Scalar via <c>WithCustomCss</c>. Adapts
+/// the canonical Nocturne theme files from the web app, embedded into this
+/// assembly at build time (see Nocturne.API.csproj), for Scalar's
+/// <c>--scalar-*</c> variable surface so the docs page shares one source of
+/// truth with the rest of the UI.
 /// </summary>
 public static class NocturneScalarTheme
 {
-    /// <summary>
-    /// Composes the theme CSS. <paramref name="solutionRoot"/> is the
-    /// repository root — the same path the apphost computes for bind
-    /// mounts. Falls back to a minimal built-in mapping if the source
-    /// CSS files cannot be read.
-    /// </summary>
-    public static string Build(string solutionRoot)
-    {
-        var themePath = Path.Combine(
-            solutionRoot, "src", "Web", "packages", "ui", "src", "theme.css");
-        var nocturneThemePath = Path.Combine(
-            solutionRoot, "src", "Web", "packages", "ui", "src", "styles", "nocturne-theme.css");
+    internal const string ThemeResource = "Nocturne.API.ScalarTheme.theme.css";
+    internal const string NocturneThemeResource = "Nocturne.API.ScalarTheme.nocturne-theme.css";
 
+    /// <summary>
+    /// Composes the theme CSS. A missing resource contributes nothing, leaving
+    /// the mapping to fall back to Scalar's own colours.
+    /// </summary>
+    public static string Build()
+    {
         var sb = new StringBuilder();
-        sb.AppendLine(ReadAndAdapt(themePath));
-        sb.AppendLine(ReadAndAdapt(nocturneThemePath));
+        sb.AppendLine(ReadAndAdapt(ThemeResource));
+        sb.AppendLine(ReadAndAdapt(NocturneThemeResource));
         sb.AppendLine(ScalarMapping);
         return sb.ToString();
     }
 
-    private static string ReadAndAdapt(string path)
+    private static string ReadAndAdapt(string resourceName)
     {
-        if (!File.Exists(path)) return string.Empty;
+        using var stream = typeof(NocturneScalarTheme).Assembly.GetManifestResourceStream(resourceName);
+        if (stream is null) return string.Empty;
 
-        var css = File.ReadAllText(path);
+        using var reader = new StreamReader(stream);
+        var css = reader.ReadToEnd();
 
         // Strip Tailwind v4 directives the browser doesn't understand.
         css = StripTailwind.Replace(css, string.Empty);
