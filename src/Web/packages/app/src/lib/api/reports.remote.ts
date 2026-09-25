@@ -354,3 +354,13 @@ export const getWeekdayAverages = query(
     return locals.apiClient.statistics.getWeekdayAverages(startDate, endDate);
   }
 );
+
+/** Per-hour figures and the ranked best and worst hours for the hourly-patterns report. */
+export const getHourlyPatterns = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { startDate, endDate } = await resolveReportRange(input);
+    return locals.apiClient.statistics.getHourlyPatterns(startDate, endDate);
+  }
+);
