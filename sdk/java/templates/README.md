@@ -39,6 +39,8 @@ the stock generator emit `auth/RetryingOAuth.java`, `auth/OAuthOkHttpClient.java
 and OAuth branches in `ApiClient.java`, all importing Apache Oltu, and declare
 `org.apache.oltu.oauth2.client:1.0.2` in `build.gradle`. Oltu is retired to the
 Apache Attic and 1.0.2 (2016) is its last release, so the SDK does not ship it.
+The generated `pom.xml` and `build.sbt` still declare it; neither is used to
+publish, so they are not overridden.
 
 `../.openapi-generator-ignore` skips the two `auth/` files, and the
 `ApiClient.mustache` and `build.gradle.mustache` overrides drop the rest. The
