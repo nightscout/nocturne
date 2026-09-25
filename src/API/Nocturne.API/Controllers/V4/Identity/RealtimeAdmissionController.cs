@@ -30,9 +30,13 @@ public class RealtimeAdmissionController : ControllerBase
     [HttpGet]
     [RequireScope(Scope.GlucoseRead)]
     [ProducesResponseType(typeof(RealtimeAdmission), StatusCodes.Status200OK)]
-    public ActionResult<RealtimeAdmission> GetRealtimeAdmission() =>
-        Ok(new RealtimeAdmission(
-            HubAuthorizationState.FromRequest(HttpContext)?.CanJoinTenantRelay ?? false));
+    public ActionResult<RealtimeAdmission> GetRealtimeAdmission()
+    {
+        var authorization = HubAuthorizationState.FromRequest(HttpContext);
+        return Ok(new RealtimeAdmission(
+            authorization?.CanJoinTenantRelay ?? false,
+            authorization?.OwnSubjectId));
+    }
 }
 
 /// <summary>A caller's realtime admission.</summary>
@@ -40,4 +44,9 @@ public class RealtimeAdmissionController : ControllerBase
 /// Whether the caller may join the room carrying the whole tenant's live payloads. False for a
 /// guest link and an anonymous share, which hold single categories.
 /// </param>
-public record RealtimeAdmission(bool TenantRelay);
+/// <param name="SubjectId">
+/// The subject whose per-subject notifications the caller may receive, carried into the bridge's
+/// handshake ticket so a browser socket joins only that subject's room. Null for a guest link and a
+/// share, which own no subject.
+/// </param>
+public record RealtimeAdmission(bool TenantRelay, Guid? SubjectId);

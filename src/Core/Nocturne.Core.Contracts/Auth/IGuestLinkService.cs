@@ -12,6 +12,7 @@ public interface IGuestLinkService
         Guid createdBySubjectId,
         string label,
         string baseUrl,
+        IReadOnlySet<string> creatorScopes,
         IEnumerable<string>? scopes = null,
         bool limitTo24Hours = false,
         CancellationToken ct = default);

@@ -28,7 +28,7 @@ export const getTreatmentsData = query(
 	async (input) => {
 		const { locals } = getRequestEvent();
 		const { apiClient } = locals;
-		const { startDate, endDate } = await resolveReportRange(input);
+		const { startDate, endDate, dayCount } = await resolveReportRange(input);
 		const [
 			bolusResponse,
 			carbResponse,
@@ -54,7 +54,7 @@ export const getTreatmentsData = query(
 
 		const treatmentSummary =
 			boluses.length > 0 || carbIntakes.length > 0
-				? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes })
+				? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes, dayCount })
 				: null;
 
 		return {

@@ -170,6 +170,10 @@
               {#snippet description()}
                 Revoke {app.clientName ?? "this app"}'s access to your data?
                 The app will need to be re-authorized to regain access.
+                {#if (app.deviceCount ?? 0) > 0}
+                  Its {app.deviceCount} paired device{app.deviceCount === 1 ? "" : "s"} will
+                  also be removed and stop receiving alerts.
+                {/if}
               {/snippet}
             </ConfirmDialog>
           </div>

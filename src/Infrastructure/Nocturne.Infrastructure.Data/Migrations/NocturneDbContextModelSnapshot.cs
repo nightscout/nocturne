@@ -3468,6 +3468,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("InvalidatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("invalidated_at");
+
                     b.Property<Guid>("SubjectId")
                         .HasColumnType("uuid")
                         .HasColumnName("subject_id");

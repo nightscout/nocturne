@@ -28,7 +28,7 @@
       "commands": [
         "dependify"
       ],
-      "rollForward": false
+      "rollForward": true
     },
     "dotnet-ef": {
       "version": "10.0.12",

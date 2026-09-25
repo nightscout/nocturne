@@ -5,49 +5,25 @@
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { AlertCircle } from "lucide-svelte";
   import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
+  import type {
+    SiteChangeImpactAnalysis,
+    SiteChangeImpactDataPoint,
+  } from "$lib/api";
 
-  // Local type definitions for site change impact analysis
-  interface SiteChangeImpactDataPoint {
-    minutesFromChange?: number;
-    averageGlucose?: number;
-    medianGlucose?: number;
-    stdDev?: number;
-    count?: number;
-    percentile10?: number;
-    percentile25?: number;
-    percentile75?: number;
-    percentile90?: number;
-  }
+  type CheckedImpactFields = Required<
+    Pick<
+      SiteChangeImpactDataPoint,
+      | "minutesFromChange"
+      | "medianGlucose"
+      | "percentile10"
+      | "percentile25"
+      | "percentile75"
+      | "percentile90"
+    >
+  >;
 
-  interface SiteChangeImpactSummary {
-    avgGlucoseBeforeChange?: number;
-    avgGlucoseAfterChange?: number;
-    timeInRangeBeforeChange?: number;
-    timeInRangeAfterChange?: number;
-    percentImprovement?: number;
-  }
-
-  interface SiteChangeImpactAnalysis {
-    dataPoints?: SiteChangeImpactDataPoint[];
-    summary?: SiteChangeImpactSummary;
-    hasSufficientData?: boolean;
-    siteChangeCount?: number;
-    hoursBeforeChange?: number;
-    hoursAfterChange?: number;
-  }
-
-  // Local interface with required fields for chart rendering
-  interface SiteChangeImpactDataPointValid {
-    minutesFromChange: number;
-    averageGlucose: number;
-    medianGlucose: number;
-    stdDev: number;
-    count: number;
-    percentile10: number;
-    percentile25: number;
-    percentile75: number;
-    percentile90: number;
-  }
+  // Chart points with every plotted field present; the API leaves them optional.
+  type SiteChangeImpactDataPointValid = Required<SiteChangeImpactDataPoint>;
 
   interface Props {
     analysis: SiteChangeImpactAnalysis | null;
@@ -88,14 +64,7 @@
       .filter(
         (
           d: SiteChangeImpactDataPoint
-        ): d is typeof d & {
-          minutesFromChange: number;
-          medianGlucose: number;
-          percentile10: number;
-          percentile25: number;
-          percentile75: number;
-          percentile90: number;
-        } =>
+        ): d is SiteChangeImpactDataPoint & CheckedImpactFields =>
           d.minutesFromChange !== undefined &&
           d.medianGlucose !== undefined &&
           d.percentile10 !== undefined &&

@@ -83,7 +83,8 @@ export const GET: RequestHandler = async (event) => {
         token: signHandshakeTicket(
           secret,
           effectiveHost,
-          admission.tenantRelay === true
+          admission.tenantRelay === true,
+          admission.subjectId ?? undefined
         ),
       });
     }

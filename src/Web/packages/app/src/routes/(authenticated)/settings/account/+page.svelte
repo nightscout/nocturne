@@ -459,6 +459,9 @@
                   {#if remainingRecoveryCodes > 0}
                     {remainingRecoveryCodes} of {recoveryStatus.totalCodes} recovery
                     codes remaining
+                  {:else if recoveryStatus.codesReset}
+                    Your old recovery codes stopped working after a Nocturne
+                    update. Generate new codes to keep a backup way to sign in.
                   {:else if recoveryStatus.hasCodes}
                     Every recovery code has been used
                   {:else}

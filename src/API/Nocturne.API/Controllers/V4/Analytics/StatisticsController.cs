@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Analytics;
@@ -25,8 +26,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// </summary>
 /// <remarks>
 /// <c>GET /periods</c> caches for five minutes through <see cref="ICacheService"/>;
-/// <c>GET /range-analytics</c> and <c>GET /weekday-averages</c> carry a 60-second
-/// <see cref="ResponseCacheAttribute"/>. No other action caches.
+/// <c>GET /range-analytics</c>, <c>GET /weekday-averages</c> and <c>GET /hourly-patterns</c>
+/// carry a 60-second client-only <see cref="ResponseCacheAttribute"/>. No other action caches.
 ///
 /// Repositories create their own DbContext per call from <c>ITenantDbContextFactory</c>, so
 /// independent reads within one request are issued together under <c>Task.WhenAll</c>.
@@ -72,6 +73,7 @@ public class StatisticsController : ControllerBase
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly ICanonicalGlucoseService _canonicalGlucose;
     private readonly ICategoryReadContext _categoryReadContext;
+    private readonly ILogger<StatisticsController> _logger;
 
     private string TenantCacheId =>
         _tenantAccessor.Context?.TenantId.ToString()
@@ -97,7 +99,8 @@ public class StatisticsController : ControllerBase
         IBasalInjectionRepository basalInjectionRepository,
         IActiveProfileResolver activeProfileResolver,
         ICanonicalGlucoseService canonicalGlucose,
-        ICategoryReadContext categoryReadContext
+        ICategoryReadContext categoryReadContext,
+        ILogger<StatisticsController> logger
     )
     {
         _statisticsService = statisticsService;
@@ -120,6 +123,7 @@ public class StatisticsController : ControllerBase
         _activeProfileResolver = activeProfileResolver;
         _canonicalGlucose = canonicalGlucose;
         _categoryReadContext = categoryReadContext;
+        _logger = logger;
     }
 
     private readonly record struct InsulinRecords(
@@ -128,11 +132,13 @@ public class StatisticsController : ControllerBase
         List<TempBasal> TempBasals,
         List<BasalInjection> BasalInjections);
 
-    /// <param name="limit">Per collection. An AID pump writes a TempBasal and often an SMB every
-    /// ~5 minutes, so anything short of <c>int.MaxValue</c> truncates a multi-month window to its
-    /// oldest records and understates every total computed from it.</param>
-    /// <param name="alongside">Reads the caller started before calling, joined into the same
-    /// <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.</param>
+    /// <remarks>
+    /// <paramref name="limit"/> applies per collection. An AID pump writes a TempBasal and often
+    /// an SMB every ~5 minutes. Anything short of <c>int.MaxValue</c> truncates a multi-month
+    /// window to its oldest records and understates every total computed from it.
+    /// <paramref name="alongside"/> holds reads the caller started before calling, joined into the
+    /// same <see cref="Task.WhenAll(Task[])"/> so a failure here still observes them.
+    /// </remarks>
     private async Task<InsulinRecords> FetchInsulinRecordsAsync(
         DateTime from, DateTime to, int limit, CancellationToken ct = default, params Task[] alongside)
     {
@@ -171,9 +177,11 @@ public class StatisticsController : ControllerBase
     /// Appends one <see cref="TempBasalOrigin.Scheduled"/> TempBasal per profile basal segment
     /// when the pump reported none.
     /// </summary>
-    /// <param name="recordedBasal">Basal delivered by a route other than TempBasals; non-empty
-    /// suppresses the fallback, because a profile baseline on top of MDI injections would
-    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.</param>
+    /// <remarks>
+    /// <paramref name="recordedBasal"/> is basal delivered by a route other than TempBasals. A
+    /// non-empty one suppresses the fallback: a profile baseline on top of MDI injections would
+    /// double-count the day's coverage. <c>null</c> where the caller does not read injections.
+    /// </remarks>
     private async Task AddScheduledBasalFallbackAsync(
         List<TempBasal> tempBasals,
         DateTime startUtc,
@@ -274,20 +282,22 @@ public class StatisticsController : ControllerBase
     }
 
     /// <summary>
-    /// Calculate averaged statistics for each hour of the day (0-23)
+    /// Calculate averaged statistics for each hour of the day (0-23), on the tenant's local clock
     /// </summary>
     /// <param name="entries">Array of sensor glucose readings</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Collection of averaged statistics for each hour</returns>
     [HttpPost("averaged-stats")]
     [EnableRateLimiting(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)]
     [RequireScope(Scope.ReportsRead)]
     [RemoteQuery]
-    public ActionResult<IEnumerable<AveragedStats>> CalculateAveragedStats(
-        [FromBody] SensorGlucose[] entries
+    public async Task<ActionResult<IEnumerable<AveragedStats>>> CalculateAveragedStats(
+        [FromBody] SensorGlucose[] entries,
+        CancellationToken cancellationToken = default
     )
     {
-        var result = _statisticsService.CalculateAveragedStats(entries);
-        return Ok(result);
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
+        return Ok(_statisticsService.CalculateAveragedStats(entries, clock.Zone));
     }
 
     /// <summary>
@@ -304,7 +314,8 @@ public class StatisticsController : ControllerBase
     {
         var result = _statisticsService.CalculateTreatmentSummary(
             request.Boluses ?? Enumerable.Empty<Bolus>(),
-            request.CarbIntakes ?? Enumerable.Empty<CarbIntake>()
+            request.CarbIntakes ?? Enumerable.Empty<CarbIntake>(),
+            dayCount: request.DayCount ?? 1
         );
         return Ok(result);
     }
@@ -381,6 +392,9 @@ public class StatisticsController : ControllerBase
     /// <param name="startDate">Start of the window (inclusive, UTC).</param>
     /// <param name="endDate">End of the window (exclusive, UTC).</param>
     /// <param name="population">Diabetes population for clinical target assessment. Defaults to Type 1 adult.</param>
+    /// <param name="patientDeviceId">Restricts glucose to readings from this one patient device,
+    /// in place of the canonical stream selected across all devices. Boluses and carb intakes are
+    /// not filtered.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The extended analytics and time-of-day averaged stats for the window.</returns>
     [HttpGet("range-analytics")]
@@ -455,12 +469,19 @@ public class StatisticsController : ControllerBase
             });
         }
 
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
+
         var result = new ReportAnalysisResult
         {
             Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
-            AveragedStats = _statisticsService.CalculateAveragedStats(entries).ToList(),
+            AveragedStats = _statisticsService.CalculateAveragedStats(entries, clock.Zone).ToList(),
+            HourlyBandThresholds = _statisticsService.HourlyBandThresholds,
             ContributingDevices = contributingDevices,
-            PersonalRange = await CalculatePersonalRangeAsync(entries, cancellationToken),
+            // A failed lookup leaves the personal range out, as a failure inside it always has; an
+            // unset zone evaluates the schedule on UTC, as it did before the zone was resolved here.
+            PersonalRange = clock.Reason == TimeZoneUnavailableReason.LookupFailed
+                ? null
+                : await CalculatePersonalRangeAsync(entries, clock.Zone ?? TimeZoneInfo.Utc, cancellationToken),
         };
         return Ok(result);
     }
@@ -490,10 +511,84 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken);
-        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(tzId);
+        // Unlike the hourly reports this one has no per-reading fallback, so a failed lookup fails
+        // the request rather than bucketing a database outage onto UTC.
+        var tz = TimeZoneHelper.GetTimeZoneInfoFromId(
+            await _therapySettingsResolver.GetTimezoneAsync(ct: cancellationToken));
 
         return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
+    }
+
+    /// <summary>
+    /// Which hours of the day go best and worst for a date range, bucketed on the tenant's local
+    /// clock. Backs the hourly-patterns report.
+    /// </summary>
+    /// <param name="startDate">Start of the window (inclusive, UTC).</param>
+    /// <param name="endDate">End of the window (exclusive, UTC).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Every hour's figures plus the ranked best, worst and most-below-range hours.</returns>
+    [HttpGet("hourly-patterns")]
+    [RequireScope(Scope.ReportsRead)]
+    [RemoteQuery]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
+    public async Task<ActionResult<HourlyPatterns>> GetHourlyPatterns(
+        [FromQuery] DateTime startDate,
+        [FromQuery] DateTime endDate,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var startDt = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        var endDt = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        // Uncapped and canonicalised for the same reasons as range-analytics above.
+        var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
+        var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
+
+        var clock = await ResolveTenantTimeZoneAsync(cancellationToken);
+
+        var patterns = _statisticsService.CalculateHourlyPatterns(entries, clock.Zone);
+        patterns.TimeZoneUnavailableReason = clock.Reason;
+        return Ok(patterns);
+    }
+
+    private readonly record struct TenantClock(TimeZoneInfo? Zone, TimeZoneUnavailableReason? Reason);
+
+    /// <summary>
+    /// The tenant's timezone, or no zone and why not: none is set, the stored one does not
+    /// resolve, the request is a public share, or the lookup threw. A share is reported as a share
+    /// whatever else is true, since its viewer can act on none of the others. No zone rather than UTC, so the hourly
+    /// statistics fall back to each reading's own offset instead of shifting every hour.
+    /// <para>
+    /// A share normally gets no zone, because RLS hides the therapy settings it lives in from share
+    /// connections. It is not guaranteed: <see cref="ITherapySettingsResolver"/> caches briefly by
+    /// tenant, so a share arriving just after the owner can be served the owner's zone.
+    /// </para>
+    /// </summary>
+    private async Task<TenantClock> ResolveTenantTimeZoneAsync(CancellationToken ct)
+    {
+        try
+        {
+            var id = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
+            if (TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz))
+                return new TenantClock(tz, null);
+
+            return new TenantClock(
+                null,
+                _categoryReadContext.IsShare ? TimeZoneUnavailableReason.Share
+                : string.IsNullOrWhiteSpace(id) ? TimeZoneUnavailableReason.NotConfigured
+                : TimeZoneUnavailableReason.Unrecognised);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Tenant timezone lookup failed; hourly statistics fall back to each reading's own offset");
+            return new TenantClock(null, TimeZoneUnavailableReason.LookupFailed);
+        }
     }
 
     /// <summary>
@@ -517,6 +612,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     private async Task<PersonalRangeTimeInRange?> CalculatePersonalRangeAsync(
         List<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone,
         CancellationToken ct
     )
     {
@@ -526,12 +622,7 @@ public class StatisticsController : ControllerBase
             if (schedule is null || schedule.Entries.Count == 0)
                 return null;
 
-            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
-            return _statisticsService.CalculatePersonalRangeTime(
-                entries,
-                schedule.Entries,
-                TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-            );
+            return _statisticsService.CalculatePersonalRangeTime(entries, schedule.Entries, tenantTimeZone);
         }
         catch (OperationCanceledException)
         {
@@ -765,7 +856,8 @@ public class StatisticsController : ControllerBase
 
                 treatmentSummary = _statisticsService.CalculateTreatmentSummary(
                     filteredBoluses,
-                    filteredCarbs
+                    filteredCarbs,
+                    dayCount: days
                 );
 
                 insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
@@ -788,13 +880,20 @@ public class StatisticsController : ControllerBase
                 {
                     var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
                     var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
+                    var profileSegments = await _basalSegments
+                        .GetSegmentsAsync(fromMs, toMs, cancellationToken)
+                        .ToListAsync(cancellationToken);
                     var profileBasal = Math.Round(
-                        await _basalSegments.GetSegmentsAsync(fromMs, toMs, cancellationToken).SumUnitsAsync(cancellationToken)
-                        * 100) / 100;
+                        profileSegments.Sum(s => s.Units) * 100) / 100;
                     var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
                     insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.ScheduledBasal = Math.Round(profileBasal * 100) / 100;
                     insulinDelivery.AdditionalBasal = 0;
+                    insulinDelivery.BasalCount = profileSegments.Count;
+                    insulinDelivery.InsulinEventCount =
+                        insulinDelivery.BolusCount
+                        + insulinDelivery.MicroBolusCount
+                        + insulinDelivery.BasalCount;
                     insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
                     insulinDelivery.Tdd =
                         Math.Round(
@@ -969,6 +1068,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     /// <param name="startDate">Inclusive start calendar date in the tenant's timezone.</param>
     /// <param name="endDate">Inclusive end calendar date in the tenant's timezone.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns><see cref="PunchCardResponse"/> with months, days, and global maxes for chart scaling.</returns>
     [HttpGet("punch-card")]
     [RequireScope(Scope.GlucoseRead)]
@@ -1062,9 +1162,6 @@ public class StatisticsController : ControllerBase
             var lowPct = (pct?.VeryLow ?? 0) + (pct?.Low ?? 0);
             var highPct = (pct?.VeryHigh ?? 0) + (pct?.High ?? 0);
 
-            var rangeStats = tir?.RangeStats;
-            var avgGlucose = rangeStats?.Target?.Mean ?? rangeStats?.Low?.Mean ?? 0;
-
             var dateStr = day.ToString("yyyy-MM-dd");
             var totals = treatment?.Totals;
             var totalCarbs = totals?.Food?.Carbs ?? 0;
@@ -1074,13 +1171,14 @@ public class StatisticsController : ControllerBase
             var carbToInsulinRatio = treatment?.CarbToInsulinRatio ?? 0;
 
             var entries = dayEntries
-                .Where(e => e.Mgdl > 0)
+                .Where(e => GlucoseStatistics.IsPlausibleReading(e.Mgdl))
                 .OrderBy(e => e.Mills)
                 .Select(e => new PunchCardEntry { Mills = e.Mills, Mgdl = e.Mgdl })
                 .ToList();
 
             // The counts are readings, so they come from the readings, not from durations.
             var totalReadings = entries.Count;
+            var avgGlucose = totalReadings > 0 ? entries.Average(e => e.Mgdl) : 0;
             var inRangeCount = (int)Math.Round(inRangePct / 100.0 * totalReadings);
             var lowCount = (int)Math.Round(lowPct / 100.0 * totalReadings);
             var highCount = (int)Math.Round(highPct / 100.0 * totalReadings);
@@ -1127,7 +1225,6 @@ public class StatisticsController : ControllerBase
             var totalLow = daysWithData.Sum(d => d.LowCount);
             var totalHigh = daysWithData.Sum(d => d.HighCount);
             var totalReadings = daysWithData.Sum(d => d.TotalReadings);
-            var glucoseDays = daysWithData.Where(d => d.AverageGlucose > 0).ToList();
 
             month.Summary = new PunchCardMonthSummary
             {
@@ -1136,8 +1233,7 @@ public class StatisticsController : ControllerBase
                 InRangePercent = totalReadings > 0 ? (double)totalIR / totalReadings * 100 : 0,
                 LowPercent = totalReadings > 0 ? (double)totalLow / totalReadings * 100 : 0,
                 HighPercent = totalReadings > 0 ? (double)totalHigh / totalReadings * 100 : 0,
-                AvgGlucose = glucoseDays.Count > 0
-                    ? glucoseDays.Average(d => d.AverageGlucose) : 0,
+                AvgGlucose = daysWithData.Sum(d => d.AverageGlucose * d.TotalReadings) / totalReadings,
             };
         }
 
@@ -1541,6 +1637,11 @@ public class TreatmentSummaryRequest
     /// Optional collection of carb intakes
     /// </summary>
     public IEnumerable<CarbIntake>? CarbIntakes { get; set; }
+
+    /// <summary>
+    /// Calendar days the records cover, for the per-day averages. Defaults to one day.
+    /// </summary>
+    public int? DayCount { get; set; }
 }
 
 /// <summary>

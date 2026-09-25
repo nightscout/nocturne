@@ -11,8 +11,15 @@ const probe = vi.fn<typeof fetch>();
 
 vi.mock("@nocturne/bridge/ticket", () => ({
   REALTIME_ADMISSION_PATH: "/api/v4/me/realtime-admission",
-  signHandshakeTicket: (_secret: string, host: string, tenantRelay: boolean) =>
-    `${tenantRelay ? "member" : "restricted"}-ticket-for-${host}`,
+  signHandshakeTicket: (
+    _secret: string,
+    host: string,
+    tenantRelay: boolean,
+    subjectId?: string
+  ) =>
+    `${tenantRelay ? "member" : "restricted"}-ticket-for-${host}${
+      subjectId ? `:${subjectId}` : ""
+    }`,
 }));
 vi.mock("$env/dynamic/public", () => ({ env: {} }));
 vi.mock("$lib/server/api-client-factory", async (importOriginal) => ({
@@ -82,6 +89,27 @@ describe("realtime ticket endpoint", () => {
     expect(probe.mock.calls[0][0]).toBe(
       "http://api.internal/api/v4/me/realtime-admission"
     );
+  });
+
+  it("signs the admission's subject id into a member ticket", async () => {
+    // The bridge routes each relayed notification to the subject room named here; without
+    // the id the member's socket receives none of its own notifications.
+    probe.mockResolvedValue(
+      admits({ tenantRelay: true, subjectId: "0a5f2c1e-1111-4222-8333-444455556666" })
+    );
+
+    expect(await mint({ access: "member-session" })).toEqual({
+      token:
+        "member-ticket-for-sleepy.nocturne.run:0a5f2c1e-1111-4222-8333-444455556666",
+    });
+  });
+
+  it("leaves the subject id out when the admission carries none", async () => {
+    probe.mockResolvedValue(admits({ tenantRelay: true, subjectId: null }));
+
+    expect(await mint({ access: "member-session" })).toEqual({
+      token: "member-ticket-for-sleepy.nocturne.run",
+    });
   });
 
   it("mints a restricted ticket for a guest session", async () => {

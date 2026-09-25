@@ -590,6 +590,182 @@ public class TddCalculationTests
         result.TotalBasal.Should().Be(0.8);
     }
 
+    [Fact]
+    public void TDD_BelowScheduleTempBasal_ShouldNotProduceNegativeAdditionalBasal()
+    {
+        // Scheduled 1.0 U/hr, temp delivered at 0.3 U/hr for 2 hours.
+        // Delivered = 0.6 U; scheduled = 2.0 U. A naive insulin - scheduled subtraction
+        // would report additional = -1.4 and scheduled = 2.0 (2.0 + -1.4 = 0.6).
+        var tempBasals = new List<TempBasal>
+        {
+            MakeAlgorithmTempBasal(
+                hourOffset: 14,
+                rateUPerHr: 0.3,
+                durationMinutes: 120,
+                scheduledRate: 1.0
+            ),
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(),
+            Array.Empty<Bolus>(),
+            tempBasals,
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate
+        );
+
+        result.TotalBasal.Should().Be(0.6);
+        result.AdditionalBasal.Should().Be(0);
+        result.ScheduledBasal.Should().Be(0.6, "the shortfall reduces scheduled, it never goes negative");
+        (result.ScheduledBasal + result.AdditionalBasal).Should().Be(result.TotalBasal);
+    }
+
+    [Fact]
+    public void TDD_AboveScheduleTempBasal_ShouldSplitIntoExcessAdditional()
+    {
+        // Scheduled 1.0 U/hr, temp delivered at 2.0 U/hr for 1 hour.
+        // Delivered = 2.0 U; scheduled = 1.0 U; excess = 1.0 U.
+        var tempBasals = new List<TempBasal>
+        {
+            MakeAlgorithmTempBasal(
+                hourOffset: 10,
+                rateUPerHr: 2.0,
+                durationMinutes: 60,
+                scheduledRate: 1.0
+            ),
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(),
+            Array.Empty<Bolus>(),
+            tempBasals,
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate
+        );
+
+        result.TotalBasal.Should().Be(2.0);
+        result.ScheduledBasal.Should().Be(1.0);
+        result.AdditionalBasal.Should().Be(1.0);
+        (result.ScheduledBasal + result.AdditionalBasal).Should().Be(result.TotalBasal);
+    }
+
+    [Fact]
+    public void TDD_MixedTemps_ShouldNeverNetAdditionalBelowZero()
+    {
+        // A below-schedule temp and an above-schedule temp must not cancel: the rising temp's
+        // excess stands on its own, the falling temp's shortfall only reduces scheduled.
+        var tempBasals = new List<TempBasal>
+        {
+            MakeAlgorithmTempBasal(hourOffset: 2, rateUPerHr: 0.2, durationMinutes: 60, scheduledRate: 1.0),
+            MakeAlgorithmTempBasal(hourOffset: 10, rateUPerHr: 1.8, durationMinutes: 60, scheduledRate: 1.0),
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(),
+            Array.Empty<Bolus>(),
+            tempBasals,
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate
+        );
+
+        // Delivered: 0.2 + 1.8 = 2.0; scheduled part: 0.2 + 1.0 = 1.2; additional: 0.8
+        result.TotalBasal.Should().Be(2.0);
+        result.ScheduledBasal.Should().Be(1.2);
+        result.AdditionalBasal.Should().Be(0.8);
+        (result.ScheduledBasal + result.AdditionalBasal).Should().Be(result.TotalBasal);
+    }
+
+    [Fact]
+    public void TDD_BasalCount_ShouldCountTempBasalSegmentsAndBasalInjections()
+    {
+        var tempBasals = new List<TempBasal>
+        {
+            MakeScheduledBasal(0, rateUPerHr: 1.0, durationMinutes: 60),
+            MakeAlgorithmTempBasal(1, rateUPerHr: 0.5, durationMinutes: 60, scheduledRate: 1.0),
+            MakeAlgorithmTempBasal(2, rateUPerHr: 0.0, durationMinutes: 60),
+        };
+        var basalInjections = new List<BasalInjection>
+        {
+            new() { Units = 20.0 },
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            Array.Empty<Bolus>(),
+            Array.Empty<Bolus>(),
+            tempBasals,
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate,
+            basalInjections
+        );
+
+        // The zero-rate suspend delivers nothing and is not a counted event.
+        result.BasalCount.Should().Be(3, "2 delivering temp segments + 1 basal injection");
+    }
+
+    [Fact]
+    public void TDD_InsulinEventCount_ShouldSumManualMicroAndBasal()
+    {
+        var boluses = new List<Bolus>
+        {
+            MakeBolus(7, units: 4.5),
+            MakeBolus(12, units: 5.0),
+        };
+        var algorithmBoluses = new List<Bolus>
+        {
+            MakeBolus(9, units: 0.3, automatic: true),
+            MakeBolus(10, units: 0.25, automatic: true),
+        };
+        var tempBasals = new List<TempBasal>
+        {
+            MakeScheduledBasal(0, rateUPerHr: 1.0, durationMinutes: 60),
+            MakeAlgorithmTempBasal(1, rateUPerHr: 0.8, durationMinutes: 60, scheduledRate: 1.0),
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            boluses,
+            algorithmBoluses,
+            tempBasals,
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate
+        );
+
+        // 2 manual + 2 micro-boluses + 2 basal deliveries
+        result.InsulinEventCount.Should().Be(6);
+        result.InsulinEventCount
+            .Should()
+            .Be(result.BolusCount + result.MicroBolusCount + result.BasalCount);
+    }
+
+    [Fact]
+    public void TDD_ProfileFallbackShape_ShouldKeepEventCountEqualToBoluses()
+    {
+        // Without basal records the bolus-only overload reports no basal events, so
+        // insulin event count tracks the manual bolus count.
+        var boluses = new List<Bolus>
+        {
+            MakeBolus(7, units: 4.5),
+            MakeBolus(12, units: 5.0),
+            MakeBolus(18, units: 6.0),
+        };
+
+        var result = _statisticsService.CalculateInsulinDeliveryStatistics(
+            boluses,
+            Array.Empty<Bolus>(),
+            Array.Empty<TempBasal>(),
+            Array.Empty<CarbIntake>(),
+            StartDate,
+            EndDate
+        );
+
+        result.BasalCount.Should().Be(0);
+        result.InsulinEventCount.Should().Be(3);
+    }
+
     #endregion
 
     #region Daily Basal/Bolus Ratio Tests

@@ -31,11 +31,11 @@ public interface IAlertReferenceService
     /// other rules in the tenant. Returns true if any traversal cycles back to
     /// <paramref name="ruleId"/> (or a self-reference exists at the root).
     /// </summary>
-    /// <param name="ruleId">The id of the rule being saved. Pass null on create where no
-    /// id has been assigned yet — only direct self-references in <paramref name="proposedRoot"/>
-    /// can introduce a cycle in that case (and they require knowing the new id, which is
-    /// generated server-side, so create is cycle-safe by construction).</param>
-    /// <param name="proposedRoot">The root <see cref="ConditionNode"/> being saved.</param>
+    /// <remarks>
+    /// Pass a null <paramref name="ruleId"/> on create, where no id has been assigned yet. Create
+    /// is cycle-safe: only a direct self-reference in <paramref name="proposedRoot"/> could close
+    /// a cycle, and that needs the server-generated new id.
+    /// </remarks>
     Task<bool> DetectCycleAsync(Guid? ruleId, ConditionNode proposedRoot, CancellationToken ct);
 }
 

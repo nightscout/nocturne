@@ -270,6 +270,20 @@
               </span>
             {/if}
           </div>
+
+          {#if device.appName}
+            <p class="text-xs text-muted-foreground">
+              Paired through {device.appName}
+            </p>
+          {:else if device.linkedToApp}
+            <p class="text-xs text-muted-foreground">
+              Paired through an app that reports no name.
+            </p>
+          {:else}
+            <p class="text-xs text-muted-foreground">
+              Not linked to an app. Revoking an app will not remove this device.
+            </p>
+          {/if}
         </Card.Content>
       </Card.Root>
     {/each}

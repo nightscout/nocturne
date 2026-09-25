@@ -74,6 +74,36 @@ describe("parseErrorBody", () => {
     expect(body?.errors).toEqual({ Label: ["The Label field is required."] });
   });
 
+  it("recovers the structured issues beside the validation map", () => {
+    const issues = [
+      { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+    ];
+    const body = parseErrorBody(
+      apiException(JSON.stringify({ detail: "Rejected.", issues }), 400)
+    );
+
+    expect(body?.issues).toEqual(issues);
+  });
+
+  it("drops an issues entry that is not a validation issue", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({ issues: [{ reason: "conditions_empty" }, "boom"] }),
+        400
+      )
+    );
+
+    expect(body?.issues).toBeUndefined();
+  });
+
+  it("drops issues the far end sent as the wrong type", () => {
+    const body = parseErrorBody(
+      apiException(JSON.stringify({ issues: "conditions_empty" }), 400)
+    );
+
+    expect(body?.issues).toBeUndefined();
+  });
+
   it("answers undefined for a body that is not JSON", () => {
     expect(
       parseErrorBody(apiException("<html>502 Bad Gateway</html>"))

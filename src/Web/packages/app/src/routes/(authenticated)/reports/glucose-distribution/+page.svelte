@@ -228,7 +228,10 @@
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <HourlyGlucoseDistributionChart averagedStats={report.averagedStats} />
+          <HourlyGlucoseDistributionChart
+            averagedStats={report.averagedStats}
+            thresholds={report.hourlyBandThresholds}
+          />
         </Card.Content>
       </Card.Root>
 

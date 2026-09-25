@@ -243,7 +243,7 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             _logger.LogInformation(
                 "Broadcasting data update to {Group}: {DataType}",
                 group,
-                data?.GetType().Name ?? "null"
+                data.GetType().Name
             );
             await _dataHubContext
                 .Clients.Group(group)
@@ -538,12 +538,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationCreated", new object[] { notification });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationCreated", new object[] { notification });
+                .SendCoreAsync(
+                    "notificationCreated",
+                    new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification created broadcast completed for user {UserId}", userId);
         }
@@ -577,12 +577,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationArchived", new object[] { payload });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationArchived", new object[] { payload });
+                .SendCoreAsync(
+                    "notificationArchived",
+                    new object[] { payload, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification archived broadcast completed for user {UserId}", userId);
         }
@@ -614,12 +614,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationUpdated", new object[] { notification });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationUpdated", new object[] { notification });
+                .SendCoreAsync(
+                    "notificationUpdated",
+                    new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification updated broadcast completed for user {UserId}", userId);
         }
