@@ -186,12 +186,13 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const { analysis, averagedStats, personalRange, contributingDevices } =
+    const { analysis, averagedStats, hourlyBandThresholds, personalRange, contributingDevices } =
       await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
       averagedStats,
+      hourlyBandThresholds,
       personalRange,
       contributingDevices,
       dateRange: {

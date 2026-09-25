@@ -4,7 +4,7 @@ import {
   patternClass,
   type GlucoseRange,
 } from "$lib/components/charts/print/chart-print-patterns";
-import type { ExtendedTimeInRangePercentages } from "$lib/api";
+import type { ExtendedTimeInRangePercentages, GlycemicThresholds } from "$lib/api";
 
 export type HourlyBandKey = keyof ExtendedTimeInRangePercentages;
 
@@ -25,17 +25,23 @@ const band = (key: HourlyBandKey, label: string, texture: GlucoseRange): HourlyB
 });
 
 /**
- * The per-hour consensus bands the API partitions `AveragedStats.timeInRange`
- * on, lowest first so a stack reads upward. Built per call: the labels follow
- * the viewer's glucose unit.
+ * The per-hour bands the API partitions `AveragedStats.timeInRange` on, lowest
+ * first so a stack reads upward, labelled from the edges the API says it used.
+ * Built per call: the labels follow the viewer's glucose unit. Without
+ * thresholds the labels are empty, for marks that show no key.
  */
-export function hourlyBandSeries(): HourlyBandSeries[] {
+export function hourlyBandSeries(thresholds?: GlycemicThresholds): HourlyBandSeries[] {
+  const edge = (mgdl: number | undefined) => (mgdl == null ? "" : String(bg(mgdl)));
+  const span = (low: number | undefined, high: number | undefined) =>
+    thresholds ? `${edge(low)}-${edge(high)}` : "";
+  const t = thresholds;
+
   return [
-    band("veryLow", `<${bg(54)}`, "very-low"),
-    band("low", `${bg(54)}-${bg(70)}`, "low"),
-    band("tightTarget", `${bg(70)}-${bg(140)}`, "tight-range"),
-    band("aboveTightTarget", `${bg(140)}-${bg(180)}`, "in-range"),
-    band("high", `${bg(180)}-${bg(250)}`, "high"),
-    band("veryHigh", `>${bg(250)}`, "very-high"),
+    band("veryLow", t ? `<${edge(t.veryLow)}` : "", "very-low"),
+    band("low", span(t?.veryLow, t?.low), "low"),
+    band("tightTarget", span(t?.tightTargetBottom, t?.tightTargetTop), "tight-range"),
+    band("aboveTightTarget", span(t?.tightTargetTop, t?.targetTop), "in-range"),
+    band("high", span(t?.targetTop, t?.veryHigh), "high"),
+    band("veryHigh", t ? `>${edge(t.veryHigh)}` : "", "very-high"),
   ];
 }

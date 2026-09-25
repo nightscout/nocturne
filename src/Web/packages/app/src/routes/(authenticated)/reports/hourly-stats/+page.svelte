@@ -5,7 +5,12 @@
   import { Button } from "$lib/components/ui/button";
   import { ArrowRight, CircleDashed, Info } from "lucide-svelte";
   import { getHourlyPatterns } from "$api/reports.remote";
-  import { HourlyComparison, HourlyExcursion, type HourlyPattern } from "$lib/api";
+  import {
+    HourlyClockBasis,
+    HourlyComparison,
+    HourlyExcursion,
+    type HourlyPattern,
+  } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, bgRange, formatNumber, formatShortDate } from "$lib/utils/formatting";
@@ -28,6 +33,18 @@
   const comparison = $derived(report?.comparison ?? HourlyComparison.NoReadings);
   const minimumDays = $derived(report?.minimumDaysToRank ?? 0);
   const minimumReadings = $derived(report?.minimumReadingsToRank ?? 0);
+  const spread = $derived(report?.minimumSpreadToRank ?? 0);
+  const minimumLowDays = $derived(report?.minimumLowDaysToList ?? 0);
+  const onTenantClock = $derived(report?.clockBasis === HourlyClockBasis.TenantTimeZone);
+
+  // Band edges as the API classified on them; the labels follow the viewer's unit.
+  const edges = $derived({
+    veryLow: report?.thresholds?.veryLow ?? 0,
+    low: report?.thresholds?.low ?? 0,
+    targetTop: report?.thresholds?.targetTop ?? 0,
+    tightBottom: report?.thresholds?.tightTargetBottom ?? 0,
+    tightTop: report?.thresholds?.tightTargetTop ?? 0,
+  });
   const unranked = $derived(hours.filter((h) => !h.isRanked && (h.count ?? 0) > 0));
   const emptyHours = $derived(hours.filter((h) => (h.count ?? 0) === 0));
 
@@ -91,7 +108,7 @@
       <p class="text-pretty">
         This report lays every day in the range over one 24-hour clock, so you can see
         which hours of the day tend to go well and which tend to be harder. In range
-        means a reading between {bgRange(70, 180)}.
+        means a reading between {bgRange(edges.low, edges.targetTop)}.
       </p>
     </header>
 
@@ -132,7 +149,7 @@
                     {#each best as hour (hour.hour)}
                       {@render hourRow(
                         hour,
-                        percent(hour.inRange),
+                        percent(hour.inRange, 1),
                         "in range",
                         `${percent(hour.belowRange, 1)} below, ${percent(hour.aboveRange, 1)} above range`
                       )}
@@ -140,8 +157,8 @@
                   </ol>
                 {:else}
                   <p class="px-4 py-3 text-sm text-muted-foreground">
-                    Every compared hour spent the same share of time in range, so none
-                    stands out.
+                    The compared hours were all within {spread} percentage points of each
+                    other in time in range, too close to call any of them better or worse.
                   </p>
                 {/if}
               </div>
@@ -156,7 +173,7 @@
                     {#each worst as hour (hour.hour)}
                       {@render hourRow(
                         hour,
-                        percent(hour.inRange),
+                        percent(hour.inRange, 1),
                         "in range",
                         `${excursionText(hour)}: ${percent(hour.belowRange, 1)} below, ${percent(hour.aboveRange, 1)} above`
                       )}
@@ -164,8 +181,8 @@
                   </ol>
                 {:else}
                   <p class="px-4 py-3 text-sm text-muted-foreground">
-                    Every compared hour spent the same share of time in range, so none
-                    stands out.
+                    The compared hours were all within {spread} percentage points of each
+                    other in time in range, too close to call any of them better or worse.
                   </p>
                 {/if}
               </div>
@@ -173,7 +190,7 @@
               <div class="bg-card">
                 {@render column(
                   "Most time below range",
-                  `The hours with the largest share of readings under ${bg(70)} ${bgLabel()}.`
+                  `The hours with the largest share of readings under ${bg(edges.low)} ${bgLabel()}, among those that went below range on at least ${minimumLowDays} days.`
                 )}
                 {#if mostBelow.length > 0}
                   <ol class="divide-y">
@@ -182,13 +199,14 @@
                         hour,
                         percent(hour.belowRange, 1),
                         "below range",
-                        `${percent(hour.timeInRange?.veryLow, 1)} under ${bg(54)} ${bgLabel()}`
+                        `${percent(hour.timeInRange?.veryLow, 1)} under ${bg(edges.veryLow)} ${bgLabel()}`
                       )}
                     {/each}
                   </ol>
                 {:else}
                   <p class="px-4 py-3 text-sm text-muted-foreground">
-                    None of the compared hours had a reading under {bg(70)} {bgLabel()}.
+                    No compared hour had a reading under {bg(edges.low)} {bgLabel()} on
+                    {minimumLowDays} or more days.
                   </p>
                 {/if}
               </div>
@@ -206,7 +224,7 @@
           </Card.Description>
         </Card.Header>
         <Card.Content class="space-y-3">
-          <HourlyRangeBars {hours} />
+          <HourlyRangeBars {hours} thresholds={report.thresholds} />
           {#if unranked.length > 0}
             <p class="flex items-start gap-2 text-xs text-muted-foreground">
               <CircleDashed class="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -261,7 +279,7 @@
                       {/if}
                     </Table.Cell>
                     {#if hasData}
-                      <Table.Cell class="text-right tabular-nums">{percent(hour.inRange)}</Table.Cell>
+                      <Table.Cell class="text-right tabular-nums">{percent(hour.inRange, 1)}</Table.Cell>
                       <Table.Cell class="text-right tabular-nums">{percent(hour.belowRange, 1)}</Table.Cell>
                       <Table.Cell class="text-right tabular-nums">{percent(hour.aboveRange, 1)}</Table.Cell>
                       <Table.Cell class="text-right tabular-nums">{bg(hour.median ?? 0)}</Table.Cell>
@@ -269,7 +287,7 @@
                         {bg(hour.percentiles?.p25 ?? 0)}–{bg(hour.percentiles?.p75 ?? 0)}
                       </Table.Cell>
                     {:else}
-                      <Table.Cell colspan={5} class="text-center">–</Table.Cell>
+                      <Table.Cell colspan={5} variant="muted" class="text-center">No readings</Table.Cell>
                     {/if}
                     <Table.Cell class="text-right tabular-nums">{formatNumber(hour.count)}</Table.Cell>
                     <Table.Cell class="text-right tabular-nums">{formatNumber(hour.dayCount)}</Table.Cell>
@@ -287,17 +305,23 @@
             <div class="space-y-2">
               <h3 class="font-semibold">How to read this report</h3>
               <p class="text-muted-foreground">
-                In range is {bgRange(70, 180)}, the international consensus target.
-                Below range is under {bg(70)} {bgLabel()}, and very low is under
-                {bg(54)} {bgLabel()}. Tight range, {bgRange(70, 140)}, is a narrower
-                part of the target that some people and care teams also look at.
+                In range is {bgRange(edges.low, edges.targetTop)}, the international
+                consensus target. Below range is under {bg(edges.low)} {bgLabel()}, and
+                very low is under {bg(edges.veryLow)} {bgLabel()}. Tight range,
+                {bgRange(edges.tightBottom, edges.tightTop)}, is a narrower part of the
+                target that some people and care teams also look at.
               </p>
-              {#if report.timeZone}
-                <p class="text-muted-foreground">
+              <p class="text-muted-foreground">
+                {#if onTenantClock}
                   Hours follow the clock of the time zone in your profile settings
                   ({report.timeZone}).
-                </p>
-              {/if}
+                {:else}
+                  No time zone is available for this data, so each reading is placed at
+                  the local time the device that recorded it reported. If readings came
+                  from devices set to different time zones, some hours may be off. Setting
+                  a time zone in the profile settings fixes this.
+                {/if}
+              </p>
             </div>
             <div class="space-y-2">
               <h3 class="font-semibold">Which hours are compared</h3>
@@ -306,6 +330,8 @@
                 {minimumDays} different days, and at least {minimumReadings} readings in all.
                 With less data, a single unusual day could make an hour look much better or
                 worse than it usually is. Those hours still appear in the chart and table.
+                Best and worst hours are only named when they differ by at least {spread}
+                percentage points of time in range.
               </p>
             </div>
             <div class="space-y-2">

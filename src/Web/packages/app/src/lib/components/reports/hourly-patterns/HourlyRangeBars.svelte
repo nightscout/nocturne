@@ -5,18 +5,19 @@
 -->
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import type { HourlyPattern } from "$lib/api";
+  import type { GlycemicThresholds, HourlyPattern } from "$lib/api";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { hourlyBandSeries } from "../hourly-bands";
   import { hourSpan, hourStart } from "./hour-labels";
 
   interface Props {
     hours: HourlyPattern[];
+    thresholds?: GlycemicThresholds;
   }
 
-  let { hours }: Props = $props();
+  let { hours, thresholds }: Props = $props();
 
-  const series = $derived(hourlyBandSeries());
+  const series = $derived(hourlyBandSeries(thresholds));
 
   const data = $derived(
     hours.map((h) => ({
@@ -34,7 +35,11 @@
   const axisLabel = (hour: number) => (hour % 3 === 0 ? hourStart(hour) : "");
 </script>
 
-<figure class="m-0 space-y-3">
+<figure class="m-0 space-y-3" aria-labelledby="hourly-bars-caption">
+  <figcaption id="hourly-bars-caption" class="sr-only">
+    Stacked bar chart of the share of each hour's readings in each glucose range, one bar per
+    hour from midnight. The table below gives the same figures.
+  </figcaption>
   <div class="h-[240px] w-full @md:h-[300px] print:h-[260px]">
     <BarChart
       {data}

@@ -25,8 +25,8 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 /// </summary>
 /// <remarks>
 /// <c>GET /periods</c> caches for five minutes through <see cref="ICacheService"/>;
-/// <c>GET /range-analytics</c> and <c>GET /weekday-averages</c> carry a 60-second
-/// <see cref="ResponseCacheAttribute"/>. No other action caches.
+/// <c>GET /range-analytics</c>, <c>GET /weekday-averages</c> and <c>GET /hourly-patterns</c>
+/// carry a 60-second client-only <see cref="ResponseCacheAttribute"/>. No other action caches.
 ///
 /// Repositories create their own DbContext per call from <c>ITenantDbContextFactory</c>, so
 /// independent reads within one request are issued together under <c>Task.WhenAll</c>.
@@ -292,7 +292,7 @@ public class StatisticsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
         return Ok(_statisticsService.CalculateAveragedStats(entries, tz));
     }
 
@@ -464,14 +464,15 @@ public class StatisticsController : ControllerBase
             });
         }
 
-        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
 
         var result = new ReportAnalysisResult
         {
             Analysis = _statisticsService.AnalyzeGlucoseDataExtended(entries, boluses, carbs, population),
             AveragedStats = _statisticsService.CalculateAveragedStats(entries, tz).ToList(),
+            HourlyBandThresholds = new GlycemicThresholds(),
             ContributingDevices = contributingDevices,
-            PersonalRange = await CalculatePersonalRangeAsync(entries, cancellationToken),
+            PersonalRange = await CalculatePersonalRangeAsync(entries, tz ?? TimeZoneInfo.Utc, cancellationToken),
         };
         return Ok(result);
     }
@@ -501,7 +502,7 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+        var tz = await ResolveTenantTimeZoneAsync(cancellationToken) ?? TimeZoneInfo.Utc;
 
         return Ok(_statisticsService.CalculateWeekdayAverages(entries, tz));
     }
@@ -531,13 +532,33 @@ public class StatisticsController : ControllerBase
         var rawGlucose = (await _sensorGlucoseRepository.GetAsync(startDt, endDt, null, null, int.MaxValue, descending: false, ct: cancellationToken)).ToList();
         var entries = await _canonicalGlucose.SelectAsync(rawGlucose, cancellationToken);
 
-        var tz = await GetTenantTimeZoneAsync(cancellationToken);
+        var tz = await ResolveTenantTimeZoneAsync(cancellationToken);
 
         return Ok(_statisticsService.CalculateHourlyPatterns(entries, tz));
     }
 
-    private async Task<TimeZoneInfo> GetTenantTimeZoneAsync(CancellationToken ct) =>
-        TimeZoneHelper.GetTimeZoneInfoFromId(await _therapySettingsResolver.GetTimezoneAsync(ct: ct));
+    /// <summary>
+    /// The tenant's timezone, or null when none is configured, it does not resolve, or the lookup
+    /// fails. A public share always takes the null path: the therapy settings the zone lives in are
+    /// not share-governed, so RLS hides them. Null rather than UTC, so the hourly statistics fall
+    /// back to each reading's own offset instead of shifting every hour for those callers.
+    /// </summary>
+    private async Task<TimeZoneInfo?> ResolveTenantTimeZoneAsync(CancellationToken ct)
+    {
+        try
+        {
+            var id = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
+            return TimeZoneHelper.TryGetTimeZoneInfoFromId(id, out var tz) ? tz : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Returns the target range schedule active for the tenant's active profile right now, or null
@@ -560,6 +581,7 @@ public class StatisticsController : ControllerBase
     /// </summary>
     private async Task<PersonalRangeTimeInRange?> CalculatePersonalRangeAsync(
         List<SensorGlucose> entries,
+        TimeZoneInfo tenantTimeZone,
         CancellationToken ct
     )
     {
@@ -569,12 +591,7 @@ public class StatisticsController : ControllerBase
             if (schedule is null || schedule.Entries.Count == 0)
                 return null;
 
-            var tzId = await _therapySettingsResolver.GetTimezoneAsync(ct: ct);
-            return _statisticsService.CalculatePersonalRangeTime(
-                entries,
-                schedule.Entries,
-                TimeZoneHelper.GetTimeZoneInfoFromId(tzId)
-            );
+            return _statisticsService.CalculatePersonalRangeTime(entries, schedule.Entries, tenantTimeZone);
         }
         catch (OperationCanceledException)
         {

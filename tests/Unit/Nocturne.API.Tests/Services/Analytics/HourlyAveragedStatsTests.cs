@@ -30,6 +30,59 @@ public class HourlyAveragedStatsTests
     }
 
     [Fact]
+    public void CalculateAveragedStats_WithoutATimezone_FallsBackToEachReadingsOwnOffset()
+    {
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 1, 15, 14, 30, 0, DateTimeKind.Utc), UtcOffset = -300 },
+            new SensorGlucose { Mgdl = 110, Timestamp = new DateTime(2026, 1, 15, 14, 40, 0, DateTimeKind.Utc) },
+        };
+
+        var stats = _service.CalculateAveragedStats(entries, null).ToList();
+
+        stats.Single(s => s.Hour == 9).Count.Should().Be(1);
+        stats.Single(s => s.Hour == 14).Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateAveragedStats_GivesTheRepeatedHourBothOccurrencesOnTheFallBackDay()
+    {
+        var newYork = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
+        // 1 November 2026: 01:30 EDT is 05:30Z, then 01:30 EST is 06:30Z.
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 11, 1, 5, 30, 0, DateTimeKind.Utc) },
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 11, 1, 6, 30, 0, DateTimeKind.Utc) },
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 11, 1, 7, 30, 0, DateTimeKind.Utc) },
+        };
+
+        var stats = _service.CalculateAveragedStats(entries, newYork).ToList();
+
+        var one = stats.Single(s => s.Hour == 1);
+        one.Count.Should().Be(2);
+        one.DayCount.Should().Be(1);
+        stats.Single(s => s.Hour == 2).Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateAveragedStats_HasNoReadingsInTheSkippedHourOnTheSpringForwardDay()
+    {
+        var newYork = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");
+        // 8 March 2026: 06:30Z is 01:30 EST, 07:30Z is 03:30 EDT; 02:00-03:00 never happens.
+        var entries = new[]
+        {
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 3, 8, 6, 30, 0, DateTimeKind.Utc) },
+            new SensorGlucose { Mgdl = 100, Timestamp = new DateTime(2026, 3, 8, 7, 30, 0, DateTimeKind.Utc) },
+        };
+
+        var stats = _service.CalculateAveragedStats(entries, newYork).ToList();
+
+        stats.Single(s => s.Hour == 1).Count.Should().Be(1);
+        stats.Single(s => s.Hour == 2).Count.Should().Be(0);
+        stats.Single(s => s.Hour == 3).Count.Should().Be(1);
+    }
+
+    [Fact]
     public void CalculateAveragedStats_FollowsDaylightSavingOnTheTenantClock()
     {
         var newYork = TimeZoneHelper.GetTimeZoneInfoFromId("America/New_York");

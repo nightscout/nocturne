@@ -214,11 +214,14 @@ public interface IStatisticsService
     /// than on each reading's own recorded offset.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <param name="tenantTimeZone">
+    /// The tenant's local timezone, or null when none resolves, in which case each reading is placed
+    /// by its own recorded offset.
+    /// </param>
     /// <returns>All 24 hours in order, midnight first.</returns>
     IEnumerable<AveragedStats> CalculateAveragedStats(
         IEnumerable<SensorGlucose> entries,
-        TimeZoneInfo tenantTimeZone
+        TimeZoneInfo? tenantTimeZone
     );
 
     /// <summary>
@@ -226,10 +229,10 @@ public interface IStatisticsService
     /// with the best, worst and most-below-range hours among those with enough data to rank.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <param name="tenantTimeZone">The tenant's local timezone.</param>
+    /// <param name="tenantTimeZone">As for <see cref="CalculateAveragedStats"/>.</param>
     HourlyPatterns CalculateHourlyPatterns(
         IEnumerable<SensorGlucose> entries,
-        TimeZoneInfo tenantTimeZone
+        TimeZoneInfo? tenantTimeZone
     );
 
     /// <summary>

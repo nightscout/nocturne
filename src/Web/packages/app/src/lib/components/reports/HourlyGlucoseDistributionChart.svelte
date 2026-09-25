@@ -2,12 +2,14 @@
   import { AreaChart } from "layerchart";
   import { timeFormat } from "$lib/stores/appearance-store.svelte";
   import { BarChart2 } from "lucide-svelte";
-  import type { AveragedStats } from "$lib/api";
+  import type { AveragedStats, GlycemicThresholds } from "$lib/api";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { hourlyBandSeries } from "./hourly-bands";
 
   interface Props {
     averagedStats?: AveragedStats[];
+    /** The band edges the API partitioned each hour on. */
+    thresholds?: GlycemicThresholds;
   }
 
   interface HourlyRangeData {
@@ -21,7 +23,7 @@
     count: number;
   }
 
-  let { averagedStats }: Props = $props();
+  let { averagedStats, thresholds }: Props = $props();
 
   function transformToChartData(stats: AveragedStats[]): HourlyRangeData[] {
     return stats.map((s) => ({
@@ -47,7 +49,7 @@
     return `${hour - 12}PM`;
   }
 
-  const chartSeries = $derived(hourlyBandSeries());
+  const chartSeries = $derived(hourlyBandSeries(thresholds));
 
   // Derived chart data
   const chartData = $derived(

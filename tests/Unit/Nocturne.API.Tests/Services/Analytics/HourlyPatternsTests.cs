@@ -28,6 +28,16 @@ public class HourlyPatternsTests
     private static IEnumerable<SensorGlucose> RankableHour(int hour, int inRange, double outOfRange = 220) =>
         Hour(hour, 7, Enumerable.Range(0, 12).Select(i => i < inRange ? 120d : outOfRange).ToArray());
 
+    /// <summary>
+    /// A rankable hour of 84 readings, twelve a day on seven days, all at 120 except the first
+    /// <paramref name="outOfRange"/> of the 84, which are at <paramref name="value"/>.
+    /// </summary>
+    private static IEnumerable<SensorGlucose> RankableHourWith(int hour, int outOfRange, double value = 220) =>
+        Hour(hour, 7, Enumerable.Repeat(120d, 12).ToArray())
+            .OrderBy(e => e.Timestamp)
+            .Select((e, i) => { if (i < outOfRange) e.Mgdl = value; return e; })
+            .ToList();
+
     #region Timezone
 
     [Fact]
@@ -38,6 +48,32 @@ public class HourlyPatternsTests
         var result = _service.CalculateHourlyPatterns([], stockholm);
 
         result.TimeZone.Should().Be(stockholm.Id);
+        result.ClockBasis.Should().Be(HourlyClockBasis.TenantTimeZone);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_WithoutATimezone_SaysItBucketedOnEachReadingsOwnOffset()
+    {
+        var reading = new SensorGlucose
+        {
+            Mgdl = 100,
+            Timestamp = new DateTime(2026, 1, 15, 14, 30, 0, DateTimeKind.Utc),
+            UtcOffset = -300,
+        };
+
+        var result = _service.CalculateHourlyPatterns([reading], null);
+
+        result.ClockBasis.Should().Be(HourlyClockBasis.ReadingOffsets);
+        result.TimeZone.Should().BeNull();
+        result.Hours.Single(h => h.Hour == 9).Count.Should().Be(1);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_PublishesTheBandThresholdsItClassifiedOn()
+    {
+        var result = _service.CalculateHourlyPatterns([], TimeZoneInfo.Utc);
+
+        result.Thresholds.Should().BeEquivalentTo(new GlycemicThresholds());
     }
 
     #endregion
@@ -105,6 +141,8 @@ public class HourlyPatternsTests
 
         result.MinimumDaysToRank.Should().Be(StatisticsService.HourlyPatternsMinimumDays);
         result.MinimumReadingsToRank.Should().Be(StatisticsService.HourlyPatternsMinimumReadings);
+        result.MinimumSpreadToRank.Should().Be(StatisticsService.HourlyPatternsMinimumSpread);
+        result.MinimumLowDaysToList.Should().Be(StatisticsService.HourlyPatternsMinimumLowDays);
     }
 
     [Fact]
@@ -158,13 +196,39 @@ public class HourlyPatternsTests
     }
 
     [Fact]
-    public void CalculateHourlyPatterns_ReportsAllAlikeWhenNoRankedHourStandsOut()
+    public void CalculateHourlyPatterns_ReportsCloseTogetherWhenNoRankedHourStandsOut()
     {
         var entries = RankableHour(0, 12).Concat(RankableHour(1, 12));
 
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
-        result.Comparison.Should().Be(HourlyComparison.AllAlike);
+        result.Comparison.Should().Be(HourlyComparison.CloseTogether);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_DoesNotRankHoursCloserThanTheMinimumSpread()
+    {
+        // 100% against 96.4%: a 3.6-point spread, under the 5-point floor.
+        var entries = RankableHourWith(0, 0).Concat(RankableHourWith(1, 3)).Concat(RankableHourWith(2, 1));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.Comparison.Should().Be(HourlyComparison.CloseTogether);
+        result.BestHours.Should().BeEmpty();
+        result.WorstHours.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_RanksHoursAtLeastTheMinimumSpreadApart()
+    {
+        // 100% against 94.0%: a 6-point spread.
+        var entries = RankableHourWith(0, 0).Concat(RankableHourWith(1, 5));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.Comparison.Should().Be(HourlyComparison.Ranked);
+        result.BestHours.Select(h => h.Hour).Should().Equal(0);
+        result.WorstHours.Select(h => h.Hour).Should().Equal(1);
     }
 
     [Fact]
@@ -261,7 +325,22 @@ public class HourlyPatternsTests
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
         result.BestHours.Select(h => h.Hour).Should().Equal(0);
-        result.WorstHours.Select(h => h.Hour).Should().Equal(1, 2, 3);
+        result.WorstHours.Select(h => h.Hour).Should().Equal(3, 4, 5);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_NeverNamesATiedMiddleHourBothBestAndWorst()
+    {
+        // 100%, then four hours tied at 75%, then 50%.
+        var entries = RankableHour(0, 12)
+            .Concat(Enumerable.Range(1, 4).SelectMany(h => RankableHour(h, 9)))
+            .Concat(RankableHour(5, 6));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.BestHours.Select(h => h.Hour).Should().Equal(0, 1, 2);
+        result.WorstHours.Select(h => h.Hour).Should().Equal(5, 3, 4);
+        result.BestHours.Select(h => h.Hour).Should().NotIntersectWith(result.WorstHours.Select(h => h.Hour));
     }
 
     [Fact]
@@ -291,6 +370,20 @@ public class HourlyPatternsTests
         var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
 
         result.MostBelowRangeHours.Select(h => h.Hour).Should().Equal(3, 1, 0);
+    }
+
+    [Fact]
+    public void CalculateHourlyPatterns_DoesNotListAnHourBelowRangeOnFewerThanTheMinimumLowDays()
+    {
+        // Hour 1 has one low reading; hour 2 has one low on each of its first two days.
+        var entries = RankableHour(0, 12)
+            .Concat(RankableHourWith(1, 1, value: 60))
+            .Concat(Hour(2, 7, Enumerable.Repeat(120d, 12).ToArray())
+                .Select(e => { if (e.Timestamp.Minute == 0 && e.Timestamp.Day <= FirstDay.Day + 1) e.Mgdl = 60; return e; }));
+
+        var result = _service.CalculateHourlyPatterns(entries, TimeZoneInfo.Utc);
+
+        result.MostBelowRangeHours.Select(h => h.Hour).Should().Equal(2);
     }
 
     [Fact]

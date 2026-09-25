@@ -1209,7 +1209,12 @@ public class StatisticsService : IStatisticsService
         VeryHigh,
     }
 
-    private static readonly GlucoseZoneScale HourlyBands = HourlyBandScale(new GlycemicThresholds());
+    private static readonly GlycemicThresholds Consensus = new();
+
+    /// <summary>The widest UTC offset any zone uses; a recorded offset beyond it is treated as none.</summary>
+    private const int MaxUtcOffsetMinutes = 14 * 60;
+
+    private static readonly GlucoseZoneScale HourlyBands = HourlyBandScale(Consensus);
 
     private static GlucoseZoneScale HourlyBandScale(GlycemicThresholds consensus) =>
         new(
@@ -1660,12 +1665,27 @@ public class StatisticsService : IStatisticsService
     /// </summary>
     public const int HourlyPatternsMinimumReadings = 20;
 
+    /// <summary>
+    /// Percentage points of time in range the best and worst ranked hours must differ by before
+    /// <see cref="CalculateHourlyPatterns"/> names either. Five points is the smallest step the
+    /// consensus time-in-range guidance treats as meaningful, about 72 minutes a day; below it the
+    /// ordering is noise, and the report would call 70.1% better than 70.0%.
+    /// </summary>
+    public const double HourlyPatternsMinimumSpread = 5;
+
+    /// <summary>
+    /// Distinct local days an hour needs a reading below range on before
+    /// <see cref="CalculateHourlyPatterns"/> lists it as most below range, so one low reading, or one
+    /// bad day at that hour, does not read as a pattern.
+    /// </summary>
+    public const int HourlyPatternsMinimumLowDays = 2;
+
     private const int HourlyPatternsListLength = 3;
 
     /// <inheritdoc/>
     public IEnumerable<AveragedStats> CalculateAveragedStats(
         IEnumerable<SensorGlucose> entries,
-        TimeZoneInfo tenantTimeZone
+        TimeZoneInfo? tenantTimeZone
     )
     {
         var byHour = GroupByLocalHour(entries, tenantTimeZone);
@@ -1675,11 +1695,12 @@ public class StatisticsService : IStatisticsService
     /// <inheritdoc/>
     public HourlyPatterns CalculateHourlyPatterns(
         IEnumerable<SensorGlucose> entries,
-        TimeZoneInfo tenantTimeZone
+        TimeZoneInfo? tenantTimeZone
     )
     {
         var byHour = GroupByLocalHour(entries, tenantTimeZone);
         var hours = new List<HourlyPattern>(24);
+        var lowDays = new int[24];
 
         for (var hour = 0; hour < 24; hour++)
         {
@@ -1701,36 +1722,46 @@ public class StatisticsService : IStatisticsService
             pattern.IsRanked =
                 pattern.DayCount >= HourlyPatternsMinimumDays
                 && total >= HourlyPatternsMinimumReadings;
+            lowDays[hour] = byHour[hour]
+                .Where(r => r.Mgdl < Consensus.Low)
+                .Select(r => r.Day)
+                .Distinct()
+                .Count();
 
             hours.Add(pattern);
         }
 
-        var ranked = hours.Where(h => h.IsRanked).ToList();
-
-        // Best and worst are drawn from opposite halves so no hour is both, and an hour that ties
-        // the other end's time in range is dropped rather than named as better or worse than it.
-        var listLength = Math.Min(HourlyPatternsListLength, ranked.Count / 2);
-        var lowestInRange = ranked.Count > 0 ? ranked.Min(h => h.InRange) : 0;
-        var highestInRange = ranked.Count > 0 ? ranked.Max(h => h.InRange) : 0;
-
-        var best = ranked
+        // One total order, best first. Best is its head and worst its tail, and with at most half
+        // the ranked hours on each side the two never share an hour, however many tie.
+        var ranked = hours
+            .Where(h => h.IsRanked)
             .OrderByDescending(h => h.InRange)
             .ThenBy(h => h.BelowRange)
             .ThenBy(h => h.Hour)
-            .Take(listLength)
-            .Where(h => h.InRange > lowestInRange)
             .ToList();
 
-        var worst = ranked
-            .OrderBy(h => h.InRange)
-            .ThenByDescending(h => h.BelowRange)
-            .ThenBy(h => h.Hour)
-            .Take(listLength)
-            .Where(h => h.InRange < highestInRange)
-            .ToList();
+        var listLength = Math.Min(HourlyPatternsListLength, ranked.Count / 2);
+        var spread = ranked.Count > 0 ? ranked[0].InRange - ranked[^1].InRange : 0;
+        var farEnoughApart = spread >= HourlyPatternsMinimumSpread;
+
+        // An hour that ties the other end's time in range is dropped rather than named as better
+        // or worse than it.
+        var best = farEnoughApart
+            ? ranked.Take(listLength).Where(h => h.InRange > ranked[^1].InRange).ToList()
+            : [];
+
+        var worst = farEnoughApart
+            ? ranked
+                .TakeLast(listLength)
+                .Where(h => h.InRange < ranked[0].InRange)
+                .OrderBy(h => h.InRange)
+                .ThenByDescending(h => h.BelowRange)
+                .ThenBy(h => h.Hour)
+                .ToList()
+            : [];
 
         var mostBelow = ranked
-            .Where(h => h.BelowRange > 0)
+            .Where(h => h.BelowRange > 0 && lowDays[h.Hour] >= HourlyPatternsMinimumLowDays)
             .OrderByDescending(h => h.BelowRange)
             .ThenBy(h => h.Hour)
             .Take(HourlyPatternsListLength)
@@ -1740,7 +1771,7 @@ public class StatisticsService : IStatisticsService
         {
             Comparison = hours.All(h => h.Count == 0) ? HourlyComparison.NoReadings
                 : ranked.Count < 2 ? HourlyComparison.TooLittleData
-                : best.Count == 0 && worst.Count == 0 ? HourlyComparison.AllAlike
+                : best.Count == 0 && worst.Count == 0 ? HourlyComparison.CloseTogether
                 : HourlyComparison.Ranked,
             Hours = hours,
             BestHours = best,
@@ -1749,7 +1780,11 @@ public class StatisticsService : IStatisticsService
             RankedHourCount = ranked.Count,
             MinimumDaysToRank = HourlyPatternsMinimumDays,
             MinimumReadingsToRank = HourlyPatternsMinimumReadings,
-            TimeZone = tenantTimeZone.Id,
+            MinimumSpreadToRank = HourlyPatternsMinimumSpread,
+            MinimumLowDaysToList = HourlyPatternsMinimumLowDays,
+            Thresholds = new GlycemicThresholds(),
+            ClockBasis = tenantTimeZone is null ? HourlyClockBasis.ReadingOffsets : HourlyClockBasis.TenantTimeZone,
+            TimeZone = tenantTimeZone?.Id,
         };
     }
 
@@ -1757,12 +1792,19 @@ public class StatisticsService : IStatisticsService
 
     /// <summary>
     /// Plausible readings grouped by hour of the tenant's local clock. A reading's own
-    /// <c>UtcOffset</c> is ignored: it records the uploader's offset, which
-    /// differs between devices and would split one local hour across several buckets.
+    /// <c>UtcOffset</c> is ignored when <paramref name="tenantTimeZone"/> is given: it records the
+    /// uploader's offset, which differs between devices and would split one local hour across
+    /// several buckets. Without a timezone it is the only local clock there is, so each reading is
+    /// placed by its own offset, and on UTC when it has none.
+    /// <para>
+    /// On the day the clock falls back, the repeated hour receives both of its occurrences and so
+    /// carries double weight for that day; on the day it springs forward the skipped hour has no
+    /// readings.
+    /// </para>
     /// </summary>
     private static List<LocalReading>[] GroupByLocalHour(
         IEnumerable<SensorGlucose> entries,
-        TimeZoneInfo tenantTimeZone
+        TimeZoneInfo? tenantTimeZone
     )
     {
         var byHour = new List<LocalReading>[24];
@@ -1774,10 +1816,10 @@ public class StatisticsService : IStatisticsService
             if (entry.Mills <= 0 || !IsPlausibleReading(entry))
                 continue;
 
-            var local = TimeZoneInfo.ConvertTime(
-                DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills),
-                tenantTimeZone
-            );
+            var instant = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
+            var local = tenantTimeZone is not null
+                ? TimeZoneInfo.ConvertTime(instant, tenantTimeZone)
+                : instant.ToOffset(TimeSpan.FromMinutes(entry.UtcOffset is { } minutes && Math.Abs(minutes) <= MaxUtcOffsetMinutes ? minutes : 0));
             byHour[local.Hour].Add(new LocalReading(entry.Mgdl, DateOnly.FromDateTime(local.DateTime)));
         }
 

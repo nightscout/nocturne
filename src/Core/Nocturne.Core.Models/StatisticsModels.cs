@@ -977,11 +977,30 @@ public enum HourlyComparison
     /// <summary>Fewer than two hours have enough data to rank, so none are compared.</summary>
     TooLittleData,
 
-    /// <summary>Every ranked hour has the same time in range, so no hour is named best or worst.</summary>
-    AllAlike,
+    /// <summary>
+    /// The ranked hours' time in range spans less than <see cref="HourlyPatterns.MinimumSpreadToRank"/>,
+    /// so no hour is named best or worst.
+    /// </summary>
+    CloseTogether,
 
     /// <summary>The best and worst hours are named.</summary>
     Ranked,
+}
+
+/// <summary>
+/// Which clock the hours of a report were bucketed on.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<HourlyClockBasis>))]
+public enum HourlyClockBasis
+{
+    /// <summary>The tenant's configured timezone.</summary>
+    TenantTimeZone,
+
+    /// <summary>
+    /// No timezone resolved, so each reading was placed by the UTC offset its uploader recorded,
+    /// or on UTC when it recorded none.
+    /// </summary>
+    ReadingOffsets,
 }
 
 /// <summary>
@@ -996,8 +1015,8 @@ public class HourlyPatterns
     public List<HourlyPattern> Hours { get; set; } = [];
 
     /// <summary>
-    /// Up to three ranked hours with the most time in range, best first. Empty when fewer than two
-    /// hours are ranked or every ranked hour has the same time in range.
+    /// Up to three ranked hours with the most time in range, best first. Empty unless
+    /// <see cref="Comparison"/> is <see cref="HourlyComparison.Ranked"/>.
     /// </summary>
     public List<HourlyPattern> BestHours { get; set; } = [];
 
@@ -1008,8 +1027,8 @@ public class HourlyPatterns
     public List<HourlyPattern> WorstHours { get; set; } = [];
 
     /// <summary>
-    /// Up to three ranked hours with the most time below range, most first. Hours that never went
-    /// below range are left out.
+    /// Up to three ranked hours with the most time below range, most first. An hour with readings
+    /// below range on fewer than <see cref="MinimumLowDaysToList"/> days is left out.
     /// </summary>
     public List<HourlyPattern> MostBelowRangeHours { get; set; } = [];
 
@@ -1022,8 +1041,26 @@ public class HourlyPatterns
     /// <summary>Readings an hour needs in all before it is ranked.</summary>
     public int MinimumReadingsToRank { get; set; }
 
-    /// <summary>Identifier of the timezone the hours were bucketed on.</summary>
-    public string TimeZone { get; set; } = string.Empty;
+    /// <summary>
+    /// Percentage points of time in range the best and worst ranked hours must differ by before
+    /// any hour is named best or worst.
+    /// </summary>
+    public double MinimumSpreadToRank { get; set; }
+
+    /// <summary>Distinct local days an hour needs readings below range on to be listed as most below range.</summary>
+    public int MinimumLowDaysToList { get; set; }
+
+    /// <summary>The band edges the hours were classified on.</summary>
+    public GlycemicThresholds Thresholds { get; set; } = new();
+
+    /// <summary>Which clock the hours were bucketed on.</summary>
+    public HourlyClockBasis ClockBasis { get; set; }
+
+    /// <summary>
+    /// Identifier of the timezone the hours were bucketed on; null when <see cref="ClockBasis"/> is
+    /// <see cref="HourlyClockBasis.ReadingOffsets"/>.
+    /// </summary>
+    public string? TimeZone { get; set; }
 }
 
 /// <summary>
@@ -1477,6 +1514,9 @@ public class ReportAnalysisResult
 
     /// <summary>Time-of-day averaged statistics for AGP-style charts.</summary>
     public IEnumerable<AveragedStats> AveragedStats { get; set; } = [];
+
+    /// <summary>The band edges <see cref="AveragedStats"/> partitions each hour's readings on.</summary>
+    public GlycemicThresholds HourlyBandThresholds { get; set; } = new();
 
     /// <summary>Registered devices that contributed readings within the requested window, for device-picker UIs.</summary>
     public List<ContributingDevice> ContributingDevices { get; set; } = new();
