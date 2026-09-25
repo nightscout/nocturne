@@ -109,17 +109,19 @@ public sealed class ExcursionTransitionAtomicityTests : IDisposable
     private sealed class ConcurrentOpenRepository(NocturneDbContext context, Guid excursionId)
         : AlertTrackerRepository(context)
     {
+        private readonly NocturneDbContext _context = context;
+
         public override async Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default)
         {
-            context.AlertExcursions.Add(new AlertExcursionEntity
+            _context.AlertExcursions.Add(new AlertExcursionEntity
             {
                 Id = excursionId, TenantId = TenantId, AlertRuleId = alertRuleId, StartedAt = Now.UtcDateTime,
             });
-            var state = await context.AlertTrackerState.SingleAsync(s => s.AlertRuleId == alertRuleId, ct);
+            var state = await _context.AlertTrackerState.SingleAsync(s => s.AlertRuleId == alertRuleId, ct);
             state.State = "active";
             state.ActiveExcursionId = excursionId;
             state.UpdatedAt = Now.UtcDateTime;
-            await context.SaveChangesAsync(ct);
+            await _context.SaveChangesAsync(ct);
         }
     }
 

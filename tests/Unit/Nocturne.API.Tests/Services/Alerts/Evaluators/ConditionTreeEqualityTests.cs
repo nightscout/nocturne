@@ -11,7 +11,6 @@ public class ConditionTreeEqualityTests
     [InlineData("""{"a":1,"b":[true,null,"x"]}""", """ { "b" : [ true , null , "x" ] , "a" : 1 } """)]
     [InlineData(null, "  ")]
     [InlineData("""{"direction":"below"}""", """{"direction":"below"}""")]
-    [InlineData("""{"direction":"below"}""", """{"direction":"below"}""")]
     public void Formatting_and_key_order_do_not_matter(string? stored, string? requested) =>
         ConditionTreeEquality.Same(stored, requested).Should().BeTrue();
 

@@ -264,8 +264,8 @@ public class ConnectorPollingRegistrationTests
     private static List<string> InstalledConnectorNames() =>
         [.. ConnectorInstallers.Types()
             .Select(t => t.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.ConnectorName)
-            .Where(name => name is not null)
-            .Distinct()!];
+            .OfType<string>()
+            .Distinct()];
 
     [ConnectorRegistration("PollingTest", "polling-test", "POLLINGTEST", "PollingTest")]
     private sealed class PollingTestConfiguration : BaseConnectorConfiguration

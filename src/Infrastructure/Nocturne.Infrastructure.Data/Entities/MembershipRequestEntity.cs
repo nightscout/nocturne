@@ -9,9 +9,11 @@ namespace Nocturne.Infrastructure.Data.Entities;
 [Table("membership_requests")]
 public class MembershipRequestEntity : ITenantScoped
 {
+    /// <summary>Primary key.</summary>
     [Key]
     public Guid Id { get; set; }
 
+    /// <summary>The tenant the requester wants to join.</summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 

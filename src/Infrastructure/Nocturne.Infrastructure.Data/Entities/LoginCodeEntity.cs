@@ -16,6 +16,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 [Table("login_codes")]
 public class LoginCodeEntity : ITenantScoped, IEntityCreated
 {
+    /// <summary>Primary key (UUID v7).</summary>
     [Key]
     public Guid Id { get; set; }
 
@@ -33,6 +34,7 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     [Column("code_hash")]
     public string CodeHash { get; set; } = string.Empty;
 
+    /// <summary>After this instant the code can no longer be exchanged.</summary>
     [Column("expires_at")]
     public DateTime ExpiresAt { get; set; }
 
@@ -40,10 +42,13 @@ public class LoginCodeEntity : ITenantScoped, IEntityCreated
     [Column("consumed_at")]
     public DateTime? ConsumedAt { get; set; }
 
+    /// <summary>When the code was minted.</summary>
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Navigation property to the tenant.</summary>
     public TenantEntity? Tenant { get; set; }
 
+    /// <summary>Navigation property to the member.</summary>
     public SubjectEntity? Subject { get; set; }
 }
