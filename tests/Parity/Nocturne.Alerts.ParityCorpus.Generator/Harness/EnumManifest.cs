@@ -79,7 +79,7 @@ public static class EnumManifest
     /// </summary>
     private static JsonObject PayloadFields()
     {
-        var options = EvaluatorJson.Options;
+        var options = new JsonSerializerOptions(EvaluatorJson.Options);
         options.MakeReadOnly(populateMissingResolver: true);
         var fields = new JsonObject();
         foreach (var payload in options.GetTypeInfo(typeof(ConditionNode)).Properties
