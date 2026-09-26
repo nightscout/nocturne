@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Auth;
@@ -30,8 +32,17 @@ public class RecoveryCodeServiceTests : IDisposable
         });
         _dbContext.SaveChanges();
 
-        _service = new RecoveryCodeService(_dbContext);
+        _service = new RecoveryCodeService(_dbContext, CheapDerive);
     }
+
+    /// <summary>
+    /// Stands in for the 100,000-iteration PBKDF2 in every test that is not about the derivation
+    /// itself: salted and one-way like the real one, at a microsecond instead of tens of
+    /// milliseconds per code. <see cref="ProductionDerivation_IsPbkdf2Sha256AndRoundTrips"/> covers
+    /// the real one.
+    /// </summary>
+    private static byte[] CheapDerive(string normalizedCode, byte[] salt) =>
+        SHA256.HashData([.. salt, .. Encoding.UTF8.GetBytes(normalizedCode)]);
 
     public void Dispose()
     {
@@ -176,7 +187,7 @@ public class RecoveryCodeServiceTests : IDisposable
         var service = new RecoveryCodeService(_dbContext, (code, salt) =>
         {
             count++;
-            return RecoveryCodeService.Derive(code, salt);
+            return CheapDerive(code, salt);
         });
         return (service, () => count);
     }
@@ -204,6 +215,21 @@ public class RecoveryCodeServiceTests : IDisposable
         await service.VerifyAndConsumeAsync(subject, code);
 
         (derivations() - before).Should().Be(8);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ProductionDerivation_IsPbkdf2Sha256AndRoundTrips()
+    {
+        var salt = Enumerable.Range(0, 16).Select(i => (byte)i).ToArray();
+        RecoveryCodeService.Derive("AAAAABBBBB", salt).Should().Equal(
+            Rfc2898DeriveBytes.Pbkdf2("AAAAABBBBB", salt, 100_000, HashAlgorithmName.SHA256, 32));
+
+        var service = new RecoveryCodeService(_dbContext);
+        var codes = await service.GenerateCodesAsync(_subjectId);
+
+        (await service.VerifyAndConsumeAsync(_subjectId, codes[0].ToLowerInvariant())).Should().BeTrue();
+        (await service.VerifyAndConsumeAsync(_subjectId, codes[0])).Should().BeFalse();
     }
 
     [Fact]
