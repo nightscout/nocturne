@@ -1,11 +1,15 @@
+using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.DevOnly;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
@@ -23,6 +27,11 @@ public class ParityTestFixture : IAsyncLifetime
     private static SharedParityState? _sharedState;
     private static int _instanceCount;
 
+    private const string TenantSlug = "parity";
+
+    /// <summary>The API's <c>BASE_DOMAIN</c>; the tenant is <c>{slug}.{BaseDomain}</c>.</summary>
+    private const string BaseDomain = "localhost";
+
     /// <summary>
     /// HttpClient for Nightscout V1/V2 API (uses api-secret header)
     /// </summary>
@@ -38,8 +47,6 @@ public class ParityTestFixture : IAsyncLifetime
     public HttpClient NocturneClient => _sharedState?.NocturneClient
         ?? throw new InvalidOperationException("Fixture not initialized");
 
-    public NocturneDbContext DbContext => _sharedState?.DbContext
-        ?? throw new InvalidOperationException("Fixture not initialized");
 
     /// <summary>
     /// The JWT token used for V3 API authentication (for debugging)
@@ -93,18 +100,15 @@ public class ParityTestFixture : IAsyncLifetime
     {
         if (_sharedState == null) return;
 
-        // Clean Nocturne (PostgreSQL) first with a bulk purge: more reliable than RemoveRange as it
-        // bypasses the change tracker, and unlike ExecuteDeleteAsync it empties the table rather than
-        // leaving soft-deleted rows to leak into the next test.
-        var db = _sharedState.DbContext;
+        // Nocturne first: its records, not the tenant, its members or the API secret's grant.
+        await using (var conn = new NpgsqlConnection(_sharedState.SuperuserConnectionString))
+        {
+            await conn.OpenAsync(cancellationToken);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"TRUNCATE TABLE {string.Join(", ", ApiIntegrationTestFixture.RecordTables)} CASCADE";
+            await cmd.ExecuteNonQueryAsync(cancellationToken);
+        }
 
-        // Clear change tracker to ensure no stale entities
-        db.ChangeTracker.Clear();
-
-        await db.ApsSnapshots.PurgeAsync(ct: cancellationToken);
-        await db.Foods.PurgeAsync(ct: cancellationToken);
-        await db.Settings.PurgeAsync(ct: cancellationToken);
-        await db.StateSpans.PurgeAsync(ct: cancellationToken);
         // Clean Nightscout (network calls - may have latency)
         await _sharedState.NightscoutContainer.CleanupDataAsync(cancellationToken);
     }
@@ -122,7 +126,7 @@ public class ParityTestFixture : IAsyncLifetime
         public HttpClient NightscoutV3Client => _nightscoutV3Client
             ?? throw new InvalidOperationException("V3 client not initialized - JWT token may have failed to fetch");
         public HttpClient NocturneClient { get; private set; } = null!;
-        public NocturneDbContext DbContext { get; private set; } = null!;
+        public string SuperuserConnectionString { get; private set; } = string.Empty;
 
         public async Task InitializeAsync()
         {
@@ -153,6 +157,8 @@ public class ParityTestFixture : IAsyncLifetime
             _nocturneFactory = new ApiFactory()
                 .WithWebHostBuilder(builder =>
                 {
+                    // Read while the host is being built, before the configuration below applies.
+                    builder.UseSetting(DevOnlyEndpoints.EnableVariable, "true");
                     builder.ConfigureAppConfiguration((_, config) =>
                     {
                         config.Sources.Clear();
@@ -162,12 +168,12 @@ public class ParityTestFixture : IAsyncLifetime
                             ["PostgreSql:ConnectionString"] = connectionString,
                             ["PostgreSql:DatabaseName"] = "nocturne_parity",
                             ["INSTANCE_KEY"] = ApiIntegrationTestFixture.InstanceKey,
-                            ["NIGHTSCOUT_API_SECRET"] = "test-api-secret-12chars",
+                            ["BASE_DOMAIN"] = BaseDomain,
+                            [DevOnlyEndpoints.EnableVariable] = "true",
                             ["DISPLAY_UNITS"] = "mg/dl",
                             ["Features:EnableExternalConnectors"] = "false",
                             ["Features:EnableRealTimeNotifications"] = "false",
                             ["Environment"] = "Testing",
-                            ["Authentication:RequireApiSecret"] = "false"
                         });
                     });
 
@@ -196,28 +202,47 @@ public class ParityTestFixture : IAsyncLifetime
                     builder.UseEnvironment("Testing");
                 });
 
-            NocturneClient = _nocturneFactory.CreateClient();
-            // Set Accept header to match Nightscout client behavior for consistent parity testing
+            SuperuserConnectionString = database.SuperuserConnectionString;
+            await ConfigureTenantLikeNightscoutAsync();
+
+            NocturneClient = _nocturneFactory.CreateClient(
+                new WebApplicationFactoryClientOptions { BaseAddress = new Uri($"http://{TenantSlug}.{BaseDomain}") });
+            // What NightscoutClient sends: the SHA-1 of the API secret, and a request for JSON.
+            NocturneClient.DefaultRequestHeaders.Add("api-secret", NightscoutContainer.ApiSecretHash);
             NocturneClient.DefaultRequestHeaders.Add("Accept", "application/json");
+        }
 
-            // Direct database operations (the per-test purge) run as the bootstrap superuser, which
-            // is not bound by row level security, so they reach every tenant's rows.
-            var options = new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(database.SuperuserConnectionString)
-                .Options;
+        /// <summary>
+        /// Seeds the tenant the parity tests address and gives it the Nightscout container's
+        /// <c>API_SECRET</c>: a full-access legacy-secret grant matched by the SHA-1 Nightscout
+        /// clients send. <c>AUTH_DEFAULT_ROLES</c> has no counterpart: a tenant host serves no
+        /// anonymous reads, and every parity request carries the secret.
+        /// </summary>
+        private async Task ConfigureTenantLikeNightscoutAsync()
+        {
+            using var apex = _nocturneFactory!.CreateClient(
+                new WebApplicationFactoryClientOptions { BaseAddress = new Uri($"http://{BaseDomain}") });
+            using var seed = await apex.PostAsJsonAsync(
+                "/api/v4/dev-only/admin/seed-tenant",
+                new DevSeedTenantRequest(TenantSlug, "Parity", "parity-owner"));
+            if (!seed.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"Seeding tenant '{TenantSlug}' answered {(int)seed.StatusCode}: " + await seed.Content.ReadAsStringAsync());
+            }
 
-            DbContext = new NocturneDbContext(options);
+            var seeded = (await seed.Content.ReadFromJsonAsync<DevSeedTenantResponse>())!;
+
+            await using var conn = new NpgsqlConnection(SuperuserConnectionString);
+            await conn.OpenAsync();
+            await AuthTestHelpers.SeedApiSecretGrantAsync(
+                conn, seeded.TenantId, seeded.SubjectId, NightscoutContainer.ApiSecretHash);
         }
 
         public async ValueTask DisposeAsync()
         {
             NocturneClient.Dispose();
             _nightscoutV3Client?.Dispose();
-
-            if (DbContext != null)
-            {
-                await DbContext.DisposeAsync();
-            }
 
             _nocturneFactory?.Dispose();
 
