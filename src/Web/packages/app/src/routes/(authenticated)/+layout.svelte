@@ -13,7 +13,7 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { beforeNavigate } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
@@ -23,7 +23,7 @@
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
@@ -74,6 +74,7 @@
   let commandPaletteOpen = $state(false);
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const coachRouter: CoachRouter = { beforeNavigate, goto };
 
   // Title/Favicon service for dynamic updates
   const titleFaviconService = getTitleFaviconService();
@@ -214,7 +215,7 @@
   });
 </script>
 
-<CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
+<CoachMarkProvider adapter={coachMarkAdapter} {sequences} router={coachRouter}>
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>

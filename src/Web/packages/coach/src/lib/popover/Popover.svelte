@@ -8,6 +8,7 @@
     arrow as arrowMiddleware,
   } from "@floating-ui/dom";
   import { getCoachMarkContext } from "../context.svelte.js";
+  import type { HistorySentinel } from "../history-sentinel.js";
   import StepControls from "./StepControls.svelte";
 
   const ctx = getCoachMarkContext();
@@ -18,10 +19,7 @@
   let dwellTimer: ReturnType<typeof setTimeout> | null = null;
   let cleanupAutoUpdate: (() => void) | null = null;
 
-  let { navigationFlag = { navigating: false } }: { navigationFlag?: { navigating: boolean } } = $props();
-
-  let historyEntryPushed = false;
-  let dismissedByUI = false;
+  let { sentinel }: { sentinel: HistorySentinel } = $props();
 
   const SPOTLIGHT_PADDING = 8;
 
@@ -49,70 +47,55 @@
   const localStep = $derived(Math.min(currentLocalStep, Math.max(totalLocalSteps - 1, 0)));
   const currentRegistration = $derived(mountedSteps[localStep] ?? null);
 
-  // Reset local step when active mark changes
+  // The overlay waits for its target to come on screen instead of scrolling the page to it, and
+  // once raised stays up while the reader scrolls. The synchronous rect check lets consecutive
+  // marks that are both on screen hand over without the overlay unmounting between them.
+  const target = $derived(currentRegistration?.element ?? null);
+  let revealedTarget: HTMLElement | null = $state(null);
+  const revealed = $derived(target !== null && (revealedTarget === target || isOnScreen(target)));
+
   $effect(() => {
-    if (activeKey) {
-      currentLocalStep = 0;
-      startDwellTimer();
-    } else {
-      cancelDwellTimer();
-    }
+    const el = target;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        revealedTarget = el;
+        observer.disconnect();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   });
 
-  // History management for back-button dismissal.
-  // Push a sentinel entry when the overlay appears; pop it when it disappears.
-  // The effect tracks whether an overlay is up, never which mark is up: keying
-  // it on `activeKey` tore the sentinel down on every step of a sequence, and
-  // the teardown's own `ctx.activeKey` read cannot tell a step change from a
-  // dismissal — a derived read outside a reaction sees the batch's earlier
-  // value, which for a step change is the momentary null between the two marks.
-  const overlayVisible = $derived(activeKey !== null);
+  function isOnScreen(el: HTMLElement): boolean {
+    const rect = el.getBoundingClientRect();
+    return (
+      (rect.width > 0 || rect.height > 0) &&
+      rect.bottom > 0 &&
+      rect.right > 0 &&
+      rect.top < window.innerHeight &&
+      rect.left < window.innerWidth
+    );
+  }
+
+  $effect(() => {
+    if (activeKey) currentLocalStep = 0;
+  });
+
+  // Time spent on a mark counts from when it can be read.
+  $effect(() => {
+    if (activeKey && revealed) startDwellTimer();
+    else cancelDwellTimer();
+  });
+
+  // The history entry tracks whether an overlay is up, never which mark is up: keying it on
+  // `activeKey` tore the entry down on every step of a sequence.
+  const overlayVisible = $derived(activeKey !== null && revealed);
 
   $effect(() => {
     if (!overlayVisible) return;
-
-    if (!historyEntryPushed) {
-      dismissedByUI = false; // reset stale flag from any previous cycle
-      history.pushState({ ...history.state, __coachMark: true }, "");
-      historyEntryPushed = true;
-    }
-
-    function onPopState() {
-      // Guard: if the UI already dismissed (Escape/backdrop/button),
-      // this popstate is just the history.back() cleanup — ignore it.
-      if (dismissedByUI) {
-        dismissedByUI = false;
-        return;
-      }
-
-      // The user pressed back. Dismiss with quiet so no follow-on sequence appears.
-      historyEntryPushed = false;
-      const key = ctx.activeKey;
-      if (key) ctx.dismiss(key, { quiet: true });
-    }
-
-    window.addEventListener("popstate", onPopState);
-
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-
-      if (!historyEntryPushed) return;
-      historyEntryPushed = false;
-
-      if (navigationFlag.navigating) {
-        // SvelteKit is navigating — don't call history.back() which
-        // would fight the router. Replace the current state to strip
-        // our marker (the router's pushState has already happened).
-        navigationFlag.navigating = false;
-        const cleaned = { ...history.state };
-        delete cleaned.__coachMark;
-        history.replaceState(cleaned, "");
-      } else {
-        // Natural dismiss (Escape, backdrop, "Got it") — pop our entry.
-        dismissedByUI = true;
-        history.back();
-      }
-    };
+    sentinel.push();
+    return () => sentinel.release();
   });
 
   function updateSpotlightRect(element: Element) {
@@ -151,17 +134,9 @@
     }
   }
 
-  // Position popover — scroll the popover tooltip into view, not the target element.
-  // For large target elements, scrollIntoView on the element itself can push the
-  // tooltip off-screen because the browser centers the (potentially huge) element.
   $effect(() => {
     if (currentRegistration && popoverEl) {
-      // Initial scroll: use "nearest" so the browser only scrolls if the element
-      // is fully off-screen, avoiding jarring jumps for large elements.
-      currentRegistration.element.scrollIntoView({ behavior: "smooth", block: "nearest" });
-
       cleanupAutoUpdate?.();
-      let initialPosition = true;
       cleanupAutoUpdate = autoUpdate(currentRegistration.element, popoverEl, () => {
         if (!currentRegistration || !popoverEl) return;
 
@@ -182,7 +157,9 @@
           middleware: [
             offset(12 + SPOTLIGHT_PADDING),
             flip(),
-            shift({ padding: 8 }),
+            // Nothing scrolls the popover into view, so a target taller than the viewport must not
+            // carry it off screen.
+            shift({ padding: 8, crossAxis: true }),
             ...(arrowEl ? [arrowMiddleware({ element: arrowEl })] : []),
           ],
         }).then(({ x, y, middlewareData }) => {
@@ -193,14 +170,6 @@
               left: middlewareData.arrow.x != null ? `${middlewareData.arrow.x}px` : "",
               top: middlewareData.arrow.y != null ? `${middlewareData.arrow.y}px` : "",
             });
-          }
-
-          // After the first position computation, scroll the popover itself into
-          // view so the user can always see the tooltip — even when the target
-          // element is taller than the viewport.
-          if (initialPosition) {
-            initialPosition = false;
-            popoverEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
           }
         });
       });
@@ -244,11 +213,11 @@
   }
 
   $effect(() => {
-    if (popoverEl && activeKey) popoverEl.focus();
+    if (popoverEl && activeKey) popoverEl.focus({ preventScroll: true });
   });
 </script>
 
-{#if activeKey && currentRegistration}
+{#if activeKey && currentRegistration && revealed}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="coach-backdrop"
