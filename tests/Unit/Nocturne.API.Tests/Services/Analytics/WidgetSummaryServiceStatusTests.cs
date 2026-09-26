@@ -76,9 +76,37 @@ public class WidgetSummaryServiceStatusTests
         summary.Current!.Status.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("mbg")]
+    [InlineData("cal")]
+    public async Task Current_isTheNewestSgv_whenANewerNonSensorEntryExists(string type)
+    {
+        var newestSgv = Reading(130, minutesAgo: 3);
+        newestSgv.Delta = 12;
+        newestSgv.Direction = "SingleUp";
+        var meter = new Entry
+        {
+            Id = Guid.NewGuid().ToString(),
+            Type = type,
+            Mgdl = 250,
+            Mbg = 250,
+            Mills = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds(),
+        };
+
+        var summary = await NewService(meter, newestSgv, Reading(118, minutesAgo: 8))
+            .GetSummaryAsync("user", hours: 1);
+
+        summary.Current!.Mills.Should().Be(newestSgv.Mills);
+        summary.Current.Sgv.Should().Be(130);
+        summary.Current.Delta.Should().Be(12, "the delta is the sensor reading's own, against the previous sgv");
+        summary.Current.Direction.Should().Be(Direction.SingleUp);
+        summary.History.Should().ContainSingle().Which.Sgv.Should().Be(118);
+    }
+
     private static Entry Reading(double sgv, int minutesAgo) => new()
     {
         Id = Guid.NewGuid().ToString(),
+        Type = "sgv",
         Sgv = sgv,
         Mills = DateTimeOffset.UtcNow.AddMinutes(-minutesAgo).ToUnixTimeMilliseconds(),
     };
@@ -106,7 +134,8 @@ public class WidgetSummaryServiceStatusTests
         var entries = new Mock<IEntryService>();
         entries.Setup(e => e.GetEntriesAsync(
                 It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(newestFirst);
+            .ReturnsAsync((string? type, int count, int _, CancellationToken _) =>
+                newestFirst.Where(e => type is null || e.Type == type).Take(count));
 
         var trackers = new Mock<ITrackerRepository>();
         trackers.Setup(t => t.GetActiveInstancesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

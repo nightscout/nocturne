@@ -87,7 +87,8 @@ public class WidgetSummaryService : IWidgetSummaryService
 
         // Fetch data sequentially (EF Core DbContext is not thread-safe)
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
-        var entries = (await _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken)).ToList();
+        // Meter and calibration entries are not CGM readings, so they never become the current reading.
+        var entries = (await _entryService.GetEntriesAsync("sgv", entryCount, 0, cancellationToken)).ToList();
         var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
 
         // Process glucose readings

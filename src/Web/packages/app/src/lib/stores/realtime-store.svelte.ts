@@ -177,22 +177,21 @@ export class RealtimeStore {
     }
   );
 
-  /** Latest glucose data computations */
-  currentEntry = $derived.by(() => {
-    const sorted = [...this.entries].sort(
-      (a, b) => (b.mills || 0) - (a.mills || 0)
-    );
-    return sorted[0] || null;
-  });
+  /**
+   * Meter and calibration entries share the entries collection, but the current reading, its
+   * delta and its trend are the CGM's, matching the summary's `current` on `mills`.
+   */
+  private sensorReadingsNewestFirst = $derived(
+    this.entries
+      .filter((e) => e.type === "sgv")
+      .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+  );
+
+  currentEntry = $derived(this.sensorReadingsNewestFirst[0] ?? null);
 
   demoMode = $derived(this.entries.some((e) => e.data_source === "demo-service"));
 
-  previousEntry = $derived.by(() => {
-    const sorted = [...this.entries].sort(
-      (a, b) => (b.mills || 0) - (a.mills || 0)
-    );
-    return sorted[1] || null;
-  });
+  previousEntry = $derived(this.sensorReadingsNewestFirst[1] ?? null);
 
   /** Current glucose values */
   currentBG = $derived(this.currentEntry?.sgv ?? this.currentEntry?.mgdl ?? 0);
