@@ -40,10 +40,10 @@ fn combined(detail: DetailLevel) -> u64 {
 #[test]
 fn catalogue_mask_hashes_match_the_snapshot() {
     let expected: [(&str, u64); 4] = [
-        ("small", 0x61cceb85d0375675),
-        ("medium", 0x0fe9249db3b2a365),
-        ("large", 0x5857579c6dcda1a7),
-        ("extralarge", 0x58dca29240bcda46),
+        ("small", 0x99e6ce2c79e27098),
+        ("medium", 0xf2065ed27ada9c8b),
+        ("large", 0x2499f474da582495),
+        ("extralarge", 0xead25973de9debb9),
     ];
     for detail in DetailLevel::ALL {
         let want = expected

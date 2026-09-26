@@ -5,6 +5,7 @@
 
 mod accents;
 mod geometry;
+mod hub;
 mod icons;
 mod icons_objects;
 mod icons_places;
@@ -133,6 +134,9 @@ impl ArtworkCatalogue {
         "exclamation-mark",
         "chat-bubble",
         "phone",
+        "hub-dawn-ridges",
+        "hub-lighthouse",
+        "hub-lakeside-cabin",
     ];
 
     pub fn ids() -> &'static [&'static str] {
@@ -199,7 +203,11 @@ impl ArtworkCatalogue {
             sim_resolution,
         )?;
         let style = style_for(seed, intensity, detail, background, sim_resolution);
-        choreograph_scene(&mut scene, &style.choreography());
+        if hub::IDS.contains(&id) {
+            choreograph_stages(&mut scene.timeline, &style.choreography(), hub::STOPS);
+        } else {
+            choreograph_scene(&mut scene, &style.choreography());
+        }
         Some(scene)
     }
 
@@ -255,6 +263,9 @@ impl ArtworkCatalogue {
             "exclamation-mark" => icons_places::exclamation_mark(&style, palette),
             "chat-bubble" => icons_places::chat_bubble(&style, palette),
             "phone" => icons_places::phone(&style, palette),
+            "hub-dawn-ridges" => hub::dawn_ridges(&style, palette),
+            "hub-lighthouse" => hub::lighthouse(&style, palette),
+            "hub-lakeside-cabin" => hub::lakeside_cabin(&style, palette),
             _ => return None,
         };
         Some(scene)
@@ -722,6 +733,75 @@ pub(crate) fn water(path: Vec<Point>, radius: f32, amount: f32, softness: f32) -
         softness,
         span: StrokeSpan::FULL,
     })
+}
+
+/// A timeline painted in equal stages, each dry by its end, so seeking to
+/// `k / count` of the ticks (a `ProgressCurve::Linear` seek) shows exactly the
+/// first `k` stages finished. Each stage is authored as its own [`Painting`]
+/// in `0..1` of its window and starts on a clean sheet state: no mask, no
+/// settle, base evaporation.
+pub(crate) struct Stages {
+    stage_ticks: u32,
+    timeline: Timeline,
+    count: u32,
+}
+
+impl Stages {
+    pub fn new(stage_ticks: u32) -> Stages {
+        Stages {
+            stage_ticks: stage_ticks.max(8),
+            timeline: Timeline::new(0),
+            count: 0,
+        }
+    }
+
+    pub fn stage(&mut self, paint: impl FnOnce(&mut Painting)) -> &mut Self {
+        let mut p = Painting::new(self.stage_ticks);
+        p.clear_mask(0.0)
+            .at(0.0, Operation::Settle { share: 0.0 })
+            .at(0.0, Operation::Dry { rate: 1.0 });
+        paint(&mut p);
+        let offset = self.count * self.stage_ticks;
+        // The stage's closing `DryAll` moves onto its last tick: a seek to
+        // the boundary tick has not yet applied that tick's events.
+        for e in p.finish().events {
+            self.timeline
+                .push(offset + e.at_tick.min(self.stage_ticks - 1), e.op);
+        }
+        self.count += 1;
+        self.timeline.total_ticks = self.count * self.stage_ticks;
+        self
+    }
+
+    pub fn finish(self) -> Timeline {
+        self.timeline
+    }
+}
+
+/// [`choreograph_scene`] for a [`Stages`] timeline: each of the `count`
+/// windows is choreographed and settled on its own, so the pen never crosses
+/// a stage boundary and each stage is dry where the next begins.
+pub(crate) fn choreograph_stages(timeline: &mut Timeline, params: &Choreography, count: u32) {
+    let count = count.max(1);
+    let window = timeline.total_ticks / count;
+    let mut out = Timeline::new(timeline.total_ticks);
+    for k in 0..count {
+        let (from, to) = (k * window, (k + 1) * window);
+        let mut stage = Timeline::new(window);
+        for e in timeline
+            .events
+            .iter()
+            .filter(|e| e.at_tick >= from && (e.at_tick < to || k == count - 1))
+        {
+            stage.push(e.at_tick - from, e.op.clone());
+        }
+        let mut stage = choreograph(&stage, params);
+        settle_after_last_stroke(&mut stage);
+        for e in stage.events {
+            out.push(from + e.at_tick.min(window - 1), e.op);
+        }
+    }
+    *timeline = out;
 }
 
 /// Rewrites a built scene's timeline so its strokes are drawn (see
