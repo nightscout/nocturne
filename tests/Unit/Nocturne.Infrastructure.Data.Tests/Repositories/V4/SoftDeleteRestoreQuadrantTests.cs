@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
@@ -106,6 +107,159 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         ctx.ChangeTracker.Clear();
     }
 
+    /// <summary>Writes a unique key onto a row directly, past the create path's own guards.</summary>
+    private static void Stamp<TEntity>(NocturneDbContext ctx, Guid id, Action<TEntity> stamp)
+        where TEntity : class
+    {
+        var entity = ctx.Set<TEntity>().IgnoreQueryFilters()
+            .Single(e => EF.Property<Guid>(e, "Id") == id);
+        stamp(entity);
+        ctx.SaveChanges();
+        ctx.ChangeTracker.Clear();
+    }
+
+    private bool IsDeleted<TEntity>(Guid id) where TEntity : class, ISoftDeletable
+        => _contextA.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
+            .Single(e => EF.Property<Guid>(e, "Id") == id).DeletedAt != null;
+
+    [Fact]
+    public async Task RestoreAsync_Refuses_AndLeavesTheRowDeleted_WhenALiveRowHoldsItsLegacyId()
+    {
+        var deleted = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var live = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);
+        Stamp<TempBasalEntity>(_contextA, deleted.Id, e => { e.LegacyId = "legacy-1"; e.DeletedAt = Base.AddHours(1); });
+        Stamp<TempBasalEntity>(_contextA, live.Id, e => e.LegacyId = "legacy-1");
+
+        var refused = await Assert.ThrowsAsync<RecreationBlockedException>(
+            () => _tempBasalsA.RestoreAsync(deleted.Id, WriteOrigin.Live));
+
+        refused.Message.Should().Contain("newer version").And.Contain("legacy-1");
+        IsDeleted<TempBasalEntity>(deleted.Id).Should().BeTrue();
+        IsDeleted<TempBasalEntity>(live.Id).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_Refuses_WhenALiveRowHoldsItsSyncKey_OnAnEntityOutsideISyncDedupable()
+    {
+        var deleted = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var live = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);
+        Stamp<TempBasalEntity>(_contextA, deleted.Id, e =>
+        {
+            e.DataSource = "aaps";
+            e.SyncIdentifier = "tb-sync-1";
+            e.DeletedAt = Base.AddHours(1);
+        });
+        Stamp<TempBasalEntity>(_contextA, live.Id, e => { e.DataSource = "aaps"; e.SyncIdentifier = "tb-sync-1"; });
+
+        var refused = await Assert.ThrowsAsync<RecreationBlockedException>(
+            () => _tempBasalsA.RestoreAsync(deleted.Id, WriteOrigin.Live));
+
+        refused.Message.Should().Contain("tb-sync-1");
+        IsDeleted<TempBasalEntity>(deleted.Id).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_Refuses_ThroughV4RepositoryBase_WhenALiveRowHoldsItsSyncKey()
+    {
+        var deleted = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-1"), WriteOrigin.Live);
+        SoftDelete<BasalInjectionEntity>(_contextA, deleted.Id, Base);
+        var live = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-other"), WriteOrigin.Live);
+        Stamp<BasalInjectionEntity>(_contextA, live.Id, e => e.SyncIdentifier = "sync-1");
+
+        var refused = await Assert.ThrowsAsync<RecreationBlockedException>(
+            () => _basalInjectionsA.RestoreAsync(deleted.Id, WriteOrigin.Live));
+
+        refused.Message.Should().Contain("sync-1");
+        IsDeleted<BasalInjectionEntity>(deleted.Id).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_Succeeds_WhenTheSameSyncIdentifierIsLiveFromAnotherSource()
+    {
+        var deleted = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-1"), WriteOrigin.Live);
+        SoftDelete<BasalInjectionEntity>(_contextA, deleted.Id, Base);
+        var live = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-other"), WriteOrigin.Live);
+        Stamp<BasalInjectionEntity>(_contextA, live.Id, e => { e.SyncIdentifier = "sync-1"; e.DataSource = "loop"; });
+
+        (await _basalInjectionsA.RestoreAsync(deleted.Id, WriteOrigin.Live)).Id.Should().Be(deleted.Id);
+    }
+
+    [Fact]
+    public async Task RestoreAsync_Succeeds_BesideALiveRowWithTheSameSyncIdentifier_WhenBothSourcesAreNull()
+    {
+        var deleted = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-1"), WriteOrigin.Live);
+        var live = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-other"), WriteOrigin.Live);
+        Stamp<BasalInjectionEntity>(_contextA, deleted.Id, e => { e.DataSource = null; e.DeletedAt = Base; });
+        Stamp<BasalInjectionEntity>(_contextA, live.Id, e => { e.DataSource = null; e.SyncIdentifier = "sync-1"; });
+
+        (await _basalInjectionsA.RestoreAsync(deleted.Id, WriteOrigin.Live)).Id.Should().Be(deleted.Id);
+
+        IsDeleted<BasalInjectionEntity>(deleted.Id).Should().BeFalse();
+        IsDeleted<BasalInjectionEntity>(live.Id).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task BulkRestoreAsync_RestoresOnlyTheNewestDeletion_OfTwoRowsSharingASyncKey()
+    {
+        var older = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-1"), WriteOrigin.Live);
+        SoftDelete<BasalInjectionEntity>(_contextA, older.Id, Base.AddHours(1));
+        var newer = await _basalInjectionsA.CreateAsync(NewBasalInjection("sync-other"), WriteOrigin.Live);
+        Stamp<BasalInjectionEntity>(_contextA, newer.Id, e => { e.SyncIdentifier = "sync-1"; e.DeletedAt = Base.AddHours(2); });
+
+        var result = await _basalInjectionsA.BulkRestoreAsync([older.Id, newer.Id], WriteOrigin.Live);
+
+        result.Restored.Select(r => r.Id).Should().Equal(newer.Id);
+        result.Conflicts.Should().Equal(older.Id);
+        IsDeleted<BasalInjectionEntity>(older.Id).Should().BeTrue();
+        IsDeleted<BasalInjectionEntity>(newer.Id).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RestoreAsync_Succeeds_WhenOnlyAnotherTenantsLiveRowHoldsTheLegacyId()
+    {
+        var mine = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var theirs = await _tempBasalsB.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        Stamp<TempBasalEntity>(_contextA, mine.Id, e => { e.LegacyId = "legacy-1"; e.DeletedAt = Base.AddHours(1); });
+        Stamp<TempBasalEntity>(_contextB, theirs.Id, e => e.LegacyId = "legacy-1");
+
+        (await _tempBasalsA.RestoreAsync(mine.Id, WriteOrigin.Live)).Id.Should().Be(mine.Id);
+
+        IsDeleted<TempBasalEntity>(mine.Id).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task BulkRestoreAsync_RestoresTheCleanIds_AndReportsTheOnesALiveRowBlocks()
+    {
+        var clashing = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var clean = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);
+        var live = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(60)), WriteOrigin.Live);
+        Stamp<TempBasalEntity>(_contextA, clashing.Id, e => { e.LegacyId = "legacy-1"; e.DeletedAt = Base.AddHours(1); });
+        Stamp<TempBasalEntity>(_contextA, clean.Id, e => { e.LegacyId = "legacy-2"; e.DeletedAt = Base.AddHours(1); });
+        Stamp<TempBasalEntity>(_contextA, live.Id, e => e.LegacyId = "legacy-1");
+
+        var result = await _tempBasalsA.BulkRestoreAsync([clashing.Id, clean.Id], WriteOrigin.Live);
+
+        result.Restored.Select(r => r.Id).Should().Equal(clean.Id);
+        result.Conflicts.Should().Equal(clashing.Id);
+        IsDeleted<TempBasalEntity>(clashing.Id).Should().BeTrue();
+        IsDeleted<TempBasalEntity>(clean.Id).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task BulkRestoreAsync_RestoresOnlyTheNewestDeletion_OfTwoRowsSharingALegacyId()
+    {
+        var older = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
+        var newer = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);
+        Stamp<TempBasalEntity>(_contextA, older.Id, e => { e.LegacyId = "legacy-1"; e.DeletedAt = Base.AddHours(1); });
+        Stamp<TempBasalEntity>(_contextA, newer.Id, e => { e.LegacyId = "legacy-1"; e.DeletedAt = Base.AddHours(2); });
+
+        var result = await _tempBasalsA.BulkRestoreAsync([older.Id, newer.Id], WriteOrigin.Live);
+
+        result.Restored.Select(r => r.Id).Should().Equal(newer.Id);
+        result.Conflicts.Should().Equal(older.Id);
+        IsDeleted<TempBasalEntity>(older.Id).Should().BeTrue();
+    }
+
     [Fact]
     public async Task RestoreAsync_ClearsDeletedAt_AndTheRecordIsReadableAgain()
     {
@@ -152,7 +306,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         SoftDelete<TempBasalEntity>(_contextA, otherDeleted.Id, Base.AddHours(1));
 
         var restored = (await _tempBasalsA.BulkRestoreAsync(
-            [asked.Id, live.Id, Guid.CreateVersion7()], WriteOrigin.Live)).ToList();
+            [asked.Id, live.Id, Guid.CreateVersion7()], WriteOrigin.Live)).Restored;
 
         restored.Select(r => r.Id).Should().Equal(asked.Id);
         _contextA.TempBasals.IgnoreQueryFilters()
@@ -170,7 +324,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
         SoftDelete<TempBasalEntity>(_contextA, mine.Id, Base.AddHours(1));
         SoftDelete<TempBasalEntity>(_contextB, theirs.Id, Base.AddHours(1));
 
-        var restored = (await _tempBasalsA.BulkRestoreAsync([mine.Id, theirs.Id], WriteOrigin.Live)).ToList();
+        var restored = (await _tempBasalsA.BulkRestoreAsync([mine.Id, theirs.Id], WriteOrigin.Live)).Restored;
 
         restored.Select(r => r.Id).Should().Equal(mine.Id);
         _contextB.TempBasals.IgnoreQueryFilters()

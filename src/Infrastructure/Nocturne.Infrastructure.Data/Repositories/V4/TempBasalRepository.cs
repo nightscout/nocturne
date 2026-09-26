@@ -275,13 +275,12 @@ public class TempBasalRepository : ITempBasalRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
+    public async Task<BulkRestoreResult<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var restored = (await ctx.RestoreDeletedAsync<TempBasalEntity>(ids, ct))
-            .Select(TempBasalMapper.ToDomainModel).ToList();
-        await RaiseBroadcastAsync(restored, [], [], origin, ct);
-        return restored;
+        var result = (await ctx.RestoreDeletedAsync<TempBasalEntity>(ids, nameof(TempBasal), ct)).Map(TempBasalMapper.ToDomainModel);
+        await RaiseBroadcastAsync(result.Restored, [], [], origin, ct);
+        return result;
     }
 
     /// <inheritdoc />

@@ -233,13 +233,20 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <summary>Restores a soft-deleted record by ID.</summary>
     /// <param name="id">The unique identifier of the soft-deleted record.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <remarks>Returns `200 OK` with the restored record, or `404 Not Found` if no soft-deleted record with the given <paramref name="id"/> exists.</remarks>
+    /// <remarks>
+    /// Returns `200 OK` with the restored record, or `404 Not Found` if no soft-deleted record with the given <paramref name="id"/> exists.
+    ///
+    /// A record whose legacy id or `(dataSource, syncIdentifier)` is now held by a live record is
+    /// refused with `409 Conflict` and stays deleted: a newer version of it exists, and a restore
+    /// never replaces it.
+    /// </remarks>
     [HttpPost("{id:guid}/restore")]
     [RemoteCommand]
     [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public virtual async Task<ActionResult<TModel>> Restore(Guid id, CancellationToken ct = default)
     {
         try
@@ -257,17 +264,24 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <summary>Restores multiple soft-deleted records by their IDs.</summary>
     /// <param name="ids">The unique identifiers of the soft-deleted records.</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <remarks>Returns `200 OK` with the restored records. IDs that don't match a soft-deleted record are silently ignored.</remarks>
+    /// <remarks>
+    /// Returns `200 OK` with the restored records in `restored`. IDs that don't match a soft-deleted
+    /// record are silently ignored. IDs left deleted per <see cref="BulkRestoreResult{T}.Conflicts"/>
+    /// are listed in `conflicts`; the rest of the batch is still restored. If a live record takes one
+    /// of those keys while the batch is being saved, the whole batch stays deleted and the request is
+    /// refused with `409 Conflict`.
+    /// </remarks>
     [HttpPost("restore")]
     [RemoteCommand]
     [RequireDeclaredWriteScope]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public virtual async Task<ActionResult<IEnumerable<TModel>>> BulkRestore(
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public virtual async Task<ActionResult<BulkRestoreResult<TModel>>> BulkRestore(
         [FromBody] Guid[] ids, CancellationToken ct = default)
     {
-        var restored = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
-        return Ok(restored);
+        var result = await Repository.BulkRestoreAsync(ids, WriteOrigin.Live, ct);
+        return Ok(result);
     }
 
     /// <summary>
