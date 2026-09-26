@@ -1,29 +1,40 @@
 #!/usr/bin/env bash
-# Writes the image tags for this build to $GITHUB_OUTPUT. Every job in docker-publish.yml
-# calls it, so the images each job pushes and the ones the report job verifies agree.
-#   version      the tag every image gets, and the only one the dotnet images get
-#   web_tags     comma-separated full references for the web image
-# Reads REGISTRY, IMAGE_REPOSITORY, EVENT_NAME and PR_NUMBER from the environment.
+# Writes the image tags for this build to $GITHUB_OUTPUT. Every job in docker-publish.yml calls
+# it, so the images each job pushes and the ones the report job verifies agree.
+#   version      the primary tag every image is pushed with
+#   extra_tags   space-separated further tags pointed at the same manifest
+#   web_tags     comma-separated full references for the web image (primary + extra)
+#
+#   push to main       develop, main-<sha7>
+#   v1.2.3 tag         1.2.3, latest
+#   v1.2.3-rc.1 tag    1.2.3-rc.1        (a pre-release never moves latest)
+#
+# Pull requests publish nothing. Reads REGISTRY and IMAGE_REPOSITORY from the environment.
 set -euo pipefail
 
-web="${REGISTRY}/${IMAGE_REPOSITORY}/nocturne-web"
-
-if [[ "$EVENT_NAME" == "pull_request" ]]; then
-  version="pr-${PR_NUMBER}-${GITHUB_SHA::7}"
-  web_tags="${web}:${version}"
-elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
   version="${GITHUB_REF#refs/tags/v}"
-  web_tags="${web}:${version},${web}:latest"
-elif [[ "$GITHUB_REF" == refs/heads/master || "$GITHUB_REF" == refs/heads/main ]]; then
-  version=latest
-  web_tags="${web}:${version}"
+  if [[ "$version" == *-* ]]; then
+    extra=""
+  else
+    extra="latest"
+  fi
+elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+  version="develop"
+  extra="main-${GITHUB_SHA::7}"
 else
-  safe_ref=$(echo "${GITHUB_REF_NAME}" | tr '/_' '-' | tr -cd '[:alnum:].-')
-  version="${safe_ref}-${GITHUB_SHA::7}"
-  web_tags="${web}:${version}"
+  echo "::error::images are published from main and v* tags only, not ${GITHUB_REF}"
+  exit 1
 fi
+
+web="${REGISTRY}/${IMAGE_REPOSITORY}/nocturne-web"
+web_tags="${web}:${version}"
+for tag in $extra; do
+  web_tags+=",${web}:${tag}"
+done
 
 {
   echo "version=${version}"
+  echo "extra_tags=${extra}"
   echo "web_tags=${web_tags}"
 } >> "$GITHUB_OUTPUT"

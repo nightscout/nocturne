@@ -104,8 +104,12 @@ nothing here is required for a working install.
 ### Image pinning
 
 `NOCTURNE_API_IMAGE` and `NOCTURNE_WEB_IMAGE` default to the `:latest` tag on
-GHCR. Pin them to a specific version tag to control exactly when your instance
-updates.
+GHCR, which always points at the most recent release (pre-releases never move
+it). Pin them to a version tag, for example `:0.2.7`, to control exactly when
+your instance updates.
+
+The `:develop` tag follows every change merged to `main`. It is for trying
+unreleased work, not for an instance you rely on.
 
 ### The in-app support form
 
