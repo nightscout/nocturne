@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -10,28 +9,20 @@ using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.V4Goldens;
 
 /// <summary>
-/// Golden-test fixture for the V4 repository dedup behaviour. Spins up a real PostgreSQL container
-/// (same role bootstrap + migrations as <c>RlsCompletenessFixture</c>) and stands up the production
+/// Golden-test fixture for the V4 repository dedup behaviour. Takes a migrated database from
+/// <see cref="SharedPostgres"/> (production role bootstrap, migrations and startup reconcilers) and stands up the production
 /// data-layer DI container via <see cref="ServiceCollectionExtensions.AddPostgreSqlInfrastructure"/>
-/// pointed at the container — so goldens exercise the real repositories AND the real
+/// pointed at that database — so goldens exercise the real repositories AND the real
 /// <c>DeduplicationService</c> against real Postgres, not mocks. These goldens capture current
 /// behaviour and are held identical across the V4RepositoryBase refactor.
 /// </summary>
 public class V4GoldenFixture : IAsyncLifetime
 {
-    private const string DbName = "nocturne_v4_goldens";
-    private const string BootstrapUser = "postgres";
-    private const string BootstrapPassword = "bootstrap-test-password";
-    private const string MigratorPassword = "v4-goldens-migrator-password";
-    private const string AppPassword = "v4-goldens-app-password";
-    private const string WebPassword = "v4-goldens-web-password";
-
-    private PostgreSqlContainer? _container;
     private ServiceProvider? _provider;
     private readonly TestTenantAccessor _accessor = new();
 
@@ -39,36 +30,9 @@ public class V4GoldenFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var initScriptPath = ResolveInitScriptPath();
-
-        _container = new PostgreSqlBuilder("postgres:17.6")
-            .WithDatabase(DbName)
-            .WithUsername(BootstrapUser)
-            .WithPassword(BootstrapPassword)
-            .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", MigratorPassword)
-            .WithEnvironment("NOCTURNE_APP_PASSWORD", AppPassword)
-            .WithEnvironment("NOCTURNE_WEB_PASSWORD", WebPassword)
-            .WithBindMount(initScriptPath, "/docker-entrypoint-initdb.d/00-init.sh")
-            .Build();
-
-        await _container.StartAsync();
-
-        var host = _container.Hostname;
-        var port = _container.GetMappedPublicPort(5432);
-
-        MigratorConnectionString =
-            $"Host={host};Port={port};Database={DbName};Username=nocturne_migrator;Password={MigratorPassword}";
-        var appConnectionString =
-            $"Host={host};Port={port};Database={DbName};Username=nocturne_app;Password={AppPassword}";
-
-        await DatabaseInitializationExtensions.RunMigrationsAsync(
-            MigratorConnectionString,
-            NullLogger.Instance,
-            new TenantConnectionInterceptor());
-
-        await DatabaseInitializationExtensions.ReconcileShareRlsPoliciesAsync(
-            MigratorConnectionString,
-            NullLogger.Instance);
+        var database = await SharedPostgres.CreateMigratedDatabaseAsync("v4_goldens");
+        MigratorConnectionString = database.MigratorConnectionString;
+        var appConnectionString = database.AppConnectionString;
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -133,12 +97,6 @@ public class V4GoldenFixture : IAsyncLifetime
         {
             await _provider.DisposeAsync();
         }
-
-        if (_container is not null)
-        {
-            await _container.StopAsync();
-            await _container.DisposeAsync();
-        }
     }
 
     /// <summary>
@@ -177,23 +135,6 @@ public class V4GoldenFixture : IAsyncLifetime
         await using var ctx = new NocturneDbContext(options);
         ctx.Tenants.Add(new TenantEntity { Id = tenantId, Slug = $"t-{tenantId:N}", DisplayName = "Golden" });
         await ctx.SaveChangesAsync();
-    }
-
-    private static string ResolveInitScriptPath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh")))
-        {
-            dir = dir.Parent;
-        }
-
-        if (dir is null)
-        {
-            throw new InvalidOperationException(
-                "Could not locate docs/postgres/container-init/00-init.sh by walking up from " + AppContext.BaseDirectory);
-        }
-
-        return Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh");
     }
 }
 

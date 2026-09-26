@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -25,10 +25,7 @@ public class ConnectorNameCasingFixture : IAsyncLifetime
     /// <summary>The migration immediately before the one under test.</summary>
     private const string PriorMigration = "20260912065418_AddOAuthGrantTokenHashIndex";
 
-    private const string DbName = "nocturne_connector_casing";
-    private const string MigratorPassword = "connector-casing-migrator-password";
 
-    private PostgreSqlContainer _container = null!;
     private string _migratorConnectionString = string.Empty;
 
     /// <summary>Already canonical, and the only connector this tenant has.</summary>
@@ -42,32 +39,16 @@ public class ConnectorNameCasingFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new PostgreSqlBuilder("postgres:17.6")
-            .WithDatabase(DbName)
-            .WithUsername("postgres")
-            .WithPassword("bootstrap-test-password")
-            .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", MigratorPassword)
-            .WithEnvironment("NOCTURNE_APP_PASSWORD", "connector-casing-app-password")
-            .WithEnvironment("NOCTURNE_WEB_PASSWORD", "connector-casing-web-password")
-            .WithBindMount(ResolveInitScriptPath(), "/docker-entrypoint-initdb.d/00-init.sh")
-            .Build();
-
-        await _container.StartAsync();
-
-        _migratorConnectionString =
-            $"Host={_container.Hostname};Port={_container.GetMappedPublicPort(5432)};"
-            + $"Database={DbName};Username=nocturne_migrator;Password={MigratorPassword}";
+        // Unmigrated: the fixture walks the chain up to the migration under test itself.
+        var database = await SharedPostgres.CreateEmptyDatabaseAsync("connector_casing");
+        _migratorConnectionString = database.MigratorConnectionString;
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
         await MigrateToAsync(targetMigration: null);
     }
 
-    public async Task DisposeAsync()
-    {
-        await _container.StopAsync();
-        await _container.DisposeAsync();
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 
     private async Task MigrateToAsync(string? targetMigration)
     {
@@ -171,20 +152,6 @@ public class ConnectorNameCasingFixture : IAsyncLifetime
 
             SELECT set_config('app.current_tenant_id', '', false);
             """);
-    }
-
-    private static string ResolveInitScriptPath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir is null
-            ? throw new InvalidOperationException(
-                "Could not locate docs/postgres/container-init/00-init.sh from " + AppContext.BaseDirectory)
-            : Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh");
     }
 }
 
