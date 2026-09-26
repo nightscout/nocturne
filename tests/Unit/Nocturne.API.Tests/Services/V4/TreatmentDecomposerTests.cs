@@ -1184,7 +1184,9 @@ public class TreatmentDecomposerTests : IDisposable
                     && ss.Metadata.ContainsKey("targetTop")
                     && ss.Metadata.ContainsKey("targetBottom")
                     && ss.Metadata.ContainsKey("insulinNeedsScaleFactor")
-                    && ss.Metadata.ContainsKey("enteredBy")),
+                    && ss.Metadata.ContainsKey("enteredBy")
+                    && ss.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
+                        == StateSpanMetadataExtensions.TreatmentsCollection),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

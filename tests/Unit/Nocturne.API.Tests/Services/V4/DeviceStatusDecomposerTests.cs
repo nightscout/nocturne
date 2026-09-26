@@ -409,7 +409,9 @@ public class DeviceStatusDecomposerTests : IDisposable
                     && ss.Metadata.ContainsKey("name")
                     && ss.Metadata.ContainsKey("multiplier")
                     && ss.Metadata.ContainsKey("currentCorrectionRange.minValue")
-                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")),
+                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")
+                    && ss.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
+                        == StateSpanMetadataExtensions.DeviceStatusCollection),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }

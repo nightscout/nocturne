@@ -905,9 +905,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return DateTimeOffset.TryParse(timestamp, out var dto) ? dto.UtcDateTime : null;
     }
 
-    private static Dictionary<string, object>? BuildOverrideMetadata(OverrideStatus overrideStatus)
+    private static Dictionary<string, object> BuildOverrideMetadata(OverrideStatus overrideStatus)
     {
-        var metadata = new Dictionary<string, object>();
+        var metadata = new Dictionary<string, object>
+        {
+            [StateSpanMetadataExtensions.CollectionKey] = StateSpanMetadataExtensions.DeviceStatusCollection,
+        };
 
         if (!string.IsNullOrEmpty(overrideStatus.Name))
             metadata["name"] = overrideStatus.Name;
@@ -921,7 +924,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (overrideStatus.CurrentCorrectionRange?.MaxValue.HasValue == true)
             metadata["currentCorrectionRange.maxValue"] = overrideStatus.CurrentCorrectionRange.MaxValue.Value;
 
-        return metadata.Count > 0 ? metadata : null;
+        return metadata;
     }
 
     #endregion

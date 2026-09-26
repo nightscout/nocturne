@@ -57,13 +57,16 @@ public static class StateSpanMapper
     }
 
     /// <summary>
-    /// Update existing entity with data from domain model
+    /// Update existing entity with data from domain model. A new end from the upload replaces the one
+    /// supersession set, so it clears <see cref="StateSpanEntity.SupersededById"/>.
     /// </summary>
     public static void UpdateEntity(StateSpanEntity entity, StateSpan stateSpan)
     {
         entity.Category = stateSpan.Category.ToString();
         entity.State = stateSpan.State ?? string.Empty;
         entity.StartTimestamp = stateSpan.StartTimestamp;
+        if (stateSpan.EndTimestamp is { } end && end != entity.EndTimestamp)
+            entity.SupersededById = null;
         entity.EndTimestamp = stateSpan.EndTimestamp;
         entity.Source = stateSpan.Source;
         entity.MetadataJson = stateSpan.Metadata != null
