@@ -75,7 +75,10 @@ async function runSpecs(which: string): Promise<number> {
 async function main() {
   switch (command) {
     case "build":
-      await ensureImages({ force: process.argv.includes("--force") });
+      await ensureImages({
+        force: process.argv.includes("--force"),
+        only: process.argv.includes("--api") ? "api" : process.argv.includes("--web") ? "web" : undefined,
+      });
       return;
     case "up":
       await up();

@@ -141,7 +141,7 @@ async function main() {
   const started = Date.now();
   const env = { ...ports, NOCTURNE_API_IMAGE: PREVIOUS, E2E_API_ENVIRONMENT: "Development" };
 
-  if (process.env.E2E_SKIP_BUILD !== "1") await ensureImages();
+  if (process.env.E2E_SKIP_BUILD !== "1") await ensureImages({ only: "api" });
   if ((await run("docker", ["pull", "--quiet", PREVIOUS])) !== 0) {
     console.warn(`[upgrade] could not pull ${PREVIOUS}; using the local copy if there is one`);
   }

@@ -184,11 +184,13 @@ async function ensureImage(name: keyof Images, ref: string, build: (ref: string)
  * Builds whichever image is missing for the current inputs and points the stable `:e2e` tags at
  * the result. With nothing changed this costs a few `git` calls and two `docker image inspect`s.
  */
-export async function ensureImages(opts: { force?: boolean } = {}): Promise<Images> {
+export async function ensureImages(opts: { force?: boolean; only?: keyof Images } = {}): Promise<Images> {
   const apiHash = inputsHash(API_INPUTS);
-  await ensureImage("api", `nocturne-api:e2e-${apiHash}`, buildApi, !!opts.force);
-  const webHash = inputsHash(WEB_INPUTS, await ensureClient(apiHash));
-  await ensureImage("web", `nocturne-web:e2e-${webHash}`, buildWeb, !!opts.force);
+  if (opts.only !== "web") await ensureImage("api", `nocturne-api:e2e-${apiHash}`, buildApi, !!opts.force);
+  if (opts.only !== "api") {
+    const webHash = inputsHash(WEB_INPUTS, await ensureClient(apiHash));
+    await ensureImage("web", `nocturne-web:e2e-${webHash}`, buildWeb, !!opts.force);
+  }
   return { api: "nocturne-api:e2e", web: "nocturne-web:e2e" };
 }
 
