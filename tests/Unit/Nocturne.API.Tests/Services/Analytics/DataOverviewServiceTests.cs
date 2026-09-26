@@ -2,9 +2,9 @@ using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Analytics;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -28,6 +28,7 @@ public class DataOverviewServiceTests : IDisposable
     private readonly DataOverviewService _service;
     private readonly Mock<ICacheService> _cacheService = new();
     private readonly CategoryReadContext _categoryReadContext = new();
+    private readonly ListLogger<DataOverviewService> _logger = new();
     private IInterceptor[] _interceptors = [];
     private readonly string _dbName = $"data_overview_{Guid.NewGuid()}";
     private static readonly Guid TenantId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -75,7 +76,7 @@ public class DataOverviewServiceTests : IDisposable
             _cacheService.Object,
             mockTenantAccessor.Object,
             _categoryReadContext,
-            NullLogger<DataOverviewService>.Instance
+            _logger
         );
     }
 
@@ -1540,47 +1541,43 @@ public class DataOverviewServiceTests : IDisposable
         _cacheService.Invocations.Should().BeEmpty();
     }
 
-    [Theory]
+    [Fact]
     [Trait("Category", "Unit")]
-    [InlineData(nameof(SensorGlucoseEntity))]
-    [InlineData(nameof(MeterGlucoseEntity))]
-    public async Task GetEHbA1cTimelineAsync_SourceQueryFails_ReturnsSurvivingSourceUncached(string failingEntity)
+    public async Task GetEHbA1cTimelineAsync_MeterGlucoseQueryFails_ReturnsSensorPointsUncached()
     {
-        // An interceptor gives the context its own InMemory store, so seed through one that shares it.
-        _interceptors = [new EntityQueryFailure(failingEntity)];
-        await using var seed = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
-        seed.TenantId = TenantId;
-        var start = new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc);
-        for (var i = 0; i < 30; i++)
-        {
-            seed.SensorGlucose.Add(new SensorGlucoseEntity
-            {
-                Id = Guid.NewGuid(),
-                Timestamp = start.AddHours(i),
-                Mgdl = failingEntity == nameof(SensorGlucoseEntity) ? 400.0 : 154.0,
-                DataSource = "dexcom"
-            });
-            seed.MeterGlucose.Add(new MeterGlucoseEntity
-            {
-                Id = Guid.NewGuid(),
-                Timestamp = start.AddHours(i),
-                Mgdl = failingEntity == nameof(MeterGlucoseEntity) ? 400.0 : 154.0,
-                DataSource = "meter"
-            });
-        }
-        await seed.SaveChangesAsync();
+        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
 
         var result = await _service.GetEHbA1cTimelineAsync(2025);
 
         result.Points.Should().NotBeEmpty()
             .And.OnlyContain(p => p.WeightedAverageGlucoseMgdl == 154.0 && p.ReadingCount == 30);
-        _cacheService.Verify(
-            c => c.SetAsync(
-                It.IsAny<string>(),
-                It.IsAny<EHbA1cTimelineResponse>(),
-                It.IsAny<DateTimeOffset>(),
-                It.IsAny<CancellationToken>()),
-            Times.Never);
+        VerifyTimelineNeverCached();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetEHbA1cTimelineAsync_SensorGlucoseQueryFails_ThrowsRatherThanUsingFingersticks()
+    {
+        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
+
+        var timeline = () => _service.GetEHbA1cTimelineAsync(2025);
+
+        await timeline.Should().ThrowAsync<TimeoutException>();
+        VerifyTimelineNeverCached();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetEHbA1cTimelineAsync_NoCgmData_EstimatesFromFingersticks()
+    {
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: null, meterMgdl: 154.0);
+
+        var result = await _service.GetEHbA1cTimelineAsync(2025);
+
+        result.Points.Should().NotBeEmpty()
+            .And.OnlyContain(p => p.WeightedAverageGlucoseMgdl == 154.0 && p.ReadingCount == 30);
     }
 
     [Fact]
@@ -1593,6 +1590,148 @@ public class DataOverviewServiceTests : IDisposable
         var cancelled = () => _service.GetEHbA1cTimelineAsync(2025, cancellationToken: cts.Token);
 
         await cancelled.Should().ThrowAsync<OperationCanceledException>();
+        VerifyTimelineNeverCached();
+    }
+
+    #endregion
+
+    #region Source failure and cancellation
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_SensorGlucoseQueryFails_WithholdsAveragesAndKeepsTheRest()
+    {
+        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        await using var seed = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
+        seed.Boluses.Add(new BolusEntity
+        {
+            Id = Guid.NewGuid(),
+            Timestamp = new DateTime(2025, 6, 1, 13, 0, 0, DateTimeKind.Utc),
+            Insulin = 4.0,
+            DataSource = "pump"
+        });
+        await seed.SaveChangesAsync();
+
+        var result = await _service.GetDailySummaryAsync(2025);
+
+        result.Days.Should().NotBeEmpty()
+            .And.OnlyContain(d => d.AverageGlucoseMgdl == null && d.TimeInRangePercent == null);
+        result.Days.Should().Contain(d => d.Counts.ContainsKey("ManualBG"));
+        result.Days.Should().Contain(d => d.TotalBolusUnits == 4.0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetDailySummaryAsync_MeterGlucoseQueryFails_KeepsSensorAveragesAndTimeInRange()
+    {
+        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0);
+
+        var result = await _service.GetDailySummaryAsync(2025);
+
+        result.Days.Should().NotBeEmpty()
+            .And.OnlyContain(d => d.AverageGlucoseMgdl == 154.0 && d.TimeInRangePercent == 100.0);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetGriTimelineAsync_MeterGlucoseQueryFails_KeepsSensorPeriods()
+    {
+        _interceptors = [new EntityQueryFailure(nameof(MeterGlucoseEntity))];
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
+
+        var result = await _service.GetGriTimelineAsync(2025);
+
+        result.Periods.Should().ContainSingle()
+            .Which.Should().Match<GriTimelinePeriod>(p => p.AverageGlucoseMgdl == 154.0 && p.ReadingCount == 72);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetGriTimelineAsync_SensorGlucoseQueryFails_WithholdsEveryPeriod()
+    {
+        _interceptors = [new EntityQueryFailure(nameof(SensorGlucoseEntity))];
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: 154.0, meterMgdl: 400.0, readings: 72);
+
+        var result = await _service.GetGriTimelineAsync(2025);
+
+        result.Periods.Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetGriTimelineAsync_NoCgmData_ScoresFromFingersticks()
+    {
+        await using var _ = await SeedGlucoseAsync(sensorMgdl: null, meterMgdl: 154.0, readings: 72);
+
+        var result = await _service.GetGriTimelineAsync(2025);
+
+        result.Periods.Should().ContainSingle()
+            .Which.Should().Match<GriTimelinePeriod>(p => p.AverageGlucoseMgdl == 154.0 && p.ReadingCount == 72);
+    }
+
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData("years")]
+    [InlineData("daily")]
+    [InlineData("gri")]
+    public async Task RequestCancelled_StopsAtTheFirstQueryWithoutWarning(string method)
+    {
+        var queries = new QueryCounter();
+        _interceptors = [queries];
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        Func<Task> call = method switch
+        {
+            "years" => () => _service.GetAvailableYearsAsync(cts.Token),
+            "daily" => () => _service.GetDailySummaryAsync(2025, cancellationToken: cts.Token),
+            _ => () => _service.GetGriTimelineAsync(2025, cancellationToken: cts.Token),
+        };
+
+        await call.Should().ThrowAsync<OperationCanceledException>();
+        queries.Count.Should().Be(1);
+        _logger.Warnings.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Seeds <paramref name="readings"/> hourly readings per non-null source. An interceptor gives the context its own
+    /// InMemory store, so seeding goes through one that shares <see cref="_interceptors"/>.
+    /// </summary>
+    private async Task<NocturneDbContext> SeedGlucoseAsync(
+        double? sensorMgdl, double? meterMgdl, int readings = 30)
+    {
+        var seed = TestDbContextFactory.CreateInMemoryContext(_dbName, _interceptors);
+        seed.TenantId = TenantId;
+        var start = new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < readings; i++)
+        {
+            if (sensorMgdl is { } sensor)
+            {
+                seed.SensorGlucose.Add(new SensorGlucoseEntity
+                {
+                    Id = Guid.NewGuid(),
+                    Timestamp = start.AddHours(i),
+                    Mgdl = sensor,
+                    DataSource = "dexcom"
+                });
+            }
+            if (meterMgdl is { } meter)
+            {
+                seed.MeterGlucose.Add(new MeterGlucoseEntity
+                {
+                    Id = Guid.NewGuid(),
+                    Timestamp = start.AddHours(i),
+                    Mgdl = meter,
+                    DataSource = "meter"
+                });
+            }
+        }
+        await seed.SaveChangesAsync();
+        return seed;
+    }
+
+    private void VerifyTimelineNeverCached() =>
         _cacheService.Verify(
             c => c.SetAsync(
                 It.IsAny<string>(),
@@ -1600,6 +1739,17 @@ public class DataOverviewServiceTests : IDisposable
                 It.IsAny<DateTimeOffset>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+
+    private sealed class QueryCounter : IQueryExpressionInterceptor
+    {
+        public int Count { get; private set; }
+
+        public Expression QueryCompilationStarting(
+            Expression queryExpression, QueryExpressionEventData eventData)
+        {
+            Count++;
+            return queryExpression;
+        }
     }
 
     private sealed class EntityQueryFailure(string entityName) : IQueryExpressionInterceptor
