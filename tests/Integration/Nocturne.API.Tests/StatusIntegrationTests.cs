@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
@@ -21,11 +22,22 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
     )
         : base(fixture, output) { }
 
+    /// <summary>
+    /// GET /api/v1/status as Nightscout clients send it: the endpoint answers JSON only to an
+    /// Accept that asks for it, and HTML otherwise.
+    /// </summary>
+    private static Task<HttpResponseMessage> GetJsonStatusAsync(HttpClient client)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/status");
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return client.SendAsync(request);
+    }
+
     [Fact]
     public async Task GetStatus_Json_ShouldReturnValidStatusResponse()
     {
         // Arrange & Act
-        var response = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -46,7 +58,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
         enable.ValueKind.Should().Be(JsonValueKind.Array);
 
         status.TryGetProperty("name", out var name).Should().BeTrue();
-        name.GetString().Should().Be("Nocturne");
+        name.GetString().Should().Be("nightscout", "Nightscout clients read the name Nightscout reports");
 
         status.TryGetProperty("version", out var version).Should().BeTrue();
         version.GetString().Should().NotBeNullOrEmpty();
@@ -59,7 +71,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
     public async Task GetStatus_ShouldIncludeEnabledFeatures()
     {
         // Arrange & Act
-        var response = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -87,7 +99,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
         var beforeRequest = DateTime.UtcNow;
 
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         var afterRequest = DateTime.UtcNow;
@@ -99,7 +111,12 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
         status.TryGetProperty("serverTime", out var serverTimeElement).Should().BeTrue();
         var serverTimeString = serverTimeElement.GetString();
 
-        DateTime.TryParse(serverTimeString, out var serverTime).Should().BeTrue();
+        DateTime.TryParse(
+                serverTimeString,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                out var serverTime)
+            .Should().BeTrue();
         serverTime.Should().BeAfter(beforeRequest.AddSeconds(-5));
         serverTime.Should().BeBefore(afterRequest.AddSeconds(5));
     }
@@ -108,7 +125,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
     public async Task GetStatus_ShouldHaveConsistentApiEnabledField()
     {
         // Arrange & Act
-        var response = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -125,7 +142,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
     public async Task GetStatus_Settings_ShouldContainRequiredLegacyFields()
     {
         // Arrange & Act
-        var response = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -156,8 +173,8 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
     public async Task GetStatus_Multiple_ShouldReturnConsistentResults()
     {
         // Arrange & Act
-        var response1 = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
-        var response2 = await ApiClient.GetAsync("/api/v1/status", CancellationToken.None);
+        var response1 = await GetJsonStatusAsync(ApiClient);
+        var response2 = await GetJsonStatusAsync(ApiClient);
 
         // Assert
         response1.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -206,7 +223,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
         // Act - Create separate HttpClient instances for concurrent requests
         for (int i = 0; i < concurrentRequests; i++)
         {
-            tasks.Add(CreateHttpClient("nocturne-api").GetAsync("/api/v1/status"));
+            tasks.Add(GetJsonStatusAsync(CreateHttpClient("nocturne-api")));
         }
 
         var responses = await Task.WhenAll(tasks);
@@ -223,7 +240,7 @@ public class StatusIntegrationTests : ApiIntegrationTestBase
             apiEnabled.GetBoolean().Should().BeTrue();
 
             status.TryGetProperty("name", out var name).Should().BeTrue();
-            name.GetString().Should().Be("Nocturne");
+            name.GetString().Should().Be("nightscout", "Nightscout clients read the name Nightscout reports");
         }
     }
 

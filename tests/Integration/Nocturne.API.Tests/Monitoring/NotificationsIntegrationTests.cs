@@ -48,7 +48,7 @@ public class NotificationsIntegrationTests : ApiIntegrationTestBase
     {
         type = "test_notification",
         title = "Integration Test Notification",
-        category = "General",
+        category = "Informational",
         urgency = "Info",
         source = "integration-test",
         actions = new[]

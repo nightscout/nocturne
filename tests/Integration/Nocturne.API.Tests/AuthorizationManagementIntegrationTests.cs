@@ -162,8 +162,12 @@ public class AuthorizationManagementIntegrationTests : ApiIntegrationTestBase
             var contentType = response.Content.Headers.ContentType.MediaType;
             if (!string.IsNullOrEmpty(contentType))
             {
+                // A refusal is RFC 9457 problem details, application/problem+json.
                 Assert.True(
-                    contentType.Contains("application/json") || contentType.Contains("text/plain")
+                    contentType == "application/json"
+                        || contentType == "application/problem+json"
+                        || contentType.Contains("text/plain"),
+                    $"unexpected content type {contentType}"
                 );
             }
         }
