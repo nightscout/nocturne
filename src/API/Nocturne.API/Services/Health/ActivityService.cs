@@ -247,6 +247,11 @@ public class ActivityService : IActivityService
             var activityList = activities.ToList();
             _logger.LogDebug("Creating {Count} activity records", activityList.Count);
 
+            // ProcessTimestamp would date these by whole-second created_at, or by the time of
+            // receipt when created_at is absent.
+            foreach (var activity in activityList)
+                ActivityDecomposer.ApplyClientTimestamp(activity);
+
             // Process documents (sanitization and timestamp conversion)
             var processedActivities = _documentProcessingService.ProcessDocuments(activityList);
             var processedList = processedActivities.ToList();

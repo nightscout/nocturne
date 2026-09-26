@@ -363,6 +363,46 @@ public class ActivityServiceTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public async Task CreateActivitiesAsync_ClientTimestamp_OutranksCreatedAtThroughDocumentProcessing()
+    {
+        var activities = System.Text.Json.JsonSerializer.Deserialize<List<Activity>>(
+            """
+            [
+              {"type":"steps-total","timeStamp":1780000000123,"created_at":"2026-05-28T20:26:40Z","steps":400},
+              {"type":"hr-bpm","timestamp":1780000060456,"bpm":61},
+              {"type":"hr-bpm","created_at":"2026-05-28T20:28:40Z","bpm":62}
+            ]
+            """)!;
+        var decomposed = new List<Activity>();
+        _mockActivityDecomposer.Setup(d => d.IsSensorData(It.IsAny<Activity>())).Returns(true);
+        _mockActivityDecomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Activity>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
+            .Callback<Activity, WriteOrigin, CancellationToken>((a, _, _) => decomposed.Add(a))
+            .ReturnsAsync(new Nocturne.Core.Models.V4.DecompositionResult());
+        var service = new ActivityService(
+            _mockStateSpanService.Object,
+            _mockSleepService.Object,
+            new Nocturne.API.Services.Legacy.DocumentProcessingService(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<
+                    Nocturne.API.Services.Legacy.DocumentProcessingService>.Instance),
+            _mockSignalRBroadcastService.Object,
+            Mock.Of<IDataEventSink<Activity>>(),
+            _mockActivityDecomposer.Object,
+            _mockHeartRateService.Object,
+            _mockStepCountService.Object,
+            _mockLogger.Object
+        );
+
+        await service.CreateActivitiesAsync(activities, CancellationToken.None);
+
+        decomposed.Select(a => (a.Mills, a.CreatedAt, a.UtcOffset)).Should().Equal(
+            (1_780_000_000_123L, "2026-05-28T20:26:40.123Z", (int?)0),
+            (1_780_000_060_456L, "2026-05-28T20:27:40.456Z", (int?)0),
+            (1_780_000_120_000L, "2026-05-28T20:28:40.000Z", (int?)0));
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     [Trait("Category", "Parity")]
     public async Task UpdateActivityAsync_WithValidActivity_ReturnsUpdatedActivityAndBroadcasts()
     {
