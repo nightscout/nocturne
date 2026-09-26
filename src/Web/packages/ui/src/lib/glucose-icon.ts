@@ -4,26 +4,9 @@
  * (`title-favicon-service`) and the desktop companion tray icon both mirror it.
  *
  * Colors are passed in by the caller (it does NOT resolve CSS variables) so the
- * renderer stays reusable across contexts.
+ * renderer stays reusable across contexts. The caller picks them from the
+ * server's status through `glucoseTileVariant` (`@nocturne/ui/glucose`).
  */
-
-/** Status levels for glucose values. */
-export type GlucoseStatus = "very-high" | "high" | "in-range" | "low" | "very-low";
-
-export interface GlucoseThresholds {
-  high: number;
-  low: number;
-  targetTop: number;
-  targetBottom: number;
-}
-
-export function getGlucoseStatus(value: number, t: GlucoseThresholds): GlucoseStatus {
-  if (value >= t.high) return "very-high";
-  if (value <= t.low) return "very-low";
-  if (value > t.targetTop) return "high";
-  if (value < t.targetBottom) return "low";
-  return "in-range";
-}
 
 export interface GlucoseIconOptions {
   /** Text to render centered in the icon, or null to draw just the background. */

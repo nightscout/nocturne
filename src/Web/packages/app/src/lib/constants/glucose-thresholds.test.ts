@@ -8,11 +8,9 @@ import {
   FALLBACK_GLUCOSE_THRESHOLDS,
   FALLBACK_GLUCOSE_Y_MAX,
   resolveChartThresholds,
-  toStatusThresholds,
 } from "./glucose-thresholds";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
 import { transformChartData } from "$lib/utils/chart-data-transform";
-import { getGlucoseStatus } from "@nocturne/ui/glucose-icon";
 
 describe("FALLBACK_GLUCOSE_THRESHOLDS", () => {
   it("matches the boundaries the time-in-range reports use", () => {
@@ -99,33 +97,5 @@ describe("resolveChartThresholds", () => {
     expect(transformChartData({ thresholds: supplied }).thresholds).toEqual(
       resolveChartThresholds(supplied)
     );
-  });
-});
-
-describe("toStatusThresholds", () => {
-  it("remaps onto the status-bucket field names", () => {
-    expect(toStatusThresholds(FALLBACK_GLUCOSE_THRESHOLDS)).toEqual({
-      low: 54,
-      targetBottom: 70,
-      targetTop: 180,
-      high: 250,
-    });
-  });
-
-  it("buckets the same way getGlucoseColor does", () => {
-    const status = toStatusThresholds(FALLBACK_GLUCOSE_THRESHOLDS);
-    const cases: [number, string][] = [
-      [40, "very-low"],
-      [60, "low"],
-      [120, "in-range"],
-      [200, "high"],
-      [300, "very-high"],
-    ];
-    for (const [mgdl, expected] of cases) {
-      expect(getGlucoseStatus(mgdl, status)).toBe(expected);
-      expect(getGlucoseColor(mgdl, FALLBACK_GLUCOSE_THRESHOLDS)).toBe(
-        `var(--glucose-${expected})`
-      );
-    }
   });
 });
