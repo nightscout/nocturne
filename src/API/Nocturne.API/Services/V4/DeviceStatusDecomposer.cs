@@ -18,8 +18,8 @@ namespace Nocturne.API.Services.V4;
 /// Extracts APS (<see cref="V4Models.ApsSnapshot"/> for OpenAPS/AAPS/Trio and Loop), pump
 /// (<see cref="V4Models.PumpSnapshot"/>), and uploader (<see cref="V4Models.UploaderSnapshot"/>)
 /// snapshots, and persists them with idempotent create-or-update via <c>LegacyId</c> matching.
-/// Active device overrides are delegated to <see cref="IStateSpanService"/> as
-/// <see cref="StateSpanCategory.Override"/> spans.
+/// Device override state is folded into one <see cref="StateSpanCategory.Override"/> span per
+/// override period.
 /// </summary>
 /// <seealso cref="IDeviceStatusDecomposer"/>
 /// <seealso cref="IDecomposer{T}"/>
@@ -100,9 +100,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             await DecomposeUploaderAsync(ds, legacyId, source, result, origin, ct);
         }
 
-        if (ds.Override is { Active: true })
+        if (ds.Override is { Active: not null })
         {
-            await DecomposeOverrideAsync(ds, legacyId, result, origin, ct);
+            await DecomposeOverrideAsync(ds, legacyId, result, ct);
         }
 
         await DecomposeExtrasAsync(ds, result, origin, ct);
@@ -475,6 +475,10 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     #region Override Decomposition
 
+    // Stores written before one span per period can hold hundreds of open spans at one
+    // instant, so the containing query pages by this.
+    private const int OverrideQueryLimit = 10;
+
     private static StateSpan BuildOverrideSpan(DeviceStatus ds, string? legacyId)
     {
         var timestamp = ResolveTimestamp(ds);
@@ -495,12 +499,101 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         };
     }
 
+    /// <summary>
+    /// Folds one override observation into <see cref="StateSpanCategory.Override"/> spans. A span
+    /// stays open until a contrary observation or its declared end.
+    /// </summary>
     private async Task DecomposeOverrideAsync(
-        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, V4Models.DecompositionResult result, CancellationToken ct)
     {
-        var upserted = await _stateSpanService.UpsertStateSpanAsync(BuildOverrideSpan(ds, legacyId), ct);
+        var at = ResolveTimestamp(ds);
+        var observed = ds.Override!.Active == true
+            ? BuildOverrideMetadata(ds.Override)
+            : null;
+
+        bool Unchanged(StateSpan span) =>
+            observed is not null
+            && (span.Source != ds.Device
+                ? span.Metadata.IsSameOverrideAs(observed)
+                : span.Metadata is { } metadata
+                  && metadata.TryReadString("name") == observed.TryReadString("name")
+                  && metadata.OverrideScaleFactor() == observed.OverrideScaleFactor());
+
+        var covered = false;
+        for (var skip = 0; ; skip += OverrideQueryLimit)
+        {
+            // A span closed at `at` still contains `at`, so closing one does not shift later pages.
+            var containing = (await _stateSpanService.GetStateSpansAsync(
+                category: StateSpanCategory.Override,
+                from: at,
+                to: at,
+                count: OverrideQueryLimit,
+                skip: skip,
+                cancellationToken: ct)).ToList();
+
+            foreach (var span in containing)
+            {
+                // Of two conflicting observations at one instant, the first decomposed wins.
+                if (Unchanged(span) || span.StartTimestamp >= at)
+                {
+                    covered |= span.Source == ds.Device;
+                    continue;
+                }
+
+                if (span.EndTimestamp == at)
+                    continue;
+
+                span.EndTimestamp = at;
+                if (await _stateSpanService.UpdateStateSpanAsync(span.Id!, span, ct) is { } closed)
+                    result.UpdatedRecords.Add(closed);
+                Logger.LogDebug("Closed Override StateSpan {SpanId} at {EndTimestamp}", span.Id, at);
+            }
+
+            if (containing.Count < OverrideQueryLimit)
+                break;
+        }
+
+        if (observed is null || covered)
+            return;
+
+        // Strict bounds in memory: Npgsql truncates to microseconds, so `at` + 1 tick matches `at`.
+        var next = (await _stateSpanService.GetStateSpansStartingFromAsync(
+            StateSpanCategory.Override, ds.Device, at, OverrideQueryLimit, ct))
+            .FirstOrDefault(s => s.StartTimestamp > at);
+
+        var contraryAt = (await _apsRepo.GetAsync(
+            from: at,
+            to: next?.StartTimestamp,
+            device: ds.Device,
+            source: null,
+            limit: OverrideQueryLimit,
+            descending: false,
+            ct: ct))
+            .FirstOrDefault(a => a.Timestamp > at
+                                 && a.Timestamp < (next?.StartTimestamp ?? DateTime.MaxValue)
+                                 && a.LegacyId != legacyId)
+            ?.Timestamp;
+
+        var opened = BuildOverrideSpan(ds, legacyId);
+
+        if (next is not null
+            && contraryAt is null
+            && Unchanged(next)
+            && !(opened.EndTimestamp < next.StartTimestamp))
+        {
+            next.StartTimestamp = at;
+            if (await _stateSpanService.UpdateStateSpanAsync(next.Id!, next, ct) is { } extended)
+                result.UpdatedRecords.Add(extended);
+            return;
+        }
+
+        var firstLater = contraryAt ?? next?.StartTimestamp;
+        if (firstLater < (opened.EndTimestamp ?? DateTime.MaxValue))
+            opened.EndTimestamp = firstLater;
+
+        var upserted = await _stateSpanService.UpsertStateSpanAsync(opened, ct);
         result.CreatedRecords.Add(upserted);
-        Logger.LogDebug("Delegated Override from device status {LegacyId} to IStateSpanService", legacyId);
+        Logger.LogDebug("Opened Override StateSpan from device status {LegacyId}", legacyId);
     }
 
     #endregion
@@ -595,7 +688,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var pumpList = new List<V4Models.PumpSnapshot>();
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
-        var overrideSpans = new List<StateSpan>();
+        var overrideStatuses = new List<DeviceStatus>();
 
         foreach (var ds in statuses)
         {
@@ -631,9 +724,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 uploaderList.Add(await BuildUploaderSnapshotAsync(ds, legacyId, source, correlationId, ct));
             }
 
-            if (ds.Override is { Active: true })
+            if (ds.Override is { Active: not null })
             {
-                overrideSpans.Add(BuildOverrideSpan(ds, legacyId));
+                overrideStatuses.Add(ds);
             }
 
             if (BuildExtras(ds, correlationId) is { } extrasModel)
@@ -650,13 +743,10 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             await BulkCreateAsync(_extrasRepo, extrasList, result, origin, ct);
         }
 
-        // Upsert override state spans individually — IStateSpanService only exposes
-        // single-item UpsertStateSpanAsync; BulkUpsertAsync lives on IStateSpanRepository
-        // (returns count, not the upserted entities) and overrides are rare in practice.
-        foreach (var span in overrideSpans)
+        // Newest first: the batch's APS rows are already stored and would contradict older observations.
+        foreach (var ds in overrideStatuses.OrderByDescending(ResolveTimestamp))
         {
-            var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
-            result.CreatedRecords.Add(upserted);
+            await DecomposeOverrideAsync(ds, ds.Id, result, ct);
         }
 
         // Post-insert pump suspension pass: sequential, order-dependent
@@ -905,9 +995,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         return DateTimeOffset.TryParse(timestamp, out var dto) ? dto.UtcDateTime : null;
     }
 
-    private static Dictionary<string, object>? BuildOverrideMetadata(OverrideStatus overrideStatus)
+    private static Dictionary<string, object> BuildOverrideMetadata(OverrideStatus overrideStatus)
     {
-        var metadata = new Dictionary<string, object>();
+        var metadata = new Dictionary<string, object>
+        {
+            [StateSpanMetadataExtensions.CollectionKey] = StateSpanMetadataExtensions.DeviceStatusCollection,
+        };
 
         if (!string.IsNullOrEmpty(overrideStatus.Name))
             metadata["name"] = overrideStatus.Name;
@@ -921,7 +1014,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (overrideStatus.CurrentCorrectionRange?.MaxValue.HasValue == true)
             metadata["currentCorrectionRange.maxValue"] = overrideStatus.CurrentCorrectionRange.MaxValue.Value;
 
-        return metadata.Count > 0 ? metadata : null;
+        return metadata;
     }
 
     #endregion

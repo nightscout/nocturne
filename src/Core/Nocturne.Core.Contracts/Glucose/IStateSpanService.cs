@@ -45,6 +45,14 @@ public interface IStateSpanService
         bool descending = true,
         CancellationToken cancellationToken = default);
 
+    /// <inheritdoc cref="Nocturne.Core.Contracts.Repositories.IStateSpanRepository.GetStateSpansStartingFromAsync"/>
+    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Returns the current pump operational mode, derived from the most recently started
     /// open-ended <see cref="StateSpanCategory.PumpMode"/> span.

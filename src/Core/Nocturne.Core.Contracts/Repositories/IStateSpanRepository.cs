@@ -37,6 +37,18 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns spans of <paramref name="category"/> starting at or after <paramref name="from"/>,
+    /// oldest first. Unlike <see cref="GetStateSpansAsync"/>, excludes open spans that started earlier.
+    /// </summary>
+    /// <param name="source">Matches every source when null.</param>
+    Task<IEnumerable<StateSpan>> GetStateSpansStartingFromAsync(
+        StateSpanCategory category,
+        string? source,
+        DateTime from,
+        int count,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Counts state spans matching the specified filters.
     /// </summary>
     /// <param name="category">Optional <see cref="StateSpanCategory"/> filter.</param>
