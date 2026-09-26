@@ -10,20 +10,20 @@ msgstr ""
 #. 0: page.status
 #: src/routes/+error.svelte
 msgid "{0} Error"
-msgstr ""
+msgstr "{0} Error"
 
 #: src/routes/+error.svelte
 msgid "An error occurred while processing your request."
-msgstr ""
+msgstr "Se produjo un error al procesar tu solicitud."
 
 #: src/routes/+error.svelte
 msgid "Details:"
-msgstr ""
+msgstr "Detalles:"
 
 #. 0: page.error.errorId
 #: src/routes/+error.svelte
 msgid "Error ID: {0}"
-msgstr ""
+msgstr "ID del error: {0}"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/connectors/DataSourceSelectionView.svelte
@@ -82,7 +82,7 @@ msgstr "Usando datos almacenados"
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Error"
-msgstr ""
+msgstr "Error"
 
 #: src/lib/components/WebSocketStatus.svelte
 #: src/lib/components/dashboard/widgets/ConnectionStatusWidget.svelte
@@ -132,86 +132,86 @@ msgstr "Error de conexión:"
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Invalid or expired device code."
-msgstr ""
+msgstr "Código de dispositivo no válido o caducado."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Invalid or expired device code. Please check and try again."
-msgstr ""
+msgstr "Código de dispositivo no válido o caducado. Compruébalo e inténtalo de nuevo."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Failed to approve. The code may have expired."
-msgstr ""
+msgstr "No se pudo aprobar. Es posible que el código haya caducado."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Failed to deny the request."
-msgstr ""
+msgstr "No se pudo denegar la solicitud."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Quick Connect"
-msgstr ""
+msgstr "Conexión rápida"
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Automatically configure xDrip+ with your Nocturne instance."
-msgstr ""
+msgstr "Configura automáticamente xDrip+ con tu instancia de Nocturne."
 
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/routes/(fullscreen)/connect/xdrip/+page.svelte
 msgid "<0/> Open in xDrip+"
-msgstr ""
+msgstr "<0/> Abrir en xDrip+"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Or scan from another device"
-msgstr ""
+msgstr "O escanea desde otro dispositivo"
 
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "QR code to connect xDrip+"
-msgstr ""
+msgstr "Código QR para conectar xDrip+"
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Scan this QR code with your phone's camera"
-msgstr ""
+msgstr "Escanea este código QR con la cámara de tu teléfono"
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Or open this link on your phone"
-msgstr ""
+msgstr "O abre este enlace en tu teléfono"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/lib/components/connectors/UploaderSetupView.svelte
 msgid "Enter Authorization Code"
-msgstr ""
+msgstr "Introduce el código de autorización"
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "If xDrip+ shows an authorization code, enter it here."
-msgstr ""
+msgstr "Si xDrip+ muestra un código de autorización, introdúcelo aquí."
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "<0/> Device authorized successfully. Waiting for data..."
-msgstr ""
+msgstr "<0/> Dispositivo autorizado correctamente. Esperando datos..."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "<0/> Authorization denied. The device will not be granted access."
-msgstr ""
+msgstr "<0/> Autorización denegada. El dispositivo no tendrá acceso."
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "<0/> wants access"
-msgstr ""
+msgstr "<0/> solicita acceso"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Requested permissions:"
-msgstr ""
+msgstr "Permisos solicitados:"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
@@ -221,7 +221,7 @@ msgstr ""
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "<0/> Deny"
-msgstr ""
+msgstr "<0/> Denegar"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
@@ -231,49 +231,49 @@ msgstr ""
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "<0/> Approve"
-msgstr ""
+msgstr "<0/> Aprobar"
 
 #: src/lib/components/PreludeQuickConnect.svelte
 #: src/lib/components/XdripQuickConnect.svelte
 #: src/routes/(authenticated)/oauth/device/+page.svelte
 #: src/routes/(unauthenticated)/auth/bot/authorize/+page.svelte
 msgid "<0/> Continue"
-msgstr ""
+msgstr "<0/> Continuar"
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "<0/> Waiting for data from xDrip+..."
-msgstr ""
+msgstr "<0/> Esperando datos de xDrip+..."
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "<0/> Connected! Data is flowing from xDrip+."
-msgstr ""
+msgstr "<0/> ¡Conectado! Los datos están llegando desde xDrip+."
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "No data from xDrip+ yet. This is normal if xDrip+ hasn't had a new reading."
-msgstr ""
+msgstr "Aún no hay datos de xDrip+. Es normal si xDrip+ todavía no ha recibido una nueva lectura."
 
 #: src/lib/components/XdripQuickConnect.svelte
 msgid "Check now"
-msgstr ""
+msgstr "Comprobar ahora"
 
 #: src/lib/components/reports/ResourceGuard.svelte
 #: src/lib/hooks/resource-context.svelte.ts
 #: src/lib/hooks/resource-context.svelte.ts
 #: src/lib/hooks/resource-context.svelte.ts
 msgid "Error Loading Data"
-msgstr ""
+msgstr "Error al cargar los datos"
 
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/stores/alarm-state.svelte.ts
 #: src/lib/stores/alarm-state.svelte.ts
 msgid "UrgentLow"
-msgstr ""
+msgstr "Baja urgente"
 
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/stores/alarm-state.svelte.ts
 msgid "UrgentHigh"
-msgstr ""
+msgstr "Alta urgente"
 
 #: src/lib/components/calendar/CalendarHeader.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
@@ -321,11 +321,11 @@ msgstr ""
 #: src/lib/components/profile/ProfileIconPicker.svelte
 #: src/lib/stores/auth-store.svelte.ts
 msgid "User"
-msgstr ""
+msgstr "Usuario"
 
 #: src/lib/stores/auth-store.svelte.ts
 msgid "Failed to load session"
-msgstr ""
+msgstr "No se pudo cargar la sesión"
 
 #: src/lib/components/layout/GuestBanner.svelte
 #: src/lib/components/members/GuestLinksSection.svelte
@@ -335,7 +335,7 @@ msgstr ""
 #: src/routes/(authenticated)/notifications/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Expired"
-msgstr ""
+msgstr "Caducado"
 
 #: src/lib/stores/realtime-store.svelte.ts
 msgid "Failed to load historical data"
@@ -401,26 +401,26 @@ msgstr "No se pudieron sincronizar los datos pendientes"
 
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 msgid "Failed to save settings"
-msgstr ""
+msgstr "No se pudieron guardar los ajustes"
 
 #: src/lib/stores/settings-store.svelte.ts
 msgid "Validation error"
-msgstr ""
+msgstr "Error de validación"
 
 #~ msgid "Failed to save alarm configuration"
 #~ msgstr ""
 
 #: src/lib/components/settings/DataSourceRow.svelte
 msgid "Just now"
-msgstr ""
+msgstr "Ahora mismo"
 
 #: src/lib/websocket/websocket-client.svelte.ts
 msgid "Failed to create socket connection"
-msgstr ""
+msgstr "No se pudo establecer la conexión"
 
 #: src/lib/websocket/websocket-client.svelte.ts
 msgid "Connection error"
-msgstr ""
+msgstr "Error de conexión"
 
 #~ msgid "Alarm"
 #~ msgstr ""
@@ -453,7 +453,7 @@ msgstr ""
 
 #: src/routes/(legal)/+layout.svelte
 msgid "<0/> Back to Login"
-msgstr ""
+msgstr "<0/> Volver al inicio de sesión"
 
 #: src/routes/(legal)/+layout.svelte
 msgid "Last updated: February 21, 2026"
@@ -462,7 +462,7 @@ msgstr ""
 #. 0: title.toLowerCase()
 #: src/lib/components/account/SecurityCredentialCard.svelte
 msgid "Unnamed {0}"
-msgstr ""
+msgstr "{0} sin nombre"
 
 #: src/lib/components/account/SecurityCredentialCard.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
@@ -509,7 +509,7 @@ msgstr "Desconocido"
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ConnectedApps.svelte
 msgid "<0/> Created {0}"
-msgstr ""
+msgstr "<0/> Creado {0}"
 
 #. 0: formatMediumDateTime(credential.lastUsedAt)
 #. 0: formatMediumDateTime(grant.lastUsedAt)
@@ -520,38 +520,38 @@ msgstr ""
 #: src/lib/components/settings/ConnectedApps.svelte
 #: src/lib/components/settings/LinkedOidcIdentities.svelte
 msgid "<0/> Last used {0}"
-msgstr ""
+msgstr "<0/> Último uso {0}"
 
 #. 0: maxCredentials; 1: title.toLowerCase()
 #: src/lib/components/account/SecurityCredentialCard.svelte
 msgid "Maximum of {0} {1} reached."
-msgstr ""
+msgstr "Se ha alcanzado el máximo de {0} {1}."
 
 #~ msgid "Verification failed. Check the code and try again."
 #~ msgstr ""
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 msgid "Set up authenticator app"
-msgstr ""
+msgstr "Configurar aplicación de autenticación"
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 msgid "TOTP QR code"
-msgstr ""
+msgstr "Código QR TOTP"
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 msgid "Or enter this secret manually:"
-msgstr ""
+msgstr "O introduce este secreto manualmente:"
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 #: src/lib/components/alerts/ChannelsSection.svelte
 #: src/lib/components/members/CreateInviteCard.svelte
 #: src/routes/(authenticated)/settings/account/+page.svelte
 msgid "Label (optional)"
-msgstr ""
+msgstr "Etiqueta (opcional)"
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 msgid "Verification code"
-msgstr ""
+msgstr "Código de verificación"
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/account/TotpSetupDialog.svelte
@@ -621,59 +621,59 @@ msgstr "Cancelar"
 
 #: src/lib/components/account/TotpSetupDialog.svelte
 msgid "<0/> Verify and save"
-msgstr ""
+msgstr "<0/> Verificar y guardar"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Failed to upload avatar"
-msgstr ""
+msgstr "No se pudo subir el avatar"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Failed to delete avatar"
-msgstr ""
+msgstr "No se pudo eliminar el avatar"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Change avatar"
-msgstr ""
+msgstr "Cambiar avatar"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Remove avatar"
-msgstr ""
+msgstr "Eliminar avatar"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Account Details"
-msgstr ""
+msgstr "Datos de la cuenta"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Subject ID"
-msgstr ""
+msgstr "ID del usuario"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "Session Expires"
-msgstr ""
+msgstr "La sesión caduca"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "<0/> Roles"
-msgstr ""
+msgstr "<0/> Roles"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "No roles assigned"
-msgstr ""
+msgstr "No hay roles asignados"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "<0/> Permissions"
-msgstr ""
+msgstr "<0/> Permisos"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "No explicit permissions"
-msgstr ""
+msgstr "Sin permisos explícitos"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "<0/> Back to Settings"
-msgstr ""
+msgstr "<0/> Volver a Ajustes"
 
 #: src/lib/components/account/UserProfileCard.svelte
 msgid "<0/> Log Out"
-msgstr ""
+msgstr "<0/> Cerrar sesión"
 
 #: src/lib/components/actogram/Actogram.svelte
 #: src/lib/components/actogram/ActogramRow.svelte
@@ -701,7 +701,7 @@ msgstr ""
 
 #: src/lib/components/actogram/Actogram.svelte
 msgid "Previous week"
-msgstr ""
+msgstr "Semana anterior"
 
 #. 0: String(h).padStart(2, '0')
 #. 0: hour % 24 === 0 && hour < 48 ? '0' \\: hour % 24
@@ -718,7 +718,7 @@ msgstr ""
 
 #: src/lib/components/actogram/Actogram.svelte
 msgid "Next week"
-msgstr ""
+msgstr "Semana siguiente"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
@@ -747,7 +747,7 @@ msgstr ""
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 msgid "Enabled"
-msgstr ""
+msgstr "Activado"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/IntegrationsTabContent.svelte
@@ -758,18 +758,18 @@ msgstr ""
 #: src/lib/components/connectors/ConnectorSetup.svelte
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 msgid "Disabled"
-msgstr ""
+msgstr "Desactivado"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
 #: src/lib/components/dashboard/PredictionSettings.svelte
 msgid "Disable"
-msgstr ""
+msgstr "Desactivar"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
 msgid "Enable"
-msgstr ""
+msgstr "Activar"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
@@ -777,7 +777,7 @@ msgstr ""
 #: src/routes/(authenticated)/clock/+page.svelte
 #: src/routes/(authenticated)/settings/integrations/discord/+page.svelte
 msgid "Edit"
-msgstr ""
+msgstr "Editar"
 
 #: src/lib/components/admin/IdentityProvidersTabContent.svelte
 #: src/lib/components/admin/OidcProvidersTabContent.svelte
@@ -823,29 +823,29 @@ msgstr ""
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Care Portal"
-msgstr ""
+msgstr "Portal de atención"
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/layout/UserMenu.svelte
 msgid "Admin"
-msgstr ""
+msgstr "Administrador"
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "New Role"
-msgstr ""
+msgstr "Nuevo rol"
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
 msgid "Edit Role"
-msgstr ""
+msgstr "Editar rol"
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Create a new role with specific permissions."
-msgstr ""
+msgstr "Crea un nuevo rol con permisos específicos."
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Update role details and permissions."
-msgstr ""
+msgstr "Actualiza los datos y permisos del rol."
 
 #: ../portal/src/routes/studio/+page.svelte
 #: src/lib/components/admin/OidcProviderDialog.svelte
@@ -868,11 +868,11 @@ msgstr "Nombre"
 #: src/lib/components/trackers/TrackerCompletionDialog.svelte
 #: src/lib/components/trackers/TrackerStartDialog.svelte
 msgid "Notes (optional)"
-msgstr ""
+msgstr "Notas (opcional)"
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Description of this role's purpose"
-msgstr ""
+msgstr "Descripción de la finalidad de este rol"
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/members/RolesSection.svelte
@@ -880,11 +880,11 @@ msgstr ""
 #: src/lib/components/settings/ApiTokens.svelte
 #: src/lib/components/settings/ConnectedApps.svelte
 msgid "Permissions"
-msgstr ""
+msgstr "Permisos"
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Custom Permission"
-msgstr ""
+msgstr "Permiso personalizado"
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/patient/PatientDeviceManager.svelte
@@ -893,12 +893,12 @@ msgstr ""
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Add"
-msgstr ""
+msgstr "Añadir"
 
 #. 0: roleFormPermissions.length
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "Selected Permissions ({0})"
-msgstr ""
+msgstr "Permisos seleccionados ({0})"
 
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/lib/components/admin/SubjectEditDialog.svelte
@@ -909,7 +909,7 @@ msgstr ""
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Create"
-msgstr ""
+msgstr "Crear"
 
 #: src/lib/components/admin/IntegrationsTabContent.svelte
 #: src/lib/components/admin/RoleDialog.svelte
@@ -929,7 +929,7 @@ msgstr "Guardar"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 msgid "Test failed"
-msgstr ""
+msgstr "La prueba ha fallado"
 
 #~ msgid "Failed to save provider"
 #~ msgstr ""
@@ -1002,12 +1002,12 @@ msgstr ""
 #. 0: testResult.responseTime ? ` (${testResult.responseTime})` \\: ""
 #: src/lib/components/admin/OidcProviderDialog.svelte
 msgid "Connection successful{0}. <0/>"
-msgstr ""
+msgstr "Conexión correcta{0}. <0/>"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/routes/(authenticated)/settings/migration/+page.svelte
 msgid "Connection test failed"
-msgstr ""
+msgstr "La prueba de conexión ha fallado"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/entries/EntryEditDialog.svelte
@@ -1019,7 +1019,7 @@ msgstr "Guardar cambios"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 msgid "Create Provider"
-msgstr ""
+msgstr "Crear proveedor"
 
 #~ msgid "Users"
 #~ msgstr ""
@@ -1072,23 +1072,23 @@ msgstr ""
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "New User"
-msgstr ""
+msgstr "Nuevo usuario"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Edit User"
-msgstr ""
+msgstr "Editar usuario"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Create a new user account."
-msgstr ""
+msgstr "Crea una nueva cuenta de usuario."
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Update user details and role assignments."
-msgstr ""
+msgstr "Actualiza los datos del usuario y la asignación de roles."
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Additional information about this user"
-msgstr ""
+msgstr "Información adicional sobre este usuario"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 #: src/lib/components/layout/UserMenu.svelte
@@ -1096,19 +1096,19 @@ msgstr ""
 #: src/lib/components/members/MemberCard.svelte
 #: src/routes/(authenticated)/settings/access-requests/+page.svelte
 msgid "Roles"
-msgstr ""
+msgstr "Roles"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "No roles available"
-msgstr ""
+msgstr "No hay roles disponibles"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Predefined"
-msgstr ""
+msgstr "Predefinido"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Custom Roles"
-msgstr ""
+msgstr "Roles personalizados"
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Use predefined roles for standard access levels. OAuth scopes provide fine-grained device permissions."
@@ -1116,44 +1116,44 @@ msgstr ""
 
 #: src/lib/components/admin/SubjectEditDialog.svelte
 msgid "Full Admin Access"
-msgstr ""
+msgstr "Acceso completo de administrador"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 msgid "Threshold"
-msgstr ""
+msgstr "Umbral"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Rate of Change"
-msgstr ""
+msgstr "Velocidad de cambio"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Signal Loss"
-msgstr ""
+msgstr "Pérdida de señal"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Composite"
-msgstr ""
+msgstr "Compuesta"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "<0/> Alert History"
-msgstr ""
+msgstr "<0/> Historial de alertas"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Past alert excursions and their resolution"
-msgstr ""
+msgstr "Alertas anteriores y su resolución"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "No alert history"
-msgstr ""
+msgstr "No hay historial de alertas"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Resolved alerts will appear here"
-msgstr ""
+msgstr "Las alertas resueltas aparecerán aquí"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Rule"
-msgstr ""
+msgstr "Regla"
 
 #: src/lib/components/admin/OidcProviderDialog.svelte
 #: src/lib/components/alerts/AlertHistoryCard.svelte
@@ -1166,7 +1166,7 @@ msgstr "Tipo"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "Started"
-msgstr ""
+msgstr "Iniciada"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/lib/components/reports/sensor-integrity/ClusterTable.svelte
@@ -1175,18 +1175,18 @@ msgstr ""
 #: src/lib/components/ui/duration-input/duration-input.svelte
 #: src/lib/components/ui/duration-input/duration-input.svelte
 msgid "Duration"
-msgstr ""
+msgstr "Duración"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Acknowledged"
-msgstr ""
+msgstr "Confirmada"
 
 #. 0: item.acknowledgedBy
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 msgid "by {0}"
-msgstr ""
+msgstr "por {0}"
 
 #. 0: history.page ?? 1; 1: history.totalPages ?? 1; 2: history.totalCount ?? 0
 #: src/lib/components/alerts/AlertHistoryCard.svelte
@@ -1196,32 +1196,32 @@ msgstr ""
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Previous"
-msgstr ""
+msgstr "Anterior"
 
 #: src/lib/components/alerts/AlertHistoryCard.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Next"
-msgstr ""
+msgstr "Siguiente"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "Low Glucose"
-msgstr ""
+msgstr "Glucosa baja"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "High Glucose"
-msgstr ""
+msgstr "Glucosa alta"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "Rapid Change"
-msgstr ""
+msgstr "Cambio rápido"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "Signal Lost"
-msgstr ""
+msgstr "Señal perdida"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "Composite Alert"
-msgstr ""
+msgstr "Alerta compuesta"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 #: src/lib/components/alerts/AlertBanner.svelte
@@ -1231,11 +1231,11 @@ msgstr ""
 #: src/routes/(authenticated)/alerts/[id]/+page.svelte
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Alert"
-msgstr ""
+msgstr "Alerta"
 
 #: src/lib/components/alerts/AlertBanner.svelte
 msgid "<0/> Acknowledge"
-msgstr ""
+msgstr "<0/> Confirmar"
 
 #: src/lib/components/alerts/AlertRuleRow.svelte
 msgid "No condition configured"
