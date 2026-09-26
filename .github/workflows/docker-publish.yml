@@ -2,7 +2,7 @@ name: Build and Publish with Aspire
 
 # Every merge to main publishes :develop (and an immutable :main-<sha7>); a v* tag publishes the
 # version and, unless it is a pre-release, moves :latest to it (.github/scripts/image-tags.sh).
-# Pull requests publish nothing: the e2e job in tests.yml builds the same images on its runner.
+# Pull requests publish nothing: the images job in tests.yml builds the same images on its runner.
 # A manual dispatch from main or a v* tag re-publishes that ref.
 on:
   push:

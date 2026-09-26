@@ -6,9 +6,9 @@
 | .NET integration, database | `tests/Integration/Nocturne.Infrastructure.Data.Tests`, `Nocturne.Connectors.Tests`, `Category=Integration` in `tests/Unit/Nocturne.API.Tests` | xUnit, one shared Postgres container | `integration-db` |
 | .NET integration, API | `tests/Integration/Nocturne.API.Tests` | the API in-process on a real port, shared Postgres; Nightscout + MongoDB containers for parity and migration | `integration-api` |
 | Alert engine parity | `tests/Parity`, `tests/Unit/Nocturne.Alerts.Native.Tests` | golden corpus, Rust FFI | `alert-corpus-check`, `alerts-ffi-parity` |
-| Web unit | `src/Web/packages/{app,bot,bridge,cms,portal}` | vitest (node) | `web-app-tests`, `web-typecheck` |
+| Web unit | `src/Web/packages/{app,bot,bridge,cms,portal}` | vitest (node) | `web-app-tests`, `web-static` |
 | Web components | `src/Web/packages/app/**/*.svelte.test.ts` | vitest browser mode, headless chromium | `web-app-tests` |
-| Web server render | `src/Web/packages/app/**/*.render.test.ts` | vitest | `web-typecheck` |
+| Web server render | `src/Web/packages/app/**/*.render.test.ts` | vitest | `web-static` |
 | End to end | `e2e/` | docker compose on the production images, vitest (API) + Playwright (web) | `e2e` |
 | Migration upgrade | `e2e/scripts/migration-upgrade.ts` | the latest release, then this checkout, on one database | `migration-upgrade` |
 | Benchmarks | `tests/Performance` | BenchmarkDotNet, manual | none |
@@ -167,10 +167,18 @@ node .github/scripts/coverage-report.mjs --base origin/main \
 pull request does not touch; pushes to main and manual runs test everything. Require
 `tests-passed`: it is green when every job it depends on passed or was skipped.
 
+`build` compiles every test project once and runs the API client codegen; `unit`, `integration-db`,
+`integration-api`, `alert-corpus-check` and `alerts-ffi-parity` run its assemblies with
+`--no-build`, and `web-static` (typechecks, lint, the node suites) and `web-app-tests` read its
+generated client. `images` builds the API and web images once and `e2e` and `migration-upgrade`
+load them from artifacts. It runs beside `build` to keep the e2e path short, so it generates its
+own client for the web image. The repeated setup lives in composite actions under
+`.github/actions/`: .NET and the NuGet cache, Node and pnpm with the store cache, Playwright's
+chromium shell, and unpacking the build's assemblies.
+
 Container images are published by `docker-publish.yml`: `:develop` and `:main-<sha7>` on every
 push to main, the version tag and `:latest` on a `v*` release tag (a pre-release tag does not move
-`:latest`). Pull requests publish no images; the `e2e` and `migration-upgrade` jobs build theirs
-on the runner.
+`:latest`). Pull requests publish no images; the `images` job builds them on the runner.
 
 ## Adding tests
 
