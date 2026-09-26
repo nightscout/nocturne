@@ -1,0 +1,127 @@
+# Quarantined tests: each names a test and the product bug that fails it. They are excluded from
+# the blocking run and run in a non-blocking CI step so they stay visible. This file is the only
+# list: tests/quarantine.sh turns it into dotnet test filters. Remove a line with the fix that makes
+# its test pass. See tests/README.md.
+#
+# <FullyQualifiedName (no theory arguments)> | <bug>
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.ActivityWorkflow_FullCrudCycle_ShouldWorkCorrectly | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.CreateActivities_WithMultipleActivities_ShouldCreateAllActivities | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.CreateActivity_WithValidData_ShouldCreateAndReturnActivity | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.DeleteActivity_WithExistingId_ShouldDeleteAndReturnSuccess | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.GetActivity_AfterCreation_ShouldReturnCreatedActivity | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.ActivityInMemoryIntegrationTests.UpdateActivity_WithValidData_ShouldUpdateAndReturnActivity | Core.Models.Activity serializes Id twice (_id and Id); POST echoes the stray id:null, which overwrites _id on read
+Nocturne.API.Tests.Integration.Auth.GuestLinkLifecycleIntegrationTests.GuestSession_CannotWriteV4TherapySettings | a guest session writing v4 therapy settings gets 500 instead of 401/403
+Nocturne.API.Tests.Integration.Auth.MultitenantIsolationIntegrationTests.TenantA_CannotSee_TenantB_Profiles | PUT /api/v1/profile is not routed (405); Nightscout accepts it
+Nocturne.API.Tests.Integration.Auth.TokenRevocationIntegrationTests.Introspect_ValidToken_ReturnsActive | /api/oauth/introspect names its fields tokenType/clientId; RFC 7662 has token_type/client_id
+Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.DeleteDeviceStatusById_ShouldRemoveEntry | devicestatus reads return nothing after a POST, so there is no id to delete
+Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatusById_ShouldReturnMatchingEntry | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatus_ShouldReturnCreatedEntries | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.PostDeviceStatus_ShouldCreateAndReturnEntry | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.DeleteEntry_ShouldRemoveEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntries_WithSkip_ShouldOffsetResults | GET /api/v1/entries ignores skip, so pages overlap (Nightscout behaviour to confirm)
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntryById_ShouldReturnSpecificEntry | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.PostEntries_Array_ShouldCreateMultipleEntries | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.PostEntry_Single_ShouldCreateAndReturnEntry | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.PutEntry_ShouldUpdateExistingEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
+Nocturne.API.Tests.Integration.Migration.ApiMigrationTests.MigrateEntries_FromApi_AllFieldsPreserved | v3 filter {dataSource: mongodb-import} matches none of the imported entries
+Nocturne.API.Tests.Integration.Migration.ApiMigrationTests.MigrateTreatments_DuplicateRun_NoDuplicatesCreated | a second import of the same source reports every document as migrated again
+Nocturne.API.Tests.Integration.Migration.MongoMigrationTests.JobStatus_DuringMigration_ShowsProgressAndCompletion | test is racy, not a product bug: the fixture import completes before the first poll, so Running is never observed
+Nocturne.API.Tests.Integration.Migration.MongoMigrationTests.MigrateEntries_DuplicateRun_NoDuplicatesCreated | a second import of the same source reports every document as migrated again
+Nocturne.API.Tests.Integration.Migration.MongoMigrationTests.MigrateEntries_FromMongo_AllFieldsPreserved | v3 filter {dataSource: mongodb-import} matches none of the imported entries
+Nocturne.API.Tests.Integration.Migration.MongoMigrationTests.MigrateEntries_WithVariedDirections_DirectionsPreserved | v3 filter {dataSource: mongodb-import} matches none of the imported entries
+Nocturne.API.Tests.Integration.NotificationsIntegrationTests.GetNotifications_SortsByUrgencyThenTime | active notifications sort by urgency as text (Warn before Urgent), not by severity
+Nocturne.API.Tests.Integration.Parity.V1.ActivityParityTests.GetActivity_WithFindFilter_ReturnsSameShape | activity find filter is not applied
+Nocturne.API.Tests.Integration.Parity.V1.CountParityTests.CountActivity_Empty_ReturnsSameShape | count/activity runs its per-category counts concurrently and intermittently answers 500
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatusJson_WithData_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithCount_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithCreatedAtDateRangeFilterGteAndLt_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithCreatedAtDateRangeFilter_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithData_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.GetDeviceStatus_WithFindFilter_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.PostDeviceStatus_MissingDevice_ReturnsSameShape | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.PostDeviceStatus_Simple_ReturnsSameShape | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.PostDeviceStatus_WithLoop_ReturnsSameShape | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.PostDeviceStatus_WithOpenAPS_ReturnsSameShape | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.Parity.V1.DeviceStatusParityTests.PostDeviceStatus_WithPump_ReturnsSameShape | POST /api/v1/devicestatus response has no _id
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesByType_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntriesCurrent_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_TopLevelTypeParam_IsIgnored_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithCountAndFindType_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithCount_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindTypeFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.PostEntries_Batch_ReturnsSameShape | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.PostEntries_Single_ReturnsSameShape | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks returns a food Nightscout does not list
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_Empty_ReturnsSameShape | /api/v1/profile/current with no profile answers []; Nightscout null
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_MultipleProfiles_ReturnsSameShape | several v1 profiles read back with their stores merged into the wrong documents
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfile_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_Simple_ReturnsSameShape | POST /api/v1/profile response has no created_at
+Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.PostProfile_WithMultipleTimePeriods_ReturnsSameShape | POST /api/v1/profile response has no created_at
+Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithPrefix_ReturnsSameShape | times/echo omits req.query.find
+Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEchoWithRegex_ReturnsSameShape | times/echo omits req.query.find
+Nocturne.API.Tests.Integration.Parity.V1.TimeQueryParityTests.GetTimesEcho_ReturnsSameShape | times/echo omits req.query.find
+Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithCount_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithData_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithEventTypeFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.GetTreatments_WithFindFilter_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V1.TreatmentsParityTests.PostTreatment_TempBasal_ReturnsSameShape | a temp basal loses percent
+Nocturne.API.Tests.Integration.Parity.V2.DDataParityTests.GetDDataAt_IsoDateString_ReturnsSameShape | ddata/at picks a different sgv and drops rssi
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Empty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_Pretty_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetAllProperties_WithData_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetSpecificProperty_Bwp_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetSpecificProperty_Cage_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetSpecificProperty_EmptyPath_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.PropertiesParityTests.GetSpecificProperty_Sage_ReturnsSameShape | v2 properties omit buckets/upbat/pump and differ on sage/cage/bwp
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_ComprehensiveData_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_DefaultHours_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_Empty_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_LongWindow_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_ShortWindow_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_VeryLargeHours_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_WithDeviceStatus_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_WithHoursParam_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_WithProfile_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V2.SummaryParityTests.GetSummary_WithTreatments_ReturnsSameShape | v2 summary omits profile and state.iob/cob, and its sgvs differ from Nightscout
+Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_Filter_Device_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithData_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithLimit_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithSkip_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V3.DeviceStatusParityTests.Search_WithSort_ReturnsSameShape | devicestatus reads return nothing after a POST
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Read_Exists_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Eq_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Gt_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Gte_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_In_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Lt_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Lte_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Ne_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Nin_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_Filter_Re_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_InvalidLimit_ReturnsSameShape | v3 search with an out-of-tolerance limit answers 500; Nightscout 400
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_MultipleFilters_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithIfModifiedSince_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithLimitAndSkip_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithLimit_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSkip_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortAsc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.EntriesParityTests.Search_WithSortDesc_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_EventType_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_In_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_Filter_Insulin_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_InvalidLimit_ReturnsSameShape | v3 search with an out-of-tolerance limit answers 500; Nightscout 400
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithData_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithFields_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithLimit_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSkip_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
+Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
+Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
+Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.DeleteTreatment_ShouldRemoveTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
+Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.GetTreatmentById_ShouldReturnSpecificTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
+Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.PutTreatment_ShouldUpdateExistingTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
+Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)

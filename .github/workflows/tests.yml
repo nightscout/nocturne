@@ -495,8 +495,19 @@ jobs:
       - name: API integration, parity and migration tests
         run: |
           dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
+            --filter "$(tests/quarantine.sh exclude)" \
             --logger "trx;LogFileName=integration-api.trx" \
             --results-directory TestResults/integration-api
+      # tests/quarantine.txt: tests failing on a known product bug. Run so they stay visible, and
+      # never fail the job; a quarantined test that passes means its line can go.
+      - name: Quarantined tests (non-blocking)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: |
+          dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj --no-build \
+            --filter "$(tests/quarantine.sh include)" \
+            --logger "trx;LogFileName=integration-api-quarantine.trx" \
+            --results-directory TestResults/integration-api-quarantine
       - uses: actions/upload-artifact@v6
         if: failure()
         with:

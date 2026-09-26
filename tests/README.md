@@ -113,13 +113,45 @@ migration chain themselves.
 
 **`ApiIntegrationTestFixture`** runs the API with `WebApplicationFactory` on a real Kestrel port
 (so HttpClient and SignalR connect over sockets) as Development, against its own `SharedPostgres`
-database, with `BASE_DOMAIN=localhost:{port}`. Use `ApiFactory` for any `WebApplicationFactory`
+database, with `BASE_DOMAIN=localhost:{port}`. It seeds one tenant through the dev-only seed
+endpoint, and its clients address that tenant's host (`integration.localhost:{port}`; SignalR sends
+it as `X-Forwarded-Host`), each presenting a client address of its own signed with the instance key,
+so the per-client rate limits see one client per test rather than the whole suite on loopback.
+Between tests it truncates the record and credential tables, removes every other tenant, restores
+the seeded tenant (active, owner with a passkey) and re-seeds the `api-secret` grant. The parity
+fixture seeds its own tenant the same way, with Nightscout's `API_SECRET` as a legacy-secret grant. Use `ApiFactory` for any `WebApplicationFactory`
 over the API: the API's entry point also carries NSwag's static `CreateHostBuilder`, which
 `WebApplicationFactory` otherwise prefers, and that host has no endpoints.
 
 **SQLite unit databases.** `TestDbContextFactory.CreateSqlite*` copies a schema built once per
 process into each test's in-memory database with SQLite's backup API instead of running
 `EnsureCreated` per test.
+
+## Quarantine
+
+`tests/quarantine.txt` lists the tests that fail on a known product bug, one line each: the test's
+fully qualified name and the bug. It is the only such list. `tests/quarantine.sh exclude` turns it
+into the `dotnet test --filter` that CI's blocking `integration-api` step runs with, and
+`tests/quarantine.sh include` into the filter of the non-blocking step after it, which runs only the
+quarantined tests so they stay visible without failing the job:
+
+```bash
+dotnet test tests/Integration/Nocturne.API.Tests --filter "$(tests/quarantine.sh exclude)"
+dotnet test tests/Integration/Nocturne.API.Tests --filter "$(tests/quarantine.sh include)"
+```
+
+A quarantined test is never edited to pass. The fix for its bug removes its line, in the same
+change. A test is quarantined for a product bug, never for a stale expectation: that is fixed in the
+test.
+
+## Parity divergences
+
+The parity tests compare each request with Nightscout 15.0.3. Where Nocturne answers differently on
+purpose, `Parity/ParityDivergences.cs` lists the test and request with the reason, and
+`ParityTestBase` asserts the status and JSON body kind Nocturne answers with instead of comparing.
+Three kinds are allowed there: Nightscout has no such route (it answers 404), Nightscout fails with
+a 500, and v3 input Nocturne accepts or validates differently (left as it is, a separate decision).
+A difference that is a Nocturne bug is quarantined instead.
 
 ## Coverage
 
