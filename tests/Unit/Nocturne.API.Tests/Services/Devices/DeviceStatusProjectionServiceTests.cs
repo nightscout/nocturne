@@ -335,12 +335,13 @@ public class DeviceStatusProjectionServiceTests
     }
 
     [Fact]
-    public void ProjectAsync_WithClientSrvModifiedInExtras_ReportsWriteClockAndDoesNotReEmit()
+    public void ProjectAsync_WithClientSrvTimestampsInExtras_ReportsServerClockAndDoesNotReEmit()
     {
-        // The record reports the server write clock, so a client-supplied srvModified must not
-        // override it. Re-emitting the extra would also serialize the key twice, which strict
+        // The record reports the server clock, so client-supplied srvCreated/srvModified must not
+        // override it. Re-emitting the extras would also serialize each key twice, which strict
         // client parsers reject.
         var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.CreatedAt = ReferenceTime.AddMinutes(3);
         aps.ModifiedAt = ReferenceTime.AddMinutes(5);
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
 
@@ -359,25 +360,30 @@ public class DeviceStatusProjectionServiceTests
         var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, extras);
 
         result.SrvModified.Should().Be(Mills(aps.ModifiedAt));
-        result.SrvCreated.Should().Be(1_722_945_500_000L);
+        result.SrvCreated.Should().Be(Mills(aps.CreatedAt));
         result.ExtensionData.Should().NotContainKey("srvModified");
         result.ExtensionData.Should().NotContainKey("srvCreated");
     }
 
     [Fact]
-    public void ProjectAsync_WithoutApsSnapshot_ReportsAnchorWriteClock()
+    public void ProjectAsync_WithoutApsSnapshot_ReportsAnchorServerClock()
     {
-        // Orphan pump/uploader records (xDrip+) have no APS anchor; the write clock comes from the
+        // Orphan pump/uploader records (xDrip+) have no APS anchor; the server clock comes from the
         // same anchor the timestamp uses, in the same precedence.
         var pump = CreatePumpSnapshot();
+        pump.CreatedAt = ReferenceTime.AddMinutes(1);
         pump.ModifiedAt = ReferenceTime.AddMinutes(2);
         var uploader = CreateUploaderSnapshot();
+        uploader.CreatedAt = ReferenceTime.AddMinutes(8);
         uploader.ModifiedAt = ReferenceTime.AddMinutes(9);
 
-        DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, uploader, null, null)
-            .SrvModified.Should().Be(Mills(pump.ModifiedAt));
-        DeviceStatusProjectionService.ProjectFromSnapshots(null, null, uploader, null, null)
-            .SrvModified.Should().Be(Mills(uploader.ModifiedAt));
+        var fromPump = DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, uploader, null, null);
+        fromPump.SrvCreated.Should().Be(Mills(pump.CreatedAt));
+        fromPump.SrvModified.Should().Be(Mills(pump.ModifiedAt));
+
+        var fromUploader = DeviceStatusProjectionService.ProjectFromSnapshots(null, null, uploader, null, null);
+        fromUploader.SrvCreated.Should().Be(Mills(uploader.CreatedAt));
+        fromUploader.SrvModified.Should().Be(Mills(uploader.ModifiedAt));
     }
 
     [Fact]
