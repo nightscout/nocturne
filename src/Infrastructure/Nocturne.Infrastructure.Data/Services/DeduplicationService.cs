@@ -1532,16 +1532,18 @@ public class DeduplicationService : IDeduplicationService
     /// <summary>
     /// One record type's <see cref="DeduplicateAllAsync"/> phase. <see cref="Name"/> is reported as
     /// <see cref="DeduplicationProgress.CurrentPhase"/>, so callers observe it.
-    /// <see cref="RecordIds"/> is every id a link of this type can point at: the type's rows with
-    /// <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record is
-    /// still linked. Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
+    /// <see cref="OrphanedLinks"/> is this type's links whose record id is absent from the type's rows
+    /// with <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record
+    /// is still linked. It is a correlated <c>NOT EXISTS</c>: a negated <c>Contains</c> translates to
+    /// <c>NOT IN</c>, which PostgreSQL rescans per link once the record table outgrows work_mem.
+    /// Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
     /// <see cref="Phase{TEntity}"/> is what guarantees.
     /// </summary>
     private sealed record TypePhase(
         RecordType RecordType,
         string Name,
         Func<NocturneDbContext, CancellationToken, Task<int>> CountAsync,
-        Func<NocturneDbContext, IQueryable<Guid>> RecordIds,
+        Func<NocturneDbContext, IQueryable<LinkedRecordEntity>> OrphanedLinks,
         PhaseRunner RunAsync);
 
     /// <summary>
@@ -1565,9 +1567,15 @@ public class DeduplicationService : IDeduplicationService
             recordType,
             name,
             (context, ct) => set(context).CountAsync(ct),
-            context => set(context)
-                .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
-                .Select(id),
+            context =>
+            {
+                var key = RecordTypeKeys.Key(recordType);
+                var recordIds = set(context)
+                    .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+                    .Select(id);
+                return context.LinkedRecords
+                    .Where(lr => lr.RecordType == key && !recordIds.Any(recordId => recordId == lr.RecordId));
+            },
             (service, totalRecords, startOffset, progress, ct) => service.DeduplicateTypeAsync(
                 recordType,
                 set(service._context),
@@ -1643,16 +1651,15 @@ public class DeduplicationService : IDeduplicationService
 
         foreach (var phase in TypePhases)
         {
-            var recordTypeStr = RecordTypeKeys.Key(phase.RecordType);
-            var recordIds = phase.RecordIds(context);
-
-            deleted += await context.LinkedRecords
-                .Where(lr => lr.RecordType == recordTypeStr && !recordIds.Contains(lr.RecordId))
-                .ExecuteDeleteAsync(ct);
+            deleted += await phase.OrphanedLinks(context).ExecuteDeleteAsync(ct);
         }
 
         return deleted;
     }
+
+    internal static IQueryable<LinkedRecordEntity> OrphanedLinksOf(
+        NocturneDbContext context, RecordType recordType) =>
+        TypePhases.Single(p => p.RecordType == recordType).OrphanedLinks(context);
 
     /// <inheritdoc />
     public async Task<DeduplicationResult> DeduplicateAllAsync(

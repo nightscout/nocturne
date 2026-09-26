@@ -1105,6 +1105,21 @@ public class DeduplicationReconcileTests : IDisposable
         links.Should().BeEmpty();
     }
 
+    [Theory]
+    [MemberData(nameof(DeduplicatedRecordTypes))]
+    public void OrphanedLinksOf_OnPostgres_AntiJoinsTheRecordTable(RecordType recordType)
+    {
+        using var context = OfflineDbContext.Create();
+
+        var sql = DeduplicationService.OrphanedLinksOf(context, recordType).ToQueryString();
+
+        sql.Should().MatchRegex(
+            @"NOT EXISTS \(\s*SELECT 1\s*FROM \w+ AS (\w+)\s*WHERE \1\.tenant_id = @ef_filter__TenantId AND \1\.id = l\.record_id\)",
+            "the record table is anti-joined per link and still scoped to the tenant");
+        sql.Should().NotContain("IN (");
+        sql.Should().NotContain("deleted_at", "a soft-deleted record still vouches for its link");
+    }
+
     /// <summary>
     /// Every type the dedup registry covers, so a type added there without a case in
     /// <see cref="AddRecord"/> fails these theories rather than going untested.
