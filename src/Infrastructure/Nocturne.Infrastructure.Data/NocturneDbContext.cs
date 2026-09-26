@@ -2586,10 +2586,34 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             UpdateTimestamps();
             return await base.SaveChangesAsync(cancellationToken);
         }
+        catch
+        {
+            DetachPendingAuditRows();
+            throw;
+        }
         finally
         {
             ChangeTracker.AutoDetectChangesEnabled = autoDetectChanges;
         }
+    }
+
+    /// <summary>
+    /// Drops the audit rows of a save that did not complete, so a retry on the same context does
+    /// not write them twice. It runs from <see cref="SaveChangesAsync(CancellationToken)"/> rather
+    /// than an interceptor hook because EF reports a <see cref="DbUpdateConcurrencyException"/>
+    /// to no interceptor failure hook. Every <see cref="MutationAuditLogEntity"/>
+    /// still <c>Added</c> belongs to the failed save: <see cref="Interceptors.MutationAuditInterceptor"/>
+    /// adds its rows during it, and <see cref="Extensions.AuditedBulkDeleteExtensions"/> adds its own
+    /// immediately before it, inside the same transaction as the delete they describe.
+    /// </summary>
+    private void DetachPendingAuditRows()
+    {
+        var pending = ChangeTracker.Entries<MutationAuditLogEntity>()
+            .Where(e => e.State == EntityState.Added)
+            .ToList();
+
+        foreach (var entry in pending)
+            entry.State = EntityState.Detached;
     }
 
     /// <summary>
