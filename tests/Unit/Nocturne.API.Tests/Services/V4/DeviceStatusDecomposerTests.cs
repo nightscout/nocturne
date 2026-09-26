@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -12,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -1817,6 +1819,154 @@ public class DeviceStatusDecomposerTests : IDisposable
             It.IsAny<string>(),
             It.IsAny<long>(),
             It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    #endregion
+
+    #region Device Resolution Time
+
+    private static readonly DateTime LoopStatusAt = new(2026, 3, 10, 14, 30, 0, DateTimeKind.Utc);
+
+    private static DeviceStatus MakeCreatedAtOnlyLoopStatus(string id, DateTime createdAt) => new()
+    {
+        Id = id,
+        CreatedAt = createdAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+        Device = "loop://iPhone",
+        Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod DASH", Reservoir = 80 },
+        Uploader = new UploaderStatus { Name = "iPhone", Type = "phone", Battery = 60 },
+        Cgm = new CgmStatus { Manufacturer = "Dexcom", Serial = "8G1234" },
+        Loop = new LoopStatus { Iob = new LoopIob { Iob = 1.2 } },
+    };
+
+    /// <summary>
+    /// A decomposer over a real <see cref="DeviceService"/>, so first/last seen and patient-device
+    /// attribution come from the service's own date handling rather than a mock.
+    /// </summary>
+    private DeviceStatusDecomposer CreateDecomposerWithDeviceService(
+        List<V4Models.Device> devices, V4Models.PatientDevice patientDevice)
+    {
+        var deviceRepo = new Mock<IDeviceRepository>();
+        deviceRepo
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(
+                It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.DeviceCategory category, string type, string serial, CancellationToken _) =>
+                devices.SingleOrDefault(d => d.Category == category && d.Type == type && d.Serial == serial));
+        deviceRepo
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.Device device, WriteOrigin _, CancellationToken _) =>
+            {
+                devices.Add(device);
+                return device;
+            });
+        deviceRepo
+            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid _, V4Models.Device device, WriteOrigin _, CancellationToken _) => device);
+
+        var patientDeviceRepo = new Mock<IPatientDeviceRepository>();
+        patientDeviceRepo
+            .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { patientDevice });
+
+        var ctxFactory = new TestTenantDbContextFactory(_context);
+        return new DeviceStatusDecomposer(
+            new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance),
+            new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance),
+            new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
+            _extrasRepo,
+            _stateSpanServiceMock.Object,
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object),
+            Mock.Of<IAuditContext>(),
+            NullLogger<DeviceStatusDecomposer>.Instance);
+    }
+
+    private static V4Models.PatientDevice MakeDatedPatientDevice() => new()
+    {
+        Id = Guid.CreateVersion7(),
+        DeviceCategory = V4Models.DeviceCategory.InsulinPump,
+        Manufacturer = "Insulet",
+        Model = "Omnipod DASH",
+        StartDate = new DateOnly(2026, 3, 1),
+    };
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtOnlyStatus_AttributesPumpAndApsAtTheStatusTime()
+    {
+        var patientDevice = MakeDatedPatientDevice();
+        var decomposer = CreateDecomposerWithDeviceService([], patientDevice);
+
+        await decomposer.DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-created-at", LoopStatusAt), WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "loop-created-at").PatientDeviceId.Should().Be(patientDevice.Id);
+        _context.ApsSnapshots.Single(a => a.LegacyId == "loop-created-at").PatientDeviceId.Should().Be(patientDevice.Id);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CreatedAtOnlyStatus_AttributesPumpAndApsAtTheStatusTime()
+    {
+        var patientDevice = MakeDatedPatientDevice();
+        var decomposer = CreateDecomposerWithDeviceService([], patientDevice);
+
+        await decomposer.DecomposeBatchAsync(
+            [MakeCreatedAtOnlyLoopStatus("loop-created-at-batch", LoopStatusAt)], source: null, WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "loop-created-at-batch").PatientDeviceId.Should().Be(patientDevice.Id);
+        _context.ApsSnapshots.Single(a => a.LegacyId == "loop-created-at-batch").PatientDeviceId.Should().Be(patientDevice.Id);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtOnlyStatus_StampsDevicesWithTheStatusTime()
+    {
+        var devices = new List<V4Models.Device>();
+        var decomposer = CreateDecomposerWithDeviceService(devices, MakeDatedPatientDevice());
+
+        await decomposer.DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-first-seen", LoopStatusAt), WriteOrigin.Live);
+
+        devices.Select(d => d.Category).Should().BeEquivalentTo(
+            [V4Models.DeviceCategory.InsulinPump, V4Models.DeviceCategory.Uploader, V4Models.DeviceCategory.CGM]);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(LoopStatusAt);
+        });
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CreatedAtOnlyStatus_StampsDevicesWithTheStatusTime()
+    {
+        var devices = new List<V4Models.Device>();
+        var decomposer = CreateDecomposerWithDeviceService(devices, MakeDatedPatientDevice());
+
+        await decomposer.DecomposeBatchAsync(
+            [MakeCreatedAtOnlyLoopStatus("loop-first-seen-batch", LoopStatusAt)], source: null, WriteOrigin.Live);
+
+        devices.Select(d => d.Category).Should().BeEquivalentTo(
+            [V4Models.DeviceCategory.InsulinPump, V4Models.DeviceCategory.Uploader, V4Models.DeviceCategory.CGM]);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(LoopStatusAt);
+        });
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_LaterCreatedAtOnlyStatus_AdvancesDeviceLastSeen()
+    {
+        var devices = new List<V4Models.Device>();
+        var patientDevice = MakeDatedPatientDevice();
+        var later = LoopStatusAt.AddMinutes(5);
+
+        // A fresh service per status, as each ingest request gets its own scoped DeviceService.
+        await CreateDecomposerWithDeviceService(devices, patientDevice)
+            .DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-seen-1", LoopStatusAt), WriteOrigin.Live);
+        await CreateDecomposerWithDeviceService(devices, patientDevice)
+            .DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-seen-2", later), WriteOrigin.Live);
+
+        devices.Should().HaveCount(3);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(later);
+        });
     }
 
     #endregion
