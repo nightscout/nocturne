@@ -127,6 +127,9 @@ ingress:
   className: ""
   annotations: {}
   host: ""                      # required when enabled=true; typically equals baseDomain
+  hosts: []                     # optional list of hosts (e.g. tenant subdomains);
+                                # each gets its own Ingress rule and TLS entry.
+                                # Empty falls back to the single `host` above.
   # By default, only the web service is exposed at the host. The API is reached
   # internally via cluster DNS. Set api.externalPath to expose API at /api etc.
   api:

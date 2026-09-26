@@ -22,11 +22,16 @@ If they do not, see:
 {{- if .Values.ingress.enabled }}
 
 Nocturne should be reachable at:
-  {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}/
+{{- $hosts := .Values.ingress.hosts | default (list .Values.ingress.host) | compact -}}
+{{- range $hosts }}
+  {{ if $.Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ . }}/
+{{- end }}
 
 {{- if .Values.ingress.api.externalPath }}
 The API is also exposed at:
-  {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}{{ .Values.ingress.api.externalPath }}
+{{- range $hosts }}
+  {{ if $.Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ . }}{{ $.Values.ingress.api.externalPath }}
+{{- end }}
 {{- end }}
 {{- else }}
 

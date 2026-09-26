@@ -1,7 +1,12 @@
 {{- if .Values.ingress.enabled -}}
-{{- $host := .Values.ingress.host -}}
-{{- if not $host -}}
-{{- fail "ingress.host is required when ingress.enabled=true" -}}
+{{- /*
+  One Ingress, one or more hosts. `ingress.hosts` serves multiple hosts (e.g.
+  tenant subdomains) from a single Ingress; `ingress.host` remains supported
+  for a single host. Either must be set when ingress.enabled=true.
+*/}}
+{{- $hosts := .Values.ingress.hosts | default (list .Values.ingress.host) | compact -}}
+{{- if not $hosts -}}
+{{- fail "ingress.host or ingress.hosts is required when ingress.enabled=true" -}}
 {{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -18,16 +23,19 @@ spec:
   {{- if .Values.ingress.tls.enabled }}
   tls:
     - hosts:
-        - {{ $host | quote }}
+        {{- range $hosts }}
+        - {{ . | quote }}
+        {{- end }}
       {{- with .Values.ingress.tls.secretName }}
       secretName: {{ . }}
       {{- end }}
   {{- end }}
   rules:
-    - host: {{ $host | quote }}
+    {{- range $hosts }}
+    - host: {{ . | quote }}
       http:
         paths:
-          {{- with .Values.ingress.api.externalPath }}
+          {{- with $.Values.ingress.api.externalPath }}
           - path: {{ . }}
             pathType: Prefix
             backend:
@@ -40,7 +48,8 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "nocturne.web.fullname" . }}
+                name: {{ include "nocturne.web.fullname" $ }}
                 port:
                   name: http
+    {{- end }}
 {{- end }}
