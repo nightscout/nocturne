@@ -111,9 +111,8 @@ public class GuestLinkService : IGuestLinkService
             return scopes;
         }
 
-        var narrowed = Scope.Normalize(DefaultScopes)
-            .Where(scope => Scope.AllowedGuestScopes.Contains(scope)
-                            && Scope.Satisfies(creatorScopes, scope))
+        var narrowed = Scope.NormalizeGuest(DefaultScopes)
+            .Where(scope => Scope.Satisfies(creatorScopes, scope))
             .ToHashSet(StringComparer.Ordinal);
 
         if (narrowed.Count == 0)

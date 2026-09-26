@@ -398,6 +398,20 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task GuestCredential_StoringHealthRead_ReadsTheAllowedHealthCategoriesButNotFood()
+    {
+        var context = await ResolveAsync(
+            RoleSeeds.Permissions[RoleSeeds.Admin], [Scope.HealthRead], AuthType.Guest);
+
+        var grantedScopes = context.GetGrantedScopes();
+        grantedScopes.Should().Contain([Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead]);
+        grantedScopes.Should().NotContain(Scope.FoodRead);
+        grantedScopes.Should().OnlyContain(s => Scope.AllowedGuestScopes.Contains(s));
+        Scope.Satisfies(grantedScopes, Scope.FoodRead).Should().BeFalse();
+        context.GetPermissionTrie()!.Check("api:food:read").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task UnauthenticatedShareRequest_IsLeftUntouched()
     {
         // The public share path resolves its scopes in AuthenticationMiddleware with

@@ -106,7 +106,7 @@ public class MemberScopeMiddleware
         // Guest sessions get their scopes directly from the grant — no membership lookup
         if (authContext.AuthType == AuthType.Guest)
         {
-            var guestScopes = Scope.Normalize(authContext.Scopes);
+            var guestScopes = Scope.NormalizeGuest(authContext.Scopes);
             context.SetGrantedScopes((IReadOnlySet<string>)guestScopes);
             var guestPermissions = ScopeTranslator.ToPermissions(guestScopes);
             var guestTrie = new PermissionTrie();

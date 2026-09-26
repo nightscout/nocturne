@@ -217,6 +217,7 @@ public static class Scope
     /// anyone — including the data owner whose subject id the grant records.
     /// </summary>
     /// <seealso cref="ValidateGrantScopes"/>
+    /// <seealso cref="NormalizeGuest"/>
     public static readonly IReadOnlySet<string> AllowedGuestScopes =
         new HashSet<string>(StringComparer.Ordinal)
         {
@@ -478,6 +479,19 @@ public static class Scope
     public static IReadOnlySet<string> NormalizeMemberPermissions(IEnumerable<string> permissions)
     {
         return Normalize(permissions, MemberGrantableScopes);
+    }
+
+    /// <summary>
+    /// Resolve a guest grant's stored scopes into the session's granted scopes: normalized, then cut
+    /// to <see cref="AllowedGuestScopes"/>. The cut is on read because alias expansion can reach
+    /// atoms the allow-list excludes (<see cref="HealthReadExpansion"/> includes
+    /// <see cref="FoodRead"/>), and it holds for grants stored before any change to the list.
+    /// </summary>
+    public static IReadOnlySet<string> NormalizeGuest(IEnumerable<string> grantScopes)
+    {
+        return Normalize(grantScopes)
+            .Where(AllowedGuestScopes.Contains)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
