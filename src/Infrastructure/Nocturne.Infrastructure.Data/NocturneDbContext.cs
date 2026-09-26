@@ -516,6 +516,22 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [.. V4LegacyIdRecordEntities, typeof(DeviceStatusExtrasEntity)];
 
     /// <summary>
+    /// Tables a v3 history endpoint pages through <see cref="HistoryPage"/>: the treatment
+    /// projection's <c>LegacyTreatmentTables.All</c> and the device-status projection's APS snapshots.
+    /// </summary>
+    internal static readonly Type[] V4HistoryPagedEntities =
+    [
+        typeof(BolusEntity),
+        typeof(CarbIntakeEntity),
+        typeof(BGCheckEntity),
+        typeof(NoteEntity),
+        typeof(DeviceEventEntity),
+        typeof(TempBasalEntity),
+        typeof(BolusCalculationEntity),
+        typeof(ApsSnapshotEntity),
+    ];
+
+    /// <summary>
     /// Profile-decomposition schedule tables, read as (tenant, profile, newest-first).
     /// </summary>
     internal static readonly Type[] V4ProfileScheduleEntities =
@@ -710,6 +726,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], name)
                 .HasDatabaseName(name)
                 .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
+        }
+
+        // Matches HistoryPage's (sys_updated_at, id) order under the tenant and soft-delete filters,
+        // so a poll reads its page off the index instead of sorting the tenant's whole table.
+        foreach (var entity in V4HistoryPagedEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            entity.HasIndex(
+                    nameof(ITenantScoped.TenantId),
+                    nameof(ISystemTimestamped.SysUpdatedAt),
+                    nameof(IIdentified.Id))
+                .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_sys_updated_at")
+                .HasFilter("deleted_at IS NULL");
         }
 
         foreach (var entity in V4CorrelationIndexedEntities.Select(t => modelBuilder.Entity(t)))
