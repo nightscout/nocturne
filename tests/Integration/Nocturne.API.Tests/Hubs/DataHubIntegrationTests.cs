@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -10,10 +11,10 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// Tests real-time data updates and client-server communication
 /// </summary>
 [Parity]
-public class DataHubIntegrationTests : AspireIntegrationTestBase
+public class DataHubIntegrationTests : ApiIntegrationTestBase
 {
     public DataHubIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -44,7 +45,7 @@ public class DataHubIntegrationTests : AspireIntegrationTestBase
         var authData = new
         {
             client = "test-client",
-            secret = "test-secret-for-integration-tests",
+            secret = HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey),
             history = 24,
         };
 

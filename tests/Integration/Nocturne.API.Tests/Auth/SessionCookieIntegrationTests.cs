@@ -1,6 +1,8 @@
 using System.Net;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Auth;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -14,14 +16,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// and falls through to the next handler when no cookies are present.
 /// </summary>
 [Trait("Category", "Integration")]
-public class SessionCookieIntegrationTests : AspireIntegrationTestBase
+public class SessionCookieIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public SessionCookieIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -48,17 +50,20 @@ public class SessionCookieIntegrationTests : AspireIntegrationTestBase
     [Fact]
     public async Task SessionCookie_ValidAccessToken_Authenticates()
     {
-        // Arrange - complete a PKCE flow to get a real JWT
-        using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
-        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient);
-        var result = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId);
+        // Arrange - a session for the seeded subject, as a sign-in issues one. A grant's access
+        // token (from an OAuth flow, say) is refused in this cookie by design.
+        SessionTokenPair session;
+        using (var scope = Fixture.Services.CreateScope())
+        {
+            session = await scope.ServiceProvider.GetRequiredService<ISessionService>()
+                .IssueSessionAsync(_subjectId, new SessionContext(DeviceDescription: "integration-test"));
+        }
 
-        // Set the JWT as the .Nocturne.AccessToken cookie
         var handler = new HttpClientHandler();
         handler.CookieContainer.Add(
-            ApiClient.BaseAddress!,
-            new System.Net.Cookie(".Nocturne.AccessToken", result.AccessToken));
-        using var cookieClient = new HttpClient(handler) { BaseAddress = ApiClient.BaseAddress };
+            Fixture.CookieOrigin,
+            new System.Net.Cookie(".Nocturne.AccessToken", session.AccessToken));
+        using var cookieClient = Fixture.CreateHttpClient(handler);
 
         // Act
         var response = await cookieClient.GetAsync("/api/v1/entries/current");
@@ -74,9 +79,9 @@ public class SessionCookieIntegrationTests : AspireIntegrationTestBase
         // Arrange - set an invalid JWT as the access token cookie
         var handler = new HttpClientHandler();
         handler.CookieContainer.Add(
-            ApiClient.BaseAddress!,
+            Fixture.CookieOrigin,
             new System.Net.Cookie(".Nocturne.AccessToken", "invalid.jwt.token"));
-        using var cookieClient = new HttpClient(handler) { BaseAddress = ApiClient.BaseAddress };
+        using var cookieClient = Fixture.CreateHttpClient(handler);
 
         // Act
         var response = await cookieClient.GetAsync("/api/v1/entries/current");
@@ -91,7 +96,7 @@ public class SessionCookieIntegrationTests : AspireIntegrationTestBase
     {
         // Arrange - no cookies, no auth headers
         var handler = new HttpClientHandler();
-        using var cookieClient = new HttpClient(handler) { BaseAddress = ApiClient.BaseAddress };
+        using var cookieClient = Fixture.CreateHttpClient(handler);
 
         // Act
         var response = await cookieClient.GetAsync("/api/v1/entries/current");
@@ -107,12 +112,12 @@ public class SessionCookieIntegrationTests : AspireIntegrationTestBase
         // Arrange - set expired access token and invalid refresh token cookies
         var handler = new HttpClientHandler();
         handler.CookieContainer.Add(
-            ApiClient.BaseAddress!,
+            Fixture.CookieOrigin,
             new System.Net.Cookie(".Nocturne.AccessToken", "expired.access.token"));
         handler.CookieContainer.Add(
-            ApiClient.BaseAddress!,
+            Fixture.CookieOrigin,
             new System.Net.Cookie(".Nocturne.RefreshToken", "invalid-refresh"));
-        using var cookieClient = new HttpClient(handler) { BaseAddress = ApiClient.BaseAddress };
+        using var cookieClient = Fixture.CreateHttpClient(handler);
 
         // Act
         var response = await cookieClient.GetAsync("/api/v1/entries/current");

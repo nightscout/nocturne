@@ -21,14 +21,16 @@ aspire run
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance/E2E)
-dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+# Run unit tests (excludes integration/performance)
+dotnet test --filter "Category!=Integration&Category!=Performance"
 
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
+# End-to-end suite: production images in docker compose, vitest API + Playwright web specs
+cd e2e && pnpm install && pnpm e2e     # build changed images, up, run all, down
+cd e2e && pnpm e2e:up                  # leave the stack up; prints URL, token, connection string
+cd e2e && pnpm e2e:upgrade             # latest release -> this checkout on one database
 
 # Type checking for frontend
 cd src/Web/packages/app && pnpm run check
@@ -64,7 +66,6 @@ src/
 tests/
 ├── Unit/                      # Unit tests
 ├── Integration/               # Integration tests (use Testcontainers)
-├── E2E/                       # Aspire-hosted end-to-end tests (opt-in, see Testing)
 └── Performance/               # Performance benchmarks
 ```
 
@@ -119,22 +120,19 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 - **xUnit** + **FluentAssertions** + **Moq**
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - Use `[Trait("Category", "Integration")]` for integration tests
-- Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+- Integration tests use `WebApplicationFactory` (see `ApiFactory`) and one shared Testcontainers Postgres per test process (`SharedPostgres`)
 
 ### End-to-end tests
 
-`tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack from `AppHostFixture`, so it is
-excluded from test collection by default (`IsTestProject` is `$(RunE2E)`, which defaults to
-`false`) — a mistyped `--filter` cannot drag the stack into a unit run. It still compiles as
-part of `dotnet build nocturne.sln`. Opt in explicitly:
-
-```bash
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
-```
-
-No workflow runs it: Aspire.Hosting.Testing's DCP orchestration never completes on
-GitHub-hosted runners (see the trailing note in `.github/workflows/tests.yml`). A workflow
-that revives it needs `-p:RunE2E=true` on the `dotnet test` invocation.
+`e2e/` is a standalone pnpm package (not in the `src/Web` workspace, whose lockfile
+`Dockerfile.web` installs with only `src/Web/packages` in the build context). It runs the API
+image from the SDK container build and the web image from `Dockerfile.web` in
+`e2e/docker-compose.yml`, with Postgres on tmpfs and a fake-vendor server (`e2e/mocks`), then
+vitest specs against the API (`e2e/src/api`) and Playwright specs against the web app
+(`e2e/src/web`). Each test seeds its own tenant through the dev-only seed endpoints, which the
+API image exposes only because the compose file sets `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true`;
+it defaults off. No test anywhere starts Aspire. Details, including adding a fake vendor, are in
+`tests/README.md`.
 
 ## Web Frontend
 

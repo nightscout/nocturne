@@ -15,8 +15,8 @@ aspire start
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance/E2E)
-dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+# Run unit tests (excludes integration/performance)
+dotnet test --filter "Category!=Integration&Category!=Performance"
 
 # Run a single test class
 dotnet test --filter "FullyQualifiedName~EntryServiceTests"
@@ -24,8 +24,10 @@ dotnet test --filter "FullyQualifiedName~EntryServiceTests"
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
+# End-to-end suite: production images in docker compose, vitest API + Playwright web specs
+cd e2e && pnpm install && pnpm e2e     # build changed images, up, run all, down
+cd e2e && pnpm e2e:up                  # leave the stack up; prints URL, token, connection string
+cd e2e && pnpm e2e:upgrade             # latest release -> this checkout on one database
 
 # Frontend type checking
 cd src/Web/packages/app && pnpm run check
@@ -321,9 +323,10 @@ Design notes:
 - **xUnit** + **FluentAssertions** + **Moq**
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - `[Trait("Category", "Integration")]` for integration tests
-- Integration tests use `WebApplicationFactory<Program>` and Testcontainers
-- `tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack and is opt-in via
-  `-p:RunE2E=true`; see the "End-to-end tests" section of `AGENTS.md`
+- Integration tests use `WebApplicationFactory` (see `ApiFactory`) and one shared Testcontainers
+  Postgres per test process (`tests/Shared/.../SharedPostgres.cs`, migrated once, cloned per fixture)
+- `e2e/` runs the production images in docker compose with vitest and Playwright specs; see
+  `tests/README.md`. No test starts Aspire.
 
 ## Web Frontend
 

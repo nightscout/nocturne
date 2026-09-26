@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// isolation.
 /// </summary>
 [Trait("Category", "Integration")]
-public class BasalInjectionIntegrationTests : AspireIntegrationTestBase
+public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
 {
     private const string EntityType = "BasalInjection";
 
@@ -30,7 +30,7 @@ public class BasalInjectionIntegrationTests : AspireIntegrationTestBase
     private string _connectionString = null!;
 
     public BasalInjectionIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -204,7 +204,7 @@ public class BasalInjectionIntegrationTests : AspireIntegrationTestBase
         await conn.OpenAsync();
 
         var tenantBSlug = $"tenant-b-{Guid.NewGuid():N}".Substring(0, 24);
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, tenantBSlug, "Basal Tenant B");
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Basal Tenant B");
         var (_, accessTokenB) = await AuthTestHelpers
             .SeedAuthenticatedSubjectAsync(conn, tenantBId, $"BasalInj B {Guid.NewGuid():N}");
 

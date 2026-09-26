@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Constants;
+using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -14,10 +16,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests legacy API compatibility with api-secret, access tokens, and JWT tokens
 /// </summary>
 [Parity]
-public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
+public class AuthenticationHandlerIntegrationTests : ApiIntegrationTestBase
 {
     public AuthenticationHandlerIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -44,7 +46,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task ApiSecret_InvalidSecret_ReturnsUnauthorized()
     {
         // Arrange
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
         client.DefaultRequestHeaders.Add("api-secret", "wrong-secret");
 
         // Act
@@ -59,9 +61,16 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     [Parity]
     public async Task ApiSecret_HashedSecretFormat_AuthenticatesSuccessfully()
     {
-        // Arrange - Nightscout supports SHA1-hashed secrets
-        var client = ApiClient;
+        // Arrange - Nightscout clients send the SHA-1 of the secret, which is what a secret
+        // carried over from Nightscout is stored as.
         var hashedSecret = ComputeSha1Hash(TestApiSecret);
+        await using (var conn = new NpgsqlConnection(await GetPostgresConnectionStringAsync()))
+        {
+            await conn.OpenAsync();
+            await AuthTestHelpers.SeedApiSecretGrantAsync(conn, Fixture.TenantId, Fixture.OwnerSubjectId, hashedSecret);
+        }
+
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
         client.DefaultRequestHeaders.Add("api-secret", hashedSecret);
 
         // Act
@@ -77,7 +86,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task ApiSecret_QueryParameter_AuthenticatesSuccessfully()
     {
         // Arrange - Legacy Nightscout supports secret via query parameter
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
 
         // Act
         var response = await client.GetAsync($"/api/v1/entries/current?secret={TestApiSecret}");
@@ -118,7 +127,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
             if (subject?.AccessToken != null)
             {
                 // Use the access token for authentication
-                var tokenClient = ApiClient;
+                using var tokenClient = CreateHttpClient(ServiceNames.NocturneApi);
                 tokenClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                     "Bearer",
                     subject.AccessToken
@@ -139,7 +148,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task AccessToken_InvalidToken_ReturnsUnauthorized()
     {
         // Arrange
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             "invalid-a1b2c3d4e5f6g7h8"
@@ -174,7 +183,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
 
             if (subject?.AccessToken != null)
             {
-                var tokenClient = ApiClient;
+                using var tokenClient = CreateHttpClient(ServiceNames.NocturneApi);
                 var response = await tokenClient.GetAsync(
                     $"/api/v1/entries/current?token={subject.AccessToken}"
                 );
@@ -220,7 +229,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
 
         // Exchange access token for JWT anonymously — the access token in the URL is
         // the caller's only credential (the NSClientV3/AAPS bootstrap).
-        var exchangeClient = ApiClient;
+        using var exchangeClient = CreateHttpClient(ServiceNames.NocturneApi);
         var exchangeResponse = await exchangeClient.GetAsync(
             $"/api/v2/authorization/request/{subject!.AccessToken}"
         );
@@ -234,7 +243,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
         Assert.NotNull(tokenResponse?.Token);
 
         // Use JWT for authentication
-        var jwtClient = ApiClient;
+        using var jwtClient = CreateHttpClient(ServiceNames.NocturneApi);
         jwtClient.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", tokenResponse!.Token);
 
@@ -249,7 +258,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task Jwt_InvalidToken_ReturnsUnauthorized()
     {
         // Arrange
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
             "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkludmFsaWQiLCJpYXQiOjE1MTYyMzkwMjJ9.InvalidSignature"
@@ -268,7 +277,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task Jwt_ExpiredToken_ReturnsUnauthorized()
     {
         // Arrange - Craft an expired JWT (would require proper signing in production)
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
         // Using a clearly expired token format
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
             "Bearer",
@@ -315,7 +324,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task HandlerChain_NoAuthentication_ReturnsUnauthorized()
     {
         // Arrange - No authentication credentials provided
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
 
         // Act
         var response = await client.GetAsync("/api/v1/entries/current");
@@ -349,13 +358,14 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
     public async Task VerifyAuth_NoAuth_ReturnsUnauthorized()
     {
         // Arrange
-        var client = ApiClient;
+        using var client = CreateHttpClient(ServiceNames.NocturneApi);
 
         // Act
         var response = await client.GetAsync("/api/v1/verifyauth");
 
-        // Assert
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        // Assert - as Nightscout does, verifyauth answers 200 and says so in its message
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("UNAUTHORIZED", await response.Content.ReadAsStringAsync());
         Output.WriteLine($"VerifyAuth without auth returned: {response.StatusCode}");
     }
 
@@ -407,7 +417,7 @@ public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
             if (subject?.AccessToken != null)
             {
                 // Use limited subject's token
-                var limitedClient = ApiClient;
+                using var limitedClient = CreateHttpClient(ServiceNames.NocturneApi);
                 limitedClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                     "Bearer",
                     subject.AccessToken

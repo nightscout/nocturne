@@ -155,7 +155,7 @@ builder.Services.AddControllers(options =>
 })
 .ConfigureApplicationPartManager(manager =>
     AuthorizationConfiguration.ConfigureControllerDiscovery(
-        manager, builder.Environment.IsDevelopment()));
+        manager, DevOnlyEndpoints.AreEnabled(builder.Environment, builder.Configuration)));
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddProblemDetails();
@@ -584,6 +584,15 @@ if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
         var bootstrap = scope.ServiceProvider.GetRequiredService<PlatformAdminBootstrapService>();
         await bootstrap.BootstrapAsync(CancellationToken.None);
     }
+}
+
+if (!app.Environment.IsDevelopment() && DevOnlyEndpoints.IsOptedIn(app.Configuration))
+{
+    app.Logger.LogWarning(
+        "{Variable} is set: the unauthenticated dev-only endpoints (api/v4/dev-only) are enabled in "
+        + "the {Environment} environment. This is for the end-to-end test stack only; never set it "
+        + "on a real deployment.",
+        DevOnlyEndpoints.EnableVariable, app.Environment.EnvironmentName);
 }
 
 // Development only: re-seed the committed dev identity fixture (real WebAuthn

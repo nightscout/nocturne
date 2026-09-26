@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -19,13 +20,13 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// management API/web phases, plus the AuthenticationMiddleware/TenantResolution unit tests.
 /// </summary>
 [Trait("Category", "Integration")]
-public class PublicAccessIntegrationTests : AspireIntegrationTestBase
+public class PublicAccessIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public PublicAccessIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -145,8 +146,7 @@ public class PublicAccessIntegrationTests : AspireIntegrationTestBase
         await conn.OpenAsync();
 
         var publicMemberId = await AuthTestHelpers.GetPublicMemberIdAsync(conn, _tenantId);
-        var roles = await AuthTestHelpers.GetRoleIdsByNameAsync(conn, "readable");
-        var readableRoleId = roles["readable"];
+        var readableRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, RoleSeeds.Viewer);
 
         return (publicMemberId, readableRoleId);
     }

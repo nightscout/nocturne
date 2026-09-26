@@ -1,11 +1,13 @@
 name: Build and Publish with Aspire
 
+# Every merge to main publishes :develop (and an immutable :main-<sha7>); a v* tag publishes the
+# version and, unless it is a pre-release, moves :latest to it (.github/scripts/image-tags.sh).
+# Pull requests publish nothing: the images job in tests.yml builds the same images on its runner.
+# A manual dispatch from main or a v* tag re-publishes that ref.
 on:
   push:
-    branches: [master, main]
+    branches: [main]
     tags: ["v*"]
-  pull_request:
-    branches: [master, main]
   workflow_dispatch:
 
 env:
@@ -15,7 +17,7 @@ env:
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
 
-# A newer push supersedes a branch's image, but a tag's is a release and always finishes.
+# A newer merge supersedes main's :develop build; a release always finishes.
 concurrency:
   group: docker-publish-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
@@ -24,6 +26,7 @@ concurrency:
 # the dotnet images need only the native library. `report` checks and announces what both pushed.
 jobs:
   dotnet-images:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     # The native library is built on the runner and links against its glibc, which must be
     # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:10.0, Ubuntu 24.04).
     runs-on: ubuntu-24.04
@@ -53,7 +56,6 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -62,9 +64,6 @@ jobs:
 
       - name: Determine image tags
         id: tags
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: .github/scripts/image-tags.sh
 
       # The scoped-DND rule classifier (and the optional rust/shadow alert engines)
@@ -104,7 +103,6 @@ jobs:
       # The API's post-build targets would run the client codegen, which needs pnpm; only the
       # web image uses that client, so it is switched off here.
       - name: Build and push Nocturne.API container
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         working-directory: src/API/Nocturne.API
         run: |
           dotnet publish \
@@ -119,7 +117,6 @@ jobs:
             "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
       - name: Build and push Nocturne.Services.Demo container
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         working-directory: src/Services/Nocturne.Services.Demo
         run: |
           dotnet publish \
@@ -131,22 +128,23 @@ jobs:
             "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
 
       - name: Set up Docker Buildx
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/setup-buildx-action@v3
 
-      - name: Tag dotnet containers as latest
-        if: startsWith(github.ref, 'refs/tags/v')
+      # latest on a release, main-<sha7> on main; see .github/scripts/image-tags.sh.
+      - name: Add the extra tags to the dotnet containers
+        if: steps.tags.outputs.extra_tags != ''
         run: |
           for image in nocturne-api nocturne-demo; do
-            docker buildx imagetools create \
-              --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:latest \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}
+            for tag in ${{ steps.tags.outputs.extra_tags }}; do
+              docker buildx imagetools create \
+                --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${tag} \
+                ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}
+            done
           done
 
       # The API csproj silently skips packing the cdylib when it is missing, and
       # Alerts:Engine=rust refuses to start without it, so load it in every platform's image.
       - name: Verify the API image loads the nocturne_alerts native library
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         run: |
           set -euo pipefail
           ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}"
@@ -167,6 +165,7 @@ jobs:
           done
 
   web-image:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -212,7 +211,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -221,9 +219,6 @@ jobs:
 
       - name: Determine image tags
         id: tags
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: .github/scripts/image-tags.sh
 
       # Generate API client, Zod schemas, and remote functions for the web build.
@@ -258,37 +253,30 @@ jobs:
           fi
 
       - name: Build and push Nocturne.Web container
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         run: |
           IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.web_tags }}"
-          TAG_ARGS=""
+          TAG_ARGS=()
           for t in "${TAGS[@]}"; do
-            TAG_ARGS+=" --tag ${t}"
+            TAG_ARGS+=(--tag "${t}")
           done
-          # Every build reads main's layer cache; only main writes it, so a branch cannot
-          # displace the layers the next main build reuses.
+          # Every publish reads and refreshes the shared layer cache.
           CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
-          CACHE_ARGS="--cache-from type=registry,ref=${CACHE_REF}"
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            CACHE_ARGS+=" --cache-to type=registry,ref=${CACHE_REF},mode=max"
-          fi
+          CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            ${TAG_ARGS} \
-            ${CACHE_ARGS} \
+            "${TAG_ARGS[@]}" \
+            "${CACHE_ARGS[@]}" \
             --file Dockerfile.web \
             --push \
             .
 
-  # Runs unless the build was cancelled, so a PR's comment still says which image failed to build.
   report:
     needs: [dotnet-images, web-image]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: read
-      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -297,7 +285,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -306,15 +293,10 @@ jobs:
 
       - name: Determine image tags
         id: tags
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: .github/scripts/image-tags.sh
 
       - name: Verify published image manifests
-        if: >-
-          needs.dotnet-images.result == 'success' && needs.web-image.result == 'success'
-          && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        if: needs.dotnet-images.result == 'success' && needs.web-image.result == 'success'
         run: |
           set -euo pipefail
           images=(
@@ -335,30 +317,6 @@ jobs:
             done
           done
 
-      - name: Collect image manifest status for PR comment
-        id: image_status
-        if: always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
-        run: |
-          set +e
-          images=(
-            "nocturne-api"
-            "nocturne-demo"
-            "nocturne-web"
-          )
-
-          {
-            echo "results<<EOF"
-            for image in "${images[@]}"; do
-              ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}"
-              if docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
-                echo "${image}|published|${ref}"
-              else
-                echo "${image}|missing|${ref}"
-              fi
-            done
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Summarize published image tags
         if: always()
         run: |
@@ -368,111 +326,10 @@ jobs:
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.tags.outputs.version }}\`"
             echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.tags.outputs.version }}\`"
-            echo ""
-            if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.fork }}" == "true" ]]; then
-              echo "> Publishing is skipped for fork PRs."
-            fi
+            for tag in ${{ steps.tags.outputs.extra_tags }}; do
+              echo "- also tagged \`${tag}\`"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upsert PR comment with published images
-        if: always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
-        uses: actions/github-script@v8
-        env:
-          VERSION_TAG: ${{ steps.tags.outputs.version }}
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE_REPOSITORY: ${{ env.IMAGE_REPOSITORY }}
-          IMAGE_RESULTS: ${{ steps.image_status.outputs.results }}
-        with:
-          script: |
-            const marker = "<!-- nocturne-pr-images -->";
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const prNumber = context.payload.pull_request.number;
-            const tag = process.env.VERSION_TAG;
-            const registry = process.env.REGISTRY;
-            const imageRepo = process.env.IMAGE_REPOSITORY;
-            const imageResultsRaw = process.env.IMAGE_RESULTS || "";
-
-            const parsedResults = imageResultsRaw
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean)
-              .map((line) => {
-                const [image, status, ref] = line.split("|");
-                return { image, status, ref };
-              });
-
-            const images = parsedResults.length > 0
-              ? parsedResults
-              : [
-                  {
-                    image: "nocturne-api",
-                    status: "missing",
-                    ref: `${registry}/${imageRepo}/nocturne-api:${tag}`,
-                  },
-                  {
-                    image: "nocturne-demo",
-                    status: "missing",
-                    ref: `${registry}/${imageRepo}/nocturne-demo:${tag}`,
-                  },
-                  {
-                    image: "nocturne-web",
-                    status: "missing",
-                    ref: `${registry}/${imageRepo}/nocturne-web:${tag}`,
-                  },
-                ];
-
-            const lines = [];
-            lines.push(marker);
-            lines.push("## Preview Container Images");
-            lines.push("");
-            lines.push(`Published for commit \`${context.sha.substring(0, 7)}\` with tag \`${tag}\`.`);
-            lines.push("");
-            lines.push("| Image | Status | Package | URI |");
-            lines.push("|---|---|---|---|");
-
-            for (const { image, status, ref } of images) {
-              const packageName = encodeURIComponent(`${repo}/${image}`);
-              const packageUrl = `https://github.com/${owner}/${repo}/pkgs/container/${packageName}`;
-              const statusText = status === "published"
-                ? "✅ Published"
-                : "❌ Image not generated by build. Check CI logs";
-              lines.push(`| \`${image}\` | ${statusText} | [package](${packageUrl}) | \`${ref}\` |`);
-            }
-
-            lines.push("");
-            lines.push("_This comment is updated on each push to this PR._");
-            const body = lines.join("\n");
-
-            const comments = await github.paginate(
-              github.rest.issues.listComments,
-              {
-                owner,
-                repo,
-                issue_number: prNumber,
-                per_page: 100,
-              }
-            );
-
-            const existing = comments.find(
-              (c) => c.user?.type === "Bot" && c.body && c.body.includes(marker)
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: prNumber,
-                body,
-              });
-            }
 
   # Disabled until the workflow token can publish to the @nightscout GitHub Packages scope.
   # publish-glucose-chart:

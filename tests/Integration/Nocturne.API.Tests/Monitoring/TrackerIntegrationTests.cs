@@ -14,13 +14,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/trackers</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public class TrackerIntegrationTests : AspireIntegrationTestBase
+public class TrackerIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public TrackerIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -179,7 +179,7 @@ public class TrackerIntegrationTests : AspireIntegrationTestBase
 
         var completePayload = new
         {
-            reason = "Manual",
+            reason = "Completed",
             completionNotes = "Pen used up"
         };
 
@@ -223,7 +223,8 @@ public class TrackerIntegrationTests : AspireIntegrationTestBase
         var to = DateTimeOffset.UtcNow.AddDays(60).ToString("o");
 
         // Act
-        var response = await client.GetAsync($"/api/v4/trackers/instances/upcoming?from={from}&to={to}");
+        var response = await client.GetAsync(
+            $"/api/v4/trackers/instances/upcoming?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

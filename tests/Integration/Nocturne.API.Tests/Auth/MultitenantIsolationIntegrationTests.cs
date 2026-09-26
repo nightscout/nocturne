@@ -20,7 +20,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
 [Trait("Category", "Integration")]
-public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
+public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantAId;
     private Guid _tenantBId;
@@ -33,7 +33,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     private string _baseDomain = null!;
 
     public MultitenantIsolationIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -52,7 +52,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         (_subjectAId, _accessTokenA) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, "Tenant A User");
 
         // Create tenant B
-        _tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, "tenant-b", "Tenant B");
+        _tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "tenant-b", "Tenant B");
         (_subjectBId, _accessTokenB) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantBId, "Tenant B User");
 
         // Get the tenant A slug from DB
@@ -243,7 +243,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Cross-Tenant Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -288,7 +288,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/auth/direct-grants", new
         {
             label = "cross-tenant-test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -297,7 +297,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var nocToken = createBody.GetProperty("token").GetString()!;
 
         // Act - use the noc_ token on tenant B's subdomain
-        using var clientB = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var clientB = Fixture.CreateHttpClient("nocturne-api", "http");
         clientB.DefaultRequestHeaders.Host = $"{_slugB}.{_baseDomain}";
         clientB.DefaultRequestHeaders.Add("Authorization", $"Bearer {nocToken}");
 
@@ -329,7 +329,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
 
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
         var authorizeUrl = $"/api/oauth/authorize?response_type=code&client_id={clientId}" +
-                           $"&redirect_uri=http://localhost:9999/callback&scope=entries.read" +
+                           $"&redirect_uri=http://localhost:9999/callback&scope=glucose.read" +
                            $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
         var response = await noRedirectClient.GetAsync(authorizeUrl);
@@ -344,7 +344,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     public async Task UnknownSubdomain_Returns404()
     {
         // Arrange
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"nonexistent.{_baseDomain}";
 
         // Act
@@ -394,7 +394,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     public async Task ApexDomain_MultipleTenants_Returns404()
     {
         // Arrange - both tenants are active (set up in InitializeAsync)
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = _baseDomain;
 
         // Act
@@ -423,7 +423,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         try
         {
             // Act - request without subdomain (apex domain)
-            using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+            using var client = Fixture.CreateHttpClient("nocturne-api", "http");
             client.DefaultRequestHeaders.Host = _baseDomain;
 
             var response = await client.GetAsync("/api/v1/status");

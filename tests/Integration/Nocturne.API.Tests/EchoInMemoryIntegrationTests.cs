@@ -14,10 +14,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle for debugging and preview functionality
 /// </summary>
 [Trait("Category", "Integration")]
-public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
+public class EchoInMemoryIntegrationTests : ApiIntegrationTestBase
 {
     public EchoInMemoryIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         Xunit.Abstractions.ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -34,8 +34,8 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
     )
     {
         // Arrange & Act
-        var response = await ApiClient
-            .GetAsync($"/api/v1/echo/{storageType}", CancellationToken.None);
+        var response = await AuthenticatedClient
+            .GetAsync($"/api/v4/debug/echo/{storageType}", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -60,8 +60,8 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
     public async Task EchoQuery_WithInvalidStorageType_ShouldReturnBadRequest()
     {
         // Arrange & Act
-        var response = await ApiClient
-            .GetAsync("/api/v1/echo/invalidtype", CancellationToken.None);
+        var response = await AuthenticatedClient
+            .GetAsync("/api/v4/debug/echo/invalidtype", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -79,8 +79,8 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         var queryString = "?count=50&find={\"type\":\"sgv\"}&dateString=2024";
 
         // Act
-        var response = await ApiClient
-            .GetAsync($"/api/v1/echo/entries{queryString}", CancellationToken.None);
+        var response = await AuthenticatedClient
+            .GetAsync($"/api/v4/debug/echo/entries{queryString}", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -100,15 +100,16 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         dateStringProperty.GetString().Should().Be("2024");
 
         result.TryGetProperty("queryString", out var queryStringProperty).Should().BeTrue();
-        queryStringProperty.GetString().Should().Be(queryString);
+        // The query as it went over the wire, which HttpClient percent-encodes.
+        queryStringProperty.GetString().Should().Be(response.RequestMessage!.RequestUri!.Query);
     }
 
     [Fact]
     public async Task EchoQuery_WithModelAndSpec_ShouldIncludeInParameters()
     {
         // Arrange & Act
-        var response = await ApiClient
-            .GetAsync("/api/v1/echo/entries/sgv/current", CancellationToken.None);
+        var response = await AuthenticatedClient
+            .GetAsync("/api/v4/debug/echo/entries/sgv/current", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -135,8 +136,8 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         var beforeRequest = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Act
-        var response = await ApiClient
-            .GetAsync("/api/v1/echo/entries", CancellationToken.None);
+        var response = await AuthenticatedClient
+            .GetAsync("/api/v4/debug/echo/entries", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -164,9 +165,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 entry,
                 cancellationToken: CancellationToken.None
             );
@@ -224,9 +225,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 entries,
                 cancellationToken: CancellationToken.None
             );
@@ -259,9 +260,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 invalidEntry,
                 cancellationToken: CancellationToken.None
             );
@@ -303,9 +304,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 entryWithWarnings,
                 cancellationToken: CancellationToken.None
             );
@@ -334,16 +335,17 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         var content = new StringContent("null", System.Text.Encoding.UTF8, "application/json");
 
         // Act
-        var response = await ApiClient
-            .PostAsync("/api/v1/entries/preview", content, CancellationToken.None);
+        var response = await AuthenticatedClient
+            .PostAsync("/api/v4/debug/entries/preview", content, CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var result = await response.Content.ReadFromJsonAsync<JsonElement>(
             cancellationToken: CancellationToken.None
         );
-        result.TryGetProperty("error", out var errorProperty).Should().BeTrue();
-        errorProperty.GetString().Should().Contain("Entry data is required");
+        // Model binding refuses the null body before the action runs, as validation problem details.
+        result.TryGetProperty("errors", out var errorsProperty).Should().BeTrue();
+        errorsProperty.TryGetProperty("entries", out _).Should().BeTrue();
     }
 
     [Fact]
@@ -354,8 +356,8 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         var content = new StringContent(invalidJson, System.Text.Encoding.UTF8, "application/json");
 
         // Act
-        var response = await ApiClient
-            .PostAsync("/api/v1/entries/preview", content, CancellationToken.None);
+        var response = await AuthenticatedClient
+            .PostAsync("/api/v4/debug/entries/preview", content, CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -375,9 +377,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         var beforeRequest = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 entry,
                 cancellationToken: CancellationToken.None
             );
@@ -427,9 +429,9 @@ public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
-                "/api/v1/entries/preview",
+                "/api/v4/debug/entries/preview",
                 mixedEntries,
                 cancellationToken: CancellationToken.None
             );

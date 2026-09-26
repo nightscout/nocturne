@@ -1,0 +1,15 @@
+name: Restore the build job's test assemblies
+description: >-
+  Unpacks the test assemblies the build job compiled into the workspace, so `dotnet test
+  --no-build` and `dotnet run --no-build` run them as built. They carry their dependencies, so no
+  NuGet cache is needed.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v5
+      with:
+        name: dotnet-build
+        path: ${{ runner.temp }}/dotnet-build
+    - shell: bash
+      run: zstd -d --long=30 -q -c "$RUNNER_TEMP/dotnet-build/dotnet-build.tar.zst" | tar -xf -

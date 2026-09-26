@@ -10,13 +10,13 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for Entry CRUD operations using Aspire-orchestrated infrastructure.
+/// Integration tests for Entry CRUD operations against the API running in-process on real PostgreSQL.
 /// Tests the complete request/response cycle for v1 entries endpoints against
 /// the full distributed application stack.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class EntriesIntegrationTests : AspireIntegrationTestBase
+public class EntriesIntegrationTests : ApiIntegrationTestBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -25,7 +25,7 @@ public class EntriesIntegrationTests : AspireIntegrationTestBase
     };
 
     public EntriesIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -175,7 +175,7 @@ public class EntriesIntegrationTests : AspireIntegrationTestBase
     public async Task GetEntries_EmptyDatabase_ShouldReturnEmptyArray()
     {
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/entries?count=10");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/entries?count=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -225,7 +225,7 @@ public class EntriesIntegrationTests : AspireIntegrationTestBase
     public async Task GetCurrentEntry_EmptyDatabase_ShouldReturnSuccessfully()
     {
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/entries/current");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/entries/current");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

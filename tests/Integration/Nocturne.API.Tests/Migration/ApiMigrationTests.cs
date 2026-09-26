@@ -5,15 +5,15 @@ using FluentAssertions;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Nocturne.Core.Constants;
-using Npgsql;
+
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Migration;
 
-[Collection("AspireIntegration")]
+[Collection("ApiIntegration")]
 [Trait("Category", "Integration")]
-public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
+public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>
 {
     private readonly MigrationTestFixture _migration;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -22,29 +22,11 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
     };
 
     public ApiMigrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         MigrationTestFixture migration,
         ITestOutputHelper output) : base(fixture, output)
     {
         _migration = migration;
-    }
-
-    public override async Task InitializeAsync()
-    {
-        await base.InitializeAsync();
-        // Clean up any data from previous tests
-        await CleanupMigratedDataAsync();
-    }
-
-    public override async Task DisposeAsync()
-    {
-        await CleanupMigratedDataAsync();
-        await base.DisposeAsync();
-    }
-
-    async Task IAsyncLifetime.DisposeAsync()
-    {
-        await DisposeAsync();
     }
 
     [Fact]
@@ -58,7 +40,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
         };
 
         // Act
-        var response = await ApiClient.PostAsJsonAsync("/api/v4/migration/test", request);
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/test", request);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -87,7 +69,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
 
         // Verify data via V3 API with dataSource filtering
         var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
-        var entriesResponse = await ApiClient.GetAsync(
+        var entriesResponse = await AuthenticatedClient.GetAsync(
             $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit=100");
 
         entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -135,7 +117,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
         };
 
         // Act
-        var startResponse = await ApiClient.PostAsJsonAsync("/api/v4/migration/start", request);
+        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
 
@@ -185,7 +167,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
             Collections = collections ?? []
         };
 
-        var startResponse = await ApiClient.PostAsJsonAsync("/api/v4/migration/start", request);
+        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         jobInfo.Should().NotBeNull();
@@ -198,7 +180,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
         MigrationJobStatus? status = null;
         for (var i = 0; i < 120; i++)
         {
-            var statusResponse = await ApiClient.GetAsync(
+            var statusResponse = await AuthenticatedClient.GetAsync(
                 $"/api/v4/migration/{jobId}/status");
             status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
 
@@ -215,43 +197,6 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
         }
 
         return status;
-    }
-
-    private async Task CleanupMigratedDataAsync()
-    {
-        try
-        {
-            var connStr = await GetPostgresConnectionStringAsync();
-            if (string.IsNullOrEmpty(connStr))
-            {
-                Log("Cleanup skipped: connection string is empty");
-                return;
-            }
-
-            await using var conn = new NpgsqlConnection(connStr);
-            await conn.OpenAsync();
-
-            // Delete entries
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $"DELETE FROM entries WHERE data_source = '{DataSources.MongoDbImport}'";
-                var entriesDeleted = await cmd.ExecuteNonQueryAsync();
-                Log($"Cleanup deleted {entriesDeleted} entries");
-            }
-
-            // Delete treatments
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $"DELETE FROM treatments WHERE data_source = '{DataSources.MongoDbImport}'";
-                var treatmentsDeleted = await cmd.ExecuteNonQueryAsync();
-                Log($"Cleanup deleted {treatmentsDeleted} treatments");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"Cleanup failed: {ex.Message}");
-            throw; // Re-throw to see the full error
-        }
     }
 
     #endregion

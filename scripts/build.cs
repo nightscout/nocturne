@@ -5,7 +5,10 @@
 // Usage:
 //   dotnet run scripts/build.cs                     # build with tag "dev", no push
 //   dotnet run scripts/build.cs v1.2.3              # build with tag "v1.2.3", no push
-//   dotnet run scripts/build.cs latest --push       # build and push with tag "latest"
+//   dotnet run scripts/build.cs develop --push      # build and push with tag "develop"
+//
+// ":latest" is the latest release and ":develop" follows main; CI publishes both
+// (.github/workflows/docker-publish.yml), so a local push should use neither without reason.
 //
 // Environment variables (optional):
 //   REGISTRY          Container registry       (default: ghcr.io)

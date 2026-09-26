@@ -6,13 +6,10 @@ using Xunit;
 namespace Nocturne.API.Tests.TestSuite;
 
 /// <summary>
-/// CI runs its suites under <c>Category!=Integration</c> and <c>Category!=E2E</c>, and the
-/// whole-solution commands add <c>Category!=Performance</c> to keep the BenchmarkDotNet runners in
-/// <c>tests/Performance</c> out of an ordinary run. Any of those traits removes a test from a run,
-/// so a test that wears one without needing it runs nowhere on CI and can rot to red locally while
-/// CI stays green. (E2E needs no sweep here: <c>Nocturne.E2E.Tests</c> is the only project that
-/// carries the trait and it is excluded from collection outright — see the "End-to-end tests"
-/// section of AGENTS.md.)
+/// CI runs its suites under <c>Category!=Integration</c>, and the whole-solution commands add
+/// <c>Category!=Performance</c> to keep the BenchmarkDotNet runners in <c>tests/Performance</c> out
+/// of an ordinary run. Either trait removes a test from a run, so a test that wears one without
+/// needing it runs nowhere on CI and can rot to red locally while CI stays green.
 /// </summary>
 /// <remarks>
 /// The Integration trait is earned by binding to an xUnit fixture — <c>[Collection]</c>,

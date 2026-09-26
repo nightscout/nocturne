@@ -25,28 +25,25 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>app.current_tenant_id</c> session variable exactly as in production.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertRepositorySweepIntegrationTests : AspireIntegrationTestBase
+public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 {
     public AlertRepositorySweepIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
     [Fact]
     public async Task SweepAndPerTenantReads_AreCorrectlyTenantScoped_UnderRls()
     {
-        var connStr = await GetPostgresConnectionStringAsync()
-                      ?? throw new InvalidOperationException("No PostgreSQL connection string.");
-
         // Two fresh tenants (unique slugs so re-runs against a persisted container don't collide).
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var tenantA = await AuthTestHelpers.SeedTenantAsync(conn, $"sweep-a-{suffix}", "Sweep A");
-        var tenantB = await AuthTestHelpers.SeedTenantAsync(conn, $"sweep-b-{suffix}", "Sweep B");
+        var tenantA = await AuthTestHelpers.SeedTenantAsync(Fixture, $"sweep-a-{suffix}", "Sweep A");
+        var tenantB = await AuthTestHelpers.SeedTenantAsync(Fixture, $"sweep-b-{suffix}", "Sweep B");
 
         // A context factory wired exactly like the app: Npgsql + the tenant RLS interceptor.
-        await using var dataSource = new NpgsqlDataSourceBuilder(connStr).Build();
+        // As the runtime role: the bootstrap superuser bypasses the policies under test, and the
+        // interceptor refuses it.
+        await using var dataSource = new NpgsqlDataSourceBuilder(Fixture.AppConnectionString).Build();
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql(dataSource)
             .AddInterceptors(new TenantConnectionInterceptor())

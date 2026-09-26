@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -188,7 +189,8 @@ public abstract class ParityTestBase : IAsyncLifetime
     protected async Task AssertGetParityAsync(
         string path,
         ComparisonOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
     {
         Output.WriteLine($"Testing GET {path}");
 
@@ -201,7 +203,7 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nsResponse = await nsTask;
         var nocResponse = await nocTask;
 
-        await AssertResponseParityAsync(nsResponse, nocResponse, $"GET {path}", options, cancellationToken);
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"GET {path}", options, test, cancellationToken);
     }
 
     /// <summary>
@@ -212,7 +214,8 @@ public abstract class ParityTestBase : IAsyncLifetime
         string path,
         T body,
         ComparisonOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
     {
         Output.WriteLine($"Testing POST {path}");
 
@@ -225,7 +228,7 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nsResponse = await nsTask;
         var nocResponse = await nocTask;
 
-        await AssertResponseParityAsync(nsResponse, nocResponse, $"POST {path}", options, cancellationToken);
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"POST {path}", options, test, cancellationToken);
     }
 
     /// <summary>
@@ -236,7 +239,8 @@ public abstract class ParityTestBase : IAsyncLifetime
         string path,
         T body,
         ComparisonOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
     {
         Output.WriteLine($"Testing PUT {path}");
 
@@ -249,7 +253,7 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nsResponse = await nsTask;
         var nocResponse = await nocTask;
 
-        await AssertResponseParityAsync(nsResponse, nocResponse, $"PUT {path}", options, cancellationToken);
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"PUT {path}", options, test, cancellationToken);
     }
 
     /// <summary>
@@ -259,7 +263,8 @@ public abstract class ParityTestBase : IAsyncLifetime
     protected async Task AssertDeleteParityAsync(
         string path,
         ComparisonOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
     {
         Output.WriteLine($"Testing DELETE {path}");
 
@@ -272,7 +277,7 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nsResponse = await nsTask;
         var nocResponse = await nocTask;
 
-        await AssertResponseParityAsync(nsResponse, nocResponse, $"DELETE {path}", options, cancellationToken);
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"DELETE {path}", options, test, cancellationToken);
     }
 
     /// <summary>
@@ -285,7 +290,8 @@ public abstract class ParityTestBase : IAsyncLifetime
         HttpContent? content = null,
         Dictionary<string, string>? headers = null,
         ComparisonOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        [CallerMemberName] string test = "")
     {
         Output.WriteLine($"Testing {method} {path}");
 
@@ -301,7 +307,7 @@ public abstract class ParityTestBase : IAsyncLifetime
         var nsResponse = await nsTask;
         var nocResponse = await nocTask;
 
-        await AssertResponseParityAsync(nsResponse, nocResponse, $"{method} {path}", options, cancellationToken);
+        await AssertResponseParityAsync(nsResponse, nocResponse, $"{method} {path}", options, test, cancellationToken);
     }
 
     private static HttpRequestMessage CreateRequest(
@@ -328,8 +334,18 @@ public abstract class ParityTestBase : IAsyncLifetime
         HttpResponseMessage nocResponse,
         string context,
         ComparisonOptions? options,
+        string test,
         CancellationToken cancellationToken)
     {
+        var divergence = ParityDivergences.Find(
+            $"{GetType().Namespace![(GetType().Namespace!.LastIndexOf('.') + 1)..]}.{GetType().Name}.{test}",
+            context.Split('?')[0]);
+        if (divergence is not null)
+        {
+            await AssertDivergenceAsync(nocResponse, context, divergence, cancellationToken);
+            return;
+        }
+
         var comparer = options != null ? new ResponseComparer(options) : Comparer;
         var result = await comparer.CompareAsync(nsResponse, nocResponse, context, cancellationToken);
 
@@ -348,6 +364,25 @@ public abstract class ParityTestBase : IAsyncLifetime
         }
 
         result.IsMatch.Should().BeTrue(result.ToString());
+    }
+
+    /// <summary>
+    /// Asserts what Nocturne answers on a request <see cref="ParityDivergences"/> exempts from the
+    /// comparison with Nightscout.
+    /// </summary>
+    private async Task AssertDivergenceAsync(
+        HttpResponseMessage nocResponse,
+        string context,
+        ParityDivergences.Divergence divergence,
+        CancellationToken cancellationToken)
+    {
+        Output.WriteLine($"{context}: not compared with Nightscout. {divergence.Reason}");
+
+        var body = await nocResponse.Content.ReadAsStringAsync(cancellationToken);
+        ((int)nocResponse.StatusCode).Should().Be(divergence.Status, $"{context} answered {body}");
+        nocResponse.Content.Headers.ContentType?.MediaType.Should().EndWith("json", context);
+        using var document = JsonDocument.Parse(body);
+        document.RootElement.ValueKind.Should().Be(divergence.Body, $"{context} answered {body}");
     }
 
     #endregion

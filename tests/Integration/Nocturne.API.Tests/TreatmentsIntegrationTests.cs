@@ -10,15 +10,15 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for Treatment CRUD operations using Aspire-orchestrated infrastructure.
+/// Integration tests for Treatment CRUD operations against the API running in-process on real PostgreSQL.
 /// Tests the complete request/response cycle for v1 treatment endpoints.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class TreatmentsIntegrationTests : AspireIntegrationTestBase
+public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 {
     public TreatmentsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

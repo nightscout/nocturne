@@ -14,12 +14,12 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// passkeys or OIDC identities (recovery mode).
 /// </summary>
 [Trait("Category", "Integration")]
-public class TenantSetupGuardIntegrationTests : AspireIntegrationTestBase
+public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
 
     public TenantSetupGuardIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -72,8 +72,7 @@ public class TenantSetupGuardIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        // Ensure clean state: remove existing passkeys, then seed one with a passkey
-        await DeleteAllPasskeysForTenantAsync(conn, _tenantId);
+        // Every member holds a passkey: the seeded owner does, and so does this one.
         var (_, accessToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantId, "Setup Guard User");
 
         // Act
@@ -130,7 +129,7 @@ public class TenantSetupGuardIntegrationTests : AspireIntegrationTestBase
 
         // Act - passkey registration endpoint should bypass the setup guard
         var setupResponse = await client.PostAsync(
-            "/api/oauth/passkey/register/begin",
+            "/api/auth/passkey/register/options",
             new StringContent("{}", System.Text.Encoding.UTF8, "application/json"));
 
         // Assert - should NOT be 503 (may be 400/401, but not 503)

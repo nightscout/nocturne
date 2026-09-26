@@ -214,14 +214,14 @@ For bring-your-own PostgreSQL (not using the bundled container), run `docs/postg
 ### Running Tests
 
 ```bash
-# Run every collected test (the opt-in E2E suite stays out)
+# Run every collected .NET test
 dotnet test
 
 # Run unit tests only
-dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+dotnet test --filter "Category!=Integration&Category!=Performance"
 
-# Run the end-to-end suite (stands up the whole Aspire stack)
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
+# Run the end-to-end suite (production images in docker compose; see tests/README.md)
+cd e2e && pnpm install && pnpm e2e
 
 # Run with coverage
 dotnet test --collect:"XPlat Code Coverage"

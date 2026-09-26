@@ -15,14 +15,14 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// Tests real-time alert subscriptions, acknowledgement broadcasts, tenant isolation, and snooze.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertHubIntegrationTests : AspireIntegrationTestBase
+public class AlertHubIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public AlertHubIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -58,6 +58,7 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         var connection = new HubConnectionBuilder()
             .WithUrl(new Uri(baseAddress, "hubs/alerts"), options =>
             {
+                options.Headers["X-Forwarded-Host"] = Fixture.TenantHost;
                 if (apiSecret != null)
                     options.Headers.Add("api-secret", apiSecret);
             })
@@ -116,8 +117,8 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, _tenantId);
-        await AuthTestHelpers.SeedAlertExcursionAsync(conn, _tenantId, ruleId);
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
 
         // Connect and subscribe
         var connection = CreateAlertHubConnection(TestApiSecret);
@@ -166,8 +167,8 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, _tenantId);
-        await AuthTestHelpers.SeedAlertExcursionAsync(conn, _tenantId, ruleId);
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
 
         // Connect and subscribe
         var connection = CreateAlertHubConnection(TestApiSecret);
@@ -193,8 +194,8 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, _tenantId);
-        await AuthTestHelpers.SeedAlertExcursionAsync(conn, _tenantId, ruleId);
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
 
         // Create two connections and subscribe both
         var connection1 = CreateAlertHubConnection(TestApiSecret);
@@ -231,11 +232,11 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, "alert-hub-tenant-b", "Alert Hub Tenant B");
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "alert-hub-tenant-b", "Alert Hub Tenant B");
         var (_, tenantBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantBId, "Tenant B Alert User");
 
-        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, tenantBId, "Tenant B Rule");
-        await AuthTestHelpers.SeedAlertExcursionAsync(conn, tenantBId, ruleId);
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, tenantBId, "Tenant B Rule");
+        await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, tenantBId, ruleId);
 
         // Connect as tenant A and subscribe
         var connectionA = CreateAlertHubConnection(TestApiSecret);
@@ -265,8 +266,8 @@ public class AlertHubIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, _tenantId);
-        var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(conn, _tenantId, ruleId);
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, _tenantId);
+        var (_, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(Fixture, _tenantId, ruleId);
 
         // Act
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);

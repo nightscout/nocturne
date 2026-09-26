@@ -14,13 +14,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/alert-rules</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertRulesIntegrationTests : AspireIntegrationTestBase
+public class AlertRulesIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public AlertRulesIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -47,37 +47,14 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
     private static object CreateValidAlertRulePayload(string name = "Test High Alert") => new
     {
         name,
-        conditionType = "Threshold",
+        conditionType = "threshold",
         conditionParams = new { direction = "above", value = 180 },
-        hysteresisMinutes = 15,
-        confirmationReadings = 2,
-        severity = "Normal",
+        severity = "warning",
         isEnabled = true,
         sortOrder = 0,
-        schedules = new[]
+        channels = new[]
         {
-            new
-            {
-                name = "Default",
-                isDefault = true,
-                timezone = "UTC",
-                escalationSteps = new[]
-                {
-                    new
-                    {
-                        stepOrder = 0,
-                        delaySeconds = 0,
-                        channels = new[]
-                        {
-                            new
-                            {
-                                channelType = "WebPush",
-                                destination = "default"
-                            }
-                        }
-                    }
-                }
-            }
+            new { channelType = "web_push", destination = "default" }
         }
     };
 
@@ -123,10 +100,10 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
         {
             name = "Bad Rule",
             conditionType = "InvalidType",
-            severity = "Normal",
+            severity = "warning",
             isEnabled = true,
             sortOrder = 0,
-            schedules = Array.Empty<object>()
+            channels = Array.Empty<object>()
         };
 
         // Act
@@ -185,16 +162,10 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
         var content = await response.Content.ReadAsStringAsync();
         var body = JsonSerializer.Deserialize<JsonElement>(content);
 
-        body.GetProperty("schedules").GetArrayLength().Should().BeGreaterThan(0);
+        body.GetProperty("channels").GetArrayLength().Should().BeGreaterThan(0);
 
-        var schedule = body.GetProperty("schedules")[0];
-        schedule.GetProperty("escalationSteps").GetArrayLength().Should().BeGreaterThan(0);
-
-        var step = schedule.GetProperty("escalationSteps")[0];
-        step.GetProperty("channels").GetArrayLength().Should().BeGreaterThan(0);
-
-        var channel = step.GetProperty("channels")[0];
-        channel.GetProperty("channelType").GetString().Should().Be("WebPush");
+        var channel = body.GetProperty("channels")[0];
+        channel.GetProperty("channelType").GetString().Should().Be("web_push");
         channel.GetProperty("destination").GetString().Should().Be("default");
     }
 
@@ -295,7 +266,7 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, "tenant-b", "Tenant B");
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "tenant-b", "Tenant B");
         var (_, tenantBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantBId, "Tenant B User");
 
         var baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
@@ -316,58 +287,23 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
-    public async Task CreateAlertRule_WithEscalationSteps_PersistsChannels()
+    public async Task CreateAlertRule_WithSeveralChannels_PersistsThemInOrder()
     {
         // Arrange
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
         var payload = new
         {
-            name = "Multi-Step Alert",
-            conditionType = "Threshold",
+            name = "Multi-Channel Alert",
+            conditionType = "threshold",
             conditionParams = new { direction = "above", value = 250 },
-            hysteresisMinutes = 10,
-            confirmationReadings = 1,
-            severity = "Normal",
+            severity = "warning",
             isEnabled = true,
             sortOrder = 0,
-            schedules = new[]
+            channels = new[]
             {
-                new
-                {
-                    name = "Default",
-                    isDefault = true,
-                    timezone = "UTC",
-                    escalationSteps = new object[]
-                    {
-                        new
-                        {
-                            stepOrder = 0,
-                            delaySeconds = 0,
-                            channels = new[]
-                            {
-                                new
-                                {
-                                    channelType = "WebPush",
-                                    destination = "default"
-                                }
-                            }
-                        },
-                        new
-                        {
-                            stepOrder = 1,
-                            delaySeconds = 300,
-                            channels = new[]
-                            {
-                                new
-                                {
-                                    channelType = "Webhook",
-                                    destination = "https://example.com/webhook"
-                                }
-                            }
-                        }
-                    }
-                }
+                new { channelType = "web_push", destination = "default" },
+                new { channelType = "webhook", destination = "https://example.com/webhook" }
             }
         };
 
@@ -386,16 +322,15 @@ public class AlertRulesIntegrationTests : AspireIntegrationTestBase
         var content = await getResponse.Content.ReadAsStringAsync();
         var body = JsonSerializer.Deserialize<JsonElement>(content);
 
-        var steps = body.GetProperty("schedules")[0].GetProperty("escalationSteps");
-        steps.GetArrayLength().Should().Be(2);
+        var channels = body.GetProperty("channels").EnumerateArray()
+            .OrderBy(c => c.GetProperty("sortOrder").GetInt32())
+            .ToList();
+        channels.Should().HaveCount(2);
 
-        var step0 = steps.EnumerateArray().First(s => s.GetProperty("stepOrder").GetInt32() == 0);
-        var step1 = steps.EnumerateArray().First(s => s.GetProperty("stepOrder").GetInt32() == 1);
+        channels[0].GetProperty("channelType").GetString().Should().Be("web_push");
+        channels[0].GetProperty("destination").GetString().Should().Be("default");
 
-        step0.GetProperty("channels")[0].GetProperty("channelType").GetString().Should().Be("WebPush");
-        step0.GetProperty("channels")[0].GetProperty("destination").GetString().Should().Be("default");
-
-        step1.GetProperty("channels")[0].GetProperty("channelType").GetString().Should().Be("Webhook");
-        step1.GetProperty("channels")[0].GetProperty("destination").GetString().Should().Be("https://example.com/webhook");
+        channels[1].GetProperty("channelType").GetString().Should().Be("webhook");
+        channels[1].GetProperty("destination").GetString().Should().Be("https://example.com/webhook");
     }
 }

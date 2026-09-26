@@ -14,13 +14,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/notifications</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public class NotificationsIntegrationTests : AspireIntegrationTestBase
+public class NotificationsIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public NotificationsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -48,7 +48,7 @@ public class NotificationsIntegrationTests : AspireIntegrationTestBase
     {
         type = "test_notification",
         title = "Integration Test Notification",
-        category = "General",
+        category = "Informational",
         urgency = "Info",
         source = "integration-test",
         actions = new[]

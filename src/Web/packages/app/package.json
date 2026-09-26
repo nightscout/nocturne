@@ -66,6 +66,7 @@
     "@types/eslint": "^9.6.1",
     "@typescript/native-preview": "7.0.0-dev.20260513.1",
     "@vitest/browser-playwright": "^4.1.6",
+    "@vitest/coverage-v8": "4.1.6",
     "autoprefixer": "^10.5.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",

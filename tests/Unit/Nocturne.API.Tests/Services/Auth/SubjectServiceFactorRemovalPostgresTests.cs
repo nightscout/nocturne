@@ -7,7 +7,6 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Infrastructure;
-using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Auth;
@@ -24,28 +23,17 @@ public class SubjectServiceFactorRemovalPostgresTests(SubjectServiceFactorRemova
 {
     public sealed class Database : IAsyncLifetime
     {
-        private readonly SharedTestContainerFixture _container = new();
-
         public string ConnectionString { get; private set; } = string.Empty;
 
         public async Task InitializeAsync()
         {
-            await _container.InitializeAsync();
-
-            var name = $"subject_factor_removal_{Guid.NewGuid():N}";
-            await using (var create = new NpgsqlCommand($"CREATE DATABASE {name}", _container.Database))
-                await create.ExecuteNonQueryAsync();
-
-            ConnectionString = new NpgsqlConnectionStringBuilder(_container.PostgreSqlConnectionString)
-            {
-                Database = name,
-            }.ConnectionString;
-
-            await using var db = CreateContext();
-            await db.Database.EnsureCreatedAsync();
+            // Subjects, passkeys and OIDC identities are not tenant-scoped, so the migrator role
+            // reaches them without a tenant pinned.
+            var database = await SharedPostgres.CreateMigratedDatabaseAsync("subject_factor_removal");
+            ConnectionString = database.MigratorConnectionString;
         }
 
-        public Task DisposeAsync() => _container.DisposeAsync();
+        public Task DisposeAsync() => Task.CompletedTask;
 
         public NocturneDbContext CreateContext() =>
             new(new DbContextOptionsBuilder<NocturneDbContext>()

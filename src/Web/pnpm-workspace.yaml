@@ -20,6 +20,13 @@ onlyBuiltDependencies:
   - protobufjs
   - sharp
 
+# bits-ui's Command reads its root ref on a tick scheduled while the palette tears down, when
+# Svelte answers the destroyed binding with an internal Symbol; the upstream guard is `if (!node)`,
+# so it calls querySelectorAll on the Symbol and rejects. The patch narrows the guard to Element.
+# Unfixed upstream as of 2.19.3; drop the patch once bits-ui guards it.
+patchedDependencies:
+  "bits-ui@2.18.1": patches/bits-ui@2.18.1.patch
+
 # Migrated from the package.json "pnpm" field, which pnpm v11+ no longer reads.
 overrides:
   "@sveltejs/vite-plugin-svelte": "^5.0.3"

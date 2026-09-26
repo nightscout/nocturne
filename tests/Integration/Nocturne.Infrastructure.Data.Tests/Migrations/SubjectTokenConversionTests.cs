@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -24,10 +24,7 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
     /// <summary>The migration immediately before the one under test.</summary>
     private const string PriorMigration = "20260908125351_AddDedupReconcileCursorLinkId";
 
-    private const string DbName = "nocturne_token_conversion";
-    private const string MigratorPassword = "token-conversion-migrator-password";
 
-    private PostgreSqlContainer _container = null!;
     private string _migratorConnectionString = string.Empty;
 
     internal static readonly Guid Converts = Guid.Parse("11111111-1111-7111-8111-111111111111");
@@ -36,32 +33,16 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new PostgreSqlBuilder("postgres:17.6")
-            .WithDatabase(DbName)
-            .WithUsername("postgres")
-            .WithPassword("bootstrap-test-password")
-            .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", MigratorPassword)
-            .WithEnvironment("NOCTURNE_APP_PASSWORD", "token-conversion-app-password")
-            .WithEnvironment("NOCTURNE_WEB_PASSWORD", "token-conversion-web-password")
-            .WithBindMount(ResolveInitScriptPath(), "/docker-entrypoint-initdb.d/00-init.sh")
-            .Build();
-
-        await _container.StartAsync();
-
-        _migratorConnectionString =
-            $"Host={_container.Hostname};Port={_container.GetMappedPublicPort(5432)};"
-            + $"Database={DbName};Username=nocturne_migrator;Password={MigratorPassword}";
+        // Unmigrated: the fixture walks the chain up to the migration under test itself.
+        var database = await SharedPostgres.CreateEmptyDatabaseAsync("token_conversion");
+        _migratorConnectionString = database.MigratorConnectionString;
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
         await MigrateToAsync(targetMigration: null);
     }
 
-    public async Task DisposeAsync()
-    {
-        await _container.StopAsync();
-        await _container.DisposeAsync();
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Migrates to <paramref name="targetMigration"/>, or to head when it is null. Seeding has to
@@ -167,20 +148,6 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
             INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
             VALUES ('33333333-0000-7000-8000-00000000b001', '{LeftAlone}', '33333333-0000-7000-8000-00000000a001', '["glucose.read"]'::jsonb, now(), now(), false);
             """);
-    }
-
-    private static string ResolveInitScriptPath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir is null
-            ? throw new InvalidOperationException(
-                "Could not locate docs/postgres/container-init/00-init.sh from " + AppContext.BaseDirectory)
-            : Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh");
     }
 }
 

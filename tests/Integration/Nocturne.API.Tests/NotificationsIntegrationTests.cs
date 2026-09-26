@@ -1,8 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -13,15 +18,57 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle for notification CRUD operations
 /// </summary>
 [Trait("Category", "Integration")]
-public class NotificationsIntegrationTests : AspireIntegrationTestBase
+public class NotificationsIntegrationTests : ApiIntegrationTestBase
 {
-    private const string TestUserId = "test-user-id-for-notifications";
+    private const string TestType = "integration_test";
+
+    /// <summary>The owner the api-secret client authenticates as; notifications are per subject.</summary>
+    private string OwnerUserId => Fixture.OwnerSubjectId.ToString();
+
+    private static readonly string OtherUserId = Guid.CreateVersion7().ToString();
 
     public NotificationsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
+
+    /// <summary>
+    /// Runs <paramref name="action"/> on the API's notification service in a scope pinned to the
+    /// seeded tenant, as a request on its host would be.
+    /// </summary>
+    private async Task<T> WithServiceAsync<T>(Func<IInAppNotificationService, Task<T>> action)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
+        return await action(scope.ServiceProvider.GetRequiredService<IInAppNotificationService>());
+    }
+
+    private Task<InAppNotificationDto> CreateAsync(
+        string userId,
+        string title,
+        NotificationUrgency urgency = NotificationUrgency.Info,
+        string? sourceId = null,
+        List<NotificationActionDto>? actions = null) =>
+        WithServiceAsync(s => s.CreateNotificationAsync(
+            userId, TestType, title, NotificationCategory.Informational, urgency, sourceId: sourceId, actions: actions));
+
+    private async Task<List<InAppNotificationDto>> GetActiveOverHttpAsync()
+    {
+        var response = await AuthenticatedClient.GetAsync("/api/v4/notifications");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<List<InAppNotificationDto>>())!;
+    }
+
+    private async Task<NotificationArchiveReason?> ArchiveReasonAsync(Guid id)
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var entity = await db.InAppNotifications.AsNoTracking().SingleAsync(n => n.Id == id);
+        entity.IsArchived.Should().BeTrue();
+        return entity.ArchiveReason;
+    }
 
     #region GetNotifications Tests
 
@@ -59,77 +106,125 @@ public class NotificationsIntegrationTests : AspireIntegrationTestBase
 
     #region Create and Get Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint for creating notifications")]
+    [Fact]
     public async Task CreateAndGetNotification_ShouldPersistAndReturn()
     {
-        // This test previously used IInAppNotificationService directly to create notifications
-        // and then verified retrieval. With Aspire, we cannot access the DI container since the
-        // API runs as a separate process. A test-only POST endpoint for creating notifications
-        // would be needed to make this test work via HTTP.
-        await Task.CompletedTask;
+        // Arrange
+        var created = await CreateAsync(OwnerUserId, "Integration test notification", NotificationUrgency.Warn);
+
+        // Act
+        var notifications = await GetActiveOverHttpAsync();
+
+        // Assert
+        var fetched = notifications.Should().ContainSingle(n => n.Id == created.Id).Subject;
+        fetched.Title.Should().Be("Integration test notification");
+        fetched.Type.Should().Be(TestType);
+        fetched.Urgency.Should().Be(NotificationUrgency.Warn);
     }
 
     #endregion
 
     #region Dismiss Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint for creating notifications")]
+    [Fact]
     public async Task DismissNotification_ShouldArchiveIt()
     {
-        // This test previously created a notification via IInAppNotificationService and then
-        // dismissed it via DELETE /api/v4/notifications/{id}. Without a way to create
-        // notifications via HTTP, we cannot set up the test data.
-        await Task.CompletedTask;
+        // Arrange
+        var created = await CreateAsync(OwnerUserId, "To dismiss");
+
+        // Act
+        var response = await AuthenticatedClient.DeleteAsync($"/api/v4/notifications/{created.Id}");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await GetActiveOverHttpAsync()).Should().NotContain(n => n.Id == created.Id);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Dismissed);
     }
 
     #endregion
 
     #region Execute Action Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint for creating notifications")]
+    [Fact]
     public async Task ExecuteAction_WithDismissAction_ShouldArchive()
     {
-        // This test previously created a notification with actions via IInAppNotificationService
-        // and then executed an action via POST /api/v4/notifications/{id}/actions/dismiss.
-        // Without a way to create notifications via HTTP, we cannot set up the test data.
-        await Task.CompletedTask;
+        // Arrange
+        var created = await CreateAsync(
+            OwnerUserId, "Dismiss by action", actions: [new NotificationActionDto { ActionId = "dismiss", Label = "Dismiss" }]);
+
+        // Act
+        var response = await AuthenticatedClient.PostAsync($"/api/v4/notifications/{created.Id}/actions/dismiss", null);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await GetActiveOverHttpAsync()).Should().NotContain(n => n.Id == created.Id);
+        (await ArchiveReasonAsync(created.Id)).Should().Be(NotificationArchiveReason.Dismissed);
     }
 
     #endregion
 
     #region Sorting Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint")]
+    [Fact]
     public async Task GetNotifications_SortsByUrgencyThenTime()
     {
-        // This test requires creating multiple notifications with different urgencies
-        // and verifying sort order. Without direct service access or an HTTP creation
-        // endpoint, this cannot be tested through the HTTP boundary.
-        await Task.CompletedTask;
+        // Arrange - most urgent first, and within one urgency the newest first
+        var info = await CreateAsync(OwnerUserId, "info", NotificationUrgency.Info);
+        var olderWarn = await CreateAsync(OwnerUserId, "older warn", NotificationUrgency.Warn);
+        var urgent = await CreateAsync(OwnerUserId, "urgent", NotificationUrgency.Urgent);
+        var newerWarn = await CreateAsync(OwnerUserId, "newer warn", NotificationUrgency.Warn);
+
+        // Act
+        var notifications = await GetActiveOverHttpAsync();
+
+        // Assert
+        notifications.Select(n => n.Id).Should().Equal(urgent.Id, newerWarn.Id, olderWarn.Id, info.Id);
     }
 
     #endregion
 
     #region Archive Reason Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint")]
+    [Fact]
     public async Task ArchiveNotification_WithDifferentReasons_ShouldWork()
     {
-        // This test archives notifications with different reasons via direct service calls.
-        // No HTTP equivalent exists for specifying archive reasons.
-        await Task.CompletedTask;
+        foreach (var reason in Enum.GetValues<NotificationArchiveReason>())
+        {
+            // Arrange
+            var created = await CreateAsync(OwnerUserId, $"archive {reason}");
+
+            // Act
+            var archived = await WithServiceAsync(s => s.ArchiveNotificationAsync(created.Id, reason, OwnerUserId));
+
+            // Assert
+            archived.Should().BeTrue(reason.ToString());
+            (await ArchiveReasonAsync(created.Id)).Should().Be(reason);
+        }
+
+        (await GetActiveOverHttpAsync()).Should().BeEmpty();
     }
 
     #endregion
 
     #region Archive By Source Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint")]
+    [Fact]
     public async Task ArchiveBySource_ShouldArchiveMatchingNotification()
     {
-        // This test uses ArchiveBySourceAsync which is an internal service method
-        // with no HTTP endpoint equivalent.
-        await Task.CompletedTask;
+        // Arrange
+        var matching = await CreateAsync(OwnerUserId, "from source", sourceId: "source-a");
+        var other = await CreateAsync(OwnerUserId, "from another source", sourceId: "source-b");
+
+        // Act
+        var archived = await WithServiceAsync(s => s.ArchiveBySourceAsync(
+            OwnerUserId, TestType, "source-a", NotificationArchiveReason.ConditionMet));
+
+        // Assert
+        archived.Should().BeTrue();
+        var active = await GetActiveOverHttpAsync();
+        active.Should().NotContain(n => n.Id == matching.Id);
+        active.Should().Contain(n => n.Id == other.Id);
+        (await ArchiveReasonAsync(matching.Id)).Should().Be(NotificationArchiveReason.ConditionMet);
     }
 
     #endregion
@@ -185,22 +280,35 @@ public class NotificationsIntegrationTests : AspireIntegrationTestBase
 
     #region User Isolation Tests
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint")]
+    [Fact]
     public async Task GetNotifications_ShouldOnlyReturnCurrentUserNotifications()
     {
-        // This test creates notifications for different users via direct service calls
-        // and verifies isolation. Without multi-user HTTP authentication and a
-        // notification creation endpoint, this cannot be tested through the HTTP boundary.
-        await Task.CompletedTask;
+        // Arrange
+        var own = await CreateAsync(OwnerUserId, "mine");
+        var others = await CreateAsync(OtherUserId, "someone else's");
+
+        // Act
+        var notifications = await GetActiveOverHttpAsync();
+
+        // Assert
+        notifications.Should().Contain(n => n.Id == own.Id);
+        notifications.Should().NotContain(n => n.Id == others.Id);
     }
 
-    [Fact(Skip = "Requires direct service access - needs API endpoint")]
+    [Fact]
     public async Task ExecuteAction_WithWrongUserId_ShouldReturnFalse()
     {
-        // This test verifies that one user cannot execute actions on another user's
-        // notifications. Requires creating notifications for specific users via
-        // direct service access.
-        await Task.CompletedTask;
+        // Arrange
+        var others = await CreateAsync(
+            OtherUserId, "someone else's", actions: [new NotificationActionDto { ActionId = "dismiss", Label = "Dismiss" }]);
+
+        // Act
+        var executed = await WithServiceAsync(s => s.ExecuteActionAsync(others.Id, "dismiss", OwnerUserId));
+
+        // Assert
+        executed.Should().BeFalse();
+        (await WithServiceAsync(s => s.GetActiveNotificationsAsync(OtherUserId)))
+            .Should().Contain(n => n.Id == others.Id);
     }
 
     #endregion

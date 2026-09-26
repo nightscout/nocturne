@@ -2,7 +2,11 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Connectors.Core.Utilities;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Alerts;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models.Authorization;
 using Npgsql;
 
@@ -59,8 +63,8 @@ public static class AuthTestHelpers
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, created_at)
-                VALUES (@id, @subjectId, @credentialId, @publicKey, 0, now());
+                INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
+                VALUES (@id, @subjectId, @credentialId, @publicKey, 0, '{}', now());
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("subjectId", subjectId);
@@ -86,12 +90,11 @@ public static class AuthTestHelpers
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subject_roles (id, subject_id, role_id, sys_created_at, sys_updated_at)
-                SELECT @id, @subjectId, r.id, now(), now()
+                INSERT INTO subject_roles (subject_id, role_id)
+                SELECT @subjectId, r.id
                 FROM roles r WHERE r.name = 'admin'
                 LIMIT 1;
                 """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("subjectId", subjectId);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -208,12 +211,11 @@ public static class AuthTestHelpers
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subject_roles (id, subject_id, role_id, sys_created_at, sys_updated_at)
-                SELECT @id, @subjectId, r.id, now(), now()
+                INSERT INTO subject_roles (subject_id, role_id)
+                SELECT @subjectId, r.id
                 FROM roles r WHERE r.name = 'admin'
                 LIMIT 1;
                 """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("subjectId", subjectId);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -228,7 +230,7 @@ public static class AuthTestHelpers
     public static async Task<string> RegisterOAuthClientAsync(
         HttpClient client,
         string redirectUri = "http://localhost:9999/callback",
-        string scope = "entries.read treatments.read")
+        string scope = "glucose.read treatments.read")
     {
         var payload = new
         {
@@ -265,7 +267,7 @@ public static class AuthTestHelpers
         HttpClient authenticatedClient,
         string clientId,
         string redirectUri = "http://localhost:9999/callback",
-        string scope = "entries.read treatments.read")
+        string scope = "glucose.read treatments.read")
     {
         var (codeVerifier, codeChallenge) = GeneratePkceChallenge();
 
@@ -371,7 +373,7 @@ public static class AuthTestHelpers
         {
             cmd.CommandText = """
                 INSERT INTO oauth_grants (id, tenant_id, subject_id, grant_type, scopes, token_hash, created_at, expires_at, revoked_at, activated_at)
-                VALUES (@id, @tenantId, @subjectId, 'guest', '["entries.read","treatments.read"]'::jsonb, @tokenHash, now(), @expiresAt, @revokedAt, @activatedAt);
+                VALUES (@id, @tenantId, @subjectId, 'guest', ARRAY['glucose.read','treatments.read'], @tokenHash, now(), @expiresAt, @revokedAt, @activatedAt);
                 """;
             cmd.Parameters.AddWithValue("id", grantId);
             cmd.Parameters.AddWithValue("tenantId", tenantId);
@@ -387,14 +389,16 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Gets the first tenant ID from the database.
+    /// Gets the id of the tenant <see cref="ApiIntegrationTestFixture"/> seeds.
     /// </summary>
     public static async Task<Guid> GetTenantIdAsync(NpgsqlConnection conn)
     {
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM tenants LIMIT 1;";
-        var result = await cmd.ExecuteScalarAsync();
-        return (Guid)result!;
+        cmd.CommandText = "SELECT id FROM tenants WHERE slug = @slug;";
+        cmd.Parameters.AddWithValue("slug", ApiIntegrationTestFixture.TenantSlug);
+        var result = await cmd.ExecuteScalarAsync()
+                     ?? throw new InvalidOperationException($"Tenant '{ApiIntegrationTestFixture.TenantSlug}' does not exist.");
+        return (Guid)result;
     }
 
     /// <summary>
@@ -418,35 +422,27 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Gets role IDs by name.
+    /// Gets the id of one of a tenant's seeded roles (<see cref="RoleSeeds"/>) by its slug.
     /// </summary>
-    public static async Task<Dictionary<string, Guid>> GetRoleIdsByNameAsync(
-        NpgsqlConnection conn,
-        params string[] names)
+    public static async Task<Guid> GetTenantRoleIdAsync(NpgsqlConnection conn, Guid tenantId, string slug)
     {
-        var result = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id, name FROM roles WHERE name = ANY(@names);";
-        cmd.Parameters.AddWithValue("names", names);
-
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-        {
-            result[reader.GetString(1)] = reader.GetGuid(0);
-        }
-
-        return result;
+        cmd.CommandText = "SELECT id FROM tenant_roles WHERE tenant_id = @tenantId AND slug = @slug;";
+        cmd.Parameters.AddWithValue("tenantId", tenantId);
+        cmd.Parameters.AddWithValue("slug", slug);
+        var result = await cmd.ExecuteScalarAsync()
+                     ?? throw new InvalidOperationException($"Tenant {tenantId} has no '{slug}' role.");
+        return (Guid)result;
     }
 
     /// <summary>
     /// Creates an HttpClient with a Bearer authorization header for the given access token.
     /// </summary>
     public static HttpClient CreateBearerClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string accessToken)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;
     }
@@ -455,66 +451,40 @@ public static class AuthTestHelpers
     /// Creates an HttpClient with both an api-secret header and a Bearer authorization header.
     /// </summary>
     public static HttpClient CreateAuthenticatedSubjectClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string accessToken,
         string apiSecret = "test-secret-for-integration-tests")
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Add("api-secret", apiSecret);
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;
     }
 
     /// <summary>
-    /// Seeds a new tenant and creates the Public system subject tenant membership for it.
-    /// Returns the new tenant ID.
+    /// Creates a tenant the way the product does, with its roles, its Public subject membership and
+    /// its bundled OAuth clients, and returns its id.
     /// </summary>
     public static async Task<Guid> SeedTenantAsync(
-        NpgsqlConnection conn,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string displayName)
     {
-        var tenantId = Guid.CreateVersion7();
-
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenants (id, slug, display_name, is_active, created_at, updated_at)
-                VALUES (@id, @slug, @displayName, true, now(), now());
-                """;
-            cmd.Parameters.AddWithValue("id", tenantId);
-            cmd.Parameters.AddWithValue("slug", slug);
-            cmd.Parameters.AddWithValue("displayName", displayName);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Create Public system subject tenant member
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO tenant_members (id, tenant_id, subject_id, sys_created_at, sys_updated_at, limit_to_24_hours)
-                SELECT @id, @tenantId, s.id, now(), now(), false
-                FROM subjects s
-                WHERE s.name = 'Public' AND s.is_system_subject = true
-                LIMIT 1;
-                """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return tenantId;
+        using var scope = fixture.Services.CreateScope();
+        var tenants = scope.ServiceProvider.GetRequiredService<ITenantService>();
+        var created = await tenants.CreateWithoutOwnerAsync(slug, displayName);
+        return created.Id;
     }
 
     /// <summary>
     /// Creates an HttpClient targeting a specific tenant by slug via the Host header.
     /// </summary>
     public static HttpClient CreateTenantClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         return client;
     }
@@ -524,13 +494,13 @@ public static class AuthTestHelpers
     /// Includes api-secret and Bearer authorization headers.
     /// </summary>
     public static HttpClient CreateAuthenticatedTenantClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain,
         string accessToken,
         string apiSecret = "test-secret-for-integration-tests")
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         client.DefaultRequestHeaders.Add("api-secret", apiSecret);
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -545,12 +515,12 @@ public static class AuthTestHelpers
     /// membership check, so it would mask cross-tenant authorization failures.
     /// </summary>
     public static HttpClient CreateTenantBearerClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain,
         string accessToken)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;
@@ -567,148 +537,72 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
-    /// Seeds an alert rule with a default schedule, escalation step, and step channel.
-    /// Returns the alert rule ID.
+    /// Seeds an enabled-by-default threshold alert rule with one web push channel, and returns its id.
     /// </summary>
+    /// <remarks>
+    /// Written through the entities, which keep in step with the schema where a raw column list
+    /// silently falls behind it.
+    /// </remarks>
     public static async Task<Guid> SeedAlertRuleAsync(
-        NpgsqlConnection conn,
+        ApiIntegrationTestFixture fixture,
         Guid tenantId,
         string name = "Test High Alert",
-        string conditionType = "Threshold",
+        AlertConditionType conditionType = AlertConditionType.Threshold,
         bool isEnabled = true)
     {
-        var ruleId = Guid.CreateVersion7();
-        var scheduleId = Guid.CreateVersion7();
-        var stepId = Guid.CreateVersion7();
-        var channelId = Guid.CreateVersion7();
-
-        // Set RLS context
-        await using (var cmd = conn.CreateCommand())
+        await using var db = fixture.CreateDbContext(tenantId);
+        var rule = new AlertRuleEntity
         {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Insert alert rule
-        await using (var cmd = conn.CreateCommand())
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Name = name,
+            ConditionType = conditionType,
+            ConditionParams = """{"direction":"above","value":180}""",
+            IsEnabled = isEnabled,
+        };
+        db.AlertRules.Add(rule);
+        db.AlertRuleChannels.Add(new AlertRuleChannelEntity
         {
-            cmd.CommandText = """
-                INSERT INTO alert_rules (id, tenant_id, name, condition_type, condition_params, hysteresis_minutes, confirmation_readings, severity, is_enabled, sort_order, created_at, updated_at)
-                VALUES (@id, @tenantId, @name, @conditionType, '{"direction":"above","value":180}'::jsonb, 15, 2, 'Normal', @isEnabled, 0, now(), now());
-                """;
-            cmd.Parameters.AddWithValue("id", ruleId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("name", name);
-            cmd.Parameters.AddWithValue("conditionType", conditionType);
-            cmd.Parameters.AddWithValue("isEnabled", isEnabled);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Insert alert schedule
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO alert_schedules (id, tenant_id, alert_rule_id, name, is_default, timezone, quiet_hours_override_critical, created_at, updated_at)
-                VALUES (@id, @tenantId, @ruleId, 'Default', true, 'UTC', true, now(), now());
-                """;
-            cmd.Parameters.AddWithValue("id", scheduleId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("ruleId", ruleId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Insert alert escalation step
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO alert_escalation_steps (id, tenant_id, alert_schedule_id, step_order, delay_seconds, created_at)
-                VALUES (@id, @tenantId, @scheduleId, 0, 0, now());
-                """;
-            cmd.Parameters.AddWithValue("id", stepId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("scheduleId", scheduleId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Insert alert step channel
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO alert_step_channels (id, tenant_id, escalation_step_id, channel_type, destination, created_at)
-                VALUES (@id, @tenantId, @stepId, 'WebPush', 'default', now());
-                """;
-            cmd.Parameters.AddWithValue("id", channelId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("stepId", stepId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return ruleId;
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            AlertRuleId = rule.Id,
+            ChannelType = ChannelType.WebPush,
+            Destination = "default",
+        });
+        await db.SaveChangesAsync();
+        return rule.Id;
     }
 
     /// <summary>
-    /// Seeds an alert excursion and associated alert instance for a given rule.
-    /// Returns the excursion ID and instance ID.
+    /// Seeds an open excursion for a rule and its triggered alert instance.
     /// </summary>
     public static async Task<(Guid ExcursionId, Guid InstanceId)> SeedAlertExcursionAsync(
-        NpgsqlConnection conn,
+        ApiIntegrationTestFixture fixture,
         Guid tenantId,
         Guid alertRuleId,
         DateTime? acknowledgedAt = null)
     {
-        var excursionId = Guid.CreateVersion7();
-        var instanceId = Guid.CreateVersion7();
-
-        // Set RLS context
-        await using (var cmd = conn.CreateCommand())
+        await using var db = fixture.CreateDbContext(tenantId);
+        var now = DateTime.UtcNow;
+        var excursion = new AlertExcursionEntity
         {
-            cmd.CommandText = "SELECT set_config('app.current_tenant_id', @tenantId, false);";
-            cmd.Parameters.AddWithValue("tenantId", tenantId.ToString());
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Insert alert excursion
-        await using (var cmd = conn.CreateCommand())
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            AlertRuleId = alertRuleId,
+            StartedAt = now,
+            AcknowledgedAt = acknowledgedAt,
+        };
+        var instance = new AlertInstanceEntity
         {
-            cmd.CommandText = """
-                INSERT INTO alert_excursions (id, tenant_id, alert_rule_id, started_at, acknowledged_at)
-                VALUES (@id, @tenantId, @ruleId, now(), @acknowledgedAt);
-                """;
-            cmd.Parameters.AddWithValue("id", excursionId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("ruleId", alertRuleId);
-            cmd.Parameters.AddWithValue("acknowledgedAt", (object?)acknowledgedAt ?? DBNull.Value);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        // Find schedule for the rule
-        Guid scheduleId;
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "SELECT id FROM alert_schedules WHERE alert_rule_id = @ruleId LIMIT 1;";
-            cmd.Parameters.AddWithValue("ruleId", alertRuleId);
-            var result = await cmd.ExecuteScalarAsync()
-                         ?? throw new InvalidOperationException(
-                             $"No alert schedule found for rule {alertRuleId}.");
-            scheduleId = (Guid)result;
-        }
-
-        // Insert alert instance
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = """
-                INSERT INTO alert_instances (id, tenant_id, alert_excursion_id, alert_schedule_id, current_step_order, status, triggered_at, snooze_count)
-                VALUES (@id, @tenantId, @excursionId, @scheduleId, 0, 'active', now(), 0);
-                """;
-            cmd.Parameters.AddWithValue("id", instanceId);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
-            cmd.Parameters.AddWithValue("excursionId", excursionId);
-            cmd.Parameters.AddWithValue("scheduleId", scheduleId);
-            await cmd.ExecuteNonQueryAsync();
-        }
-
-        return (excursionId, instanceId);
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            AlertExcursionId = excursion.Id,
+            TriggeredAt = now,
+        };
+        db.AlertExcursions.Add(excursion);
+        db.AlertInstances.Add(instance);
+        await db.SaveChangesAsync();
+        return (excursion.Id, instance.Id);
     }
 
     /// <summary>

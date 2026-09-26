@@ -14,10 +14,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle with real database operations
 /// </summary>
 [Trait("Category", "Integration")]
-public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
+public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
 {
     public ActivityInMemoryIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         Xunit.Abstractions.ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -26,7 +26,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
     public async Task GetActivities_WhenNoActivitiesExist_ShouldReturnEmptyArray()
     {
         // Arrange & Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .GetAsync("/api/v1/activity", CancellationToken.None);
 
         // Assert
@@ -52,7 +52,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 newActivity,
@@ -60,7 +60,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             );
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "Nightscout answers a created activity with 200");
         var createdActivities = await response.Content.ReadFromJsonAsync<Activity[]>(
             cancellationToken: CancellationToken.None
         );
@@ -98,7 +98,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 activities,
@@ -106,7 +106,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             );
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, "Nightscout answers a created activity with 200");
         var createdActivities = await response.Content.ReadFromJsonAsync<Activity[]>(
             cancellationToken: CancellationToken.None
         );
@@ -131,7 +131,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             Duration = 25,
         };
 
-        var createResponse = await ApiClient
+        var createResponse = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 newActivity,
@@ -143,7 +143,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var activityId = createdActivities![0].Id;
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
 
         // Assert
@@ -164,7 +164,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var nonExistentId = Guid.NewGuid().ToString();
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{nonExistentId}", CancellationToken.None);
 
         // Assert
@@ -182,7 +182,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             Duration = 30,
         };
 
-        var createResponse = await ApiClient
+        var createResponse = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 originalActivity,
@@ -202,7 +202,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PutAsJsonAsync(
                 $"/api/v1/activity/{activityId}",
                 updatedActivity,
@@ -230,7 +230,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var updatedActivity = new Activity { Type = "Exercise", Description = "Test" };
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PutAsJsonAsync(
                 $"/api/v1/activity/{nonExistentId}",
                 updatedActivity,
@@ -252,7 +252,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             Duration = 20,
         };
 
-        var createResponse = await ApiClient
+        var createResponse = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 newActivity,
@@ -264,14 +264,14 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var activityId = createdActivities![0].Id;
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .DeleteAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify the activity is actually deleted
-        var getResponse = await ApiClient
+        var getResponse = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
@@ -283,7 +283,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var nonExistentId = Guid.NewGuid().ToString();
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .DeleteAsync($"/api/v1/activity/{nonExistentId}", CancellationToken.None);
 
         // Assert
@@ -304,7 +304,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             })
             .ToArray();
 
-        await ApiClient
+        await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 activities,
@@ -312,7 +312,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             );
 
         // Act - Get with pagination
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .GetAsync("/api/v1/activity?count=5&skip=5", CancellationToken.None);
 
         // Assert
@@ -329,7 +329,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
     {
         // Arrange - Create activities with different timestamps
         var firstActivity = new Activity { Type = "Exercise", Description = "First activity" };
-        await ApiClient
+        await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 firstActivity,
@@ -340,7 +340,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         await Task.Delay(100, CancellationToken.None);
 
         var secondActivity = new Activity { Type = "Walking", Description = "Second activity" };
-        await ApiClient
+        await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 secondActivity,
@@ -348,7 +348,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             );
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .GetAsync("/api/v1/activity", CancellationToken.None);
 
         // Assert
@@ -379,7 +379,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         var content = new StringContent(invalidJson, System.Text.Encoding.UTF8, "application/json");
 
         // Act
-        var response = await ApiClient
+        var response = await AuthenticatedClient
             .PostAsync("/api/v1/activity", content, CancellationToken.None);
 
         // Assert
@@ -399,20 +399,20 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         };
 
         // Act 1: Create
-        var createResponse = await ApiClient
+        var createResponse = await AuthenticatedClient
             .PostAsJsonAsync(
                 "/api/v1/activity",
                 originalActivity,
                 cancellationToken: CancellationToken.None
             );
-        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        createResponse.StatusCode.Should().Be(HttpStatusCode.OK, "Nightscout answers a created activity with 200");
         var createdActivities = await createResponse.Content.ReadFromJsonAsync<Activity[]>(
             cancellationToken: CancellationToken.None
         );
         var activityId = createdActivities![0].Id;
 
         // Act 2: Read
-        var getResponse = await ApiClient
+        var getResponse = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var retrievedActivity = await getResponse.Content.ReadFromJsonAsync<Activity>(
@@ -428,7 +428,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
             Duration = 45,
             Intensity = "High",
         };
-        var updateResponse = await ApiClient
+        var updateResponse = await AuthenticatedClient
             .PutAsJsonAsync(
                 $"/api/v1/activity/{activityId}",
                 updatedActivity,
@@ -437,7 +437,7 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         updateResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act 4: Verify Update
-        var getUpdatedResponse = await ApiClient
+        var getUpdatedResponse = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
         var updatedRetrievedActivity = await getUpdatedResponse.Content.ReadFromJsonAsync<Activity>(
             cancellationToken: CancellationToken.None
@@ -446,12 +446,12 @@ public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
         updatedRetrievedActivity.Type.Should().Be("Walking");
 
         // Act 5: Delete
-        var deleteResponse = await ApiClient
+        var deleteResponse = await AuthenticatedClient
             .DeleteAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act 6: Verify Delete
-        var getFinalResponse = await ApiClient
+        var getFinalResponse = await AuthenticatedClient
             .GetAsync($"/api/v1/activity/{activityId}", CancellationToken.None);
         getFinalResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
