@@ -29,6 +29,12 @@
 //! strips are rendered at the artwork's natural aspect (long edge 512 / 128
 //! for finals, the manifest's frame size for strips).
 //!
+//! An entry may override the manifest's `stripFrames` with its own and set
+//! `"linearProgress": true`, which samples the strip one-for-one in ticks
+//! (`ProgressCurve::Linear`) instead of on the reveal curve. The staged
+//! setup-hub scenes use both: seven frames, so frame `k` is exactly the
+//! painting after `k` of its six stages.
+//!
 //! The PNGs written here are intermediates. `pnpm bake` runs
 //! `src/Web/packages/watercolour/scripts/to-webp.mjs` afterwards, which
 //! re-encodes each one as WebP and deletes it, because these washes are mostly
@@ -40,7 +46,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use nocturne_watercolour_core::application::{Exporter, Playback, Renderer};
+use nocturne_watercolour_core::application::{Exporter, Playback, ProgressCurve, Renderer};
 use nocturne_watercolour_core::domain::{Palette, Seed};
 use nocturne_watercolour_infra::authoring::{
     IconHints, IconNode, parse_icon_elements, parse_icon_hints, svg_icon_scene,
@@ -83,6 +89,10 @@ struct ManifestArtwork {
     surfaces: Vec<String>,
     strip_width: u32,
     strip_height: u32,
+    #[serde(default)]
+    strip_frames: Option<u32>,
+    #[serde(default)]
+    linear_progress: bool,
 }
 
 /// A `lucide:<name>` manifest entry: the element list and built-in hints
@@ -98,6 +108,7 @@ struct ArtworkSpec {
     id: String,
     palettes: Vec<(String, Surface)>,
     strip_frames: u32,
+    linear_progress: bool,
     strip_width: u32,
     strip_height: u32,
     icon: Option<IconBake>,
@@ -207,7 +218,8 @@ fn curated(manifest_path: &Path) -> BakeConfig {
                     .into_iter()
                     .map(|surface| (a.palette.clone(), surface))
                     .collect(),
-                strip_frames: manifest.strip_frames,
+                strip_frames: a.strip_frames.unwrap_or(manifest.strip_frames),
+                linear_progress: a.linear_progress,
                 strip_width: a.strip_width,
                 strip_height: a.strip_height,
                 icon,
@@ -230,6 +242,7 @@ fn whole_catalogue() -> BakeConfig {
             id,
             palettes: full_variants(),
             strip_frames: STRIP_FRAMES,
+            linear_progress: false,
             strip_width: STRIP_EDGE,
             strip_height: STRIP_EDGE,
             icon: None,
@@ -249,6 +262,7 @@ fn single_artwork(id: &str) -> BakeConfig {
         id: id.to_string(),
         palettes: full_variants(),
         strip_frames: STRIP_FRAMES,
+        linear_progress: false,
         strip_width: STRIP_EDGE,
         strip_height: STRIP_EDGE,
         icon: None,
@@ -334,6 +348,9 @@ fn main() {
             fs::create_dir_all(&dir).expect("create asset dir");
 
             let mut playback = Playback::new(template.fork(), scene, 1000.0).expect("playback");
+            if spec.linear_progress {
+                playback.set_progress_curve(ProgressCurve::Linear);
+            }
             let frames = FrameSequence {
                 count: spec.strip_frames,
                 width: spec.strip_width,

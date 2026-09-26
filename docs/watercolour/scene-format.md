@@ -169,6 +169,27 @@ it:
 - `durationMs` in the manifest is the artwork's suggested reveal length; the
   player's `durationMs` option wins.
 
+## Staged artworks
+
+The `hub-*` scenes (the setup hub's header candidates: `hub-dawn-ridges`,
+`hub-lighthouse`, `hub-lakeside-cabin`, all 3:1) are painted in six equal
+stages, one per hub item. Each stage is a whole layer of the picture and is
+choreographed and settled inside its own window, with a `DryAll` on the tick
+before the next begins, so tick `k/6` of the timeline is always the painting
+after exactly `k` stages, dry (`authoring::Stages`, `choreograph_stages`; the
+`hub` tests pin it).
+
+That holds in **tick** space. The player's default curve spends the first
+fifth of the wall clock on all the painting, so a host that steps through the
+stops must pass `easing: (t) => t`, which switches the engine to
+`ProgressCurve::Linear`; `seek(k / 6)` then lands on stop `k`. The baked strip
+matches: these manifest entries set `"stripFrames": 7` and
+`"linearProgress": true`, so strip frame `k` is stop `k` and a linear seek on
+the baked fallback shows the same painting. Contact sheets of every stop, light
+and dark, are in `docs/watercolour/hub-scenes/` (one row per stop, 0 at the
+top; light ground on the left, dark on the right), regenerated with the
+`render_stops` infra example.
+
 ## Static PNG export
 
 `PngExporter` encodes a premultiplied-linear-RGBA `Image` to **straight-alpha
@@ -211,9 +232,9 @@ bundled set only - an `assetBaseUrl` is served exactly as requested.
 
 | Artwork | Default palette |
 |---|---|
-| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell` | `moonlight` |
-| `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge` | `water` |
-| `overlapping-shapes`, `linked-rings` | `dusk` |
+| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell`, `hub-lakeside-cabin` | `moonlight` |
+| `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge`, `hub-lighthouse` | `water` |
+| `overlapping-shapes`, `linked-rings`, `hub-dawn-ridges` | `dusk` |
 | `confirmation-mark`, `confirmation-background` | `moss` |
 | `report-pages`, `distant-mountains` | `slate` |
 | `tab-underline` | `ember` |
