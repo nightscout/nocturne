@@ -62,6 +62,16 @@ public class FlexibleDeserializationTests
         json.Should().Contain("\"noise\":2");
     }
 
+    [Theory]
+    [InlineData("""{"mbg": 120}""")]
+    [InlineData("""{"mbg": "120"}""")]
+    public void Entry_Mbg_DeserializesNumberOrNumericString(string json)
+    {
+        var entry = JsonSerializer.Deserialize<Entry>(json);
+
+        entry!.Mbg.Should().Be(120);
+    }
+
     // ========================================================================
     // Treatment.Rate — real data contains "offset" instead of a number
     // ========================================================================

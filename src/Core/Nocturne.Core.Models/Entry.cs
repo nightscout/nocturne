@@ -163,6 +163,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets or sets the meter blood glucose in mg/dL
     /// </summary>
     [JsonPropertyName("mbg")]
+    [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
     public double? Mbg { get; set; }
 
     /// <summary>
