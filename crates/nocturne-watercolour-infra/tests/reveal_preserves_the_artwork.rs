@@ -28,7 +28,7 @@ use nocturne_watercolour_core::application::playback::{
     DEFAULT_PAINT_WALL_FRACTION, DEFAULT_TICK_BUDGET,
 };
 use nocturne_watercolour_core::application::{CpuEngine, Playback, ProgressCurve, Renderer};
-use nocturne_watercolour_core::domain::{Background, Image, Palette, Seed};
+use nocturne_watercolour_core::domain::{Background, Image, Operation, Palette, Seed};
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DEFAULT_INTENSITY, DetailLevel};
 
 /// Alpha at or above which a pixel counts as part of the artwork at all: the
@@ -324,6 +324,19 @@ fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
         .unwrap();
         let aspect = scene.size_hint.height as f32 / scene.size_hint.width as f32;
         let (w, h) = (192u32, ((192.0 * aspect).round() as u32).max(8));
+        if let Some(stages) = ArtworkCatalogue::stages(id) {
+            let share = first_stage_pace(scene, stages, (w, h));
+            println!(
+                "{id:<24} first stage at {:.0} %: {share:.2}",
+                PACE_AT * 100.0
+            );
+            if share > MAX_AREA_AT_PACE {
+                slow.push(format!(
+                    "{id}: {share:.2} of its first stage was already there"
+                ));
+            }
+            continue;
+        }
         let curve = ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION);
         let ProgressCurve::Reveal { wall_split, .. } = curve else {
             unreachable!("reveal_for always returns Reveal")
@@ -352,6 +365,40 @@ fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
         slow.join("
   ")
     );
+}
+
+/// [`every_artwork_is_still_arriving_a_quarter_of_the_way_in`] for a staged
+/// artwork, which a host steps through one stage at a time with a linear
+/// seek: the share of the first stage's finished area already down a quarter
+/// of the way through that stage's brushwork.
+fn first_stage_pace(
+    scene: nocturne_watercolour_core::domain::Scene,
+    stages: u32,
+    (w, h): (u32, u32),
+) -> f32 {
+    let window = scene.timeline.total_ticks / stages;
+    let last_stroke = scene
+        .timeline
+        .events
+        .iter()
+        .filter(|e| e.at_tick < window)
+        .filter(|e| {
+            matches!(
+                e.op,
+                Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
+            )
+        })
+        .map(|e| e.at_tick)
+        .max()
+        .unwrap_or(window);
+    let mut pb = Playback::new(CpuEngine::default(), scene, 3000.0).unwrap();
+    pb.set_progress_curve(ProgressCurve::Linear);
+    pb.seek_tick((PACE_AT * last_stroke as f32).round() as u32)
+        .unwrap();
+    let early = covered_area(&pb.simulator().render(w, h).unwrap());
+    pb.seek_tick(window).unwrap();
+    let full = covered_area(&pb.simulator().render(w, h).unwrap());
+    if full > 0.0 { early / full } else { 0.0 }
 }
 
 /// How much longer than its authored wall clock an artwork's brushwork may
@@ -391,12 +438,18 @@ fn the_brushwork_fits_the_frames_it_is_given() {
             )
             .unwrap();
             let total = scene.timeline.total_ticks as f32;
-            let ProgressCurve::Reveal { tick_split, .. } =
-                ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION)
-            else {
-                unreachable!("reveal_for always returns Reveal")
+            // A staged artwork plays one stage per step, each its own reveal.
+            let paint_ticks = match ArtworkCatalogue::stages(id) {
+                Some(stages) => total / stages as f32,
+                None => {
+                    let ProgressCurve::Reveal { tick_split, .. } =
+                        ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION)
+                    else {
+                        unreachable!("reveal_for always returns Reveal")
+                    };
+                    tick_split * total
+                }
             };
-            let paint_ticks = tick_split * total;
             let ratio = paint_ticks / affordable;
             println!("{id:<24} {detail:?} paint {paint_ticks:.0} ticks, {ratio:.2} of budget");
             if ratio > MAX_BRUSHWORK_SLIP {

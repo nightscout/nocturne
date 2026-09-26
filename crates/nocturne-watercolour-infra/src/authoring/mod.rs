@@ -143,6 +143,13 @@ impl ArtworkCatalogue {
         Self::IDS
     }
 
+    /// How many equal stages `id` is painted in (see [`Stages`]), or `None`
+    /// for an artwork revealed in one go. A staged artwork is stepped through
+    /// with a linear seek to `k / stages`, one stage per step.
+    pub fn stages(id: &str) -> Option<u32> {
+        hub::IDS.contains(&id).then_some(hub::STOPS)
+    }
+
     /// `by_id_for` on a light ground.
     pub fn by_id(
         id: &str,
@@ -203,8 +210,8 @@ impl ArtworkCatalogue {
             sim_resolution,
         )?;
         let style = style_for(seed, intensity, detail, background, sim_resolution);
-        if hub::IDS.contains(&id) {
-            choreograph_stages(&mut scene.timeline, &style.choreography(), hub::STOPS);
+        if let Some(stages) = Self::stages(id) {
+            choreograph_stages(&mut scene.timeline, &style.choreography(), stages);
         } else {
             choreograph_scene(&mut scene, &style.choreography());
         }
