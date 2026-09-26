@@ -39,8 +39,7 @@ public class OrphanedSubjectFilterTests : IDisposable
         bool isDemoSubject = false,
         bool withPasskey = false,
         bool withOidc = false,
-        bool oidcProviderEnabled = true,
-        DateTime? revokedAt = null)
+        bool oidcProviderEnabled = true)
     {
         var subjectId = Guid.CreateVersion7();
         _context.Subjects.Add(new SubjectEntity
@@ -57,7 +56,6 @@ public class OrphanedSubjectFilterTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = tenantId ?? _tenant,
             SubjectId = subjectId,
-            RevokedAt = revokedAt,
         });
 
         if (withPasskey)
@@ -146,15 +144,6 @@ public class OrphanedSubjectFilterTests : IDisposable
         SeedMember("Locked out", withOidc: true, oidcProviderEnabled: false);
 
         (await OrphansAsync()).Should().ContainSingle().Which.Should().Be("Locked out");
-    }
-
-    [Fact]
-    public async Task A_revoked_membership_does_not_count()
-    {
-        // Revoking is how a member is removed, so the account has left this tenant.
-        SeedMember("Departed", revokedAt: DateTime.UtcNow);
-
-        (await OrphansAsync()).Should().BeEmpty();
     }
 
     [Fact]

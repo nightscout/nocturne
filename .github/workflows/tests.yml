@@ -230,6 +230,8 @@ jobs:
       # E2E suite that would is opt-in, so this is the only gate on it.
       - name: App server-rendering tests
         run: pnpm --filter @nocturne/app run test:render
+      - name: App production translation tests
+        run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       # The portal's `check` needs the generated client, but its vitest suites do not.
       - name: Portal unit tests
         run: pnpm --filter @nocturne/portal run test

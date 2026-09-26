@@ -315,7 +315,6 @@ public class MemberInviteService : IMemberInviteService
             entity.IsRevoked,
             entity.CreatedAt,
             entity.CreatedMembers
-                .Where(m => m.RevokedAt == null)
                 .Select(m => new InviteUsageInfo(
                     m.SubjectId,
                     m.Subject?.Name,

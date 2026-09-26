@@ -19,11 +19,6 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// excluded here rather than relying on callers to check <c>IsDemo</c> first: a filter that is only
 /// correct because an unrelated early return happens to run before it is not correct.
 /// </para>
-/// <para>
-/// Revoked memberships fall out through <see cref="TenantMemberEntity"/>'s global query filter. A
-/// caller that reproduces this in SQL has to spell that condition out, since raw SQL does not carry
-/// the filter.
-/// </para>
 /// </remarks>
 public static class OrphanedSubjectFilter
 {

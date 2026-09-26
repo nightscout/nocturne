@@ -91,12 +91,6 @@ public class TenantMemberEntity : ISystemTimestamped
     public string? LastUsedUserAgent { get; set; }
 
     /// <summary>
-    /// When the membership was revoked, if applicable
-    /// </summary>
-    [Column("revoked_at")]
-    public DateTime? RevokedAt { get; set; }
-
-    /// <summary>
     /// Navigation property to the tenant
     /// </summary>
     public TenantEntity? Tenant { get; set; }

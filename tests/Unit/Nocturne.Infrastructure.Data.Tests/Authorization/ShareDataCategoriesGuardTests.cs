@@ -25,7 +25,7 @@ public class ShareDataCategoriesGuardTests
         "alert_instances", "alert_invites", "alert_rule_channels", "alert_rules", "alert_tracker_state",
         "basal_schedules", "body_weights", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "compression_low_suggestions", "connector_configurations", "data_source_metadata",
-        "dedup_reconcile_state", "devices", "discrepancy_analyses",
+        "dedup_reconcile_state", "device_clock_observations", "devices", "discrepancy_analyses",
         "discrepancy_details", "dnd_windows", "in_app_notifications", "lab_hba1c_results", "linked_records", "login_codes",
         "member_invites", "membership_requests",
         "mutation_audit_log", "notes", "oauth_authorization_codes", "oauth_clients", "oauth_device_codes",

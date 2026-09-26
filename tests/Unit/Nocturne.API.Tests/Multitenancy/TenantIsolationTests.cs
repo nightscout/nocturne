@@ -931,7 +931,8 @@ public class TenantIsolationTests
                 tenantContext.TenantId,
                 new HashSet<string> { Nocturne.Core.Models.Authorization.Scope.FullAccess },
                 Nocturne.API.Hubs.HubCredentialKind.Subject,
-                Guid.NewGuid()));
+                Guid.NewGuid(),
+                HistoryClamped: false));
 
         var mockGroups = new Mock<IGroupManager>();
         var mockClients = new Mock<IHubCallerClients>();

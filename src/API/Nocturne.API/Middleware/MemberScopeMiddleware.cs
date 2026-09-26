@@ -64,26 +64,14 @@ public class MemberScopeMiddleware
         if (authContext is { IsAuthenticated: true, TenantId: { } tenantId })
         {
             await ResolveAsync(context, authContext, tenantId);
-            ApplyHistoryClamp(context, authContext);
+
+            // Outside ResolveAsync because its early returns (a guest, a credential with no
+            // membership) still carry the credential's own limit.
+            if (authContext.LimitTo24Hours)
+                context.ClampMemberHistory();
         }
 
         await _next(context);
-    }
-
-    /// <summary>
-    /// Carries a resolved <see cref="AuthContext.LimitTo24Hours"/> to Row-Level Security: onto
-    /// <see cref="ICategoryReadContext"/>, which the DbContext factory and the PHI caches read, and
-    /// onto the request-scoped context, which was pinned before authentication ran. Every credential
-    /// kind passes through here after its own limit and the membership's are combined.
-    /// </summary>
-    private static void ApplyHistoryClamp(HttpContext context, AuthContext authContext)
-    {
-        if (!authContext.LimitTo24Hours)
-            return;
-
-        context.RequestServices.GetService<ICategoryReadContext>()?.ClampMemberHistory();
-        if (context.RequestServices.GetService<NocturneDbContext>() is { } db)
-            db.HistoryClamped = true;
     }
 
     private async Task ResolveAsync(HttpContext context, AuthContext authContext, Guid tenantId)
@@ -184,13 +172,8 @@ public class MemberScopeMiddleware
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
         context.SetPermissionTrie(memberTrie);
 
-        // The narrower of the two wins. A credential may carry its own limit (a direct grant issued
-        // for a follower's phone), and overwriting rather than combining would let the membership
-        // widen a token that was deliberately restricted. The membership's own flag is ignored for
-        // a member who administers the tenant; see MemberScopeResolver.IsExemptFromHistoryClamp.
-        var membershipClamp = membership.LimitTo24Hours
-            && !MemberScopeResolver.IsExemptFromHistoryClamp(effectivePermissions);
-        authContext.LimitTo24Hours = membershipClamp || authContext.LimitTo24Hours;
+        authContext.LimitTo24Hours = MemberScopeResolver.IsHistoryClamped(
+            authContext.LimitTo24Hours, membership.LimitTo24Hours, effectivePermissions);
 
         _logger.LogDebug(
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",

@@ -259,7 +259,7 @@ public class SubjectTokenConversionTests(SubjectTokenConversionFixture fixture)
         var orphans = await ScalarAsync<long>(Converts,
             $"""
             SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id
-             WHERE tm.tenant_id = '{Converts}' AND tm.revoked_at IS NULL AND s.is_active
+             WHERE tm.tenant_id = '{Converts}' AND s.is_active
                AND NOT s.is_system_subject AND NOT s.is_demo_subject
                AND NOT EXISTS (SELECT 1 FROM passkey_credentials p WHERE p.subject_id = s.id)
                AND NOT EXISTS (SELECT 1 FROM subject_oidc_identities i WHERE i.subject_id = s.id);

@@ -462,12 +462,6 @@ public class PasskeyController : ControllerBase
     /// the caller's ceremony was minted against, wins. Ids are UUID v7, which sort in creation order.
     /// Walking the candidates newest-first and taking the first with no membership is the same
     /// answer as the newest candidate satisfying all four conditions at once.
-    /// <para>
-    /// A membership that has been revoked does not count, here or in
-    /// <see cref="ITenantMemberService.GetTenantIdsForSubjectAsync"/>: the global
-    /// <c>RevokedAt == null</c> filter excludes it either way. A revoked member is a shell with no
-    /// remaining access, so enrolling onto it takes nothing over.
-    /// </para>
     /// </remarks>
     private async Task<Guid?> FindEnrollingSubjectIdAsync(Expression<Func<SubjectEntity, bool>> match)
     {

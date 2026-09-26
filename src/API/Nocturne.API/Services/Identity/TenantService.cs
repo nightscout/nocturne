@@ -203,7 +203,6 @@ public partial class TenantService : ITenantService
         return new TenantDetailDto(
             tenant.Id, tenant.Slug, tenant.DisplayName, tenant.IsActive, tenant.SysCreatedAt,
             tenant.Members
-                .Where(m => m.RevokedAt == null)
                 .Select(m => new TenantMemberDto(
                     m.Id,
                     m.SubjectId,

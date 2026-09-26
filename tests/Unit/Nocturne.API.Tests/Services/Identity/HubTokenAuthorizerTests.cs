@@ -78,7 +78,11 @@ public class HubTokenAuthorizerTests
     private void SetupValidJwt(Guid? tenantId, params string[] scopes) =>
         SetupValidJwt(tenantId, grantId: null, scopes);
 
-    private void SetupValidJwt(Guid? tenantId, Guid? grantId, params string[] scopes)
+    private void SetupValidJwt(Guid? tenantId, Guid? grantId, params string[] scopes) =>
+        SetupValidJwt(tenantId, grantId, limitTo24Hours: false, scopes);
+
+    private void SetupValidJwt(
+        Guid? tenantId, Guid? grantId, bool limitTo24Hours, params string[] scopes)
     {
         SeedMember(Tenant, JwtSubject, Scope.FullAccess);
         _jwtService
@@ -89,6 +93,7 @@ public class HubTokenAuthorizerTests
                 TenantId = tenantId,
                 GrantId = grantId,
                 Scopes = [.. scopes],
+                LimitTo24Hours = limitTo24Hours,
                 JwtId = "jti-1",
                 IssuedAt = DateTimeOffset.UtcNow,
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
@@ -99,13 +104,28 @@ public class HubTokenAuthorizerTests
     }
 
     /// <summary>Makes <paramref name="subjectId"/> a member of <paramref name="tenantId"/> only.</summary>
-    private void SeedMember(Guid tenantId, Guid subjectId, params string[] rolePermissions)
+    private void SeedMember(Guid tenantId, Guid subjectId, params string[] rolePermissions) =>
+        SeedMember(tenantId, subjectId, limitTo24Hours: false, rolePermissions);
+
+    private void SeedMember(
+        Guid tenantId, Guid subjectId, bool limitTo24Hours, params string[] rolePermissions)
     {
         _memberService
-            .Setup(m => m.GetEffectivePermissionsAsync(
+            .Setup(m => m.GetMemberAccessAsync(
                 subjectId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid _, Guid queriedTenant, CancellationToken _) =>
-                queriedTenant == tenantId ? rolePermissions.ToHashSet() : null);
+                queriedTenant == tenantId
+                    ? new TenantMemberAccess(rolePermissions.ToHashSet(), limitTo24Hours)
+                    : null);
+    }
+
+    private async Task LimitDirectGrantTo24HoursAsync(Guid grantId)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        db.TenantId = Tenant;
+        var grant = await db.OAuthGrants.SingleAsync(g => g.Id == grantId);
+        grant.LimitTo24Hours = true;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -277,6 +297,63 @@ public class HubTokenAuthorizerTests
     }
 
     [Fact]
+    public async Task Jwt_carrying_its_own_24_hour_limit_is_clamped_even_for_an_owner()
+    {
+        // The owner's membership is exempt from its own flag, but a credential's limit is a ceiling
+        // the holder chose for the token.
+        SetupValidJwt(Tenant, grantId: null, limitTo24Hours: true, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Unflagged_jwt_on_a_membership_limited_to_24_hours_is_clamped()
+    {
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
+        SeedMember(Tenant, JwtSubject, limitTo24Hours: true, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Membership_limit_is_ignored_for_a_member_who_manages_site_settings()
+    {
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
+        SeedMember(Tenant, JwtSubject, limitTo24Hours: true, Scope.GlucoseRead, Scope.TenantSettings);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Unflagged_jwt_on_an_unflagged_membership_reads_full_history()
+    {
+        SetupValidJwt(Tenant, Scope.GlucoseRead);
+        SeedMember(Tenant, JwtSubject, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            JwtShapedToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Jwt_scopes_are_narrowed_to_what_the_membership_grants()
     {
         // The credential is the ceiling in the other direction too: the authorized connection must
@@ -397,7 +474,7 @@ public class HubTokenAuthorizerTests
 
         result.Should().BeNull();
         _memberService.Verify(
-            m => m.GetEffectivePermissionsAsync(
+            m => m.GetMemberAccessAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
@@ -417,6 +494,37 @@ public class HubTokenAuthorizerTests
         result!.TenantId.Should().Be(Tenant);
         result.Kind.Should().Be(HubCredentialKind.Subject);
         result.SubjectId.Should().Be(subjectId);
+    }
+
+    [Fact]
+    public async Task Direct_grant_limited_to_24_hours_is_clamped()
+    {
+        var subjectId = Guid.CreateVersion7();
+        var grantId = await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, Scope.GlucoseRead);
+        await LimitDirectGrantTo24HoursAsync(grantId);
+        SeedMember(Tenant, subjectId, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Unflagged_direct_grant_on_a_membership_limited_to_24_hours_is_clamped()
+    {
+        var subjectId = Guid.CreateVersion7();
+        await SeedDirectGrantAsync(Tenant, subjectId, revokedAt: null, Scope.GlucoseRead);
+        SeedMember(Tenant, subjectId, limitTo24Hours: true, Scope.GlucoseRead);
+        var authorizer = CreateAuthorizer();
+
+        var result = await authorizer.AuthorizeTokenAsync(
+            DirectGrantToken, Tenant, Scope.GlucoseRead);
+
+        result.Should().NotBeNull();
+        result!.HistoryClamped.Should().BeTrue();
     }
 
     [Fact]

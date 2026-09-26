@@ -266,6 +266,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<TimezoneTimelineEntity> TimezoneTimeline { get; set; }
 
+    /// <summary>
+    /// Device-clock offset evidence gathered by connectors — stored separately from
+    /// <see cref="TimezoneTimeline"/> so derived knowledge never clobbers a user assertion.
+    /// </summary>
+    public DbSet<DeviceClockObservationEntity> DeviceClockObservations { get; set; }
+
     public DbSet<CalibrationEntity> Calibrations { get; set; }
 
     public DbSet<BolusEntity> Boluses { get; set; }
@@ -412,13 +418,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                     Security.TotpSecretProtection.CreateProtector(ApplicationServices)));
 
         ConfigureTenantFilters(modelBuilder);
-
-        // Tenant membership is "active" only while not revoked. Enforcing this once here
-        // keeps every membership query (auth gates, setup detection, admin listings) from
-        // having to repeat `RevokedAt == null`. The matching partial unique index
-        // (ix_tenant_members_tenant_subject, filtered on revoked_at IS NULL) lets a revoked
-        // membership coexist with a fresh active one, so re-adds remain valid.
-        modelBuilder.Entity<TenantMemberEntity>().HasQueryFilter(tm => tm.RevokedAt == null);
 
         ConfigureTenantCascadeDeletes(modelBuilder);
 
@@ -1683,6 +1682,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_timezone_timeline_tenant_effective_from")
             .IsUnique();
 
+        // DeviceClockObservations: an observation is keyed by what was observed and when — the same
+        // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
+        modelBuilder.Entity<DeviceClockObservationEntity>()
+            .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
+            .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
+            .IsUnique();
+
         modelBuilder
             .Entity<CarbIntakeEntity>()
             .HasIndex(e => new { e.TenantId, e.Timestamp })
@@ -2336,14 +2342,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.SubjectId })
             .HasDatabaseName("ix_tenant_members_tenant_subject")
-            .IsUnique()
-            .HasFilter("revoked_at IS NULL");
+            .IsUnique();
 
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.Username })
             .HasDatabaseName("ix_tenant_members_tenant_username")
             .IsUnique()
-            .HasFilter("username IS NOT NULL AND revoked_at IS NULL");
+            .HasFilter("username IS NOT NULL");
 
         modelBuilder.Entity<TenantRoleEntity>(entity =>
         {

@@ -89,9 +89,8 @@ public class PasskeyControllerTests : IDisposable
             auditService.Object,
             _tenantAccessor.Object,
             _tenantService.Object,
-            // The real service, not a mock: the enrolment probe's cross-tenant reach and its
-            // revoked-membership filtering are the properties under test, and a mock would
-            // assert the mock.
+            // The real service, not a mock: the enrolment probe's cross-tenant reach is the
+            // property under test, and a mock would assert the mock.
             new TenantMemberService(new SharedSqliteFactory(_db.Options)),
             _dbContext,
             new SharedSqliteFactory(_db.Options),
@@ -650,7 +649,6 @@ public class PasskeyControllerTests : IDisposable
     {
         await AllowAccessRequestsAsync();
         var owner = await SeedOwnerAsync("owner");
-        await SeedOwnerAsync("revoked", revokedAt: DateTime.UtcNow);
         await SeedOwnerAsync("deactivated", isActive: false);
         await SeedOwnerAsync("public", isSystemSubject: true);
         var requestorId = await SeedPendingAccessRequestAsync("Sam Smith");
@@ -801,36 +799,6 @@ public class PasskeyControllerTests : IDisposable
             s => s.CompleteRegistrationAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), newerMember, It.IsAny<string?>()),
             Times.Never);
-    }
-
-    /// <summary>
-    /// A revoked membership does not disqualify a candidate: it carries no access, so the subject
-    /// is the same empty shell as one that never had a membership. Current behaviour of the single
-    /// anti-join too — the global <c>RevokedAt == null</c> filter excluded it there as well.
-    /// </summary>
-    [Fact]
-    public async Task InviteComplete_WhenTheCandidatesOnlyMembershipIsRevoked_ResolvesThatSubject()
-    {
-        var revokedId = await SeedRevokedMemberAsync("returning", tenantId: Guid.CreateVersion7());
-        var inviteService = StubValidInvite();
-        StubRegistrationChallengeMintedFor(revokedId);
-        _recoveryCodeService.Setup(s => s.GenerateCodesAsync(revokedId)).ReturnsAsync(["code-1"]);
-        _sessionService
-            .Setup(s => s.IssueSessionAsync(revokedId, It.IsAny<SessionContext>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SessionTokenPair("access", "refresh", 900));
-
-        var result = await _controller.InviteComplete(
-            new InviteCompleteRequest
-            {
-                Token = "invite-token",
-                Username = "returning",
-                AttestationResponseJson = "{}",
-                ChallengeToken = "challenge-for-returning",
-            },
-            inviteService.Object);
-
-        Assert.IsType<OkObjectResult>(result.Result);
-        inviteService.Verify(s => s.AcceptInviteAsync("invite-token", revokedId, _tenantId), Times.Once);
     }
 
     /// <summary>
@@ -1008,39 +976,6 @@ public class PasskeyControllerTests : IDisposable
     }
 
     /// <summary>
-    /// Adds the subject that <c>invite/options</c> creates: active, no credentials, and not yet a
-    /// member of the tenant.
-    /// </summary>
-    /// <summary>
-    /// Seeds an active subject whose only membership — of another tenant — has been revoked, and
-    /// returns the subject id. A revoked membership carries no access, so the subject is the same
-    /// credential-less shell as one that never had a membership at all.
-    /// </summary>
-    private async Task<Guid> SeedRevokedMemberAsync(string username, Guid tenantId)
-    {
-        await EnsureTenantAsync(tenantId);
-
-        var subjectId = Guid.CreateVersion7();
-        _dbContext.Subjects.Add(new SubjectEntity
-        {
-            Id = subjectId,
-            Name = username,
-            Username = username,
-            IsActive = true,
-            IsSystemSubject = false,
-        });
-        _dbContext.TenantMembers.Add(new TenantMemberEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = tenantId,
-            SubjectId = subjectId,
-            RevokedAt = DateTime.UtcNow.AddDays(-1),
-        });
-        await _dbContext.SaveChangesAsync();
-        return subjectId;
-    }
-
-    /// <summary>
     /// Two ids that sort the same way under every representation the enrolling-subject query might
     /// order on: <see cref="Guid.CompareTo(Guid)"/>, the SQLite column these tests sort in, and the
     /// PostgreSQL <c>uuid</c> column production sorts in.
@@ -1100,14 +1035,13 @@ public class PasskeyControllerTests : IDisposable
 
     private async Task<Guid> SeedOwnerAsync(
         string username,
-        DateTime? revokedAt = null,
         bool isActive = true,
         bool isSystemSubject = false)
     {
         await EnsureTenantAsync(_tenantId);
         return await TestDatabaseSeeder.SeedMemberAsync(
             _dbContext, _tenantId, name: username,
-            isActive: isActive, isSystemSubject: isSystemSubject, revokedAt: revokedAt);
+            isActive: isActive, isSystemSubject: isSystemSubject);
     }
 
     private async Task AllowAccessRequestsAsync()

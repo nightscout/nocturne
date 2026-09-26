@@ -11886,6 +11886,8 @@ msgstr ""
 #~ msgstr ""
 
 #. 0: Math.round(toIfccMmolMol(percent))
+#. 0: Math.round(value)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "{0} mmol/mol"
 msgstr ""
@@ -25496,3 +25498,11 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "The stack uses the same restart policy and log rotation as the <0>Docker Compose bundle</0>. Portainer stacks do not read override files, so to keep your own logging driver, edit the <1/> section of each service in the stack editor instead."
 msgstr ""
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "eHbA1c"
+msgstr "eHbA1c"
+
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Lab result"
+msgstr "实验室检测结果"

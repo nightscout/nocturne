@@ -67,6 +67,23 @@ public static class MemberScopeResolver
         Scope.Satisfies(Scope.NormalizeMemberPermissions(effectivePermissions), Scope.TenantSettings);
 
     /// <summary>
+    /// Whether a credential presented on a membership may read only the last 24 hours. The narrower
+    /// of the two limits wins: a credential may carry its own (a direct grant issued for a
+    /// follower's phone), and the membership must not widen a token that was deliberately
+    /// restricted. The membership's own flag is ignored for a member
+    /// <see cref="IsExemptFromHistoryClamp"/> exempts.
+    /// </summary>
+    /// <param name="credentialLimitTo24Hours">The credential's own limit.</param>
+    /// <param name="membershipLimitTo24Hours">The membership's <c>limit_to_24_hours</c> flag.</param>
+    /// <param name="effectivePermissions">Role permissions unioned with direct permissions.</param>
+    public static bool IsHistoryClamped(
+        bool credentialLimitTo24Hours,
+        bool membershipLimitTo24Hours,
+        IEnumerable<string> effectivePermissions) =>
+        credentialLimitTo24Hours
+        || (membershipLimitTo24Hours && !IsExemptFromHistoryClamp(effectivePermissions));
+
+    /// <summary>
     /// The refusal a member editor reads when asked to clamp a member
     /// <see cref="IsExemptFromHistoryClamp"/> exempts.
     /// </summary>

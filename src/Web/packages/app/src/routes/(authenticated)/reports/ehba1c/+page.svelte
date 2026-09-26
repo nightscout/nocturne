@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { LineChart } from "layerchart";
+  import { SvelteMap } from "svelte/reactivity";
+  import { LineChart, Tooltip } from "layerchart";
   import { Loader2, Activity, Plus, Trash2 } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
@@ -83,6 +84,10 @@
     return value instanceof Date ? value : new Date(value ?? 0);
   }
 
+  function dateKey(date: Date): string {
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+  }
+
   /** IFCC mmol/mol to NGSP %, the inverse of toIfccMmolMol — used to store a mmol/mol entry as %. */
   function toPercentFromDisplayUnit(value: number): number {
     return a1cUnit === "percent" ? value : value / 10.929 + 2.15;
@@ -92,6 +97,12 @@
     return a1cUnit === "percent"
       ? `${percent.toFixed(1)}%`
       : `${Math.round(toIfccMmolMol(percent))} mmol/mol`;
+  }
+
+  function formatDisplayValue(value: number): string {
+    return a1cUnit === "percent"
+      ? `${value.toFixed(1)}%`
+      : `${Math.round(value)} mmol/mol`;
   }
 
   function toChartPoints(pointsMap: Map<number, EHbA1cPoint[]>): ChartPoint[] {
@@ -124,11 +135,6 @@
   });
 
   setReportPrintMeta(() => (timelineBounds ? { period: timelineBounds } : {}));
-
-  const displayChartData = $derived(
-    chartData.map((p) => ({ ...p, displayValue: toDisplayUnit(p.estimatedA1cPercent) }))
-  );
-
   const latest = $derived(chartData.length > 0 ? chartData[chartData.length - 1] : undefined);
 
   const extremes = $derived.by(() => {
@@ -228,6 +234,51 @@
       note: r.note,
     }))
   );
+
+  function displayValueForChartDate(date: Date): number | null {
+    if (chartData.length === 0) return null;
+    const timestamp = date.getTime();
+    if (
+      timestamp < chartData[0].date.getTime() ||
+      timestamp > chartData[chartData.length - 1].date.getTime()
+    ) {
+      return null;
+    }
+    const nextIndex = chartData.findIndex((point) => point.date.getTime() >= timestamp);
+    if (nextIndex === 0) return toDisplayUnit(chartData[0].estimatedA1cPercent);
+    if (nextIndex === -1) return toDisplayUnit(chartData[chartData.length - 1].estimatedA1cPercent);
+
+    const previous = chartData[nextIndex - 1];
+    const next = chartData[nextIndex];
+    const progress = (timestamp - previous.date.getTime()) / (next.date.getTime() - previous.date.getTime());
+    const value = previous.estimatedA1cPercent +
+      (next.estimatedA1cPercent - previous.estimatedA1cPercent) * progress;
+    return toDisplayUnit(value);
+  }
+
+  const displayChartData = $derived.by(() => {
+    const rows = new SvelteMap<number, { date: Date; displayValue: number }>();
+    for (const point of chartData) {
+      rows.set(point.date.getTime(), {
+        date: point.date,
+        displayValue: toDisplayUnit(point.estimatedA1cPercent),
+      });
+    }
+    // A lab-only date gets a synthetic row with the interpolated estimate solely to give the tooltip
+    // a hover target there. `extremes` and `yDomain` read `chartData`, so the summaries never see
+    // these rows, and lab draws stay out of the calculation (see `labChartPoints`). Declaring lab
+    // draws as a second series instead would be wrong: LineChart renders a Spline per visible
+    // series and would join the lab points with a line.
+    for (const labPoint of labChartPoints) {
+      if (!rows.has(labPoint.date.getTime())) {
+        const displayValue = displayValueForChartDate(labPoint.date);
+        if (displayValue !== null) {
+          rows.set(labPoint.date.getTime(), { date: labPoint.date, displayValue });
+        }
+      }
+    }
+    return [...rows.values()].sort((a, b) => a.date.getTime() - b.date.getTime());
+  });
 
   async function addLabResult() {
     const value = Number(newLabValue);
@@ -344,7 +395,7 @@
           </div>
         {/if}
 
-        <div class="h-[320px] w-full @md:h-[400px]">
+        <div class="h-[320px] w-full @md:h-[400px]" data-testid="ehba1c-chart">
           <LineChart
             data={displayChartData}
             x="date"
@@ -358,10 +409,45 @@
                 color: "var(--ehba1c-line)",
               },
             ]}
-            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round" } }}
+            props={{ spline: { "stroke-width": 3, "stroke-linecap": "round", "data-testid": "ehba1c-line" } }}
             points={{ data: labChartPoints, x: (d) => d.date, y: (d) => d.displayValue, children: labMarkers }}
             {annotations}
-          />
+          >
+            {#snippet tooltip({ context })}
+              <Tooltip.Root {context} class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg">
+                {#snippet children({ data })}
+                  {@const hoveredDate = context.x(data)}
+                  {@const hoveredDateKey = dateKey(hoveredDate)}
+                  {@const eHbA1cPoint = chartData.find((point) => dateKey(point.date) === hoveredDateKey)}
+                  {@const labResultsForDate = labChartPoints.filter((point) => dateKey(point.date) === hoveredDateKey)}
+                  <div class="mb-2 text-sm font-semibold">{formatLongDate(hoveredDate)}</div>
+                  <div class="min-w-56 space-y-1.5 text-sm" data-testid="ehba1c-tooltip">
+                    {#if eHbA1cPoint}
+                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
+                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <span class="h-2 w-2 shrink-0 rounded-full bg-(--ehba1c-line)"></span>
+                          <span>eHbA1c</span>
+                        </span>
+                        <span class="font-mono font-medium tabular-nums">{formatDisplayValue(toDisplayUnit(eHbA1cPoint.estimatedA1cPercent))}</span>
+                      </div>
+                    {/if}
+                    {#each labResultsForDate as labResult (labResult.id)}
+                      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4">
+                        <span class="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <span class="h-0 w-0 shrink-0 border-x-4 border-b-8 border-x-transparent border-b-foreground"></span>
+                          <span>Lab result</span>
+                        </span>
+                        <span class="font-mono font-medium tabular-nums">{formatA1c(labResult.valuePercent)}</span>
+                        {#if labResult.note}
+                          <span class="col-span-2 truncate text-xs text-muted-foreground">{labResult.note}</span>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                {/snippet}
+              </Tooltip.Root>
+            {/snippet}
+          </LineChart>
         </div>
 
         <div class="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm">
@@ -467,9 +553,11 @@
 {#snippet labMarkers({ points }: { points: { x: number; y: number; data: (typeof labChartPoints)[number] }[] })}
   {#each points as point (point.data.id)}
     <polygon
+      data-testid="lab-marker"
       points="{point.x},{point.y - 7} {point.x - 6},{point.y + 5} {point.x + 6},{point.y + 5}"
       class="fill-foreground stroke-background"
       stroke-width="1"
+      pointer-events="none"
     >
       <title>Lab result: {formatA1c(point.data.valuePercent)} ({formatLongDate(point.data.date)}){point.data.note ? ` — ${point.data.note}` : ""}</title>
     </polygon>

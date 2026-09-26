@@ -71,7 +71,7 @@ public class HubAuthorizationFilterTests
 
     /// <summary>A member credential on the connection's own tenant carrying <paramref name="scopes"/>.</summary>
     private static HubAuthorization Member(params string[] scopes) => new(
-        Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Guid.NewGuid(), HistoryClamped: false);
 
     /// <summary>
     /// A share-style credential — a guest link — carrying <paramref name="scopes"/>.
@@ -82,7 +82,7 @@ public class HubAuthorizationFilterTests
     /// the refusal must hold on the kind alone, not on the subject id happening to be absent.
     /// </remarks>
     private static HubAuthorization Guest(params string[] scopes) => new(
-        Tenant, Scope.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid());
+        Tenant, Scope.Normalize(scopes), HubCredentialKind.Restricted, Guid.NewGuid(), HistoryClamped: false);
 
     private static async Task<bool> InvokeAsync(HubInvocationContext invocation)
     {
@@ -258,7 +258,8 @@ public class HubAuthorizationFilterTests
                          Tenant,
                          Scope.Normalize([Scope.FullAccess]),
                          HubCredentialKind.Infrastructure,
-                         SubjectId: null),
+                         SubjectId: null,
+                         HistoryClamped: false),
                  })
         {
             var reached = await InvokeAsync(CreateInvocation(hubType, methodName, authorization));
