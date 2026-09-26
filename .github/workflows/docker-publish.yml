@@ -101,8 +101,8 @@ jobs:
           test -f target/release/libnocturne_alerts.so
           test -f target/aarch64-unknown-linux-gnu/release/libnocturne_alerts.so
 
-      # Publishing never runs the client codegen (the API csproj turns it off when PublishDir
-      # is set), so this job needs no pnpm.
+      # The API's post-build targets would run the client codegen, which needs pnpm; only the
+      # web image uses that client, so it is switched off here.
       - name: Build and push Nocturne.API container
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         working-directory: src/API/Nocturne.API
@@ -113,6 +113,7 @@ jobs:
             '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
             -p:ContainerRegistry=${{ env.REGISTRY }} \
             -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
+            -p:GenerateNSwagClient=false \
             "-p:ContainerImageTags=${{ steps.tags.outputs.version }}" \
             "-p:ContainerGitCommit=${GITHUB_SHA}" \
             "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
