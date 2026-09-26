@@ -18,7 +18,7 @@ public class DeviceService : IDeviceService
     private readonly IDeviceRepository _repository;
     private readonly IPatientDeviceRepository _patientDeviceRepository;
     private readonly ITenantAccessor _tenantAccessor;
-    private readonly ConcurrentDictionary<(string, string, string, string), Guid> _cache = new();
+    private readonly ConcurrentDictionary<(string, string, string, string), Device> _cache = new();
     private readonly ConcurrentDictionary<(string, Guid), IReadOnlyList<PatientDevice>> _patientDeviceCache = new();
 
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
@@ -38,19 +38,18 @@ public class DeviceService : IDeviceService
 
         var tenantId = TenantCacheId;
         var key = (tenantId, category.ToString(), type, serial);
-        if (_cache.TryGetValue(key, out var cachedId))
-            return cachedId;
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
+        if (_cache.TryGetValue(key, out var cached))
+        {
+            await AdvanceLastSeenAsync(cached, timestamp, ct);
+            return cached.Id;
+        }
 
         var existing = await _repository.FindByCategoryTypeAndSerialAsync(category, type, serial, ct);
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
         if (existing is not null)
         {
-            if (timestamp > existing.LastSeenTimestamp)
-            {
-                existing.LastSeenTimestamp = timestamp;
-                await _repository.UpdateAsync(existing.Id, existing, WriteOrigin.Live, ct);
-            }
-            _cache[key] = existing.Id;
+            await AdvanceLastSeenAsync(existing, timestamp, ct);
+            _cache[key] = existing;
             return existing.Id;
         }
 
@@ -64,8 +63,28 @@ public class DeviceService : IDeviceService
             LastSeenTimestamp = timestamp
         };
         var created = await _repository.CreateAsync(device, WriteOrigin.Live, ct);
-        _cache[key] = created.Id;
+        _cache[key] = created;
         return created.Id;
+    }
+
+    private async Task AdvanceLastSeenAsync(Device device, DateTime timestamp, CancellationToken ct)
+    {
+        if (timestamp <= device.LastSeenTimestamp)
+            return;
+
+        var persisted = device.LastSeenTimestamp;
+        device.LastSeenTimestamp = timestamp;
+        try
+        {
+            await _repository.UpdateAsync(device.Id, device, WriteOrigin.Live, ct);
+        }
+        catch
+        {
+            // The cached device outlives a failed page in a migration's scope, so it must not
+            // claim a last seen the database never took.
+            device.LastSeenTimestamp = persisted;
+            throw;
+        }
     }
 
     public async Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default)
