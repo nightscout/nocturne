@@ -271,6 +271,16 @@ public class CrossSourceIngestDedupTests : IDisposable
     }
 
     [Fact]
+    public async Task TwoTidepoolBolusesOfOneSizeAtOneSecond_StayTwoDoses()
+    {
+        await _boluses.BulkCreateAsync(
+            [Bolus(1.2, EventTime, Connector, "tidepool_b1"), Bolus(1.2, EventTime, Connector, "tidepool_b2")],
+            WriteOrigin.Live);
+
+        (await VisibleBolusesAsync()).Should().HaveCount(2);
+    }
+
+    [Fact]
     public async Task SecondDoseFromTheUploader_BesideAMergedCopy_StaysVisible()
     {
         await _boluses.CreateAsync(Bolus(1, EventTime, null, "syn-first"), WriteOrigin.Live);

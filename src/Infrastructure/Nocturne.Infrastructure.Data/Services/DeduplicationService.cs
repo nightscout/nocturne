@@ -323,16 +323,25 @@ public class DeduplicationService : IDeduplicationService
     /// Whether the tight path refuses to put a record from <paramref name="source"/> into a group
     /// already holding <paramref name="groupSources"/>. Two same-amount records from one source
     /// seconds apart are two doses, and the tight window's tolerances cannot tell them from one, so
-    /// a group takes at most one record per source. The exception is a source that
-    /// <see cref="DataSources.EmitsDuplicateEvents"/>, whose twins must still merge.
+    /// a group takes at most one record per source. The exception is a source and record type that
+    /// <see cref="EmitsDuplicateEvents"/>, whose twins must still merge.
     /// <see cref="DeduplicationInput.UnknownDataSource"/> counts as one source like any other.
     /// Only dose-like record types are guarded; see <see cref="TracksTightSources"/>.
     /// </summary>
     internal static bool RefusesTightJoin(RecordType recordType, string source, IReadOnlySet<string>? groupSources) =>
         TracksTightSources(recordType)
-        && !DataSources.EmitsDuplicateEvents(source)
+        && !EmitsDuplicateEvents(recordType, source)
         && groupSources is not null
         && groupSources.Contains(source);
+
+    /// <summary>
+    /// True for a source and record type known to report one event twice under two ids. Tidepool
+    /// imports some carb events as two food records. It is not known to double any other type, so
+    /// two Tidepool boluses of one size at one second are two doses and stay apart.
+    /// </summary>
+    private static bool EmitsDuplicateEvents(RecordType recordType, string source) =>
+        recordType == RecordType.CarbIntake
+        && string.Equals(source, DataSources.TidepoolConnector, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether <see cref="RefusesTightJoin"/> applies to this record type. Sensor glucose and state
