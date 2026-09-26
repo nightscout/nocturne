@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Nocturne.Core.Models.V4;
 using Xunit;
 
 namespace Nocturne.Core.Constants.Tests;
@@ -80,8 +81,6 @@ public class GlucoseMirrorTests
     /// </summary>
     public static TheoryData<string, string, double> TargetRangeDeclarations() => new()
     {
-        { TrayIcon, @"const LOW_THRESHOLD_MGDL: f64 = ([0-9.]+);", GlucoseConstants.TargetBottomMgdl },
-        { TrayIcon, @"const HIGH_THRESHOLD_MGDL: f64 = ([0-9.]+);", GlucoseConstants.TargetTopMgdl },
         { ModSettings, @"- rangeLow: ([0-9.]+)", ToMmolSetting(GlucoseConstants.TargetBottomMgdl) },
         { ModSettings, @"- rangeHigh: ([0-9.]+)", ToMmolSetting(GlucoseConstants.TargetTopMgdl) },
     };
@@ -126,6 +125,40 @@ public class GlucoseMirrorTests
     {
         ReadHex(source, pattern).Should().Be(expected.ToUpperInvariant());
     }
+
+    /// <summary>
+    /// The tray matches the server's <see cref="GlucoseStatus"/> by name, and a name it does not
+    /// know renders neutral. A renamed or added member therefore fails safe and silently, so each
+    /// colour's arm is pinned to the members it should hold.
+    /// </summary>
+    public static TheoryData<string, string, string[]> StatusNameDeclarations() => new()
+    {
+        { TrayIcon, RustStatusArm("COLOR_LOW"), [nameof(GlucoseStatus.UrgentLow), nameof(GlucoseStatus.Low)] },
+        { TrayIcon, RustStatusArm("COLOR_IN_RANGE"), [nameof(GlucoseStatus.InRange)] },
+        { TrayIcon, RustStatusArm("COLOR_HIGH"), [nameof(GlucoseStatus.High), nameof(GlucoseStatus.UrgentHigh)] },
+    };
+
+    private static readonly string[] NeutralStatuses = [nameof(GlucoseStatus.Stale), nameof(GlucoseStatus.Unknown)];
+
+    [Theory]
+    [MemberData(nameof(StatusNameDeclarations))]
+    public void MirroredStatusNamesMatchTheBackend(string source, string pattern, string[] expected)
+    {
+        var names = Regex.Matches(Capture(source, pattern)[0], @"""(\w+)""").Select(match => match.Groups[1].Value);
+
+        names.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public void EveryBackendStatusHasATrayColourOrIsNeutral()
+    {
+        var covered = StatusNameDeclarations().SelectMany(row => (string[])row[2]).Concat(NeutralStatuses);
+
+        covered.Should().BeEquivalentTo(Enum.GetNames<GlucoseStatus>());
+    }
+
+    private static string RustStatusArm(string color) =>
+        $@"Some\(((?:""\w+""(?: \| )?)+)\) => {color},";
 
     private static string RustColor(string name) =>
         $@"const {name}: \(u8, u8, u8\) = \(0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}}), 0x([0-9A-Fa-f]{{2}})\);";
