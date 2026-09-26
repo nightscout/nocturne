@@ -2112,21 +2112,9 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.Property(e => e.Success).HasDefaultValue(true);
 
             entity
-                .HasOne(e => e.Subject)
-                .WithMany()
-                .HasForeignKey(e => e.SubjectId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity
                 .HasOne(e => e.RefreshToken)
                 .WithMany()
                 .HasForeignKey(e => e.RefreshTokenId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity
-                .HasOne<SubjectEntity>()
-                .WithMany()
-                .HasForeignKey(e => e.ActorSubjectId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
