@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models;
@@ -66,6 +67,9 @@ public class ActogramController : ControllerBase
     {
         if (endTime <= startTime)
             return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+
+        if (this.RejectDateSpan(startTime, endTime, V4ReadLimits.MaxActogramSpanDays) is { } overlong)
+            return overlong;
 
         var result = await _service.GetAsync(startTime, endTime, cancellationToken);
         return Ok(ActogramReadScopeGuard.Redact(result, HttpContext.GetGrantedScopes()));

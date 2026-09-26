@@ -48,7 +48,7 @@ public class AlertReplayController : ControllerBase
         }
         catch (ReplayWindowTooLargeException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
     }
 
@@ -82,7 +82,7 @@ public class AlertReplayController : ControllerBase
         }
         catch (ReplayWindowTooLargeException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
     }
 }

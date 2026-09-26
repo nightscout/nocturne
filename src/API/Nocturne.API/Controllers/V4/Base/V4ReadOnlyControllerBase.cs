@@ -76,8 +76,8 @@ public abstract class V4ReadOnlyControllerBase<TModel, TRepository>(TRepository 
         if (sort is not "timestamp_desc" and not "timestamp_asc")
             return Problem(detail: $"Invalid sort value '{sort}'. Must be 'timestamp_asc' or 'timestamp_desc'.", statusCode: 400, title: "Bad Request");
 
-        if (V4ReadLimits.ExceedsMaxDateSpan(from, to))
-            return Problem(detail: $"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.", statusCode: 400, title: "Bad Request");
+        if (this.RejectDateSpan(from, to) is { } overlong)
+            return overlong;
 
         descending = sort == "timestamp_desc";
         limit = V4ReadLimits.ClampLimit(limit);

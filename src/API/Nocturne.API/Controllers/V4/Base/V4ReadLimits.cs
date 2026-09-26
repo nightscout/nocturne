@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Mvc;
+
 namespace Nocturne.API.Controllers.V4.Base;
 
 /// <summary>
@@ -10,9 +12,9 @@ namespace Nocturne.API.Controllers.V4.Base;
 /// </para>
 /// <para>
 /// Over-large values are clamped rather than rejected, matching the existing V4 paging behaviour
-/// in <c>ProfileController.GetProfileRecords</c>. An over-long date range is rejected instead,
-/// matching <c>SleepReportController.GetTrends</c>: silently narrowing a range would answer a
-/// different question than the caller asked.
+/// in <c>ProfileController.GetProfileRecords</c>. An over-long date range is rejected instead, by
+/// <see cref="RejectDateSpan(ControllerBase, DateTime?, DateTime?, int)"/>: silently narrowing a
+/// range would answer a different question than the caller asked.
 /// </para>
 /// </remarks>
 public static class V4ReadLimits
@@ -58,6 +60,24 @@ public static class V4ReadLimits
     /// </remarks>
     public const int MaxDateSpanDays = 366;
 
+    /// <summary>
+    /// Maximum span, in days, of a CGM comparison or sleep trends window.
+    /// </summary>
+    /// <remarks>
+    /// Both routes held a 90-day contract before the shared ceiling existed, and their callers send
+    /// the picker range unpadded, so the widest preset fits exactly.
+    /// </remarks>
+    public const int MaxAnalyticsSpanDays = 90;
+
+    /// <summary>
+    /// Maximum span, in days, of an actogram window.
+    /// </summary>
+    /// <remarks>
+    /// The actogram report pads the picker range by 14 days each side for its double plot, so a
+    /// picker range at <see cref="MaxDateSpanDays"/> arrives 28 days wider.
+    /// </remarks>
+    public const int MaxActogramSpanDays = MaxDateSpanDays + 28;
+
     /// <summary>Clamp a caller-supplied page size to <see cref="MaxPageSize"/>.</summary>
     public static int ClampLimit(int limit) => Math.Clamp(limit, 0, MaxPageSize);
 
@@ -93,8 +113,26 @@ public static class V4ReadLimits
         Math.Clamp(page, 1, MaxPageSize / Math.Clamp(pageSize, 1, MaxPageSize));
 
     /// <summary>
-    /// Whether a range read's bounds are further apart than <see cref="MaxDateSpanDays"/>.
+    /// Rejects a range read whose bounds are further apart than <paramref name="maxDays"/>.
     /// </summary>
-    public static bool ExceedsMaxDateSpan(DateTime? from, DateTime? to) =>
-        from is { } start && to is { } end && (end - start).TotalDays > MaxDateSpanDays;
+    /// <returns>The error response to return, or <c>null</c> when the range is usable.</returns>
+    public static ObjectResult? RejectDateSpan(
+        this ControllerBase controller, DateTime? from, DateTime? to, int maxDays = MaxDateSpanDays) =>
+        from is { } start && to is { } end && (end - start).TotalDays > maxDays
+            ? DateSpanProblem(controller, maxDays)
+            : null;
+
+    /// <inheritdoc cref="RejectDateSpan(ControllerBase, DateTime?, DateTime?, int)"/>
+    /// <remarks>
+    /// The difference is taken in <see cref="double"/> because two caller-supplied
+    /// <see cref="long"/> bounds can be far enough apart to overflow a <see cref="long"/> subtraction.
+    /// </remarks>
+    public static ObjectResult? RejectDateSpan(
+        this ControllerBase controller, long fromMills, long toMills, int maxDays = MaxDateSpanDays) =>
+        (double)toMills - fromMills > (double)maxDays * TimeSpan.MillisecondsPerDay
+            ? DateSpanProblem(controller, maxDays)
+            : null;
+
+    private static ObjectResult DateSpanProblem(ControllerBase controller, int maxDays) =>
+        controller.Problem(detail: $"Date range must not exceed {maxDays} days.", statusCode: 400, title: "Bad Request");
 }

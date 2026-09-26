@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models.Analytics;
 
@@ -54,12 +55,8 @@ public class SensorIntegrityControllerTests
     {
         var result = await _controller.Analyze(default, default);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
-        _service.Verify(
-            s => s.AnalyzeAsync(
-                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<bool>(),
-                It.IsAny<HypoEventOptions?>(), It.IsAny<DetectorConfig?>(), It.IsAny<CancellationToken>()),
-            Times.Never);
+        ProblemOf(result).Detail.Should().Be("startDate and endDate must be later than 0001-01-01.");
+        VerifyNotAnalyzed();
     }
 
     [Fact]
@@ -67,8 +64,42 @@ public class SensorIntegrityControllerTests
     {
         var result = await _controller.Analyze(End, Start);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result).Detail.Should().Be("endDate must be after startDate.");
+        VerifyNotAnalyzed();
     }
+
+    [Fact]
+    public async Task Analyze_with_a_range_over_the_cap_returns_bad_request_without_calling_service()
+    {
+        var result = await _controller.Analyze(Start, Start.AddDays(V4ReadLimits.MaxDateSpanDays).AddMilliseconds(1));
+
+        ProblemOf(result).Detail.Should().Be($"Date range must not exceed {V4ReadLimits.MaxDateSpanDays} days.");
+        VerifyNotAnalyzed();
+    }
+
+    [Fact]
+    public async Task Analyze_accepts_a_range_of_exactly_the_cap()
+    {
+        SetupService();
+
+        var result = await _controller.Analyze(Start, Start.AddDays(V4ReadLimits.MaxDateSpanDays));
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    private static ProblemDetails ProblemOf(ActionResult<SensorIntegrityReport> result)
+    {
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(400);
+        return objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+    }
+
+    private void VerifyNotAnalyzed() =>
+        _service.Verify(
+            s => s.AnalyzeAsync(
+                It.IsAny<DateTime>(), It.IsAny<DateTime>(), It.IsAny<string?>(), It.IsAny<bool>(),
+                It.IsAny<HypoEventOptions?>(), It.IsAny<DetectorConfig?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
 
     private static SensorIntegrityReport EmptyReport() => new()
     {

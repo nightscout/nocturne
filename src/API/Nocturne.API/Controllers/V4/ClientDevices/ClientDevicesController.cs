@@ -69,12 +69,12 @@ public class ClientDevicesController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
         catch (InvalidOperationException ex)
         {
             // The install id is already owned by another subject in this tenant.
-            return Conflict(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
         }
     }
 
