@@ -6,10 +6,14 @@ WORKDIR /app
 # Increase Node.js heap size to avoid "JavaScript heap out of memory" in CI
 ENV NODE_OPTIONS="--max-old-space-size=8192"
 
-RUN npm install -g pnpm@10
+# The same pnpm as CI and src/Web/Dockerfile. pnpm 10 cannot read this lockfile's
+# patchedDependencies (`pnpm fetch` dies on an undefined patch path).
+RUN npm install -g pnpm@11.5.0
 
 # Fetched from the lockfile alone, so a source change leaves the download layer cached.
 COPY src/Web/package.json src/Web/pnpm-lock.yaml src/Web/pnpm-workspace.yaml ./
+# patchedDependencies in pnpm-workspace.yaml: every install from the lockfile needs the patch files.
+COPY src/Web/patches ./patches
 RUN pnpm fetch
 
 COPY src/Web/supportedLocales.json src/Web/wuchale.shared.js ./
@@ -36,12 +40,13 @@ RUN pnpm --filter @nocturne/app run build
 FROM node:24-alpine
 WORKDIR /app
 
-RUN npm install -g pnpm@10
+RUN npm install -g pnpm@11.5.0
 
 # Copy workspace structure
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/patches ./patches
 COPY --from=builder /app/packages/app/package.json ./packages/app/
 COPY --from=builder /app/packages/bridge/package.json ./packages/bridge/
 

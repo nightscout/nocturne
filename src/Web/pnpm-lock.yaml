@@ -11,6 +11,9 @@ overrides:
 
 packageExtensionsChecksum: sha256-+J/i+JN9q0i27S6jHAFCNlPAOZNxqln6DUYUOcBUKZM=
 
+patchedDependencies:
+  bits-ui@2.18.1: d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07
+
 importers:
 
   .:
@@ -202,7 +205,7 @@ importers:
         version: 10.5.0(postcss@8.5.14)
       bits-ui:
         specifier: ^2.18.1
-        version: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        version: 2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -259,7 +262,7 @@ importers:
         version: 1.4.0
       vaul-svelte:
         specifier: 1.0.0-next.7
-        version: 1.0.0-next.7(bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        version: 1.0.0-next.7(bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       vite:
         specifier: ^6.3.5
         version: 6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)
@@ -572,7 +575,7 @@ importers:
         version: 2.11.2
       bits-ui:
         specifier: ^2.18.1
-        version: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        version: 2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -823,7 +826,7 @@ importers:
         version: 0.5.19(tailwindcss@4.1.18)
       bits-ui:
         specifier: ^2.18.1
-        version: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        version: 2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -865,7 +868,7 @@ importers:
         version: 5.9.3
       vaul-svelte:
         specifier: 1.0.0-next.7
-        version: 1.0.0-next.7(bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+        version: 1.0.0-next.7(bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
 
 packages:
 
@@ -10515,7 +10518,7 @@ snapshots:
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
-  bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
+  bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
     dependencies:
       '@floating-ui/core': 1.7.5
       '@floating-ui/dom': 1.7.6
@@ -10529,7 +10532,7 @@ snapshots:
     transitivePeerDependencies:
       - '@sveltejs/kit'
 
-  bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
+  bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
     dependencies:
       '@floating-ui/core': 1.7.5
       '@floating-ui/dom': 1.7.6
@@ -13912,16 +13915,16 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vaul-svelte@1.0.0-next.7(bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
+  vaul-svelte@1.0.0-next.7(bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
     dependencies:
-      bits-ui: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+      bits-ui: 2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@6.0.3)(vite@6.4.1(@types/node@25.7.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       runed: 0.23.4(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       svelte: 5.55.5(@typescript-eslint/types@8.59.3)
       svelte-toolbelt: 0.7.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))
 
-  vaul-svelte@1.0.0-next.7(bits-ui@2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
+  vaul-svelte@1.0.0-next.7(bits-ui@2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)))(svelte@5.55.5(@typescript-eslint/types@8.59.3)):
     dependencies:
-      bits-ui: 2.18.1(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
+      bits-ui: 2.18.1(patch_hash=d6bc798c146d2e020903360fbfc7ce25e55a9428ee02b73815c4ab0a4c86ad07)(@internationalized/date@3.12.1)(@sveltejs/kit@2.59.1(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@5.1.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))(typescript@5.9.3)(vite@8.0.12(@types/node@25.7.0)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.20.6)(yaml@2.9.0)))(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       runed: 0.23.4(svelte@5.55.5(@typescript-eslint/types@8.59.3))
       svelte: 5.55.5(@typescript-eslint/types@8.59.3)
       svelte-toolbelt: 0.7.1(svelte@5.55.5(@typescript-eslint/types@8.59.3))
