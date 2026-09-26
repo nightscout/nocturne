@@ -187,10 +187,12 @@ public class Entry : ProcessableDocumentBase
     public string? Direction { get; set; }
 
     /// <summary>
-    /// Gets or sets the numeric trend indicator (1-9) used by Dexcom and Loop
-    /// 1=DoubleUp, 2=SingleUp, 3=FortyFiveUp, 4=Flat, 5=FortyFiveDown, 6=SingleDown, 7=DoubleDown, 8=NotComputable, 9=RateOutOfRange
+    /// Dexcom trend number, on the same scale as the direction names: 0=NONE, 1=DoubleUp, 2=SingleUp,
+    /// 3=FortyFiveUp, 4=Flat, 5=FortyFiveDown, 6=SingleDown, 7=DoubleDown, 8=NOT COMPUTABLE,
+    /// 9=RATE OUT OF RANGE.
     /// </summary>
     [JsonPropertyName("trend")]
+    [JsonConverter(typeof(FlexibleTrendConverter))]
     public int? Trend { get; set; }
 
     /// <summary>

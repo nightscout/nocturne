@@ -8,26 +8,11 @@ namespace Nocturne.Core.Models.Serializers;
 /// ("Flat", "SingleUp") and numeric values (1-9) from older Nightscout records.
 /// </summary>
 /// <remarks>
-/// Numeric direction mapping follows the Dexcom/Nightscout convention:
-/// 1=DoubleUp, 2=SingleUp, 3=FortyFiveUp, 4=Flat, 5=FortyFiveDown,
-/// 6=SingleDown, 7=DoubleDown, 8=NOT COMPUTABLE, 9=RATE OUT OF RANGE.
+/// Numbers are read on the Dexcom trend scale; see <see cref="DirectionExtensions.TryFromTrendNumber"/>.
 /// </remarks>
 /// <seealso cref="Entry"/>
 public class FlexibleDirectionConverter : JsonConverter<string?>
 {
-    private static readonly Dictionary<int, Direction> NumericDirectionMap = new()
-    {
-        [1] = Direction.DoubleUp,
-        [2] = Direction.SingleUp,
-        [3] = Direction.FortyFiveUp,
-        [4] = Direction.Flat,
-        [5] = Direction.FortyFiveDown,
-        [6] = Direction.SingleDown,
-        [7] = Direction.DoubleDown,
-        [8] = Direction.NotComputable,
-        [9] = Direction.RateOutOfRange,
-    };
-
     public override string? Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -42,7 +27,7 @@ public class FlexibleDirectionConverter : JsonConverter<string?>
             case JsonTokenType.Number:
                 if (reader.TryGetInt32(out var intValue))
                 {
-                    return NumericDirectionMap.TryGetValue(intValue, out var direction)
+                    return DirectionExtensions.TryFromTrendNumber(intValue, out var direction)
                         ? direction.ToWireString()
                         : intValue.ToString();
                 }

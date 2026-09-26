@@ -316,6 +316,66 @@ public class FlexibleDeserializationTests
         entry!.Noise.Should().Be(2);
     }
 
+    // ========================================================================
+    // Entry.Trend — share2nightscout-bridge stored the direction name instead of a number
+    // ========================================================================
+
+    [Theory]
+    [InlineData("4", 4)]
+    [InlineData("\"4\"", 4)]
+    [InlineData("\"DoubleUp\"", 1)]
+    [InlineData("\"SingleUp\"", 2)]
+    [InlineData("\"FortyFiveUp\"", 3)]
+    [InlineData("\"Flat\"", 4)]
+    [InlineData("\"flat\"", 4)]
+    [InlineData("\"FortyFiveDown\"", 5)]
+    [InlineData("\"SingleDown\"", 6)]
+    [InlineData("\"DoubleDown\"", 7)]
+    [InlineData("\"NotComputable\"", 8)]
+    [InlineData("\"NOT COMPUTABLE\"", 8)]
+    [InlineData("\"RateOutOfRange\"", 9)]
+    [InlineData("\"RATE OUT OF RANGE\"", 9)]
+    [InlineData("\"TripleUp\"", 1)]
+    [InlineData("\"TripleDown\"", 7)]
+    [InlineData("\"NONE\"", 0)]
+    [InlineData("\"Sideways\"", null)]
+    [InlineData("\"\"", null)]
+    [InlineData("null", null)]
+    [InlineData("true", null)]
+    public void Entry_Trend_ReadsNumbersAndDirectionNames(string jsonValue, int? expected)
+    {
+        var entry = JsonSerializer.Deserialize<Entry>($$"""{"trend": {{jsonValue}}}""");
+
+        entry!.Trend.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Entry_Trend_RoundTripsFromADirectionNameAsANumber()
+    {
+        var entry = JsonSerializer.Deserialize<Entry>("""{"trend": "SingleDown"}""");
+
+        JsonSerializer.Serialize(entry).Should().Contain("\"trend\":6");
+    }
+
+    [Fact]
+    public void Entry_Trend_MalformedValuesDoNotFailTheArray()
+    {
+        var json = """
+            [
+                {"sgv": 120, "trend": 4, "direction": "Flat"},
+                {"sgv": 140, "trend": "FortyFiveUp", "direction": "FortyFiveUp"},
+                {"sgv": 160, "trend": "garbage"},
+                {"sgv": 180, "trend": {"value": 4}},
+                {"sgv": 200, "trend": [4]}
+            ]
+            """;
+
+        var entries = JsonSerializer.Deserialize<Entry[]>(json);
+
+        entries!.Select(e => e.Trend).Should().Equal(4, 3, null, null, null);
+        entries!.Select(e => e.Sgv).Should().Equal(120, 140, 160, 180, 200);
+    }
+
     [Fact]
     public void NumberConverters_ParseStringsInvariantlyUnderACommaDecimalCulture()
     {
