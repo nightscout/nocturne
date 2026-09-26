@@ -40,7 +40,7 @@ public static class TempBasalToTreatmentMapper
             DataSource = tempBasal.DataSource,
         };
 
-        // Carry origin, scheduled rate, and device in AdditionalProperties for debug/display
+        // TreatmentDecomposer reads basalOrigin back when PATCH re-decomposes; the rest is for display
         treatment.AdditionalProperties ??= new Dictionary<string, object>();
         treatment.AdditionalProperties["basalOrigin"] = tempBasal.Origin.ToString();
         if (tempBasal.ScheduledRate.HasValue)

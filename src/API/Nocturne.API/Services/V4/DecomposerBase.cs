@@ -148,6 +148,19 @@ public abstract class DecomposerBase
     protected static IDisposable SystemAttributedBatchWrites(IAuditContext auditContext)
         => SystemAuditScope.Push(auditContext);
 
+    protected static bool TryGetString(Dictionary<string, object> props, string key, out string value)
+    {
+        value = default!;
+        if (!props.TryGetValue(key, out var obj))
+            return false;
+
+        if (obj is string s) { value = s; return true; }
+        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
+        { value = el.GetString()!; return true; }
+
+        return false;
+    }
+
     protected static async Task BulkCreateAsync<TRecord>(
         IBulkCreateRepository<TRecord> repository,
         List<TRecord> records,

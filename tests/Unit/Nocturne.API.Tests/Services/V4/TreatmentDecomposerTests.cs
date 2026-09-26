@@ -1033,6 +1033,79 @@ public class TreatmentDecomposerTests : IDisposable
         TreatmentDecomposer.MapCalculationType(null).Should().BeNull();
     }
 
+    [Theory]
+    [InlineData(true, "loop://Test Phone", null, V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(false, "loop://Test Phone", null, V4Models.TempBasalOrigin.Manual)]
+    [InlineData(null, "loop://Test Phone", null, V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(true, "loop://Test Phone", "suspend", V4Models.TempBasalOrigin.Suspended)]
+    [InlineData(false, "loop://Test Phone", "suspend", V4Models.TempBasalOrigin.Suspended)]
+    [InlineData(true, "openaps://AndroidAPS", null, V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData(null, "openaps://AndroidAPS", null, V4Models.TempBasalOrigin.Manual)]
+    [InlineData(null, "Trio", null, V4Models.TempBasalOrigin.Manual)]
+    [InlineData(null, null, null, V4Models.TempBasalOrigin.Manual)]
+    public void MapToTempBasal_OriginFollowsReasonThenAutomaticFlag(
+        bool? automatic, string? enteredBy, string? reason, V4Models.TempBasalOrigin expected)
+    {
+        var treatment = new Treatment
+        {
+            Id = "tb-origin-1",
+            EventType = "Temp Basal",
+            Mills = 1760529600000,
+            Absolute = 0.4,
+            Duration = 30,
+            Automatic = automatic,
+            EnteredBy = enteredBy,
+            Reason = reason,
+        };
+
+        TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null).Origin.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("scheduled", V4Models.TempBasalOrigin.Scheduled)]
+    [InlineData("99", V4Models.TempBasalOrigin.Algorithm)]
+    [InlineData("unknown", V4Models.TempBasalOrigin.Algorithm)]
+    public void MapToTempBasal_StoredBasalOriginWinsWhenDefined(string basalOrigin, V4Models.TempBasalOrigin expected)
+    {
+        var treatment = new Treatment
+        {
+            Id = "tb-origin-2",
+            EventType = "Temp Basal",
+            Mills = 1760529600000,
+            Absolute = 0.4,
+            Duration = 30,
+            EnteredBy = "loop://Test Phone",
+            AdditionalProperties = new Dictionary<string, object> { ["basalOrigin"] = basalOrigin },
+        };
+
+        TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null).Origin.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(V4Models.TempBasalOrigin.Algorithm, "openaps://AndroidAPS")]
+    [InlineData(V4Models.TempBasalOrigin.Manual, "loop://Test Phone")]
+    [InlineData(V4Models.TempBasalOrigin.Scheduled, "loop://Test Phone")]
+    [InlineData(V4Models.TempBasalOrigin.Suspended, "Glooko")]
+    [InlineData(V4Models.TempBasalOrigin.Inferred, "loop://Test Phone")]
+    public void MapToTempBasal_OriginSurvivesTreatmentRoundTrip(V4Models.TempBasalOrigin origin, string app)
+    {
+        var tempBasal = new V4Models.TempBasal
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = new DateTime(2025, 10, 15, 12, 0, 0, DateTimeKind.Utc),
+            EndTimestamp = new DateTime(2025, 10, 15, 12, 30, 0, DateTimeKind.Utc),
+            Rate = origin == V4Models.TempBasalOrigin.Suspended ? 0 : 0.4,
+            Origin = origin,
+            App = app,
+        };
+
+        var mapped = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+        var treatment = JsonSerializer.Deserialize<Treatment>(JsonSerializer.Serialize(mapped))!;
+
+        treatment.AdditionalProperties!["basalOrigin"].Should().BeOfType<JsonElement>();
+        TreatmentDecomposer.MapToTempBasal(treatment, correlationId: null).Origin.Should().Be(origin);
+    }
+
     #endregion
 
     #region Event Type Case Insensitivity

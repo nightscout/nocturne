@@ -792,8 +792,29 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             CorrelationId = correlationId,
             Rate = treatment.Absolute ?? treatment.Rate ?? 0,
             ScheduledRate = null, // Not available from legacy treatments
-            Origin = V4Models.TempBasalOrigin.Manual, // v1/v3 treatments default to Manual
+            Origin = MapTempBasalOrigin(treatment),
             PumpRecordId = treatment.PumpId?.ToString(),
+        };
+    }
+
+    private static V4Models.TempBasalOrigin MapTempBasalOrigin(Treatment treatment)
+    {
+        // TempBasalToTreatmentMapper writes basalOrigin, so a PATCH re-decomposition keeps the stored origin
+        if (treatment.AdditionalProperties is { } props
+            && TryGetString(props, "basalOrigin", out var stored)
+            && Enum.TryParse<V4Models.TempBasalOrigin>(stored, ignoreCase: true, out var origin)
+            && Enum.IsDefined(origin))
+            return origin;
+
+        if (string.Equals(treatment.Reason, "suspend", StringComparison.OrdinalIgnoreCase))
+            return V4Models.TempBasalOrigin.Suspended;
+
+        return treatment.Automatic switch
+        {
+            true => V4Models.TempBasalOrigin.Algorithm,
+            false => V4Models.TempBasalOrigin.Manual,
+            null when IsLoopUpload(treatment) => V4Models.TempBasalOrigin.Algorithm, // Loop 2.x omits the flag; Loop reads a missing flag as automatic
+            null => V4Models.TempBasalOrigin.Manual,
         };
     }
 
@@ -999,6 +1020,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return string.Equals(appString, "AAPS", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsLoopUpload(Treatment treatment) =>
+        treatment.EnteredBy?.StartsWith("loop://", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>
     /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in

@@ -332,19 +332,6 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         };
     }
 
-    private static bool TryGetString(Dictionary<string, object> props, string key, out string value)
-    {
-        value = default!;
-        if (!props.TryGetValue(key, out var obj))
-            return false;
-
-        if (obj is string s) { value = s; return true; }
-        if (obj is System.Text.Json.JsonElement el && el.ValueKind == System.Text.Json.JsonValueKind.String)
-        { value = el.GetString()!; return true; }
-
-        return false;
-    }
-
     private static bool TryGetDouble(Dictionary<string, object> props, string key, out double value)
     {
         value = default;
