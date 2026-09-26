@@ -14,10 +14,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests legacy API compatibility with api-secret, access tokens, and JWT tokens
 /// </summary>
 [Parity]
-public class AuthenticationHandlerIntegrationTests : AspireIntegrationTestBase
+public class AuthenticationHandlerIntegrationTests : ApiIntegrationTestBase
 {
     public AuthenticationHandlerIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

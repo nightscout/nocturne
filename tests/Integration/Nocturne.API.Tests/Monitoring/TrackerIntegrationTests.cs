@@ -14,13 +14,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/trackers</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public class TrackerIntegrationTests : AspireIntegrationTestBase
+public class TrackerIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public TrackerIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

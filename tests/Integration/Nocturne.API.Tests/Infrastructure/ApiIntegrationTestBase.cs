@@ -8,17 +8,16 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
-/// Base class for Aspire-based integration tests.
-/// Uses the AspireIntegrationTestFixture to provide a fully orchestrated
-/// distributed application environment including database, API, and other services.
+/// Base class for the API integration tests: the API in-process on a real port and its own
+/// PostgreSQL database, from <see cref="ApiIntegrationTestFixture"/>.
 /// </summary>
-[Collection("AspireIntegration")]
+[Collection("ApiIntegration")]
 [Parity]
-public abstract class AspireIntegrationTestBase : IAsyncLifetime
+public abstract class ApiIntegrationTestBase : IAsyncLifetime
 {
     protected const string TestApiSecret = "test-secret-for-integration-tests";
 
-    protected readonly AspireIntegrationTestFixture Fixture;
+    protected readonly ApiIntegrationTestFixture Fixture;
     protected readonly ITestOutputHelper Output;
     protected readonly List<HubConnection> HubConnections = new();
 
@@ -27,8 +26,8 @@ public abstract class AspireIntegrationTestBase : IAsyncLifetime
     /// </summary>
     protected HttpClient ApiClient => Fixture.ApiClient;
 
-    protected AspireIntegrationTestBase(
-        AspireIntegrationTestFixture fixture,
+    protected ApiIntegrationTestBase(
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
     {
@@ -59,7 +58,7 @@ public abstract class AspireIntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// Creates an HttpClient for a specific Aspire resource
+    /// Creates an HttpClient for the API resource
     /// </summary>
     protected HttpClient CreateHttpClient(string resourceName)
     {

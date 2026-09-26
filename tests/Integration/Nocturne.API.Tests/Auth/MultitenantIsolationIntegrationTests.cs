@@ -20,7 +20,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
 [Trait("Category", "Integration")]
-public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
+public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantAId;
     private Guid _tenantBId;
@@ -33,7 +33,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     private string _baseDomain = null!;
 
     public MultitenantIsolationIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

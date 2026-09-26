@@ -5,7 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Extensions;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
@@ -114,8 +114,7 @@ public class ParityTestFixture : IAsyncLifetime
     /// </summary>
     private class SharedParityState : IAsyncDisposable
     {
-        private PostgreSqlContainer? _postgresContainer;
-        private WebApplicationFactory<Program>? _nocturneFactory;
+        private WebApplicationFactory<Nocturne.API.Program>? _nocturneFactory;
         private HttpClient? _nightscoutV3Client;
 
         public NightscoutContainer NightscoutContainer { get; } = new();
@@ -145,18 +144,13 @@ public class ParityTestFixture : IAsyncLifetime
                 _nightscoutV3Client.DefaultRequestHeaders.Add("Accept", "application/json");
             }
 
-            // Start PostgreSQL for Nocturne
-            _postgresContainer = new PostgreSqlBuilder("postgres:16")
-                .WithDatabase("nocturne_parity")
-                .WithUsername("test")
-                .WithPassword("test")
-                .Build();
-
-            await _postgresContainer.StartAsync();
-            var connectionString = _postgresContainer.GetConnectionString();
+            // A migrated database on the shared container: the production schema (EnsureCreated
+            // on NocturneDbContext alone misses tables such as DataProtectionKeys) and roles.
+            var database = await SharedPostgres.CreateMigratedDatabaseAsync("nocturne_parity");
+            var connectionString = database.AppConnectionString;
 
             // Create Nocturne WebApplicationFactory
-            _nocturneFactory = new WebApplicationFactory<Program>()
+            _nocturneFactory = new ApiFactory()
                 .WithWebHostBuilder(builder =>
                 {
                     builder.ConfigureAppConfiguration((_, config) =>
@@ -167,7 +161,7 @@ public class ParityTestFixture : IAsyncLifetime
                             ["ConnectionStrings:DefaultConnection"] = connectionString,
                             ["PostgreSql:ConnectionString"] = connectionString,
                             ["PostgreSql:DatabaseName"] = "nocturne_parity",
-                            ["INSTANCE_KEY"] = "test-api-secret-12chars",
+                            ["INSTANCE_KEY"] = ApiIntegrationTestFixture.InstanceKey,
                             ["NIGHTSCOUT_API_SECRET"] = "test-api-secret-12chars",
                             ["DISPLAY_UNITS"] = "mg/dl",
                             ["Features:EnableExternalConnectors"] = "false",
@@ -206,13 +200,13 @@ public class ParityTestFixture : IAsyncLifetime
             // Set Accept header to match Nightscout client behavior for consistent parity testing
             NocturneClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
-            // Create DbContext for direct database operations
+            // Direct database operations (the per-test purge) run as the bootstrap superuser, which
+            // is not bound by row level security, so they reach every tenant's rows.
             var options = new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseNpgsql(connectionString)
+                .UseNpgsql(database.SuperuserConnectionString)
                 .Options;
 
             DbContext = new NocturneDbContext(options);
-            await DbContext.Database.EnsureCreatedAsync();
         }
 
         public async ValueTask DisposeAsync()
@@ -222,7 +216,6 @@ public class ParityTestFixture : IAsyncLifetime
 
             if (DbContext != null)
             {
-                await DbContext.Database.EnsureDeletedAsync();
                 await DbContext.DisposeAsync();
             }
 
@@ -230,11 +223,6 @@ public class ParityTestFixture : IAsyncLifetime
 
             await NightscoutContainer.DisposeAsync();
 
-            if (_postgresContainer != null)
-            {
-                await _postgresContainer.StopAsync();
-                await _postgresContainer.DisposeAsync();
-            }
         }
     }
 }

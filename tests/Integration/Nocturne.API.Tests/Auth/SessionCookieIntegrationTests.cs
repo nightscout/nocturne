@@ -14,14 +14,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// and falls through to the next handler when no cookies are present.
 /// </summary>
 [Trait("Category", "Integration")]
-public class SessionCookieIntegrationTests : AspireIntegrationTestBase
+public class SessionCookieIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public SessionCookieIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

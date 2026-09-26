@@ -25,10 +25,10 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>app.current_tenant_id</c> session variable exactly as in production.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertRepositorySweepIntegrationTests : AspireIntegrationTestBase
+public class AlertRepositorySweepIntegrationTests : ApiIntegrationTestBase
 {
     public AlertRepositorySweepIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

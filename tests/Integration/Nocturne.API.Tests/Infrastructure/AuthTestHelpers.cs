@@ -443,7 +443,7 @@ public static class AuthTestHelpers
     /// Creates an HttpClient with a Bearer authorization header for the given access token.
     /// </summary>
     public static HttpClient CreateBearerClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string accessToken)
     {
         var client = fixture.CreateHttpClient("nocturne-api", "http");
@@ -455,7 +455,7 @@ public static class AuthTestHelpers
     /// Creates an HttpClient with both an api-secret header and a Bearer authorization header.
     /// </summary>
     public static HttpClient CreateAuthenticatedSubjectClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string accessToken,
         string apiSecret = "test-secret-for-integration-tests")
     {
@@ -510,7 +510,7 @@ public static class AuthTestHelpers
     /// Creates an HttpClient targeting a specific tenant by slug via the Host header.
     /// </summary>
     public static HttpClient CreateTenantClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain)
     {
@@ -524,7 +524,7 @@ public static class AuthTestHelpers
     /// Includes api-secret and Bearer authorization headers.
     /// </summary>
     public static HttpClient CreateAuthenticatedTenantClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain,
         string accessToken,
@@ -545,7 +545,7 @@ public static class AuthTestHelpers
     /// membership check, so it would mask cross-tenant authorization failures.
     /// </summary>
     public static HttpClient CreateTenantBearerClient(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         string slug,
         string baseDomain,
         string accessToken)

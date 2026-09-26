@@ -3,15 +3,11 @@ using Xunit;
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
 /// <summary>
-/// Test collection to ensure tests share the same Aspire application instance.
-/// The AspireIntegrationTestFixture manages the complete distributed application lifecycle,
-/// including PostgreSQL database, API service, and any other dependencies.
-///
-/// All integration tests should use [Collection("AspireIntegration")] to share
-/// the same application instance for performance.
+/// Tests sharing one <see cref="ApiIntegrationTestFixture"/>: one API and one database for the
+/// collection, cleaned between tests by <see cref="ApiIntegrationTestBase"/>.
 /// </summary>
-[CollectionDefinition("AspireIntegration")]
-public class AspireIntegrationTestCollection : ICollectionFixture<AspireIntegrationTestFixture>
+[CollectionDefinition("ApiIntegration")]
+public class ApiIntegrationTestCollection : ICollectionFixture<ApiIntegrationTestFixture>
 {
     // This class has no code, and is never created. Its purpose is simply
     // to be the place to apply [CollectionDefinition] and all the

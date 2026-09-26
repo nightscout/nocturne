@@ -10,14 +10,14 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for DeviceStatus and Health endpoints using Aspire-orchestrated infrastructure.
+/// Integration tests for DeviceStatus and Health endpoints against the API running in-process on real PostgreSQL.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
+public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
 {
     public DeviceStatusIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

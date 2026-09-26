@@ -11,9 +11,9 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Migration;
 
-[Collection("AspireIntegration")]
+[Collection("ApiIntegration")]
 [Trait("Category", "Integration")]
-public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
+public class ApiMigrationTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
 {
     private readonly MigrationTestFixture _migration;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -22,7 +22,7 @@ public class ApiMigrationTests : AspireIntegrationTestBase, IClassFixture<Migrat
     };
 
     public ApiMigrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         MigrationTestFixture migration,
         ITestOutputHelper output) : base(fixture, output)
     {

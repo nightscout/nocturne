@@ -10,10 +10,10 @@ namespace Nocturne.API.Tests.Integration.Hubs;
 /// Tests real-time data updates and client-server communication
 /// </summary>
 [Parity]
-public class DataHubIntegrationTests : AspireIntegrationTestBase
+public class DataHubIntegrationTests : ApiIntegrationTestBase
 {
     public DataHubIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

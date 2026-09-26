@@ -19,13 +19,13 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// management API/web phases, plus the AuthenticationMiddleware/TenantResolution unit tests.
 /// </summary>
 [Trait("Category", "Integration")]
-public class PublicAccessIntegrationTests : AspireIntegrationTestBase
+public class PublicAccessIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public PublicAccessIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

@@ -14,10 +14,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle with real database operations
 /// </summary>
 [Trait("Category", "Integration")]
-public class ActivityInMemoryIntegrationTests : AspireIntegrationTestBase
+public class ActivityInMemoryIntegrationTests : ApiIntegrationTestBase
 {
     public ActivityInMemoryIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         Xunit.Abstractions.ITestOutputHelper output
     )
         : base(fixture, output) { }

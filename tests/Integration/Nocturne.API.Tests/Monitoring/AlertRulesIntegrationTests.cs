@@ -14,13 +14,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// <c>/api/v4/alert-rules</c>.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertRulesIntegrationTests : AspireIntegrationTestBase
+public class AlertRulesIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public AlertRulesIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

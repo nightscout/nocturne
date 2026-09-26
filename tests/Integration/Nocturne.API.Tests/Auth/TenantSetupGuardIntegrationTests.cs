@@ -14,12 +14,12 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// passkeys or OIDC identities (recovery mode).
 /// </summary>
 [Trait("Category", "Integration")]
-public class TenantSetupGuardIntegrationTests : AspireIntegrationTestBase
+public class TenantSetupGuardIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
 
     public TenantSetupGuardIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

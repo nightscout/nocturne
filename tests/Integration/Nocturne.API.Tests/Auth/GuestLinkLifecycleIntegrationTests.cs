@@ -14,14 +14,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// session-based access, revocation, and listing.
 /// </summary>
 [Trait("Category", "Integration")]
-public class GuestLinkLifecycleIntegrationTests : AspireIntegrationTestBase
+public class GuestLinkLifecycleIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public GuestLinkLifecycleIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

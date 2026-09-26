@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Integration.V4;
 /// isolation.
 /// </summary>
 [Trait("Category", "Integration")]
-public class BasalInjectionIntegrationTests : AspireIntegrationTestBase
+public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
 {
     private const string EntityType = "BasalInjection";
 
@@ -30,7 +30,7 @@ public class BasalInjectionIntegrationTests : AspireIntegrationTestBase
     private string _connectionString = null!;
 
     public BasalInjectionIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

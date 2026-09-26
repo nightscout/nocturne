@@ -13,12 +13,12 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle for notification CRUD operations
 /// </summary>
 [Trait("Category", "Integration")]
-public class NotificationsIntegrationTests : AspireIntegrationTestBase
+public class NotificationsIntegrationTests : ApiIntegrationTestBase
 {
     private const string TestUserId = "test-user-id-for-notifications";
 
     public NotificationsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

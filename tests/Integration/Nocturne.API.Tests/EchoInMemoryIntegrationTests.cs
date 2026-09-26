@@ -14,10 +14,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Tests the complete request/response cycle for debugging and preview functionality
 /// </summary>
 [Trait("Category", "Integration")]
-public class EchoInMemoryIntegrationTests : AspireIntegrationTestBase
+public class EchoInMemoryIntegrationTests : ApiIntegrationTestBase
 {
     public EchoInMemoryIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         Xunit.Abstractions.ITestOutputHelper output
     )
         : base(fixture, output) { }

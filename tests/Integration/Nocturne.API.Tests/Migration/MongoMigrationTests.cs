@@ -13,9 +13,9 @@ using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Migration;
 
-[Collection("AspireIntegration")]
+[Collection("ApiIntegration")]
 [Trait("Category", "Integration")]
-public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
+public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
 {
     private readonly MigrationTestFixture _migration;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -24,7 +24,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
     };
 
     public MongoMigrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         MigrationTestFixture migration,
         ITestOutputHelper output) : base(fixture, output)
     {

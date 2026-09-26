@@ -15,7 +15,7 @@ namespace Nocturne.API.Tests.Integration;
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class MealsIntegrationTests : AspireIntegrationTestBase
+public class MealsIntegrationTests : ApiIntegrationTestBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -24,7 +24,7 @@ public class MealsIntegrationTests : AspireIntegrationTestBase
     };
 
     public MealsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

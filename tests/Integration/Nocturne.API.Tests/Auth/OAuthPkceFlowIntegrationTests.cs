@@ -16,14 +16,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// token exchange (happy path and error cases), and scope enforcement.
 /// </summary>
 [Trait("Category", "Integration")]
-public class OAuthPkceFlowIntegrationTests : AspireIntegrationTestBase
+public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public OAuthPkceFlowIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

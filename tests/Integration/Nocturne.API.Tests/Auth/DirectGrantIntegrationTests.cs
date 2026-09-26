@@ -15,14 +15,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// verification that the list endpoint never leaks plaintext tokens.
 /// </summary>
 [Trait("Category", "Integration")]
-public class DirectGrantIntegrationTests : AspireIntegrationTestBase
+public class DirectGrantIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public DirectGrantIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

@@ -8,15 +8,15 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for Status endpoints using Aspire-orchestrated infrastructure.
+/// Integration tests for Status endpoints against the API running in-process on real PostgreSQL.
 /// Tests the complete request/response cycle for various status formats against
 /// the full distributed application stack.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AspireStatusIntegrationTests : AspireIntegrationTestBase
+public class StatusIntegrationTests : ApiIntegrationTestBase
 {
-    public AspireStatusIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+    public StatusIntegrationTests(
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -230,8 +230,6 @@ public class AspireStatusIntegrationTests : AspireIntegrationTestBase
     [Fact]
     public async Task Database_ShouldBeAccessible()
     {
-        // This test verifies that the Aspire-managed PostgreSQL database
-        // is properly configured and accessible
         var connectionString = await GetPostgresConnectionStringAsync();
 
         connectionString.Should().NotBeNullOrEmpty();

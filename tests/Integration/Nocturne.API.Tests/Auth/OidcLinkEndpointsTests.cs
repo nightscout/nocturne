@@ -18,7 +18,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Does NOT test link initiation or callback (those require a real IdP; unit tests cover them).
 /// </summary>
 [Trait("Category", "Integration")]
-public class OidcLinkEndpointsTests : AspireIntegrationTestBase
+public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 {
     /// <summary>
     /// Known access token for test subject authentication.
@@ -29,7 +29,7 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
     private Guid _tenantId;
 
     public OidcLinkEndpointsTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

@@ -16,13 +16,13 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// snooze, history, and delivery workflows.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
+public class AlertLifecycleIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private string _accessToken = null!;
 
     public AlertLifecycleIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

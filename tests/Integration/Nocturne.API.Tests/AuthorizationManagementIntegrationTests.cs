@@ -11,10 +11,10 @@ namespace Nocturne.API.Tests.Integration;
 /// Integration tests for authorization management endpoints
 /// </summary>
 [Parity]
-public class AuthorizationManagementIntegrationTests : AspireIntegrationTestBase
+public class AuthorizationManagementIntegrationTests : ApiIntegrationTestBase
 {
     public AuthorizationManagementIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
