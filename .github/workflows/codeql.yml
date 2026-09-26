@@ -11,6 +11,10 @@ on:
   schedule:
     - cron: '17 13 * * 6'
 
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
@@ -24,6 +28,7 @@ jobs:
       packages: read
       actions: read
       contents: read
+      pull-requests: read
 
     strategy:
       fail-fast: false
@@ -37,10 +42,31 @@ jobs:
           build-mode: none
 
     steps:
+    # The C# analysis runs 10-15 minutes, so a pull request that touches no C# skips it. Pushes to
+    # main and the weekly schedule always analyse everything, so nothing goes unscanned for long.
+    - name: Decide whether to analyse
+      id: scope
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ matrix.language }}" != "csharp" ]; then
+          echo "analyse=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
+        if grep -qE '\.(cs|csproj|props|targets|razor|cshtml)$|^global\.json$|^\.github/workflows/codeql\.yml$' <<< "$files"; then
+          echo "analyse=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "No C# changes; skipping the C# analysis."
+          echo "analyse=false" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Checkout repository
+      if: steps.scope.outputs.analyse == 'true'
       uses: actions/checkout@v5
 
     - name: Initialize CodeQL
+      if: steps.scope.outputs.analyse == 'true'
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
@@ -58,6 +84,7 @@ jobs:
         exit 1
 
     - name: Perform CodeQL Analysis
+      if: steps.scope.outputs.analyse == 'true'
       uses: github/codeql-action/analyze@v4
       with:
         category: "/language:${{matrix.language}}"

@@ -67,18 +67,19 @@ jobs:
             exit 1
           fi
 
+      # A solution of just the unit test projects, built from the directory so a new one cannot
+      # be left out, and so nocturne.sln's Windows-only projects (Desktop, Widgets) never build.
+      # One solution means one restore, a parallel build, and the assemblies tested concurrently.
       - name: Test
         run: |
-          # Build per-project to avoid Windows-only projects (Desktop, Widgets)
-          for proj in tests/Unit/*/; do
-            csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
-            [ -z "$csproj" ] && continue
-            dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=E2E" \
-              --logger "trx;LogFileName=unit.trx" \
-              -p:GenerateNSwagClient=false \
-              || exit 1
-          done
+          set -euo pipefail
+          sln="$RUNNER_TEMP/unit/unit.slnx"
+          dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
+          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet test "$sln" \
+            --filter "Category!=Integration&Category!=E2E" \
+            --logger "trx;LogFileName=unit.trx" \
+            -p:GenerateNSwagClient=false
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
