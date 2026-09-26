@@ -21,7 +21,7 @@ public class ShareDataCategoriesGuardTests
     /// </summary>
     private static readonly IReadOnlySet<string> KnownHiddenTables = new HashSet<string>(StringComparer.Ordinal)
     {
-        "alert_condition_timers", "alert_custom_sounds", "alert_deliveries", "alert_excursions",
+        "alert_condition_timers", "alert_custom_sounds", "alert_deliveries", "alert_excursion_mutes", "alert_excursions",
         "alert_instances", "alert_invites", "alert_rule_channels", "alert_rules", "alert_tracker_state",
         "basal_schedules", "body_weights", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "compression_low_suggestions", "connector_configurations", "data_source_metadata",

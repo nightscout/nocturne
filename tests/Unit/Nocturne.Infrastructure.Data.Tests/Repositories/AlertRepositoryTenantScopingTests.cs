@@ -6,6 +6,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
+using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
 namespace Nocturne.Infrastructure.Data.Tests.Repositories;
@@ -109,6 +110,43 @@ public class AlertRepositoryTenantScopingTests
         var inHysteresis = await repo.GetExcursionsInHysteresisAsync(CancellationToken.None);
 
         inHysteresis.Should().BeEquivalentTo([new HysteresisExcursionSnapshot(legacyExcursion, TenantA, legacy.Id, null)]);
+    }
+
+    [Fact]
+    public async Task DeleteExcursionMutesAsync_DeletesEveryMuteOfTheClosedExcursionAndNoOther()
+    {
+        // SQLite rather than InMemory: the delete is a set-based ExecuteDelete.
+        using var store = TestDbContextFactory.CreateSqliteWithTenant(TenantA, "a");
+        var rule = NewRule(TenantA, "Low");
+        var closed = Guid.NewGuid();
+        var stillOpen = Guid.NewGuid();
+        var alice = Guid.NewGuid();
+        var bob = Guid.NewGuid();
+        await using (var seed = store.CreateContext())
+        {
+            seed.Subjects.AddRange(
+                new SubjectEntity { Id = alice, Name = "Alice" },
+                new SubjectEntity { Id = bob, Name = "Bob" });
+            seed.AlertRules.Add(rule);
+            seed.AlertExcursions.AddRange(
+                new AlertExcursionEntity { Id = closed, TenantId = TenantA, AlertRuleId = rule.Id, StartedAt = DateTime.UtcNow },
+                new AlertExcursionEntity { Id = stillOpen, TenantId = TenantA, AlertRuleId = rule.Id, StartedAt = DateTime.UtcNow });
+            seed.AlertExcursionMutes.AddRange(
+                Mute(alice, closed), Mute(bob, closed), Mute(alice, stillOpen));
+            await seed.SaveChangesAsync();
+        }
+
+        await new AlertRepository(store.ContextFactory)
+            .DeleteExcursionMutesAsync(TenantA, closed, CancellationToken.None);
+
+        await using var read = store.CreateContext();
+        (await read.AlertExcursionMutes.Select(m => new { m.SubjectId, m.AlertExcursionId }).ToListAsync())
+            .Should().BeEquivalentTo([new { SubjectId = alice, AlertExcursionId = stillOpen }]);
+
+        static AlertExcursionMuteEntity Mute(Guid subjectId, Guid excursionId) => new()
+        {
+            Id = Guid.NewGuid(), TenantId = TenantA, SubjectId = subjectId, AlertExcursionId = excursionId,
+        };
     }
 
     private static DbContextOptions<NocturneDbContext> NewStore() =>

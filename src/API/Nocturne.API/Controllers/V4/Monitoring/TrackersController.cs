@@ -171,7 +171,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         foreach (var excursionId in excursions)
         {
             await _acknowledgementService.AcknowledgeExcursionAsync(
-                db.TenantId, excursionId, userId, broadcast: true, ct);
+                db.TenantId, excursionId, userId, HttpContext.GetAlertAcknowledgementAuthority(),
+                broadcast: true, ct);
         }
     }
 

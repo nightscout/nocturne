@@ -1,5 +1,7 @@
 <script lang="ts">
   import { isoNow } from "$lib/utils/now";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     getActiveAlerts,
     snoozeInstance,
@@ -47,6 +49,11 @@
 
   const activeAlerts = getActiveAlerts();
 
+  // Without alerts.readwrite the server mutes the alert for this member only.
+  const acknowledgesForEveryone = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
+  );
+
   // The layout drives one shared poll of this query; react to whatever it
   // returns rather than running a second timer at a different cadence.
   $effect(() => {
@@ -59,18 +66,20 @@
         seen.delete(id);
         continue;
       }
-      if (seen.has(id) || a.acknowledgedAt) continue;
+      if (seen.has(id) || a.acknowledgedAt || a.mutedByCaller) continue;
       seen.add(id);
       fresh.push(a);
     }
     if (fresh.length > 0) queue = [...fresh, ...queue];
-    // Remove toasts that were acknowledged or snoozed elsewhere (other tab,
-    // banner, chat bot, etc.). Assign only when a card actually drops: this
+    // Remove toasts that were acknowledged, muted or snoozed elsewhere (other
+    // tab, banner, chat bot, etc.). Assign only when a card actually drops: this
     // effect reads `queue`, and `filter` returns a new array even when nothing
     // matched, so an unconditional write re-dirties the effect's own dependency
     // and loops.
     const quietIds = new Set(
-      list.filter((a) => a.acknowledgedAt || a.snoozedUntil).map((a) => a.id)
+      list
+        .filter((a) => a.acknowledgedAt || a.mutedByCaller || a.snoozedUntil)
+        .map((a) => a.id)
     );
     if (quietIds.size > 0) {
       const remaining = queue.filter((a) => !quietIds.has(a.id));
@@ -117,7 +126,11 @@
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.id === id ? { ...a, acknowledgedAt: isoNow() } : a
+            a.id !== id
+              ? a
+              : acknowledgesForEveryone
+                ? { ...a, acknowledgedAt: isoNow() }
+                : { ...a, mutedByCaller: true }
           )
         )
       )
@@ -207,7 +220,11 @@
                 class="ml-auto"
                 onclick={() => ack(a.id ?? "")}
               >
-                Acknowledge
+                {#if acknowledgesForEveryone}
+                  Acknowledge
+                {:else}
+                  Mute for me
+                {/if}
               </Button>
               {#if a.alertRuleId}
                 <Button

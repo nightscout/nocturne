@@ -25506,3 +25506,16 @@ msgstr "eHbA1c"
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result"
 msgstr "검사 결과"
+
+#: src/lib/components/alerts/AlertBanner.svelte
+msgid "<0/> Mute for me"
+msgstr ""
+
+#: src/lib/components/alerts/FiringToast.svelte
+#: src/lib/components/layout/NotificationItem.svelte
+msgid "Mute for me"
+msgstr ""
+
+#: src/lib/components/members/InviteSummary.svelte
+msgid "You can press Mute for me on an alert to stop it reaching you. Other people keep getting it until someone who manages alerts acknowledges it, or it ends."
+msgstr ""

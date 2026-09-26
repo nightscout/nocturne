@@ -5,8 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Controllers.V4.Monitoring;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
@@ -25,6 +28,7 @@ public class AlertAcknowledgeEndpointTests
     private readonly Mock<ILogger<AlertsController>> _loggerMock = new();
 
     private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly Guid _subjectId = Guid.NewGuid();
 
     public AlertAcknowledgeEndpointTests()
     {
@@ -60,10 +64,10 @@ public class AlertAcknowledgeEndpointTests
             _tenantAccessorMock.Object,
             _loggerMock.Object);
 
-        controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext()
-        };
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(new AuthContext { IsAuthenticated = true, SubjectId = _subjectId });
+        httpContext.SetGrantedScopes(new HashSet<string> { Scope.DeviceNotify });
+        controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
 
         return controller;
     }
@@ -88,38 +92,62 @@ public class AlertAcknowledgeEndpointTests
     // ---- AcknowledgeExcursion ----
 
     [Fact]
-    public async Task AcknowledgeExcursion_ExistingExcursion_CallsServiceAndReturnsNoContent()
+    public async Task AcknowledgeExcursion_ExistingExcursion_PassesCallerAuthorityAndReturnsOutcome()
     {
-        // Arrange
         var excursionId = await SeedExcursionAsync();
         var controller = CreateController();
-        var request = new AcknowledgeRequest { AcknowledgedBy = "user:bob" };
+        _acknowledgementServiceMock
+            .Setup(s => s.AcknowledgeExcursionAsync(
+                _tenantId, excursionId, It.IsAny<string>(), It.IsAny<AlertAcknowledgementAuthority>(),
+                true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AlertAcknowledgementOutcome.Muted);
 
-        // Act
-        var result = await controller.AcknowledgeExcursion(excursionId, request, CancellationToken.None);
+        var result = await controller.AcknowledgeExcursion(
+            excursionId, new AcknowledgeRequest(), CancellationToken.None);
 
-        // Assert
-        result.Should().BeOfType<NoContentResult>();
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeOfType<AcknowledgeExcursionResponse>()
+            .Which.Outcome.Should().Be(AlertAcknowledgementOutcome.Muted);
         _acknowledgementServiceMock.Verify(
-            s => s.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", true, It.IsAny<CancellationToken>()),
+            s => s.AcknowledgeExcursionAsync(
+                _tenantId,
+                excursionId,
+                It.IsAny<string>(),
+                It.Is<AlertAcknowledgementAuthority>(a =>
+                    a.SubjectId == _subjectId && a.GrantedScopes.SetEquals(new[] { Scope.DeviceNotify })),
+                true,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_MachineCallerWithNoNameClaim_UsesRequestLabel()
+    {
+        var excursionId = await SeedExcursionAsync();
+        var controller = CreateController();
+
+        await controller.AcknowledgeExcursion(
+            excursionId, new AcknowledgeRequest { AcknowledgedBy = "user:bob" }, CancellationToken.None);
+
+        _acknowledgementServiceMock.Verify(
+            s => s.AcknowledgeExcursionAsync(
+                _tenantId, excursionId, "user:bob", It.IsAny<AlertAcknowledgementAuthority>(),
+                true, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
     public async Task AcknowledgeExcursion_NoAcknowledgedBy_DefaultsToUnknown()
     {
-        // Arrange
         var excursionId = await SeedExcursionAsync();
         var controller = CreateController();
-        var request = new AcknowledgeRequest();
 
-        // Act
-        var result = await controller.AcknowledgeExcursion(excursionId, request, CancellationToken.None);
+        await controller.AcknowledgeExcursion(excursionId, new AcknowledgeRequest(), CancellationToken.None);
 
-        // Assert
-        result.Should().BeOfType<NoContentResult>();
         _acknowledgementServiceMock.Verify(
-            s => s.AcknowledgeExcursionAsync(_tenantId, excursionId, "unknown", true, It.IsAny<CancellationToken>()),
+            s => s.AcknowledgeExcursionAsync(
+                _tenantId, excursionId, "unknown", It.IsAny<AlertAcknowledgementAuthority>(),
+                true, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -134,10 +162,11 @@ public class AlertAcknowledgeEndpointTests
         var result = await controller.AcknowledgeExcursion(Guid.NewGuid(), request, CancellationToken.None);
 
         // Assert
-        result.Should().BeOfType<NotFoundResult>();
+        result.Result.Should().BeOfType<NotFoundResult>();
         _acknowledgementServiceMock.Verify(
             s => s.AcknowledgeExcursionAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<AlertAcknowledgementAuthority>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -154,10 +183,11 @@ public class AlertAcknowledgeEndpointTests
         var result = await controller.AcknowledgeExcursion(excursionId, request, CancellationToken.None);
 
         // Assert
-        result.Should().BeOfType<NotFoundResult>();
+        result.Result.Should().BeOfType<NotFoundResult>();
         _acknowledgementServiceMock.Verify(
             s => s.AcknowledgeExcursionAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()),
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<AlertAcknowledgementAuthority>(),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

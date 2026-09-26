@@ -45,8 +45,11 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
     alerts: {
       getActiveAlerts: (signal) => api.alerts.getActiveAlerts(signal),
       acknowledge: (request, signal) => api.alerts.acknowledge(request, signal),
-      acknowledgeExcursion: (excursionId, request, signal) =>
-        api.alerts.acknowledgeExcursion(excursionId, request, signal),
+      // The bot authenticates with the instance key, which always acknowledges
+      // for everyone, so the outcome carries nothing it needs.
+      acknowledgeExcursion: async (excursionId, request, signal) => {
+        await api.alerts.acknowledgeExcursion(excursionId, request, signal);
+      },
       markDelivered: (deliveryId, request, signal) =>
         api.alerts.markDelivered(deliveryId, request, signal),
       markFailed: (deliveryId, request, signal) =>

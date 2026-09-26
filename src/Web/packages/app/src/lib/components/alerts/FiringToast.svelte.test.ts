@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { flushSync } from "svelte";
+import { page as pageState } from "$app/state";
 import type { ActiveExcursionResponse } from "$api-clients";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
@@ -38,6 +39,7 @@ function excursion(
 describe("FiringToast", () => {
 	beforeEach(() => {
 		activeAlerts = [];
+		pageState.data = { effectivePermissions: ["alerts.readwrite"] };
 		snoozes.calls = [];
 	});
 
@@ -75,6 +77,34 @@ describe("FiringToast", () => {
 		flushSync();
 
 		await expect.element(page.getByText("Rule b")).not.toBeInTheDocument();
+	});
+
+	it("offers Acknowledge to a member who manages alerts", async () => {
+		activeAlerts = [excursion("c")];
+
+		render(FiringToast);
+
+		await expect.element(page.getByRole("button", { name: "Acknowledge" })).toBeVisible();
+		await expect.element(page.getByRole("button", { name: "Mute for me" })).not.toBeInTheDocument();
+	});
+
+	it("offers only Mute for me to a member without alerts.readwrite", async () => {
+		pageState.data = { effectivePermissions: ["glucose.read", "device.notify"] };
+		activeAlerts = [excursion("d")];
+
+		render(FiringToast);
+
+		await expect.element(page.getByRole("button", { name: "Mute for me" })).toBeVisible();
+		await expect.element(page.getByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
+	});
+
+	it("never raises a card for an alert the member already muted", async () => {
+		pageState.data = { effectivePermissions: ["glucose.read", "device.notify"] };
+		activeAlerts = [excursion("e", { mutedByCaller: true })];
+
+		render(FiringToast);
+
+		await expect.element(page.getByText("Rule e")).not.toBeInTheDocument();
 	});
 
 	it("snoozes the excursion's instance, not the excursion", async () => {

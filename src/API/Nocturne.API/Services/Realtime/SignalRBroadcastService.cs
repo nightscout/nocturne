@@ -131,6 +131,14 @@ public interface ISignalRBroadcastService
     Task BroadcastDeviceActionAsync(DeviceActionIntent intent);
 
     /// <summary>
+    /// Send a device actuation intent to one subject's DataHub connections only, for a change
+    /// that concerns that member alone, such as muting an excursion for themselves.
+    /// </summary>
+    /// <param name="subjectId">The subject whose registered devices should reconcile.</param>
+    /// <param name="intent">The actuation intent to deliver.</param>
+    Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent);
+
+    /// <summary>
     /// Mirror a non-alert in-app notification to the tenant's authenticated clients. A device
     /// surfaces it only if it owns the notification (matches <see cref="DeviceNotificationMirror.UserId"/>);
     /// web clients ignore it. Alerts do NOT use this path (they go via device_action).
@@ -677,6 +685,22 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting device_action for excursion {ExcursionId}", intent.ExcursionId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent)
+    {
+        try
+        {
+            await _dataHubContext
+                .Clients.Group(TenantGroup(RealtimeGroups.ForSubject(subjectId)))
+                .SendCoreAsync("device_action", new object[] { intent });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending device_action for excursion {ExcursionId} to subject {SubjectId}",
+                intent.ExcursionId, subjectId);
         }
     }
 

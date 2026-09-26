@@ -107,8 +107,27 @@ describe("InviteSummary", () => {
       .toBeVisible();
   });
 
-  it("says a viewer can acknowledge alerts, and what that does", async () => {
+  it("says a viewer can mute an alert for themselves, and that others keep getting it", async () => {
     render(InviteSummary, { props: { invite: viewerInvite, signedIn: false } });
+
+    await expect
+      .element(page.getByText(/press Mute for me on an alert to stop it reaching you/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/Other\s+people keep getting it/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/press Acknowledge on an alert/))
+      .not.toBeInTheDocument();
+  });
+
+  it("says a member who manages alerts can acknowledge for everyone", async () => {
+    render(InviteSummary, {
+      props: {
+        invite: { ...viewerInvite, permissions: ["glucose.read", "alerts.readwrite"] },
+        signedIn: false,
+      },
+    });
 
     await expect
       .element(page.getByText(/press Acknowledge on an alert/))

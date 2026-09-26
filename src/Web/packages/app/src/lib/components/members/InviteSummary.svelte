@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AlertTriangle, Bell, BellOff, Clock, Eye } from "lucide-svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import type { JoinInviteInfo } from "$lib/api/generated/nocturne-api-client";
 
   interface Props {
@@ -12,6 +13,9 @@
 
   const siteName = $derived(invite.tenantName || "this site");
   const roleNames = $derived(invite.roleNames ?? []);
+  const acknowledgesForEveryone = $derived(
+    satisfiesScope(invite.permissions ?? [], "alerts.readwrite")
+  );
 </script>
 
 <div class="space-y-4 text-sm" data-testid="invite-summary">
@@ -85,8 +89,14 @@
       <li class="flex items-start gap-2">
         <BellOff class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
         <span>
-          You can press Acknowledge on an alert to mark it as seen. This stops
-          the alert being passed on to other people.
+          {#if acknowledgesForEveryone}
+            You can press Acknowledge on an alert to mark it as seen. This stops
+            the alert being passed on to other people.
+          {:else}
+            You can press Mute for me on an alert to stop it reaching you. Other
+            people keep getting it until someone who manages alerts acknowledges
+            it, or it ends.
+          {/if}
         </span>
       </li>
     </ul>

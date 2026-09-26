@@ -36,7 +36,10 @@ public class DeviceActionIntent
     /// <summary>Capabilities the rule requested. The device actuates the subset it actually has.</summary>
     public List<string> Capabilities { get; set; } = [];
 
-    /// <summary>Whether the excursion has been acknowledged (on any device) — the device should not re-alarm.</summary>
+    /// <summary>
+    /// Whether the excursion has been acknowledged for everyone, or muted by the device's owner. The
+    /// device should not re-alarm either way.
+    /// </summary>
     public bool Acknowledged { get; set; }
 
     /// <summary>When the excursion started.</summary>

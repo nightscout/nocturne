@@ -33,7 +33,8 @@ export const OAUTH_SCOPE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   [OAuthScope.HealthRead]: "View all health data (read-only)",
   [OAuthScope.HealthReadWrite]: "View, update and remove all health data",
   [OAuthScope.FullAccess]: "Full access to all data and settings",
-  [DEVICE_NOTIFY_SCOPE]: "Send notifications to this device",
+  [DEVICE_NOTIFY_SCOPE]:
+    "Send notifications to this device, and mute an alert for yourself from it",
   [DEVICE_ACTUATE_SCOPE]:
     "Use this device's alarms: sound, vibration, flashlight, and full-screen alerts",
 } as const;

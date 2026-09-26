@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
@@ -194,6 +195,13 @@ public static class HttpContextExtensions
         var grantedScopes = context.GetGrantedScopes();
         return Scope.Satisfies(grantedScopes, scope);
     }
+
+    /// <summary>
+    /// The authority this request acknowledges an excursion with, for
+    /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>.
+    /// </summary>
+    public static AlertAcknowledgementAuthority GetAlertAcknowledgementAuthority(this HttpContext context) =>
+        new(context.GetSubjectId(), context.GetGrantedScopes());
 
     /// <summary>
     /// The refusal a history-clamped caller reads when an action would give someone more history

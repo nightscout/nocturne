@@ -61,6 +61,20 @@ public class ExcursionResolutionHandlerTests
     }
 
     [Fact]
+    public async Task HandleClosed_DeletesEveryMembersMuteOfTheExcursion()
+    {
+        _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<AlertInstanceSnapshot>());
+
+        await _sut.HandleClosedAsync(
+            new ExcursionTransition(ExcursionTransitionType.ExcursionClosed, _excursionId, ExcursionCloseReason.AutoResolve),
+            _tenantId,
+            CancellationToken.None);
+
+        _repository.Verify(r => r.DeleteExcursionMutesAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task HandleClosed_HysteresisReason_MapsToHysteresisWireString()
     {
         _repository.Setup(r => r.GetInstancesForExcursionAsync(_tenantId, _excursionId, It.IsAny<CancellationToken>()))

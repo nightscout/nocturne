@@ -1,3 +1,4 @@
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts.Providers;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -9,9 +10,10 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 /// Handles user actions on <c>alert.firing</c> in-app notifications produced by
 /// <see cref="InAppProvider"/>. <c>ack</c> calls
 /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/> for the underlying
-/// excursion (sourceId), then signals archive-as-completed. <c>dismiss</c> archives only — it
-/// does not silence the alert; the next escalation step's delivery creates a fresh
-/// notification (CreateNotificationAsync does not dedupe by sourceId).
+/// excursion (sourceId) with the request's own authority, so it acknowledges for everyone or mutes
+/// for the caller exactly as the HTTP endpoint does, then signals archive-as-completed.
+/// <c>dismiss</c> archives only. It does not silence the alert; the next escalation step's
+/// delivery creates a fresh notification (CreateNotificationAsync does not dedupe by sourceId).
 /// </summary>
 /// <remarks>
 /// Authorisation: <see cref="IInAppNotificationService.ExecuteActionAsync"/>
@@ -25,6 +27,7 @@ namespace Nocturne.API.Services.NotificationActionHandlers;
 internal sealed class AlertActionHandler(
     IAlertAcknowledgementService acknowledgementService,
     ITenantAccessor tenantAccessor,
+    IHttpContextAccessor httpContextAccessor,
     ILogger<AlertActionHandler> logger
 ) : INotificationActionHandler
 {
@@ -49,10 +52,10 @@ internal sealed class AlertActionHandler(
         switch (actionId.ToLowerInvariant())
         {
             case InAppProvider.AckActionId:
-                if (!tenantAccessor.IsResolved)
+                if (!tenantAccessor.IsResolved || httpContextAccessor.HttpContext is not { } httpContext)
                 {
                     logger.LogWarning(
-                        "Cannot acknowledge excursion {ExcursionId} — no tenant context",
+                        "Cannot acknowledge excursion {ExcursionId}: no tenant or request context",
                         excursionId);
                     return NotificationActionResult.NotHandled;
                 }
@@ -61,6 +64,7 @@ internal sealed class AlertActionHandler(
                     tenantAccessor.TenantId,
                     excursionId,
                     $"user:{userId}",
+                    httpContext.GetAlertAcknowledgementAuthority(),
                     broadcast: true,
                     cancellationToken);
 

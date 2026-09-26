@@ -139,10 +139,10 @@ public class NotificationsController : ControllerBase
     /// action on an <c>alert.firing</c> in-app notification dispatches through
     /// <see cref="IInAppNotificationService.ExecuteActionAsync"/> to
     /// <c>AlertActionHandler</c>, which calls
-    /// <see cref="Core.Contracts.Alerts.IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>.
-    /// The resolver grants <c>device.notify</c> to any member holding at least one permission, and
-    /// the Clinician and Viewer seed roles hold it outright, so requiring
-    /// <c>alerts.readwrite</c> alone gave those members an alert they could see but not stop.
+    /// <see cref="Core.Contracts.Alerts.IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>,
+    /// which decides between acknowledging for everyone and muting for the caller. The resolver
+    /// grants <c>device.notify</c> to any member holding at least one permission, so every member
+    /// can at least mute an alert that reaches them.
     /// </para>
     /// <para>
     /// <see cref="IInAppNotificationService.ExecuteActionAsync"/> is a generic dispatcher, not an

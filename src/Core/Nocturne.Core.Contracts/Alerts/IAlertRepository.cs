@@ -95,6 +95,14 @@ public interface IAlertRepository
     Task ExpirePendingDeliveriesAsync(Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct);
 
     /// <summary>
+    /// Deletes every member's mute of an excursion, so no mute outlives the excursion it silenced.
+    /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the delete.</param>
+    /// <param name="excursionId">The closed excursion.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+
+    /// <summary>
     /// Counts the number of active (unresolved) excursions for a tenant.
     /// </summary>
     /// <param name="tenantId">The tenant identifier.</param>

@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -221,58 +221,21 @@ public class AlertTrackerRepository : IAlertTrackerRepository
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Joins a transaction already open on the context, and runs the work as is on a provider
-    /// without transactions. Otherwise opens one under the context's
-    /// execution strategy. Opening the connection sets the tenant GUCs (TenantConnectionInterceptor),
-    /// so every statement in the transaction runs under the context's tenant. Each attempt, and
-    /// the verification, starts with no tracker state or excursion tracked: an entity an earlier
-    /// attempt saved stays tracked as unchanged after its transaction rolls back, so a retry
-    /// setting it to the same values would write nothing. Only those two entity types are
-    /// detached; the context is the scope's, and what else it tracks is its other users'.
+    /// Runs under <see cref="RetryingTransactionExtensions.ExecuteInTransactionAsync{T}"/>. Opening
+    /// the connection sets the tenant GUCs (TenantConnectionInterceptor), so every statement in the
+    /// transaction runs under the context's tenant. Tracker state and excursions are detached before
+    /// each attempt even when tracked before the call, so the work reads them fresh under the rule's
+    /// lock.
     /// </remarks>
-    public virtual async Task<T> ExecuteInTransactionAsync<T>(
+    public virtual Task<T> ExecuteInTransactionAsync<T>(
         Func<CancellationToken, Task<T>> work,
         Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
-        CancellationToken ct = default)
-    {
-        if (_context.Database.CurrentTransaction is not null || !_context.Database.IsRelational())
-            return await work(ct);
-
-        var completed = false;
-        T result = default!;
-        var strategy = _context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(
-            (object?)null,
-            async (_, _, token) =>
-            {
-                completed = false;
-                DetachTransitionRows();
-                await using var transaction = await _context.Database.BeginTransactionAsync(token);
-                result = await work(token);
-                completed = true;
-                await transaction.CommitAsync(token);
-                return result;
-            },
-            verifySucceeded is null
-                ? null
-                : async (_, _, token) =>
-                {
-                    if (!completed)
-                        return new ExecutionResult<T>(false, default!);
-                    DetachTransitionRows();
-                    return new ExecutionResult<T>(await verifySucceeded(result, token), result);
-                },
+        CancellationToken ct = default) =>
+        _context.ExecuteInTransactionAsync(
+            work,
+            verifySucceeded,
+            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity,
             ct);
-    }
-
-    private void DetachTransitionRows()
-    {
-        var rows = _context.ChangeTracker.Entries()
-            .Where(e => e.Entity is AlertTrackerStateEntity or AlertExcursionEntity)
-            .ToList();
-        foreach (var row in rows)
-            row.State = EntityState.Detached;
-    }
 
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()
     {

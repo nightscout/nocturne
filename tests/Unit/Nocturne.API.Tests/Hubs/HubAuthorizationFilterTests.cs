@@ -173,7 +173,7 @@ public class HubAuthorizationFilterTests
     }
 
     [Fact]
-    public async Task Home_assistant_acknowledge_requires_alerts_readwrite()
+    public async Task Home_assistant_acknowledge_refuses_a_credential_that_can_neither_acknowledge_nor_mute()
     {
         var readOnly = Member(Scope.AlertsRead);
 
@@ -181,7 +181,16 @@ public class HubAuthorizationFilterTests
             typeof(HomeAssistantHub), nameof(HomeAssistantHub.Acknowledge), readOnly);
 
         await attempt.Should().ThrowAsync<HubException>()
-            .Where(e => e.Message.Contains(Scope.AlertsReadWrite));
+            .Where(e => e.Message.Contains(Scope.AlertsReadWrite) && e.Message.Contains(Scope.DeviceNotify));
+    }
+
+    [Fact]
+    public async Task Home_assistant_acknowledge_admits_the_same_credentials_as_the_http_endpoint()
+    {
+        var reached = await InvokeAsync(CreateInvocation(
+            typeof(HomeAssistantHub), nameof(HomeAssistantHub.Acknowledge), Member(Scope.DeviceNotify)));
+
+        reached.Should().BeTrue("a member who can only mute reaches the one acknowledgement decision");
     }
 
     [Fact]

@@ -179,31 +179,25 @@ public sealed class ChatIdentityDirectoryService(
     public async Task SetDefaultAsync(Guid linkId, ChatLinkScope scope, CancellationToken ct)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
-        var target = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, scope)).FirstOrDefaultAsync(ct)
-            ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
-
-        // NpgsqlRetryingExecutionStrategy requires user-initiated transactions
-        // to be wrapped in strategy.ExecuteAsync so the entire block can be
-        // retried as a unit on transient failures.
-        var strategy = db.Database.CreateExecutionStrategy();
-        await strategy.ExecuteAsync(async () =>
+        var target = await db.ExecuteInTransactionAsync(async token =>
         {
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
+            var link = await db.ChatIdentityDirectory.Where(ScopedToId(linkId, scope)).FirstOrDefaultAsync(token)
+                ?? throw new KeyNotFoundException($"Chat identity directory link {linkId} not found");
 
             // Cleared across tenants on purpose: ux_directory_user_one_default permits at most
             // one default row per (platform, platform_user_id) for the whole table, because the
             // default is which tenant a bare bot command resolves to for that chat account.
             await db.ChatIdentityDirectory
-                .Where(d => d.Platform == target.Platform
-                            && d.PlatformUserId == target.PlatformUserId
-                            && d.Id != target.Id
+                .Where(d => d.Platform == link.Platform
+                            && d.PlatformUserId == link.PlatformUserId
+                            && d.Id != link.Id
                             && d.IsDefault)
-                .ExecuteUpdateAsync(s => s.SetProperty(d => d.IsDefault, false), ct);
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.IsDefault, false), token);
 
-            target.IsDefault = true;
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-        });
+            link.IsDefault = true;
+            await db.SaveChangesAsync(token);
+            return link;
+        }, ct: ct);
 
         logger.LogInformation(
             "Set chat identity directory link {LinkId} as default for {Platform}:{PlatformUserId}",

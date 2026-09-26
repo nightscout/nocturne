@@ -196,7 +196,8 @@ internal sealed class AlertOrchestrator(
         if (rule.Severity == AlertRuleSeverity.Info && suppressingScope is null)
         {
             await acknowledgementService.AcknowledgeExcursionAsync(
-                tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: false, ct);
+                tenantId, excursionId, "system:auto-ack-on-trigger", AlertAcknowledgementAuthority.System,
+                broadcast: false, ct);
         }
     }
 

@@ -18,7 +18,7 @@ internal sealed class HomeAssistantProvider(
     /// Returns <c>true</c> if the instance is connected and the message was sent;
     /// <c>false</c> if no connection is registered for the instance.
     /// </summary>
-    public async Task<bool> SendAsync(Guid tenantId, string destination, AlertPayload payload, object? channelMeta, CancellationToken ct)
+    public async Task<bool> SendAsync(Guid tenantId, string destination, AlertPayload payload, CancellationToken ct)
     {
         if (!HomeAssistantHub.IsInstanceConnected(tenantId.ToString(), destination))
         {
@@ -31,7 +31,7 @@ internal sealed class HomeAssistantProvider(
         try
         {
             await hubContext.Clients.Group(group)
-                .SendCoreAsync("alert_dispatch", new object[] { payload, channelMeta ?? new { allowAck = false } }, ct);
+                .SendCoreAsync("alert_dispatch", new object[] { payload }, ct);
 
             logger.LogDebug(
                 "HA alert dispatched to instance {Destination} for alert instance {InstanceId}",

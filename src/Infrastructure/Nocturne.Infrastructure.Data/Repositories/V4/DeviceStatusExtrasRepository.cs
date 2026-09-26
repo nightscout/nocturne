@@ -101,27 +101,17 @@ public class DeviceStatusExtrasRepository : IDeviceStatusExtrasRepository
             return [];
 
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        var written = await strategy.ExecuteAsync(async () =>
+        var written = await ctx.ExecuteInTransactionAsync(async token =>
         {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
             var (toInsert, skippedDeleted) = await ctx.InsertUnblockedAsync(
                 entities,
                 e => e.CorrelationId,
-                (correlationIds, token) => ctx.GetBlockingCorrelationIdsAsync(correlationIds, token),
-                ct);
+                (correlationIds, t) => ctx.GetBlockingCorrelationIdsAsync(correlationIds, t),
+                token);
 
-            if (toInsert.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return new BulkWrite<DeviceStatusExtras>([], skippedDeleted);
-            }
-
-            await tx.CommitAsync(ct);
             return new BulkWrite<DeviceStatusExtras>(
                 toInsert.Select(DeviceStatusExtrasMapper.ToDomainModel).ToList(), skippedDeleted);
-        });
+        }, ct: ct);
 
         _logger.LogSkippedDeleted(nameof(DeviceStatusExtras), written.SkippedDeleted);
         return written;

@@ -230,6 +230,12 @@ public class ClientDeviceService : IClientDeviceService
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(cancellationToken);
 
+        var mutedByOwner = await _dbContext.AlertExcursionMutes
+            .AsNoTracking()
+            .Where(m => m.SubjectId == subjectId)
+            .Select(m => m.AlertExcursionId)
+            .ToHashSetAsync(cancellationToken);
+
         var intents = new List<DeviceActionIntent>(excursions.Count);
         foreach (var e in excursions)
         {
@@ -244,17 +250,19 @@ public class ClientDeviceService : IClientDeviceService
                 .Where(deviceCaps.Contains)
                 .ToList();
 
+            // A mute is the owner's own acknowledgement, so their devices read it as one.
+            var acknowledged = e.AcknowledgedAt is not null || mutedByOwner.Contains(e.Id);
             var snoozed = e.Instances.Any(i => i.ResolvedAt == null && AlertSnooze.IsSnoozed(i.SnoozedUntil, now));
 
             intents.Add(new DeviceActionIntent
             {
-                Intent = e.AcknowledgedAt is not null ? "acknowledged" : snoozed ? "snoozed" : "opened",
+                Intent = acknowledged ? "acknowledged" : snoozed ? "snoozed" : "opened",
                 ExcursionId = e.Id,
                 RuleName = e.AlertRule.Name,
                 Severity = e.AlertRule.Severity,
                 TargetKind = device.Kind,
                 Capabilities = effective,
-                Acknowledged = e.AcknowledgedAt is not null,
+                Acknowledged = acknowledged,
                 StartedAt = e.StartedAt,
             });
         }

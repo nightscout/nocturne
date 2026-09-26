@@ -138,16 +138,17 @@ public sealed record HubAuthorization(
 public sealed class HubAuthenticationMethodAttribute : Attribute;
 
 /// <summary>
-/// The OAuth scope a hub method requires, enforced by <see cref="HubAuthorizationFilter"/> against
-/// the connection's <see cref="HubAuthorization.Scopes"/>. A method without it still requires an
-/// authorized connection; declare a scope on any method that reads or changes tenant data.
+/// The OAuth scopes a hub method accepts, enforced by <see cref="HubAuthorizationFilter"/> against
+/// the connection's <see cref="HubAuthorization.Scopes"/>: any one of them admits the call, as
+/// with <c>RequireScope</c> over HTTP. A method without it still requires an authorized
+/// connection; declare a scope on any method that reads or changes tenant data.
 /// </summary>
-/// <param name="scope">The required scope, from <see cref="Scope"/>.</param>
+/// <param name="scopes">The accepted scopes, from <see cref="Scope"/>.</param>
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class HubScopeAttribute(string scope) : Attribute
+public sealed class HubScopeAttribute(params string[] scopes) : Attribute
 {
-    /// <summary>The required scope.</summary>
-    public string Scope { get; } = scope;
+    /// <summary>The accepted scopes; the call needs one of them.</summary>
+    public IReadOnlyList<string> Scopes { get; } = scopes;
 }
 
 /// <summary>
@@ -284,10 +285,11 @@ public sealed class HubAuthorizationFilter : IHubFilter
             var authorization = HubAuthorizationState.Resolve(invocationContext.Context)
                 ?? throw new HubException($"{method.Name} requires an authorized connection.");
 
-            var requiredScope = method.GetCustomAttribute<HubScopeAttribute>()?.Scope;
-            if (requiredScope is not null && !authorization.Satisfies(requiredScope))
+            var acceptedScopes = method.GetCustomAttribute<HubScopeAttribute>()?.Scopes;
+            if (acceptedScopes is not null && !acceptedScopes.Any(authorization.Satisfies))
             {
-                throw new HubException($"{method.Name} requires the {requiredScope} scope.");
+                throw new HubException(
+                    $"{method.Name} requires the {string.Join(" or ", acceptedScopes)} scope.");
             }
 
             if (method.GetCustomAttribute<HubTenantGroupAttribute>() is not null

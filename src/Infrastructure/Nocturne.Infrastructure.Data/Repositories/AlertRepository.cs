@@ -181,6 +181,17 @@ public class AlertRepository : IAlertRepository
                 .SetProperty(d => d.Status, "expired"), ct);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        await context.AlertExcursionMutes
+            .Where(m => m.AlertExcursionId == excursionId)
+            .ExecuteDeleteAsync(ct);
+    }
+
     /// <summary>
     /// Counts the number of active alert excursions for a specific tenant.
     /// </summary>

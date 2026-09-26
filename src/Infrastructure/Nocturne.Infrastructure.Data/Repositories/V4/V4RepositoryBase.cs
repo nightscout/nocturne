@@ -562,43 +562,42 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         var records = recordsParam.ToList();
         if (records.Count == 0) return [];
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        var written = await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-            var entities = records.Select(ToEntity).ToList();
-
-            var split = await SplitUpsertsAsync(ctx, entities, ct);
-
-            // The entity overload, not the key set: each legacy id's first candidate is both the one
-            // InsertUnblockedAsync keeps and the one whose client id the tombstone exemption reads.
-            var (toInsert, blockedSkipped) = await ctx.InsertUnblockedAsync(
-                split.ToInsert,
-                e => e.LegacyId,
-                (_, token) => ctx.GetBlockingLegacyIdsAsync(split.ToInsert, token),
-                ct);
-            var skippedDeleted = split.SkippedDeleted + blockedSkipped;
-
-            if (toInsert.Count == 0 && split.UpdatedInPlace.Count == 0)
+        var written = await ctx.ExecuteInTransactionAsync(
+            async token =>
             {
-                await tx.CommitAsync(ct);
-                return new BulkWrite<TModel>([], skippedDeleted);
-            }
+                var entities = records.Select(ToEntity).ToList();
 
-            await tx.CommitAsync(ct);
-            await PostCommitDedupAsync(ctx, toInsert, origin, ct);
+                var split = await SplitUpsertsAsync(ctx, entities, token);
+
+                // The entity overload, not the key set: each legacy id's first candidate is both the one
+                // InsertUnblockedAsync keeps and the one whose client id the tombstone exemption reads.
+                var (toInsert, blockedSkipped) = await ctx.InsertUnblockedAsync(
+                    split.ToInsert,
+                    e => e.LegacyId,
+                    (_, t) => ctx.GetBlockingLegacyIdsAsync(split.ToInsert, t),
+                    token);
+                var skippedDeleted = split.SkippedDeleted + blockedSkipped;
+
+                return (split, toInsert, skippedDeleted);
+            },
+            (attempt, token) => ctx.AnyLandedAsync(attempt.toInsert, token),
+            ct: ct);
+
+        var (split, inserted, skippedDeleted) = written;
+        if (inserted.Count > 0 || split.UpdatedInPlace.Count > 0)
+        {
+            await PostCommitDedupAsync(ctx, inserted, origin, ct);
             // Inserts broadcast as create; upserts broadcast as update only when materially changed
             // (a connector re-poll of byte-identical rows changes nothing, so it stays silent).
             await RaiseBroadcastAsync(
-                toInsert.Select(ToDomain).ToList(),
+                inserted.Select(ToDomain).ToList(),
                 split.MateriallyChanged.Select(ToDomain).ToList(),
                 [],
                 origin, ct);
-            return new BulkWrite<TModel>(
-                split.UpdatedInPlace.Concat(toInsert).Select(ToDomain).ToList(), skippedDeleted);
-        });
+        }
 
-        Logger.LogSkippedDeleted(typeof(TModel).Name, written.SkippedDeleted);
-        return written;
+        Logger.LogSkippedDeleted(typeof(TModel).Name, skippedDeleted);
+        return new BulkWrite<TModel>(
+            split.UpdatedInPlace.Concat(inserted).Select(ToDomain).ToList(), skippedDeleted);
     }
 }

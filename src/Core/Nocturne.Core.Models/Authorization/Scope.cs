@@ -111,7 +111,11 @@ public static class Scope
     // registered client devices (Prelude, the desktop Companion), whose rows are RLS-scoped to the
     // member's subject. They have no read/write tiers and do not imply one another.
 
-    /// <summary>Allows the alert engine to push notifications to a registered client device.</summary>
+    /// <summary>
+    /// Allows the alert engine to push notifications to a registered client device, and lets the
+    /// member mute an excursion for themselves. Acknowledging for everyone needs
+    /// <see cref="AlertsReadWrite"/>.
+    /// </summary>
     public const string DeviceNotify = "device.notify";
     /// <summary>Allows the alert engine to actuate hardware on a registered client device (torch, vibration, sound, full-screen).</summary>
     public const string DeviceActuate = "device.actuate";
@@ -247,8 +251,10 @@ public static class Scope
     /// Member-personal capability scopes. These authorize the alert engine to drive the member's
     /// OWN registered client devices (rows are RLS-scoped to the member's subject), not access to
     /// the patient record, so <c>MemberScopeMiddleware</c> exempts them from the role-permission
-    /// intersection for any member holding at least one permission. See the note on
-    /// <see cref="RoleSeeds.Permissions"/> for why enforcement cannot rely on role rows.
+    /// intersection for any member holding at least one permission. What one member does with them
+    /// reaches only that member: <see cref="DeviceNotify"/> mutes an alert for its holder and never
+    /// changes anyone else's escalation. See the note on <see cref="RoleSeeds.Permissions"/> for why
+    /// enforcement cannot rely on role rows.
     /// </summary>
     public static readonly IReadOnlySet<string> MemberPersonalScopes =
         new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate };
@@ -437,8 +443,8 @@ public static class Scope
     /// Whether <paramref name="permissions"/> let a member see the record while changing no
     /// records, no treatment settings and nobody's access. This is narrower than "changes
     /// nothing": <see cref="MemberPersonalScopes"/> are allowed, and <see cref="DeviceNotify"/>
-    /// acknowledges an alert, which halts its escalation for everyone. Counting it as a change
-    /// instead would make no member view-only, since every member with a permission holds it.
+    /// mutes an alert for the member themselves. Counting it as a change instead would make no
+    /// member view-only, since every member with a permission holds it.
     /// False when nothing is readable.
     /// </summary>
     /// <param name="permissions">A member's effective permissions.</param>

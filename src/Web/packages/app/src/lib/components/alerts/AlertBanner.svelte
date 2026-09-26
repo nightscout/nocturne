@@ -1,5 +1,7 @@
 <script lang="ts">
   import { isoNow } from "$lib/utils/now";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     getActiveAlerts,
     acknowledgeExcursion,
@@ -17,11 +19,19 @@
 
   let acknowledgingId = $state<string | null>(null);
 
-  // Acknowledging is the only way off this surface. The X that used to sit here
-  // hid a live, unacknowledged alert for the rest of the session while recording
-  // nothing server-side and halting no escalation.
+  // Without alerts.readwrite the server mutes the alert for this member only,
+  // so the button has to say that rather than promise to stop it for everyone.
+  const acknowledgesForEveryone = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
+  );
+
+  // Acknowledging or muting is the only way off this surface. The X that used
+  // to sit here hid a live, unacknowledged alert for the rest of the session
+  // while recording nothing server-side and halting no escalation.
   const visibleAlerts = $derived(
-    (activeAlerts.current ?? []).filter((a) => !a.acknowledgedAt)
+    (activeAlerts.current ?? []).filter(
+      (a) => !a.acknowledgedAt && !a.mutedByCaller
+    )
   );
 
   function getConditionLabel(conditionType: string | undefined): string {
@@ -44,8 +54,8 @@
   async function handleAcknowledge(id: string) {
     acknowledgingId = id;
     try {
-      // Optimistically mark this excursion acknowledged so it drops out of
-      // visibleAlerts at once; the single-flight refresh confirms server-side.
+      // Optimistically drop this excursion out of visibleAlerts at once; the
+      // single-flight refresh confirms server-side.
       await acknowledgeExcursion({
         excursionId: id,
         // Who acknowledged is taken from the session server-side; sending a
@@ -54,7 +64,11 @@
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.id === id ? { ...a, acknowledgedAt: isoNow() } : a
+            a.id !== id
+              ? a
+              : acknowledgesForEveryone
+                ? { ...a, acknowledgedAt: isoNow() }
+                : { ...a, mutedByCaller: true }
           )
         )
       );
@@ -111,8 +125,13 @@
               onclick={() => handleAcknowledge(alert.id ?? "")}
               disabled={acknowledgingId === alert.id}
             >
-              <Check class="h-3 w-3 mr-1" />
-              Acknowledge
+              {#if acknowledgesForEveryone}
+                <Check class="h-3 w-3 mr-1" />
+                Acknowledge
+              {:else}
+                <BellOff class="h-3 w-3 mr-1" />
+                Mute for me
+              {/if}
             </Button>
           {/if}
 

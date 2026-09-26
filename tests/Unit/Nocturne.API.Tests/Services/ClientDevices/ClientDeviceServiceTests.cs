@@ -402,6 +402,34 @@ public class ClientDeviceServiceTests
     }
 
     [Fact]
+    public async Task GetActiveIntentsAsync_reports_a_muted_excursion_as_acknowledged_only_to_the_muting_members_devices()
+    {
+        using var ctx = CreateContext();
+        var muter = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var svc = CreateService(ctx);
+        var mutersDevice = await svc.RegisterAsync(muter, Req("m1", DeviceKinds.Companion), FullDeviceScopes, null);
+        var othersDevice = await svc.RegisterAsync(other, Req("o1", DeviceKinds.Companion), FullDeviceScopes, null);
+        SeedDeviceActionExcursion(ctx, DeviceKinds.Companion, "{\"capabilities\":[\"notify\"]}");
+        await ctx.SaveChangesAsync();
+        ctx.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
+        {
+            Id = Guid.NewGuid(),
+            SubjectId = muter,
+            AlertExcursionId = ctx.AlertExcursions.Single().Id,
+        });
+        await ctx.SaveChangesAsync();
+
+        var mutersIntent = (await svc.GetActiveIntentsAsync(mutersDevice.Id, muter)).Should().ContainSingle().Subject;
+        var othersIntent = (await svc.GetActiveIntentsAsync(othersDevice.Id, other)).Should().ContainSingle().Subject;
+
+        mutersIntent.Acknowledged.Should().BeTrue();
+        mutersIntent.Intent.Should().Be("acknowledged");
+        othersIntent.Acknowledged.Should().BeFalse("one member's mute never silences another member's devices");
+        othersIntent.Intent.Should().Be("opened");
+    }
+
+    [Fact]
     public async Task GetActiveIntentsAsync_empty_for_local_engine_device()
     {
         using var ctx = CreateContext();

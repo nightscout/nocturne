@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Extensions;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -22,7 +23,8 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// every write action here requires <see cref="Scope.AlertsReadWrite"/>; the class-level
 /// <c>[Authorize]</c> alone is satisfied by read-only credentials such as a guest-link session,
 /// which holds <c>alerts.read</c>. <see cref="AcknowledgeExcursion"/> additionally accepts
-/// <see cref="Scope.DeviceNotify"/> — see the note on that action.
+/// <see cref="Scope.DeviceNotify"/>, because for a caller without <c>alerts.readwrite</c> it mutes
+/// the excursion for that caller alone. See the note on that action.
 /// </remarks>
 /// <seealso cref="IAlertAcknowledgementService"/>
 /// <seealso cref="IAlertDeliveryService"/>
@@ -82,6 +84,15 @@ public class AlertsController : ControllerBase
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(ct);
 
+        var subjectId = HttpContext.GetSubjectId();
+        var mutedByCaller = subjectId is { } id
+            ? await db.AlertExcursionMutes
+                .AsNoTracking()
+                .Where(m => m.SubjectId == id)
+                .Select(m => m.AlertExcursionId)
+                .ToHashSetAsync(ct)
+            : new HashSet<Guid>();
+
         var now = DateTime.UtcNow;
         var result = excursions.Select(e => new ActiveExcursionResponse
         {
@@ -93,6 +104,7 @@ public class AlertsController : ControllerBase
             StartedAt = e.StartedAt,
             AcknowledgedAt = e.AcknowledgedAt,
             AcknowledgedBy = e.AcknowledgedBy,
+            MutedByCaller = mutedByCaller.Contains(e.Id),
             HysteresisStartedAt = e.HysteresisStartedAt,
             SnoozedUntil = e.Instances
                 .Where(i => i.ResolvedAt == null)
@@ -248,31 +260,25 @@ public class AlertsController : ControllerBase
     }
 
     /// <summary>
-    /// Acknowledge a single alert excursion, halting escalation delivery for its
-    /// active instances. Acknowledging an excursion that is already acknowledged
-    /// or already closed is a no-op. Returns 404 when the excursion does not
-    /// exist for the current tenant.
+    /// Acknowledge a single alert excursion. A caller with <c>alerts.readwrite</c> acknowledges it
+    /// for everyone; anyone else mutes it for themselves. The response says which applied.
+    /// Returns 404 when the excursion does not exist for the current tenant.
     /// </summary>
     /// <remarks>
-    /// Accepts <see cref="Scope.DeviceNotify"/> as well as
-    /// <see cref="Scope.AlertsReadWrite"/>: this is the endpoint behind the Acknowledge
-    /// action on a device toast, and a registered client device's grant carries the device
-    /// capability scopes rather than the alert data scope. A scoped credential is intersected with
-    /// membership (<see cref="MemberScopeResolver"/>), so even a tenant owner's Companion token
-    /// resolves to <c>device.notify</c> without <c>alerts.readwrite</c>. A guest link reaches
-    /// neither scope, its grant being capped at <see cref="Scope.AllowedGuestScopes"/>, but a
-    /// member does: the Clinician and Viewer seed roles hold <c>device.notify</c> outright (and the
-    /// resolver grants it to any member holding at least one permission), so both acknowledge here
-    /// while holding no <c>alerts.readwrite</c> — Clinician holding <c>alerts.read</c>, Viewer no
-    /// alert scope at all.
+    /// Accepts <see cref="Scope.DeviceNotify"/> as well as <see cref="Scope.AlertsReadWrite"/>:
+    /// this is the endpoint behind the action on a device toast, and a registered client device's
+    /// grant carries the device capability scopes rather than the alert data scope. Every member
+    /// holding a permission reaches it (see <see cref="Scope.MemberPersonalScopes"/>); what the
+    /// call does is decided by <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>.
+    /// A guest link reaches neither scope, its grant being capped at
+    /// <see cref="Scope.AllowedGuestScopes"/>.
     /// </remarks>
-    /// <seealso cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>
     [HttpPost("excursions/{excursionId:guid}/acknowledge")]
     [RequireScope(Scope.AlertsReadWrite, Scope.DeviceNotify)]
     [RemoteCommand(Invalidates = ["GetActiveAlerts"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(AcknowledgeExcursionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult> AcknowledgeExcursion(
+    public async Task<ActionResult<AcknowledgeExcursionResponse>> AcknowledgeExcursion(
         Guid excursionId, [FromBody] AcknowledgeRequest request, CancellationToken ct)
     {
         var tenantId = _tenantAccessor.TenantId;
@@ -288,14 +294,15 @@ public class AlertsController : ControllerBase
         if (!exists)
             return NotFound();
 
-        await _acknowledgementService.AcknowledgeExcursionAsync(
+        var outcome = await _acknowledgementService.AcknowledgeExcursionAsync(
             tenantId,
             excursionId,
             ResolveAcknowledger(request),
+            HttpContext.GetAlertAcknowledgementAuthority(),
             broadcast: true,
             ct);
 
-        return NoContent();
+        return Ok(new AcknowledgeExcursionResponse { Outcome = outcome });
     }
 
     /// <summary>
@@ -400,6 +407,13 @@ public class ActiveExcursionResponse
     public DateTime StartedAt { get; set; }
     public DateTime? AcknowledgedAt { get; set; }
     public string? AcknowledgedBy { get; set; }
+
+    /// <summary>
+    /// True when the caller muted this excursion for themselves. It is still unacknowledged for
+    /// everyone else.
+    /// </summary>
+    public bool MutedByCaller { get; set; }
+
     public DateTime? HysteresisStartedAt { get; set; }
 
     /// <summary>
@@ -462,6 +476,15 @@ public class HistoryExcursionResponse
 public class AcknowledgeRequest
 {
     public string? AcknowledgedBy { get; set; }
+}
+
+public class AcknowledgeExcursionResponse
+{
+    /// <summary>
+    /// <c>acknowledged</c> when escalation stopped for everyone, <c>muted</c> when it stopped for
+    /// the caller only, <c>closed</c> when the excursion had already ended.
+    /// </summary>
+    public AlertAcknowledgementOutcome Outcome { get; set; }
 }
 
 public class SnoozeRequest

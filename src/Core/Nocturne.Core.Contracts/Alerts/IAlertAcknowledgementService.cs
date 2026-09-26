@@ -1,3 +1,5 @@
+using Nocturne.Core.Models.Alerts;
+
 namespace Nocturne.Core.Contracts.Alerts;
 
 /// <summary>
@@ -18,29 +20,41 @@ public interface IAlertAcknowledgementService
     Task AcknowledgeAllAsync(Guid tenantId, string acknowledgedBy, CancellationToken ct);
 
     /// <summary>
-    /// Acknowledges every unresolved <see cref="Nocturne.Infrastructure.Data.Entities.AlertInstanceEntity"/>
-    /// belonging to the specified excursion. No-op when the excursion is already
-    /// closed or already acknowledged. Used by per-rule auto-acknowledgement
-    /// (Info-severity rules), the InApp ack action, and any future per-row
-    /// dismiss flow.
+    /// The one acknowledgement decision for a single excursion. A caller whose authority includes
+    /// <c>alerts.readwrite</c> acknowledges it for everyone: every unresolved instance is silenced and
+    /// escalation stops, while the excursion stays open for hysteresis. Any other member mutes it for
+    /// themselves: later deliveries skip that member's in-app notifications and registered client
+    /// devices until the excursion closes, and nobody else's escalation changes.
     /// </summary>
+    /// <remarks>
+    /// Authority is the member behind the credential, not only the credential: a device grant carries
+    /// <c>device.notify</c> but not <c>alerts.readwrite</c>, so a token that falls short is judged
+    /// again on the subject's own membership, and an owner's Companion still acknowledges for
+    /// everyone. <see cref="AlertAcknowledgementAuthority.System"/> always acknowledges for everyone.
+    /// </remarks>
     /// <param name="tenantId">The tenant that owns the excursion (defence-in-depth check).</param>
-    /// <param name="excursionId">The excursion whose instances should be acknowledged.</param>
+    /// <param name="excursionId">The excursion to acknowledge.</param>
     /// <param name="acknowledgedBy">
     /// Identifier of the user or system performing the acknowledgement. System
     /// callers use the <c>"system:&lt;reason&gt;"</c> convention so the audit
     /// trail can parse the source (e.g. <c>"system:auto-ack-on-trigger"</c>).
     /// </param>
+    /// <param name="caller">The authority the acknowledgement is made with.</param>
     /// <param name="broadcast">
     /// When false, suppresses the <c>alert_acknowledged</c> SignalR broadcast — used by the
     /// auto-ack-on-trigger flow which immediately follows an <c>alert_dispatch</c> for the same
     /// excursion the FE has not yet rendered.
     /// </param>
     /// <param name="ct">Cancellation token.</param>
-    Task AcknowledgeExcursionAsync(
+    /// <returns>
+    /// Which outcome applied. An excursion someone already acknowledged reads as
+    /// <see cref="AlertAcknowledgementOutcome.Acknowledged"/> whoever asks.
+    /// </returns>
+    Task<AlertAcknowledgementOutcome> AcknowledgeExcursionAsync(
         Guid tenantId,
         Guid excursionId,
         string acknowledgedBy,
+        AlertAcknowledgementAuthority caller,
         bool broadcast,
         CancellationToken ct);
 }

@@ -42,8 +42,9 @@ public static class RealtimeGroups
     public const string Relay = "relay";
 
     /// <summary>
-    /// The group carrying one subject's own payloads: its in-app notifications and the device
-    /// notification mirrors addressed to it.
+    /// The group carrying one subject's own payloads: its in-app notifications, the device
+    /// notification mirrors addressed to it, and the <c>device_action</c> nudge sent when it mutes
+    /// an excursion.
     /// </summary>
     /// <param name="subjectId">The subject identifier, as carried on the payload.</param>
     /// <remarks>

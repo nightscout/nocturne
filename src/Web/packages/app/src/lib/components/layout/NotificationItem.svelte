@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import {
@@ -14,6 +16,13 @@
   }
 
   let { notification, onAction }: Props = $props();
+
+  // An alert's ack action mutes it for this member only unless they hold
+  // alerts.readwrite, so it is labelled for what the server will do.
+  const mutesOnly = $derived(
+    notification.type === "alert.firing" &&
+      !satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
+  );
 
   // Get color classes based on urgency
   function getUrgencyClasses(urgency: NotificationUrgency | undefined): string {
@@ -112,7 +121,11 @@
             size="sm"
             onclick={() => onAction?.(action.actionId!)}
           >
-            {resolveNotificationLabel(action.label)}
+            {#if mutesOnly && action.actionId === "ack"}
+              Mute for me
+            {:else}
+              {resolveNotificationLabel(action.label)}
+            {/if}
           </Button>
         {/each}
       </div>
