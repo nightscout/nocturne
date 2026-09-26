@@ -34,12 +34,6 @@ const ICON_SIZE: u32 = 32;
 /// Corner radius of the favicon-style rounded-rect tile (mirrors `@nocturne/ui` glucose-icon).
 const ICON_RADIUS: f32 = 6.0;
 
-/// Glucose status thresholds (mg/dL). A 3-state model (Low / InRange / High) to match the
-/// taskbar mod, not the web's 5-state. Must equal `GlucoseConstants.TargetBottomMgdl` and
-/// `GlucoseConstants.TargetTopMgdl`; `GlucoseMirrorTests` fails if they do not.
-const LOW_THRESHOLD_MGDL: f64 = 70.0;
-const HIGH_THRESHOLD_MGDL: f64 = 180.0;
-
 /// Status-tile fill colors as (R, G, B). Must equal `GlucoseConstants.StatusPalette`;
 /// `GlucoseMirrorTests` fails if they do not.
 const COLOR_IN_RANGE: (u8, u8, u8) = (0x36, 0xC7, 0x6A);
@@ -47,16 +41,9 @@ const COLOR_HIGH: (u8, u8, u8) = (0xE6, 0xB8, 0x00);
 const COLOR_LOW: (u8, u8, u8) = (0xE0, 0x53, 0x3D);
 /// Attention-tile fill for the flash "on" frame: the alert red a low is already drawn in.
 const COLOR_ATTENTION: (u8, u8, u8) = COLOR_LOW;
-/// No-data (`--`) state.
-const COLOR_NO_DATA: (u8, u8, u8) = (0x6B, 0x72, 0x80);
+/// No reading, or no status this build knows for it (tile variant `neutral`).
+const COLOR_NEUTRAL: (u8, u8, u8) = (0x6B, 0x72, 0x80);
 const COLOR_FG: (u8, u8, u8) = (0xFF, 0xFF, 0xFF);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum GlucoseStatus {
-    Low,
-    InRange,
-    High,
-}
 
 /// Shared tray state, coordinating the glucose poll and the flash task.
 ///
@@ -84,21 +71,15 @@ fn tray_state() -> &'static Mutex<TrayState> {
 /// accumulate alongside a newer one nor paint an attention frame after a stop's restore render.
 static FLASH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-fn status_from_mgdl(sgv_mgdl: f64) -> GlucoseStatus {
-    if sgv_mgdl < LOW_THRESHOLD_MGDL {
-        GlucoseStatus::Low
-    } else if sgv_mgdl > HIGH_THRESHOLD_MGDL {
-        GlucoseStatus::High
-    } else {
-        GlucoseStatus::InRange
-    }
-}
-
-fn status_color(status: GlucoseStatus) -> (u8, u8, u8) {
+/// `glucoseStatusTileVariant` from `@nocturne/ui` with the urgent levels folded into low and high,
+/// the taskbar mod's three colours. Any other status, or none, is neutral: never a colour worked out
+/// from the value.
+fn status_color(status: Option<&str>) -> (u8, u8, u8) {
     match status {
-        GlucoseStatus::Low => COLOR_LOW,
-        GlucoseStatus::InRange => COLOR_IN_RANGE,
-        GlucoseStatus::High => COLOR_HIGH,
+        Some("UrgentLow" | "Low") => COLOR_LOW,
+        Some("InRange") => COLOR_IN_RANGE,
+        Some("High" | "UrgentHigh") => COLOR_HIGH,
+        _ => COLOR_NEUTRAL,
     }
 }
 
@@ -385,17 +366,16 @@ fn render_icon(app: &AppHandle, current: Option<&CurrentBg>, attention: bool) {
         None => return,
     };
 
-    let (text, bg_color) = match current {
-        Some(c) => {
-            let color = if attention { COLOR_ATTENTION } else { status_color(status_from_mgdl(c.sgv_mgdl)) };
-            (to_display(c.sgv_mgdl), color)
-        }
-        None => ("--".to_string(), if attention { COLOR_ATTENTION } else { COLOR_NO_DATA }),
-    };
-
+    let (text, bg_color) = tile(current, attention);
     if let Some((rgba, w, h)) = rasterize(&text, bg_color) {
         let _ = tray.set_icon(Some(tauri::image::Image::new_owned(rgba, w, h)));
     }
+}
+
+fn tile(current: Option<&CurrentBg>, attention: bool) -> (String, (u8, u8, u8)) {
+    let text = current.map_or_else(|| "--".to_string(), |c| to_display(c.sgv_mgdl));
+    let color = if attention { COLOR_ATTENTION } else { status_color(current.and_then(|c| c.status.as_deref())) };
+    (text, color)
 }
 
 /// The effect of a `set_tray_flash` call on the shared flashing set.
@@ -559,20 +539,44 @@ mod tests {
         assert_eq!(tooltip_text(None), "No data");
     }
 
-    #[test]
-    fn status_classifies_by_mgdl_thresholds() {
-        assert_eq!(status_from_mgdl(69.9), GlucoseStatus::Low);
-        assert_eq!(status_from_mgdl(70.0), GlucoseStatus::InRange); // boundary: not low
-        assert_eq!(status_from_mgdl(120.0), GlucoseStatus::InRange);
-        assert_eq!(status_from_mgdl(180.0), GlucoseStatus::InRange); // boundary: not high
-        assert_eq!(status_from_mgdl(180.1), GlucoseStatus::High);
+    fn with_status(sgv_mgdl: f64, status: Option<&str>) -> CurrentBg {
+        CurrentBg { status: status.map(str::to_string), ..reading(sgv_mgdl) }
     }
 
     #[test]
-    fn status_maps_to_palette() {
-        assert_eq!(status_color(GlucoseStatus::Low), COLOR_LOW);
-        assert_eq!(status_color(GlucoseStatus::InRange), COLOR_IN_RANGE);
-        assert_eq!(status_color(GlucoseStatus::High), COLOR_HIGH);
+    fn tile_colours_from_the_server_status_not_the_value() {
+        assert_eq!(tile(Some(&with_status(170.0, Some("High"))), false).1, COLOR_HIGH);
+        assert_eq!(tile(Some(&with_status(170.0, Some("InRange"))), false).1, COLOR_IN_RANGE);
+    }
+
+    #[test]
+    fn tile_is_neutral_without_a_known_status() {
+        for status in [None, Some("Stale"), Some("Unknown"), Some("SomethingNew")] {
+            assert_eq!(tile(Some(&with_status(40.0, status)), false).1, COLOR_NEUTRAL);
+        }
+        assert_eq!(tile(None, false), ("--".to_string(), COLOR_NEUTRAL));
+    }
+
+    #[test]
+    fn every_server_status_takes_its_tile_colour() {
+        let cases = [
+            ("UrgentLow", COLOR_LOW),
+            ("Low", COLOR_LOW),
+            ("InRange", COLOR_IN_RANGE),
+            ("High", COLOR_HIGH),
+            ("UrgentHigh", COLOR_HIGH),
+            ("Stale", COLOR_NEUTRAL),
+            ("Unknown", COLOR_NEUTRAL),
+        ];
+        for (status, color) in cases {
+            assert_eq!(status_color(Some(status)), color, "{status}");
+        }
+    }
+
+    #[test]
+    fn attention_overrides_the_status_colour() {
+        assert_eq!(tile(Some(&with_status(120.0, Some("InRange"))), true).1, COLOR_ATTENTION);
+        assert_eq!(tile(None, true).1, COLOR_ATTENTION);
     }
 
     #[test]
@@ -596,6 +600,7 @@ mod tests {
             delta_mgdl: None,
             direction: Some("FortyFiveUp".to_string()),
             mills: 0,
+            status: None,
         };
         let t = tooltip_text(Some(&bg));
         assert!(t.starts_with("5.5 mmol/L"));
@@ -638,7 +643,7 @@ mod tests {
     // ── flash generation: (set, generation) must change atomically ───────────────────────
 
     fn reading(sgv_mgdl: f64) -> CurrentBg {
-        CurrentBg { sgv_mgdl, delta_mgdl: None, direction: None, mills: 0 }
+        CurrentBg { sgv_mgdl, delta_mgdl: None, direction: None, mills: 0, status: None }
     }
 
     #[test]

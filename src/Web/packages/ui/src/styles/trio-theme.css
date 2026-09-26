@@ -32,6 +32,11 @@
   --glucose-very-low: rgb(235, 87, 87); /* LoopRed */
   --glucose-high: rgb(255, 193, 69); /* LoopYellow */
   --glucose-very-high: rgb(235, 87, 87); /* LoopRed */
+  --glucose-very-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.21 0.034 264.665);
 
   /* Insulin Types - Trio Colors */
   --insulin: rgb(30, 150, 252); /* Insulin/Bolus base */

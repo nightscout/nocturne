@@ -7,6 +7,10 @@ import {
   GlucoseStatus,
   type TenantOverviewItem,
 } from "$lib/api/generated/nocturne-api-client";
+import {
+  glucoseStatusTileVariant,
+  type GlucoseTileVariant,
+} from "@nocturne/ui/glucose";
 
 export const glucoseStatusStyles: Record<GlucoseStatus, string> = {
   [GlucoseStatus.UrgentLow]: "text-glucose-very-low",
@@ -34,6 +38,19 @@ export function getGlucoseStatusClass(
   status: GlucoseStatus | undefined
 ): string {
   return lookup(glucoseStatusStyles, status);
+}
+
+/**
+ * A server status added or renamed without updating the ui table fails `check`
+ * here.
+ */
+const tileVariants: Record<GlucoseStatus, GlucoseTileVariant> =
+  glucoseStatusTileVariant;
+
+export function getGlucoseTileVariant(
+  status: GlucoseStatus | undefined
+): GlucoseTileVariant {
+  return lookup(tileVariants, status);
 }
 
 /** Presentational rank only — not a domain ordering. */

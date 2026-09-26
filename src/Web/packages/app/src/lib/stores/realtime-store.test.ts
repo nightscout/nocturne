@@ -53,6 +53,8 @@ type TestStore = StoreInternals &
     RealtimeStore,
     | "currentReservoir"
     | "entries"
+    | "currentEntry"
+    | "bgDelta"
     | "direction"
     | "syncProgressByConnector"
     | "trackerInstances"
@@ -165,7 +167,9 @@ describe("RealtimeStore reservoir freshness", () => {
 describe("RealtimeStore direction", () => {
   it("passes the reported direction through", () => {
     const store = makeStore();
-    store.entries = [{ mills: 1_000, sgv: 120, direction: "FortyFiveDown" }];
+    store.entries = [
+      { type: "sgv", mills: 1_000, sgv: 120, direction: "FortyFiveDown" },
+    ];
 
     expect(store.direction).toBe("FortyFiveDown");
 
@@ -173,8 +177,11 @@ describe("RealtimeStore direction", () => {
   });
 
   it.each([
-    ["an entry with no direction", [{ mills: 1_000, sgv: 120 }]],
-    ["an empty direction", [{ mills: 1_000, sgv: 120, direction: "" }]],
+    ["an entry with no direction", [{ type: "sgv", mills: 1_000, sgv: 120 }]],
+    [
+      "an empty direction",
+      [{ type: "sgv", mills: 1_000, sgv: 120, direction: "" }],
+    ],
     ["no entries at all", []],
   ])("reports no direction for %s rather than Flat", (_case, entries) => {
     const store = makeStore();
@@ -184,6 +191,39 @@ describe("RealtimeStore direction", () => {
 
     store.destroy();
   });
+});
+
+describe("RealtimeStore current reading", () => {
+  it.each(["mbg", "cal"])(
+    "is the newest sgv when a newer %s entry arrives",
+    (type) => {
+      const store = makeStore();
+      store.entries = [
+        { _id: "older-sgv", type: "sgv", sgv: 100, mills: 1_000 },
+        {
+          _id: "newest-sgv",
+          type: "sgv",
+          sgv: 130,
+          mills: 2_000,
+          direction: "SingleUp",
+        },
+        {
+          _id: "meter",
+          type,
+          mbg: 250,
+          mgdl: 250,
+          mills: 3_000,
+          direction: "DoubleDown",
+        },
+      ];
+
+      expect(store.currentEntry?._id).toBe("newest-sgv");
+      expect(store.direction).toBe("SingleUp");
+      expect(store.bgDelta).toBe(30);
+
+      store.destroy();
+    }
+  );
 });
 
 describe("RealtimeStore entry create batching", () => {

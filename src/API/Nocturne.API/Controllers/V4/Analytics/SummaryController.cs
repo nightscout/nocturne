@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
@@ -59,6 +60,7 @@ public class SummaryController : ControllerBase
     /// <param name="includePredictions">Whether to include predicted glucose values (default false)</param>
     /// <returns>Widget summary response with aggregated diabetes management data</returns>
     [HttpGet]
+    [RemoteQuery]
     [Authorize]
     [RequireScope(Scope.GlucoseRead, Scope.TreatmentsRead, Scope.AlertsRead)]
     [ProducesResponseType(typeof(V4SummaryResponse), StatusCodes.Status200OK)]

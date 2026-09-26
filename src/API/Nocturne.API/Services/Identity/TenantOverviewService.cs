@@ -1,7 +1,5 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Nocturne.API.Services.Alerts.Evaluators;
-using Nocturne.Core.Constants;
+using Nocturne.API.Services.Glucose;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -27,18 +25,18 @@ public class TenantOverviewService : ITenantOverviewService
 {
     private readonly IDbContextFactory<NocturneDbContext> _factory;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IConfiguration _configuration;
+    private readonly IGlucoseStatusClassifier _classifier;
     private readonly ILogger<TenantOverviewService> _logger;
 
     public TenantOverviewService(
         IDbContextFactory<NocturneDbContext> factory,
         IServiceScopeFactory scopeFactory,
-        IConfiguration configuration,
+        IGlucoseStatusClassifier classifier,
         ILogger<TenantOverviewService> logger)
     {
         _factory = factory;
         _scopeFactory = scopeFactory;
-        _configuration = configuration;
+        _classifier = classifier;
         _logger = logger;
     }
 
@@ -49,13 +47,6 @@ public class TenantOverviewService : ITenantOverviewService
     {
         var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
 
-        var defaults = new TenantOverviewThresholds(
-            UrgentLow: _configuration.GetValue("Thresholds:BgLow", ApplicationConstants.Web.Thresholds.BgLow),
-            Low: _configuration.GetValue("Thresholds:BgTargetBottom", ApplicationConstants.Web.Thresholds.BgTargetBottom),
-            High: _configuration.GetValue("Thresholds:BgTargetTop", ApplicationConstants.Web.Thresholds.BgTargetTop),
-            UrgentHigh: _configuration.GetValue("Thresholds:BgHigh", ApplicationConstants.Web.Thresholds.BgHigh));
-        var staleAfter = TimeSpan.FromMinutes(_configuration.GetValue("Overview:StaleAfterMinutes", 25));
-
         var items = new List<TenantOverviewItem>();
         foreach (var (tenant, allowed, membershipClamped) in glucoseReadTenants)
         {
@@ -64,8 +55,7 @@ public class TenantOverviewService : ITenantOverviewService
 
             try
             {
-                items.Add(await BuildItemAsync(
-                    tenant, defaults, staleAfter, includeAlerts, historyClamped, ct));
+                items.Add(await BuildItemAsync(tenant, includeAlerts, historyClamped, ct));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -73,7 +63,7 @@ public class TenantOverviewService : ITenantOverviewService
                 items.Add(new TenantOverviewItem(
                     tenant.Id, tenant.Slug, tenant.DisplayName,
                     historyClamped ? null : tenant.LastReadingAt, Latest: null, GlucoseStatus.Unknown,
-                    defaults, ActiveAlertCount: null, HighestActiveSeverity: null));
+                    _classifier.Defaults, ActiveAlertCount: null, HighestActiveSeverity: null));
             }
         }
 
@@ -130,8 +120,6 @@ public class TenantOverviewService : ITenantOverviewService
 
     private async Task<TenantOverviewItem> BuildItemAsync(
         TenantEntity tenant,
-        TenantOverviewThresholds defaults,
-        TimeSpan staleAfter,
         bool includeAlerts,
         bool historyClamped,
         CancellationToken ct)
@@ -169,11 +157,7 @@ public class TenantOverviewService : ITenantOverviewService
                 .Min();
         }
 
-        var thresholdRules = await db.AlertRules.AsNoTracking()
-            .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.Threshold)
-            .ToListAsync(ct);
-
-        var thresholds = ResolveThresholds(defaults, ParseThresholdRules(thresholdRules));
+        var thresholds = await _classifier.ResolveThresholdsAsync(db, ct);
 
         var reading = latest is null
             ? null
@@ -183,126 +167,13 @@ public class TenantOverviewService : ITenantOverviewService
         // caller must not read an older reading's time off it.
         var lastReadingAt = historyClamped ? null : tenant.LastReadingAt;
 
-        var status = Classify(
-            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, staleAfter, DateTime.UtcNow);
+        var status = _classifier.Classify(
+            latest?.Mgdl, latest?.Timestamp, lastReadingAt, thresholds, DateTime.UtcNow);
 
         return new TenantOverviewItem(
             tenant.Id, tenant.Slug, tenant.DisplayName,
             latest?.Timestamp ?? lastReadingAt,
             reading, status, thresholds,
             activeAlertCount, highestSeverity);
-    }
-
-    private IEnumerable<(string Direction, double Value, AlertRuleSeverity Severity)> ParseThresholdRules(
-        IEnumerable<AlertRuleEntity> rules)
-    {
-        foreach (var rule in rules)
-        {
-            ThresholdCondition? condition;
-            try
-            {
-                condition = JsonSerializer.Deserialize<ThresholdCondition>(rule.ConditionParams, EvaluatorJson.Options);
-            }
-            catch (JsonException ex)
-            {
-                _logger.LogWarning(ex, "Unparseable threshold condition params for rule {RuleId}", rule.Id);
-                continue;
-            }
-
-            // STJ materializes the record with a null Direction when the property is
-            // absent from the JSON; such a rule cannot be bucketed.
-            if (condition is null || string.IsNullOrEmpty(condition.Direction))
-            {
-                if (condition is not null)
-                    _logger.LogWarning("Threshold rule {RuleId} has no direction; skipped", rule.Id);
-                continue;
-            }
-
-            yield return (condition.Direction, (double)condition.Value, rule.Severity);
-        }
-    }
-
-    /// <summary>
-    /// Overrides configuration defaults from the tenant's enabled threshold rules.
-    /// Multiple rules in the same bucket resolve to the most conservative value
-    /// (below: highest, above: lowest); urgent bounds are then clamped so
-    /// UrgentLow &lt;= Low and High &lt;= UrgentHigh, and finally Low is clamped
-    /// to High so the in-range band cannot invert.
-    /// </summary>
-    internal static TenantOverviewThresholds ResolveThresholds(
-        TenantOverviewThresholds defaults,
-        IEnumerable<(string Direction, double Value, AlertRuleSeverity Severity)> rules)
-    {
-        double? urgentLow = null, low = null, high = null, urgentHigh = null;
-
-        foreach (var (direction, value, severity) in rules)
-        {
-            if (string.IsNullOrEmpty(direction)) continue;
-
-            switch (direction.ToLowerInvariant(), severity)
-            {
-                case ("below", AlertRuleSeverity.Critical):
-                    urgentLow = Math.Max(urgentLow ?? double.MinValue, value);
-                    break;
-                case ("below", _):
-                    low = Math.Max(low ?? double.MinValue, value);
-                    break;
-                case ("above", AlertRuleSeverity.Critical):
-                    urgentHigh = Math.Min(urgentHigh ?? double.MaxValue, value);
-                    break;
-                case ("above", _):
-                    high = Math.Min(high ?? double.MaxValue, value);
-                    break;
-            }
-        }
-
-        var resolved = new TenantOverviewThresholds(
-            urgentLow ?? defaults.UrgentLow,
-            low ?? defaults.Low,
-            high ?? defaults.High,
-            urgentHigh ?? defaults.UrgentHigh);
-
-        resolved = resolved with
-        {
-            UrgentLow = Math.Min(resolved.UrgentLow, resolved.Low),
-            UrgentHigh = Math.Max(resolved.UrgentHigh, resolved.High),
-        };
-
-        // A "below" rule above the high bound (e.g. below-200 with High=180) would invert
-        // the in-range band; keep Low <= High (and UrgentLow <= the clamped Low) so
-        // classification stays ordered.
-        var clampedLow = Math.Min(resolved.Low, resolved.High);
-        return resolved with
-        {
-            Low = clampedLow,
-            UrgentLow = Math.Min(resolved.UrgentLow, clampedLow),
-        };
-    }
-
-    /// <summary>
-    /// Classifies the latest reading. Boundary values are in range / non-urgent
-    /// (strict comparisons throughout).
-    /// </summary>
-    internal static GlucoseStatus Classify(
-        double? mgdl,
-        DateTime? readingTimestamp,
-        DateTime? lastReadingAt,
-        TenantOverviewThresholds thresholds,
-        TimeSpan staleAfter,
-        DateTime nowUtc)
-    {
-        var freshness = readingTimestamp ?? lastReadingAt;
-        if (freshness is null) return GlucoseStatus.Unknown;
-        if (nowUtc - freshness.Value > staleAfter) return GlucoseStatus.Stale;
-        if (mgdl is null) return GlucoseStatus.Unknown;
-
-        return mgdl.Value switch
-        {
-            var v when v < thresholds.UrgentLow => GlucoseStatus.UrgentLow,
-            var v when v < thresholds.Low => GlucoseStatus.Low,
-            var v when v > thresholds.UrgentHigh => GlucoseStatus.UrgentHigh,
-            var v when v > thresholds.High => GlucoseStatus.High,
-            _ => GlucoseStatus.InRange,
-        };
     }
 }

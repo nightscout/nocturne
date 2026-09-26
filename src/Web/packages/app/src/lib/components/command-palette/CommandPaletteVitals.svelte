@@ -8,6 +8,8 @@
   import { getDirectionInfo } from "$lib/utils";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
+  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
 
   const realtimeStore = getRealtimeStore();
 
@@ -28,14 +30,9 @@
   const isDimmed = $derived(isStale || isDisconnected);
   const hasData = $derived(currentBG > 0);
 
-  /** Text color class based on raw BG in mg/dL */
-  function getBGTextColor(bg: number): string {
-    if (bg < 70) return "text-red-500";
-    if (bg < 80) return "text-yellow-500";
-    if (bg > 250) return "text-red-500";
-    if (bg > 180) return "text-orange-500";
-    return "text-green-500";
-  }
+  const statusClass = $derived(
+    getGlucoseStatusClass(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
+  );
 
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
 </script>
@@ -45,7 +42,7 @@
   class:opacity-50={isDimmed}
 >
   {#if hasData}
-    <span class="font-mono font-semibold {getBGTextColor(currentBG)}">
+    <span class="font-mono font-semibold {statusClass}">
       {displayBG}
     </span>
     <span class="flex items-center gap-1 text-muted-foreground">
