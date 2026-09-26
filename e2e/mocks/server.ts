@@ -56,7 +56,9 @@ const server = createServer(async (req, res) => {
     const reply = await vendor.handle(request);
     send(res, reply.status, reply.body);
   } catch (err) {
-    send(res, 500, { error: String(err) });
+    // The detail goes to the container log (e2e/docker-compose-logs.txt on failure), not the reply.
+    console.error("fake vendor handler failed:", err);
+    send(res, 500, { error: "fake vendor handler failed; see the mocks container log" });
   }
 });
 

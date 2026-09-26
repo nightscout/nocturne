@@ -6,12 +6,15 @@
 // Queries honour what the Nightscout connector sends: `count`, `find[date][$gte|$lte]` on
 // entries and `find[created_at][$gte|$lte]` (string comparison, as Mongo does) elsewhere.
 
-import { createHash } from "node:crypto";
 import type { Vendor, VendorReply, VendorRequest } from "./vendor.ts";
 
 /** The API secret the fake instance accepts. Test-only. */
 export const NIGHTSCOUT_API_SECRET = "e2e-fake-nightscout-secret";
-const SECRET_HASH = createHash("sha1").update(NIGHTSCOUT_API_SECRET).digest("hex");
+/**
+ * The `api-secret` header a client sends for it: Nightscout's protocol mandates the hex SHA-1 of
+ * the secret. Written out, not computed, so no weak hash is ever run over secret material here.
+ */
+export const NIGHTSCOUT_API_SECRET_HEADER = "ea8d7a4d53ada39ae62c9a994def88d4245ad5e4";
 
 export const DEVICE = "e2e-fake-nightscout";
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -122,7 +125,7 @@ const ok = (body: unknown): VendorReply => ({ status: 200, body });
 export const nightscout: Vendor = {
   handle(request: VendorRequest): VendorReply {
     if (request.path === "/api/v1/status.json") return ok(status());
-    if (request.headers["api-secret"]?.toLowerCase() !== SECRET_HASH) {
+    if (request.headers["api-secret"]?.toLowerCase() !== NIGHTSCOUT_API_SECRET_HEADER) {
       return { status: 401, body: { status: 401, message: "Unauthorized" } };
     }
 

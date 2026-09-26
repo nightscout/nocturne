@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "../helpers/env.ts";
 import { seedTenant, type Tenant } from "../helpers/tenant.ts";
+import { NIGHTSCOUT_API_SECRET_HEADER } from "../../mocks/vendors/nightscout.ts";
 
 // Mirrors e2e/mocks/vendors/nightscout.ts, which serves 48 hours of five-minute readings.
 const FAKE_SECRET = "e2e-fake-nightscout-secret";
@@ -65,10 +65,9 @@ describe("Nightscout connector", () => {
     expect(result.itemsSynced.CarbIntake).toBeGreaterThanOrEqual(1);
 
     const calls = (await vendorRequests()).slice(before);
-    const hash = createHash("sha1").update(FAKE_SECRET).digest("hex");
     const authenticated = calls.filter((c) => c.path !== "/api/v1/status.json");
     expect(authenticated.length).toBeGreaterThan(0);
-    expect(authenticated.every((c) => c.headers["api-secret"] === hash)).toBe(true);
+    expect(authenticated.every((c) => c.headers["api-secret"] === NIGHTSCOUT_API_SECRET_HEADER)).toBe(true);
     expect(calls.some((c) => c.path === "/api/v1/entries.json" && c.query["find[date][$lte]"])).toBe(true);
     expect(calls.some((c) => c.path === "/api/v1/treatments.json")).toBe(true);
   });
