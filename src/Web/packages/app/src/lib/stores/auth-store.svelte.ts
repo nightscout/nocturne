@@ -267,24 +267,6 @@ export class AuthStore {
   }
 
   /**
-   * Check if the user has a specific role
-   * @param role - Role name (e.g., "admin", "readable")
-   */
-  hasRole(role: string): boolean {
-    if (!this._user) return false;
-    return this._user.roles.includes(role);
-  }
-
-  /**
-   * Check if the user has any of the specified roles
-   * @param roles - Array of role names
-   */
-  hasAnyRole(roles: string[]): boolean {
-    if (!this._user) return false;
-    return roles.some((role) => this._user!.roles.includes(role));
-  }
-
-  /**
    * Dismiss the session expiry warning
    */
   dismissExpiryWarning(): void {

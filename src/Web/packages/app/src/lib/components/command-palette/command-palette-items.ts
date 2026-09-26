@@ -69,8 +69,8 @@ export interface CommandPaletteItem {
 	shortcut?: string;
 	/** Scope required to see this item (e.g. "audit.read"). */
 	scope?: string;
-	/** Role required to see this item (e.g. "platform_admin"). */
-	role?: string;
+	/** Shown only to a platform administrator. */
+	platformAdmin?: boolean;
 	href?: string;
 	linkedHref?: string;
 }
@@ -369,7 +369,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
 		href: "/settings/admin/tenants",
-		role: "platform_admin",
+		platformAdmin: true,
 	},
 	{
 		id: "page-access-requests",
@@ -378,7 +378,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["access requests", "join", "approve", "pending users"],
 		icon: UserPlus,
 		href: "/settings/access-requests",
-		role: "platform_admin",
+		platformAdmin: true,
 	},
 
 	// ─── Settings ────────────────────────────────────────────────────────

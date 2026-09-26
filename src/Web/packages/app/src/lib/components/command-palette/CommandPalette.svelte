@@ -1,7 +1,6 @@
 <script lang="ts">
   import * as Command from "$lib/components/ui/command";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -44,7 +43,6 @@
 
   let searchValue = $state("");
 
-  const authStore = getAuthStore();
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
@@ -52,7 +50,7 @@
       (item) =>
         (!item.scope ||
           satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
-        (!item.role || authStore.hasRole(item.role))
+        (!item.platformAdmin || page.data.isPlatformAdmin)
     )
   );
 
