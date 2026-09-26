@@ -15,6 +15,16 @@ export default defineConfig({
       "src/**/*.render.test.ts",
     ],
     environment: "node",
+    // Half the cores: the suite is import-bound, and more workers mostly add memory.
+    maxWorkers: "50%",
+    // Off unless asked for (`--coverage`); CI collects it for the PR coverage report.
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "json-summary", "cobertura"],
+      reportsDirectory: "coverage/unit",
+      include: ["src/**/*.{ts,js,svelte}"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "**/*.d.ts"],
+    },
     alias: {
       $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
       $api: fileURLToPath(new URL("./src/lib/api/", import.meta.url)),

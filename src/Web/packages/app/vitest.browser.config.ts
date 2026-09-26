@@ -12,13 +12,29 @@ export default defineConfig({
   server: { fs: { strict: false } },
   // runed/kit imports `$app/*`, which esbuild's dep pre-bundler can't resolve —
   // the stubs below are vitest aliases, applied only in vite's own pipeline.
-  optimizeDeps: { exclude: ["runed/kit"] },
+  // `entries` makes the dep optimizer crawl every test file before the run. Left to discover deps
+  // as files load, it re-bundles mid-run and reloads the browser, and a test file whose import was
+  // in flight then fails with "Failed to fetch dynamically imported module".
+  optimizeDeps: { exclude: ["runed/kit"], entries: ["src/**/*.svelte.test.ts"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],
+    // Two pages finish as fast as the default one-per-core here; the Vite server is the bottleneck.
+    maxWorkers: 2,
+    // Off unless asked for (`--coverage`); CI collects it for the PR coverage report. No `include`:
+    // only files the browser loaded are reported, since the unit suite's report already lists every
+    // source file (untested ones at zero) and instrumenting the rest here doubles time and memory.
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "json-summary", "cobertura"],
+      reportsDirectory: "coverage/browser",
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "**/node_modules/**", "**/.svelte-kit/**"],
+    },
     browser: {
       enabled: true,
       provider: playwright(),
+      // Always headless: the default follows process.env.CI and opens a visible window locally.
+      headless: true,
       instances: [{ browser: "chromium" }],
     },
     alias: {
