@@ -13,6 +13,8 @@
   import { Button } from "$lib/components/ui/button";
   import { markSetupComplete } from "./setup.remote";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
+  import { Badge } from "$lib/components/ui/badge";
+  import { Progress } from "$lib/components/ui/progress";
   import {
     getServicesOverview,
     getActiveDataSources,
@@ -24,7 +26,6 @@
     DataSourceInfo,
   } from "$lib/api/generated/nocturne-api-client";
 
-  import ConstellationCanvas from "./ConstellationCanvas.svelte";
   import StepSidebar from "./StepSidebar.svelte";
   import TenantIdentity from "./steps/TenantIdentity.svelte";
   import AccountCreation from "./steps/AccountCreation.svelte";
@@ -34,7 +35,11 @@
   import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
   import UploaderSetupView from "$lib/components/connectors/UploaderSetupView.svelte";
   import ImportProgress from "./steps/ImportProgress.svelte";
-  import Finish from "./steps/Finish.svelte";
+  import Finish, {
+    type ImportResult,
+    type SourceResult,
+  } from "./steps/Finish.svelte";
+  import type { StepArt } from "./StepArtwork.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // Auth check is handled server-side in +page.server.ts:
@@ -55,20 +60,16 @@
     !accountCreated && page.data?.setupRequired === true
   );
 
+  type StepDef = { id: string; label: string; short: string; art: StepArt };
+
   const SETUP_STEPS = [
-    { id: "tenant", label: "Name your instance", short: "Instance" },
-    { id: "account", label: "Create your account", short: "Account" },
-  ] as const;
+    { id: "tenant", label: "Name your instance", short: "Instance", art: "welcome" },
+    { id: "account", label: "Create your account", short: "Account", art: "account" },
+  ] as const satisfies readonly StepDef[];
 
   // If the tenant already exists (user abandoned after step 1), skip to account creation.
   // page.data is resolved before render, so this is correct at init time.
   let setupStepIndex = $state(page.data?.tenantExists === true ? 1 : 0);
-  const setupStep = $derived(SETUP_STEPS[setupStepIndex]);
-  const setupProgressPct = $derived(
-    SETUP_STEPS.length <= 1
-      ? 100
-      : (setupStepIndex / (SETUP_STEPS.length - 1)) * 100
-  );
 
   function handleTenantCreated(_slug: string) {
     setupStepIndex = 1;
@@ -87,18 +88,18 @@
   // ── Onboarding step definitions (post-auth) ────────────────────────
   const STEPS = {
     fresh: [
-      { id: "path", label: "Choose your path", short: "Path" },
-      { id: "cgm", label: "Connect a data source", short: "Source" },
-      { id: "sync", label: "Configure & sync", short: "Setup" },
-      { id: "finish", label: "You\u2019re in", short: "Done" },
+      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
+      { id: "cgm", label: "Connect a data source", short: "Source", art: "source" },
+      { id: "sync", label: "Configure & sync", short: "Setup", art: "source" },
+      { id: "finish", label: "Finish", short: "Done", art: "done" },
     ],
     migration: [
-      { id: "path", label: "Choose your path", short: "Path" },
-      { id: "connect", label: "Connect your Nightscout", short: "Connect" },
-      { id: "import", label: "Import your history", short: "Import" },
-      { id: "finish", label: "Welcome home", short: "Done" },
+      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
+      { id: "connect", label: "Connect your Nightscout", short: "Connect", art: "source" },
+      { id: "import", label: "Import your history", short: "Import", art: "import" },
+      { id: "finish", label: "Finish", short: "Done", art: "done" },
     ],
-  } as const;
+  } as const satisfies Record<string, readonly StepDef[]>;
 
   // ── State ───────────────────────────────────────────────────────────
   let path = $state<"fresh" | "migration">("fresh");
@@ -131,22 +132,33 @@
       dataSourcesQuery.current === undefined
   );
   let importProgress = $state(0);
+  let importResult = $state<ImportResult>(null);
+  let sourceResult = $state<SourceResult>(null);
   let migrationJobId = $state<string | undefined>(undefined);
 
   const steps = $derived(STEPS[path]);
   const currentStep = $derived(steps[stepIndex]);
+
+  // Both phases share one layout; these pick the phase's steps.
+  const activeSteps: readonly StepDef[] = $derived(
+    setupRequired ? SETUP_STEPS : steps
+  );
+  const activeIndex = $derived(setupRequired ? setupStepIndex : stepIndex);
+  const activeStep = $derived(activeSteps[activeIndex]);
   const progressPct = $derived(
-    steps.length <= 1 ? 100 : (stepIndex / (steps.length - 1)) * 100
+    activeSteps.length <= 1
+      ? 100
+      : (activeIndex / (activeSteps.length - 1)) * 100
   );
 
-  // Constellation progress: for migration import step, use import %; otherwise step-based
-  const constellationProgress = $derived.by(() => {
-    if (path === "migration" && currentStep?.id === "import") {
-      return 0.35 + 0.6 * (importProgress / 100);
-    }
-    if (currentStep?.id === "finish") return 1;
-    return steps.length <= 1 ? 1 : stepIndex / (steps.length - 1);
-  });
+  function handleJumpToStep(index: number) {
+    if (!setupRequired) stepIndex = index;
+    else if (index <= setupStepIndex) setupStepIndex = index;
+  }
+
+  const artProgress = $derived(
+    currentStep?.id === "import" ? importProgress / 100 : undefined
+  );
 
   // ── Data source loading ──────────────────────────────────────────────
   const connectors = $derived(servicesData?.availableConnectors ?? []);
@@ -159,10 +171,6 @@
 
   function handleNext() {
     if (stepIndex < steps.length - 1) stepIndex++;
-  }
-
-  function handleSkip() {
-    handleNext();
   }
 
   async function handleEnterDashboard() {
@@ -189,23 +197,19 @@
     handleNext();
   }
 
-  function handleSourceSkip() {
+  function goToFinish() {
     const finishIdx = steps.findIndex((s) => s.id === "finish");
     if (finishIdx >= 0) stepIndex = finishIdx;
   }
 
-  function handleSetupComplete() {
-    const finishIdx = steps.findIndex((s) => s.id === "finish");
-    if (finishIdx >= 0) stepIndex = finishIdx;
+  function handleConnectorSaved() {
+    sourceResult = "connector-saved";
+    goToFinish();
   }
 
-  function handleSetupBack() {
-    handleBack();
-  }
-
-  function handleImportComplete() {
-    const finishIdx = steps.findIndex((s) => s.id === "finish");
-    if (finishIdx >= 0) stepIndex = finishIdx;
+  function handleUploaderReceiving() {
+    sourceResult = "uploader-receiving";
+    goToFinish();
   }
 
   // The Nightscout history import is started from the saved connector. It lives here (a
@@ -233,93 +237,48 @@
   <title>Get Started - Nocturne</title>
 </svelte:head>
 
-<!-- The onboarding surface is always dark by design. Force a `dark` theme context so
-     shadcn children (inputs, recovery-code chips, buttons) render with dark tokens even
-     when the user's system theme — applied by ModeWatcher on <html> — is light. -->
 <div
-  class="onb dark relative min-h-screen grid grid-rows-[auto_1fr_auto] bg-(--onb-navy) text-white"
-  class:onb-migration={path === "migration"}
+  class="relative min-h-screen grid grid-rows-[auto_1fr_auto] bg-background text-foreground"
 >
-  <!-- Background gradient -->
-  <div class="onb-backdrop fixed inset-0 z-0 pointer-events-none"></div>
-
-  <!-- Constellation background (above gradient so stars are visible) -->
-  <div class="fixed inset-0 z-1 pointer-events-none">
-    <ConstellationCanvas progress={constellationProgress} />
-  </div>
-
-  <!-- Header -->
   <header
-    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b border-white/8 bg-(--onb-navy-60) backdrop-blur-md backdrop-saturate-130 max-[900px]:px-5 max-[900px]:py-3.5"
+    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b bg-background/80 backdrop-blur-md max-[900px]:px-5 max-[900px]:py-3.5"
   >
     <div class="flex items-center gap-3">
-      <!-- Logo mark -->
-      <svg class="h-7 w-7" viewBox="0 0 100 100" aria-hidden="true">
-        <path
-          d="M50 6 C 70 30, 86 48, 86 66 A 36 36 0 0 1 14 66 C 14 48, 30 30, 50 6 Z"
-          fill="oklch(0.21 0.04 265)"
-        />
-        <path
-          d="M58 32 A 28 28 0 1 0 58 92 A 22 22 0 1 1 58 32 Z"
-          fill="oklch(0.82 0.06 265)"
-          opacity="0.92"
-        />
-        <g fill="#22c55e">
-          <circle cx="18" cy="56" r="1.6" />
-          <circle cx="26" cy="58" r="1.6" />
-          <circle cx="34" cy="58" r="1.6" />
-          <circle cx="42" cy="56" r="1.6" />
-          <circle cx="50" cy="55" r="1.6" />
-          <circle cx="58" cy="55" r="1.6" />
-          <circle cx="66" cy="56" r="1.6" />
-          <circle cx="74" cy="58" r="1.6" />
-          <circle cx="82" cy="60" r="1.6" />
-        </g>
-      </svg>
-      <span class="font-brand text-xl font-light tracking-wide text-white">
-        nocturne
-      </span>
+      <AppLogo icon="nocturne" class="h-7 w-7" />
+      <span class="font-brand text-xl font-light tracking-wide">nocturne</span>
     </div>
 
     <div class="flex items-center gap-5">
-      {#if setupRequired}
-        <!-- Step counter for setup phase -->
-        <span class="hidden font-mono text-xs text-white/40 sm:inline">
-          Step {setupStepIndex + 1} of {SETUP_STEPS.length}
-        </span>
-      {:else}
-        <!-- Step counter -->
-        <span class="hidden font-mono text-xs text-white/40 sm:inline">
-          Step {stepIndex + 1} of {steps.length}
-        </span>
+      <span class="hidden font-mono text-xs text-muted-foreground sm:inline">
+        Step {activeIndex + 1} of {activeSteps.length}
+      </span>
 
-        <!-- Account pill -->
+      {#if !setupRequired}
         {#if userEmail}
           <div
-            class="flex items-center gap-2.5 rounded-full border border-white/8 bg-white/3 py-1 pl-1 pr-3"
+            class="flex items-center gap-2.5 rounded-full border bg-muted/50 py-1 pl-1 pr-3"
           >
             <span
-              class="onb-avatar flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-(--onb-navy)"
+              class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground"
             >
               {userInitials}
             </span>
-            <span class="hidden text-xs text-white/40 sm:inline">
+            <span class="hidden text-xs text-muted-foreground sm:inline">
               {userEmail}
             </span>
           </div>
         {/if}
 
-        <!-- Save & exit -->
+        <!-- Marks onboarding complete on the server so it is not offered again. -->
         <Button variant="ghost-muted" size="xs" onclick={handleEnterDashboard}>
-          Save & exit
+          Exit setup
         </Button>
       {/if}
     </div>
   </header>
 
-  <!-- Stage -->
   <main
-    class="relative z-10 px-8 py-12 pb-16 max-[900px]:px-5 max-[900px]:py-7 max-[900px]:pb-10"
+    class="relative px-8 py-12 pb-16 max-[900px]:px-5 max-[900px]:py-7 max-[900px]:pb-10"
   >
     {#if httpsRequired}
       <div class="w-full max-w-lg mx-auto text-center py-20">
@@ -327,154 +286,88 @@
           class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8"
         >
           <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-destructive" />
-          <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
-          <p class="text-white/60 text-sm leading-relaxed">
+          <h2 class="text-xl font-semibold mb-3">HTTPS Required</h2>
+          <p class="text-muted-foreground text-sm leading-relaxed">
             Nocturne requires a secure connection. Please access this site using <strong
-              class="text-white"
+              class="text-foreground"
             >
               https://
             </strong>
             instead of http://.
           </p>
-          <p class="text-white/40 text-xs mt-4">
+          <p class="text-muted-foreground text-xs mt-4">
             Passkey authentication and secure cookies require HTTPS to function.
           </p>
         </div>
       </div>
-    {:else if setupRequired}
-      <!-- ═══ Pre-auth setup: tenant identity → account creation ═══ -->
-      <div
-        class="w-full max-w-280 mx-auto grid grid-cols-[320px_1fr] gap-14 items-start max-[900px]:grid-cols-1 max-[900px]:gap-6"
-      >
-        <!-- Sidebar -->
-        <aside class="sticky top-25 max-[900px]:static">
-          <StepSidebar
-            path="fresh"
-            currentStep={setupStepIndex}
-            steps={SETUP_STEPS.map((s) => ({ id: s.id, label: s.label }))}
-            onJumpToStep={(i) => {
-              if (i <= setupStepIndex) setupStepIndex = i;
-            }}
-          />
-        </aside>
-
-        <!-- Step card -->
-        <section
-          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
-        >
-          <!-- Strip -->
-          <div
-            class="relative z-2 flex items-center justify-between px-7 py-5 border-b border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
-          >
-            <div class="flex items-center gap-3">
-              <span
-                class="font-mono text-xs uppercase tracking-wide text-white/40"
-              >
-                Step {String(setupStepIndex + 1).padStart(2, "0")} / {String(
-                  SETUP_STEPS.length
-                ).padStart(2, "0")}
-              </span>
-              <span class="text-white/20">&middot;</span>
-              <span class="text-xs text-white/40">{setupStep?.short}</span>
-            </div>
-            <div class="flex items-center gap-3">
-              <!-- Progress bar -->
-              <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
-                <div
-                  class="h-full w-(--progress) rounded-full bg-(--onb-teal) shadow-(--onb-glow-teal) transition-all duration-500"
-                  style:--progress="{setupProgressPct}%"
-                ></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Step body -->
-          <div class="relative z-2 flex-1 px-5 py-3 max-[900px]:px-4">
-            {#if setupStep?.id === "tenant"}
-              <TenantIdentity onComplete={handleTenantCreated} />
-            {:else if setupStep?.id === "account"}
-              <AccountCreation onComplete={handleAccountCreated} />
-            {/if}
-          </div>
-        </section>
-      </div>
     {:else}
-      <!-- ═══ Post-auth onboarding wizard ═══ -->
       <div
         class="w-full max-w-280 mx-auto grid grid-cols-[320px_1fr] gap-14 items-start max-[900px]:grid-cols-1 max-[900px]:gap-6"
       >
-        <!-- Sidebar -->
-        <aside class="sticky top-25 max-[900px]:static">
+        <aside class="sticky top-8 max-[900px]:static">
           <StepSidebar
-            {path}
-            currentStep={stepIndex}
-            steps={steps.map((s) => ({ id: s.id, label: s.label }))}
-            onJumpToStep={(i) => (stepIndex = i)}
+            path={setupRequired ? "fresh" : path}
+            currentStep={activeIndex}
+            steps={activeSteps}
+            art={activeStep?.art ?? "welcome"}
+            {artProgress}
+            onJumpToStep={handleJumpToStep}
           />
         </aside>
 
-        <!-- Step card -->
         <section
-          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
+          class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden min-h-135 flex flex-col"
         >
-          <!-- Strip -->
           <div
-            class="relative z-2 flex items-center justify-between px-7 py-5 border-b border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
+            class="flex items-center justify-between px-7 py-5 border-b max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
           >
-            <div class="flex items-center gap-3">
-              <span
-                class="font-mono text-xs uppercase tracking-wide text-white/40"
-              >
-                Step {String(stepIndex + 1).padStart(2, "0")} / {String(
-                  steps.length
+            <div class="flex items-center gap-3 text-xs text-muted-foreground">
+              <span class="font-mono uppercase tracking-wide">
+                Step {String(activeIndex + 1).padStart(2, "0")} / {String(
+                  activeSteps.length
                 ).padStart(2, "0")}
               </span>
-              <span class="text-white/20">&middot;</span>
-              <span class="text-xs text-white/40">{currentStep?.short}</span>
+              <span aria-hidden="true">&middot;</span>
+              <span>{activeStep?.short}</span>
             </div>
             <div class="flex items-center gap-3">
-              <!-- Path badge -->
-              <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold tracking-wider uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
-              >
-                {#if path === "migration"}
-                  <Cable class="h-2.5 w-2.5" />
-                  Nightscout Migration
-                {:else}
-                  <Sprout class="h-2.5 w-2.5" />
-                  Fresh Start
-                {/if}
-              </span>
-              <!-- Progress bar -->
-              <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
-                <div
-                  class="h-full w-(--progress) rounded-full bg-(--onb-accent) shadow-(--onb-glow-accent) transition-all duration-500"
-                  style:--progress="{progressPct}%"
-                ></div>
-              </div>
+              {#if !setupRequired}
+                <Badge variant="secondary">
+                  {#if path === "migration"}
+                    <Cable />
+                    Nightscout Migration
+                  {:else}
+                    <Sprout />
+                    Fresh Start
+                  {/if}
+                </Badge>
+              {/if}
+              <Progress
+                value={progressPct}
+                class="h-1 w-30"
+                aria-label="Setup progress"
+              />
             </div>
           </div>
 
-          <!-- Step body -->
-          <div class="relative z-2 flex-1 px-5 py-3 max-[900px]:px-4">
-            {#if currentStep?.id === "path"}
+          <div class="flex-1 px-5 py-3 max-[900px]:px-4">
+            {#if activeStep?.id === "tenant"}
+              <TenantIdentity onComplete={handleTenantCreated} />
+            {:else if activeStep?.id === "account"}
+              <AccountCreation onComplete={handleAccountCreated} />
+            {:else if activeStep?.id === "path"}
               <PathChoice bind:path />
-            {:else if currentStep?.id === "connect"}
+            {:else if activeStep?.id === "connect"}
               <NightscoutConnect onComplete={handleMigrationConnected} />
-            {:else if currentStep?.id === "cgm"}
+            {:else if activeStep?.id === "cgm"}
               <div class="flex flex-col gap-8 px-4 py-8">
                 <div class="flex flex-col items-center gap-4 text-center">
                   <h1
-                    class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                    class="font-brand font-hairline leading-tight tracking-tight text-3xl md:text-4xl xl:text-5xl"
                   >
-                    Connect a <em
-                      class="not-italic font-light text-(--onb-accent)"
-                    >
-                      data source
-                    </em>
-                    .
+                    Connect a <em class="not-italic font-light text-primary">data source</em>.
                   </h1>
-                  <p class="max-w-140 text-base leading-relaxed text-white/50">
+                  <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
                     Choose a cloud service or phone app to start sending glucose
                     and treatment data to Nocturne. You can connect more later.
                   </p>
@@ -487,26 +380,19 @@
                   loadError={null}
                   onSelectConnector={handleSelectConnector}
                   onSelectUploader={handleSelectUploader}
-                  onSkip={handleSourceSkip}
+                  onSkip={goToFinish}
                 />
               </div>
-            {:else if currentStep?.id === "sync"}
+            {:else if activeStep?.id === "sync"}
               <div class="flex flex-col gap-8 px-4 py-8">
                 {#if selectedConnectorId}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                      class="font-brand font-hairline leading-tight tracking-tight text-3xl md:text-4xl xl:text-5xl"
                     >
-                      Configure your <em
-                        class="not-italic font-light text-(--onb-accent)"
-                      >
-                        connection
-                      </em>
-                      .
+                      Configure your <em class="not-italic font-light text-primary">connection</em>.
                     </h1>
-                    <p
-                      class="max-w-140 text-base leading-relaxed text-white/50"
-                    >
+                    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
                       Enter your credentials and we'll start syncing your data.
                     </p>
                   </div>
@@ -516,24 +402,17 @@
                     showToggle={false}
                     showDangerZone={false}
                     showCapabilities={true}
-                    onComplete={() => handleSetupComplete()}
-                    onCancel={handleSetupBack}
+                    onComplete={handleConnectorSaved}
+                    onCancel={handleBack}
                   />
                 {:else if selectedUploader}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+                      class="font-brand font-hairline leading-tight tracking-tight text-3xl md:text-4xl xl:text-5xl"
                     >
-                      Set up your <em
-                        class="not-italic font-light text-(--onb-accent)"
-                      >
-                        app
-                      </em>
-                      .
+                      Set up your <em class="not-italic font-light text-primary">app</em>.
                     </h1>
-                    <p
-                      class="max-w-140 text-base leading-relaxed text-white/50"
-                    >
+                    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
                       Follow the steps below to connect your phone app to
                       Nocturne.
                     </p>
@@ -541,170 +420,95 @@
                   <UploaderSetupView
                     app={selectedUploader}
                     setupResponse={uploaderSetupResponse}
-                    onBack={handleSetupBack}
-                    onConnected={handleSetupComplete}
+                    onBack={handleBack}
+                    onConnected={handleUploaderReceiving}
                   />
                 {:else}
-                  <div
-                    class="flex flex-col items-center gap-8 px-4 py-8 text-center"
-                  >
-                    <p class="text-white/50">
-                      No data source selected. Go back to choose one.
-                    </p>
-                  </div>
+                  <p class="px-4 py-8 text-center text-muted-foreground">
+                    No data source selected. Go back to choose one.
+                  </p>
                 {/if}
               </div>
-            {:else if currentStep?.id === "import"}
+            {:else if activeStep?.id === "import"}
               <ImportProgress
                 jobId={migrationJobId}
                 onProgressChange={(pct) => (importProgress = pct)}
-                onComplete={handleImportComplete}
+                onResult={(result) => (importResult = result)}
+                onComplete={goToFinish}
               />
-            {:else if currentStep?.id === "finish"}
+            {:else if activeStep?.id === "finish"}
               <Finish
                 {path}
+                source={sourceResult}
+                {importResult}
                 onEnterDashboard={handleEnterDashboard}
                 onNavigateWithCoach={handleNavigateWithCoach}
               />
             {/if}
           </div>
 
-          <!-- Actions bar -->
-          <div
-            class="relative z-2 flex justify-between items-center px-7 py-4.5 border-t border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-surface-60)"
-          >
-            <div>
-              {#if stepIndex > 0 && currentStep?.id !== "finish"}
-                <Button variant="outline" onclick={handleBack}>
-                  <ArrowLeft class="h-4 w-4" />
-                  Back
-                </Button>
-              {:else if currentStep?.id === "path"}
-                <span class="text-xs text-white/30">
-                  Just pick a starting point.
-                </span>
-              {/if}
-            </div>
-            <div class="flex items-center gap-3">
-              {#if currentStep?.id === "finish"}
-                <Button onclick={handleEnterDashboard}>
-                  Enter Nocturne
-                  <ArrowRight class="h-4 w-4" />
-                </Button>
-              {:else if currentStep?.id === "cgm"}
-                <Button onclick={handleSetupComplete}>
-                  Save and continue
-                  <ArrowRight class="h-4 w-4" />
-                </Button>
-              {:else if currentStep?.id === "path"}
-                <Button onclick={handleNext}>
-                  Continue
-                  <ArrowRight class="h-4 w-4" />
-                </Button>
-              {:else}
-                <Button variant="ghost" onclick={handleSkip}>
-                  Skip for now
-                </Button>
-                {#if currentStep?.id !== "sync" && currentStep?.id !== "connect"}
+          {#if !setupRequired}
+            <div
+              class="flex justify-between items-center px-7 py-4.5 border-t bg-muted/40 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
+            >
+              <div>
+                {#if stepIndex > 0 && currentStep?.id !== "finish"}
+                  <Button variant="outline" onclick={handleBack}>
+                    <ArrowLeft class="h-4 w-4" />
+                    Back
+                  </Button>
+                {:else if currentStep?.id === "path"}
+                  <span class="text-xs text-muted-foreground">
+                    Just pick a starting point.
+                  </span>
+                {/if}
+              </div>
+              <div class="flex items-center gap-3">
+                {#if currentStep?.id === "finish"}
+                  <Button onclick={handleEnterDashboard}>
+                    Enter Nocturne
+                    <ArrowRight class="h-4 w-4" />
+                  </Button>
+                {:else if currentStep?.id === "path"}
                   <Button onclick={handleNext}>
                     Continue
                     <ArrowRight class="h-4 w-4" />
                   </Button>
+                {:else if currentStep?.id !== "cgm"}
+                  <Button variant="ghost" onclick={handleNext}>
+                    Skip for now
+                  </Button>
+                  {#if currentStep?.id !== "sync" && currentStep?.id !== "connect"}
+                    <Button onclick={handleNext}>
+                      Continue
+                      <ArrowRight class="h-4 w-4" />
+                    </Button>
+                  {/if}
                 {/if}
-              {/if}
+              </div>
             </div>
-          </div>
+          {/if}
         </section>
       </div>
     {/if}
   </main>
 
-  <!-- Footer -->
   <footer
-    class="relative z-50 px-8 py-5 border-t border-white/8 flex justify-between items-center text-xs text-white/30 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-navy-50) backdrop-blur-sm"
+    class="relative px-8 py-5 border-t flex justify-between items-center text-xs text-muted-foreground max-[900px]:flex-wrap max-[900px]:gap-2.5"
   >
     <div class="flex flex-wrap items-center gap-5">
       <span>&copy; 2026 Nocturne</span>
-      <a href={resolve("/privacy")} class="hover:text-white/60">Privacy</a>
-      <a href="/docs" rel="external" class="hover:text-white/60">Docs</a>
+      <a href={resolve("/privacy")} class="hover:text-foreground">Privacy</a>
+      <a href="/docs" rel="external" class="hover:text-foreground">Docs</a>
     </div>
-    <div class="flex flex-wrap items-center gap-5">
-      <span class="font-mono">v1.4.2</span>
-      <a
-        href="https://github.com/nightscout/nocturne"
-        class="inline-flex items-center gap-1.5 hover:text-white/60"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <AppLogo class="max-h-12" icon="github" />
-        Source
-      </a>
-    </div>
+    <a
+      href="https://github.com/nightscout/nocturne"
+      class="inline-flex items-center gap-1.5 hover:text-foreground"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <AppLogo class="max-h-12" icon="github" />
+      Source
+    </a>
   </footer>
 </div>
-
-<style>
-  .onb {
-    --onb-navy: oklch(0.08 0.025 261.692);
-    --onb-navy-60: oklch(0.08 0.025 261.692 / 0.6);
-    --onb-navy-50: oklch(0.08 0.025 261.692 / 0.5);
-    --onb-surface-60: oklch(0.1 0.025 261.692 / 0.6);
-    --onb-teal: oklch(0.72 0.14 184);
-    --onb-ok: oklch(0.72 0.17 150);
-    --onb-warn: oklch(0.769 0.188 70.08);
-    --onb-green: oklch(0.78 0.21 145);
-    --onb-green-dim: oklch(0.78 0.21 145 / 0.12);
-    --onb-lavender: oklch(0.78 0.09 265);
-    --onb-lavender-dim: oklch(0.78 0.09 265 / 0.14);
-    --onb-border: rgb(255 255 255 / 0.08);
-    --onb-accent: var(--onb-green);
-    --onb-accent-dim: var(--onb-green-dim);
-    --onb-glow-teal: 0 0 10px var(--onb-teal);
-    --onb-glow-accent: 0 0 10px var(--onb-accent);
-    --onb-step-glow: 0 0 12px var(--onb-accent-dim);
-  }
-
-  .onb.onb-migration {
-    --onb-accent: var(--onb-lavender);
-    --onb-accent-dim: var(--onb-lavender-dim);
-  }
-
-  .onb-backdrop {
-    background:
-      radial-gradient(
-        ellipse 50% 35% at 50% 0%,
-        oklch(0.16 0.05 265 / 0.6),
-        transparent 70%
-      ),
-      linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));
-  }
-
-  .onb-avatar {
-    background: linear-gradient(135deg, var(--onb-teal), var(--onb-accent));
-  }
-
-  .step-card {
-    background: linear-gradient(
-      180deg,
-      oklch(0.14 0.03 261.692 / 0.85),
-      oklch(0.12 0.025 261.692 / 0.75)
-    );
-    box-shadow:
-      0 1px 0 rgb(255 255 255 / 0.05) inset,
-      0 30px 80px -30px rgb(0 0 0 / 0.6);
-  }
-
-  /* Pseudo-element for step-card accent glow — cannot be expressed with Tailwind's before: variant
-     because it uses a CSS custom property in the radial-gradient. */
-  .step-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      ellipse 60% 30% at 50% 0%,
-      var(--onb-accent-dim),
-      transparent 70%
-    );
-  }
-</style>

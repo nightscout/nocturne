@@ -12,19 +12,21 @@
   } from "lucide-svelte";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
-  import { Artwork } from "@nocturne/watercolour";
-  import { databaseArtwork } from "$lib/watercolour-icons";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { findSessionJob } from "../migration-session";
   import { SkippedRecordsNote } from "$lib/components/shared";
+  import type { ImportResult } from "./Finish.svelte";
 
   let {
     jobId,
     onProgressChange,
+    onResult,
     onComplete,
   }: {
     jobId?: string;
     onProgressChange?: (pct: number) => void;
+    /** Fires once the server reports the run ended, including a run that ended before this mounted. */
+    onResult?: (result: Exclude<ImportResult, null>) => void;
     onComplete: () => void;
   } = $props();
 
@@ -172,6 +174,7 @@
             caveat = status.errorMessage ?? null;
             caveatIsFault = Object.values(cp).some((col) => col.failureReason);
             realProgress = 100;
+            onResult?.(caveatIsFault ? "partial" : "complete");
             break;
           }
           if (
@@ -182,6 +185,7 @@
             failed = true;
             error =
               status.errorMessage ?? `Migration ${String(status.state).toLowerCase()}`;
+            onResult?.("failed");
             break;
           }
 
@@ -261,25 +265,17 @@
 <div class="flex flex-col gap-8 px-4 py-8">
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
-    <Artwork
-      icon={databaseArtwork}
-      palette="slate"
-      surface="dark"
-      motion="auto"
-      autoplay="once"
-      class="size-48"
-    />
     <h1
-      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
       Bringing your <em
-        class="not-italic font-light text-(--onb-accent)"
+        class="not-italic font-light text-primary"
       >
         history
       </em>
       across.
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-white/50">
+    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
       We're streaming entries, treatments, and profiles from your Nightscout
       into Nocturne's store. You can navigate away &mdash; this continues in the
       background.
@@ -289,53 +285,53 @@
   {#if loading}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <Loader2
-        class="h-12 w-12 animate-spin text-(--onb-accent)"
+        class="h-12 w-12 animate-spin text-primary"
       />
-      <p class="text-sm text-white/40">Finding active migration...</p>
+      <p class="text-sm text-muted-foreground">Finding active migration...</p>
     </div>
   {:else if error && !collections.length}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <AlertTriangle class="h-12 w-12 text-warning" />
-      <p class="text-sm text-white/60">{error}</p>
+      <p class="text-sm text-muted-foreground">{error}</p>
     </div>
   {:else}
     <!-- Import hero card -->
     <div
-      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative border-(--onb-border) bg-linear-135 from-white/4 to-white/2"
+      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative bg-card"
     >
       <!-- Left side -->
       <div class="flex flex-col gap-3">
         <span
-          class="font-mono text-xs uppercase tracking-widest text-white/40"
+          class="font-mono text-xs uppercase tracking-widest text-muted-foreground"
         >
           Overall progress
         </span>
         <div class="flex items-baseline gap-1">
           <span
-            class="font-brand font-hairline tabular-nums text-5xl md:text-6xl xl:text-7xl text-(--onb-accent)"
+            class="font-brand font-hairline tabular-nums text-5xl md:text-6xl xl:text-7xl text-primary"
           >
             {Math.round(progress)}
           </span>
           <span
-            class="text-3xl font-brand font-hairline tabular-nums text-white/40"
+            class="text-3xl font-brand font-hairline tabular-nums text-muted-foreground"
           >
             %
           </span>
         </div>
-        <p class="text-sm text-white/40">
+        <p class="text-sm text-muted-foreground">
           {#if failed}
             <span class="text-warning">{error}</span>
           {:else if caveat}
             <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
           {:else if etaText}
-            About <span class="font-semibold text-white/60">{etaText}</span>
+            About <span class="font-semibold text-muted-foreground">{etaText}</span>
             remaining &middot; {formatCount(totalMigrated)} records
           {:else}
             {formatCount(totalMigrated)} records migrated
           {/if}
         </p>
         {#if currentOperation}
-          <p class="font-mono text-xs text-white/30">{currentOperation}</p>
+          <p class="font-mono text-xs text-muted-foreground">{currentOperation}</p>
         {/if}
       </div>
 
@@ -355,7 +351,7 @@
             cy="100"
             r="88"
             fill="none"
-            stroke="var(--onb-border)"
+            class="stroke-border"
             stroke-width="6"
           />
           <!-- Progress arc -->
@@ -365,7 +361,7 @@
             r="88"
             fill="none"
             stroke="currentColor"
-            class="progress-arc {failed ? 'text-(--onb-warn)' : 'text-(--onb-accent)'}"
+            class="progress-arc {failed ? 'text-warning' : 'text-primary'}"
             stroke-width="6"
             stroke-linecap="round"
             stroke-dasharray={circumference}
@@ -374,7 +370,7 @@
         </svg>
         <!-- Center overlay -->
         <span
-          class="absolute font-brand text-4xl font-light tabular-nums text-white"
+          class="absolute font-brand text-4xl font-light tabular-nums text-foreground"
         >
           {Math.round(progress)}%
         </span>
@@ -386,27 +382,27 @@
       <div class="flex flex-col gap-2.5">
         {#each collections as col (col.key)}
           <div
-            class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border border-white/6 bg-white/2"
+            class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border bg-card"
           >
             <div class="grid grid-cols-[36px_1fr_auto] gap-3 items-center">
               <!-- Icon box -->
               <div
                 class="flex h-9 w-9 items-center justify-center rounded-lg {col.isComplete ||
                 col.pct > 0
-                  ? 'bg-(--onb-accent-dim)'
-                  : 'bg-white/3'}"
+                  ? 'bg-primary/10'
+                  : 'bg-muted'}"
               >
                 <col.icon
                   class="h-[18px] w-[18px] {col.isComplete || col.pct > 0
-                    ? 'text-(--onb-accent)'
-                    : 'text-white/40'}"
+                    ? 'text-primary'
+                    : 'text-muted-foreground'}"
                 />
               </div>
 
               <!-- Name & meta -->
               <div class="flex flex-col">
                 <span class="text-sm font-medium">{col.label}</span>
-                <span class="font-mono text-xs text-white/40">
+                <span class="font-mono text-xs text-muted-foreground">
                   {#if col.total > 0}
                     {formatCount(col.migrated)} / {formatCount(col.total)} records
                   {:else if col.migrated > 0}
@@ -422,9 +418,9 @@
               <!-- Percentage or checkmark -->
               <div class="flex items-center justify-end">
                 {#if col.isComplete}
-                  <Check class="h-4 w-4 text-(--onb-accent)" />
+                  <Check class="h-4 w-4 text-primary" />
                 {:else}
-                  <span class="font-mono text-xs text-white/40">
+                  <span class="font-mono text-xs text-muted-foreground">
                     {col.pct}%
                   </span>
                 {/if}
@@ -434,17 +430,17 @@
             <SkippedRecordsNote
               deleted={col.skippedDeleted}
               unsupported={col.skippedUnsupported}
-              class="text-xs text-white/60"
+              class="text-xs text-muted-foreground"
             />
 
             <!-- Progress bar -->
             <div
-              class="h-1 w-full overflow-hidden rounded-full bg-(--onb-border)"
+              class="h-1 w-full overflow-hidden rounded-full bg-muted"
             >
               <div
                 class="h-full w-(--progress) rounded-full transition-all duration-500 ease-out {col.isComplete
-                  ? 'bg-(--onb-ok)'
-                  : 'bg-(--onb-accent)'}"
+                  ? 'bg-success'
+                  : 'bg-primary'}"
                 style:--progress="{col.isComplete ? 100 : col.pct}%"
               ></div>
             </div>

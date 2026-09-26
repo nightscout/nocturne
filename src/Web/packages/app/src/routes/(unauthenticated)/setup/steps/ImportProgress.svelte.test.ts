@@ -183,4 +183,22 @@ describe("ImportProgress", () => {
 
     await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
   });
+
+  // Finish states what the import achieved, so the wizard has to learn how it ended.
+  it.each([
+    ["complete", MigrationJobState.Completed, {}],
+    [
+      "partial",
+      MigrationJobState.Completed,
+      { treatments: { collectionName: "treatments", isComplete: true, failureReason: "Could not reach your Nightscout server." } },
+    ],
+    ["failed", MigrationJobState.Failed, {}],
+  ] as const)("reports a %s run", async (expected, state, collectionProgress) => {
+    status = { state, progressPercentage: 100, collectionProgress };
+    const onResult = vi.fn();
+
+    render(ImportProgress, { jobId: `job-${expected}`, onResult, onComplete: () => {} });
+
+    await expect.poll(() => onResult.mock.calls).toEqual([[expected]]);
+  });
 });

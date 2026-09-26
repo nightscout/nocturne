@@ -1,7 +1,5 @@
 <script lang="ts">
   import { Check, Fingerprint, Loader2, UserPlus } from "lucide-svelte";
-  import { Artwork } from "@nocturne/watercolour";
-  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -164,20 +162,12 @@
 <div class="flex flex-col items-center gap-10 px-4 py-8">
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
-    <Artwork
-      icon={fingerprintArtwork}
-      palette="water"
-      surface="dark"
-      motion="auto"
-      autoplay="once"
-      class="size-56"
-    />
     <h1
-      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
-      Create your <em class="not-italic font-light text-(--onb-teal)">account</em>.
+      Create your <em class="not-italic font-light text-primary">account</em>.
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-white/50">
+    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
       Set up the owner account for your Nocturne instance. You will be the
       administrator.
     </p>
@@ -189,12 +179,12 @@
       <div class="space-y-4">
         <div class="flex flex-col items-center gap-2 text-center">
           <div
-            class="flex h-12 w-12 items-center justify-center rounded-full bg-(--onb-ok) text-(--onb-navy)"
+            class="flex h-12 w-12 items-center justify-center rounded-full bg-success text-success-foreground"
           >
             <UserPlus class="h-6 w-6" />
           </div>
-          <h2 class="text-lg font-semibold text-white">Account Created</h2>
-          <p class="text-sm text-white/50">
+          <h2 class="text-lg font-semibold text-foreground">Account Created</h2>
+          <p class="text-sm text-muted-foreground">
             Save your recovery codes before continuing.
           </p>
         </div>
@@ -207,7 +197,7 @@
       </div>
     {:else if authStateQuery.loading}
       <div class="flex items-center justify-center py-12">
-        <Loader2 class="h-8 w-8 animate-spin text-white/40" />
+        <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     {:else if !isAuthenticated}
       <form class="space-y-4" onsubmit={handlePasskeyRegister}>
@@ -259,14 +249,14 @@
           {/snippet}
           {#snippet hint()}
             {#if availability.validating}
-              <p class="text-xs text-white/40">Checking availability...</p>
+              <p class="text-xs text-muted-foreground">Checking availability...</p>
             {:else if availability.valid}
               <p class="flex items-center gap-1.5 text-xs text-success">
                 <Check class="h-3 w-3" />
                 Available
               </p>
             {:else}
-              <p class="text-xs text-white/30">
+              <p class="text-xs text-muted-foreground">
                 3-32 characters: letters, numbers, dots, underscores, and hyphens.
               </p>
             {/if}

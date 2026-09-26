@@ -1,10 +1,16 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 // Only the wizard's own navigation is under test; every step body it can reach is stood down.
-vi.mock("./setup.remote", () => ({ markSetupComplete: vi.fn() }));
+const { markSetupComplete } = vi.hoisted(() => ({ markSetupComplete: vi.fn() }));
+vi.mock("./setup.remote", () => ({ markSetupComplete }));
+vi.mock("@nocturne/watercolour", async () => ({
+  Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
+  hostSurface: () => "light",
+  watchSurface: () => () => {},
+}));
 vi.mock("$api/generated/migrations.generated.remote", () => ({
   getHistory: () => remoteQuery(() => []),
   startFromConnector: vi.fn(),
@@ -19,7 +25,6 @@ const { emptyStub } = vi.hoisted(() => ({
     default: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
   }),
 }));
-vi.mock("./ConstellationCanvas.svelte", emptyStub);
 vi.mock("./steps/TenantIdentity.svelte", emptyStub);
 vi.mock("./steps/AccountCreation.svelte", emptyStub);
 vi.mock("./steps/NightscoutConnect.svelte", emptyStub);
@@ -95,5 +100,51 @@ describe("setup path step", () => {
       .element(migrationCard())
       .toHaveAttribute("aria-checked", "true");
     await expect.element(freshCard()).toHaveAttribute("aria-checked", "false");
+  });
+});
+
+describe("setup chrome", () => {
+  beforeEach(() => markSetupComplete.mockClear());
+
+  it("follows the person's theme instead of forcing dark", async () => {
+    const { container } = render(SetupPage);
+
+    await expect.element(freshCard()).toBeVisible();
+    expect(container.querySelector(".dark")).toBeNull();
+  });
+
+  it("shows each step's artwork beside it", async () => {
+    render(SetupPage);
+
+    const artwork = page.getByTestId("artwork");
+    await expect.element(artwork).toHaveAttribute("data-artwork", "crescent-moon");
+
+    await continueButton().click();
+
+    await expect.element(artwork).toHaveAttribute("data-artwork", "plug");
+  });
+
+  // Leaving marks onboarding complete on the server, but nothing past the
+  // steps actually finished is set up, so the control must not say otherwise.
+  it("offers an exit that claims nothing was saved", async () => {
+    render(SetupPage);
+
+    await expect.element(page.getByRole("button", { name: /Save/ })).not.toBeInTheDocument();
+    await page.getByRole("button", { name: "Exit setup" }).click();
+
+    expect(markSetupComplete).toHaveBeenCalledOnce();
+  });
+
+  it("has no action on the data source step that pretends to save", async () => {
+    render(SetupPage);
+
+    await continueButton().click();
+
+    await expect
+      .element(page.getByRole("heading", { name: /Connect a data source/ }))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Save and continue" }))
+      .not.toBeInTheDocument();
   });
 });

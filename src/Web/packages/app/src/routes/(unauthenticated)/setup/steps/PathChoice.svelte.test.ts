@@ -37,4 +37,11 @@ describe("PathChoice", () => {
 
     await expect.element(fresh).toHaveAttribute("aria-checked", "true");
   });
+
+  it("promises only steps the wizard has", async () => {
+    render(PathChoice, { path: "fresh" });
+
+    await expect.element(page.getByText(/target range/i)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/glucose units/i)).not.toBeInTheDocument();
+  });
 });

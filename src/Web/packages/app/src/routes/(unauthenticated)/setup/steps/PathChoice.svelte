@@ -7,26 +7,53 @@
   }
 
   let { path = $bindable() }: Props = $props();
+
+  const PATHS = [
+    {
+      value: "fresh",
+      tag: "Fresh start",
+      icon: Sprout,
+      title: "Start with a blank slate",
+      description:
+        "I'm new to open-source diabetes data, or I'd rather not bring old data with me.",
+      bullets: [
+        "Connect a CGM, pump, or phone app",
+        "Skip anything and set it up later",
+        "Land on your dashboard",
+      ],
+    },
+    {
+      value: "migration",
+      tag: "Coming from Nightscout",
+      icon: Cable,
+      title: "Migrate my Nightscout data",
+      description:
+        "I already run Nightscout. Copy my history across without changing my Nightscout site.",
+      bullets: [
+        "Point at your existing Nightscout address",
+        "Import entries, treatments, and profiles",
+        "Keep Nightscout running while you try Nocturne",
+      ],
+    },
+  ] as const;
 </script>
 
 <div class="flex flex-col items-center gap-10 px-4 py-8">
-  <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <!-- prettier-ignore -->
     <h1
       id="path-choice-heading"
-      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
+      class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
-      How are you <em class="not-italic font-light text-(--onb-green)">arriving</em>?
+      How are you <em class="not-italic font-light text-primary">arriving</em>?
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-white/50">
+    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
       Both roads end in the same place. We just want to know whether to carry
       your existing Nightscout data over, or give you a clean notebook to start
       in.
     </p>
   </div>
 
-  <!-- Path cards -->
   <RadioGroup.Root
     class="w-full max-w-170 grid-cols-1 gap-5 sm:grid-cols-2"
     aria-labelledby="path-choice-heading"
@@ -35,151 +62,47 @@
       if (value === "fresh" || value === "migration") path = value;
     }}
   >
-    <!-- Fresh Start -->
-    <RadioGroup.Card value="fresh">
-      {#snippet child({ props, checked })}
-        <button
-          {...props}
-          class="group relative flex cursor-pointer flex-col gap-5 rounded-2xl border p-6 text-left transition-all duration-200 {checked
-            ? 'border-(--onb-green) bg-(--onb-green-dim)'
-            : 'border-white/8 bg-white/3 hover:border-white/18 hover:-translate-y-0.5'}"
-          style="--card-accent: var(--onb-green); --card-glow: var(--onb-green-dim);"
-        >
-          <!-- Radio dot -->
-          <span
-            class="absolute right-4 top-4 block h-5.5 w-5.5 rounded-full border-2 transition-all duration-200 {checked
-              ? 'border-(--card-accent) bg-(--card-accent) inset-ring-4 inset-ring-(--onb-navy)'
-              : 'border-white/20'}"
-          ></span>
+    {#each PATHS as option (option.value)}
+      <RadioGroup.Card value={option.value}>
+        {#snippet children({ checked })}
+          <span class="flex w-full flex-col gap-5 p-2">
+            <span
+              class="absolute right-4 top-4 block h-5 w-5 rounded-full border-2 transition-colors {checked
+                ? 'border-primary bg-primary inset-ring-4 inset-ring-card'
+                : 'border-border'}"
+            ></span>
 
-          <!-- Tag pill -->
-          <span
-            class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-2xs uppercase tracking-wider bg-(--card-glow) text-(--card-accent)"
-          >
-            Fresh start
+            <span
+              class="inline-flex self-start rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-2xs uppercase tracking-wider text-primary"
+            >
+              {option.tag}
+            </span>
+
+            <span
+              class="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10"
+            >
+              <option.icon class="h-6 w-6 text-primary" />
+            </span>
+
+            <span class="font-brand text-xl font-normal leading-snug text-foreground">
+              {option.title}
+            </span>
+
+            <span class="text-sm leading-relaxed text-muted-foreground">
+              {option.description}
+            </span>
+
+            <span class="flex flex-col gap-2.5">
+              {#each option.bullets as bullet (bullet)}
+                <span class="flex items-start gap-2.5 text-sm text-foreground">
+                  <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  {bullet}
+                </span>
+              {/each}
+            </span>
           </span>
-
-          <!-- Icon -->
-          <div
-            class="flex h-12 w-12 items-center justify-center rounded-xl bg-(--card-glow)"
-          >
-            <Sprout class="h-6 w-6 text-(--card-accent)" />
-          </div>
-
-          <!-- Title -->
-          <h2 class="font-brand text-xl font-normal leading-snug text-white">
-            Start with a blank slate
-          </h2>
-
-          <!-- Description -->
-          <p class="text-sm leading-relaxed text-white/50">
-            I'm new to open-source diabetes data, or I'd rather not bring old
-            data with me.
-          </p>
-
-          <!-- Bullets -->
-          <ul class="flex flex-col gap-2.5">
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Pick your glucose units and target range
-            </li>
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Connect a CGM, pump, or uploader
-            </li>
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Land on a dashboard in about two minutes
-            </li>
-          </ul>
-
-          <!-- Bottom glow streak -->
-          <div
-            class="card-streak pointer-events-none absolute bottom-0 left-1/2 h-px w-[70%] -translate-x-1/2 transition-opacity duration-300 {checked
-              ? 'opacity-100'
-              : 'opacity-0'}"
-          ></div>
-        </button>
-      {/snippet}
-    </RadioGroup.Card>
-
-    <!-- Migration -->
-    <RadioGroup.Card value="migration">
-      {#snippet child({ props, checked })}
-        <button
-          {...props}
-          class="group relative flex cursor-pointer flex-col gap-5 rounded-2xl border p-6 text-left transition-all duration-200 {checked
-            ? 'border-(--onb-lavender) bg-(--onb-lavender-dim)'
-            : 'border-white/8 bg-white/3 hover:border-white/18 hover:-translate-y-0.5'}"
-          style="--card-accent: var(--onb-lavender); --card-glow: var(--onb-lavender-dim);"
-        >
-          <!-- Radio dot -->
-          <span
-            class="absolute right-4 top-4 block h-5.5 w-5.5 rounded-full border-2 transition-all duration-200 {checked
-              ? 'border-(--card-accent) bg-(--card-accent) inset-ring-4 inset-ring-(--onb-navy)'
-              : 'border-white/20'}"
-          ></span>
-
-          <!-- Tag pill -->
-          <span
-            class="inline-flex self-start rounded-full px-2.5 py-0.75 font-mono text-2xs uppercase tracking-wider bg-(--card-glow) text-(--card-accent)"
-          >
-            Coming from Nightscout
-          </span>
-
-          <!-- Icon -->
-          <div
-            class="flex h-12 w-12 items-center justify-center rounded-xl bg-(--card-glow)"
-          >
-            <Cable class="h-6 w-6 text-(--card-accent)" />
-          </div>
-
-          <!-- Title -->
-          <h2 class="font-brand text-xl font-normal leading-snug text-white">
-            Migrate my Nightscout data
-          </h2>
-
-          <!-- Description -->
-          <p class="text-sm leading-relaxed text-white/50">
-            I already run Nightscout. Pull my history across and keep my
-            uploaders working.
-          </p>
-
-          <!-- Bullets -->
-          <ul class="flex flex-col gap-2.5">
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Point at your existing Nightscout URL
-            </li>
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Import entries, treatments, profiles
-            </li>
-            <li class="flex items-start gap-2.5 text-sm text-white/70">
-              <Check class="mt-0.5 h-4 w-4 shrink-0 text-(--card-accent)" />
-              Run side-by-side during the switchover
-            </li>
-          </ul>
-
-          <!-- Bottom glow streak -->
-          <div
-            class="card-streak pointer-events-none absolute bottom-0 left-1/2 h-px w-[70%] -translate-x-1/2 transition-opacity duration-300 {checked
-              ? 'opacity-100'
-              : 'opacity-0'}"
-          ></div>
-        </button>
-      {/snippet}
-    </RadioGroup.Card>
+        {/snippet}
+      </RadioGroup.Card>
+    {/each}
   </RadioGroup.Root>
 </div>
-
-<style>
-  .card-streak {
-    background: radial-gradient(
-      ellipse at center,
-      var(--card-accent),
-      transparent 70%
-    );
-    box-shadow: 0 0 20px 4px var(--card-glow);
-  }
-</style>
