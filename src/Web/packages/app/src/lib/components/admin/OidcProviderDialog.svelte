@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Alert from "$lib/components/ui/alert";
   import * as Select from "$lib/components/ui/select";
@@ -37,9 +38,17 @@
         name: "name",
         email: "email",
         picture: "avatar_url",
-      } as Record<string, string>,
+      } satisfies Record<string, string>,
     },
   };
+
+  interface Props {
+    open: boolean;
+    editingProvider: OidcProviderResponse | null;
+    roles: TenantRoleDto[];
+    onSave: (providerData: Record<string, unknown>) => Promise<void>;
+    onCancel: () => void;
+  }
 
   let {
     open = $bindable(false),
@@ -47,13 +56,10 @@
     roles = $bindable<TenantRoleDto[]>([]),
     onSave,
     onCancel,
-  } = $props<{
-    open: boolean;
-    editingProvider: OidcProviderResponse | null;
-    roles: TenantRoleDto[];
-    onSave: (providerData: any) => Promise<void>;
-    onCancel: () => void;
-  }>();
+  }: Props = $props();
+
+  // `roles` is accepted for callers but read only through the binding.
+  void roles;
 
   // Form field state
   let providerName = $state("");
@@ -265,7 +271,10 @@
         <Select.Root
           type="single"
           value={providerType}
-          onValueChange={(v) => onProviderTypeChange(v as OidcProviderType)}
+          onValueChange={(v) => {
+            const type = enumValue(OidcProviderType, v);
+            if (type) onProviderTypeChange(type);
+          }}
         >
           <Select.Trigger id="provider-type">
             {isOAuth2 ? "OAuth 2.0" : "OpenID Connect"}
@@ -283,7 +292,7 @@
           <Alert.Description>
             Register an OAuth app with your provider using the callback URL
             <code>{`{your-domain}`}/api/auth/oidc/callback</code>. Need GitHub?
-            <button type="button" class="underline" onclick={applyGithubPreset}>Use GitHub preset</button>.
+            <Button variant="link" size="inline" onclick={applyGithubPreset}>Use GitHub preset</Button>.
           </Alert.Description>
         </Alert.Root>
       {/if}
@@ -402,7 +411,6 @@
           variant="outline"
           onclick={testProviderConnection}
           disabled={testingProvider || !providerIssuerUrl || !providerClientId}
-          class="gap-2"
         >
           {#if testingProvider}
             <Loader2 class="h-4 w-4 animate-spin" />
@@ -421,7 +429,7 @@
                   : ""}.
                 {#if testResult.warnings && testResult.warnings.length > 0}
                   <ul class="list-disc list-inside mt-1 text-xs">
-                    {#each testResult.warnings as warn}
+                    {#each testResult.warnings as warn, i (i)}
                       <li>{warn}</li>
                     {/each}
                   </ul>
@@ -445,7 +453,7 @@
       <Button variant="outline" onclick={handleCancel}>
         Cancel
       </Button>
-      <Button onclick={handleSave} disabled={providerSaving} class="gap-2">
+      <Button onclick={handleSave} disabled={providerSaving}>
         {#if providerSaving}
           <Loader2 class="h-4 w-4 animate-spin" />
         {/if}

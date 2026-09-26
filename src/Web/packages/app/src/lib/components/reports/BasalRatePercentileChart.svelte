@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { AreaChart, Legend } from "layerchart";
-  import { scaleOrdinal } from "d3-scale";
+  import { AreaChart } from "layerchart";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { Layers, Loader2 } from "lucide-svelte";
 
   // Local type definition for hourly basal percentile data
@@ -38,17 +39,13 @@
     return `${hour - 12} PM`;
   }
 
-  const legendScale = scaleOrdinal<string, string>()
-    .domain([
-      "10th-25th / 75th-90th percentile",
-      "25th-75th percentile",
-      "Median basal rate",
-    ])
-    .range([
-      "var(--chart-1)",
-      "var(--chart-2)",
-      "var(--primary)",
-    ]);
+  // Basal bands are tints of the one basal hue; texture tells them apart in print.
+  const outer = {
+    color: "color-mix(in oklab, var(--basal) 45%, var(--background))",
+    props: { class: patternClass("percentile-outer") },
+  };
+  const inner = { color: "var(--basal)", props: { class: patternClass("percentile-inner") } };
+  const medianColor = "var(--entry-basal)";
 </script>
 
 <div class="w-full">
@@ -74,7 +71,7 @@
               (d: HourlyBasalPercentileData) => d.p25,
               (d: HourlyBasalPercentileData) => d.p10,
             ],
-            color: "var(--chart-1)",
+            ...outer,
             label: "P10-P25",
           },
           {
@@ -83,7 +80,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.p25,
             ],
-            color: "var(--chart-2)",
+            ...inner,
             label: "P25-Median",
           },
           {
@@ -92,7 +89,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.median,
             ],
-            color: "var(--primary)",
+            color: medianColor,
             props: {
               line: { strokeWidth: 2 },
             },
@@ -104,7 +101,7 @@
               (d: HourlyBasalPercentileData) => d.median,
               (d: HourlyBasalPercentileData) => d.p75,
             ],
-            color: "var(--chart-3)",
+            ...inner,
             label: "Median-P75",
           },
           {
@@ -113,7 +110,7 @@
               (d: HourlyBasalPercentileData) => d.p75,
               (d: HourlyBasalPercentileData) => d.p90,
             ],
-            color: "var(--chart-1)",
+            ...outer,
             label: "P75-P90",
           },
         ]}
@@ -134,17 +131,14 @@
       />
     </div>
 
-    <!-- Legend -->
-    <div class="mt-4 flex justify-center">
-      <Legend
-        scale={legendScale}
-        variant="swatches"
-        classes={{
-          label: "text-xs text-muted-foreground",
-          swatch: "rounded-sm",
-        }}
-      />
-    </div>
+    <ChartKey
+      class="mt-4"
+      items={[
+        { texture: "percentile-outer", label: "10th–25th / 75th–90th percentile", color: outer.color },
+        { texture: "percentile-inner", label: "25th–75th percentile", color: inner.color },
+        { texture: "percentile-median", label: "Median basal rate", shape: "line", color: medianColor },
+      ]}
+    />
   {:else}
     <div
       class="flex h-[400px] w-full items-center justify-center text-muted-foreground"

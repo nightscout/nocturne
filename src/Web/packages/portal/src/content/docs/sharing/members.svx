@@ -54,12 +54,14 @@ limit that member to recent data, the same way the public link's time window
 works.
 
 <Callout type="tip" title="When to use it: a teacher and a school nurse">
+
   At school, two people need access for the whole term, and they need different
   things. Invite the <strong>teacher as a Viewer</strong>; they just need to
   glance at the current glucose during class. Invite the
   <strong>school nurse as a Caretaker</strong>, so they can also log a treatment
   or manage an alert if they step in. Each has their own login, you can see them
   in your member list, and when the year ends you remove them in one click.
+
 </Callout>
 
 ## Membership requests
@@ -83,10 +85,12 @@ For what the person on the other side sees, and how to word the note, see
 [Request membership](/docs/authentication/request-membership).
 
 <Callout type="tip" title="When to use it: a relative who wants to follow along">
+
   A grandparent asks to keep an eye on your child's glucose. Rather than
   collecting their email and sending an invite, switch membership requests on and
   point them at your instance. They sign in, request access, and you approve them as a
   <strong>Viewer</strong> when it suits you, or deny it if you change your mind.
+
 </Callout>
 
 ## Removing a member

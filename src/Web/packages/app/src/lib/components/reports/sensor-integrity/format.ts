@@ -16,15 +16,20 @@ export function confidenceLabel(c: ClusterConfidence | undefined): string {
   }
 }
 
-/** Tailwind text + background classes for a confidence chip. */
-export function confidenceChipClass(c: ClusterConfidence | undefined): string {
+/**
+ * A confidence level's key, which names both its chart texture and its badge
+ * variant, so a chart band and its chip always match.
+ */
+export function confidenceKey(
+  c: ClusterConfidence | undefined
+): "cluster-high" | "cluster-medium" | "cluster-low" {
   switch (c) {
     case ClusterConfidence.High:
-      return "bg-cluster-high/15 text-cluster-high";
+      return "cluster-high";
     case ClusterConfidence.Medium:
-      return "bg-cluster-medium/15 text-cluster-medium";
+      return "cluster-medium";
     default:
-      return "bg-cluster-low/20 text-cluster-low";
+      return "cluster-low";
   }
 }
 

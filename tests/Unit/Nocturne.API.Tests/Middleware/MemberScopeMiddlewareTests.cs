@@ -4,6 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Middleware;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -395,6 +398,20 @@ public class MemberScopeMiddlewareTests
     }
 
     [Fact]
+    public async Task GuestCredential_StoringHealthRead_ReadsTheAllowedHealthCategoriesButNotFood()
+    {
+        var context = await ResolveAsync(
+            RoleSeeds.Permissions[RoleSeeds.Admin], [Scope.HealthRead], AuthType.Guest);
+
+        var grantedScopes = context.GetGrantedScopes();
+        grantedScopes.Should().Contain([Scope.HeartRateRead, Scope.StepCountRead, Scope.SleepRead]);
+        grantedScopes.Should().NotContain(Scope.FoodRead);
+        grantedScopes.Should().OnlyContain(s => Scope.AllowedGuestScopes.Contains(s));
+        Scope.Satisfies(grantedScopes, Scope.FoodRead).Should().BeFalse();
+        context.GetPermissionTrie()!.Check("api:food:read").Should().BeFalse();
+    }
+
+    [Fact]
     public async Task UnauthenticatedShareRequest_IsLeftUntouched()
     {
         // The public share path resolves its scopes in AuthenticationMiddleware with
@@ -572,6 +589,125 @@ public class MemberScopeMiddlewareTests
             "the grant carries treatments.readwrite only");
     }
 
+    [Theory]
+    [InlineData(AuthType.SessionCookie)]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task ClampedFollower_IsHistoryClampedOnBothCarriers(AuthType authType)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[RoleSeeds.Viewer], limitTo24Hours: true);
+
+        var (category, scoped) = await ResolveClampAsync(
+            db, subjectId, authType, credentialLimit: false, [Scope.GlucoseRead]);
+
+        category.IsHistoryClamped.Should().BeTrue();
+        scoped.HistoryClamped.Should().BeTrue(
+            "the scoped context was pinned before authentication, so it must be stamped here");
+    }
+
+    [Fact]
+    public async Task UnclampedFollower_IsNotHistoryClamped()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(db, RoleSeeds.Permissions[RoleSeeds.Viewer]);
+
+        var (category, scoped) = await ResolveClampAsync(
+            db, subjectId, AuthType.SessionCookie, credentialLimit: false, []);
+
+        category.IsHistoryClamped.Should().BeFalse();
+        scoped.HistoryClamped.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(RoleSeeds.Owner)]
+    [InlineData(RoleSeeds.Admin)]
+    public async Task AdministeringMember_WithTheRowFlagSet_IsNotHistoryClamped(string roleSlug)
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(
+            db, RoleSeeds.Permissions[roleSlug], limitTo24Hours: true);
+
+        var (category, scoped) = await ResolveClampAsync(
+            db, subjectId, AuthType.SessionCookie, credentialLimit: false, []);
+
+        category.IsHistoryClamped.Should().BeFalse();
+        scoped.HistoryClamped.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken)]
+    [InlineData(AuthType.DirectGrant)]
+    [InlineData(AuthType.ApiKey)]
+    public async Task Owner_OnAClampedCredential_IsStillHistoryClamped(AuthType authType)
+    {
+        // The exemption covers the membership row only; a token the owner limited is a ceiling.
+        using var db = TestDbContextFactory.CreateSqlite();
+        var subjectId = SeedMemberWithRole(db, OwnerPermissions);
+
+        var (category, scoped) = await ResolveClampAsync(
+            db, subjectId, authType, credentialLimit: true, [Scope.GlucoseRead]);
+
+        category.IsHistoryClamped.Should().BeTrue();
+        scoped.HistoryClamped.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ApiKey_WithNoMembershipRow_KeepsTheGrantsClamp()
+    {
+        using var db = TestDbContextFactory.CreateSqlite();
+        using (var seed = db.CreateContext())
+        {
+            TestDatabaseSeeder.Seed(seed);
+        }
+
+        var (category, scoped) = await ResolveClampAsync(
+            db, Guid.CreateVersion7(), AuthType.ApiKey, credentialLimit: true, [Scope.GlucoseRead]);
+
+        category.IsHistoryClamped.Should().BeTrue();
+        scoped.HistoryClamped.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Runs the middleware with a real <see cref="ICategoryReadContext"/> and scoped context, as
+    /// the request pipeline registers them, and returns both carriers of the history clamp.
+    /// </summary>
+    private static async Task<(CategoryReadContext Category, NocturneDbContext Scoped)> ResolveClampAsync(
+        SqliteTestDatabase db,
+        Guid subjectId,
+        AuthType authType,
+        bool credentialLimit,
+        List<string> tokenScopes)
+    {
+        var category = new CategoryReadContext();
+        var scoped = db.CreateContext();
+        var services = new ServiceCollection();
+        services.AddSingleton<ICategoryReadContext>(category);
+        services.AddSingleton(scoped);
+        using var provider = services.BuildServiceProvider();
+
+        var context = new DefaultHttpContext { RequestServices = provider };
+        context.Items["AuthContext"] = new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = authType,
+            SubjectId = subjectId,
+            TenantId = TestDatabaseSeeder.TenantId,
+            Scopes = tokenScopes,
+            LimitTo24Hours = credentialLimit,
+        };
+        context.Items["GrantedScopes"] = Scope.Normalize(tokenScopes);
+        context.Items["PermissionTrie"] = new PermissionTrie();
+
+        var middleware = new MemberScopeMiddleware(
+            _ => Task.CompletedTask, NullLogger<MemberScopeMiddleware>.Instance);
+        await middleware.InvokeAsync(context);
+
+        return (category, scoped);
+    }
+
     /// <summary>
     /// Seeds a member holding <paramref name="rolePermissions"/> on a database of its own, then
     /// runs the middleware for a credential carrying <paramref name="tokenScopes"/>.
@@ -637,7 +773,7 @@ public class MemberScopeMiddlewareTests
     /// permission atoms. Returns the member's subject id.
     /// </summary>
     private static Guid SeedMemberWithRole(
-        SqliteTestDatabase db, List<string> rolePermissions)
+        SqliteTestDatabase db, List<string> rolePermissions, bool limitTo24Hours = false)
     {
         var subjectId = Guid.CreateVersion7();
         using var seed = db.CreateContext();
@@ -656,6 +792,7 @@ public class MemberScopeMiddlewareTests
             Id = memberId,
             TenantId = TestDatabaseSeeder.TenantId,
             SubjectId = subjectId,
+            LimitTo24Hours = limitTo24Hours,
         });
         var roleId = Guid.CreateVersion7();
         seed.TenantRoles.Add(new Nocturne.Infrastructure.Data.Entities.TenantRoleEntity

@@ -6,6 +6,15 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 
+  interface Props {
+    availableDataSources: string[];
+    selectedDataSources: string[];
+    presentDataTypes: string[];
+    hiddenDataTypes: Set<string>;
+    toggleDataType: (type: string) => void;
+    showAllDataTypes: () => void;
+  }
+
   let {
     availableDataSources,
     selectedDataSources = $bindable([]),
@@ -13,14 +22,7 @@
     hiddenDataTypes,
     toggleDataType,
     showAllDataTypes,
-  } = $props<{
-    availableDataSources: string[];
-    selectedDataSources: string[];
-    presentDataTypes: string[];
-    hiddenDataTypes: Set<string>;
-    toggleDataType: (type: string) => void;
-    showAllDataTypes: () => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <div class="@container">
@@ -64,7 +66,7 @@
           </span>
         </Select.Trigger>
         <Select.Content>
-          {#each availableDataSources as source}
+          {#each availableDataSources as source (source)}
             <Select.Item value={source}>
               {getDataTypeLabel(source)}
             </Select.Item>
@@ -78,12 +80,12 @@
       <Popover.Root>
         <Popover.Trigger>
           {#snippet child({ props }: { props: Record<string, unknown> })}
-            <Button variant="outline" size="sm" class="gap-1.5" {...props}>
+            <Button variant="outline" size="sm" {...props}>
               <SlidersHorizontal class="h-3.5 w-3.5" />
               Types
               {#if hiddenDataTypes.size > 0}
                 <span
-                  class="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium leading-none text-primary-foreground"
+                  class="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-2xs font-medium leading-none text-primary-foreground"
                 >
                   {presentDataTypes.length -
                     hiddenDataTypes.size}/{presentDataTypes.length}
@@ -98,16 +100,13 @@
               Show data types
             </span>
             {#if hiddenDataTypes.size > 0}
-              <button
-                class="text-xs text-primary hover:underline"
-                onclick={showAllDataTypes}
-              >
+              <Button variant="link" size="inline" onclick={showAllDataTypes}>
                 Show all
-              </button>
+              </Button>
             {/if}
           </div>
           <div class="space-y-1.5">
-            {#each presentDataTypes as dataType}
+            {#each presentDataTypes as dataType (dataType)}
               <label
                 class="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
               >

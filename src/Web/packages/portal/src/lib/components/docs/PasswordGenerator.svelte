@@ -1,6 +1,7 @@
 <script lang="ts">
     import CopyButton from "./CopyButton.svelte";
     import { RefreshCw } from "@lucide/svelte";
+    import { Button } from "@nocturne/ui/ui/button";
 
     interface Props {
         label?: string;
@@ -9,6 +10,11 @@
 
     let { label = "password", length = 32 }: Props = $props();
 
+    // Charset for generation, not user-facing text; if extracted as a
+    // message, a missing catalog entry makes the sampling loop below spin
+    // forever during prerender (ALPHABET.length becomes 0). The directive
+    // comment must be exactly "@wc-ignore" on its own.
+    // @wc-ignore
     const ALPHABET =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#%^&*-_=+";
 
@@ -60,14 +66,14 @@
         </code>
 
         <div class="flex items-center gap-1 shrink-0">
-            <button
-                type="button"
+            <Button
+                variant="ghost-muted"
+                size="icon-xs"
                 onclick={refresh}
-                class="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                 aria-label="Generate new {label}"
             >
-                <RefreshCw class="h-4 w-4" />
-            </button>
+                <RefreshCw class="size-4" />
+            </Button>
 
             <CopyButton text={password} kind="password" label="Copy {label} to clipboard" />
         </div>

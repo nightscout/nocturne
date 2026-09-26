@@ -17,7 +17,9 @@
     "./themes/trio.css": "./src/themes/trio.css"
   },
   "scripts": {
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "peerDependencies": {
     "@lucide/svelte": ">=0.400.0",
@@ -27,14 +29,16 @@
     "tailwindcss": ">=4.0.0"
   },
   "devDependencies": {
+    "@nocturne/eslint-config": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@types/d3": "^7.4.3",
     "@types/d3-scale": "^4.0.9",
     "d3": "^7.9.0",
     "d3-scale": "^4.0.2",
+    "eslint": "^10.3.0",
     "layerchart": "2.2.0",
     "svelte": "^5.54.0",
-    "typescript": "^5.9.3",
-    "svelte-check": "^4.4.2"
+    "svelte-check": "^4.4.2",
+    "typescript": "^5.9.3"
   }
 }

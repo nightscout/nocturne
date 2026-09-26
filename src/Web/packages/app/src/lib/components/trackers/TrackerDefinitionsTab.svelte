@@ -14,6 +14,16 @@
   import { cn } from "$lib/utils";
   import { TrackerCategory, type TrackerDefinitionDto } from "$api";
 
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    categoryLabels: Record<TrackerCategory, string>;
+    categoryColors: Record<TrackerCategory, string>;
+    openNewDefinition: () => void;
+    openStartDialog: (def: TrackerDefinitionDto) => void;
+    openEditDefinition: (def: TrackerDefinitionDto) => void;
+    openDeleteDefinitionDialog: (id: string) => void;
+  }
+
   let {
     definitions,
     categoryLabels,
@@ -22,15 +32,7 @@
     openStartDialog,
     openEditDefinition,
     openDeleteDefinitionDialog,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    categoryLabels: Record<TrackerCategory, string>;
-    categoryColors: Record<TrackerCategory, string>;
-    openNewDefinition: () => void;
-    openStartDialog: (def: TrackerDefinitionDto) => void;
-    openEditDefinition: (def: TrackerDefinitionDto) => void;
-    openDeleteDefinitionDialog: (id: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="definitions">
@@ -58,7 +60,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each definitions as def}
+          {#each definitions as def (def.id)}
             {@const category = def.category ?? TrackerCategory.Consumable}
             <div
               class="flex items-center justify-between p-4 rounded-lg border"

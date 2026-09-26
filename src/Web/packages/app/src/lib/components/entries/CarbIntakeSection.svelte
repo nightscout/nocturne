@@ -59,11 +59,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Apple class="h-4 w-4 text-green-500" />
+      <Apple class="h-4 w-4 text-entry-carbs" />
       Carb Intake
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -96,9 +96,10 @@
       {#if pendingFoods.length === 0}
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-4 text-sm font-normal text-muted-foreground"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -115,9 +116,8 @@
               </div>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                class="h-7 w-7 text-destructive"
+                variant="ghost-destructive"
+                size="icon-xs"
                 onclick={() => removePendingFood(index)}
               >
                 <Trash2 class="h-4 w-4" />
@@ -139,9 +139,10 @@
 
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-3 text-sm font-normal text-muted-foreground"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

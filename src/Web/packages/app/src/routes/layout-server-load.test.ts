@@ -17,8 +17,12 @@ interface Situation {
   host: string;
   /** Scopes the API reports for the caller; a thrown value stands for a refused call. */
   reported?: string[] | Error;
+  /** Whether the API reports the caller as limited to the last 24 hours. */
+  reportedLimit?: boolean;
   /** Scopes the auth handler already resolved, for a signed-in member. */
   resolved?: string[];
+  /** The history limit the auth handler already resolved, for a signed-in member. */
+  resolvedLimit?: boolean;
   isShareHost?: boolean;
   isGuestSession?: boolean;
   /** The share link owner's presentation settings; a thrown value stands for a refused call. */
@@ -30,6 +34,7 @@ interface Situation {
 /** The page data the load returned. */
 type LoadedData = {
   effectivePermissions: string[];
+  limitTo24Hours: boolean;
   displayPreferences: UserDisplayPreferences[];
   serverPreferences: UserDisplayPreferences | null;
 };
@@ -37,7 +42,7 @@ type LoadedData = {
 function runLoad(situation: Situation) {
   const getMyPermissions = vi.fn(async () => {
     if (situation.reported instanceof Error) throw situation.reported;
-    return situation.reported ?? [];
+    return { scopes: situation.reported ?? [], limitTo24Hours: situation.reportedLimit ?? false };
   });
   const getShareAppearance = vi.fn(async () => {
     if (situation.ownerAppearance instanceof Error) throw situation.ownerAppearance;
@@ -51,6 +56,7 @@ function runLoad(situation: Situation) {
     isShareHost: situation.isShareHost ?? false,
     isGuestSession: situation.isGuestSession ?? false,
     effectivePermissions: situation.resolved,
+    limitTo24Hours: situation.resolvedLimit,
     apiClient: {
       status: { getStatus: async () => ({ tenantSlug: null }) },
       myPermissions: { getMyPermissions },
@@ -58,7 +64,6 @@ function runLoad(situation: Situation) {
     },
   };
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- a stub of the one Cookies method this load touches; implementing the full interface would say nothing
   const cookies = { get: () => undefined } as unknown as Cookies;
 
   const event = {
@@ -69,7 +74,6 @@ function runLoad(situation: Situation) {
     }),
   };
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load reads three fields of the request event; the rest of SvelteKit's ServerLoadEvent is not reachable from here
   const data = load(event as unknown as LoadEvent) as unknown as Promise<LoadedData>;
   return { data, getMyPermissions, getShareAppearance };
 }
@@ -138,6 +142,34 @@ describe("root layout load", () => {
 
     await expect(data).resolves.toMatchObject({ effectivePermissions: [] });
     expect(getMyPermissions).not.toHaveBeenCalled();
+  });
+
+  it("carries a share's 24-hour limit, which the API decides", async () => {
+    const { data } = runLoad({
+      host: SHARE_HOST,
+      isShareHost: true,
+      reported: ["glucose.read"],
+      reportedLimit: true,
+    });
+
+    await expect(data).resolves.toMatchObject({ limitTo24Hours: true });
+  });
+
+  it("carries the 24-hour limit the auth handler resolved for a member", async () => {
+    const { data } = runLoad({ host: TENANT_HOST, resolved: ["glucose.read"], resolvedLimit: true });
+
+    await expect(data).resolves.toMatchObject({ limitTo24Hours: true });
+  });
+
+  it("does not limit a viewer the API reports as unlimited", async () => {
+    const { data } = runLoad({
+      host: SHARE_HOST,
+      isShareHost: true,
+      reported: ["glucose.read"],
+      reportedLimit: false,
+    });
+
+    await expect(data).resolves.toMatchObject({ limitTo24Hours: false });
   });
 
   it("draws a share host with the link owner's units and clock", async () => {

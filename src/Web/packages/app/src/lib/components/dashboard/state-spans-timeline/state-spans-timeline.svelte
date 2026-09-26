@@ -115,7 +115,7 @@
 
 </script>
 
-<div class="relative w-full" style="height: {chartHeight}px;">
+<div class="relative h-(--chart-h) w-full" style:--chart-h="{chartHeight}px">
   {#if standardTracks.length === 0 && !showTempBasals}
     <div class="flex h-full items-center justify-center text-sm text-muted-foreground">
       No tracks selected. Enable at least one category above.
@@ -152,7 +152,7 @@
             x={-LABEL_WIDTH + 8}
             y={yPos + TRACK_HEIGHT / 2 + 4}
             dy="-0.355em"
-            class="text-[10px] fill-muted-foreground font-medium"
+            class="text-2xs fill-muted-foreground font-medium"
           >
             {track.label}
           </text>
@@ -206,7 +206,7 @@
                 y={yPos + TRACK_HEIGHT / 2 + 4}
                 dx={6}
                 dy="-0.355em"
-                class="text-[9px] fill-foreground font-medium pointer-events-none"
+                class="text-2xs fill-foreground font-medium pointer-events-none"
               >
                 {span.profileName}
               </text>
@@ -216,7 +216,7 @@
                 y={yPos + TRACK_HEIGHT / 2 + 4}
                 dx={6}
                 dy="-0.355em"
-                class="text-[9px] fill-foreground font-medium pointer-events-none"
+                class="text-2xs fill-foreground font-medium pointer-events-none"
               >
                 {span.state}
               </text>
@@ -257,7 +257,7 @@
           placement="bottom"
           rule
           tickLabelProps={{
-            class: "text-[10px] fill-muted-foreground",
+            class: "text-2xs fill-muted-foreground",
           }}
         />
         </Svg>
@@ -267,8 +267,9 @@
     <!-- Custom tooltip -->
     {#if hoveredSpan}
       <div
-        class="fixed z-50 bg-popover text-popover-foreground border rounded-md shadow-md px-3 py-2 text-sm pointer-events-none"
-        style="left: {tooltipX + 12}px; top: {tooltipY - 10}px;"
+        class="fixed z-50 bg-popover text-popover-foreground border rounded-md shadow-md px-3 py-2 text-sm pointer-events-none left-(--tip-x) top-(--tip-y)"
+        style:--tip-x="{tooltipX + 12}px"
+        style:--tip-y="{tooltipY - 10}px"
       >
         <div class="font-medium">{hoveredSpan.profileName ?? hoveredSpan.state}</div>
         <div class="text-xs text-muted-foreground mt-1">

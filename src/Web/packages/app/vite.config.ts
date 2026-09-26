@@ -19,13 +19,17 @@ import { dirname } from "node:path";
 // matches at path boundaries, so `react-dom` -> <dir> also rewrites subpaths like
 // `react-dom/server` -> <dir>/server (react-email needs that). Aliasing to a file
 // would turn `react-dom/server` into `<dir>/index.js/server` (ENOTDIR).
-const require = createRequire(import.meta.url);
+//
+// Resolve from @nocturne/bot, which declares react/react-dom: pnpm's global
+// virtual store does not hoist them to where the app can see them.
+const require = createRequire(
+  createRequire(import.meta.url).resolve("@nocturne/bot/package.json"),
+);
 const reactAliases = {
   react: dirname(require.resolve("react/package.json")),
   "react-dom": dirname(require.resolve("react-dom/package.json")),
 };
-// WUCHALE-DISABLED: wuchale temporarily disabled — see also hooks.server.ts and +layout.ts
-// import { wuchale } from '@wuchale/vite-plugin'
+import { wuchale } from 'wuchale/vite'
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -35,11 +39,11 @@ export default defineConfig(({ mode }) => {
     assetsInclude: ["**/*.jpg", "**/*.png", "**/*.gif"],
     resolve: {
       alias: reactAliases,
-      // Force a single copy of @internationalized/date (and bits-ui) into the
-      // bundle. Multiple versions are installed (3.11.0 + 3.12.1 via different
-      // bits-ui versions); without dedupe a date created by the app fails
-      // bits-ui's `instanceof CalendarDate` check and the RangeCalendar throws
-      // "Unknown date type" once it has a value (reports filter, date pickers).
+      // Force a single copy of @internationalized/date and bits-ui into the
+      // bundle. The app and @nocturne/ui resolve bits-ui 2.18.1 against
+      // different peers (vite, typescript), so pnpm installs it twice. A date
+      // that fails bits-ui's `instanceof CalendarDate` check makes the
+      // RangeCalendar throw "Unknown date type" (reports filter, date pickers).
       dedupe: ["@internationalized/date", "bits-ui"],
     },
     ssr: {
@@ -70,7 +74,7 @@ export default defineConfig(({ mode }) => {
       route: '/_translations',  // Route where editor UI is served
       localesDir: '../../locales',  // Path to .po files
     }),
-      // wuchale(),
+      wuchale(),
       // Custom plugin to integrate WebSocket bridge into Vite dev server
       {
         name: "websocket-bridge",

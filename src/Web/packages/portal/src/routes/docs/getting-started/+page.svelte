@@ -20,7 +20,7 @@
     <Content />
 
     <div class="mt-12 flex gap-4 not-prose">
-        <Button href="/docs/installation" variant="outline" class="gap-2">
+        <Button href="/docs/installation" variant="outline">
             Full Installation Guide
             <ArrowRight class="w-4 h-4" />
         </Button>

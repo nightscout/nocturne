@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { BGCheck } from "$lib/api";
   import { GlucoseType, GlucoseUnit } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
@@ -28,11 +29,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Droplet class="h-4 w-4 text-red-500" />
+      <Droplet class="h-4 w-4 text-entry-bg-check" />
       BG Check
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -57,14 +58,14 @@
         type="single"
         value={bgCheck.glucoseType ?? GlucoseType.Finger}
         onValueChange={(v) => {
-          bgCheck.glucoseType = v as GlucoseType;
+          bgCheck.glucoseType = enumValue(GlucoseType, v) ?? bgCheck.glucoseType;
         }}
       >
         <Select.Trigger id="bg-type">
           {glucoseTypeLabels[bgCheck.glucoseType ?? GlucoseType.Finger]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(GlucoseType) as gt}
+          {#each Object.values(GlucoseType) as gt (gt)}
             <Select.Item value={gt} label={glucoseTypeLabels[gt]} />
           {/each}
         </Select.Content>
@@ -77,14 +78,14 @@
         type="single"
         value={bgCheck.units ?? GlucoseUnit.MgDl}
         onValueChange={(v) => {
-          bgCheck.units = v as GlucoseUnit;
+          bgCheck.units = enumValue(GlucoseUnit, v) ?? bgCheck.units;
         }}
       >
         <Select.Trigger id="bg-units">
           {glucoseUnitLabels[bgCheck.units ?? GlucoseUnit.MgDl]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(GlucoseUnit) as gu}
+          {#each Object.values(GlucoseUnit) as gu (gu)}
             <Select.Item value={gu} label={glucoseUnitLabels[gu]} />
           {/each}
         </Select.Content>

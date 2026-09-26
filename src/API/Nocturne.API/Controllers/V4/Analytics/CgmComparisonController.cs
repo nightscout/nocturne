@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Analytics;
 using Nocturne.Core.Models.Authorization;
@@ -20,7 +21,6 @@ namespace Nocturne.API.Controllers.V4.Analytics;
 [RequireScope(Scope.ReportsRead)]
 public class CgmComparisonController : ControllerBase
 {
-    private const double MaxRangeDays = 90;
     private const double MaxToleranceMinutes = 30;
 
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
@@ -45,7 +45,7 @@ public class CgmComparisonController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(CgmComparisonResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -58,30 +58,30 @@ public class CgmComparisonController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (startDate == default || endDate == default)
-            return BadRequest(new { error = "startDate and endDate must be later than 0001-01-01." });
+            return Problem(detail: "startDate and endDate must be later than 0001-01-01.", statusCode: 400, title: "Bad Request");
 
         if (endDate <= startDate)
-            return BadRequest(new { error = "endDate must be after startDate." });
+            return Problem(detail: "endDate must be after startDate.", statusCode: 400, title: "Bad Request");
 
-        if ((endDate - startDate).TotalDays > MaxRangeDays)
-            return BadRequest(new { error = $"Date range must not exceed {MaxRangeDays} days." });
+        if (this.RejectDateSpan(startDate, endDate, V4ReadLimits.MaxAnalyticsSpanDays) is { } overlong)
+            return overlong;
 
         if (deviceAId == deviceBId)
-            return BadRequest(new { error = "deviceAId and deviceBId must be different devices." });
+            return Problem(detail: "deviceAId and deviceBId must be different devices.", statusCode: 400, title: "Bad Request");
 
         // Stated as what a tolerance must be rather than what it must not be, so NaN — which
         // compares false against every bound — is rejected rather than reaching TimeSpan.
         if (!(toleranceMinutes > 0 && toleranceMinutes <= MaxToleranceMinutes))
-            return BadRequest(new { error = $"toleranceMinutes must be greater than 0 and at most {MaxToleranceMinutes}." });
+            return Problem(detail: $"toleranceMinutes must be greater than 0 and at most {MaxToleranceMinutes}.", statusCode: 400, title: "Bad Request");
 
         var deviceA = await _patientDeviceRepository.GetByIdAsync(deviceAId, cancellationToken);
         var deviceB = await _patientDeviceRepository.GetByIdAsync(deviceBId, cancellationToken);
 
         if (deviceA is null || deviceB is null)
-            return NotFound(new { error = "One or both devices were not found." });
+            return Problem(detail: "One or both devices were not found.", statusCode: 404, title: "Not Found");
 
         if (deviceA.DeviceCategory != DeviceCategory.CGM || deviceB.DeviceCategory != DeviceCategory.CGM)
-            return BadRequest(new { error = "Both devices must be CGMs." });
+            return Problem(detail: "Both devices must be CGMs.", statusCode: 400, title: "Bad Request");
 
         // Kind=Unspecified is what query-bound dates arrive as when the client omits an offset, and
         // Npgsql rejects those against timestamptz. Same normalization as StatisticsController.

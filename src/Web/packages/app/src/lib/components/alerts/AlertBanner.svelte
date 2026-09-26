@@ -1,10 +1,14 @@
 <script lang="ts">
+  import { isoNow } from "$lib/utils/now";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     getActiveAlerts,
     acknowledgeExcursion,
   } from "$api/generated/alerts.generated.remote";
   import { Button } from "$lib/components/ui/button";
-  import { AlertTriangle, Check } from "lucide-svelte";
+  import { AlertTriangle, BellOff, Check } from "lucide-svelte";
+  import { time } from "$lib/utils/formatting";
   import { formatTimeSince } from "./alertTime";
   import { severity, severityLabel } from "./severity";
 
@@ -15,11 +19,19 @@
 
   let acknowledgingId = $state<string | null>(null);
 
-  // Acknowledging is the only way off this surface. The X that used to sit here
-  // hid a live, unacknowledged alert for the rest of the session while recording
-  // nothing server-side and halting no escalation.
+  // Without alerts.readwrite the server mutes the alert for this member only,
+  // so the button has to say that rather than promise to stop it for everyone.
+  const acknowledgesForEveryone = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
+  );
+
+  // Acknowledging or muting is the only way off this surface. The X that used
+  // to sit here hid a live, unacknowledged alert for the rest of the session
+  // while recording nothing server-side and halting no escalation.
   const visibleAlerts = $derived(
-    (activeAlerts.current ?? []).filter((a) => !a.acknowledgedAt)
+    (activeAlerts.current ?? []).filter(
+      (a) => !a.acknowledgedAt && !a.mutedByCaller
+    )
   );
 
   function getConditionLabel(conditionType: string | undefined): string {
@@ -42,8 +54,8 @@
   async function handleAcknowledge(id: string) {
     acknowledgingId = id;
     try {
-      // Optimistically mark this excursion acknowledged so it drops out of
-      // visibleAlerts at once; the single-flight refresh confirms server-side.
+      // Optimistically drop this excursion out of visibleAlerts at once; the
+      // single-flight refresh confirms server-side.
       await acknowledgeExcursion({
         excursionId: id,
         // Who acknowledged is taken from the session server-side; sending a
@@ -52,7 +64,11 @@
       }).updates(
         activeAlerts.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.id === id ? { ...a, acknowledgedAt: new Date() } : a
+            a.id !== id
+              ? a
+              : acknowledgesForEveryone
+                ? { ...a, acknowledgedAt: isoNow() }
+                : { ...a, mutedByCaller: true }
           )
         )
       );
@@ -64,7 +80,7 @@
 </script>
 
 {#if visibleAlerts.length > 0}
-  <div class="border-b">
+  <div class="border-b print:hidden">
     {#each visibleAlerts as alert (alert.id)}
       <!-- Coloured by the rule's own severity: styling every banner as
            destructive made an info rule indistinguishable from a critical low. -->
@@ -78,7 +94,7 @@
         <div class="flex-1 min-w-0">
           <!-- Named as well as coloured: colour alone is unavailable to a
                screen reader and to anyone who can't distinguish these hues. -->
-          <span class="text-[10px] font-semibold uppercase tracking-wider">
+          <span class="text-2xs font-semibold uppercase tracking-wider">
             {severityLabel(alert.severity)}
           </span>
           <span class="text-sm font-medium">
@@ -90,18 +106,32 @@
           <span class="text-xs text-muted-foreground">
             {formatTimeSince(alert.startedAt)}
           </span>
+          {#if alert.snoozedUntil}
+            <!-- Still listed: a snooze pauses notifications, it does not
+                 acknowledge the alert. -->
+            <span
+              class="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <BellOff class="h-3 w-3" />
+              Snoozed until {time(alert.snoozedUntil)}
+            </span>
+          {/if}
         </div>
         <div class="flex items-center gap-2 shrink-0">
           {#if !alert.acknowledgedAt}
             <Button
               variant="outline"
-              size="sm"
-              class="h-7 text-xs"
+              size="xs"
               onclick={() => handleAcknowledge(alert.id ?? "")}
               disabled={acknowledgingId === alert.id}
             >
-              <Check class="h-3 w-3 mr-1" />
-              Acknowledge
+              {#if acknowledgesForEveryone}
+                <Check class="h-3 w-3 mr-1" />
+                Acknowledge
+              {:else}
+                <BellOff class="h-3 w-3 mr-1" />
+                Mute for me
+              {/if}
             </Button>
           {/if}
 

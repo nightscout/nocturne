@@ -35,7 +35,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var apsRepo = new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
         var pumpRepo = new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
-        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext());
+        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
@@ -374,7 +374,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             {
                 Active = true,
                 Name = "Exercise",
-                Duration = 60.0,
+                Duration = 3600,
                 Multiplier = 1.5,
                 CurrentCorrectionRange = new CorrectionRange { MinValue = 140, MaxValue = 160 }
             }
@@ -1008,18 +1008,18 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_OverrideWithDuration_CalculatesEndMills()
+    public async Task DecomposeAsync_OverrideWithDuration_ReadsDurationAsSeconds()
     {
         var ds = new DeviceStatus
         {
             Id = "override-with-duration",
-            Mills = 1700000000000,
+            Mills = 1780000000000,
             Device = "Loop/3.0",
             Override = new OverrideStatus
             {
                 Active = true,
                 Name = "Pre-Meal",
-                Duration = 60.0 // 60 minutes
+                Duration = 3600
             }
         };
 
@@ -1033,7 +1033,93 @@ public class DeviceStatusDecomposerTests : IDisposable
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
                 It.Is<StateSpan>(ss =>
-                    ss.EndMills == 1700000000000 + (long)(60.0 * 60000)),
+                    ss.EndTimestamp - ss.StartTimestamp == TimeSpan.FromHours(1)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideWithDuration_CountsFromTheOverrideTimestamp()
+    {
+        var overrideAt = new DateTime(2026, 5, 28, 21, 5, 0, DateTimeKind.Utc);
+        var ds = new DeviceStatus
+        {
+            Id = "override-with-own-timestamp",
+            Mills = new DateTimeOffset(overrideAt.AddMinutes(-5)).ToUnixTimeMilliseconds(),
+            Device = "Loop/3.0",
+            Override = new OverrideStatus
+            {
+                Active = true,
+                Name = "Pre-Meal",
+                Timestamp = "2026-05-28T21:05:00Z",
+                Duration = 3600
+            }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.EndTimestamp == overrideAt.AddHours(1)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideEndingBeforeTheStatus_LeavesTheSpanOpen()
+    {
+        var statusAt = new DateTime(2026, 5, 28, 21, 5, 0, DateTimeKind.Utc);
+        var ds = new DeviceStatus
+        {
+            Id = "override-stale-timestamp",
+            Mills = new DateTimeOffset(statusAt).ToUnixTimeMilliseconds(),
+            Device = "Loop/3.0",
+            Override = new OverrideStatus
+            {
+                Active = true,
+                Name = "Pre-Meal",
+                Timestamp = "2026-05-28T19:05:00Z",
+                Duration = 3600
+            }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.StartTimestamp == statusAt && ss.EndTimestamp == null),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideWithoutDuration_IsIndefinite()
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "override-no-duration",
+            Mills = 1700000000000,
+            Device = "Loop/3.0",
+            Override = new OverrideStatus { Active = true, Name = "Indefinite", Duration = null }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.EndTimestamp == null),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -1863,6 +1949,41 @@ public class DeviceStatusDecomposerTests : IDisposable
         aps.Timestamp.Year.Should().Be(2026);
         aps.Timestamp.Month.Should().Be(4);
         aps.Timestamp.Day.Should().Be(12);
+    }
+
+    [Theory]
+    [InlineData("2026-04-12T09:35:00Z", "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 35)]
+    [InlineData(null, "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 33)]
+    [InlineData(null, null, "2026-04-12T09:36:00.000Z", 36)]
+    [InlineData(null, null, null, 30)]
+    public async Task DecomposeAsync_LoopWithMillsZero_PrefersTheLoopCycleTimeToThePredictionStart(
+        string? loopTimestamp, string? pumpClock, string? createdAt, int expectedMinute)
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "loop-cycle-time",
+            Mills = 0,
+            CreatedAt = createdAt,
+            Device = "loop://iPhone",
+            Loop = new LoopStatus
+            {
+                Timestamp = loopTimestamp,
+                Predicted = new LoopPredicted { StartDate = "2026-04-12T09:30:00Z" },
+            },
+            Pump = new PumpStatus { Clock = pumpClock },
+            Override = new OverrideStatus { Active = true, Duration = 30.0 },
+        };
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+        var expected = new DateTime(2026, 4, 12, 9, expectedMinute, 0, DateTimeKind.Utc);
+
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single().Timestamp.Should().Be(expected);
+        result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single().Timestamp.Should().Be(expected);
+        result.CreatedRecords.OfType<StateSpan>().Single(s => s.Category == StateSpanCategory.Override)
+            .StartTimestamp.Should().Be(expected);
     }
 
     #endregion

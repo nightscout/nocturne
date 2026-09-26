@@ -4,6 +4,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { membershipRequestStorageKey } from "$lib/membership-request-storage";
 
   interface Props {
@@ -26,7 +27,7 @@
     open = false;
 
     const returnUrl = encodeURIComponent(window.location.pathname);
-    goto(`/auth/login?returnUrl=${returnUrl}`);
+    goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
   }
 </script>
 

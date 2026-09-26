@@ -1,8 +1,10 @@
 <script lang="ts">
   import * as Command from "$lib/components/ui/command";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { getAuthStore } from "$lib/stores/auth-store.svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     glucoseChartLookback,
     setColorScheme,
@@ -26,10 +28,14 @@
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
   import { Star } from "lucide-svelte";
+  import { Button } from "$lib/components/ui/button";
 
   interface Props {
     open: boolean;
-    /** Whether the host resolves no tenant (the apex, or a reserved dashboard slug). */
+    /**
+     * Whether the host resolves no tenant (the apex, or a reserved dashboard
+     * slug).
+     */
     tenantless?: boolean;
   }
 
@@ -37,14 +43,14 @@
 
   let searchValue = $state("");
 
-  const authStore = getAuthStore();
   const realtimeStore = getRealtimeStore();
 
   const visibleItems = $derived(
     paletteItemsFor(tenantless).filter(
       (item) =>
-        (!item.permission || authStore.hasPermission(item.permission)) &&
-        (!item.role || authStore.hasRole(item.role))
+        (!item.scope ||
+          satisfiesScope(page.data.effectivePermissions ?? [], item.scope)) &&
+        (!item.platformAdmin || page.data.isPlatformAdmin)
     )
   );
 
@@ -74,21 +80,17 @@
   });
 
   const groupedItems = $derived.by(() => {
-    const groups: Partial<Record<CommandPaletteGroup, CommandPaletteItem[]>> =
-      {};
+    const groups: CommandPaletteGroup[] = [];
     for (const item of mainGroupItems) {
-      (groups[item.group] ??= []).push(item);
+      if (!groups.includes(item.group)) groups.push(item.group);
     }
 
-    const entries = Object.entries(groups) as [
-      CommandPaletteGroup,
-      CommandPaletteItem[],
-    ][];
-    const sorted = entries.sort(
-      ([a], [b]) => groupMeta[a].order - groupMeta[b].order
-    );
-
-    return sorted;
+    return groups
+      .sort((a, b) => groupMeta[a].order - groupMeta[b].order)
+      .map((group): [CommandPaletteGroup, CommandPaletteItem[]] => [
+        group,
+        mainGroupItems.filter((item) => item.group === group),
+      ]);
   });
 
   function getStatValue(itemId: string): string | undefined {
@@ -142,9 +144,11 @@
 
     if (item.href) {
       open = false;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a literal in-app path from command-palette-items.ts
       goto(item.href);
     } else if (item.linkedHref) {
       open = false;
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- item.linkedHref is a literal in-app path from command-palette-items.ts
       goto(item.linkedHref);
     } else {
       handleAction(item.id);
@@ -172,22 +176,17 @@
       }
       case "action-add-treatment":
         open = false;
-        goto("/reports/treatments");
+        goto(resolve("/reports/treatments"));
         break;
       case "action-add-food":
         open = false;
-        goto("/food");
+        goto(resolve("/food"));
         break;
       case "action-manual-sync":
         open = false;
-        goto("/settings/connectors");
+        goto(resolve("/settings/connectors"));
         break;
     }
-  }
-
-  function handlePinClick(e: MouseEvent, itemId: string) {
-    e.stopPropagation();
-    togglePin(itemId);
   }
 
   $effect(() => {
@@ -197,68 +196,59 @@
   });
 </script>
 
+{#snippet itemBody(item: CommandPaletteItem)}
+  {#if item.icon}
+    {@const Icon = item.icon}
+    <Icon class="mr-2 h-4 w-4" />
+  {/if}
+  <div class="flex flex-1 flex-col">
+    <span>{getItemLabel(item)}</span>
+    {#if item.description}
+      <span class="text-xs text-muted-foreground">{item.description}</span>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet commandItem(item: CommandPaletteItem, pinAlwaysVisible: boolean)}
   {@const pinned = isPinned(item.id)}
-  {#if item.href}
-    <Command.LinkItem
-      class="group/item"
-      href={item.href}
-      value={item.label}
-      keywords={item.keywords}
-      onSelect={() => handleSelect(item)}
-    >
-      {#if item.icon}
-        {@const Icon = item.icon}
-        <Icon class="mr-2 h-4 w-4" />
-      {/if}
-      <div class="flex flex-1 flex-col">
-        <span>{getItemLabel(item)}</span>
-        {#if item.description}
-          <span class="text-xs text-muted-foreground"
-            >{item.description}</span
-          >
-        {/if}
-      </div>
-      <button
-        class="ml-auto shrink-0 p-1 {pinAlwaysVisible || pinned ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} transition-opacity"
-        aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e) => handlePinClick(e, item.id)}
+  <!-- The pin sits beside the item, not in it: a button inside an option or link fires both. The row hides with its item when a search filters the item out. -->
+  <div
+    class="group flex items-center rounded-sm pr-2 not-has-data-[slot=command-item]:hidden has-aria-selected:bg-accent has-aria-selected:text-accent-foreground"
+  >
+    {#if item.href}
+      <Command.LinkItem
+        class="flex-1"
+        href={item.href}
+        value={item.label}
+        keywords={item.keywords}
+        onSelect={() => handleSelect(item)}
       >
-        <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-yellow-500' : 'text-muted-foreground'}"
-        />
-      </button>
-    </Command.LinkItem>
-  {:else}
-    <Command.Item
-      class="group/item"
-      value={item.label}
-      keywords={item.keywords}
-      onSelect={() => handleSelect(item)}
-    >
-      {#if item.icon}
-        {@const Icon = item.icon}
-        <Icon class="mr-2 h-4 w-4" />
-      {/if}
-      <div class="flex flex-1 flex-col">
-        <span>{getItemLabel(item)}</span>
-        {#if item.description}
-          <span class="text-xs text-muted-foreground"
-            >{item.description}</span
-          >
-        {/if}
-      </div>
-      <button
-        class="ml-auto shrink-0 p-1 {pinAlwaysVisible || pinned ? 'opacity-100' : 'opacity-0 group-hover/item:opacity-100'} transition-opacity"
-        aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
-        onclick={(e) => handlePinClick(e, item.id)}
+        {@render itemBody(item)}
+      </Command.LinkItem>
+    {:else}
+      <Command.Item
+        class="flex-1"
+        value={item.label}
+        keywords={item.keywords}
+        onSelect={() => handleSelect(item)}
       >
-        <Star
-          class="h-3.5 w-3.5 {pinned ? 'fill-current text-yellow-500' : 'text-muted-foreground'}"
-        />
-      </button>
-    </Command.Item>
-  {/if}
+        {@render itemBody(item)}
+      </Command.Item>
+    {/if}
+    <Button
+      variant="ghost-muted"
+      size="icon-2xs"
+      reveal={!(pinAlwaysVisible || pinned)}
+      aria-label={pinned ? `Unpin ${item.label}` : `Pin ${item.label}`}
+      onclick={() => togglePin(item.id)}
+    >
+      <Star
+        class="size-3.5 {pinned
+          ? 'fill-current text-favorite'
+          : 'text-muted-foreground'}"
+      />
+    </Button>
+  </div>
 {/snippet}
 
 <Command.Dialog bind:open>

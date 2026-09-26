@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BolusType, PatientInsulin, InsulinCategory } from "$lib/api";
+  import { BolusType, type PatientInsulin } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -26,7 +26,7 @@
 
   let { form = $bindable(), patientInsulins = [], onAddInsulin }: Props = $props();
 
-  const bolusTypeOptions: BolusType[] = ["Normal", "Square", "Dual"] as BolusType[];
+  const bolusTypeOptions: BolusType[] = [BolusType.Normal, BolusType.Square, BolusType.Dual];
 
   const roleOrder: Record<string, number> = { Bolus: 0, Basal: 1, Both: 2 };
   let sortedInsulins = $derived(
@@ -58,8 +58,8 @@
 
 <div class="grid grid-cols-2 gap-4">
   <div class="space-y-2">
-    <Label for="insulin" class="flex items-center gap-1.5">
-      <Syringe class="h-3.5 w-3.5 text-blue-500" />
+    <Label for="insulin">
+      <Syringe class="h-3.5 w-3.5 text-entry-bolus" />
       Insulin (U)
     </Label>
     <Input
@@ -76,7 +76,7 @@
       type="single"
       value={form.bolusType ?? ""}
       onValueChange={(v) => {
-        form.bolusType = (v as BolusType) || undefined;
+        form.bolusType = Object.values(BolusType).find((t) => t === v);
       }}
     >
       <Select.Trigger>
@@ -131,7 +131,7 @@
   <Label>Insulin</Label>
   {#if form.insulinType && !form.patientInsulinId}
     <div class="mb-1.5">
-      <Badge variant="secondary" class="text-xs">
+      <Badge variant="secondary">
         {form.insulinType} (unlinked)
       </Badge>
     </div>
@@ -154,7 +154,7 @@
           <div>
             <div>{insulin.name}</div>
             <div class="text-xs text-muted-foreground">
-              {insulinCategoryLabels[insulin.insulinCategory as InsulinCategory] ?? insulin.insulinCategory}
+              {(insulin.insulinCategory ? insulinCategoryLabels[insulin.insulinCategory] : undefined) ?? insulin.insulinCategory}
             </div>
           </div>
         </Select.Item>
@@ -172,7 +172,7 @@
 <div class="flex gap-6">
   <div class="flex items-center gap-2">
     <Checkbox id="automatic" bind:checked={form.automatic} />
-    <Label for="automatic" class="text-sm font-normal cursor-pointer">
+    <Label for="automatic" variant="option" class="cursor-pointer">
       Automatic
     </Label>
   </div>
@@ -183,7 +183,8 @@
     />
     <Label
       for="isBasalInsulin"
-      class="text-sm font-normal cursor-pointer"
+      variant="option"
+      class="cursor-pointer"
     >
       Basal Insulin
     </Label>

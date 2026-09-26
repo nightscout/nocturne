@@ -32,7 +32,7 @@
     Moon,
   } from "lucide-svelte";
   import type { ConditionNode } from "./types";
-  import type { TrendBucket } from "./types";
+  import { isTrendBucket, type TrendBucket } from "./types";
   import { Direction } from "$lib/api";
   import { getDirectionInfo } from "$lib/utils";
   import RuleBuilder from "./RuleBuilder.svelte";
@@ -65,7 +65,7 @@
   let { parent, index, availableRules = [], shiftHeld }: Props = $props();
 
   let child = $derived(parent.composite!.conditions[index]);
-  let operator = $derived(parent.composite!.operator as "and" | "or");
+  let operator = $derived(parent.composite!.operator);
 
   const ICONS: Record<LucideIconName, typeof Droplet> = {
     droplet: Droplet,
@@ -107,7 +107,8 @@
   function trendIconFor(c: ConditionNode): typeof TrendingUp | null {
     const leaf = rowLeafNode(c);
     if (leaf.type !== "trend" || !leaf.trend) return null;
-    const bucket = (leaf.trend.bucket as TrendBucket) ?? "falling";
+    const bucket = leaf.trend.bucket ?? "falling";
+    if (!isTrendBucket(bucket)) return TrendingUp;
     return getDirectionInfo(TREND_DIRECTIONS[bucket]).icon ?? TrendingUp;
   }
 
@@ -216,14 +217,15 @@
       // Only clear when leaving the element itself, not when crossing into a
       // descendant — relatedTarget being null or outside this element marks
       // the real exit.
-      const next = e.relatedTarget as Node | null;
-      if (!next || !(e.currentTarget as HTMLElement).contains(next)) {
+      const next = e.relatedTarget;
+      if (!(next instanceof Node) || !e.currentTarget.contains(next)) {
         if (drag.overKey === `into:${child._uid ?? ""}`) drag.overKey = null;
       }
     }}
     ondrop={onDropGroup}
   >
     <div class="flex items-center gap-2">
+      <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
       <button
         type="button"
         class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
@@ -233,7 +235,7 @@
         <GripVertical class="h-3.5 w-3.5" />
       </button>
       <span
-        class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+        class="w-12 shrink-0 text-2xs font-semibold uppercase tracking-wider text-muted-foreground"
       >
         {label}
       </span>
@@ -246,8 +248,8 @@
             <Button
               {...props}
               variant="ghost"
-              size="icon"
-              class="h-7 w-7 shrink-0"
+              size="icon-xs"
+              class="shrink-0"
               aria-label="Group actions"
             >
               <MoreHorizontal class="h-4 w-4" />
@@ -279,6 +281,7 @@
     ondragstart={startDrag}
     ondragend={() => drag.end()}
   >
+    <!-- eslint-disable-next-line no-restricted-syntax -- drag handle, not a focusable action -->
     <button
       type="button"
       class="grid h-6 w-4 shrink-0 cursor-grab place-items-center text-muted-foreground hover:text-foreground"
@@ -288,7 +291,7 @@
       <GripVertical class="h-3.5 w-3.5" />
     </button>
     <span
-      class="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+      class="w-12 shrink-0 text-2xs font-semibold uppercase tracking-wider text-muted-foreground"
     >
       {label}
     </span>
@@ -301,7 +304,7 @@
       </span>
     {/if}
     {#if isNot}
-      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <span class="rounded bg-muted px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
         NOT
       </span>
     {/if}
@@ -312,12 +315,13 @@
       <Input
         type="number"
         min="1"
-        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        size="xs"
+        class="w-16 text-right tabular-nums"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
             const n = Number(e.currentTarget.value);
-            sustainedNode.sustained.minutes = Number.isFinite(n)
+            sustainedNode.sustained.minutes = Number.isInteger(n) && n >= 1
               ? n
               : sustainedNode.sustained.minutes;
           }
@@ -329,9 +333,9 @@
     {#if shiftHeld}
       <Button
         type="button"
-        variant="ghost"
-        size="icon"
-        class="h-7 w-7 shrink-0 text-destructive hidden group-hover/row:inline-flex"
+        variant="ghost-destructive"
+        size="icon-xs"
+        class="shrink-0 hidden group-hover/row:inline-flex"
         aria-label="Remove condition (shift+click shortcut)"
         onclick={() => removeChild(parent, index)}
       >
@@ -344,8 +348,8 @@
           <Button
             {...props}
             variant="ghost"
-            size="icon"
-            class="h-7 w-7 shrink-0"
+            size="icon-xs"
+            class="shrink-0"
             aria-label="Row actions"
           >
             <MoreHorizontal class="h-4 w-4" />

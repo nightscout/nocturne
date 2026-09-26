@@ -45,7 +45,6 @@ function runLoad(situation: Situation) {
   const shareHost = kind === "share";
 
   const jar = new Map(Object.entries(situation.cookies ?? {}));
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- a stub of the three Cookies methods this load touches; implementing the full interface would say nothing
   const cookies = {
     get: (name: string) => jar.get(name),
     set: () => {},
@@ -85,7 +84,6 @@ function runLoad(situation: Situation) {
     parent: async () => ({ tenantless }),
   };
 
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load reads five fields of the request event; the rest of SvelteKit's ServerLoadEvent is not reachable from here
   return load(event as unknown as LoadEvent);
 }
 
@@ -93,7 +91,6 @@ function runLoad(situation: Situation) {
 async function loadedData(
   situation: Situation
 ): Promise<{ canViewRealtimeData: boolean; user: { name: string } | null }> {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- the load's declared return includes void, for the paths that throw a redirect; these situations render
   return (await runLoad(situation)) as {
     canViewRealtimeData: boolean;
     user: { name: string } | null;

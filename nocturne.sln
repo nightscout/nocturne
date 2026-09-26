@@ -192,6 +192,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Tools.DiagramGen",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.NocturneRemote.Tests", "tests\Unit\Nocturne.Connectors.NocturneRemote.Tests\Nocturne.Connectors.NocturneRemote.Tests.csproj", "{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Nocturne.Connectors.FreeStyle.Tests", "tests\Unit\Nocturne.Connectors.FreeStyle.Tests\Nocturne.Connectors.FreeStyle.Tests.csproj", "{35F8047B-084E-4517-B4AC-6768B55DD0ED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -1006,6 +1008,18 @@ Global
 		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x64.Build.0 = Release|Any CPU
 		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x86.ActiveCfg = Release|Any CPU
 		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A}.Release|x86.Build.0 = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|x64.Build.0 = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Debug|x86.Build.0 = Debug|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|x64.ActiveCfg = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|x64.Build.0 = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|x86.ActiveCfg = Release|Any CPU
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1090,5 +1104,6 @@ Global
 		{5507B435-56A8-48A7-A917-B8EFB65F8196} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 		{3AA294CD-171F-4F5D-8103-8399CAC253B9} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{645DCDBB-21E8-4EDC-960C-1B24D50D5E6A} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
+		{35F8047B-084E-4517-B4AC-6768B55DD0ED} = {F25A9213-C080-46DC-93A8-09D96E2C55A1}
 	EndGlobalSection
 EndGlobal

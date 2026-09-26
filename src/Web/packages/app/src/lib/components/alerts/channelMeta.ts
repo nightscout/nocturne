@@ -1,4 +1,3 @@
-import type { ComponentType } from "svelte";
 import {
   Bell,
   BellRing,
@@ -20,7 +19,7 @@ export interface ChannelMetaEntry {
   label: string;
   description: string;
   /** Lucide icon component for first-party kinds. */
-  icon?: ComponentType;
+  icon?: typeof Bell;
   /** Path under `/logos/` for branded channels. Overrides `icon`. */
   logo?: string;
   /** Linked-platform key for getLinkedPlatforms. */
@@ -47,20 +46,20 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     type: ChannelType.WebPush,
     label: "Browser Push",
     description: "Receive alerts directly in your browser",
-    icon: Bell as unknown as ComponentType,
+    icon: Bell,
   },
   {
     type: ChannelType.InApp,
     label: "In-App",
     description: "Show alerts in the Nocturne notification centre",
-    icon: BellRing as unknown as ComponentType,
+    icon: BellRing,
     destinationHelper: "Routed to your account automatically.",
   },
   {
     type: ChannelType.Webhook,
     label: "Webhook",
     description: "POST to a custom URL",
-    icon: WebhookIcon as unknown as ComponentType,
+    icon: WebhookIcon,
     destinationLabel: "Webhook URL",
     destinationPlaceholder: "https://example.com/webhook",
   },
@@ -152,13 +151,13 @@ export const CHANNEL_META: ChannelMetaEntry[] = [
     type: ChannelType.DeviceAction,
     label: "Device",
     description: "Send an actuation intent to a registered device by kind",
-    icon: MonitorSmartphone as unknown as ComponentType,
+    icon: MonitorSmartphone,
     isDeviceAction: true,
   },
 ];
 
 const CHANNEL_META_BY_TYPE: Map<string, ChannelMetaEntry> = new Map(
-  CHANNEL_META.map((m) => [m.type as string, m]),
+  CHANNEL_META.map((m) => [m.type, m]),
 );
 
 /**
@@ -184,5 +183,5 @@ export function findChannelMeta(
   t: ChannelType | string | undefined,
 ): ChannelMetaEntry | undefined {
   if (t === undefined || t === null) return undefined;
-  return CHANNEL_META_BY_TYPE.get(t as string);
+  return CHANNEL_META_BY_TYPE.get(t);
 }

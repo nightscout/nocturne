@@ -24,6 +24,9 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
 {
     private const string ConnectorName = "Glooko";
 
+    /// <summary>The name the configuration is stored and invalidated under, whatever the writer passed.</summary>
+    private const string CanonicalName = "glooko";
+
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
     private readonly Guid _tenantId = Guid.CreateVersion7();
@@ -72,7 +75,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     {
         await _service.SaveConfigurationAsync(ConnectorName, JsonDocument.Parse("{\"enabled\":true}"));
 
-        _invalidated.Should().ContainSingle().Which.Should().Be((ConnectorName, _tenantId));
+        _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
     }
 
     [Fact]
@@ -80,7 +83,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     {
         await _service.SaveSecretsAsync(ConnectorName, new Dictionary<string, string> { ["password"] = "x" });
 
-        _invalidated.Should().ContainSingle().Which.Should().Be((ConnectorName, _tenantId));
+        _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
     }
 
     [Fact]
@@ -88,7 +91,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
     {
         await _service.SetActiveAsync(ConnectorName, isActive: true);
 
-        _invalidated.Should().ContainSingle().Which.Should().Be((ConnectorName, _tenantId));
+        _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
     }
 
     [Fact]
@@ -101,7 +104,7 @@ public class ConnectorConfigurationInvalidationTests : IDisposable
         _invalidated.Clear();
 
         (await _service.DeleteConfigurationAsync(ConnectorName)).Should().BeTrue();
-        _invalidated.Should().ContainSingle().Which.Should().Be((ConnectorName, _tenantId));
+        _invalidated.Should().ContainSingle().Which.Should().Be((CanonicalName, _tenantId));
     }
 
     private sealed class RecordingInvalidator(List<(string Connector, Guid Tenant)> sink) : IConnectorCacheInvalidator

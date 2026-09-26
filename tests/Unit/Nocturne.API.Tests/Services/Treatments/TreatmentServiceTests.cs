@@ -83,7 +83,7 @@ public class TreatmentServiceTests
     public async Task CreateTreatmentsAsync_ShouldInvalidateCacheAndPublishEvents()
     {
         var created = new List<Treatment> { new Treatment { Id = "1" } };
-        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>())).ReturnsAsync(created.AsReadOnly());
+        _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>())).ReturnsAsync([.. created]);
         var result = await _treatmentService.CreateTreatmentsAsync(new List<Treatment> { new Treatment() }, CancellationToken.None);
         result.Should().ContainSingle();
         _mockCache.Verify(x => x.InvalidateAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -206,7 +206,7 @@ public class TreatmentServiceTests
         var treatment = new Treatment { EventType = "Meal Bolus", Insulin = 5.0 };
 
         _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult(t));
+            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -230,7 +230,7 @@ public class TreatmentServiceTests
         var treatment = new Treatment { EventType = "Note", Notes = "Feeling good" };
 
         _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult(t));
+            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -264,7 +264,7 @@ public class TreatmentServiceTests
         };
 
         _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult(t));
+            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();
@@ -299,7 +299,7 @@ public class TreatmentServiceTests
         var treatment = new Treatment { EventType = "Temp Basal", Rate = 0.8, Duration = 30 };
 
         _mockStore.Setup(x => x.CreateAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
-            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult(t));
+            .Returns<IReadOnlyList<Treatment>, CancellationToken>((t, _) => Task.FromResult<BulkWrite<Treatment>>([.. t]));
 
         // Act
         var result = (await _treatmentService.CreateTreatmentsAsync(new[] { treatment }, CancellationToken.None)).ToList();

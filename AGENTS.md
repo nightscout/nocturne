@@ -32,6 +32,9 @@ dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Type checking for frontend
 cd src/Web/packages/app && pnpm run check
+
+# Lint the frontend before pushing (CI gate: no errors, warnings capped in each package.json)
+cd src/Web && pnpm --recursive --no-bail run lint:ci
 ```
 
 Aspire creates the NSwag client on startup, and orchestrates everything. All you need to do to regenerate the NSwag client is `aspire start`.

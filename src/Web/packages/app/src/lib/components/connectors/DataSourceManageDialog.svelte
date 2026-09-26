@@ -4,6 +4,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import {
@@ -15,18 +16,26 @@
     Trash2,
   } from "lucide-svelte";
   import { describeSubmitError, errorStatus } from "$lib/forms";
+  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { page } from "$app/state";
   import { getCategoryIcon } from "$lib/utils/connector-display";
   import { formatNumber, lastSeen } from "$lib/utils/formatting";
+
+  interface Props {
+    open: boolean;
+    selectedDataSource: DataSourceInfo | null;
+    onDeleteComplete?: () => Promise<void>;
+  }
 
   let {
     open = $bindable(false),
     selectedDataSource,
     onDeleteComplete,
-  } = $props<{
-    open: boolean;
-    selectedDataSource: DataSourceInfo | null;
-    onDeleteComplete?: () => Promise<void>;
-  }>();
+  }: Props = $props();
+
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+  );
 
   let showDeleteConfirmDialog = $state(false);
   let isDeletingDataSource = $state(false);
@@ -46,38 +55,20 @@
   });
 
   function getStatusBadge(status: string | undefined): {
-    variant: "default" | "secondary" | "destructive" | "outline";
+    variant: "success" | "warning" | "secondary" | "outline";
     text: string;
-    class: string;
   } {
     switch (status) {
       case "active":
-        return {
-          variant: "default" as const,
-          text: "Active",
-          class: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
-        };
+        return { variant: "success", text: "Active" };
       case "stale":
-        return {
-          variant: "secondary" as const,
-          text: "Stale",
-          class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100",
-        };
+        return { variant: "warning", text: "Stale" };
       case "inactive":
-        return {
-          variant: "outline" as const,
-          text: "Inactive",
-          class: "",
-        };
+        return { variant: "outline", text: "Inactive" };
       default:
-        return {
-          variant: "secondary" as const,
-          text: "Unknown",
-          class: "",
-        };
+        return { variant: "secondary", text: "Unknown" };
     }
   }
-
 
   async function deleteDataSource() {
     if (!selectedDataSource) return;
@@ -141,7 +132,6 @@
             <div class="mt-1">
               <Badge
                 variant={getStatusBadge(selectedDataSource.status).variant}
-                class={getStatusBadge(selectedDataSource.status).class}
               >
                 {getStatusBadge(selectedDataSource.status).text}
               </Badge>
@@ -160,7 +150,9 @@
             </p>
           </div>
           <div>
-            <span class="text-muted-foreground">Total Records</span>
+            <span class="text-muted-foreground">
+              Records in the last 30 days
+            </span>
             <p class="mt-1 font-medium">
               {formatNumber(selectedDataSource.totalEntries)}
             </p>
@@ -169,151 +161,149 @@
 
         <Separator />
 
-        <div
-          class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4"
-        >
-          <div class="flex items-start gap-3">
-            <AlertTriangle
-              class="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
-            />
-            <div>
-              <p class="text-sm font-medium text-amber-800 dark:text-amber-200">
-                Delete All Data from This Source
-              </p>
-              <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                This will permanently delete all entries, treatments, and device
-                status records from this data source.
-              </p>
+        {#if canManage}
+          <div class="rounded-lg border border-warning/30 bg-warning/10 p-4">
+            <div class="flex items-start gap-3">
+              <AlertTriangle class="h-5 w-5 text-warning shrink-0 mt-0.5" />
+              <div>
+                <p class="text-sm font-medium text-warning">
+                  Delete All Data from This Source
+                </p>
+                <p class="text-sm text-warning mt-1">
+                  This will permanently delete all entries, treatments, and
+                  device status records from this data source.
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        {/if}
       </div>
 
       <Dialog.Footer>
-        <Button
-          variant="outline"
-          onclick={() => (open = false)}
-        >
-          Cancel
-        </Button>
-        <Button
-          variant="outline"
-          class="gap-2"
-          onclick={() => { showDeleteConfirmDialog = true; deleteConfirmText = ""; }}
-        >
-          <Pencil class="h-4 w-4" />
-          Delete Data...
-        </Button>
+        <Button variant="outline" onclick={() => (open = false)}>Cancel</Button>
+        {#if canManage}
+          <Button
+            variant="outline"
+            onclick={() => {
+              showDeleteConfirmDialog = true;
+              deleteConfirmText = "";
+            }}
+          >
+            <Pencil class="h-4 w-4" />
+            Delete Data...
+          </Button>
+        {/if}
       </Dialog.Footer>
     {/if}
   </Dialog.Content>
 </Dialog.Root>
 
 <!-- Delete Confirmation Dialog -->
-<AlertDialog.Root bind:open={showDeleteConfirmDialog}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title class="flex items-center gap-2 text-destructive">
-        <AlertTriangle class="h-5 w-5" />
-        Permanently Delete Data
-      </AlertDialog.Title>
-      <AlertDialog.Description class="space-y-4">
-        {#if selectedDataSource}
-          <div
-            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4 mt-4"
-          >
-            <p class="text-sm font-semibold text-red-800 dark:text-red-200">
-              THIS ACTION CANNOT BE UNDONE
-            </p>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-2">
-              You are about to permanently delete <strong>all data</strong>
-              from
-              <strong>{selectedDataSource.name}</strong>
-              . This includes:
-            </p>
-            <ul
-              class="text-sm text-red-700 dark:text-red-300 list-disc list-inside mt-2 space-y-1"
+{#if canManage}
+  <AlertDialog.Root bind:open={showDeleteConfirmDialog}>
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title
+          variant="destructive"
+          class="flex items-center gap-2"
+        >
+          <AlertTriangle class="h-5 w-5" />
+          Permanently Delete Data
+        </AlertDialog.Title>
+        <AlertDialog.Description class="grid gap-4">
+          {#if selectedDataSource}
+            <div
+              class="rounded-lg border border-destructive/30 bg-destructive/10 p-4 mt-4"
             >
-              <li>
-                All glucose records ({formatNumber(selectedDataSource.totalEntries)} records)
-              </li>
-              <li>All treatments entered by this device</li>
-              <li>All device status records</li>
-            </ul>
-          </div>
+              <p class="text-sm font-semibold text-destructive">
+                THIS ACTION CANNOT BE UNDONE
+              </p>
+              <p class="text-sm text-destructive mt-2">
+                You are about to permanently delete <strong>all data</strong>
+                from
+                <strong>{selectedDataSource.name}</strong>
+                . This includes:
+              </p>
+              <ul
+                class="text-sm text-destructive list-disc list-inside mt-2 space-y-1"
+              >
+                <li>All glucose records</li>
+                <li>All treatments entered by this device</li>
+                <li>All device status records</li>
+              </ul>
+              <p class="text-sm text-destructive mt-2">
+                This source sent {formatNumber(selectedDataSource.totalEntries)}
+                records in the last 30 days.
+              </p>
+            </div>
 
-          {#if deleteResult}
-            {#if deleteResult.success}
-              <div
-                class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4"
-              >
+            {#if deleteResult}
+              {#if deleteResult.success}
                 <div
-                  class="flex items-center gap-2 text-green-800 dark:text-green-200"
+                  class="rounded-lg border border-success/30 bg-success/10 p-4"
                 >
-                  <CheckCircle class="h-5 w-5" />
-                  <span class="font-medium">Data deleted successfully</span>
+                  <div class="flex items-center gap-2 text-success">
+                    <CheckCircle class="h-5 w-5" />
+                    <span class="font-medium">Data deleted successfully</span>
+                  </div>
+                  <p class="text-sm text-success mt-1">
+                    Deleted {formatNumber(deleteResult.totalDeleted)} records
+                  </p>
                 </div>
-                <p class="text-sm text-green-700 dark:text-green-300 mt-1">
-                  Deleted {formatNumber(deleteResult.totalDeleted)} records
-                </p>
-              </div>
+              {:else}
+                <div
+                  class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
+                >
+                  <div class="flex items-center gap-2 text-destructive">
+                    <AlertCircle class="h-5 w-5" />
+                    <span class="font-medium">
+                      {deleteResult.alreadyGone
+                        ? "Nothing left to delete"
+                        : "Failed to delete data"}
+                    </span>
+                  </div>
+                  <p class="text-sm text-destructive mt-1">
+                    {deleteResult.error}
+                  </p>
+                </div>
+              {/if}
             {:else}
-              <div
-                class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
-              >
-                <div
-                  class="flex items-center gap-2 text-red-800 dark:text-red-200"
-                >
-                  <AlertCircle class="h-5 w-5" />
-                  <span class="font-medium">
-                    {deleteResult.alreadyGone
-                      ? "Nothing left to delete"
-                      : "Failed to delete data"}
-                  </span>
-                </div>
-                <p class="text-sm text-red-700 dark:text-red-300 mt-1">
-                  {deleteResult.error}
-                </p>
+              <div class="space-y-2 mt-4">
+                <label for="confirm-delete" class="text-sm font-medium">
+                  Type <strong>DELETE</strong>
+                  to confirm:
+                </label>
+                <Input
+                  id="confirm-delete"
+                  type="text"
+                  bind:value={deleteConfirmText}
+                  placeholder="Type DELETE"
+                />
               </div>
             {/if}
-          {:else}
-            <div class="space-y-2 mt-4">
-              <label for="confirm-delete" class="text-sm font-medium">
-                Type <strong>DELETE</strong>
-                to confirm:
-              </label>
-              <input
-                id="confirm-delete"
-                type="text"
-                bind:value={deleteConfirmText}
-                class="w-full px-3 py-2 rounded-md border bg-background text-sm"
-                placeholder="Type DELETE"
-              />
-            </div>
           {/if}
+        </AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel onclick={() => (showDeleteConfirmDialog = false)}>
+          Cancel
+        </AlertDialog.Cancel>
+        {#if !deleteResult?.success}
+          <Button
+            variant="destructive"
+            onclick={deleteDataSource}
+            disabled={isDeletingDataSource || deleteConfirmText !== "DELETE"}
+          >
+            {#if isDeletingDataSource}
+              <Loader2 class="h-4 w-4 animate-spin" />
+              Deleting...
+            {:else}
+              <Trash2 class="h-4 w-4" />
+              Delete All Data
+            {/if}
+          </Button>
         {/if}
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel onclick={() => (showDeleteConfirmDialog = false)}>
-        Cancel
-      </AlertDialog.Cancel>
-      {#if !deleteResult?.success}
-        <Button
-          variant="destructive"
-          onclick={deleteDataSource}
-          disabled={isDeletingDataSource || deleteConfirmText !== "DELETE"}
-          class="gap-2"
-        >
-          {#if isDeletingDataSource}
-            <Loader2 class="h-4 w-4 animate-spin" />
-            Deleting...
-          {:else}
-            <Trash2 class="h-4 w-4" />
-            Delete All Data
-          {/if}
-        </Button>
-      {/if}
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog.Root>
+{/if}

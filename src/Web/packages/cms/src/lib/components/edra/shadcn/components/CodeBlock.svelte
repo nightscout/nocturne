@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '@nocturne/ui/ui/button';
+	import { Button } from '@nocturne/ui/ui/button';
 	import type { NodeViewProps } from '@tiptap/core';
 	import { NodeViewContent, NodeViewWrapper } from 'svelte-tiptap';
 
@@ -37,18 +37,15 @@
 <NodeViewWrapper class="code-wrapper" draggable={false} spellcheck={false}>
 	<div class="code-wrapper-tile justify-end print:justify-start" contenteditable="false">
 		<Popover.Root>
-			<Popover.Trigger
-				contenteditable="false"
-				disabled={!editor.isEditable}
-				class={buttonVariants({
-					variant: 'ghost',
-					class: 'text-muted-foreground h-6! w-fit rounded-sm p-1 capitalize'
-				})}
-			>
-				{defaultLanguage}
+			<Popover.Trigger contenteditable="false" disabled={!editor.isEditable}>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} variant="ghost-muted" size="xs" class="w-fit">
+						<span class="capitalize">{defaultLanguage}</span>
+					</Button>
+				{/snippet}
 			</Popover.Trigger>
 			<Popover.Content
-				class="text-primary! max-h-96 w-36 p-0"
+				class="max-h-96 w-36 p-0"
 				portalProps={{ disabled: true, to: undefined }}
 				onCloseAutoFocus={(e) => e.preventDefault()}
 			>
@@ -61,10 +58,9 @@
 								<Command.Item
 									value={language}
 									onSelect={() => (defaultLanguage = language)}
-									class="text-primary capitalize"
 								>
 									<Check class={cn(language !== defaultLanguage && 'text-transparent')} />
-									{language}
+									<span class="capitalize">{language}</span>
 								</Command.Item>
 							{/each}
 						</Command.Group>
@@ -72,13 +68,9 @@
 				</Command.Root>
 			</Popover.Content>
 		</Popover.Root>
-		<Button
-			variant="ghost"
-			class="text-muted-foreground size-6! rounded-sm p-0.5 print:hidden"
-			onclick={copyCode}
-		>
+		<Button variant="ghost-muted" size="icon-xs" class="print:hidden" onclick={copyCode}>
 			{#if isCopying}
-				<Check class="size-4 text-green-500" />
+				<Check class="size-4 text-success" />
 			{:else}
 				<Copy class="size-4" />
 			{/if}

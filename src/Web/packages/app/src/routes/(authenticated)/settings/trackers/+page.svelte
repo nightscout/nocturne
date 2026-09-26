@@ -35,6 +35,7 @@
   } from "lucide-svelte";
   import { tick } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -45,6 +46,7 @@
     DashboardVisibility,
     TrackerVisibility,
     TrackerMode,
+    ReservoirReportKind,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -230,7 +232,7 @@
   }
 
   // Format date
-  function formatDate(dateStr: any): string {
+  function formatDate(dateStr: Date | string | undefined): string {
     if (!dateStr) return "";
     return formatDayTime(dateStr);
   }
@@ -295,7 +297,7 @@
   function requireAuth(): boolean {
     if (!isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(`/auth/login?returnUrl=${returnUrl}`);
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
       return false;
     }
     return true;
@@ -482,7 +484,7 @@
       </div>
     {/snippet}
     {#snippet failed(error, reset)}
-      <Card class="border-destructive">
+      <Card variant="destructive">
         <CardContent class="py-6 text-center">
           <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
           <p class="text-destructive">
@@ -493,31 +495,31 @@
       </Card>
     {/snippet}
 
-    {@const _await = await Promise.all([
+    {void (await Promise.all([
       definitionsQuery,
       activeInstancesQuery,
       historyInstancesQuery,
       presetsQuery,
-    ])}
+    ]))}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class="grid w-full grid-cols-4">
-        <Tabs.Trigger value="active" class="gap-2">
+        <Tabs.Trigger value="active">
           <Activity class="h-4 w-4" />
           Active
           {#if activeCount > 0}
             <Badge variant="secondary" class="ml-1">{activeCount}</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history" class="gap-2">
+        <Tabs.Trigger value="history">
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
-        <Tabs.Trigger value="definitions" class="gap-2">
+        <Tabs.Trigger value="definitions">
           <Settings2 class="h-4 w-4" />
           Definitions
         </Tabs.Trigger>
-        <Tabs.Trigger value="presets" class="gap-2">
+        <Tabs.Trigger value="presets">
           <Bookmark class="h-4 w-4" />
           Presets
         </Tabs.Trigger>
@@ -627,7 +629,7 @@
 />
 
 <!-- Reservoir Report Dialog -->
-<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind="Fill" />
+<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind={ReservoirReportKind.Fill} />
 
 <!-- Delete Definition Confirmation Dialog -->
 <ConfirmDialog
@@ -688,7 +690,7 @@
               "Select a definition"}
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item value={def.id ?? ""} label={def.name ?? ""} />
             {/each}
           </Select.Content>

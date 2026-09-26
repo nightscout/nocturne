@@ -26,6 +26,7 @@ import {
   Terminal,
   TestTube,
   Palette,
+  Languages,
   Timer,
   Layers,
   ShieldCheck,
@@ -39,7 +40,7 @@ import {
   History as HistoryIcon,
 } from "lucide-svelte";
 import { satisfiesScope } from "$lib/authorization/scopes";
-import { getSidebarReportItems } from "$lib/navigation/report-navigation";
+import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export interface NavItem {
@@ -216,6 +217,11 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
           icon: HeartPulse,
         },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
+        {
+          title: "Translations",
+          href: "/settings/translations",
+          icon: Languages,
+        },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         {
           title: "Data Quality",

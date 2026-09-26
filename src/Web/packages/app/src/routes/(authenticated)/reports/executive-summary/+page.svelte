@@ -7,6 +7,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import { Progress } from "$lib/components/ui/progress";
   import {
     Gauge,
@@ -15,7 +16,6 @@
     Shield,
     AlertTriangle,
     Activity,
-    Zap,
     BarChart3,
     Calendar,
     BookOpen,
@@ -23,6 +23,7 @@
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -62,72 +63,31 @@
   <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-6xl">
     {#if analysis}
       {@const tir = analysis?.timeInRange?.percentages}
-      {@const durations = analysis?.timeInRange?.durations}
+      {@const dailyMinutes = analysis?.timeInRange?.averageDailyMinutes}
       {@const variability = analysis?.glycemicVariability}
       {@const stats = analysis?.basicStats}
       {@const quality = analysis?.dataQuality}
       {@const totalLows = (tir?.low ?? 0) + (tir?.veryLow ?? 0)}
       {@const totalHighs = (tir?.high ?? 0) + (tir?.veryHigh ?? 0)}
 
-      <!-- A metric tile: the figure, or an explicit empty state when the window
-           has no value for it, plus the consensus target it is read against. -->
-      {#snippet metricTile(
-        label: string,
-        value: number | null | undefined,
-        digits: number,
-        target: string
-      )}
-        <div>
-          {#if value != null}
-            <div class="text-2xl font-bold tabular-nums">
-              {value.toFixed(digits)}%
-            </div>
-          {:else}
-            <div class="text-sm font-medium text-muted-foreground">No data</div>
-          {/if}
-          <div class="text-xs text-muted-foreground">{label}</div>
-          <div class="text-[10px] text-muted-foreground/70">Target {target}</div>
-        </div>
-      {/snippet}
-
-      <!-- Headline Metrics -->
-      <Card
-        class="border-2 border-primary/20 bg-linear-to-br from-background to-muted/30"
-      >
-        <CardContent class="pt-6">
-          <div
-            class="flex flex-col @3xl:flex-row items-center justify-between gap-6"
-          >
-            <div class="flex-1 text-center @3xl:text-left space-y-2">
-              <h2 class="text-lg font-semibold">Headline metrics</h2>
-              <p class="text-sm text-muted-foreground">
-                Time in Range, glucose variability and estimated A1C over the
-                last {dayCount} days, each shown with the consensus target it is
-                read against.
-              </p>
-            </div>
-
-            <div class="grid grid-cols-3 gap-3 @sm:gap-6 text-center shrink-0">
-              {@render metricTile("TIR", tir?.target, 0, "≥70%")}
-              {@render metricTile(
-                "CV",
-                variability?.coefficientOfVariation,
-                0,
-                "≤33%"
-              )}
-              {@render metricTile("eA1C", variability?.estimatedA1c, 1, "<7%")}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <FigureStrip
+        figures={[
+          { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
+          { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%" },
+          { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%" },
+          { label: "Est. A1C", value: variability?.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "Target: <7%" },
+          { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+          { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days` },
+        ]}
+      />
 
       <!-- Primary Metrics Grid -->
       <div class="grid grid-cols-1 @2xl:grid-cols-2 @4xl:grid-cols-3 gap-6">
         <!-- Time in Range - Featured -->
-        <Card class="border-2 @2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
+        <Card class="@2xl:col-span-2 @4xl:col-span-1 @4xl:row-span-2">
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <Target class="w-5 h-5 text-green-600" />
+              <Target class="w-5 h-5 text-glucose-in-range" />
               Time in Range
             </CardTitle>
             <CardDescription>
@@ -145,29 +105,21 @@
               <h4 class="font-medium text-sm">Time Breakdown (per day avg)</h4>
               <div class="grid grid-cols-3 gap-2">
                 <div class="flex flex-col">
-                  <span class="text-green-600 font-medium">In Range</span>
+                  <span class="text-glucose-in-range font-medium print:text-foreground">In Range</span>
                   <span>
-                    {formatMinutesDuration(
-                      (durations?.target ?? 0) / dayCount
-                    )}
+                    {formatMinutesDuration(dailyMinutes?.target ?? 0)}
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-red-600 font-medium">Low</span>
+                  <span class="text-glucose-very-low font-medium print:text-foreground">Low</span>
                   <span>
-                    {formatMinutesDuration(
-                      ((durations?.low ?? 0) + (durations?.veryLow ?? 0)) /
-                        dayCount
-                    )}
+                    {formatMinutesDuration(dailyMinutes?.low ?? 0)}
                   </span>
                 </div>
                 <div class="flex flex-col">
-                  <span class="text-orange-500 font-medium">High</span>
+                  <span class="text-glucose-high font-medium print:text-foreground">High</span>
                   <span>
-                    {formatMinutesDuration(
-                      ((durations?.high ?? 0) + (durations?.veryHigh ?? 0)) /
-                        dayCount
-                    )}
+                    {formatMinutesDuration(dailyMinutes?.high ?? 0)}
                   </span>
                 </div>
               </div>
@@ -176,7 +128,7 @@
         </Card>
 
         <!-- Estimated A1C -->
-        <Card class="border-2">
+        <Card>
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <Gauge class="w-5 h-5" />
@@ -184,12 +136,9 @@
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="text-center">
+            <div>
               {#if variability?.estimatedA1c != null}
-                <div class="text-5xl font-bold tabular-nums">
-                  {variability.estimatedA1c.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground mt-1">
+                <p class="text-sm text-muted-foreground">
                   Target: below 7%. Your care team sets your individual target.
                 </p>
               {:else}
@@ -203,19 +152,18 @@
               <ReliabilityBadge reliability={analysis?.reliability} />
             </div>
 
-            <!-- What this means -->
-            <div class="bg-muted/50 rounded-lg p-3 text-sm space-y-2">
+            <div class="text-sm space-y-2 border-t pt-3">
               <p>
                 <strong>What is eA1C?</strong>
                 This estimates what your lab A1C would be based on your average glucose.
               </p>
               <details class="text-xs">
-                <summary class="cursor-pointer text-blue-600 hover:underline">
+                <summary class="cursor-pointer text-primary hover:underline">
                   Clinical details
                 </summary>
                 <p class="mt-2 text-muted-foreground">
-                  Calculated using the Nathan formula: eA1C = (GMI + 2.59) /
-                  1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
+                  Calculated using the ADAG formula: eA1C = (mean glucose in
+                  mmol/L + 2.59) / 1.59. Based on mean glucose of {bgOr(stats?.mean)} {bgLabel()} over
                   {dayCount}
                   days.
                 </p>
@@ -225,7 +173,7 @@
         </Card>
 
         <!-- Glucose Variability -->
-        <Card class="border-2">
+        <Card>
           <CardHeader class="pb-2">
             <CardTitle class="flex items-center gap-2 text-base">
               <TrendingUp class="w-5 h-5" />
@@ -233,49 +181,36 @@
             </CardTitle>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="text-center">
-              {#if variability?.coefficientOfVariation != null}
-                <div class="text-5xl font-bold tabular-nums">
-                  {variability.coefficientOfVariation.toFixed(0)}%
-                </div>
-              {:else}
-                <div class="text-lg font-medium text-muted-foreground">
-                  No data for this window
-                </div>
-              {/if}
-              <p class="text-sm text-muted-foreground mt-1">
-                Coefficient of Variation (CV)
-              </p>
-            </div>
+            {#if variability?.coefficientOfVariation == null}
+              <div class="text-lg font-medium text-muted-foreground">
+                No data for this window
+              </div>
+            {/if}
 
-            <p class="text-xs text-muted-foreground">
+            <p class="text-sm text-muted-foreground">
               Target: ≤33%. Lower means steadier glucose with fewer ups and
               downs.
             </p>
 
             <!-- Additional variability metrics -->
-            <div class="grid grid-cols-2 gap-2 text-xs border-t pt-3">
-              <div>
-                <div class="font-medium">
-                  {bgOr(stats?.standardDeviation)} {bgLabel()}
-                </div>
-                <div class="text-muted-foreground">Std. Deviation</div>
+            <dl class="m-0 divide-y divide-border border-t text-sm">
+              <div class="flex justify-between py-2">
+                <dt class="text-muted-foreground">Standard deviation</dt>
+                <dd class="m-0 font-medium tabular-nums">{bgOr(stats?.standardDeviation)} {bgLabel()}</dd>
               </div>
-              <div>
-                <div class="font-medium">
-                  {bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}
-                </div>
-                <div class="text-muted-foreground">MAGE</div>
+              <div class="flex justify-between py-2">
+                <dt class="text-muted-foreground">MAGE</dt>
+                <dd class="m-0 font-medium tabular-nums">{bgOr(variability?.meanAmplitudeGlycemicExcursions)} {bgLabel()}</dd>
               </div>
-            </div>
+            </dl>
           </CardContent>
         </Card>
       </div>
 
       <!-- Safety Metrics Row -->
-      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
         <!-- Hypoglycemia -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <AlertTriangle class="w-5 h-5 text-glucose-very-low" />
@@ -286,22 +221,14 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-3xl font-bold tabular-nums">
-                  {totalLows.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground">
-                  Total time below range
-                </p>
-              </div>
-              <div class="text-right text-sm">
+            <div>
+              <div class="space-y-1 text-sm tabular-nums">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                  <TextureSwatch texture="very-low" />
                   <span>&lt;{bg(54)}: {tir?.veryLow?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-red-300"></div>
+                  <TextureSwatch texture="low" />
                   <span>{bg(54)}-{bg(70)}: {tir?.low?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
@@ -309,26 +236,24 @@
 
             <!-- Episodes count if available -->
             {#if analysis?.timeInRange?.episodes}
-              <div class="bg-muted/50 rounded p-3 text-sm">
+              <div class="border-t pt-3 text-sm">
                 <div class="flex justify-between">
-                  <span>Low episodes:</span>
-                  <span class="font-medium">
-                    {(analysis.timeInRange.episodes.low ?? 0) +
-                      (analysis.timeInRange.episodes.veryLow ?? 0)}
+                  <span class="text-muted-foreground">Low episodes</span>
+                  <span class="font-medium tabular-nums">
+                    {analysis.timeInRange.episodes.belowRange ?? 0}
                   </span>
                 </div>
               </div>
             {/if}
 
-            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
-              Target for time below {bg(70)} {bgLabel()} is under 4%. Discuss any
-              patterns with your care team.
+            <div class="text-sm text-muted-foreground">
+              Target for time below {bg(70)} {bgLabel()} is under 4%.
             </div>
           </CardContent>
         </Card>
 
         <!-- Hyperglycemia -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <TrendingUp class="w-5 h-5 text-glucose-high" />
@@ -339,28 +264,20 @@
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-3xl font-bold tabular-nums">
-                  {totalHighs.toFixed(1)}%
-                </div>
-                <p class="text-sm text-muted-foreground">
-                  Total time above range
-                </p>
-              </div>
-              <div class="text-right text-sm">
+            <div>
+              <div class="space-y-1 text-sm tabular-nums">
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-orange-400"></div>
+                  <TextureSwatch texture="high" />
                   <span>{bg(180)}-{bg(250)}: {tir?.high?.toFixed(1) ?? 0}%</span>
                 </div>
                 <div class="flex items-center gap-2">
-                  <div class="w-3 h-3 rounded-full bg-orange-600"></div>
+                  <TextureSwatch texture="very-high" />
                   <span>&gt;{bg(250)}: {tir?.veryHigh?.toFixed(1) ?? 0}%</span>
                 </div>
               </div>
             </div>
 
-            <div class="bg-muted/50 rounded p-3 text-sm text-muted-foreground">
+            <div class="text-sm text-muted-foreground">
               Target for time above {bg(180)} {bgLabel()} is under 25%. The AGP
               report shows the times of day when highs occur most.
             </div>
@@ -372,9 +289,9 @@
       <ClinicalInsights {analysis} showClinicalNotes={true} maxInsights={3} />
 
       <!-- Data Quality & Statistics -->
-      <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
         <!-- Glucose Statistics -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Activity class="w-5 h-5" />
@@ -382,32 +299,22 @@
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.mean)}
+            <dl class="m-0 divide-y divide-border text-sm">
+              {#each [
+                { label: "Average", value: stats?.mean },
+                { label: "Median", value: stats?.median },
+                { label: "Lowest", value: stats?.min },
+                { label: "Highest", value: stats?.max },
+              ] as { label, value } (label)}
+                <div class="flex items-baseline justify-between py-2">
+                  <dt class="text-muted-foreground">{label}</dt>
+                  <dd class="m-0 font-semibold tabular-nums">
+                    {bgOr(value)}
+                    <span class="text-xs font-normal text-muted-foreground">{bgLabel()}</span>
+                  </dd>
                 </div>
-                <div class="text-xs text-muted-foreground">Average ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.median)}
-                </div>
-                <div class="text-xs text-muted-foreground">Median ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.min)}
-                </div>
-                <div class="text-xs text-muted-foreground">Lowest ({bgLabel()})</div>
-              </div>
-              <div class="space-y-1">
-                <div class="text-2xl font-bold">
-                  {bgOr(stats?.max)}
-                </div>
-                <div class="text-xs text-muted-foreground">Highest ({bgLabel()})</div>
-              </div>
-            </div>
+              {/each}
+            </dl>
 
             <!-- Percentiles -->
             <div class="mt-4 pt-4 border-t">
@@ -443,7 +350,7 @@
         </Card>
 
         <!-- Data Quality -->
-        <Card class="border-2">
+        <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
               <Shield class="w-5 h-5" />
@@ -465,8 +372,8 @@
             />
 
             {#if (quality?.cgmActivePercent ?? 0) < 70}
-              <div class="bg-muted/50 rounded p-2 text-sm text-muted-foreground">
-                <AlertTriangle class="w-4 h-4 inline mr-1" />
+              <div class="text-sm text-muted-foreground">
+                <AlertTriangle class="w-4 h-4 inline mr-1 text-warning" />
                 Limited data may affect report accuracy.
               </div>
             {/if}
@@ -489,57 +396,18 @@
         </Card>
       </div>
 
-      <!-- Navigation to Other Reports -->
-      <Card class="border-2 bg-muted/30 print:hidden">
-        <CardHeader>
-          <CardTitle class="flex items-center gap-2">
-            <Zap class="w-5 h-5" />
-            Explore More Reports
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div class="grid grid-cols-2 @3xl:grid-cols-4 gap-3">
-            <Button
-              href="/reports/agp"
-              variant="outline"
-              class="h-auto py-4 flex-col gap-2"
-            >
-              <BarChart3 class="w-5 h-5" />
-              <span class="text-xs">AGP Report</span>
-            </Button>
-            <Button
-              href="/reports/readings"
-              variant="outline"
-              class="h-auto py-4 flex-col gap-2"
-            >
-              <Calendar class="w-5 h-5" />
-              <span class="text-xs">Day-by-Day</span>
-            </Button>
-            <Button
-              href="/reports/treatments"
-              variant="outline"
-              class="h-auto py-4 flex-col gap-2"
-            >
-              <Activity class="w-5 h-5" />
-              <span class="text-xs">Treatments</span>
-            </Button>
-            <Button
-              href="/reports"
-              variant="outline"
-              class="h-auto py-4 flex-col gap-2"
-            >
-              <BookOpen class="w-5 h-5" />
-              <span class="text-xs">All Reports</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <nav class="flex flex-wrap gap-2 print:hidden" aria-label="More reports">
+        <Button href="/reports/agp" variant="outline" size="sm"><BarChart3 />AGP Report</Button>
+        <Button href="/reports/readings" variant="outline" size="sm"><Calendar />Day-by-Day</Button>
+        <Button href="/reports/treatments" variant="outline" size="sm"><Activity />Treatments</Button>
+        <Button href="/reports" variant="ghost" size="sm"><BookOpen />All reports</Button>
+      </nav>
     {/if}
 
     <!-- Footer -->
     <div class="text-xs text-muted-foreground text-center space-y-1 print:mt-8">
       {#if lastUpdated}
-        <p>Report generated: {formatMediumDateTime(new Date(lastUpdated))}</p>
+        <p class="print:hidden">Report generated: {formatMediumDateTime(new Date(lastUpdated))}</p>
       {/if}
       <p class="text-muted-foreground/60">
         This report is for informational purposes. Always consult your
@@ -553,13 +421,6 @@
   @media print {
     :global(body) {
       font-size: 12px;
-    }
-    /* Collapsed <details> can't be expanded on paper; reveal content, drop the toggle. */
-    details > :not(summary) {
-      display: block;
-    }
-    summary {
-      display: none;
     }
   }
 </style>

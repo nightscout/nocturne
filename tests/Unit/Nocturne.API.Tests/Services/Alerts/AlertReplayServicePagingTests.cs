@@ -7,6 +7,7 @@ using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -106,7 +107,7 @@ public class AlertReplayServicePagingTests
             enricher,
             _tenantAccessor.Object,
             Options.Create(options),
-            NullLogger<AlertReplayService>.Instance);
+            new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
     }
 
     /// <summary>
@@ -501,6 +502,8 @@ public class AlertReplayServicePagingTests
         var response = await controller.Replay(
             new AlertReplayRequest(null, null, _dayStart, _dayStart.AddDays(90)), CancellationToken.None);
 
-        response.Result.Should().BeOfType<BadRequestObjectResult>();
+        var problem = response.Result.Should().BeOfType<ObjectResult>().Which;
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().NotBeNullOrWhiteSpace();
     }
 }

@@ -2,7 +2,9 @@
   import { formatLocale } from "$lib/utils/formatting";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     get as getDnd,
     update as updateDnd,
@@ -11,6 +13,8 @@
   import { describeSubmitError } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { Item } from "$lib/components/ui/item";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
   interface Props {
@@ -20,14 +24,10 @@
 
   const { onNavigate }: Props = $props();
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   // Manual DND is tenant-wide — it suppresses delivery of every non-critical
   // alert for every member — so the server gates it on alerts.readwrite.
   const canSetDnd = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("alerts.readwrite"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
 
   let settings = $state<TenantAlertSettingsResponse | null>(null);
@@ -95,73 +95,58 @@
 
 {#if canSetDnd}
   <div class="border-b px-2 py-2">
-    <button
-      type="button"
-      class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted {isActive ? 'text-status-info' : ''}"
-      onclick={() => (expanded = !expanded)}
-      aria-expanded={expanded}
-    >
-      {#if isActive}
-        <BellOff class="h-4 w-4" />
-      {:else}
-        <Bell class="h-4 w-4" />
-      {/if}
-      <span class="flex-1 text-left truncate">Do Not Disturb</span>
-      <span class="text-xs text-muted-foreground">{loading ? "…" : label}</span>
-    </button>
-
-    {#if expanded}
-      <div class="mt-1 rounded border bg-muted/30 p-1">
+    <DropdownMenu.Root bind:open={expanded}>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props }: { props: Record<string, unknown> })}
+          <Item {...props} variant="ghost" size="sm">
+            {#if isActive}
+              <BellOff class="h-4 w-4 text-status-info" />
+            {:else}
+              <Bell class="h-4 w-4" />
+            {/if}
+            <span class="flex-1 truncate text-sm {isActive ? 'text-status-info' : ''}">Do Not Disturb</span>
+            {#if saving}
+              <Loader2 class="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            {:else}
+              <span class="text-xs text-muted-foreground">{loading ? "…" : label}</span>
+            {/if}
+          </Item>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content class="w-76" align="start">
         {#if loading}
           <div class="px-2 py-1.5 text-sm text-muted-foreground">Loading…</div>
         {:else if isActive}
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-            onclick={() => setActive(false)}
-            disabled={saving}
-          >
-            {#if saving}<Loader2 class="h-3.5 w-3.5 animate-spin" />{:else}<Bell class="h-3.5 w-3.5" />{/if}
+          <DropdownMenu.Item disabled={saving} onSelect={() => setActive(false)}>
+            <Bell class="h-3.5 w-3.5" />
             Turn off
-          </button>
+          </DropdownMenu.Item>
         {:else}
-          <div class="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div class="px-2 pt-1 pb-1 text-2xs uppercase tracking-wider text-muted-foreground">
             Mute alerts for
           </div>
           {#each [30, 60, 120, 240] as mins (mins)}
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded px-2 py-1.5 text-sm hover:bg-muted"
-              onclick={() => setActive(true, mins)}
-              disabled={saving}
-            >
-              <span>{mins < 60 ? `${mins} minutes` : `${mins / 60} hour${mins > 60 ? "s" : ""}`}</span>
-            </button>
+            <DropdownMenu.Item disabled={saving} onSelect={() => setActive(true, mins)}>
+              {mins < 60 ? `${mins} minutes` : `${mins / 60} hour${mins > 60 ? "s" : ""}`}
+            </DropdownMenu.Item>
           {/each}
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-            onclick={() => setActive(true)}
-            disabled={saving}
-          >
+          <DropdownMenu.Item disabled={saving} onSelect={() => setActive(true)}>
             Until I turn it off
-          </button>
+          </DropdownMenu.Item>
         {/if}
-        {#if errorMessage}
-          <p class="px-2 py-1.5 text-sm text-destructive">{errorMessage}</p>
-        {/if}
-        <div class="my-1 border-t"></div>
-        <button
-          type="button"
-          class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-          onclick={() => {
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item
+          onSelect={() => {
             onNavigate?.();
-            goto("/alerts/dnd");
+            goto(resolve("/alerts/dnd"));
           }}
         >
           <SettingsIcon class="h-3.5 w-3.5" /> Configure…
-        </button>
-      </div>
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+    {#if errorMessage}
+      <p class="px-2 pt-1.5 text-sm text-destructive">{errorMessage}</p>
     {/if}
   </div>
 {/if}

@@ -8,8 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BolusCalculation
 /// </summary>
 [Table("bolus_calculations")]
-public class BolusCalculationEntity : V4TimeSeriesEntityBase
+public class BolusCalculationEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("upstream_fingerprint")]
+    public string? UpstreamFingerprint { get; set; }
+
     /// <summary>
     /// Blood glucose input value used for the calculation
     /// </summary>

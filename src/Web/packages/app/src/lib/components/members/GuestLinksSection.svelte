@@ -1,6 +1,7 @@
 <script lang="ts">
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
@@ -8,8 +9,7 @@
   import { Label } from "$lib/components/ui/label";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { copyToClipboard } from "$lib/utils";
-  import { toast } from "svelte-sonner";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     Clock,
     Copy,
@@ -33,12 +33,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? []
-  );
-  const hasStar = $derived(effectivePermissions.includes("*"));
   const canCreateGuestLinks = $derived(
-    hasStar || effectivePermissions.includes("sharing.guest")
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.guest")
   );
 
   // UI state
@@ -61,8 +57,7 @@
   let createError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
-  let copiedCode = $state(false);
-  let copiedUrl = $state(false);
+  const copy = createCopyFeedback();
 
   function statusLabel(status: GuestLinkStatus | undefined): string {
     switch (status) {
@@ -105,15 +100,14 @@
     return ip.slice(0, half) + "...";
   }
 
-  function formatDate(date: Date | undefined | null): string {
+  function formatDate(date: string | undefined | null): string {
     if (!date) return "";
-    const d = date instanceof Date ? date : new Date(date);
-    return formatDayTime(d);
+    return formatDayTime(date);
   }
 
-  function formatRelativeExpiry(date: Date | undefined | null): string {
+  function formatRelativeExpiry(date: string | undefined | null): string {
     if (!date) return "";
-    const d = date instanceof Date ? date : new Date(date);
+    const d = new Date(date);
     const now = Date.now();
     const diffMs = d.getTime() - now;
     const absDiffMs = Math.abs(diffMs);
@@ -149,11 +143,8 @@
   /** The backend may report http behind a reverse proxy; use the browser's origin */
   function normalizeCreatedUrl(url: string): string {
     try {
-      const backendUrl = new URL(url);
-      const originUrl = new URL(window.location.origin);
-      backendUrl.protocol = originUrl.protocol;
-      backendUrl.host = originUrl.host;
-      return backendUrl.toString();
+      const { pathname, search, hash } = new URL(url);
+      return new URL(pathname + search + hash, window.location.origin).toString();
     } catch {
       // Fallback: treat as relative path
       return url.startsWith("http") ? url : `${window.location.origin}${url}`;
@@ -180,17 +171,7 @@
   }
 
   async function copyText(text: string, type: "code" | "url") {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    if (type === "code") {
-      copiedCode = true;
-      setTimeout(() => (copiedCode = false), 2000);
-    } else {
-      copiedUrl = true;
-      setTimeout(() => (copiedUrl = false), 2000);
-    }
+    await copy.copy(text, type);
   }
 
   /**
@@ -300,12 +281,12 @@
           {#if createdCode || createdUrl}
             <div class="space-y-4">
               <div
-                class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+                class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
               >
                 <Check
-                  class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-success"
                 />
-                <p class="text-sm text-green-800 dark:text-green-200">
+                <p class="text-sm text-success">
                   Guest link created successfully.
                 </p>
               </div>
@@ -325,8 +306,8 @@
                       class="shrink-0 self-center"
                       onclick={() => copyText(createdCode!, "code")}
                     >
-                      {#if copiedCode}
-                        <Check class="h-4 w-4 text-green-600" />
+                      {#if copy.isCopied("code")}
+                        <Check class="h-4 w-4 text-success" />
                       {:else}
                         <Copy class="h-4 w-4" />
                       {/if}
@@ -343,7 +324,7 @@
                       type="text"
                       value={createdUrl}
                       readonly
-                      class="font-mono text-sm"
+                      class="font-mono"
                     />
                     <Button
                       variant="outline"
@@ -351,8 +332,8 @@
                       class="shrink-0"
                       onclick={() => copyText(createdUrl!, "url")}
                     >
-                      {#if copiedUrl}
-                        <Check class="h-4 w-4 text-green-600" />
+                      {#if copy.isCopied("url")}
+                        <Check class="h-4 w-4 text-success" />
                       {:else}
                         <Copy class="h-4 w-4" />
                       {/if}
@@ -438,15 +419,12 @@
       <div class="space-y-2">
         {#each guestLinks as link (link.id)}
           <div
+            class={link.dismissedAt ? "opacity-50" : undefined}
             transition:slide={{ duration: 300 }}
             animate:flip={{ duration: 300 }}
           >
             <Card.Root>
-              <Card.Content
-                class="flex items-center gap-4 py-3{link.dismissedAt
-                  ? ' opacity-50'
-                  : ''}"
-              >
+              <Card.Content class="flex items-center gap-4 py-3">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-sm truncate">
@@ -472,9 +450,9 @@
                 </div>
                 {#if link.status === GuestLinkStatus.Active || (isTerminal(link) && !link.dismissedAt)}
                   <Button
-                    variant="ghost"
+                    variant="ghost-muted"
                     size="sm"
-                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    class="shrink-0"
                     disabled={reissuingId === link.id}
                     onclick={() => handleReissue(link)}
                   >
@@ -488,9 +466,9 @@
                 {/if}
                 {#if canRevoke(link)}
                   <Button
-                    variant="ghost"
+                    variant="ghost-destructive"
                     size="sm"
-                    class="text-destructive hover:text-destructive shrink-0"
+                    class="shrink-0"
                     disabled={pendingIds.has(link.id!)}
                     onclick={() => handleRevoke(link.id!)}
                   >
@@ -499,9 +477,9 @@
                   </Button>
                 {:else if isTerminal(link) && !link.dismissedAt}
                   <Button
-                    variant="ghost"
+                    variant="ghost-muted"
                     size="sm"
-                    class="text-muted-foreground hover:text-foreground shrink-0"
+                    class="shrink-0"
                     disabled={pendingIds.has(link.id!)}
                     onclick={() => handleDismiss(link.id!)}
                   >
@@ -515,14 +493,14 @@
         {/each}
       </div>
       {#if dismissedCount > 0}
-        <button
-          type="button"
-          class="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        <Button
+          variant="ghost-muted"
+          size="xs"
           onclick={() => (showDismissed = !showDismissed)}
         >
           {showDismissed ? "Hide" : "Show"}
           {dismissedCount} dismissed
-        </button>
+        </Button>
       {/if}
     {/if}
   </div>

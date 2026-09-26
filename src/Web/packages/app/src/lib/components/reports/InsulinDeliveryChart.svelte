@@ -2,7 +2,11 @@
   import { AreaChart } from "layerchart";
   import type { HourlyInsulinDeliveryPoint } from "$lib/api";
   import { Syringe } from "lucide-svelte";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import {
+    patternClass,
+    type TextureKey,
+  } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     /** Backend-computed hourly delivery averages (24 entries, hour 0-23) */
@@ -12,7 +16,6 @@
 
   let { data, showStacked = true }: Props = $props();
 
-  // Format hour for display
   function formatHour(hour: number): string {
     if (hour === 0) return "12 AM";
     if (hour < 12) return `${hour} AM`;
@@ -36,11 +39,72 @@
     return Math.max(2, Math.ceil(maxValue * 1.2));
   });
 
-  // Check if we have both scheduled and temp basal data
   const hasScheduledBasalData = $derived(
     chartData.some((d) => (d.scheduledBasal ?? 0) > 0)
   );
   const hasTempBasalData = $derived(chartData.some((d) => (d.tempBasal ?? 0) > 0));
+
+  type Series = {
+    key: string;
+    value: (d: HourlyInsulinDeliveryPoint) => number;
+    color: string;
+    label: string;
+    texture: TextureKey;
+  };
+
+  const stackedSeries = $derived.by((): Series[] => {
+    const basal: Series[] = [];
+    if (hasScheduledBasalData)
+      basal.push({
+        key: "scheduledBasal",
+        value: (d) => d.scheduledBasal ?? 0,
+        color: "var(--insulin-scheduled-basal)",
+        label: "Scheduled Basal",
+        texture: "insulin-scheduled-basal",
+      });
+    if (hasTempBasalData)
+      basal.push({
+        key: "tempBasal",
+        value: (d) => d.tempBasal ?? 0,
+        color: "var(--insulin-additional-basal)",
+        label: "Temp Basal",
+        texture: "insulin-temp-basal",
+      });
+    if (basal.length === 0)
+      basal.push({
+        key: "basal",
+        value: (d) => d.basal ?? 0,
+        color: "var(--basal)",
+        label: "Basal",
+        texture: "insulin-scheduled-basal",
+      });
+    return [
+      ...basal,
+      {
+        key: "bolus",
+        value: (d) => d.bolus ?? 0,
+        color: "var(--insulin-bolus)",
+        label: "Bolus",
+        texture: "insulin-bolus",
+      },
+    ];
+  });
+
+  const series = $derived(
+    showStacked
+      ? stackedSeries.map(({ texture, ...s }) => ({
+          ...s,
+          props: { class: patternClass(texture) },
+        }))
+      : [
+          {
+            key: "basal",
+            value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
+            color: "var(--basal)",
+            label: "Basal Insulin",
+          },
+        ]
+  );
 </script>
 
 <div class="w-full">
@@ -50,59 +114,7 @@
         data={chartData}
         x={(d) => d.hour}
         y={displayValue}
-        series={showStacked
-          ? [
-              // Show scheduled basal, temp basal adjustments, and bolus as stacked
-              ...(hasScheduledBasalData
-                ? [
-                    {
-                      key: "scheduledBasal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.scheduledBasal ?? 0,
-                      color: "var(--insulin-scheduled-basal)",
-                      label: "Scheduled Basal",
-                      props: { class: categoryPatternClass(1) },
-                    },
-                  ]
-                : []),
-              ...(hasTempBasalData
-                ? [
-                    {
-                      key: "tempBasal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.tempBasal ?? 0,
-                      color: "var(--insulin-additional-basal)",
-                      label: "Temp Basal",
-                      props: { class: categoryPatternClass(2) },
-                    },
-                  ]
-                : []),
-              // Fallback if no scheduled/temp distinction - show combined basal
-              ...(!hasScheduledBasalData && !hasTempBasalData
-                ? [
-                    {
-                      key: "basal",
-                      value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                      color: "var(--insulin-scheduled-basal)",
-                      label: "Basal",
-                      props: { class: categoryPatternClass(1) },
-                    },
-                  ]
-                : []),
-              {
-                key: "bolus",
-                value: (d: HourlyInsulinDeliveryPoint) => d.bolus ?? 0,
-                color: "var(--insulin-bolus)",
-                label: "Bolus",
-                props: { class: categoryPatternClass(3) },
-              },
-            ]
-          : [
-              {
-                key: "basal",
-                value: (d: HourlyInsulinDeliveryPoint) => d.basal ?? 0,
-                color: "var(--chart-1)",
-                label: "Basal Insulin",
-              },
-            ]}
+        {series}
         xDomain={[0, 23]}
         yDomain={[0, maxInsulin]}
         seriesLayout={showStacked ? "stack" : "overlap"}
@@ -118,8 +130,13 @@
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
       />
     </div>
+    {#if showStacked}
+      <ChartKey
+        class="mt-2"
+        items={stackedSeries.map((s) => ({ texture: s.texture, label: s.label, color: s.color }))}
+      />
+    {/if}
 
-    <!-- Time period insights -->
     {#if chartData.length >= 24}
       {@const morning = chartData.slice(6, 12).reduce((s, d) => s + displayValue(d), 0)}
       {@const afternoon = chartData
@@ -129,29 +146,25 @@
         chartData.slice(18, 24).reduce((s, d) => s + displayValue(d), 0) +
         chartData.slice(0, 6).reduce((s, d) => s + displayValue(d), 0)}
       {@const totalDaily = morning + afternoon + evening}
-      <div class="mt-4 grid grid-cols-3 gap-3 text-center">
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{morning.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Morning (6am-12pm)</div>
-          <div class="text-xs font-medium text-amber-600">
-            {totalDaily > 0 ? ((morning / totalDaily) * 100).toFixed(0) : 0}%
+      {@const periods = [
+        { label: "Morning (6am-12pm)", units: morning },
+        { label: "Afternoon (12pm-6pm)", units: afternoon },
+        { label: "Evening/Night", units: evening },
+      ]}
+      <dl class="m-0 mt-4 grid grid-cols-3 divide-x divide-border border-t border-border">
+        {#each periods as period (period.label)}
+          <div class="px-3 pt-3 first:pl-0 last:pr-0">
+            <dt class="text-xs text-muted-foreground">{period.label}</dt>
+            <dd class="m-0 mt-1 flex flex-wrap items-baseline gap-x-1">
+              <span class="text-lg font-semibold tabular-nums">{period.units.toFixed(1)}</span>
+              <span class="text-xs text-muted-foreground">U</span>
+              <span class="ml-1 text-xs text-muted-foreground tabular-nums">
+                {totalDaily > 0 ? ((period.units / totalDaily) * 100).toFixed(0) : 0}%
+              </span>
+            </dd>
           </div>
-        </div>
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{afternoon.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Afternoon (12pm-6pm)</div>
-          <div class="text-xs font-medium text-blue-600">
-            {totalDaily > 0 ? ((afternoon / totalDaily) * 100).toFixed(0) : 0}%
-          </div>
-        </div>
-        <div class="rounded-lg border bg-card p-3">
-          <div class="text-lg font-bold">{evening.toFixed(1)}U</div>
-          <div class="text-xs text-muted-foreground">Evening/Night</div>
-          <div class="text-xs font-medium text-purple-600">
-            {totalDaily > 0 ? ((evening / totalDaily) * 100).toFixed(0) : 0}%
-          </div>
-        </div>
-      </div>
+        {/each}
+      </dl>
     {/if}
   {:else}
     <div

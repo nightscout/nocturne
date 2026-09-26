@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,7 +11,6 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
-using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.API.Services.Glucose;
 
@@ -33,6 +31,7 @@ namespace Nocturne.API.Services.BackgroundServices;
 public class CompressionLowDetectionService : BackgroundService, ICompressionLowDetectionService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<CompressionLowDetectionService> _logger;
 
     public const string NotificationType = "glucose.compression_low_review";
@@ -53,12 +52,15 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
     /// Initialises a new <see cref="CompressionLowDetectionService"/>.
     /// </summary>
     /// <param name="serviceProvider">Root service provider; scoped services are resolved per tenant.</param>
+    /// <param name="activeTenants">The active tenants to schedule and scan.</param>
     /// <param name="logger">Logger instance.</param>
     public CompressionLowDetectionService(
         IServiceProvider serviceProvider,
+        ActiveTenantSnapshot activeTenants,
         ILogger<CompressionLowDetectionService> logger)
     {
         _serviceProvider = serviceProvider;
+        _activeTenants = activeTenants;
         _logger = logger;
     }
 
@@ -106,13 +108,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         DateTime? earliestNextRunUtc = null;
         string? earliestTimezoneId = null;
 
-        using var lookupScope = _serviceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(cancellationToken);
-        var tenants = await lookupContext.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await _activeTenants.GetAsync(cancellationToken);
 
         foreach (var tenant in tenants)
         {
@@ -127,6 +123,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
 
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+                if (settings == null)
+                {
+                    _logger.LogWarning(
+                        "Could not read UI settings for tenant {TenantSlug}; leaving it out of the schedule",
+                        tenant.Slug);
+                    continue;
+                }
+
                 var sleepSchedule = settings.DataQuality.SleepSchedule;
                 var wakeTimeHour = sleepSchedule.WakeTimeHour;
                 var lastNightGuess = DateOnly.FromDateTime(nowUtc.AddDays(-1));
@@ -171,14 +175,7 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
 
     private async Task RunForAllTenantsAsync(CancellationToken cancellationToken)
     {
-        // Lookup active tenants using unfiltered context
-        using var lookupScope = _serviceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(cancellationToken);
-        var tenants = await lookupContext.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await _activeTenants.GetAsync(cancellationToken);
 
         foreach (var tenant in tenants)
         {
@@ -193,6 +190,14 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
                 var entryService = scope.ServiceProvider.GetRequiredService<IEntryService>();
                 var uiSettingsService = scope.ServiceProvider.GetRequiredService<IUISettingsService>();
                 var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+                if (settings == null)
+                {
+                    _logger.LogWarning(
+                        "Could not read UI settings for tenant {TenantSlug}; skipping its detection run",
+                        tenant.Slug);
+                    continue;
+                }
+
                 var lastNightGuess = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
                 var userTimeZone = ResolveTimeZone(settings.DataQuality.SleepSchedule.Timezone)
                     ?? await GetUserTimeZoneFromProfileAsync(therapySettingsResolver, cancellationToken)
@@ -250,8 +255,18 @@ public class CompressionLowDetectionService : BackgroundService, ICompressionLow
         var uiSettingsService = scopedProvider.GetRequiredService<IUISettingsService>();
         var tenantAccessor = scopedProvider.GetRequiredService<ITenantAccessor>();
 
-        // Check if detection is enabled
+        // The enable flag and the sleep hours are the tenant's own, so a read that failed leaves
+        // nothing to run against: the defaults would both override a tenant who turned detection
+        // off and judge the night by hours they never chose.
         var settings = await uiSettingsService.GetSettingsAsync(cancellationToken);
+        if (settings == null)
+        {
+            _logger.LogWarning(
+                "Could not read UI settings; skipping compression low detection for night of {NightOf}",
+                nightOf);
+            return 0;
+        }
+
         if (!settings.DataQuality.CompressionLowDetection.Enabled)
         {
             _logger.LogDebug("Compression low detection is disabled");

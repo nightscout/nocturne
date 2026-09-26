@@ -35,18 +35,20 @@
   });
 </script>
 
+<span class="hidden print:inline">{label}</span>
+<span class="print:hidden">
 <Popover.Root bind:open>
   <Popover.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         variant="ghost"
         size="sm"
-        class="-ml-3 h-8 data-[state=open]:bg-accent gap-1"
+        class="-ml-3"
         {...props}
       >
         {label}
         {#if selected.length > 0}
-          <Badge variant="secondary" class="ml-1 h-5 px-1 text-xs">
+          <Badge variant="secondary" size="sm" class="ml-1 h-5">
             {selected.length}
           </Badge>
         {/if}
@@ -70,7 +72,7 @@
           <Command.Empty>No options found.</Command.Empty>
         {/if}
         <Command.Group>
-          {#each filteredOptions as option}
+          {#each filteredOptions as option (option.value)}
             <Command.Item
               value={option.value}
               onSelect={() => onToggle(option.value)}
@@ -112,3 +114,4 @@
     </Command.Root>
   </Popover.Content>
 </Popover.Root>
+</span>

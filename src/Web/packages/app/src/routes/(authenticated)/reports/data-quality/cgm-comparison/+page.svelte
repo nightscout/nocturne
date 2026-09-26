@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -12,8 +13,11 @@
   import { getCgmComparison, getReportsAnalysis } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-    import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
+  import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+
+  setReportPrintMeta(() => ({ title: "CGM Comparison" }));
 
   const params = requireDateParamsContext(14);
 
@@ -77,18 +81,18 @@
   <div class="@container container mx-auto max-w-5xl space-y-6 p-3 @md:p-6">
     <div class="space-y-3">
       <a
-        href="/reports/data-quality"
+        href={resolve("/reports/data-quality")}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
         Data Quality
       </a>
       <div class="flex items-center gap-3">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
           <GitCompareArrows class="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 class="text-2xl font-bold tracking-tight">CGM Comparison</h1>
+          <h1 class="text-2xl font-bold tracking-tight print:hidden">CGM Comparison</h1>
           <p class="text-muted-foreground">
             Readings from two sensors matched to the same moment
           </p>
@@ -98,7 +102,7 @@
 
     {#if devices.length < 2}
       <Card>
-        <CardContent class="pt-6 text-sm text-muted-foreground">
+        <CardContent variant="muted" class="pt-6">
           Two registered CGMs need readings in this range to compare. This range has {devices.length}.
         </CardContent>
       </Card>
@@ -157,13 +161,13 @@
 
       {#if !comparable}
         <Card>
-          <CardContent class="pt-6 text-sm text-muted-foreground">
+          <CardContent variant="muted" class="pt-6">
             Pick two different devices to compare.
           </CardContent>
         </Card>
       {:else if query?.error}
         <Card>
-          <CardContent class="pt-6 text-sm text-muted-foreground">
+          <CardContent variant="muted" class="pt-6">
             The comparison could not be loaded.
           </CardContent>
         </Card>
@@ -172,7 +176,7 @@
           <CardHeader class="pb-3">
             <CardTitle class="text-base">Agreement</CardTitle>
             <CardDescription>
-              {comparison.deviceAName} against {comparison.deviceBName}, readings matched within
+              {comparison.deviceAName} against the reference {comparison.deviceBName}, readings matched within
               {comparison.toleranceMinutes} minutes.
             </CardDescription>
           </CardHeader>

@@ -10,8 +10,8 @@ describe("inspectionSearchWindow", () => {
 
     const { from, to } = inspectionSearchWindow(timestamp);
 
-    expect(from.toISOString()).toBe("2026-09-02T11:55:00.000Z");
-    expect(to.toISOString()).toBe("2026-09-02T12:05:00.000Z");
+    expect(from).toBe("2026-09-02T11:55:00.000Z");
+    expect(to).toBe("2026-09-02T12:05:00.000Z");
   });
 
   it("stays symmetrical across a DST boundary", () => {
@@ -21,8 +21,8 @@ describe("inspectionSearchWindow", () => {
 
     const { from, to } = inspectionSearchWindow(timestamp);
 
-    expect(timestamp.getTime() - from.getTime()).toBe(FIVE_MINUTES);
-    expect(to.getTime() - timestamp.getTime()).toBe(FIVE_MINUTES);
+    expect(timestamp.getTime() - Date.parse(from)).toBe(FIVE_MINUTES);
+    expect(Date.parse(to) - timestamp.getTime()).toBe(FIVE_MINUTES);
   });
 
   it("leaves the inspected instant untouched", () => {

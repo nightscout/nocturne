@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
-  import { cn } from "$lib/utils";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { PROFILE_ICONS } from "$lib/constants/profile-icons";
   import {
     User,
@@ -93,31 +93,37 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled} class="w-full">
-    <Button variant="outline" class="w-full justify-start gap-2" {disabled}>
-      <CurrentIcon class="h-4 w-4" />
-      <span>{currentIconName}</span>
-    </Button>
+  <Popover.Trigger {disabled}>
+    {#snippet child({ props }: { props: Record<string, unknown> })}
+      <Button {...props} variant="outline" class="w-full justify-start">
+        <CurrentIcon class="h-4 w-4" />
+        <span>{currentIconName}</span>
+      </Button>
+    {/snippet}
   </Popover.Trigger>
   <Popover.Content class="w-80 p-3" align="start">
     <div class="space-y-2">
       <p class="text-sm font-medium">Select an icon</p>
-      <div class="grid grid-cols-6 gap-2">
-        {#each PROFILE_ICONS as icon}
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        spacing={1}
+        class="grid grid-cols-6"
+        value={selectedIcon}
+        onValueChange={(v: string) => v && selectIcon(v)}
+      >
+        {#each PROFILE_ICONS as icon (icon.id)}
           {@const IconComponent = iconComponents[icon.id] ?? User}
-          <button
-            type="button"
-            class={cn(
-              "flex h-9 w-9 items-center justify-center rounded-md border transition-colors hover:bg-accent",
-              selectedIcon === icon.id && "border-primary bg-primary/10"
-            )}
+          <ToggleGroup.Item
+            value={icon.id}
+            class="w-9"
             title={icon.name}
-            onclick={() => selectIcon(icon.id)}
+            aria-label={icon.name}
           >
             <IconComponent class="h-4 w-4" />
-          </button>
+          </ToggleGroup.Item>
         {/each}
-      </div>
+      </ToggleGroup.Root>
     </div>
   </Popover.Content>
 </Popover.Root>

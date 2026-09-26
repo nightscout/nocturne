@@ -1,10 +1,17 @@
 <script lang="ts">
+	import { timeDay } from "d3-time";
+	import { withAll } from "$lib/utils/collections";
 	import { page } from '$app/state';
+	import { satisfiesScope } from '$lib/authorization/scopes';
 	import { toast } from 'svelte-sonner';
 	import { permissionGatedMutationError } from '$lib/forms';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Badge } from '$lib/components/ui/badge';
+	import * as Table from '$lib/components/ui/table';
+	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';
+	import { startOfDay, toDayString } from '$lib/utils/date-range';
 	import {
 		Select,
 		SelectContent,
@@ -20,7 +27,7 @@
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
-		import { createChartDataEngine } from '$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte';
+	import { createChartDataEngine } from '$lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte';
 	import GlucoseChartShell from '$lib/components/dashboard/glucose-chart/GlucoseChartShell.svelte';
 	import GlucoseTrack from '$lib/components/dashboard/glucose-chart/tracks/GlucoseTrack.svelte';
 	import BasalTrack from '$lib/components/dashboard/glucose-chart/tracks/BasalTrack.svelte';
@@ -38,14 +45,10 @@
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
 
-	const effectivePermissions: string[] = $derived(
-		(page.data as any).effectivePermissions ?? []
-	);
 	// Accepting, dismissing, deleting and re-running detection all write state
 	// spans and suggestion rows, so the server gates them on glucose.readwrite.
 	const canReviewSuggestions = $derived(
-		effectivePermissions.includes('*') ||
-			effectivePermissions.includes('glucose.readwrite')
+		satisfiesScope(page.data.effectivePermissions ?? [], 'glucose.readwrite')
 	);
 	const NEEDS_GLUCOSE_READWRITE =
 		'Reviewing compression lows requires the glucose.readwrite permission.';
@@ -53,13 +56,36 @@
 	const mutationError = (err: unknown) =>
 		permissionGatedMutationError(err, NEEDS_GLUCOSE_READWRITE);
 
-	// Create resource with automatic layout registration - load ALL suggestions
 	const suggestionsResource = contextResource(
 		() => getCompressionLowSuggestions({}),
 		{ errorTitle: 'Error Loading Compression Low History' }
 	);
 
 	const suggestions = $derived(suggestionsResource.current ?? []);
+
+	/**
+	 * Local midnight of a night's calendar date. `nightOf` is a date sent as UTC
+	 * midnight, which local getters would read as the previous day west of UTC.
+	 */
+	function nightDate(nightOf: string | Date): Date {
+		const utc = nightOf instanceof Date ? nightOf : new Date(nightOf);
+		return startOfDay(utc.toISOString().slice(0, 10));
+	}
+
+	// Spans the nights the printed table lists, so the header matches the rows.
+	const nightSpan = $derived.by(() => {
+		const nights = filteredSuggestions.flatMap((s) => (s.nightOf ? [nightDate(s.nightOf).getTime()] : []));
+		if (nights.length === 0) return null;
+		return {
+			from: toDayString(Math.min(...nights)),
+			to: toDayString(timeDay.offset(new Date(Math.max(...nights)), 1))
+		};
+	});
+
+	setReportPrintMeta(() => ({
+		title: 'Compression Lows',
+		period: nightSpan ?? { label: 'All recorded nights' }
+	}));
 
 	let statusFilter = $state<string>('all');
 	let selectedSuggestions = $state<Set<string>>(new Set());
@@ -110,12 +136,10 @@
 		if (event.shiftKey && lastClickedIndex >= 0) {
 			const start = Math.min(lastClickedIndex, index);
 			const end = Math.max(lastClickedIndex, index);
-			const newSelection = new Set(selectedSuggestions);
-			for (let i = start; i <= end; i++) {
-				const id = filteredSuggestions[i]?.id;
-				if (id) newSelection.add(id);
-			}
-			selectedSuggestions = newSelection;
+			selectedSuggestions = withAll(
+				selectedSuggestions,
+				filteredSuggestions.slice(start, end + 1).flatMap((s) => (s.id ? [s.id] : []))
+			);
 		} else {
 			selectedSuggestions = new Set([suggestion.id]);
 		}
@@ -254,6 +278,34 @@
 		}
 	}
 
+	function getStatusLabel(status: string | undefined): string {
+		switch (status?.toLowerCase()) {
+			case 'accepted':
+				return 'Accepted';
+			case 'dismissed':
+				return 'Dismissed';
+			default:
+				return 'Pending review';
+		}
+	}
+
+	function getStatusFilterLabel(filter: string): string {
+		switch (filter) {
+			case 'pending':
+				return 'Pending';
+			case 'accepted':
+				return 'Accepted';
+			case 'dismissed':
+				return 'Dismissed';
+			default:
+				return 'All';
+		}
+	}
+
+	function timeOrDash(mills: number | undefined): string {
+		return mills == null ? '—' : time(mills);
+	}
+
 	function getConfidenceLabel(confidence: number): string {
 		if (confidence >= 0.75) return 'High';
 		if (confidence >= 0.6) return 'Medium';
@@ -268,9 +320,8 @@
 
 
 	function formatNightOf(nightOf: string | Date): string {
-		const date = nightOf instanceof Date ? nightOf : new Date(nightOf);
-		const nextDay = new Date(date);
-		nextDay.setDate(nextDay.getDate() + 1);
+		const date = nightDate(nightOf);
+		const nextDay = timeDay.offset(date, 1);
 		// `{ day, year }` has no CLDR pattern; ICU renders it as "2026 (day: 30)".
 		return `Night of ${formatShortDate(date)} \u2013 ${formatShortDate(nextDay, true)}`;
 	}
@@ -306,14 +357,19 @@
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
-					<h1 class="text-2xl font-bold">Compression Lows</h1>
+					<h1 class="text-2xl font-bold print:hidden">Compression Lows</h1>
 					<p class="text-muted-foreground">
 						{#if pendingCount > 0}
 							{pendingCount} pending review
 						{:else}
-							Review history and manage exclusions
+							<span class="print:hidden">Suspected false lows from pressure on the sensor</span>
 						{/if}
 					</p>
+					{#if statusFilter !== 'all'}
+						<p class="hidden text-sm text-muted-foreground print:block">
+							Status: {getStatusFilterLabel(statusFilter)}
+						</p>
+					{/if}
 				</div>
 			</div>
 			<div class="flex shrink-0 items-center gap-2 print:hidden">
@@ -344,11 +400,10 @@
 			</div>
 		</div>
 
-
 		{#if suggestions.length === 0}
 			<Card>
 				<CardContent class="py-12 text-center">
-					<History class="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+					<History class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
 					<h2 class="mb-2 text-lg font-semibold">No compression lows detected yet</h2>
 					<p class="mb-4 text-muted-foreground">
 						When compression lows are detected during your sleep, they will appear here.
@@ -358,23 +413,23 @@
 						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
 							<div class="flex flex-col gap-1">
 								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
-								<input
+								<Input
 									id="start-date"
 									type="date"
 									bind:value={testStartDate}
-									class="rounded border bg-background px-3 py-2"
+									class="w-auto"
 								/>
 							</div>
 							<div class="flex flex-col gap-1">
 								<label for="end-date" class="text-sm text-muted-foreground"
 									>End Date (optional)</label
 								>
-								<input
+								<Input
 									id="end-date"
 									type="date"
 									bind:value={testEndDate}
 									min={testStartDate}
-									class="rounded border bg-background px-3 py-2"
+									class="w-auto"
 								/>
 							</div>
 							<Button
@@ -399,21 +454,59 @@
 		{:else if filteredSuggestions.length === 0}
 			<Card>
 				<CardContent class="py-12 text-center">
-					<AlertTriangle class="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+					<AlertTriangle class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
 					<h2 class="mb-2 text-lg font-semibold">No matching results</h2>
 					<p class="text-muted-foreground">Try changing your filter criteria.</p>
 				</CardContent>
 			</Card>
 		{:else}
+			<!-- The row list is a selection control; print lists every night as a table instead. -->
+			<div class="hidden print:block">
+				<Table.Root>
+					<Table.Header>
+						<Table.Row>
+							<Table.Head>Night</Table.Head>
+							<Table.Head>Time</Table.Head>
+							<Table.Head class="text-right">Lowest ({bgLabel()})</Table.Head>
+							<Table.Head class="text-right">Drop rate ({bgLabel()}/min)</Table.Head>
+							<Table.Head class="text-right">Recovery (minutes)</Table.Head>
+							<Table.Head>Confidence</Table.Head>
+							<Table.Head>Status</Table.Head>
+						</Table.Row>
+					</Table.Header>
+					<Table.Body>
+						{#each filteredSuggestions as suggestion (suggestion.id)}
+							<Table.Row>
+								<Table.Cell class="font-medium">
+									{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
+								</Table.Cell>
+								<Table.Cell class="tabular-nums">
+									{timeOrDash(suggestion.startMills)} - {timeOrDash(suggestion.endMills)}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.lowestGlucose != null ? bg(suggestion.lowestGlucose) : '-'}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.dropRate != null ? bg(suggestion.dropRate) : '-'}
+								</Table.Cell>
+								<Table.Cell class="text-right tabular-nums">
+									{suggestion.recoveryMinutes ?? '-'}
+								</Table.Cell>
+								<Table.Cell>{getConfidenceLabel(suggestion.confidence ?? 0)}</Table.Cell>
+								<Table.Cell>{getStatusLabel(suggestion.status)}</Table.Cell>
+							</Table.Row>
+						{/each}
+					</Table.Body>
+				</Table.Root>
+			</div>
+
 			<div class="grid gap-6 @3xl:grid-cols-3">
-				<!-- Suggestion List -->
-				<div
-					class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:max-h-none print:overflow-visible"
-				>
+				<div class="max-h-[600px] space-y-2 overflow-y-auto pr-2 print:hidden">
 					{#each filteredSuggestions as suggestion, index (suggestion.id)}
 						{@const StatusIcon = getStatusIcon(suggestion.status)}
 						{@const isSelected = suggestion.id ? selectedSuggestions.has(suggestion.id) : false}
 						{@const isActive = suggestion.id === activeSuggestion}
+						<!-- eslint-disable-next-line no-restricted-syntax -- list row region with shift-click range selection -->
 						<button
 							type="button"
 							class="w-full text-left"
@@ -427,24 +520,23 @@
 										: ''}"
 							>
 								<div class="flex items-center gap-3">
-									<div
-										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+									<span
+										class="review-status flex shrink-0 items-center"
 										data-status={suggestion.status?.toLowerCase() ?? ''}
 									>
-										<StatusIcon class="h-4 w-4" />
-									</div>
+										<StatusIcon class="size-4" aria-hidden="true" />
+										<span class="sr-only">{getStatusLabel(suggestion.status)}</span>
+									</span>
 									<div>
 										<p class="font-medium">
 											{suggestion.nightOf ? formatNightOf(suggestion.nightOf) : 'Unknown date'}
 										</p>
 										<p class="text-sm text-muted-foreground">
-											{time(suggestion.startMills ?? 0)} - {time(
-												suggestion.endMills ?? 0
-											)}
+											{timeOrDash(suggestion.startMills)} - {timeOrDash(suggestion.endMills)}
 										</p>
 									</div>
 								</div>
-								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)} class="text-xs">
+								<Badge variant={getConfidenceVariant(suggestion.confidence ?? 0)}>
 									{getConfidenceLabel(suggestion.confidence ?? 0)}
 								</Badge>
 							</div>
@@ -452,7 +544,6 @@
 					{/each}
 				</div>
 
-				<!-- Chart and Actions -->
 				<div class="@3xl:col-span-2">
 					{#if suggestionDetail}
 						<Card>
@@ -464,15 +555,17 @@
 											: 'Unknown'}
 									</CardTitle>
 									<div
-										class="review-status flex h-8 w-8 items-center justify-center rounded-full"
+										class="review-status flex items-center gap-1.5"
 										data-status={suggestionDetail.suggestion?.status?.toLowerCase() ?? ''}
 									>
-										<DetailStatusIcon class="h-4 w-4" />
+										<DetailStatusIcon class="size-4" aria-hidden="true" />
+										<span class="text-sm font-medium">
+											{getStatusLabel(suggestionDetail.suggestion?.status)}
+										</span>
 									</div>
 								</div>
 							</CardHeader>
 							<CardContent>
-								<!-- Glucose Chart with Brush -->
 								{#if suggestionDetail?.entries && suggestionDetail.entries.length > 0 && chartDateRange}
 									{#key chartDateRange.from.getTime() + '-' + chartDateRange.to.getTime()}
 										{@const chartEngine = createChartDataEngine({
@@ -502,37 +595,37 @@
 									{/key}
 								{/if}
 
-								<!-- Stats -->
-								<div class="mb-6 grid grid-cols-3 gap-4 text-center">
-									<div>
-										<p class="text-2xl font-bold">
+								<dl class="m-0 mb-6 grid grid-cols-3 divide-x divide-border border-y border-border">
+									<div class="py-3 pr-4">
+										<dt class="text-sm text-muted-foreground">Lowest ({bgLabel()})</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
 											{suggestionDetail.suggestion?.lowestGlucose != null
 												? bg(suggestionDetail.suggestion.lowestGlucose)
 												: '-'}
-										</p>
-										<p class="text-sm text-muted-foreground">Lowest ({bgLabel()})</p>
+										</dd>
 									</div>
-									<div>
-										<p class="text-2xl font-bold">
+									<div class="px-4 py-3">
+										<dt class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
 											{suggestionDetail.suggestion?.dropRate != null
 												? bg(suggestionDetail.suggestion.dropRate)
 												: '-'}
-										</p>
-										<p class="text-sm text-muted-foreground">Drop Rate ({bgLabel()}/min)</p>
+										</dd>
 									</div>
-									<div>
-										<p class="text-2xl font-bold">{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}</p>
-										<p class="text-sm text-muted-foreground">Recovery (min)</p>
+									<div class="py-3 pl-4">
+										<dt class="text-sm text-muted-foreground">Recovery (min)</dt>
+										<dd class="m-0 mt-1 text-lg font-semibold tabular-nums">
+											{suggestionDetail.suggestion?.recoveryMinutes ?? '-'}
+										</dd>
 									</div>
-								</div>
+								</dl>
 
-								<!-- Time Range Display -->
 								{#if brushDomain}
-									<div class="mb-6 rounded-lg bg-muted p-4">
+									<div class="mb-6 border-b border-border pb-4">
 										<p class="text-sm text-muted-foreground">
-											{isPending ? 'Selected Range' : 'Exclusion Range'}
+											{isPending ? 'Selected Range' : 'Marked Range'}
 										</p>
-										<p class="font-medium">
+										<p class="font-medium tabular-nums">
 											{time(brushDomain[0])} - {time(brushDomain[1])}
 										</p>
 										{#if isPending && canReviewSuggestions}
@@ -543,11 +636,10 @@
 									</div>
 								{/if}
 
-								<!-- Bulk Selection Bar -->
 								{#if isBulkMode && canReviewSuggestions}
 									<div
-									class="mb-4 flex items-center justify-between rounded-lg bg-primary/10 p-3 print:hidden"
-								>
+										class="mb-4 flex items-center justify-between border-b border-border pb-3 print:hidden"
+									>
 										<span class="text-sm font-medium">{selectionCount} selected</span>
 										<div class="flex gap-2">
 											<Button
@@ -580,7 +672,6 @@
 									</div>
 								{/if}
 
-								<!-- Actions -->
 								{#if !isBulkMode && canReviewSuggestions}
 									{#if isPending}
 										<div class="flex gap-4 print:hidden">
@@ -644,15 +735,18 @@
 	/* Review status is a backend enum; the colour comes from the theme's status
 	   vars keyed off data-status. Anything not yet reviewed uses the default. */
 	.review-status {
-		background: color-mix(in oklab, var(--status-warning) 15%, transparent);
 		color: var(--status-warning);
 	}
 	.review-status[data-status='accepted'] {
-		background: color-mix(in oklab, var(--status-normal) 15%, transparent);
 		color: var(--status-normal);
 	}
 	.review-status[data-status='dismissed'] {
-		background: var(--muted);
 		color: var(--muted-foreground);
+	}
+	@media print {
+		.review-status,
+		.review-status[data-status] {
+			color: var(--foreground);
+		}
 	}
 </style>

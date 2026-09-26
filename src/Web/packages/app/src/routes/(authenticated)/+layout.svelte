@@ -4,7 +4,7 @@
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
   import type { LayoutData } from "./$types";
@@ -20,6 +20,7 @@
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
+  import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider } from "@nocturne/coach";
@@ -30,6 +31,7 @@
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -44,7 +46,12 @@
     pingInterval: 25000,
   };
 
-  const { data, children } = $props<{ data: LayoutData; children: any }>();
+  interface Props {
+    data: LayoutData;
+    children: Snippet;
+  }
+
+  const { data, children }: Props = $props();
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
   // tenantless-navigation. Read once: the host cannot change without a fresh load.
@@ -141,7 +148,10 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const timeSinceReading = $derived(realtimeStore.timeSinceReading);
 
-  const isDisconnected = $derived(!realtimeStore.isConnected);
+  const connection = createConnectionIndicator(
+    () => realtimeStore.connectionStatus
+  );
+  const isDisconnected = $derived(connection.isDisconnected);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
   $effect(() => {
@@ -211,14 +221,19 @@
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} />
     <Sidebar.Inset>
       <MobileHeader />
-      {#if data.isDemo}
-        <DemoBanner nextResetAt={data.nextResetAt} />
-      {/if}
-      {#if data.isGuestSession && data.guestExpiresAt}
-        <GuestBanner expiresAt={data.guestExpiresAt} />
-      {/if}
-      {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
-        <BackupSignInPrompt />
+      <div class="sticky top-(--mobile-header-offset,0px) z-40 transition-all duration-300 md:top-0">
+          {#if data.isDemo}
+            <DemoBanner nextResetAt={data.nextResetAt} />
+          {/if}
+          {#if data.isGuestSession && data.guestExpiresAt}
+            <GuestBanner expiresAt={data.guestExpiresAt} />
+          {/if}
+          {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
+            <BackupSignInPrompt />
+          {/if}
+      </div>
+      {#if data.user && !data.isGuestSession}
+        <SessionExpiryWatcher />
       {/if}
       {#if !tenantless}
         <MembershipRequestAutoSubmit

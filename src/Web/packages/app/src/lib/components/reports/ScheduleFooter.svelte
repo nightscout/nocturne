@@ -91,6 +91,12 @@
     computeSegmentWidths<ScheduleEntry>(sensitivityEntries),
   );
 
+  const anyChanged = $derived(
+    [targetRangeChanged, carbRatioChanged, sensitivityChanged].some(
+      (info) => info?.changedDuringPeriod
+    )
+  );
+
   let hasData = $derived(
     targetSegments.length > 0 ||
       carbSegments.length > 0 ||
@@ -113,23 +119,23 @@
   <div class="space-y-2 text-xs">
       {#if targetSegments.length > 0}
         <div class="flex items-center gap-2">
-          <span class="w-28 shrink-0 text-gray-600 dark:text-gray-400 font-medium">
+          <span class="w-28 shrink-0 text-muted-foreground font-medium">
             Correction Range
           </span>
-          <div class="flex flex-1 h-8 rounded overflow-hidden border border-gray-200 dark:border-gray-700">
-            {#each targetSegments as seg, i}
+          <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
+            {#each targetSegments as seg, i (i)}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-gray-200 dark:border-gray-700 last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.low)}-{bgOr(seg.entry.high)}"
               >
-                <span class="truncate text-gray-800 dark:text-gray-200">
+                <span class="truncate text-foreground">
                   {bgOr(seg.entry.low)}-{bgOr(seg.entry.high)}
                 </span>
               </div>
             {/each}
           </div>
-          <span class="w-20 shrink-0 text-right text-gray-500 dark:text-gray-400 flex items-center justify-end gap-0.5">
+          <span class="w-20 shrink-0 text-right text-muted-foreground flex items-center justify-end gap-0.5">
             {bgLabel()}
             {@render changeIndicator(targetRangeChanged)}
           </span>
@@ -138,23 +144,23 @@
 
       {#if carbSegments.length > 0}
         <div class="flex items-center gap-2">
-          <span class="w-28 shrink-0 text-gray-600 dark:text-gray-400 font-medium">
+          <span class="w-28 shrink-0 text-muted-foreground font-medium">
             Carb Ratio
           </span>
-          <div class="flex flex-1 h-8 rounded overflow-hidden border border-gray-200 dark:border-gray-700">
-            {#each carbSegments as seg, i}
+          <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
+            {#each carbSegments as seg, i (i)}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-gray-200 dark:border-gray-700 last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {seg.entry.value ?? '?'} g/U"
               >
-                <span class="truncate text-gray-800 dark:text-gray-200">
+                <span class="truncate text-foreground">
                   {seg.entry.value ?? "?"}
                 </span>
               </div>
             {/each}
           </div>
-          <span class="w-20 shrink-0 text-right text-gray-500 dark:text-gray-400 flex items-center justify-end gap-0.5">
+          <span class="w-20 shrink-0 text-right text-muted-foreground flex items-center justify-end gap-0.5">
             g/U
             {@render changeIndicator(carbRatioChanged)}
           </span>
@@ -163,23 +169,23 @@
 
       {#if sensitivitySegments.length > 0}
         <div class="flex items-center gap-2">
-          <span class="w-28 shrink-0 text-gray-600 dark:text-gray-400 font-medium">
+          <span class="w-28 shrink-0 text-muted-foreground font-medium">
             Correction Factor
           </span>
-          <div class="flex flex-1 h-8 rounded overflow-hidden border border-gray-200 dark:border-gray-700">
-            {#each sensitivitySegments as seg, i}
+          <div class="flex flex-1 h-8 rounded overflow-hidden border border-border">
+            {#each sensitivitySegments as seg, i (i)}
               <div
-                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-gray-200 dark:border-gray-700 last:border-r-0 px-1 overflow-hidden"
-                style="width: {seg.widthPercent}%"
+                class="flex items-center justify-center {segmentColors[i % segmentColors.length]} border-r border-border last:border-r-0 px-1 overflow-hidden w-(--seg-w)"
+                style:--seg-w="{seg.widthPercent}%"
                 title="{formatTime(seg.startSeconds)}: {bgOr(seg.entry.value)} {bgLabel()}/U"
               >
-                <span class="truncate text-gray-800 dark:text-gray-200">
+                <span class="truncate text-foreground">
                   {bgOr(seg.entry.value)}
                 </span>
               </div>
             {/each}
           </div>
-          <span class="w-20 shrink-0 text-right text-gray-500 dark:text-gray-400 flex items-center justify-end gap-0.5">
+          <span class="w-20 shrink-0 text-right text-muted-foreground flex items-center justify-end gap-0.5">
             {bgLabel()}/U
             {@render changeIndicator(sensitivityChanged)}
           </span>
@@ -189,7 +195,7 @@
       <!-- Time axis -->
       <div class="flex items-center gap-2">
         <span class="w-28 shrink-0"></span>
-        <div class="flex flex-1 justify-between text-[10px] text-gray-400 dark:text-gray-500 px-0.5">
+        <div class="flex flex-1 justify-between text-2xs text-muted-foreground px-0.5">
           <span>12AM</span>
           <span>6AM</span>
           <span>12PM</span>
@@ -198,5 +204,12 @@
         </div>
         <span class="w-20 shrink-0"></span>
       </div>
+
+      <!-- The icon's meaning is otherwise only in its hover title, which paper cannot show. -->
+      {#if anyChanged}
+        <p class="hidden items-center justify-end gap-1 text-2xs text-muted-foreground print:flex">
+          <History class="w-3 h-3" /> Changed during this period
+        </p>
+      {/if}
   </div>
 {/if}

@@ -12,6 +12,8 @@
   } from "@lucide/svelte";
   import { SystemEventType } from "./enums.js";
   import { Clock, ChevronDown } from "@lucide/svelte";
+  import type { Snippet } from "svelte";
+  import LegendButton from "./controls/LegendButton.svelte";
 
   interface DeviceEventMarker {
     eventType?: string;
@@ -126,23 +128,15 @@
   show: boolean,
   toggle: () => void,
   label: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  children: any
+  children: Snippet
 )}
-  <button
-    type="button"
-    class={cn(
-      "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-      !show && "opacity-50"
-    )}
-    onclick={toggle}
-  >
+  <LegendButton pressed={show} onclick={toggle}>
     {@render children()}
     <span class={cn(!show && "line-through")}>{label}</span>
-  </button>
+  </LegendButton>
 {/snippet}
 
-{#snippet legendIndicator(children: any, label: string)}
+{#snippet legendIndicator(children: Snippet, label: string)}
   <div class="flex items-center gap-1">
     {@render children()}
     <span>{label}</span>
@@ -157,9 +151,11 @@
 {/snippet}
 
 <!-- Icon snippets -->
-{#snippet basalIcon()}<div
-    class="w-3 h-2 bg-insulin-basal border border-insulin"
-  ></div>{/snippet}
+<!-- Scheduled step, then temp step: the pair the basal track draws. -->
+{#snippet basalIcon()}<div class="flex items-end">
+    <div class="w-2 h-1.5 bg-insulin-basal"></div>
+    <div class="w-2 h-2.5 bg-insulin-temp-basal border border-insulin-bolus"></div>
+  </div>{/snippet}
 {#snippet iobIcon()}<div
     class="w-3 h-2 bg-iob-basal border border-insulin"
   ></div>{/snippet}
@@ -182,22 +178,14 @@
   />{/snippet}
 {#snippet batteryIcon()}<Battery size={16} color="var(--color-carbs)" />{/snippet}
 {#snippet overrideIcon()}<div
-    class="w-3 h-2 rounded border"
-    style="background-color: var(--color-pump-mode-boost); opacity: 0.3; border-color: var(--color-pump-mode-boost)"
+    class="w-3 h-2 rounded border bg-pump-mode-boost border-pump-mode-boost opacity-30"
   ></div>{/snippet}
 {#snippet profileIcon()}<div
-    class="w-3 h-2 rounded border"
-    style="background-color: var(--color-chart-1); opacity: 0.2; border-color: var(--color-chart-1)"
+    class="w-3 h-2 rounded border bg-chart-1 border-chart-1 opacity-20"
   ></div>{/snippet}
 {#snippet activityIcon()}<div class="flex items-center gap-0.5">
-    <div
-      class="w-2 h-2 rounded"
-      style="background-color: var(--color-pump-mode-sleep)"
-    ></div>
-    <div
-      class="w-2 h-2 rounded"
-      style="background-color: var(--color-pump-mode-exercise)"
-    ></div>
+    <div class="w-2 h-2 rounded bg-pump-mode-sleep"></div>
+    <div class="w-2 h-2 rounded bg-pump-mode-exercise"></div>
   </div>{/snippet}
 
 <div
@@ -241,14 +229,7 @@
 
   <!-- Pump mode toggle with expandable dropdown -->
   <div class="relative flex items-center">
-    <button
-      type="button"
-      class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded-l transition-colors",
-        !showPumpModes && "opacity-50"
-      )}
-      onclick={onTogglePumpModes}
-    >
+    <LegendButton segment="start" pressed={showPumpModes} onclick={onTogglePumpModes}>
       <Activity
         size={14}
         class={showPumpModes ? "opacity-70" : "opacity-40"}
@@ -256,24 +237,20 @@
       <span class={cn(!showPumpModes && "line-through")}>
         {currentPumpMode ?? "Automatic"}
       </span>
-    </button>
+    </LegendButton>
     {#if uniquePumpModes.length > 1 && showPumpModes}
-      <button
-        type="button"
-        class="flex items-center cursor-pointer hover:bg-accent/50 px-0.5 py-0.5 rounded-r transition-colors"
-        onclick={onToggleExpandedPumpModes}
-      >
+      <LegendButton segment="end" expanded={expandedPumpModes} onclick={onToggleExpandedPumpModes}>
         <ChevronDown
           size={12}
           class={cn("transition-transform", expandedPumpModes && "rotate-180")}
         />
-      </button>
+      </LegendButton>
     {/if}
     {#if expandedPumpModes && uniquePumpModes.length > 1}
       <div
         class="absolute top-full left-0 mt-1 bg-background border border-border rounded shadow-lg z-50 py-1 min-w-[120px]"
       >
-        {#each uniquePumpModes as state}
+        {#each uniquePumpModes as state (state)}
           {@const span = pumpModeSpans.find((s) => s.state === state)}
           {#if span}
             <div
@@ -293,15 +270,8 @@
     {@const uniqueEventTypes = [
       ...new Set(systemEvents.map((e) => e.eventType)),
     ]}
-    <button
-      type="button"
-      class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-        !showAlarms && "opacity-50"
-      )}
-      onclick={onToggleAlarms}
-    >
-      {#each uniqueEventTypes.slice(0, 1) as eventType}
+    <LegendButton pressed={showAlarms} onclick={onToggleAlarms}>
+      {#each uniqueEventTypes.slice(0, 1) as eventType (eventType)}
         {@const event = systemEvents.find((e) => e.eventType === eventType)}
         {#if event && eventType}
           <AlertTriangle
@@ -313,19 +283,12 @@
       <span class={cn(!showAlarms && "line-through")}>
         Alarms ({systemEvents.length})
       </span>
-    </button>
+    </LegendButton>
   {/if}
 
   <!-- Scheduled tracker legend items -->
   {#if scheduledTrackerMarkers.length > 0}
-    <button
-      type="button"
-      class={cn(
-        "flex items-center gap-1 cursor-pointer hover:bg-accent/50 px-1.5 py-0.5 rounded transition-colors",
-        !showScheduledTrackers && "opacity-50"
-      )}
-      onclick={onToggleScheduledTrackers}
-    >
+    <LegendButton pressed={showScheduledTrackers} onclick={onToggleScheduledTrackers}>
       <Clock
         size={14}
         class={showScheduledTrackers
@@ -335,7 +298,7 @@
       <span class={cn(!showScheduledTrackers && "line-through")}>
         Scheduled ({scheduledTrackerMarkers.length})
       </span>
-    </button>
+    </LegendButton>
   {/if}
 
   <!-- Override, Profile, Activity spans toggles -->

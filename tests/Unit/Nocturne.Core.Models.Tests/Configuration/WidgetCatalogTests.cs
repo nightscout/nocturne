@@ -26,7 +26,7 @@ public class WidgetCatalogTests
     [InlineData(WidgetId.Clock, "Clock", null, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.Tdd, "Total Daily Dose", null, WidgetPlacement.Top, true)]
     [InlineData(WidgetId.GlucoseChart, "Glucose Chart", true, WidgetPlacement.Main, true)]
-    [InlineData(WidgetId.Statistics, "Statistics", true, WidgetPlacement.Main, true)]
+    [InlineData(WidgetId.Statistics, "Statistics", false, WidgetPlacement.Main, false)]
     [InlineData(WidgetId.Predictions, "Predictions", true, WidgetPlacement.Main, true)]
     [InlineData(WidgetId.DailyStats, "Daily Stats", true, WidgetPlacement.Main, true)]
     [InlineData(WidgetId.Treatments, "Treatments", true, WidgetPlacement.Main, true)]
@@ -91,7 +91,11 @@ public class WidgetCatalogTests
         WidgetCatalog
             .Defaults()
             .Should()
-            .NotContain(w => w.Id == WidgetId.Agp || w.Id == WidgetId.BatteryStatus);
+            .NotContain(w =>
+                w.Id == WidgetId.Agp
+                || w.Id == WidgetId.BatteryStatus
+                || w.Id == WidgetId.Statistics
+            );
     }
 
     [Fact]
@@ -141,6 +145,42 @@ public class WidgetCatalogTests
             .ContainSingle()
             .Which.Id.Should()
             .Be(WidgetId.Statistics);
+    }
+
+    // A row written before the size and per-widget settings fields were dropped carries keys no
+    // property matches; deserialising must ignore them rather than throw the whole tenant's
+    // settings away.
+    [Fact]
+    public void Stored_row_naming_a_dropped_field_still_deserialises()
+    {
+        const string json = """
+            {
+              "widgets": [
+                {
+                  "id": "Statistics",
+                  "enabled": false,
+                  "placement": "Main",
+                  "size": "Large",
+                  "settings": { "columns": 2 }
+                }
+              ]
+            }
+            """;
+
+        var settings = JsonSerializer.Deserialize<FeatureSettings>(json)!;
+
+        settings
+            .Widgets.Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(
+                new
+                {
+                    Id = WidgetId.Statistics,
+                    Enabled = false,
+                    Placement = WidgetPlacement.Main,
+                }
+            );
     }
 
     [Fact]

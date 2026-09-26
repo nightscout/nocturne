@@ -1,6 +1,11 @@
+import type { RustValidationIssue } from "$api-clients";
+
 /** The fields of an error body a status arm can route on. */
 export interface ParsedErrorBody {
-  /** RFC 7807 `detail` — the sentence written for a person. */
+  /**
+   * The sentence written for a person: RFC 7807 `detail`, or RFC 6749
+   * `error_description` from an OAuth endpoint, which fills the same role.
+   */
   detail?: string;
   /** RFC 7807 `title`, usually only the status phrase. */
   title?: string;
@@ -11,6 +16,8 @@ export interface ParsedErrorBody {
   message?: string;
   /** ASP.NET's per-field validation map. */
   errors?: Record<string, unknown>;
+  /** The structured validation issues, when the body carries a well-formed set. */
+  issues?: RustValidationIssue[];
 }
 
 /**
@@ -43,11 +50,35 @@ export function parseErrorBody(err: unknown): ParsedErrorBody | undefined {
   if (!isPlainObject(parsed)) return undefined;
 
   return {
-    detail: sentence(parsed.detail),
+    detail: sentence(parsed.detail) ?? sentence(parsed.error_description),
     title: sentence(parsed.title),
     message: sentence(parsed.message),
     errors: isPlainObject(parsed.errors) ? parsed.errors : undefined,
+    issues: parseIssues(parsed.issues),
   };
+}
+
+/**
+ * The structured issues a body carries, when every entry has the shape one
+ * declares. Anything else is dropped rather than handed on as an issue the
+ * caller would index into blindly.
+ */
+export function parseIssues(value: unknown): RustValidationIssue[] | undefined {
+  if (!Array.isArray(value) || !value.every(isValidationIssue)) return undefined;
+  return value;
+}
+
+function isValidationIssue(value: unknown): value is RustValidationIssue {
+  if (!isPlainObject(value)) return false;
+
+  return (
+    typeof value.scope === "string" &&
+    typeof value.path === "string" &&
+    typeof value.reason === "string" &&
+    (value.field === null ||
+      value.field === undefined ||
+      typeof value.field === "string")
+  );
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

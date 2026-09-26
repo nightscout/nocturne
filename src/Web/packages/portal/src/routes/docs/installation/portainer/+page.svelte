@@ -1,10 +1,11 @@
 <script lang="ts">
     import { ArtworkHero } from "@nocturne/watercolour";
+    import { resolve } from "$app/paths";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
-    import { Info } from "@lucide/svelte";
+    import Callout from "@nocturne/cms/components/Callout.svelte";
     import { DOCS_HERO } from "$lib/data/docs-artwork";
 
     const hero = DOCS_HERO["installation/portainer"];
@@ -55,7 +56,7 @@
 
     <h3 class="text-xl font-semibold mt-6 mb-3">Step 1: Add the template URL</h3>
     <p class="text-muted-foreground mb-4">
-        In Portainer, go to <strong class="text-foreground">Settings → App Templates</strong> and
+        In Portainer, go to <strong class="text-foreground">Settings &rsaquo; App Templates</strong> and
         set the URL to:
     </p>
     <CodeBlock code={templateUrl} class="mb-4" />
@@ -84,16 +85,12 @@
         </li>
     </ol>
 
-    <div class="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5 mb-8 not-prose">
-        <div class="flex items-start gap-3">
-            <Info class="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
-            <p class="text-sm text-muted-foreground">
-                <strong class="text-blue-700 dark:text-blue-400">Bot integrations are optional.</strong>
-                Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them.
-                They can be configured later by updating the stack.
-            </p>
-        </div>
-    </div>
+    <Callout type="info" title="Bot integrations are optional">
+        <p>
+            Leave Discord, Telegram, Slack, and WhatsApp fields blank if you don't need them.
+            They can be configured later by updating the stack.
+        </p>
+    </Callout>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Option 2: Manual deployment</h2>
     <p class="text-muted-foreground mb-4">
@@ -106,7 +103,7 @@
     </p>
     <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-8">
         <li>
-            In Portainer, go to <strong class="text-foreground">Stacks → Add stack</strong>.
+            In Portainer, go to <strong class="text-foreground">Stacks &rsaquo; Add stack</strong>.
             Name it <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">nocturne</code>
             and select <strong class="text-foreground">Web editor</strong>.
         </li>
@@ -150,6 +147,15 @@
         <li>Check <strong class="text-foreground">Re-pull image and redeploy</strong></li>
         <li>Click <strong class="text-foreground">Update</strong></li>
     </ol>
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>
+    <p class="text-muted-foreground mb-8">
+        The stack uses the same restart policy and log rotation as the
+        <a href={resolve("/docs/installation/docker-compose")} class="text-primary hover:underline">Docker Compose bundle</a>.
+        Portainer stacks do not read override files, so to keep your own logging driver,
+        edit the <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">logging</code>
+        section of each service in the stack editor instead.
+    </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Connectors</h2>
     <p class="text-muted-foreground mb-8">

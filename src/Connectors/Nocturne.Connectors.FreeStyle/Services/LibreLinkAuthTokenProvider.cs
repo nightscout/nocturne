@@ -35,12 +35,6 @@ public class LibreLinkAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    // Must match the ConnectorRegistration on LibreLinkUpConnectorConfiguration: everything that
-    // reads this cache by connector — invalidation on a credential change, the background sync's
-    // health bookkeeping — keys off the registered name, and a key only this writer uses is a key
-    // nothing else can find.
-    protected override string ConnectorName => "LibreLinkUp";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {

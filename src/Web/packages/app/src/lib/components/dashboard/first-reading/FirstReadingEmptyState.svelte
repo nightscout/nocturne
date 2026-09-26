@@ -105,7 +105,7 @@
             </div>
           </div>
         {/each}
-        <Button variant="outline" href={connectorsPath} class="gap-2">
+        <Button variant="outline" href={connectorsPath}>
           <Plug class="h-4 w-4" />
           Manage connectors
           <ArrowRight class="h-4 w-4" />
@@ -136,7 +136,6 @@
               Glooko.
             </span>
           </DropSurface>
-          <!-- eslint-disable svelte/no-navigation-without-resolve -- resolve() covers the route; the #api-tokens-section fragment deep-links to the token section and cannot be expressed through resolve() -->
           <DropSurface
             as="a"
             name="uploader"
@@ -153,7 +152,6 @@
               send readings.
             </span>
           </DropSurface>
-          <!-- eslint-enable svelte/no-navigation-without-resolve -->
           <DropSurface
             as="a"
             name="migration"

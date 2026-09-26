@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Database } from "@lucide/svelte";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
@@ -86,7 +88,7 @@
       tenants = (await tenantRemote.getAll().run()) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
-      tenantsError = "Failed to load tenants.";
+      tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
     } finally {
       tenantsLoading = false;
     }
@@ -113,7 +115,10 @@
       connectors = await getTenantConnectors(value).run();
     } catch (err) {
       console.error("Failed to load connectors:", err);
-      connectorsError = "Failed to load this tenant's connectors.";
+      connectorsError = remoteErrorMessage(
+        err,
+        "Failed to load this tenant's connectors."
+      );
     } finally {
       connectorsLoading = false;
     }
@@ -146,8 +151,10 @@
         return;
       }
     } catch (err) {
+      // Polling carries on through a failed tick. The warning shows from the
+      // first failure until another tenant is chosen or a new reset starts, even
+      // if later ticks succeed.
       console.error("Failed to poll reset job:", err);
-      // Keep polling through transient errors; surface persistent ones to the operator.
       resetError = "Lost contact with the reset job. Check the server logs.";
     }
     pollTimer = setTimeout(pollJob, 1500);
@@ -175,7 +182,10 @@
       await pollJob();
     } catch (err) {
       console.error("Cursor reset failed:", err);
-      resetError = "Failed to start the cursor reset. Check the server logs for details.";
+      resetError = describeSubmitError(
+        err,
+        "Failed to start the cursor reset. Check the server logs for details."
+      );
     } finally {
       resetting = false;
     }
@@ -190,7 +200,7 @@
       await pollJob();
     } catch (err) {
       console.error("Failed to cancel reset job:", err);
-      resetError = "Failed to cancel the reset job.";
+      resetError = describeSubmitError(err, "Failed to cancel the reset job.");
     } finally {
       cancelling = false;
     }
@@ -347,7 +357,7 @@
               {#if !jobDone}
                 <Loader2 class="h-4 w-4 animate-spin text-primary" />
               {:else if jobStatus.state === ConnectorResetJobState.Completed}
-                <CheckCircle2 class="h-4 w-4 text-green-600" />
+                <CheckCircle2 class="h-4 w-4 text-success" />
               {:else}
                 <AlertTriangle class="h-4 w-4 text-destructive" />
               {/if}
@@ -377,7 +387,7 @@
                 </div>
                 {#if progress}
                   {#if progress.state === ConnectorResetConnectorState.Succeeded}
-                    <span class="flex items-center gap-1 text-sm text-green-600">
+                    <span class="flex items-center gap-1 text-sm text-success">
                       <CheckCircle2 class="h-4 w-4" /> Reset
                     </span>
                   {:else if progress.state === ConnectorResetConnectorState.Failed}

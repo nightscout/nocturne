@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
@@ -33,13 +34,13 @@
   const devices = $derived(devicesQuery.current ?? []);
 
   // Map capability key -> human label from the catalog.
-  const capabilityLabels = $derived.by(() => {
-    const map = new Map<string, string>();
-    for (const cap of catalogQuery.current?.capabilities ?? []) {
-      if (cap.key) map.set(cap.key, cap.label ?? cap.key);
-    }
-    return map;
-  });
+  const capabilityLabels = $derived(
+    indexBy(
+      catalogQuery.current?.capabilities ?? [],
+      (cap) => cap.key || null,
+      (cap) => cap.label ?? cap.key ?? ""
+    )
+  );
 
   // Inline rename state.
   let editingId = $state<string | null>(null);
@@ -119,10 +120,10 @@
 
   {#if successMessage}
     <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
     >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
+      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <p class="text-sm text-success">{successMessage}</p>
     </div>
   {/if}
 
@@ -154,7 +155,8 @@
                     bind:value={editLabel}
                     placeholder="Device name"
                     maxlength={255}
-                    class="h-8 max-w-xs"
+                    size="sm"
+                    class="max-w-xs"
                     disabled={isSaving === device.id}
                     aria-label="Device name"
                   />
@@ -214,9 +216,8 @@
                     <Button
                       {...props}
                       type="button"
-                      variant="outline"
+                      variant="outline-destructive"
                       size="sm"
-                      class="text-destructive border-destructive/30 hover:bg-destructive/10"
                       disabled={isRevoking === device.id}
                     >
                       {#if isRevoking === device.id}
@@ -245,7 +246,7 @@
                 Capabilities
               </p>
               <ul class="space-y-1.5">
-                {#each device.capabilities ?? [] as cap}
+                {#each device.capabilities ?? [] as cap, i (i)}
                   <li class="flex items-start gap-2 text-sm">
                     <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                     <span class="text-muted-foreground">
@@ -269,6 +270,20 @@
               </span>
             {/if}
           </div>
+
+          {#if device.appName}
+            <p class="text-xs text-muted-foreground">
+              Paired through {device.appName}
+            </p>
+          {:else if device.linkedToApp}
+            <p class="text-xs text-muted-foreground">
+              Paired through an app that reports no name.
+            </p>
+          {:else}
+            <p class="text-xs text-muted-foreground">
+              Not linked to an app. Revoking an app will not remove this device.
+            </p>
+          {/if}
         </Card.Content>
       </Card.Root>
     {/each}

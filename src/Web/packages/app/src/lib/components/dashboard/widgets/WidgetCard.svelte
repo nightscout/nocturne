@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
   import type { Snippet } from "svelte";
 
   interface Props {
@@ -9,11 +8,9 @@
     subtitle?: string;
     /** Optional custom subtitle snippet (takes precedence over subtitle text) */
     subtitleSnippet?: Snippet;
-    /** Primary value to display (large text) */
     children: Snippet;
-    /** Additional CSS classes for the card */
     class?: string;
-    /** Whether to show compact mode (no header padding) */
+    /** Tighter vertical padding */
     compact?: boolean;
   }
 
@@ -27,16 +24,17 @@
   }: Props = $props();
 </script>
 
-<Card class="h-full {className}">
-  <CardHeader class={compact ? "pb-1 pt-3" : "pb-2"}>
-    <CardTitle class="text-sm font-medium">{title}</CardTitle>
+<!-- One cell of the dashboard's widget panel; WidgetGrid draws the panel and the rules between cells. -->
+<section class="flex h-full flex-col gap-3 px-5 {compact ? 'py-3' : 'py-4'} {className}">
+  <header class="flex min-h-7 items-center justify-between gap-2">
+    <h2 class="text-sm font-medium text-muted-foreground">{title}</h2>
     {#if subtitleSnippet}
       {@render subtitleSnippet()}
     {:else if subtitle}
       <p class="text-xs text-muted-foreground">{subtitle}</p>
     {/if}
-  </CardHeader>
-  <CardContent class={compact ? "pt-0" : ""}>
+  </header>
+  <div class="flex-1">
     {@render children()}
-  </CardContent>
-</Card>
+  </div>
+</section>

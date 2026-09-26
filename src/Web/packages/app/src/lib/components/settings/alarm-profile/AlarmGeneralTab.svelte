@@ -88,7 +88,7 @@
           <span>{ALARM_TYPE_LABELS[profile.alarmType]}</span>
         </SelectTrigger>
         <SelectContent>
-          {#each alarmTypes as type}
+          {#each alarmTypes as type (type)}
             <SelectItem value={type}>
               {ALARM_TYPE_LABELS[type] ?? type}
             </SelectItem>
@@ -102,14 +102,14 @@
         type="single"
         value={profile.priority}
         onValueChange={(value) => {
-          if (value) profile.priority = value as AlarmPriority;
+          if (value) profile.priority = priorities.find((p) => p === value) ?? profile.priority;
         }}
       >
         <SelectTrigger>
           <span>{PRIORITY_LABELS[profile.priority]}</span>
         </SelectTrigger>
         <SelectContent>
-          {#each priorities as priority}
+          {#each priorities as priority (priority)}
             <SelectItem value={priority}>
               {PRIORITY_LABELS[priority] ?? priority}
             </SelectItem>

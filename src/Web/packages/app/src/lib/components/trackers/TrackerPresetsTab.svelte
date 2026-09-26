@@ -11,19 +11,21 @@
   import { Bookmark, Plus, Play, Trash2 } from "lucide-svelte";
   import type { TrackerDefinitionDto, TrackerPresetDto } from "$api";
 
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    presets: TrackerPresetDto[];
+    openNewPreset: () => void;
+    applyPresetHandler: (id: string) => void;
+    openDeletePresetDialog: (id: string) => void;
+  }
+
   let {
     definitions,
     presets,
     openNewPreset,
     applyPresetHandler,
     openDeletePresetDialog,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    presets: TrackerPresetDto[];
-    openNewPreset: () => void;
-    applyPresetHandler: (id: string) => void;
-    openDeletePresetDialog: (id: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="presets">
@@ -61,7 +63,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each presets as preset}
+          {#each presets as preset (preset.id)}
             <div
               class="flex items-center justify-between p-4 rounded-lg border"
             >

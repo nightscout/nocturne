@@ -1,14 +1,15 @@
 <script lang="ts">
   import { LineChart } from "layerchart";
   import { parseDate } from "@internationalized/date";
-  import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
   import { getWeekdayAverages } from "$api/reports.remote";
   import type { DayOfWeek } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  import { bg, formatShortDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatShortDate, hourLabel } from "$lib/utils/formatting";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { dashClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
   type Weekday = keyof typeof DayOfWeek;
 
@@ -23,11 +24,28 @@
     "Saturday",
   ];
 
-  const DAY_SERIES = WEEKDAYS.map((key) => ({
-    key,
-    label: key.slice(0, 3),
-    color: `var(--weekday-${key.slice(0, 3).toLowerCase()})`,
-  }));
+  const WEEKDAY_TEXTURE: Record<Weekday, TextureKey> = {
+    Sunday: "weekday-sun",
+    Monday: "weekday-mon",
+    Tuesday: "weekday-tue",
+    Wednesday: "weekday-wed",
+    Thursday: "weekday-thu",
+    Friday: "weekday-fri",
+    Saturday: "weekday-sat",
+  };
+
+  const DAY_SERIES = WEEKDAYS.map((key) => {
+    const short = key.slice(0, 3).toLowerCase();
+    const texture = WEEKDAY_TEXTURE[key];
+    return {
+      key,
+      label: key.slice(0, 3),
+      // Darkened in print, where the pale weekday hues (Thursday's yellow) vanish on paper.
+      color: `color-mix(in oklab, var(--weekday-${short}) var(--weekday-ink, 100%), black)`,
+      texture,
+      props: { class: `${dashClass(texture)} print:stroke-2` },
+    };
+  });
 
   // Get shared date params from context (set by reports layout)
   // Default: 7 days (today + last 6 days = 1 full week)
@@ -84,42 +102,50 @@
 
 {#if weekdayResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Week-stepper controls — navigation chaff; the compared date range stays
-       visible in the layout's print header. -->
-  <Card.Root class="print:hidden">
-    <Card.Content class="p-4">
-      <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start">
-        <Button variant="outline" size="icon" onclick={previousWeek}>
-          <ChevronLeft class="h-4 w-4" />
-        </Button>
-        <div class="flex items-center gap-2 min-w-[200px] justify-center">
-          <Calendar class="h-4 w-4 text-muted-foreground" />
-          <span class="text-sm font-medium">{dateRangeDisplay}</span>
-        </div>
-        <Button variant="outline" size="icon" onclick={nextWeek}>
-          <ChevronRight class="h-4 w-4" />
-        </Button>
-        {#if !reportsParams.isDefault}
-          <Button variant="ghost" size="sm" onclick={goToCurrentWeek}>
-            Reset
-          </Button>
-        {/if}
-      </div>
-    </Card.Content>
-  </Card.Root>
+  <!-- The compared date range stays visible in the layout's print header. -->
+  <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start print:hidden">
+    <Button variant="outline" size="icon" onclick={previousWeek}>
+      <ChevronLeft class="h-4 w-4" />
+    </Button>
+    <div class="flex items-center gap-2 min-w-[200px] justify-center">
+      <Calendar class="h-4 w-4 text-muted-foreground" />
+      <span class="text-sm font-medium">{dateRangeDisplay}</span>
+    </div>
+    <Button variant="outline" size="icon" onclick={nextWeek}>
+      <ChevronRight class="h-4 w-4" />
+    </Button>
+    {#if !reportsParams.isDefault}
+      <Button variant="ghost" size="sm" onclick={goToCurrentWeek}>
+        Reset
+      </Button>
+    {/if}
+  </div>
 
-  <!-- Day-of-week comparison chart -->
-  <div class="h-[320px] w-full p-4 border rounded-sm @md:h-[400px]">
+  <div class="w-full space-y-2 rounded-sm border p-4 print:[--weekday-ink:45%]">
     {#if chartData.length > 0}
-      <LineChart
-        data={chartData}
-        x="time"
-        legend
-        series={DAY_SERIES}
+      <div class="h-[280px] @md:h-[360px] print:h-[520px]">
+        <LineChart
+          data={chartData}
+          x="time"
+          series={DAY_SERIES}
+          padding={{ top: 8, right: 8, bottom: 24, left: 48 }}
+          props={{
+            xAxis: { format: hourLabel },
+            yAxis: { label: bgLabel() },
+          }}
+        />
+      </div>
+      <ChartKey
+        items={DAY_SERIES.map((s) => ({
+          texture: s.texture,
+          label: s.label,
+          color: s.color,
+          shape: "line",
+        }))}
       />
     {:else}
       <div
-        class="flex h-full items-center justify-center text-muted-foreground"
+        class="flex h-[280px] items-center justify-center text-muted-foreground @md:h-[360px]"
       >
         No data available for this week
       </div>

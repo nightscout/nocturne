@@ -27,6 +27,7 @@
     updateRole,
     deleteRole,
   } from "$lib/api/generated/roles.generated.remote";
+  import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 
   // Query
   const rolesQuery = getRoles();
@@ -83,7 +84,7 @@
     isCreateOpen = false;
   }
 
-  function openEditDialog(role: any) {
+  function openEditDialog(role: TenantRoleDto) {
     editId = role.id ?? "";
     editName = role.name ?? "";
     editDescription = role.description ?? "";
@@ -95,7 +96,7 @@
     isEditOpen = true;
   }
 
-  function openDeleteDialog(role: any) {
+  function openDeleteDialog(role: TenantRoleDto) {
     deleteId = role.id ?? "";
     deleteName = role.name ?? "";
     deleteMemberCount = role.memberCount ?? 0;
@@ -182,9 +183,9 @@
   {/if}
 
   {#if successMessage}
-    <div class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20">
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">{successMessage}</p>
+    <div class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3">
+      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <p class="text-sm text-success">{successMessage}</p>
     </div>
   {/if}
 
@@ -207,7 +208,7 @@
           </div>
           <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
             {#if role.slug}
-              <Badge variant="outline" class="font-mono text-xs">{role.slug}</Badge>
+              <Badge variant="outline" class="font-mono">{role.slug}</Badge>
             {/if}
             <Badge variant="secondary">
               {role.permissions?.length ?? 0} permission{(role.permissions?.length ?? 0) !== 1 ? "s" : ""}
@@ -231,9 +232,8 @@
             </Button>
             {#if !role.isSystem}
               <Button
-                variant="outline"
+                variant="outline-destructive"
                 size="sm"
-                class="border-destructive/30 text-destructive hover:bg-destructive/10"
                 onclick={() => openDeleteDialog(role)}
               >
                 <Trash2 class="h-3.5 w-3.5" />

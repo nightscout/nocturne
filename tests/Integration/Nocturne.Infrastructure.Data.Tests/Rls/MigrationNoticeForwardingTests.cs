@@ -73,9 +73,10 @@ public class MigrationNoticeForwardingTests
 
         for (var i = 0; i < 3; i++)
         {
+            // DO blocks take no bind parameters; both holes are test constants.
+            var raise = $"DO $$ BEGIN RAISE NOTICE '{Message} {i}'; END $$;";
             await context.Database.OpenConnectionAsync();
-            await context.Database.ExecuteSqlRawAsync(
-                $"DO $$ BEGIN RAISE NOTICE '{Message} {i}'; END $$;");
+            await context.Database.ExecuteSqlRawAsync(raise);
             await context.Database.CloseConnectionAsync();
         }
 

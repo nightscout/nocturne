@@ -31,7 +31,6 @@
   // non-composite node, render an empty stub so the runtime doesn't crash —
   // surfacing the bug to the developer console rather than rendering garbage.
   if (node.type !== "composite" || !node.composite) {
-    // eslint-disable-next-line no-console
     console.error("[RuleBuilder] expected a composite root, got:", node.type);
   }
 
@@ -60,7 +59,7 @@
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
       <span>Notify when</span>
       <OperatorToggle
-        value={node.composite.operator as "and" | "or"}
+        value={node.composite.operator}
         onChange={setOperator}
       />
       <span>these are true:</span>
@@ -70,7 +69,7 @@
       <Brackets class="h-3.5 w-3.5" />
       <span>Group — match</span>
       <OperatorToggle
-        value={node.composite.operator as "and" | "or"}
+        value={node.composite.operator}
         size="compact"
         onChange={setOperator}
       />

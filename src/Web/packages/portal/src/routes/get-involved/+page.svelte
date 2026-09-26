@@ -1,51 +1,34 @@
 <script lang="ts">
   import {
-    Globe,
     MessageCircle,
-    Heart,
-    BookOpen,
-    Users,
-    Megaphone,
-    Database,
     ArrowRight,
     ArrowUpRight,
     ExternalLink,
     MessageSquare,
-    Tag,
     HeartHandshake,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
+  import { Button } from "@nocturne/ui/ui/button";
+  import { resolve } from "$app/paths";
   import { LINKS } from "$lib/data/links";
   import { track } from "$lib/analytics";
   import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
 
-  const ACCENT = "oklch(0.6 0.118 184.704)";
-
-  const STATS = [
-    { value: "100%", label: "Built by volunteers" },
-    { value: "22+", label: "Devices & apps connected" },
-    { value: "0", label: "Ads, cookies, or paywalls" },
-    { value: "24/7", label: "Community support" },
-  ];
+  const BRAND = { background: "var(--brand)", foreground: "white" };
 
   type Lane = {
     /** Also the `lane` property of a `Get Involved Lane` event; see ALLOWED_PROPS. */
     id: string;
-    icon: typeof Globe;
-    accent: string;
     title: string;
     desc: string;
     cta: string;
     href: string;
     external?: boolean;
-    highlight?: boolean;
   };
 
   const LANES: Lane[] = [
     {
       id: "translate",
-      icon: Globe,
-      accent: "oklch(0.65 0.16 250)",
       title: "Translate Nocturne",
       desc: "Every interface string lives in a gettext .po file, one per language, and most languages are barely started. Edit one on GitHub and open a pull request: no build tools, just words.",
       cta: "Open the translation files",
@@ -54,8 +37,6 @@
     },
     {
       id: "support",
-      icon: MessageCircle,
-      accent: "oklch(0.62 0.17 280)",
       title: "Answer questions",
       desc: "New self-hosters get stuck. Hang out in the Discord and help someone get their data flowing. It is the fastest way to make a real difference today.",
       cta: "Join the Discord",
@@ -64,27 +45,20 @@
     },
     {
       id: "donate",
-      icon: Heart,
-      accent: "oklch(0.62 0.2 18)",
       title: "Donate",
       desc: "Nocturne is free and always will be. One-off gifts to the Nightscout Foundation and monthly subscriptions from US$10 both cover servers, testing devices, and keep the project independent.",
       cta: "See the ways to give",
       href: "#donate",
-      highlight: true,
     },
     {
       id: "docs",
-      icon: BookOpen,
-      accent: "oklch(0.65 0.15 160)",
       title: "Improve the docs",
       desc: "Spotted a gap, a stale screenshot, or a typo? Clear docs save everyone hours. Fix a page or write a guide for the setup you wish you'd had.",
       cta: "Browse the docs",
-      href: "/docs",
+      href: resolve("/docs"),
     },
     {
       id: "peer",
-      icon: Users,
-      accent: "oklch(0.66 0.15 70)",
       title: "Peer support",
       desc: 'Plenty of people start in the "CGM in the Cloud" Facebook group and community forums. Share what you\'ve learned where newcomers actually ask.',
       cta: "Open CGM in the Cloud",
@@ -93,8 +67,6 @@
     },
     {
       id: "spread",
-      icon: Megaphone,
-      accent: "oklch(0.68 0.16 40)",
       title: "Spread the word",
       desc: "Write up your setup, post your time-in-range win, give a talk at your clinic. Word of mouth is how most people find Nightscout in the first place. Send us your story and we'll help share it.",
       cta: "Email testimonials@nocturne.run",
@@ -103,8 +75,6 @@
     },
     {
       id: "sponsor",
-      icon: HeartHandshake,
-      accent: "oklch(0.64 0.19 330)",
       title: "Sponsor Hack Diabetes",
       desc: "Hack Diabetes brings the open-source diabetes community together to build and test tools like Nocturne. Sponsors fund the events and get their name in front of the people who build this software.",
       cta: "Sponsor an event",
@@ -113,8 +83,6 @@
     },
     {
       id: "data",
-      icon: Database,
-      accent: "oklch(0.6 0.13 200)",
       title: "Donate anonymized data",
       desc: "Opt in to share de-identified glucose data so connectors and reports can be tested against real-world patterns, not just synthetic samples.",
       cta: "Email research-data@nocturne.run",
@@ -122,37 +90,6 @@
       external: true,
     },
   ];
-
-  const LABEL_COLORS: Record<string, { fg: string; bg: string }> = {
-    "get-involved": {
-      fg: "oklch(0.62 0.118 184.7)",
-      bg: "oklch(0.62 0.118 184.7 / 0.16)",
-    },
-    i18n: {
-      fg: "oklch(0.65 0.16 250)",
-      bg: "oklch(0.65 0.16 250 / 0.16)",
-    },
-    documentation: {
-      fg: "oklch(0.65 0.15 160)",
-      bg: "oklch(0.65 0.15 160 / 0.16)",
-    },
-    testing: {
-      fg: "oklch(0.68 0.16 40)",
-      bg: "oklch(0.68 0.16 40 / 0.16)",
-    },
-    triage: {
-      fg: "oklch(0.62 0.17 280)",
-      bg: "oklch(0.62 0.17 280 / 0.16)",
-    },
-    tutorial: {
-      fg: "oklch(0.66 0.15 70)",
-      bg: "oklch(0.66 0.15 70 / 0.16)",
-    },
-    "good first issue": {
-      fg: "oklch(0.62 0.2 18)",
-      bg: "oklch(0.62 0.2 18 / 0.16)",
-    },
-  };
 
   type Issue = {
     num: number;
@@ -198,9 +135,9 @@
           num: item.number,
           title: item.title,
           url: item.html_url,
-          labels: (item.labels ?? []).map((l) =>
-            typeof l === "string" ? l : l.name,
-          ),
+          labels: (item.labels ?? [])
+            .map((l) => (typeof l === "string" ? l : l.name))
+            .filter((l) => l !== "get-involved"),
           comments: item.comments ?? 0,
           updatedAt: item.updated_at,
         }));
@@ -237,328 +174,168 @@
   />
 </svelte:head>
 
-<div class="container mx-auto px-4 sm:px-7">
-  <!-- Hero -->
-  <section class="pt-14 pb-10">
-    <div>
-      <span
-        class="inline-flex items-center gap-2 whitespace-nowrap text-xs font-medium tracking-[0.08em] uppercase text-muted-foreground bg-[color-mix(in_oklch,var(--card),transparent_50%)] border border-border px-3 py-1.5 rounded-full backdrop-blur-sm"
+<div class="max-w-[1200px] mx-auto px-6">
+  <section class="pt-20 pb-16 max-w-[760px]">
+    <h1 class="text-headline font-bold text-foreground m-0 mb-5 text-balance">
+      The best diabetes tools are built by the people who need them.
+    </h1>
+    <p class="text-lead text-muted-foreground m-0 mb-8 max-w-[560px]">
+      Nocturne is free, open source, and made entirely by volunteers. You
+      don't need to write a line of code to move it forward. Here's where to
+      start.
+    </p>
+    <div class="flex gap-3 flex-wrap">
+      <Button href="#tasks" variant="brand" size="cta" brand={BRAND}>
+        Find a task <ArrowRight />
+      </Button>
+      <Button
+        href={LINKS.discord}
+        target="_blank"
+        rel="external noopener noreferrer"
+        onclick={() => track("Outbound Click", { destination: "discord" })}
+        variant="outline"
+        size="cta"
       >
-        <span class="w-1.5 h-1.5 rounded-full inline-block bg-[--accent-dot]" style="--accent-dot: {ACCENT}"></span>
-        Get Involved
-      </span>
-      <h1
-        class="text-[42px] font-bold tracking-[-0.025em] leading-[1.08] mt-[18px] mb-3.5"
-      >
-        The best diabetes tools are built by <span class="gi-accent-text"
-          >the people who need them</span
-        >.
-      </h1>
-      <p class="text-muted-foreground text-[17px] max-w-[520px] mb-[26px]">
-        Nocturne is free, open source, and made entirely by volunteers. You
-        don't need to write a line of code to move it forward. Here's where to
-        start.
-      </p>
-      <div class="flex gap-2.5 flex-wrap">
-        <a
-          href="#tasks"
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-[--gi-accent] text-white hover:brightness-108"
-          style="--gi-accent: {ACCENT}"
-        >
-          Find a task <ArrowRight class="w-4 h-4" strokeWidth={2.5} />
-        </a>
-        <a
-          href={LINKS.discord}
-          target="_blank"
-          rel="noopener noreferrer"
-          onclick={() => track("Outbound Click", { destination: "discord" })}
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
-        >
-          <MessageCircle class="w-4 h-4" /> Join the Discord
-        </a>
-      </div>
-    </div>
-
-    <!-- Stat widgets -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-10">
-      {#each STATS as stat}
-        <div class="bg-card border border-border rounded-xl p-5">
-          <p class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground m-0 mb-2.5">
-            {stat.label}
-          </p>
-          <div class="text-4xl font-bold tabular-nums tracking-[-0.03em] leading-none text-foreground">
-            {stat.value}
-          </div>
-        </div>
-      {/each}
+        <MessageCircle /> Join the Discord
+      </Button>
     </div>
   </section>
 
-  <!-- Ways to help -->
-  <section class="py-8" id="ways">
-    <div class="mb-6">
-      <p
-        class="text-xs font-semibold tracking-[0.1em] uppercase m-0 mb-3.5"
-        style="color: {ACCENT}"
-      >
-        Ways to help
-      </p>
-      <h2 class="text-[28px] font-bold tracking-tight">
-        Ways to contribute
-      </h2>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      {#each LANES as lane}
-        <a
-          href={lane.href}
-          target={opensNewTab(lane) ? "_blank" : undefined}
-          rel={opensNewTab(lane) ? "noopener noreferrer" : undefined}
-          onclick={() => track("Get Involved Lane", { lane: lane.id })}
-          class="gi-lane-card flex flex-row items-start gap-4 bg-card border border-border rounded-xl p-5 transition-[border-color,transform] duration-200 no-underline text-inherit"
-          class:gi-lane-highlight={lane.highlight}
-          style="--lane-accent: {lane.accent}"
-        >
-          <div
-            class="w-[42px] h-[42px] rounded-[11px] grid place-items-center shrink-0"
-            style="background: color-mix(in oklch, {lane.accent}, transparent 85%)"
+  <section class="py-16 border-t border-border" id="ways">
+    <h2 class="text-section font-bold text-foreground m-0 mb-10">Ways to contribute</h2>
+    <ul class="m-0 p-0 list-none grid gap-x-16 md:grid-cols-2 border-t border-border md:border-t-0">
+      {#each LANES as lane, i (lane.id)}
+        <li class="py-7 border-b border-border {i < 2 ? 'md:border-t' : ''}">
+          <h3 class="text-lg font-semibold text-foreground m-0 mb-2">{lane.title}</h3>
+          <p class="text-muted-foreground leading-relaxed m-0 mb-3 max-w-[60ch]">{lane.desc}</p>
+          <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- lane.href is a resolve()d route, a fragment, or an external URL from LANES -->
+          <a href={lane.href}
+            target={opensNewTab(lane) ? "_blank" : undefined}
+            rel={opensNewTab(lane) ? "noopener noreferrer" : undefined}
+            onclick={() => track("Get Involved Lane", { lane: lane.id })}
+            class="group inline-flex items-center gap-1.5 text-sm font-semibold text-brand no-underline hover:underline underline-offset-4"
           >
-            <lane.icon class="w-[22px] h-[22px]" color={lane.accent} />
-          </div>
-          <div class="flex-1 flex flex-col">
-            <h3 class="text-lg font-semibold mb-1.5 tracking-tight">
-              {lane.title}
-            </h3>
-            <p class="text-sm text-muted-foreground leading-relaxed flex-1">
-              {lane.desc}
-            </p>
-            <span
-              class="gi-lane-link inline-flex items-center gap-1.5 mt-3 text-sm font-semibold"
-              style="color: {lane.accent}"
-            >
-              {lane.cta}
-              {#if lane.external}
-                <ArrowUpRight class="w-[15px] h-[15px]" />
-              {:else}
-                <ArrowRight class="w-[15px] h-[15px]" />
-              {/if}
-            </span>
-          </div>
-        </a>
+            {lane.cta}
+            {#if lane.external}
+              <ArrowUpRight class="size-4" aria-hidden="true" />
+            {:else}
+              <ArrowRight class="size-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden="true" />
+            {/if}
+          </a>
+        </li>
       {/each}
-    </div>
+    </ul>
   </section>
 
-  <!-- Open tasks -->
-  <section class="py-8" id="tasks">
-    <div class="mb-5 flex items-end justify-between gap-4 flex-wrap">
+  <section class="py-16 border-t border-border" id="tasks">
+    <div class="mb-8 flex items-end justify-between gap-4 flex-wrap">
       <div>
-        <p
-          class="text-xs font-semibold tracking-[0.1em] uppercase m-0 mb-3.5"
-          style="color: {ACCENT}"
-        >
-          Open tasks right now
+        <h2 class="text-section font-bold text-foreground m-0 mb-3">Open tasks</h2>
+        <p class="text-muted-foreground m-0">
+          Issues tagged <code class="text-sm">get-involved</code> on GitHub, live.
         </p>
-        <h2 class="text-[28px] font-bold tracking-tight m-0">
-          Tagged <code class="text-xl">get-involved</code>
-        </h2>
       </div>
-      <a
+      <Button
         href={LINKS.githubLabel}
         target="_blank"
-        rel="noopener noreferrer"
+        rel="external noopener noreferrer"
         onclick={() => track("Outbound Click", { destination: "github-labels" })}
-        class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[38px] px-4 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
+        variant="outline"
       >
-        Open the tracker <ExternalLink class="w-3.5 h-3.5" />
-      </a>
+        View all on GitHub <ExternalLink />
+      </Button>
     </div>
 
-    <!-- Issue feed card -->
-    <div class="border border-border rounded-[14px] bg-card overflow-hidden">
-      <div
-        class="flex items-center gap-3 px-[22px] py-[18px] border-b border-border"
-        style="background: color-mix(in oklch, var(--card), var(--background) 35%)"
-      >
-        <img
-          src="/logos/github.png"
-          alt="GitHub"
-          class="w-[22px] h-[22px] rounded-[5px] object-contain"
-          onerror={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-        <span class="font-mono text-[13px] text-muted-foreground">nightscout/nocturne</span>
-        <span
-          class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold py-1 px-2.5 rounded-full ml-auto"
-          style="background: color-mix(in oklch, {ACCENT}, transparent 85%); color: {ACCENT}; border: 1px solid color-mix(in oklch, {ACCENT}, transparent 70%)"
-        >
-          <Tag class="w-[13px] h-[13px]" color={ACCENT} />
-          get-involved
-        </span>
-      </div>
-
+    <div class="border-t border-border">
       {#if status === "loading"}
         {#each Array.from({ length: 5 }) as _, i (i)}
-          <div class="flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border last:border-b-0">
-            <div class="shrink-0 w-3.5 h-3.5 rounded-full bg-muted animate-pulse"></div>
-            <div class="flex-1 min-w-0 space-y-2">
-              <div class="h-3.5 w-2/3 rounded bg-muted animate-pulse"></div>
-              <div class="h-2.5 w-28 rounded bg-muted animate-pulse"></div>
-            </div>
+          <div class="py-4 border-b border-border space-y-2">
+            <div class="h-3.5 w-2/3 rounded bg-muted animate-pulse"></div>
+            <div class="h-2.5 w-28 rounded bg-muted animate-pulse"></div>
           </div>
         {/each}
       {:else if status === "error"}
-        <div class="px-[22px] py-10 text-center text-sm text-muted-foreground">
+        <p class="py-10 m-0 text-sm text-muted-foreground">
           Couldn't load live tasks just now.
           <a
             href={LINKS.githubLabel}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             onclick={() => track("Outbound Click", { destination: "github-labels" })}
-            class="font-semibold underline"
-            style="color: {ACCENT}">View them on GitHub</a
+            class="font-semibold underline text-brand">View them on GitHub</a
           >.
-        </div>
+        </p>
       {:else if issues.length === 0}
-        <div class="px-[22px] py-10 text-center text-sm text-muted-foreground">
+        <p class="py-10 m-0 text-sm text-muted-foreground">
           No open tasks tagged <code>get-involved</code> right now. Check back soon,
           or
           <a
             href={LINKS.discord}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             onclick={() => track("Outbound Click", { destination: "discord" })}
-            class="font-semibold underline"
-            style="color: {ACCENT}">ask in the Discord</a
+            class="font-semibold underline text-brand">ask in the Discord</a
           >.
-        </div>
+        </p>
       {:else}
         {#each issues as issue (issue.num)}
           <a
             href={issue.url}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             onclick={() => track("Outbound Click", { destination: "github" })}
-            class="gi-issue-row flex items-center gap-3.5 px-[18px] py-[13px] border-b border-border transition-[background] duration-150 cursor-pointer no-underline text-inherit hover:bg-[color-mix(in_oklch,var(--card),transparent_20%)] last:border-b-0"
+            class="flex items-start gap-4 py-4 border-b border-border no-underline text-inherit hover:bg-accent/40 transition-colors -mx-3 px-3 rounded-md"
           >
-            <div class="gi-issue-dot shrink-0 w-3.5 h-3.5 rounded-full relative mt-[3px]" style="border: 2px solid {ACCENT}">
-            </div>
             <div class="flex-1 min-w-0">
-              <p class="text-[15px] font-semibold m-0 flex items-baseline gap-2 flex-wrap">
+              <p class="font-medium text-foreground m-0">
                 {issue.title}
-                <span class="font-mono text-[13px] font-medium text-muted-foreground">#{issue.num}</span>
+                <span class="text-sm font-normal text-muted-foreground tabular-nums">#{issue.num}</span>
               </p>
-              <div class="flex items-center gap-2 flex-wrap mt-1.5">
-                {#each issue.labels as label (label)}
-                  {@const colors = LABEL_COLORS[label] || {
-                    fg: "var(--muted-foreground)",
-                    bg: "var(--muted)",
-                  }}
-                  <span
-                    class="text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap py-[3px] px-[9px] rounded-full"
-                    style="color: {colors.fg}; background: {colors.bg}; border: 1px solid color-mix(in oklch, {colors.fg}, transparent 70%)"
-                  >
-                    {label}
-                  </span>
-                {/each}
-              </div>
+              {#if issue.labels.length > 0}
+                <p class="text-xs text-muted-foreground m-0 mt-1">{issue.labels.join(" · ")}</p>
+              {/if}
             </div>
-            <div class="flex items-center gap-4 shrink-0 text-muted-foreground text-[13px]">
+            <div class="flex items-center gap-4 shrink-0 text-muted-foreground text-xs tabular-nums pt-1">
               <span class="inline-flex items-center gap-1.5">
-                <MessageSquare class="w-3.5 h-3.5" /> {issue.comments}
+                <MessageSquare class="size-3.5" aria-hidden="true" />
+                <span class="sr-only">Comments:</span>
+                {issue.comments}
               </span>
               <span>{relativeTime(issue.updatedAt)}</span>
             </div>
           </a>
         {/each}
       {/if}
-
-      <div class="flex items-center justify-between gap-3 px-[22px] py-4">
-        <span class="text-muted-foreground text-[13px]">Updated continuously: these are real, grabbable tasks.</span>
-        <a
-          href={LINKS.githubLabel}
-          target="_blank"
-          rel="noopener noreferrer"
-          onclick={() => track("Outbound Click", { destination: "github-labels" })}
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-sm h-[38px] px-4 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 bg-transparent border border-border text-foreground hover:bg-accent"
-        >
-          View all on GitHub <ExternalLink class="w-3.5 h-3.5" />
-        </a>
-      </div>
     </div>
   </section>
 
-  <!-- Donate band -->
-  <section class="pb-20" id="donate">
-    <div
-      class="rounded-[18px] p-10 flex items-center gap-8 flex-wrap"
-      style="
-        border: 1px solid color-mix(in oklch, {ACCENT}, transparent 55%);
-        background:
-          radial-gradient(120% 140% at 100% 0%, color-mix(in oklch, {ACCENT}, transparent 80%), transparent 60%),
-          color-mix(in oklch, var(--card), transparent 30%);
-      "
-    >
-      <div class="flex-1 min-w-[280px]">
-        <h3 class="text-[26px] font-bold tracking-tight mb-2">
-          Keep Nocturne free and independent
-        </h3>
-        <p class="text-muted-foreground m-0 max-w-[52ch]">
+  <section class="py-16 border-t border-border" id="donate">
+    <div class="grid gap-8 md:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] md:items-end">
+      <div>
+        <h2 class="text-section font-bold text-foreground m-0 mb-4">Keep Nocturne free and independent</h2>
+        <p class="text-muted-foreground text-lead m-0 max-w-[56ch]">
           There is no company behind Nocturne, just volunteers and the
           Nightscout Foundation, a registered non-profit. Donations cover
           servers, test devices, and the work that keeps your data yours. Give
           once, or subscribe monthly.
         </p>
       </div>
-      <div class="flex flex-col gap-2.5">
-        <a
+      <div class="flex flex-col gap-2.5 md:items-end">
+        <Button
           href={LINKS.donate}
           target="_blank"
-          rel="noopener noreferrer"
+          rel="external noopener noreferrer"
           onclick={() => track("Donate Click", { destination: "foundation" })}
-          class="inline-flex items-center justify-center gap-2 rounded-lg font-medium text-[15px] h-[46px] px-6 whitespace-nowrap no-underline cursor-pointer transition-all duration-150 text-white hover:brightness-108"
-          style="background: {ACCENT}"
+          variant="brand"
+          size="cta"
+          brand={BRAND}
         >
-          <HeartHandshake class="w-[17px] h-[17px]" /> Donate to the Foundation
-        </a>
-        <span class="text-xs text-muted-foreground text-center"
-          >Tax-deductible in the US &middot; Supports the whole community</span
-        >
+          <HeartHandshake /> Donate to the Foundation
+        </Button>
+        <span class="text-xs text-muted-foreground">Tax-deductible in the US &middot; Supports the whole community</span>
       </div>
     </div>
 
     <SupportNocturne />
   </section>
 </div>
-
-<style>
-  .gi-accent-text {
-    background: linear-gradient(118deg, var(--foreground), color-mix(in oklch, oklch(0.6 0.118 184.704), var(--foreground) 35%));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  .gi-lane-card:hover {
-    border-color: color-mix(in oklch, oklch(0.6 0.118 184.704), transparent 55%);
-  }
-
-  .gi-lane-highlight {
-    border-color: color-mix(in oklch, oklch(0.6 0.118 184.704), transparent 45%);
-    background: color-mix(in oklch, oklch(0.6 0.118 184.704), var(--card) 80%);
-  }
-
-  .gi-lane-link :global(svg) {
-    transition: transform 0.15s;
-  }
-
-  .gi-lane-card:hover .gi-lane-link :global(svg) {
-    transform: translateX(3px);
-  }
-
-  .gi-issue-dot::after {
-    content: "";
-    position: absolute;
-    inset: 3px;
-    border-radius: 50%;
-    background: oklch(0.6 0.118 184.704);
-  }
-</style>

@@ -42,18 +42,18 @@
 </script>
 
 <div class="space-y-2">
-  <Label class="flex items-center gap-1.5">
-    <Smartphone class="h-3.5 w-3.5 text-orange-500" />
+  <Label>
+    <Smartphone class="h-3.5 w-3.5 text-entry-device-event" />
     Event Type
   </Label>
   <Popover.Root bind:open={popoverOpen}>
     <Popover.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
-          variant="outline"
+          variant="combobox"
           role="combobox"
           aria-expanded={popoverOpen}
-          class="w-full justify-between font-normal"
+          class="w-full justify-between"
           {...props}
         >
           {#if form.eventType}

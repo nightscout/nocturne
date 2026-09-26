@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -8,6 +7,7 @@ using Nocturne.API.Configuration;
 using Nocturne.API.Models.OAuth;
 using Nocturne.API.Multitenancy;
 using Nocturne.Connectors.Core.Extensions;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
@@ -178,9 +178,6 @@ public class MetadataController : ControllerBase
             new WidgetDefinitionsMetadata
             {
                 Definitions = [.. WidgetCatalog.All],
-                AvailablePlacements = Enum.GetValues<WidgetPlacement>(),
-                AvailableSizes = Enum.GetValues<WidgetSize>(),
-                AvailableUICategories = Enum.GetValues<WidgetUICategory>(),
                 Description = "Available dashboard widget definitions for configuration",
             }
         );
@@ -246,6 +243,7 @@ public class MetadataController : ControllerBase
         {
             Sample = new ConditionNode("threshold"),
             TempBasalMetrics = Enum.GetValues<TempBasalMetric>(),
+            ValidationIssue = new RustValidationIssue("condition", "root", "conditions_empty", null),
             Description = "Polymorphic ConditionNode shape used by alert rules.",
         });
     }
@@ -338,21 +336,6 @@ public class WidgetDefinitionsMetadata
     /// Array of all widget definitions with full metadata
     /// </summary>
     public WidgetDefinition[] Definitions { get; set; } = [];
-
-    /// <summary>
-    /// All available placement options
-    /// </summary>
-    public WidgetPlacement[] AvailablePlacements { get; set; } = [];
-
-    /// <summary>
-    /// All available size options
-    /// </summary>
-    public WidgetSize[] AvailableSizes { get; set; } = [];
-
-    /// <summary>
-    /// All available UI category options
-    /// </summary>
-    public WidgetUICategory[] AvailableUICategories { get; set; } = [];
 
     /// <summary>
     /// Description of the widget definitions
@@ -507,6 +490,9 @@ public class AlertConditionTypesMetadata
 
     /// <summary>All <see cref="TempBasalMetric"/> values.</summary>
     public TempBasalMetric[] TempBasalMetrics { get; set; } = [];
+
+    /// <summary>A sample <see cref="RustValidationIssue"/>; pulls the type into the generated client.</summary>
+    public RustValidationIssue? ValidationIssue { get; set; }
 
     public string Description { get; set; } = string.Empty;
 }

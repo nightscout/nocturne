@@ -287,7 +287,6 @@ public class AuditController : ControllerBase
                 ReadAuditEnabled = request.ReadAuditEnabled,
                 ReadAuditRetentionDays = request.ReadAuditRetentionDays,
                 MutationAuditRetentionDays = mutationDays,
-                SysCreatedAt = now,
                 SysUpdatedAt = now,
             };
             db.TenantAuditConfig.Add(entity);

@@ -38,7 +38,7 @@
 
 <ToggleGroupPrimitive.Root
   bind:ref
-  value={value as never}
+  {value}
   onValueChange={handleValueChange}
   type="multiple"
   data-slot="connector-toggle-group"

@@ -1,4 +1,5 @@
 import { randomUUID } from "$lib/utils";
+import type { UserAlarmConfiguration as ApiUserAlarmConfiguration } from "$lib/api";
 
 /**
  * xDrip+-inspired Alarm Profile Types
@@ -14,20 +15,25 @@ import { randomUUID } from "$lib/utils";
  * - Re-raise for unacknowledged alarms
  */
 
+const ALARM_TRIGGER_TYPES = [
+  "High",
+  "Low",
+  "UrgentHigh",
+  "UrgentLow",
+  "RisingFast",
+  "FallingFast",
+  "StaleData",
+  "ForecastLow",
+  "Custom",
+] as const;
+
 /** Types of alarm triggers */
-export type AlarmTriggerType =
-  | "High"
-  | "Low"
-  | "UrgentHigh"
-  | "UrgentLow"
-  | "RisingFast"
-  | "FallingFast"
-  | "StaleData"
-  | "ForecastLow"
-  | "Custom";
+export type AlarmTriggerType = (typeof ALARM_TRIGGER_TYPES)[number];
+
+const ALARM_PRIORITIES = ["Low", "Normal", "High", "Critical"] as const;
 
 /** Priority levels for alarms */
-export type AlarmPriority = "Low" | "Normal" | "High" | "Critical";
+export type AlarmPriority = (typeof ALARM_PRIORITIES)[number];
 
 /** Audio settings for an alarm */
 export interface AlarmAudioSettings {
@@ -101,20 +107,6 @@ export interface AlarmReraiseSettings {
   escalationVolumeStep: number;
 }
 
-/** Smart snooze settings - auto-extend snooze when trending in right direction */
-export interface SmartSnoozeSettings {
-  /** Whether smart snooze is enabled */
-  enabled: boolean;
-  /** For high alarms: auto-extend snooze if glucose is falling. For low alarms: auto-extend snooze if glucose is rising */
-  extendWhenTrendingCorrect: boolean;
-  /** Minimum delta (mg/dL per 5 min) to consider "trending correct" */
-  minDeltaThreshold: number;
-  /** Extension duration in minutes when trending correct */
-  extensionMinutes: number;
-  /** Maximum total snooze time with extensions */
-  maxTotalMinutes: number;
-}
-
 /** A time range for scheduling */
 export interface TimeRange {
   /** Start time in HH:mm format (24-hour) */
@@ -168,8 +160,6 @@ export interface AlarmProfileConfiguration {
   snooze: AlarmSnoozeSettings;
   /** Re-raise/repeat configuration for unacknowledged alarms */
   reraise: AlarmReraiseSettings;
-  /** Smart snooze - auto-extend snooze if glucose is trending in the right direction */
-  smartSnooze: SmartSnoozeSettings;
   /** Time-of-day schedule - when this alarm is active */
   schedule: AlarmScheduleSettings;
   /** Priority level for this alarm (affects notification behavior) */
@@ -330,16 +320,17 @@ export function normalizeAlarmType(value: string | null | undefined): AlarmTrigg
     return "High";
   }
 
-  if ((value as AlarmTriggerType) in ALARM_TYPE_LABELS) {
-    return value as AlarmTriggerType;
+  const exact = ALARM_TRIGGER_TYPES.find((type) => type === value);
+  if (exact) {
+    return exact;
   }
 
   const lowered = value.trim().toLowerCase();
-  if (ALARM_TYPE_ALIASES[lowered]) {
+  if (Object.hasOwn(ALARM_TYPE_ALIASES, lowered)) {
     return ALARM_TYPE_ALIASES[lowered];
   }
 
-  const labelMatch = (Object.keys(ALARM_TYPE_LABELS) as AlarmTriggerType[]).find(
+  const labelMatch = ALARM_TRIGGER_TYPES.find(
     (key) => ALARM_TYPE_LABELS[key].toLowerCase() === lowered
   );
   return labelMatch ?? "High";
@@ -352,12 +343,13 @@ export function normalizeAlarmPriority(
     return "Normal";
   }
 
-  if ((value as AlarmPriority) in PRIORITY_LABELS) {
-    return value as AlarmPriority;
+  const exact = ALARM_PRIORITIES.find((priority) => priority === value);
+  if (exact) {
+    return exact;
   }
 
   const lowered = value.trim().toLowerCase();
-  const labelMatch = (Object.keys(PRIORITY_LABELS) as AlarmPriority[]).find(
+  const labelMatch = ALARM_PRIORITIES.find(
     (key) => PRIORITY_LABELS[key].toLowerCase() === lowered
   );
   return labelMatch ?? "Normal";
@@ -428,13 +420,6 @@ export function createDefaultAlarmProfile(
       intervalMinutes: defaults.reraiseMinutes,
       escalate: type === "UrgentHigh" || type === "UrgentLow",
       escalationVolumeStep: 20,
-    },
-    smartSnooze: {
-      enabled: false,
-      extendWhenTrendingCorrect: true,
-      minDeltaThreshold: 5,
-      extensionMinutes: 15,
-      maxTotalMinutes: 60,
     },
     schedule: {
       enabled: false,
@@ -599,4 +584,29 @@ export function createDefaultUserAlarmConfiguration(): UserAlarmConfiguration {
       sms: { enabled: false, minPriority: "Critical" },
     },
   };
+}
+
+/**
+ * The seam between this hand-written alarm model and the generated one it
+ * mirrors. They agree at runtime: the generated enums are these same strings,
+ * and its `Date` fields arrive and leave as ISO strings (the client parses with
+ * no reviver). TypeScript cannot relate a string union to a string enum, nor
+ * this model's required fields to the generated optional ones, so the
+ * conversion is asserted here and nowhere else. The API side leaves fields
+ * unset that this model requires; retiring this model for the generated types
+ * is the real fix.
+ */
+export function toApiAlarmConfiguration(
+  config: UserAlarmConfiguration
+): ApiUserAlarmConfiguration {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see the doc comment: same JSON, enum vs union typing
+  return config as unknown as ApiUserAlarmConfiguration;
+}
+
+/** The inverse of {@link toApiAlarmConfiguration}. */
+export function fromApiAlarmConfiguration(
+  config: ApiUserAlarmConfiguration
+): UserAlarmConfiguration {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see toApiAlarmConfiguration
+  return config as unknown as UserAlarmConfiguration;
 }

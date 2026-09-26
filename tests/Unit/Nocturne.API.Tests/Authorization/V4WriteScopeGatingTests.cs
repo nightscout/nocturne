@@ -88,13 +88,15 @@ public class V4WriteScopeGatingTests
         public const string ConnectorFoodImport = "connector food-entry import; governing write scope undecided";
 
         /// <summary>
-        /// Connector configuration, gated on <see cref="Scope.TenantSettings"/> — an
-        /// administration atom, absent from <see cref="Scope.AllScopes"/>, so no data-category
-        /// scope names it. Asserted per controller by
+        /// Tenant administration (connector configuration and the connector data-deletion and
+        /// sync-trigger actions), gated on <see cref="Scope.TenantSettings"/>. An administration
+        /// atom, absent from <see cref="Scope.AllScopes"/>, so no data-category scope names it.
+        /// Asserted per controller by
         /// <see cref="EveryExemptionClaimingAnAttribute_ActuallyCarriesIt"/>, and behaviourally by
-        /// <see cref="ConnectorConfigurationScopeTests"/>.
+        /// <see cref="ConnectorConfigurationScopeTests"/> and
+        /// <see cref="ServicesControllerScopeTests"/>.
         /// </summary>
-        public const string TenantSettingsScope = "connector configuration, gated on tenant.settings";
+        public const string TenantSettingsScope = "tenant administration, gated on tenant.settings";
 
         /// <summary>
         /// The same tenant-administration gate as <see cref="TenantSettingsScope"/>, enforced in the
@@ -112,7 +114,11 @@ public class V4WriteScopeGatingTests
         /// </summary>
         public const string ComputesAndReturns = "computes and returns, persists nothing";
 
-        /// <summary>Per-user or per-tenant presentation state with no patient observation in it.</summary>
+        /// <summary>
+        /// Per-user or per-tenant presentation or authoring state with no patient
+        /// observation in it: what the caller has seen, how they want it shown, and work
+        /// in progress they have not submitted anywhere.
+        /// </summary>
         public const string PresentationState = "presentation state, no patient data";
 
         /// <summary>
@@ -178,11 +184,10 @@ public class V4WriteScopeGatingTests
             ["DeduplicationController"] = NotDataCategory.TenantAdminAttribute,
             ["MigrationController"] = NotDataCategory.TenantAdminAttribute,
 
-            // Both repeat [RequireAdmin] per action rather than carrying it on the class.
-            // ServicesController's data deletions and sync triggers are behind it, so they are not
-            // reachable by a read-only session despite having no scope gate.
+            // CompatibilityController repeats [RequireAdmin] per action rather than carrying it on
+            // the class.
             ["CompatibilityController"] = NotDataCategory.TenantAdminAttribute,
-            ["ServicesController"] = NotDataCategory.TenantAdminAttribute,
+            ["ServicesController"] = NotDataCategory.TenantSettingsScope,
 
             ["ChatIdentityDirectoryController"] = NotDataCategory.InstanceKey,
 
@@ -267,6 +272,25 @@ public class V4WriteScopeGatingTests
             ["NotificationsController.MarkAsRead"] = NotDataCategory.PresentationState,
             ["NotificationsController.MarkAllAsRead"] = NotDataCategory.PresentationState,
             ["NotificationsController.DismissNotification"] = NotDataCategory.PresentationState,
+
+            // Both open a pull request on the upstream repository through the GitHub API and
+            // persist no tenant row, the same shape as SupportController above. The relay route is
+            // additionally [AllowAnonymous] by design: it is the ingress for instances that have no
+            // PAT of their own, so there is no credential whose scopes could be checked.
+            // The draft store holds the caller's own in-progress translations, keyed by their
+            // subject id, and nothing else reads it. SubmitDrafts opens the same upstream PR as
+            // SubmitContribution and then deletes the drafts it managed to apply.
+            ["TranslationsController.UpsertDrafts"] = NotDataCategory.PresentationState,
+            ["TranslationsController.ClearDrafts"] = NotDataCategory.PresentationState,
+            ["TranslationsController.SubmitDrafts"] = NotDataCategory.PresentationState,
+
+            ["TranslationsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
+            ["TranslationsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
+
+            // Same shape as the translation contribution routes: the content studio proposes a
+            // .svx file as an upstream pull request and stores nothing locally.
+            ["ContentContributionsController.SubmitContribution"] = NotDataCategory.OutboundOnly,
+            ["ContentContributionsController.AcceptRelayedContribution"] = NotDataCategory.AnonymousByDeclaration,
         };
 
     /// <summary>

@@ -36,8 +36,7 @@
                 target="_blank"
                 rel="noopener noreferrer"
                 onclick={() => track("Outbound Click", { destination: "demo" })}
-                size="lg"
-                class="gap-2 text-base"
+                size="cta"
             >
                 Open the demo
                 <ExternalLink class="size-4" />

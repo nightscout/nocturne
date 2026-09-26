@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Pencil, Trash2, Plus } from "lucide-svelte";
@@ -52,7 +55,7 @@
       breakdown = await getCarbIntakeFoodBreakdown(id).run();
     } catch (err) {
       console.error("Failed to load food breakdown:", err);
-      loadError = "Unable to load food breakdown.";
+      loadError = remoteErrorMessage(err, "Unable to load food breakdown.");
     } finally {
       isLoading = false;
     }
@@ -66,6 +69,7 @@
       showAddFood = false;
     } catch (err) {
       console.error("Failed to add food entry:", err);
+      toast.error(describeSubmitError(err, "Failed to add food"));
     }
   }
 
@@ -84,6 +88,7 @@
       await loadBreakdown(carbIntakeId);
     } catch (err) {
       console.error("Failed to delete food entry:", err);
+      toast.error(describeSubmitError(err, "Failed to delete food"));
     }
   }
 
@@ -144,9 +149,10 @@
       {#if !breakdown.foods || breakdown.foods.length === 0}
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-4 text-sm font-normal text-muted-foreground"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add a food to this carb entry
@@ -175,9 +181,8 @@
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => handleDelete(entry)}
                 >
                   <Trash2 class="h-4 w-4" />
@@ -188,9 +193,10 @@
         </div>
         <Button
           type="button"
-          variant="ghost"
+          variant="dashed"
+          size="lg"
           onclick={() => (showAddFood = true)}
-          class="h-auto w-full justify-center rounded-md border border-dashed p-3 text-sm font-normal text-muted-foreground"
+          class="w-full"
         >
           <Plus class="mr-1.5 h-4 w-4" />
           Add food

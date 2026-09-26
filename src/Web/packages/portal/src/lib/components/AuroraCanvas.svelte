@@ -184,7 +184,7 @@ void main(){
 
 <canvas
     bind:this={canvasEl}
-    class="block w-full object-cover {className}"
-    style="height: {height}px"
+    class="block w-full h-(--canvas-h) object-cover {className}"
+    style:--canvas-h="{height}px"
     aria-hidden="true"
 ></canvas>

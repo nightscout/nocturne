@@ -2,6 +2,7 @@
   import { formatLocale } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Item } from "$lib/components/ui/item";
   import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
   import type { SyncProgressEvent } from "$lib/websocket/types";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
@@ -28,17 +29,19 @@
     message: string;
   }
 
+  interface Props {
+    open: boolean;
+    isManualSyncing: boolean;
+    manualSyncResult: BatchSyncResult | null;
+    syncProgress: SyncProgressEvent | null;
+  }
+
   let {
     open = $bindable(false),
     isManualSyncing = false,
     manualSyncResult = null,
     syncProgress = null,
-  } = $props<{
-    open: boolean;
-    isManualSyncing: boolean;
-    manualSyncResult: BatchSyncResult | null;
-    syncProgress: SyncProgressEvent | null;
-  }>();
+  }: Props = $props();
 
   let logEntries = $state<LogEntry[]>([]);
   let logContainer: HTMLDivElement | undefined = $state();
@@ -123,24 +126,24 @@
         )}
         {@const counts = `${manualSyncResult.successfulConnectors} of ${manualSyncResult.totalConnectors} connectors synced in ${elapsedSeconds}s`}
         {#if outcome === "all-succeeded"}
-          <div class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4">
-            <div class="flex items-center gap-2 text-green-800 dark:text-green-200">
+          <div class="rounded-lg border border-success/30 bg-success/10 p-4">
+            <div class="flex items-center gap-2 text-success">
               <CheckCircle class="h-5 w-5" />
               <span class="font-medium">Sync completed</span>
             </div>
-            <p class="text-sm text-green-700 dark:text-green-300 mt-1">
+            <p class="text-sm text-success mt-1">
               {counts}
             </p>
           </div>
         {:else if outcome === "partial"}
-          <div class="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4">
-            <div class="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+          <div class="rounded-lg border border-warning/30 bg-warning/10 p-4">
+            <div class="flex items-center gap-2 text-warning">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">
                 Sync finished with {manualSyncResult.failedConnectors} failed
               </span>
             </div>
-            <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            <p class="text-sm text-warning mt-1">
               {counts}
             </p>
           </div>
@@ -155,12 +158,12 @@
             </p>
           </div>
         {:else}
-          <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4">
-            <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+          <div class="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+            <div class="flex items-center gap-2 text-destructive">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">Sync failed</span>
             </div>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            <p class="text-sm text-destructive mt-1">
               {manualSyncResult.errorMessage ??
                 (outcome === "all-failed" ? counts : "The sync could not be started.")}
             </p>
@@ -172,12 +175,12 @@
             <h4 class="font-medium text-sm">Connector Results</h4>
             <div class="space-y-2">
               {#each manualSyncResult.connectorResults as result (result.connectorName)}
-                <div class="flex items-center justify-between p-3 rounded-lg border {result.success ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/10' : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/10'}">
+                <Item variant={result.success ? "success" : "destructive"} class="justify-between">
                   <div class="flex items-center gap-3">
                     {#if result.success}
-                      <CheckCircle class="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <CheckCircle class="h-4 w-4 text-success" />
                     {:else}
-                      <AlertCircle class="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <AlertCircle class="h-4 w-4 text-destructive" />
                     {/if}
                     <div>
                       <p class="font-medium text-sm">{result.connectorName}</p>
@@ -193,7 +196,7 @@
                       {result.duration}
                     {/if}
                   </div>
-                </div>
+                </Item>
               {/each}
             </div>
           </div>

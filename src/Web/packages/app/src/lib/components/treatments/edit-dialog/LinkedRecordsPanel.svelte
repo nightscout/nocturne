@@ -5,6 +5,7 @@
     getEntryStyle,
   } from "$lib/constants/entry-categories";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Separator } from "$lib/components/ui/separator";
   import { Link } from "lucide-svelte";
   import {
@@ -60,27 +61,21 @@
     >
       <Link class="h-3.5 w-3.5" />
       Linked Records
-      <Badge variant="secondary" class="text-xs h-5 px-1.5">
+      <Badge variant="secondary" size="sm" class="h-5">
         {records.length}
       </Badge>
     </h4>
-    {#each records as linked}
+    {#each records as linked (`${linked.kind}-${linked.data.id}`)}
       {@const linkedStyle = getEntryStyle(linked.kind)}
       {@const linkedCategory = ENTRY_CATEGORIES[linked.kind]}
       {@const isActive = linked.data.id === activeRecordId}
-      <button
-        type="button"
-        class="w-full text-left rounded-lg border p-3 transition-colors {isActive
-          ? 'border-primary bg-primary/5'
-          : 'hover:bg-muted/50'}"
-        disabled={isActive}
-        onclick={() => onSwitch(linked)}
+      <Item
+        variant="outline"
+        aria-current={isActive}
+        onclick={isActive ? undefined : () => onSwitch(linked)}
       >
-        <div class="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            class="{linkedStyle.colorClass} {linkedStyle.bgClass} {linkedStyle.borderClass} text-xs"
-          >
+        <div class="flex flex-1 items-center gap-2">
+          <Badge variant={linkedStyle.badge}>
             {linkedCategory.name}
           </Badge>
           <span class="text-sm">{getPrimaryValue(linked)}</span>
@@ -88,7 +83,7 @@
             {formatMills(linked.data.mills)}
           </span>
         </div>
-      </button>
+      </Item>
     {/each}
   </div>
 {/if}

@@ -22,7 +22,9 @@
     "./editor/markdown": "./src/editor/markdown.ts",
     "./editor/extensions/svelte-component": "./src/editor/extensions/svelte-component.ts",
     "./editor/extensions/callout": "./src/editor/extensions/callout.ts",
-    "./editor/ContentEditor.svelte": "./src/editor/ContentEditor.svelte"
+    "./editor/ContentEditor.svelte": "./src/editor/ContentEditor.svelte",
+    "./translations": "./src/translations/index.ts",
+    "./translations/*.svelte": "./src/translations/*.svelte"
   },
   "peerDependencies": {
     "@nocturne/ui": ">=0.1.0",
@@ -33,6 +35,7 @@
   "devDependencies": {
     "@floating-ui/dom": "^1.6.0",
     "@lucide/svelte": "^0.563.1",
+    "@nocturne/eslint-config": "workspace:*",
     "@nocturne/ui": "workspace:*",
     "@sveltejs/kit": "^2.50.2",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
@@ -55,24 +58,29 @@
     "@tiptap/pm": "^3.0.0",
     "@tiptap/starter-kit": "^3.0.0",
     "@tiptap/suggestion": "^3.0.0",
+    "@types/mdast": "^4.0.4",
+    "eslint": "^10.3.0",
     "lowlight": "^3.0.0",
     "mdsvex": "^0.12.3",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
     "svelte": "^5.50.0",
-    "svelte-check-native": "^0.2.0",
-    "svelte-sonner": "^0.3.0",
+    "svelte-check": "^4.4.2",
+    "svelte-sonner": "^1.1.1",
     "svelte-tiptap": "^3.0.0",
     "tiptap-extension-auto-joiner": "^0.1.3",
     "typescript": "^5.8.3",
     "unified": "^11.0.0",
     "unist-util-visit": "^5.0.0",
     "vite": "^7.3.1",
-    "vitest": "^3.2.1"
+    "vitest": "^3.2.1",
+    "zod": "^4.4.3"
   },
   "scripts": {
-    "check": "svelte-check-native --tsconfig ./tsconfig.json",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   }
 }

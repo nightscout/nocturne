@@ -24,7 +24,11 @@
     resend: "Resend (Email)",
   };
 
-  let { platforms, onSave, onDelete } = $props<{
+  let {
+    platforms,
+    onSave,
+    onDelete,
+  }: {
     platforms: PlatformSettingsSummary[];
     onSave: (
       category: string,
@@ -32,7 +36,7 @@
       fields: Record<string, string>
     ) => Promise<void>;
     onDelete: (category: string) => Promise<void>;
-  }>();
+  } = $props();
 
   type PlatformState = {
     enabled: boolean;
@@ -127,7 +131,7 @@
             {/if}
           </div>
           <div class="flex items-center gap-2">
-            <Label for="switch-{category}" class="text-sm text-muted-foreground">
+            <Label for="switch-{category}" variant="muted">
               {state.enabled ? "Enabled" : "Disabled"}
             </Label>
             <Switch
@@ -146,7 +150,7 @@
                 <div class="flex items-center gap-2">
                   <Label for="field-{category}-{name}">{field.label ?? name}</Label>
                   {#if fieldConfigured}
-                    <Badge variant="outline" class="text-xs">Set</Badge>
+                    <Badge variant="outline">Set</Badge>
                   {/if}
                 </div>
                 <Input

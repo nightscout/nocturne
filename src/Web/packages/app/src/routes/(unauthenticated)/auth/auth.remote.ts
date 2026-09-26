@@ -94,12 +94,8 @@ export const getOidcProviders = query(async () => {
   });
 
   // Return safe defaults if API is unavailable
-  return (
-    result ?? {
-      enabled: false,
-      providers: [] as OidcProviderInfo[],
-    }
-  );
+  const providers: OidcProviderInfo[] = [];
+  return result ?? { enabled: false, providers };
 });
 
 /**
@@ -168,6 +164,7 @@ export const getProvidersInfo = query(async () => {
         name: p.name,
         icon: p.icon,
         buttonColor: p.buttonColor,
+        buttonForegroundColor: p.buttonForegroundColor,
       })) ?? [],
     };
   } catch (error) {

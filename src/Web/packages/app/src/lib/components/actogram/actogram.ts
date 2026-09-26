@@ -27,6 +27,24 @@ export interface GlucoseThresholds {
 	veryLow: number;
 	veryHigh: number;
 	glucoseYMax: number;
+	/** Personal target from the active profile; absent when no profile exists. */
+	targetLow?: number | null;
+	targetHigh?: number | null;
+}
+
+/**
+ * The band the target key and limit lines draw: the personal target when the
+ * profile supplies one, else the clinical in-range band. Dot colouring stays on
+ * `low`/`high` regardless.
+ */
+export function resolveTargetRange(thresholds: GlucoseThresholds): {
+	low: number;
+	high: number;
+} {
+	return {
+		low: thresholds.targetLow ?? thresholds.low,
+		high: thresholds.targetHigh ?? thresholds.high,
+	};
 }
 
 export interface RowDataPoint<T extends ActogramPoint = ActogramPoint> {
@@ -43,10 +61,10 @@ export interface ActogramRowContext<T extends ActogramPoint = ActogramPoint> {
 	day: Date;
 }
 
-export interface ActogramTooltipData {
+export interface ActogramTooltipData<T extends ActogramPoint = ActogramPoint> {
 	time: Date;
 	bgPoint?: RowDataPoint<GlucosePoint>;
-	dataPoint?: RowDataPoint<ActogramPoint>;
+	dataPoint?: RowDataPoint<T>;
 }
 
 export function findNearestPoint<T extends ActogramPoint>(
@@ -111,9 +129,9 @@ export function extentOf<T>(
 }
 
 function slicePoints<T extends ActogramPoint>(data: T[], days: Date[]): { day: Date; data: RowDataPoint<T>[] }[] {
-	const rows = days.map((day) => ({
+	const rows = days.map((day): { day: Date; data: RowDataPoint<T>[] } => ({
 		day,
-		data: [] as RowDataPoint<T>[],
+		data: [],
 	}));
 
 	for (const point of data) {

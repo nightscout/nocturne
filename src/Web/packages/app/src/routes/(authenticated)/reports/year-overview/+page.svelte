@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Loader2 } from "lucide-svelte";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
@@ -14,12 +15,11 @@
   import YearOverviewFilters from "$lib/components/reports/year-overview/YearOverviewFilters.svelte";
   import HeatmapLegend from "$lib/components/reports/year-overview/HeatmapLegend.svelte";
   import YearHeatmap from "$lib/components/reports/year-overview/YearHeatmap.svelte";
-  import DayDetailPanel from "$lib/components/reports/year-overview/DayDetailPanel.svelte";
   import type {
     DailySummaryDay,
     GriTimelinePeriod,
   } from "$api/generated/nocturne-api-client";
-  import { formatLongDate, getUnitLabel } from "$lib/utils/formatting";
+  import { getUnitLabel } from "$lib/utils/formatting";
   import { getGlucoseHeatmapFill } from "$lib/utils/chart-colors";
   import { glucoseUnits, yearOverviewColors } from "$lib/stores/appearance-store.svelte";
   import {
@@ -36,6 +36,10 @@
   } from "$lib/utils/metric-color-focus";
   import { onMount, untrack, tick } from "svelte";
   import { fade } from "svelte/transition";
+  import { getWeekColumns } from "$lib/components/reports/year-overview/week-columns";
+  import { toggled } from "$lib/utils/collections";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import type { TextureKey } from "$lib/components/charts/print/chart-print-patterns";
 
   // =========================================================================
   // State
@@ -50,7 +54,6 @@
   let loadingYears = $state<Set<number>>(new Set());
   let metadataLoaded = $state(false);
   let metadataLoading = $state(false);
-  let selectedDay = $state<CalendarDatum | null>(null);
   let sentinelElements: Record<number, HTMLDivElement | undefined> = $state({});
 
   type HeatmapMetric =
@@ -71,6 +74,9 @@
   ];
 
   let selectedMetric = $state<HeatmapMetric>("avgGlucose");
+  const colorsKey = $derived<`${HeatmapMetric}Colors`>(`${selectedMetric}Colors`);
+  const invertKey = $derived<`${HeatmapMetric}Invert`>(`${selectedMetric}Invert`);
+  const bandKey = $derived<`${HeatmapMetric}Band`>(`${selectedMetric}Band`);
   const colorFocusPreferences = $derived(yearOverviewColors.current);
   const advancedMode = $derived(colorFocusPreferences.advancedMode ?? false);
   const transparencyPercent = $derived(
@@ -78,16 +84,13 @@
   );
 
   const currentMetricColors = $derived.by(() => {
-    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
-    const colors = colorFocusPreferences[key] as string[] | undefined;
+    const colors = colorFocusPreferences[colorsKey];
     return colors && colors.length >= 2 ? colors : undefined;
   });
 
   const lowColor = $derived(currentMetricColors?.[0]);
   const highColor = $derived(currentMetricColors?.at(-1));
-  const invert = $derived(
-    !!colorFocusPreferences[`${selectedMetric}Invert` as keyof typeof colorFocusPreferences]
-  );
+  const invert = $derived(!!colorFocusPreferences[invertKey]);
 
   const focusRange = $derived.by(() => {
     if (!advancedMode || selectedMetric === "avgGlucose") return null;
@@ -95,10 +98,6 @@
   });
   const focusBand = $derived.by(() => {
     if (!advancedMode) return null;
-    if (selectedMetric === "avgGlucose") {
-      return resolveColorFocusRange(colorFocusPreferences.avgGlucoseBand);
-    }
-    const bandKey = `${selectedMetric}Band` as keyof typeof colorFocusPreferences;
     return resolveColorFocusRange(colorFocusPreferences[bandKey]);
   });
   const glucoseThresholds = $derived(
@@ -138,25 +137,19 @@
   }
 
   function setCustomColors(colors: string[] | undefined) {
-    const key = `${selectedMetric}Colors` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
     if (colors && colors.length >= 2) {
-      (next as Record<string, string[] | undefined>)[key] = [...colors];
+      next[colorsKey] = [...colors];
     } else {
-      delete next[key];
+      delete next[colorsKey];
     }
     yearOverviewColors.current = next;
   }
 
   function setInvert(value: boolean) {
-    const key = `${selectedMetric}Invert` as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (value) {
-      (next as Record<string, boolean>)[key] = true;
-    } else {
-      delete next[key];
-    }
-    yearOverviewColors.current = next;
+    delete next[invertKey];
+    yearOverviewColors.current = value ? { ...next, [invertKey]: true } : next;
   }
 
   function setFocusRange(candidate: ColorFocusRange | null) {
@@ -189,11 +182,8 @@
       (!range || (selectedMetric === "tir" && range[1] > 100))
     )
       return;
-    const bandKey = (selectedMetric === "avgGlucose"
-      ? "avgGlucoseBand"
-      : `${selectedMetric}Band`) as keyof typeof colorFocusPreferences;
     const next = { ...colorFocusPreferences };
-    if (range) (next as Record<string, number[] | undefined>)[bandKey] = [...range];
+    if (range) next[bandKey] = [...range];
     else delete next[bandKey];
     yearOverviewColors.current = next;
   }
@@ -221,8 +211,10 @@
   // Glucose color scale
   // =========================================================================
 
+  const GLUCOSE_BANDS = [54, 70, 180, 250];
+
   const glucoseColorScale = scaleThreshold<number, string>()
-    .domain([54, 70, 180, 250])
+    .domain(GLUCOSE_BANDS)
     .range([
       "var(--glucose-very-low)",
       "var(--glucose-low)",
@@ -230,6 +222,15 @@
       "var(--glucose-high)",
       "var(--glucose-very-high)",
     ]);
+
+  const glucoseHatchScale = scaleThreshold<number, TextureKey | null>()
+    .domain(GLUCOSE_BANDS)
+    .range(["very-low-hatch", "low-hatch", null, "high-hatch", "very-high-hatch"]);
+
+  function getCellHatch(data: CalendarDatum | undefined): TextureKey | null {
+    if (selectedMetric !== "avgGlucose" || data?.value == null) return null;
+    return glucoseHatchScale(data.value);
+  }
 
   /** CSS variable names for each metric's hue */
   const METRIC_CSS_VARS: Record<
@@ -242,6 +243,21 @@
     tdd: "--chart-4",
     carbs: "--chart-5",
   };
+
+  function metricCssVar(metric: Exclude<HeatmapMetric, "avgGlucose">): string {
+    switch (metric) {
+      case "tir":
+        return METRIC_CSS_VARS.tir;
+      case "bolus":
+        return METRIC_CSS_VARS.bolus;
+      case "basal":
+        return METRIC_CSS_VARS.basal;
+      case "tdd":
+        return METRIC_CSS_VARS.tdd;
+      case "carbs":
+        return METRIC_CSS_VARS.carbs;
+    }
+  }
 
   /** Compute max value for a metric across all loaded year data */
   function getMetricMax(metric: HeatmapMetric): number {
@@ -333,8 +349,7 @@
       return "rgb(0 0 0 / 5%)";
     }
 
-    const cssVar =
-      METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">];
+    const cssVar = metricCssVar(selectedMetric);
     const baseColor = getFocusedIntensityFill(
       metricValue,
       focusRange ?? [0, metricMaxCached],
@@ -363,19 +378,18 @@
   const unitLabel = $derived(getUnitLabel(units));
   const sortedYears = $derived([...availableYears].sort((a, b) => b - a));
 
+  setReportPrintMeta(() => {
+    const title = "Year Overview";
+    if (sortedYears.length === 0) return { title };
+    const first = sortedYears.at(-1);
+    const last = sortedYears[0];
+    return { title, period: { label: first === last ? `${last}` : `${first} – ${last}` } };
+  });
+
   /** Discover data types present in loaded data */
   const presentDataTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const days of yearData.values()) {
-      for (const day of days) {
-        if (day.counts) {
-          for (const key of Object.keys(day.counts) as string[]) {
-            types.add(key);
-          }
-        }
-      }
-    }
-    return ALL_DATA_TYPES.filter((t) => types.has(t));
+    const days = [...yearData.values()].flat();
+    return ALL_DATA_TYPES.filter((t) => days.some((day) => day.counts && Object.hasOwn(day.counts, t)));
   });
 
   // =========================================================================
@@ -413,9 +427,7 @@
     } catch (err) {
       console.error(`Failed to load data for year ${year}:`, err);
     } finally {
-      const next = new Set(loadingYears);
-      next.delete(year);
-      loadingYears = next;
+      loadingYears = toggled(loadingYears, year, false);
     }
   }
 
@@ -468,7 +480,7 @@
       const [y, m, d] = dateStr.split("-").map(Number);
       const date = new Date(y, m - 1, d);
       const avg = day.averageGlucoseMgdl ?? null;
-      const counts = (day.counts as Record<string, number>) ?? {};
+      const counts = day.counts ?? {};
 
       // Calculate filtered count excluding hidden types
       const filteredCount = Object.entries(counts)
@@ -497,13 +509,7 @@
   // =========================================================================
 
   function toggleDataType(dataType: string) {
-    const next = new Set(hiddenDataTypes);
-    if (next.has(dataType)) {
-      next.delete(dataType);
-    } else {
-      next.add(dataType);
-    }
-    hiddenDataTypes = next;
+    hiddenDataTypes = toggled(hiddenDataTypes, dataType);
   }
 
   function showAllDataTypes() {
@@ -524,7 +530,8 @@
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const year = Number((entry.target as HTMLElement).dataset.year);
+            if (!(entry.target instanceof HTMLElement)) continue;
+            const year = Number(entry.target.dataset.year);
             if (!isNaN(year)) {
               loadYearData(year);
             }
@@ -540,16 +547,8 @@
     }
   }
 
-  // =========================================================================
-  // Day detail panel
-  // =========================================================================
-
-  function closeDetailPanel() {
-    selectedDay = null;
-  }
-
   function navigateToDayInReview(dateStr: string) {
-    goto(`/reports/day-in-review?date=${dateStr}`);
+    goto(resolve(`/reports/day-in-review?date=${dateStr}`));
   }
 
   // =========================================================================
@@ -593,12 +592,6 @@
   // Helpers
   // =========================================================================
 
-  function formatSelectedDate(dateStr: string): string {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    const date = new Date(y, m - 1, d);
-    return formatLongDate(date);
-  }
-
   function formatUnits(value: number | null): string {
     if (value == null) return "-";
     return value.toFixed(1) + " U";
@@ -612,57 +605,6 @@
       .filter(([key, count]) => count > 0 && !hiddenDataTypes.has(key))
       .sort(([, a], [, b]) => b - a);
   }
-
-  /** Get ISO week number for a date */
-  function getISOWeekNumber(date: Date): number {
-    const d = new Date(
-      Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-    );
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  }
-
-  /** Get the Monday and Sunday of the ISO week containing the given date */
-  function getWeekBounds(date: Date): { from: string; to: string } {
-    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const day = d.getDay();
-    const diffToMonday = day === 0 ? -6 : 1 - day;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() + diffToMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const fmt = (dt: Date) =>
-      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
-    return { from: fmt(monday), to: fmt(sunday) };
-  }
-
-  type WeekColumn = {
-    x: number;
-    weekNumber: number;
-    from: string;
-    to: string;
-  };
-
-  /** Extract unique week columns from calendar cells */
-  function getWeekColumns(
-    cells: Array<{ x: number; data?: { date?: Date } }>
-  ): WeekColumn[] {
-    const seen = new Map<number, { date: Date }>();
-    for (const cell of cells) {
-      const date = cell.data?.date;
-      if (date && !seen.has(cell.x)) {
-        seen.set(cell.x, { date });
-      }
-    }
-    return [...seen.entries()]
-      .map(([x, { date }]) => ({
-        x,
-        weekNumber: getISOWeekNumber(date),
-        ...getWeekBounds(date),
-      }))
-      .sort((a, b) => a.x - b.x);
-  }
 </script>
 
 <svelte:head>
@@ -673,13 +615,9 @@
   />
 </svelte:head>
 
-<div class="year-overview @container flex min-h-full">
+<div class="year-overview @container flex min-h-full print:px-3">
   <!-- Main Content -->
-  <div
-    class="flex-1 transition-[margin] duration-200 print:mr-0 {selectedDay
-      ? 'mr-80 @5xl:mr-96'
-      : ''}"
-  >
+  <div class="flex-1">
     <!-- Header / interactive filters — hidden on print -->
     <div class="print:hidden">
       <YearOverviewFilters
@@ -717,6 +655,7 @@
       onCustomColorsChange={setCustomColors}
       {invert}
       onInvertChange={setInvert}
+      glucoseBands={GLUCOSE_BANDS}
     />
 
     <!-- Loading state for metadata -->
@@ -773,6 +712,7 @@
             {yearData}
             {transformYearData}
             {getCellFill}
+            {getCellHatch}
             {getWeekColumns}
             {navigateToDayInReview}
             {glucoseColorScale}
@@ -783,10 +723,9 @@
             bind:sentinelElement={sentinelElements[year]}
           />
 
-          <!-- GRI Chart for year -->
           {@const griPeriods = griTimelineData.get(year) ?? []}
           {#if griPeriods.length > 1}
-            <div class="mt-4 rounded-lg border border-border bg-card p-4">
+            <div class="mt-4 border-t border-border pt-4">
               <GlycemicRiskIndexChart
                 gri={griPeriods[griPeriods.length - 1]?.gri ?? { score: 0 }}
                 timeSeriesData={griPeriods}
@@ -797,19 +736,23 @@
       </div>
     {/if}
   </div>
-
-  <!-- Day Detail Panel — interactive fly-out, hidden on print -->
-  <div class="print:hidden">
-    <DayDetailPanel
-      {selectedDay}
-      {units}
-      {unitLabel}
-      {formatSelectedDate}
-      {formatUnits}
-      {glucoseColorScale}
-      {getVisibleCounts}
-      {closeDetailPanel}
-      {navigateToDayInReview}
-    />
-  </div>
 </div>
+
+<style>
+  /* The theme ramp runs black, cyan, green, yellow, red: its lightness rises and
+     falls, so grey days read as either end. On paper it becomes one ramp that
+     darkens with glucose; the band hatching over each cell tells lows apart. */
+  @media print {
+    .year-overview {
+      --glucose-heatmap-1: oklch(0.97 0.02 250);
+      --glucose-heatmap-2: oklch(0.93 0.04 245);
+      --glucose-heatmap-3: oklch(0.87 0.07 225);
+      --glucose-heatmap-4: oklch(0.8 0.1 190);
+      --glucose-heatmap-5: oklch(0.72 0.12 150);
+      --glucose-heatmap-6: oklch(0.63 0.13 95);
+      --glucose-heatmap-7: oklch(0.53 0.15 55);
+      --glucose-heatmap-8: oklch(0.44 0.15 30);
+      --glucose-heatmap-9: oklch(0.32 0.12 20);
+    }
+  }
+</style>

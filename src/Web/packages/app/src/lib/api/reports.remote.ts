@@ -3,13 +3,26 @@
  * intakes, device events, and analysis data for all report pages
  */
 import { z } from "zod";
-import { DiabetesPopulationSchema } from "$lib/api/generated/schemas";
 import { getRequestEvent, query } from "$app/server";
 import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
+import { readable } from "$lib/server/patient-timezone";
 
 export type { DateRangeInput } from "./report-range";
+
+/**
+ * Who a printed report is about. Both fields are null when the record leaves
+ * them unset or the viewer (a public share) may not read the patient record.
+ */
+export const getReportSubject = query(async () => {
+  const { apiClient } = getRequestEvent().locals;
+  const record = await readable(() => apiClient.patientRecord.getPatientRecord());
+  return {
+    name: record?.preferredName?.trim() || null,
+    dateOfBirth: record?.dateOfBirth ?? null,
+  };
+});
 
 /** Get sensor glucose readings for a date range */
 export const getEntries = query(DateRangeSchema.optional(), async (input) => {
@@ -22,8 +35,8 @@ export const getEntries = query(DateRangeSchema.optional(), async (input) => {
   return {
     entries,
     dateRange: {
-      from: startDate.toISOString(),
-      to: endDate.toISOString(),
+      from: startDate,
+      to: endDate,
     },
   };
 });
@@ -98,8 +111,8 @@ export const getBolusesAndCarbs = query(
       boluses: allBoluses!,
       carbIntakes: allCarbIntakes!,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
@@ -111,7 +124,7 @@ export const getAnalysis = query(
     entries: z.array(z.any()),
     boluses: z.array(z.any()),
     carbIntakes: z.array(z.any()),
-    population: DiabetesPopulationSchema.optional(),
+    population: z.enum(DiabetesPopulation).optional(),
   }),
   async ({
     entries,
@@ -126,7 +139,7 @@ export const getAnalysis = query(
       entries,
       boluses,
       carbIntakes,
-      population: population as DiabetesPopulation,
+      population,
     });
   }
 );
@@ -154,8 +167,8 @@ export const getReportsData = query(
       averagedStats,
       personalRange,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
         lastUpdated: new Date().toISOString(),
       },
     };
@@ -173,17 +186,18 @@ export const getReportsAnalysis = query(
     const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    const { analysis, averagedStats, personalRange, contributingDevices } =
+    const { analysis, averagedStats, hourlyBandThresholds, personalRange, contributingDevices } =
       await apiClient.statistics.getRangeAnalytics(startDate, endDate);
 
     return {
       analysis,
       averagedStats,
+      hourlyBandThresholds,
       personalRange,
       contributingDevices,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
@@ -225,7 +239,8 @@ export const getDataQualityReport = query(
   async (input) => {
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
-    const { startDate, endDate } = await resolveReportRange(input);
+    const { startDate, endDate, timeZone, days } =
+      await resolveReportRange(input);
 
     const [entries, integrity] = await Promise.all([
       fetchAllGlucose(apiClient, startDate, endDate),
@@ -244,9 +259,11 @@ export const getDataQualityReport = query(
     return {
       entries,
       integrity,
+      timeZone,
+      days,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
         lastUpdated: new Date().toISOString(),
       },
     };
@@ -322,8 +339,8 @@ export const getSiteChangeImpact = query(
     return {
       analysis,
       dateRange: {
-        from: startDate.toISOString(),
-        to: endDate.toISOString(),
+        from: startDate,
+        to: endDate,
       },
     };
   }
@@ -336,5 +353,15 @@ export const getWeekdayAverages = query(
     const { locals } = getRequestEvent();
     const { startDate, endDate } = await resolveReportRange(input);
     return locals.apiClient.statistics.getWeekdayAverages(startDate, endDate);
+  }
+);
+
+/** Per-hour figures and the ranked best and worst hours for the hourly-patterns report. */
+export const getHourlyPatterns = query(
+  DateRangeSchema.optional(),
+  async (input) => {
+    const { locals } = getRequestEvent();
+    const { startDate, endDate } = await resolveReportRange(input);
+    return locals.apiClient.statistics.getHourlyPatterns(startDate, endDate);
   }
 );

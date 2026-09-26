@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
+  import { Item } from "$lib/components/ui/item";
   import { Activity, Syringe, Utensils } from "lucide-svelte";
 
   type InspectionContext = "glucose" | "delivery" | "treatment";
@@ -44,11 +45,7 @@
     <div class="space-y-2 py-2">
       {#each options as option (option.type)}
         {@const Icon = icons[option.type]}
-        <button
-          type="button"
-          class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
-          onclick={() => onSelect(option.type)}
-        >
+        <Item variant="muted" onclick={() => onSelect(option.type)}>
           <div class="{colors[option.type]}">
             <Icon class="size-5" />
           </div>
@@ -56,7 +53,7 @@
             <div class="font-medium text-sm">{option.label}</div>
             <div class="text-xs text-muted-foreground">{option.preview}</div>
           </div>
-        </button>
+        </Item>
       {/each}
     </div>
     <Dialog.Footer>

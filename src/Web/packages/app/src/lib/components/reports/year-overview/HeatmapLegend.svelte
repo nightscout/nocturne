@@ -1,9 +1,11 @@
 <script lang="ts">
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { SlidersHorizontal } from "lucide-svelte";
   import { formatGlucoseValue, getUnitLabel, type GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import {
     GLUCOSE_COLOR_MIN,
     GLUCOSE_COLOR_MAX,
@@ -56,7 +58,8 @@
     invert = false,
     onInvertChange = () => {},
     themeStops = undefined,
-  } = $props<{
+    glucoseBands,
+  }: {
     selectedMetric: HeatmapMetric;
     units: GlucoseUnits;
     METRIC_OPTIONS: { value: HeatmapMetric; label: string }[];
@@ -80,7 +83,20 @@
     invert?: boolean;
     onInvertChange?: (value: boolean) => void;
     themeStops?: ReadonlyArray<{ mgdl: number; color: string }>;
-  }>();
+    /** Very-low, low, high and very-high boundaries in mg/dL, as the cells are hatched. */
+    glucoseBands: readonly number[];
+  } = $props();
+
+  const bandKey = $derived.by(() => {
+    const [veryLow, low, high, veryHigh] = glucoseBands.map((mgdl) => formatGlucoseValue(mgdl, units));
+    const unit = getUnitLabel(units);
+    return [
+      { texture: "very-low-hatch" as const, label: `Very low < ${veryLow} ${unit}` },
+      { texture: "low-hatch" as const, label: `Low < ${low}` },
+      { texture: "high-hatch" as const, label: `High ≥ ${high}` },
+      { texture: "very-high-hatch" as const, label: `Very high ≥ ${veryHigh}` },
+    ];
+  });
 
   let isPoppedOut = $state(false);
 
@@ -99,16 +115,18 @@
           type="single"
           value={selectedMetric}
           onValueChange={(v) => {
-            if (v) selectedMetric = v as HeatmapMetric;
+            const option = METRIC_OPTIONS.find((o) => o.value === v);
+            if (option) selectedMetric = option.value;
           }}
         >
-          <Select.Trigger class="w-[145px] h-8 text-xs print:hidden">
+          <span class="hidden text-sm font-medium print:inline">{currentMetricLabel}</span>
+          <Select.Trigger size="sm" class="w-[145px] print:hidden">
             <span class="truncate">
               {currentMetricLabel}
             </span>
           </Select.Trigger>
           <Select.Content>
-            {#each METRIC_OPTIONS as option}
+            {#each METRIC_OPTIONS as option (option.value)}
               <Select.Item value={option.value}>
                 {option.label}
               </Select.Item>
@@ -117,12 +135,10 @@
         </Select.Root>
 
         <!-- Advanced Settings Checkbox -->
-        <label class="flex items-center gap-1.5 font-medium cursor-pointer text-foreground/90 text-xs shrink-0 select-none">
-          <input
-            type="checkbox"
+        <label class="flex items-center gap-1.5 font-medium cursor-pointer text-foreground/90 text-xs shrink-0 select-none print:hidden">
+          <Checkbox
             checked={advancedMode}
-            onchange={(e) => onAdvancedModeChange(e.currentTarget.checked)}
-            class="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/40 cursor-pointer"
+            onCheckedChange={(checked: boolean) => onAdvancedModeChange(checked)}
           />
           Advanced
         </label>
@@ -130,9 +146,9 @@
 
       <!-- Dock / undock Button -->
       <Button
-        variant="ghost"
-        size="sm"
-        class="h-7 px-2 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md gap-1.5 text-xs"
+        variant="ghost-muted"
+        size="xs"
+        class="shrink-0 print:hidden"
         title={isPoppedOut ? "Return panel to the page" : "Float panel in the top-right corner"}
         onclick={() => isPoppedOut = !isPoppedOut}
       >
@@ -145,42 +161,44 @@
     {#if selectedMetric === "avgGlucose"}
       <div class="w-full">
         {#if advancedMode}
-          {#key `avgGlucose-${lowColor}-${highColor}-${invert}`}
-            <ColorFocusRange
-              metricKey="avgGlucose"
-              glucose
-              {units}
-              thresholds={glucoseThresholds}
-              stops={HEATMAP_STOPS}
-              {themeStops}
-              onThresholdsChange={onGlucoseThresholdsChange}
-              {focusBand}
-              onFocusBandChange={onFocusBandChange}
-              {lowColor}
-              {highColor}
-              colors={metricColors}
-              {COLOR_PALETTES}
-              {onCustomColorsChange}
-              {invert}
-              {onInvertChange}
-              {transparencyPercent}
-              {onTransparencyChange}
-            />
-          {/key}
-        {:else}
-          <!-- Default simple scale preview -->
-          <div class="w-full text-xs text-muted-foreground space-y-1.5">
-            <span
-              class="block h-3.5 w-full rounded-sm"
-              style:background="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
-            ></span>
-            <div class="flex justify-between text-[11px] tabular-nums">
-              <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
-              <span class="text-muted-foreground">Default scale</span>
-              <span>{formatGlucoseValue(GLUCOSE_COLOR_MAX, units)} {getUnitLabel(units)}</span>
-            </div>
+          <div class="print:hidden">
+            {#key `avgGlucose-${lowColor}-${highColor}-${invert}`}
+              <ColorFocusRange
+                metricKey="avgGlucose"
+                glucose
+                {units}
+                thresholds={glucoseThresholds}
+                stops={HEATMAP_STOPS}
+                {themeStops}
+                onThresholdsChange={onGlucoseThresholdsChange}
+                {focusBand}
+                onFocusBandChange={onFocusBandChange}
+                {lowColor}
+                {highColor}
+                colors={metricColors}
+                {COLOR_PALETTES}
+                {onCustomColorsChange}
+                {invert}
+                {onInvertChange}
+                {transparencyPercent}
+                {onTransparencyChange}
+              />
+            {/key}
           </div>
         {/if}
+        <!-- The advanced editor is all controls, so paper gets this preview of the scale it set. -->
+        <div class={["w-full space-y-1.5 text-xs text-muted-foreground", advancedMode && "hidden print:block"]}>
+          <span
+            class="block h-3.5 w-full rounded-sm bg-(image:--heatmap-gradient)"
+            style:--heatmap-gradient="linear-gradient(to right in srgb, {HEATMAP_STOPS.map((s) => `${s.color} ${((s.mgdl - GLUCOSE_COLOR_MIN) / (GLUCOSE_COLOR_MAX - GLUCOSE_COLOR_MIN)) * 100}%`).join(', ')})"
+          ></span>
+          <div class="flex justify-between text-xs tabular-nums">
+            <span>{formatGlucoseValue(GLUCOSE_COLOR_MIN, units)} {getUnitLabel(units)}</span>
+            <span class="text-muted-foreground">{advancedMode ? "Custom scale" : "Default scale"}</span>
+            <span>{formatGlucoseValue(GLUCOSE_COLOR_MAX, units)} {getUnitLabel(units)}</span>
+          </div>
+          <ChartKey items={bandKey} class="hidden justify-start [.chart-patterns-on_&]:flex" />
+        </div>
       </div>
     {:else}
       {@const metricLabel = currentMetricLabel}
@@ -189,46 +207,46 @@
       {@const metricMax =
         selectedMetric === "tir" ? 100 : getMetricMax(selectedMetric)}
       {@const cssVar =
-        METRIC_CSS_VARS[selectedMetric as Exclude<HeatmapMetric, "avgGlucose">]}
+        Object.entries(METRIC_CSS_VARS).find(([metric]) => metric === selectedMetric)?.[1]}
       <div class="w-full">
         {#if advancedMode}
-          {#key `${selectedMetric}-${lowColor}-${highColor}-${invert}`}
-            <ColorFocusRange
-              metricKey={selectedMetric}
-              {metricLabel}
-              unit={metricUnit}
-              observedMax={metricMax}
-              {cssVar}
-              fixedMax={selectedMetric === "tir" ? 100 : undefined}
-              {focusRange}
-              {onFocusRangeChange}
-              {focusBand}
-              {onFocusBandChange}
-              {lowColor}
-              {highColor}
-              colors={metricColors}
-              {COLOR_PALETTES}
-              {onCustomColorsChange}
-              {invert}
-              {onInvertChange}
-              {transparencyPercent}
-              {onTransparencyChange}
-            />
-          {/key}
-        {:else}
-          <!-- Default simple scale preview -->
-          <div class="w-full text-xs text-muted-foreground space-y-1.5">
-            <span
-              class="block h-3.5 w-full rounded-sm"
-              style:background="linear-gradient(to right, color-mix(in srgb, var({cssVar}) 15%, transparent) 0%, var({cssVar}) 100%)"
-            ></span>
-            <div class="flex justify-between text-[11px] tabular-nums">
-              <span>0 {metricUnit}</span>
-              <span class="text-muted-foreground">{metricLabel} default scale</span>
-              <span>{metricMax} {metricUnit}</span>
-            </div>
+          <div class="print:hidden">
+            {#key `${selectedMetric}-${lowColor}-${highColor}-${invert}`}
+              <ColorFocusRange
+                metricKey={selectedMetric}
+                {metricLabel}
+                unit={metricUnit}
+                observedMax={metricMax}
+                {cssVar}
+                fixedMax={selectedMetric === "tir" ? 100 : undefined}
+                {focusRange}
+                {onFocusRangeChange}
+                {focusBand}
+                {onFocusBandChange}
+                {lowColor}
+                {highColor}
+                colors={metricColors}
+                {COLOR_PALETTES}
+                {onCustomColorsChange}
+                {invert}
+                {onInvertChange}
+                {transparencyPercent}
+                {onTransparencyChange}
+              />
+            {/key}
           </div>
         {/if}
+        <div class={["w-full space-y-1.5 text-xs text-muted-foreground", advancedMode && "hidden print:block"]}>
+          <span
+            class="block h-3.5 w-full rounded-sm bg-linear-to-r from-(--metric-color)/15 to-(--metric-color)"
+            style:--metric-color="var({cssVar})"
+          ></span>
+          <div class="flex justify-between text-xs tabular-nums">
+            <span>0 {metricUnit}</span>
+            <span class="text-muted-foreground">{metricLabel} {advancedMode ? "custom scale" : "default scale"}</span>
+            <span>{metricMax} {metricUnit}</span>
+          </div>
+        </div>
       </div>
     {/if}
   </div>

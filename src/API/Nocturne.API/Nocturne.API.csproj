@@ -46,7 +46,6 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="OpenTelemetry.Exporter.Console" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="ShiroTrie" />
     <PackageReference Include="SixLabors.ImageSharp" />
@@ -61,6 +60,11 @@
          Download from https://github.com/nightscout/nocturne-heuristics-wasm/releases
          and place in the build output directory. -->
     <Content Include="oref.wasm" Link="oref.wasm" CopyToOutputDirectory="PreserveNewest" Condition="Exists('oref.wasm')" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Source for the Scalar docs theme; see NocturneScalarTheme. -->
+    <EmbeddedResource Include="..\..\Web\packages\ui\src\theme.css" LogicalName="Nocturne.API.ScalarTheme.theme.css" />
+    <EmbeddedResource Include="..\..\Web\packages\ui\src\styles\nocturne-theme.css" LogicalName="Nocturne.API.ScalarTheme.nocturne-theme.css" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Nocturne.API.Tests" />

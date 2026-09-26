@@ -25,9 +25,10 @@
 import type { RequestEvent } from "@sveltejs/kit";
 import type { ApiClient } from "$lib/api";
 import { isTimeZone } from "$lib/utils/date-range";
+import { errorStatus } from "$lib/forms/submit-error";
 
 /**
- * Read `fetch`, treating a refusal as "no zone named here" and nothing else.
+ * Read `fetch`, treating a refusal as "not named here" and nothing else.
  *
  * Neither the patient record nor therapy settings is a shareable data category,
  * so an anonymous public-share viewer is refused both, and their reports must
@@ -37,11 +38,11 @@ import { isTimeZone } from "$lib/utils/date-range";
  * because this lookup timed out would show a clinician the wrong day with
  * nothing on the page or in the logs to say so; failing the query says it.
  */
-async function readable<T>(fetch: () => Promise<T>): Promise<T | null> {
+export async function readable<T>(fetch: () => Promise<T>): Promise<T | null> {
   try {
     return await fetch();
   } catch (err) {
-    const status = (err as { status?: number })?.status;
+    const status = errorStatus(err);
     if (status === 401 || status === 403) return null;
     throw err;
   }

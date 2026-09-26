@@ -34,15 +34,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -82,7 +82,7 @@ jobs:
         run: pnpm --filter @nocturne/watercolour build:wasm
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -113,8 +113,14 @@ jobs:
           VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_PORTAL_DOMAIN }}
         run: pnpm run build
 
+      # A build whose translations compile empty still succeeds and prerenders
+      # blank pages, so this guard fails the deploy before upload.
+      - name: Check built pages have copy
+        working-directory: src/Web/packages/portal
+        run: pnpm run check:build
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: src/Web/packages/portal/build
 
@@ -127,4 +133,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

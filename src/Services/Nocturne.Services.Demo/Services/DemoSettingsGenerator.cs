@@ -110,7 +110,6 @@ public class DemoSettingsGenerator
     {
         return new FeatureSettings
         {
-            Widgets = WidgetCatalog.Defaults(),
             Plugins = new Dictionary<string, PluginSettings>
             {
                 {

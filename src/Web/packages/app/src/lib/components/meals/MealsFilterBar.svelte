@@ -1,6 +1,7 @@
 <script lang="ts">
   import DateRangePicker from "$lib/components/ui/date-range-picker.svelte";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
   import { ChevronDown, X, Check } from "lucide-svelte";
@@ -26,6 +27,8 @@
     onClearFilters,
   }: Props = $props();
 
+  // `dateRange` is only written here and read by the parent through the binding.
+  void dateRange;
 
   let foodFilterOpen = $state(false);
   let foodFilterSearch = $state("");
@@ -93,11 +96,10 @@
 
         <!-- Search -->
         <div class="flex-1 min-w-[200px] max-w-sm">
-          <input
+          <Input
             type="text"
             placeholder="Search meals..."
             bind:value={searchQuery}
-            class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
 
@@ -105,7 +107,7 @@
         <Popover.Root bind:open={foodFilterOpen}>
           <Popover.Trigger>
             {#snippet child({ props }: { props: Record<string, unknown> })}
-              <Button variant="outline" size="sm" class="gap-2" {...props}>
+              <Button variant="outline" size="sm" {...props}>
                 Foods
                 {#if selectedFoods.length > 0}
                   <Badge variant="secondary" class="ml-1">
@@ -125,7 +127,7 @@
               <Command.List class="max-h-[200px]">
                 <Command.Empty>No foods found.</Command.Empty>
                 <Command.Group>
-                  {#each filteredFoodsForDropdown as food}
+                  {#each filteredFoodsForDropdown as food (food)}
                     <Command.Item
                       value={food}
                       onSelect={() => toggleFoodFilter(food)}
@@ -183,27 +185,23 @@
           <!-- Note: parent should track filteredAndSortedMeals count -->
         </span>
 
-        {#each selectedFoods as food}
-          <Badge variant="outline" class="gap-1">
+        {#each selectedFoods as food (food)}
+          <Badge
+            variant="outline"
+            onremove={() => toggleFoodFilter(food)}
+            removeLabel="Remove {food} filter"
+          >
             {food}
-            <button
-              onclick={() => toggleFoodFilter(food)}
-              class="ml-1 hover:text-foreground"
-            >
-              <X class="h-3 w-3" />
-            </button>
           </Badge>
         {/each}
 
         {#if searchQuery.trim()}
-          <Badge variant="outline" class="gap-1">
+          <Badge
+            variant="outline"
+            onremove={() => (searchQuery = "")}
+            removeLabel="Clear search"
+          >
             "{searchQuery}"
-            <button
-              onclick={() => (searchQuery = "")}
-              class="ml-1 hover:text-foreground"
-            >
-              <X class="h-3 w-3" />
-            </button>
           </Badge>
         {/if}
       </div>

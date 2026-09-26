@@ -277,12 +277,29 @@ export function contextResource<T>(
   // for the life of the component. Every report that asked for `date` therefore
   // rendered its empty state forever while the layout's ResourceGuard — which reads
   // the query through its own closure — saw the data arrive and showed content.
-  return Object.defineProperty(base, "date", {
-    enumerable: true,
-    get: (): DateInfo => ({
-      from: dateParams.startDate,
-      to: dateParams.endDate,
-      dayCount: dateParams.dayCount,
-    }),
-  }) as ContextResourceWithDate<T>;
+  const withDate: ContextResourceWithDate<T> = {
+    get loading() {
+      return base.loading;
+    },
+    get error() {
+      return base.error;
+    },
+    get current() {
+      return base.current;
+    },
+    get stale() {
+      return base.stale;
+    },
+    refresh() {
+      base.refresh();
+    },
+    get date(): DateInfo {
+      return {
+        from: dateParams.startDate,
+        to: dateParams.endDate,
+        dayCount: dateParams.dayCount,
+      };
+    },
+  };
+  return withDate;
 }

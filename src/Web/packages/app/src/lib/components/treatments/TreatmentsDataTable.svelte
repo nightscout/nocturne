@@ -5,7 +5,9 @@
   } from "$lib/constants/entry-categories";
   import { getEntryStyle } from "$lib/constants/entry-categories";
   import type {
+    Column,
     ColumnDef,
+    Row,
     SortingState,
     ColumnFiltersState,
     VisibilityState,
@@ -25,6 +27,9 @@
 </script>
 
 <script lang="ts">
+  import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
+  import { cn } from "$lib/utils";
+  import { distinct } from "$lib/utils/collections";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
@@ -40,6 +45,7 @@
   import DataTableToolbar from "./DataTableToolbar.svelte";
   import DataTablePagination from "./DataTablePagination.svelte";
   import ColumnFilterPopover from "./ColumnFilterPopover.svelte";
+  import { getDeviceEventTypeLabel } from "$lib/constants/device-event-types";
 
   interface Props {
     rows: EntryRecord[];
@@ -58,6 +64,31 @@
   let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 50 });
   let globalFilter = $state("");
 
+  /** Columns that only carry controls, dropped from the printout. */
+  const CONTROL_COLUMNS = new Set(["select", "actions"]);
+
+  // Paper cannot page, so a printout carries every row the filters let through.
+  const print = new PrintMode();
+
+  interface FilterOption {
+    value: string;
+    label: string;
+  }
+
+  interface TypeFilterHeaderProps {
+    typeFilterOptions: FilterOption[];
+    selectedTypes: string[];
+    toggleTypeFilter: (kind: string) => void;
+    clearTypeFilter: () => void;
+  }
+
+  interface SourceFilterHeaderProps {
+    uniqueSources: string[];
+    selectedSources: string[];
+    toggleSourceFilter: (source: string) => void;
+    clearSourceFilter: () => void;
+  }
+
   // Column filter states
   let selectedTypes = $state<string[]>([]);
   let selectedSources = $state<string[]>([]);
@@ -73,14 +104,9 @@
   };
 
   // Compute unique sources from data
-  let uniqueSources = $derived.by(() => {
-    const sources = new Set<string>();
-    for (const r of rows) {
-      const source = r.data.dataSource || r.data.app;
-      if (source) sources.add(source);
-    }
-    return Array.from(sources).sort();
-  });
+  let uniqueSources = $derived(
+    distinct(rows.map((r) => r.data.dataSource || r.data.app || null)).sort()
+  );
 
   // Format functions
   function formatNumber(
@@ -115,7 +141,7 @@
             : record.data.text
           : "\u2014";
       case "deviceEvent":
-        return record.data.eventType ?? "\u2014";
+        return record.data.eventType ? getDeviceEventTypeLabel(record.data.eventType) : "\u2014";
       case "basalInjection":
         return formatNumber(record.data.units, "U");
     }
@@ -137,7 +163,7 @@
       case "note": {
         const parts: string[] = [];
         if (record.data.eventType) parts.push(record.data.eventType);
-        if (record.data.isAnnouncement) parts.push("Announcement");
+        if (record.data.isAnnouncement && !parts.includes("Announcement")) parts.push("Announcement");
         return parts.length > 0 ? parts.join(" \u00B7 ") : "\u2014";
       }
       case "deviceEvent":
@@ -159,7 +185,7 @@
       header: ({ table }) => {
         const checked = table.getIsAllPageRowsSelected();
         const indeterminate = table.getIsSomePageRowsSelected();
-        return renderSnippet(selectHeaderSnippet as any, {
+        return renderSnippet(selectHeaderSnippet, {
           checked,
           indeterminate,
           table,
@@ -167,7 +193,7 @@
       },
       cell: ({ row }) => {
         const checked = row.getIsSelected();
-        return renderSnippet(selectCellSnippet as any, { checked, row });
+        return renderSnippet(selectCellSnippet, { checked, row });
       },
       enableSorting: false,
       enableHiding: false,
@@ -178,7 +204,7 @@
       id: "time",
       accessorFn: (row) => row.data.mills,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Time" }),
       cell: ({ row }) => formatMills(row.original.data.mills),
       sortingFn: (rowA, rowB) =>
         (rowA.original.data.mills ?? 0) - (rowB.original.data.mills ?? 0),
@@ -187,11 +213,11 @@
     {
       id: "type",
       accessorFn: (row) => row.kind,
-      header: () => renderSnippet(typeFilterHeaderSnippet as any, { typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }),
+      header: () => renderSnippet(typeFilterHeaderSnippet, { typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }),
       cell: ({ row }) => {
         const label = categoryLabels[row.original.kind];
         const styles = getEntryStyle(row.original.kind);
-        return renderSnippet(typeBadgeSnippet as any, { label, styles });
+        return renderSnippet(typeBadgeSnippet, { label, styles });
       },
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
@@ -202,7 +228,7 @@
     {
       id: "value",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Value",
         }),
@@ -258,7 +284,7 @@
     {
       id: "source",
       accessorFn: (row) => row.data.dataSource || row.data.app,
-      header: () => renderSnippet(sourceFilterHeaderSnippet as any, { uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }),
+      header: () => renderSnippet(sourceFilterHeaderSnippet, { uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }),
       cell: ({ row }) => {
         const source = row.original.data.dataSource || row.original.data.app;
         if (!source) return "\u2014";
@@ -275,7 +301,7 @@
       id: "actions",
       header: "",
       cell: ({ row }) =>
-        renderSnippet(actionsSnippet as any, { entry: row.original }),
+        renderSnippet(actionsSnippet, { entry: row.original }),
       enableSorting: false,
       enableHiding: false,
       size: 50,
@@ -378,6 +404,10 @@
     return table.getSelectedRowModel().rows.map((row) => row.original);
   });
 
+  const visibleRows = $derived(
+    print.active ? table.getPrePaginationRowModel().rows : table.getRowModel().rows
+  );
+
   function handleBulkDelete() {
     if (onBulkDelete && selectedRows.length > 0) {
       onBulkDelete(selectedRows);
@@ -435,7 +465,15 @@
     }
   }
 
-  const typeFilterOptions = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
+  const printFilters = $derived([
+    ...(globalFilter.trim() ? [`search "${globalFilter.trim()}"`] : []),
+    ...(selectedTypes.length > 0
+      ? [`type: ${selectedTypes.map((t) => (typeFilterOptions.find((o) => o.value === t)?.label ?? t)).join(", ")}`]
+      : []),
+    ...(selectedSources.length > 0 ? [`source: ${selectedSources.join(", ")}`] : []),
+  ]);
+
+  const typeFilterOptions: FilterOption[] = Object.entries(ENTRY_CATEGORIES).map(([id, cat]) => ({
     value: id,
     label: cat.name,
   }));
@@ -459,7 +497,7 @@
   />
 {/snippet}
 
-{#snippet selectCellSnippet({ checked, row }: { checked: boolean; row: any })}
+{#snippet selectCellSnippet({ checked, row }: { checked: boolean; row: Row<EntryRecord> })}
   <Checkbox
     {checked}
     onCheckedChange={(value: boolean) => row.toggleSelected(!!value)}
@@ -471,13 +509,14 @@
   column,
   label,
 }: {
-  column: any;
+  column: Column<EntryRecord, unknown>;
   label: string;
 })}
+  <span class="hidden print:inline">{label}</span>
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8 data-[state=open]:bg-accent"
+    class="-ml-3 print:hidden"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -496,17 +535,15 @@
   styles,
 }: {
   label: string;
-  styles: any;
+  styles: ReturnType<typeof getEntryStyle>;
 })}
-  <Badge
-    variant="outline"
-    class="whitespace-nowrap {styles.colorClass} {styles.bgClass} {styles.borderClass}"
-  >
+  <Badge variant={styles.badge} class="print:hidden">
     {label}
   </Badge>
+  <span class="hidden print:inline">{label}</span>
 {/snippet}
 
-{#snippet typeFilterHeaderSnippet({ typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }: any)}
+{#snippet typeFilterHeaderSnippet({ typeFilterOptions, selectedTypes, toggleTypeFilter, clearTypeFilter }: TypeFilterHeaderProps)}
   <ColumnFilterPopover
     label="Type"
     options={typeFilterOptions}
@@ -516,7 +553,7 @@
   />
 {/snippet}
 
-{#snippet sourceFilterHeaderSnippet({ uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }: any)}
+{#snippet sourceFilterHeaderSnippet({ uniqueSources, selectedSources, toggleSourceFilter, clearSourceFilter }: SourceFilterHeaderProps)}
   <ColumnFilterPopover
     label="Source"
     options={uniqueSources.map((source: string) => ({
@@ -535,9 +572,8 @@
   <div class="flex items-center gap-1">
     {#if onDelete}
       <Button
-        variant="ghost"
-        size="sm"
-        class="h-8 w-8 p-0 text-destructive hover:text-destructive"
+        variant="ghost-destructive"
+        size="icon-sm"
         onclick={() => onDelete(entry)}
         title="Delete"
       >
@@ -549,26 +585,35 @@
 
 <!-- Table UI -->
 <div class="space-y-4">
-  <!-- Toolbar -->
-  <DataTableToolbar
-    bind:globalFilter
-    {table}
-    selectedCount={selectedRows.length}
-    onClearSelection={clearSelection}
-    onBulkDelete={handleBulkDelete}
-  />
+  <div class="print:hidden">
+    <DataTableToolbar
+      bind:globalFilter
+      {table}
+      selectedCount={selectedRows.length}
+      onClearSelection={clearSelection}
+      onBulkDelete={handleBulkDelete}
+    />
+  </div>
+  {#if printFilters.length > 0}
+    <p class="hidden text-xs text-muted-foreground print:block">
+      Filtered by {printFilters.join("; ")}
+    </p>
+  {/if}
 
   <!-- Table -->
   <div class="rounded-md border">
     <Table.Root>
       <Table.Header>
-        {#each table.getHeaderGroups() as headerGroup}
+        {#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
           <Table.Row>
-            {#each headerGroup.headers as header}
+            {#each headerGroup.headers as header (header.id)}
               <Table.Head
-                class="whitespace-nowrap"
+                class={cn(
+                  "whitespace-nowrap w-(--col-w)",
+                  CONTROL_COLUMNS.has(header.column.id) && "print:hidden"
+                )}
                 style={header.getSize()
-                  ? `width: ${header.getSize()}px`
+                  ? `--col-w: ${header.getSize()}px`
                   : undefined}
               >
                 {#if !header.isPlaceholder}
@@ -583,19 +628,24 @@
         {/each}
       </Table.Header>
       <Table.Body>
-        {#each table.getRowModel().rows as row (row.id)}
+        {#each visibleRows as row (row.id)}
           <Table.Row
             data-testid="treatment-row"
             data-state={row.getIsSelected() ? "selected" : undefined}
             class={onRowClick ? "cursor-pointer" : ""}
             onclick={(e: MouseEvent) => {
-              const target = e.target as HTMLElement;
-              if (target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
+              const target = e.target;
+              if (target instanceof Element && target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
               onRowClick?.(row.original);
             }}
           >
-            {#each row.getVisibleCells() as cell}
-              <Table.Cell class="py-2">
+            {#each row.getVisibleCells() as cell (cell.id)}
+              <Table.Cell
+                class={cn(
+                  "py-2",
+                  CONTROL_COLUMNS.has(cell.column.id) && "print:hidden"
+                )}
+              >
                 <FlexRender
                   content={cell.column.columnDef.cell}
                   context={cell.getContext()}
@@ -606,8 +656,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={columns.length}
-              class="h-24 text-center text-muted-foreground"
+              class="h-24 text-center"
             >
               No records found.
             </Table.Cell>
@@ -617,10 +668,11 @@
     </Table.Root>
   </div>
 
-  <!-- Pagination -->
-  <DataTablePagination
-    {table}
-    selectedCount={table.getFilteredSelectedRowModel().rows.length}
-    totalCount={table.getFilteredRowModel().rows.length}
-  />
+  <div class="print:hidden">
+    <DataTablePagination
+      {table}
+      selectedCount={table.getFilteredSelectedRowModel().rows.length}
+      totalCount={table.getFilteredRowModel().rows.length}
+    />
+  </div>
 </div>

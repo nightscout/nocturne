@@ -91,7 +91,8 @@ public class OutboundSinkGuardTests
         var migration = new MigrationJobService(
             NullLogger<MigrationJobService>.Instance,
             provider,
-            EmptyConfiguration());
+            EmptyConfiguration(),
+            new Nocturne.API.Services.TenantRunGuard());
 
         await migration.TestConnectionAsync(new TestMigrationConnectionRequest
         {

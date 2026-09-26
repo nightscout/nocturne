@@ -1,6 +1,7 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { onMount } from "svelte";
   import { setClockGlucoseSource } from "$lib/stores/realtime-store.svelte";
@@ -110,14 +111,14 @@
 <svelte:body class:embed-transparent={embed} />
 
 {#if loading}
-  <div class="fixed inset-0 flex items-center justify-center bg-neutral-950">
+  <div class="fixed inset-0 flex items-center justify-center bg-black">
     <Loader2 class="size-12 animate-spin text-white/50" />
   </div>
 {:else if error}
-  <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-neutral-950 text-white">
+  <div class="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-black text-white">
     <ClockIcon class="size-12 text-white/30" />
     <p class="text-lg">{error}</p>
-    <Button variant="outline" onclick={() => goto("/clock")}>
+    <Button variant="outline" onclick={() => goto(resolve("/clock"))}>
       <ArrowLeft class="mr-2 size-4" />
       Back to Clock Faces
     </Button>
@@ -131,25 +132,23 @@
            opacity-0 transition-opacity duration-300 hover:opacity-100"
   >
     <Button
-      variant="ghost"
+      variant="overlay"
       size="sm"
-      class="gap-2 text-white/80 hover:text-white"
-      onclick={() => goto("/clock")}
+      onclick={() => goto(resolve("/clock"))}
     >
       <ArrowLeft class="size-4" />
       Back
     </Button>
     <div class="flex items-center gap-2">
       {#if demoMode}
-        <Badge variant="outline" class="border-white/30 text-white/80">
+        <Badge variant="overlay">
           Demo Mode
         </Badge>
       {/if}
       <Button
-        variant="ghost"
+        variant="overlay"
         size="sm"
-        class="gap-2 text-white/80 hover:text-white"
-        onclick={() => goto(`/clock/config/${id}`)}
+        onclick={() => goto(resolve("/(authenticated)/clock/config/[id]", { id }))}
       >
         <Settings class="size-4" />
         Edit
@@ -181,7 +180,7 @@
     <!-- Stale indicator -->
     {#if isStale}
       <div class="fixed bottom-8 left-1/2 z-20 -translate-x-1/2">
-        <Badge variant="outline" class="border-white/50 px-4 py-2 text-white">
+        <Badge variant="overlay" size="lg">
           Data is {timeSince} old
         </Badge>
       </div>

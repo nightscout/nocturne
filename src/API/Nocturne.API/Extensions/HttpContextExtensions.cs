@@ -1,7 +1,9 @@
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.API.Middleware;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Infrastructure.Data;
 using Scope = Nocturne.Core.Models.Authorization.Scope;
 
 namespace Nocturne.API.Extensions;
@@ -105,13 +107,36 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
+    /// The <c>oauth_grants</c> id the request's credential authenticates under, or null when the
+    /// credential has no grant. <see cref="AuthContext.TokenId"/> means "the token row this
+    /// credential came from", which is a grant id only for the grant-backed credential types; a
+    /// platform-access or session cookie carries a JWT id instead, and a credential that carries
+    /// no token id carries none.
+    /// </summary>
+    public static Guid? GetGrantId(this HttpContext context)
+    {
+        var authContext = context.GetAuthContext();
+        if (authContext is null)
+        {
+            return null;
+        }
+
+        return authContext.AuthType is AuthType.OAuthAccessToken
+            or AuthType.ApiKey
+            or AuthType.DirectGrant
+            or AuthType.Guest
+            ? authContext.TokenId
+            : null;
+    }
+
+    /// <summary>
     /// Check if the current request has admin permissions
     /// </summary>
     /// <param name="context">HTTP context</param>
-    /// <returns>True if has admin permissions</returns>
+    /// <returns>True if the request holds superuser permissions</returns>
     public static bool IsAdmin(this HttpContext context)
     {
-        return context.HasPermission("admin") || context.HasPermission("*");
+        return context.HasPermission("*");
     }
 
     /// <summary>
@@ -170,6 +195,50 @@ public static class HttpContextExtensions
         var grantedScopes = context.GetGrantedScopes();
         return Scope.Satisfies(grantedScopes, scope);
     }
+
+    /// <summary>
+    /// The authority this request acknowledges an excursion with, for
+    /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/>.
+    /// </summary>
+    public static AlertAcknowledgementAuthority GetAlertAcknowledgementAuthority(this HttpContext context) =>
+        new(context.GetSubjectId(), context.GetGrantedScopes());
+
+    /// <summary>
+    /// The refusal a history-clamped caller reads when an action would give someone more history
+    /// than the caller can see.
+    /// </summary>
+    public const string HistoryCeilingDetail =
+        "You can see the last 24 hours only, so you cannot give anyone more history than that.";
+
+    /// <summary>
+    /// Whether the caller may read only the last 24 hours, per
+    /// <see cref="ICategoryReadContext.IsHistoryClamped"/>. This is the caller's history ceiling:
+    /// whatever the caller mints (an invite, a direct grant, a guest link, an OAuth consent)
+    /// inherits it, and a clamped caller may not lift another member's clamp or give a share
+    /// full history, because either would hand out more history than the caller can read.
+    /// </summary>
+    public static bool IsCallerHistoryClamped(this HttpContext context) =>
+        context.RequestServices?.GetService<ICategoryReadContext>()?.IsHistoryClamped == true;
+
+    /// <summary>
+    /// Clamps every read on the request's services to the last 24 hours: onto
+    /// <see cref="ICategoryReadContext"/>, which the DbContext factory and the PHI caches read, and
+    /// onto the request-scoped context, which was pinned before authentication ran. There is no way
+    /// to lift it.
+    /// </summary>
+    public static void ClampMemberHistory(this HttpContext context)
+    {
+        context.RequestServices.GetService<ICategoryReadContext>()?.ClampMemberHistory();
+        if (context.RequestServices.GetService<NocturneDbContext>() is { } db)
+            db.HistoryClamped = true;
+    }
+
+    /// <summary>
+    /// The history limit something this caller mints carries: the requested limit, or the
+    /// caller's own ceiling (<see cref="IsCallerHistoryClamped"/>).
+    /// </summary>
+    public static bool InheritHistoryClamp(this HttpContext context, bool requested) =>
+        requested || context.IsCallerHistoryClamped();
 
     /// <summary>
     /// The tenant the request resolved to, or <see langword="null"/> when it resolved to none.

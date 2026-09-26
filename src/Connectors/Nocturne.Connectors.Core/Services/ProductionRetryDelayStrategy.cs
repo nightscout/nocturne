@@ -3,15 +3,23 @@ using Nocturne.Connectors.Core.Interfaces;
 namespace Nocturne.Connectors.Core.Services;
 
 /// <summary>
-///     Production retry delay strategy with exponential backoff
-///     Follows the legacy implementation with 2.5 minutes * 2^attempt
+///     Exponential backoff from 30 seconds, capped at 2 minutes so no single delay outlasts
+///     <c>ConnectorBackgroundService.PerTenantSyncTimeout</c> (3 minutes); the token ends a delay
+///     the timeout overtakes.
 /// </summary>
 public class ProductionRetryDelayStrategy : IRetryDelayStrategy
 {
-    public async Task ApplyRetryDelayAsync(int attemptNumber)
+    internal static readonly TimeSpan BaseDelay = TimeSpan.FromSeconds(30);
+    internal static readonly TimeSpan MaxDelay = TimeSpan.FromMinutes(2);
+
+    public async Task ApplyRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken)
     {
-        // Exponential backoff: 2.5 minutes * 2^attempt (following legacy implementation)
-        var delayMs = (int)(2.5 * 60 * 1000 * Math.Pow(2, attemptNumber));
-        await Task.Delay(delayMs);
+        await Task.Delay(DelayFor(attemptNumber), cancellationToken);
+    }
+
+    internal static TimeSpan DelayFor(int attemptNumber)
+    {
+        var exponential = BaseDelay.TotalMilliseconds * Math.Pow(2, attemptNumber);
+        return TimeSpan.FromMilliseconds(Math.Min(exponential, MaxDelay.TotalMilliseconds));
     }
 }

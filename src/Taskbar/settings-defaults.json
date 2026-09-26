@@ -1,0 +1,10 @@
+{
+  "unit": "mmol",
+  "rangeLow": "3.9",
+  "rangeHigh": "10.0",
+  "colorInRange": "36C76A",
+  "colorHigh": "E6B800",
+  "colorLow": "E0533D",
+  "colorPredicted": "8AA0B4",
+  "textColor": "FFFFFF"
+}

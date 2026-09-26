@@ -9,12 +9,16 @@ namespace Nocturne.Connectors.Core.Tests.Services;
 internal sealed class RecordingRetryDelayStrategy : IRetryDelayStrategy
 {
     private readonly List<int> _delayedAttempts = [];
+    private readonly List<CancellationToken> _tokens = [];
 
     public IReadOnlyList<int> DelayedAttempts => _delayedAttempts;
 
-    public Task ApplyRetryDelayAsync(int attemptNumber)
+    public IReadOnlyList<CancellationToken> Tokens => _tokens;
+
+    public Task ApplyRetryDelayAsync(int attemptNumber, CancellationToken cancellationToken)
     {
         _delayedAttempts.Add(attemptNumber);
+        _tokens.Add(cancellationToken);
         return Task.CompletedTask;
     }
 }

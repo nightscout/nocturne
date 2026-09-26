@@ -11,23 +11,21 @@ namespace Nocturne.API.Services.Alerts.Engines;
 /// <see cref="IAlertEvaluationEngine"/> implementation backed by the Rust engine
 /// (crates/nocturne-alerts-core) over the nocturne_alerts FFI. The engine is stateless
 /// between calls: this adapter reads the rule's persisted state (sustained timers via
-/// <see cref="IConditionTimerStore"/>, tracker state via
-/// <see cref="IAlertTrackerRepository"/>), threads it through the envelope, and persists
-/// the deltas the engine reports — so DB rows stay identical to managed mode and either
+/// <see cref="IConditionTimerStore"/>, tracker state via <see cref="IAlertTrackerRepository"/>),
+/// threads it through the envelope, and persists what the engine decided, the tracker through
+/// <see cref="ExcursionTransitionWriter"/>. DB rows stay identical to managed mode, so either
 /// engine can pick up where the other left off.
 /// </summary>
 /// <remarks>
-/// Excursion identity: the FFI tracker uses opaque ordinals; this host owns the GUIDs.
-/// "Has an active excursion" goes in as a sentinel ordinal, and the response
-/// <c>transition</c> (+ <c>auto_resolved</c>) drives <see cref="IAlertTrackerRepository"/>
-/// excursion lifecycle calls (create/close/set-hysteresis/clear-hysteresis), with the
-/// real GUID stored back into tracker state.
+/// Excursion identity: the FFI tracker uses opaque ordinals and this host owns the GUIDs, so
+/// only "has an active excursion" crosses the boundary (<see cref="RustEnvelopeMapper.BuildTracker"/>).
 /// </remarks>
 internal sealed class RustBackedAlertEngine(
     IConditionTimerStore timerStore,
     IAlertTrackerRepository trackerRepository,
-    IExcursionTracker excursionTracker,
     AlertRuleEvaluationGate gate,
+    AlertEngineErrors errors,
+    ConditionVersionLog conditionLog,
     TimeProvider timeProvider,
     ILogger<RustBackedAlertEngine> logger)
     : IAlertEvaluationEngine
@@ -63,96 +61,61 @@ internal sealed class RustBackedAlertEngine(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct));
         var trackerState = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
-        var priorExcursionId = trackerState?.ActiveExcursionId;
 
-        var response = RustAlertEngine.Evaluate(
-            RustEnvelopeMapper.BuildRule(ruleRow),
-            RustEnvelopeMapper.BuildContext(context),
-            now,
-            timers,
-            RustEnvelopeMapper.BuildTracker(trackerState));
-        var result = RustAlertEngine.GetRuleResult(response);
-
-        if (result.Skipped == true)
+        var (response, result) = errors.Track("evaluate", AlertEngineErrors.RustEngine, () =>
         {
-            // signal_loss as a root type: state passes through unchanged, nothing persisted.
-            logger.LogWarning("No evaluator registered for condition type '{ConditionType}'", rule.ConditionType);
+            var response = RustAlertEngine.Evaluate(
+                RustEnvelopeMapper.BuildRule(ruleRow),
+                RustEnvelopeMapper.BuildContext(context),
+                now,
+                timers,
+                RustEnvelopeMapper.BuildTracker(trackerState),
+                options.IncludeLeafValues);
+            return (response, RustAlertEngine.GetRuleResult(response, options.IncludeLeafValues));
+        });
+
+        if (result.Skipped)
+        {
+            // The envelope rejects a body that does not parse before evaluating it, so this is
+            // reached only if the two checks disagree; the orchestrator logs rejections.
+            if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+            {
+                logger.LogWarning(
+                    "Rust engine skipped alert rule {AlertRuleId}: its condition tree cannot be evaluated; the rule is skipped until it is edited",
+                    rule.Id);
+            }
             return new AlertEngineEvaluation { Skipped = true };
         }
 
-        // 1. Sustained-timer deltas, in execution order — reproduces exactly the rows the
-        //    managed evaluators would have written.
+        // Timer deltas in execution order reproduce exactly the rows the managed evaluators write.
         await ApplyTimerOpsAsync(rule.Id, result.TimerOps, ct);
 
-        // 2. Excursion lifecycle. The transition is the event source; GUIDs are host-owned.
-        var (transition, activeExcursionId) = await ApplyTransitionAsync(
-            rule.Id, result, priorExcursionId, now, ct);
-
-        ExcursionTransition? autoResolveTransition = null;
-        if (result.AutoResolved == true)
-        {
-            // The engine force-closed the excursion in its auto-resolve pass (reason auto).
-            // Close whichever excursion was active after the main transition (a same-call
-            // open + auto-close closes the excursion we just created).
-            if (activeExcursionId is { } toClose)
-            {
-                await trackerRepository.CloseExcursionAsync(toClose, now, ct);
-                autoResolveTransition = new ExcursionTransition(
-                    ExcursionTransitionType.ExcursionClosed, toClose, ExcursionCloseReason.AutoResolve);
-                activeExcursionId = null;
-
-                logger.LogInformation(
-                    "Excursion {ExcursionId} force-closed for alert rule {AlertRuleId}, reason={Reason}",
-                    toClose, rule.Id, ExcursionCloseReason.AutoResolve);
-            }
-        }
-
-        // 3. Tracker state upsert from the engine's post-state (UpdatedAt is rewritten on
-        //    every evaluation, matching the managed tracker).
-        if (response.Tracker is { State: not null } post)
-        {
-            await trackerRepository.UpsertTrackerStateAsync(new AlertTrackerState
-            {
-                AlertRuleId = rule.Id,
-                State = post.State,
-                ConfirmationCount = post.ConfirmationCount,
-                ActiveExcursionId = post.ActiveExcursionOrdinal is null ? null : activeExcursionId,
-                UpdatedAt = post.UpdatedAt ?? now,
-            }, ct);
-        }
+        var decision = new TrackerDecision(
+            RustEnvelopeMapper.TransitionFromWire(result.Transition!.Value),
+            result.CloseReason is { } reason ? RustEnvelopeMapper.CloseReasonFromWire(reason) : null,
+            RustEnvelopeMapper.PostStateFromWire(response.Tracker!));
+        var (transition, autoResolveTransition) = await ExcursionTransitionWriter.ApplyAsync(
+            trackerRepository, logger, rule.Id, trackerState, decision, now, ct, result.AutoResolved);
 
         return new AlertEngineEvaluation
         {
-            ConditionMet = result.Root ?? false,
+            ConditionMet = result.Root!.Value,
             Transition = transition,
             AutoResolveTransition = autoResolveTransition,
             LeafValues = options.IncludeLeafValues
-                ? (result.Leaves ?? []).ToDictionary(l => l.LeafId, l => l.Value)
+                ? result.Leaves!.ToDictionary(l => l.LeafId, l => l.Value)
                 : null,
         };
     }
 
     /// <inheritdoc/>
-    public async Task<bool> EvaluateNodeAsync(
+    public Task<bool> EvaluateNodeAsync(
         Guid ruleId,
         ConditionNode node,
         SensorContext context,
         string pathRoot,
-        CancellationToken ct)
-    {
-        var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
-        {
-            RuleId = ruleId,
-            Node = RustEnvelopeMapper.BuildNode(node),
-            Root = pathRoot,
-            Context = RustEnvelopeMapper.BuildContext(context),
-            Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(ruleId, ct)),
-        });
-
-        await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
-        return response.Value;
-    }
+        CancellationToken ct) =>
+        EvaluateNodeAsync(ruleId, RustEnvelopeMapper.BuildNode(node), pathRoot, context, ct);
 
     /// <inheritdoc/>
     public async Task<ExcursionTransition> EvaluateAutoResolveAsync(
@@ -161,145 +124,63 @@ internal sealed class RustBackedAlertEngine(
         CancellationToken ct)
     {
         var none = new ExcursionTransition(ExcursionTransitionType.None);
-        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+        using var lease = await gate.AcquireAsync(rule.Id, ct);
+
+        var state = await trackerRepository.GetTrackerStateAsync(rule.Id, ct);
+        if (!RustAuxiliaryEvaluation.AttemptsAutoResolve(rule, state))
             return none;
 
-        // Active-excursion gate + force-close stay on the host tracker port — force-close
-        // is persistence bookkeeping, not evaluation (engine-semantics §6.2).
-        var activeExcursionId = await excursionTracker.GetActiveExcursionIdAsync(rule.Id, ct);
-        if (activeExcursionId is null)
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var timers = await timerStore.GetAllForRuleAsync(rule.Id, ct);
+        var outcome = RustAuxiliaryEvaluation.AutoResolve(
+            errors, AlertEngineErrors.RustEngine, rule, context, now, timers, state, logger);
+        if (outcome.Node is { } node)
+            await ApplyTimerOpsAsync(rule.Id, node.TimerOps, ct);
+        if (outcome.Close is not { } close)
             return none;
 
-        JsonElement nodeJson;
-        try
-        {
-            nodeJson = RustEnvelopeMapper.ParseJson(rule.AutoResolveParams);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
-            return none;
-        }
-
-        bool shouldResolve;
-        try
-        {
-            var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
-            {
-                RuleId = rule.Id,
-                Node = nodeJson,
-                Root = Evaluators.AlertConditionTypeNames.AutoResolvePathRoot,
-                Context = RustEnvelopeMapper.BuildContext(context),
-                Now = timeProvider.GetUtcNow().UtcDateTime,
-                Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-            });
-            await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-            shouldResolve = response.Value;
-        }
-        catch (RustAlertEngineException ex)
-        {
-            // Structurally malformed trees are skipped silently in the managed path
-            // (JsonException on ConditionNode deserialisation); mirror that.
-            logger.LogWarning(ex, "Failed to parse AutoResolveParams for rule {AlertRuleId}; skipping", rule.Id);
-            return none;
-        }
-
-        if (!shouldResolve) return none;
-
-        return await excursionTracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+        var (transition, _) = await ExcursionTransitionWriter.ApplyAsync(
+            trackerRepository, logger, rule.Id, state, close, now, ct);
+        return transition;
     }
 
     /// <summary>
     /// Root-eval-only fallback for a rule whose row vanished mid-evaluation: evaluates the
     /// condition tree (timers still mutate) without touching the tracker.
     /// </summary>
-    private async Task<bool> EvaluateRuleNodeWithoutTrackerAsync(
+    private Task<bool> EvaluateRuleNodeWithoutTrackerAsync(
         AlertRuleSnapshot rule,
         SensorContext context,
         CancellationToken ct)
     {
         var wire = Evaluators.AlertConditionTypeNames.ToWireString(rule.ConditionType);
-        var payload = string.IsNullOrWhiteSpace(rule.ConditionParams) ? "null" : rule.ConditionParams;
-        var nodeJson = RustEnvelopeMapper.ParseJson($"{{\"type\":{JsonSerializer.Serialize(wire)},{JsonSerializer.Serialize(wire)}:{payload}}}");
+        var node = RustEnvelopeMapper.ParseNode(
+            RustEnvelopeMapper.WrapPayload(wire, rule.ConditionParams));
+        return EvaluateNodeAsync(rule.Id, node, wire, context, ct);
+    }
 
-        var response = RustAlertEngine.EvaluateNode(new RustEvaluateNodeRequest
-        {
-            RuleId = rule.Id,
-            Node = nodeJson,
-            Root = wire,
-            Context = RustEnvelopeMapper.BuildContext(context),
-            Now = timeProvider.GetUtcNow().UtcDateTime,
-            Timers = RustEnvelopeMapper.BuildTimers(await timerStore.GetAllForRuleAsync(rule.Id, ct)),
-        });
-        await ApplyTimerOpsAsync(rule.Id, response.TimerOps, ct);
-        return response.Value;
+    /// <summary>
+    /// Evaluates one full condition node through <c>evaluate_node</c> against the rule's persisted
+    /// timers, and persists the timer deltas the engine reports.
+    /// </summary>
+    private async Task<bool> EvaluateNodeAsync(
+        Guid ruleId, JsonElement node, string pathRoot, SensorContext context, CancellationToken ct)
+    {
+        var response = RustAuxiliaryEvaluation.EvaluateNode(
+            errors, AlertEngineErrors.RustEngine, ruleId, node, pathRoot, context,
+            timeProvider.GetUtcNow().UtcDateTime, await timerStore.GetAllForRuleAsync(ruleId, ct));
+        await ApplyTimerOpsAsync(ruleId, response.TimerOps, ct);
+        return response.Value!.Value;
     }
 
     private async Task ApplyTimerOpsAsync(Guid ruleId, IReadOnlyList<RustTimerOp>? ops, CancellationToken ct)
     {
-        if (ops is null) return;
-        foreach (var op in ops)
+        foreach (var op in ops ?? [])
         {
-            switch (op.Op)
-            {
-                case "set" when op.At is { } at:
-                    await timerStore.SetFirstTrueAsync(ruleId, op.Path, at, ct);
-                    break;
-                case "clear":
-                    await timerStore.ClearAsync(ruleId, op.Path, ct);
-                    break;
-                default:
-                    logger.LogWarning("Unknown timer op '{Op}' for rule {AlertRuleId} path {Path}", op.Op, ruleId, op.Path);
-                    break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Applies the engine's tracker transition to the excursion rows and returns the
-    /// transition (with host GUIDs) plus the excursion active after the main transition.
-    /// </summary>
-    private async Task<(ExcursionTransition Transition, Guid? ActiveExcursionId)> ApplyTransitionAsync(
-        Guid ruleId,
-        RustRuleResult result,
-        Guid? priorExcursionId,
-        DateTime now,
-        CancellationToken ct)
-    {
-        var type = RustEnvelopeMapper.TransitionFromWire(result.Transition);
-        switch (type)
-        {
-            case ExcursionTransitionType.ExcursionOpened:
-            {
-                var excursion = await trackerRepository.CreateExcursionAsync(ruleId, now, ct);
-                logger.LogInformation(
-                    "Excursion {ExcursionId} opened for alert rule {AlertRuleId}", excursion.Id, ruleId);
-                return (new ExcursionTransition(type, excursion.Id), excursion.Id);
-            }
-
-            case ExcursionTransitionType.HysteresisStarted:
-                if (priorExcursionId is { } hsId)
-                    await trackerRepository.SetHysteresisStartedAsync(hsId, now, ct);
-                return (new ExcursionTransition(type, priorExcursionId), priorExcursionId);
-
-            case ExcursionTransitionType.HysteresisResumed:
-                if (priorExcursionId is { } hrId)
-                    await trackerRepository.ClearHysteresisAsync(hrId, ct);
-                return (new ExcursionTransition(type, priorExcursionId), priorExcursionId);
-
-            case ExcursionTransitionType.ExcursionClosed:
-                if (priorExcursionId is { } closeId)
-                    await trackerRepository.CloseExcursionAsync(closeId, now, ct);
-                return (
-                    new ExcursionTransition(type, priorExcursionId,
-                        RustEnvelopeMapper.CloseReasonFromWire(result.CloseReason) ?? ExcursionCloseReason.Hysteresis),
-                    null);
-
-            case ExcursionTransitionType.ExcursionContinues:
-                return (new ExcursionTransition(type, priorExcursionId), priorExcursionId);
-
-            default:
-                return (new ExcursionTransition(ExcursionTransitionType.None), priorExcursionId);
+            if (op.Op == RustTimerOpKind.Set)
+                await timerStore.SetFirstTrueAsync(ruleId, op.Path, op.At!.Value, ct);
+            else
+                await timerStore.ClearAsync(ruleId, op.Path, ct);
         }
     }
 }

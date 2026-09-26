@@ -32,7 +32,7 @@
   {content}
 {:else if content instanceof Function}
   <!-- It's unlikely that a CellContext will be passed to a Header -->
-  <!-- eslint-disable-next-line @typescript-eslint/no-explicit-any -->
+  <!-- eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/consistent-type-assertions -- upstream shadcn-svelte: TS cannot narrow the conditional `content` type against TContext -->
   {@const result = content(context as any)}
   {#if result instanceof RenderComponentConfig}
     {@const { component: Component, props } = result}

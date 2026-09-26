@@ -24,12 +24,9 @@ public class MeterGlucoseRepository : V4RepositoryBase<MeterGlucose, MeterGlucos
     /// <summary>
     /// Initializes a new instance of the <see cref="MeterGlucoseRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public MeterGlucoseRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<MeterGlucoseRepository> logger, IV4RecordBroadcaster<MeterGlucose>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 

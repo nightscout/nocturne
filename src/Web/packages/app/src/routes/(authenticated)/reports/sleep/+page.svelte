@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import {
     Card,
     CardAction,
@@ -8,34 +9,25 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
-  import {
-    Moon,
-    Calendar,
-    CalendarRange,
-    Sparkles,
-    Gauge,
-    Sunrise,
-    TriangleAlert,
-    Activity,
-  } from "lucide-svelte";
+  import { Moon, CalendarRange } from "lucide-svelte";
   import {
     Actogram,
     buildDayRange,
     type ActogramRowContext,
   } from "$lib/components/actogram";
-  import { MS_PER_HOUR, HOURS_PER_ROW } from "$lib/components/actogram/actogram";
+  import { MS_PER_HOUR, HOURS_PER_ROW, type ActogramPoint } from "$lib/components/actogram/actogram";
   import { getTrends } from "$api/generated/sleepReports.generated.remote";
   import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { resolve } from "$app/paths";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
   import { bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
-  import SleepSummaryTile, {
-    type TileDelta,
-  } from "$lib/components/reports/sleep/SleepSummaryTile.svelte";
+  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import SleepCompositionChart from "$lib/components/reports/sleep/SleepCompositionChart.svelte";
   import SleepWeeklyBreakdown from "$lib/components/reports/sleep/SleepWeeklyBreakdown.svelte";
   import { SleepSource } from "$api";
+  import { laneForStage, laneTexture } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
   import { Artwork } from "@nocturne/watercolour";
@@ -77,8 +69,8 @@
   const trendsResource = contextResource(
     () =>
       getTrends({
-        from: new Date(reportsParams.dateRangeMillis.from),
-        to: new Date(reportsParams.dateRangeMillis.to),
+        from: new Date(reportsParams.dateRangeMillis.from).toISOString(),
+        to: new Date(reportsParams.dateRangeMillis.to).toISOString(),
         source: sourceFilter === "all" ? undefined : sourceFilter,
       }),
     { errorTitle: "Error Loading Sleep Report" }
@@ -101,6 +93,28 @@
     }))
   );
 
+  function sleepSpanOf(point: ActogramPoint) {
+    const { startMills, endMills, state } = point;
+    return {
+      startMills: typeof startMills === "number" ? startMills : point.mills,
+      endMills: typeof endMills === "number" ? endMills : point.mills,
+      state: typeof state === "string" ? state : "",
+    };
+  }
+
+  const actogramLegend = $derived.by(() => {
+    const lanes = new Set(sleepPoints.map((p) => laneForStage(String(p.state ?? ""))));
+    return [
+      { lane: "deep", label: "Deep" },
+      { lane: "rem", label: "REM" },
+      { lane: "light", label: "Light" },
+      { lane: "awake", label: "Awake" },
+      { lane: "unspecified", label: "Asleep (unstaged)" },
+    ]
+      .filter((s) => lanes.has(s.lane))
+      .map((s) => ({ texture: laneTexture(s.lane), label: s.label }));
+  });
+
   // BG data as GlucosePoints
   const bgPoints = $derived(
     (actogramResource.current?.glucoseData ?? []).map((g) => ({ mills: g.mills, sgv: g.sgv, color: g.color }))
@@ -111,13 +125,13 @@
   const sleepWeeks = $derived(trendsResource.current?.weeks ?? []);
 
   // Maps each display day to the night's authoritative display date, for actogram row links.
-  const nightDateByDayKey = $derived.by(() => {
-    const map = new Map<number, string>();
-    for (const [key, night] of buildNightsByDayKey(sleepNights)) {
-      if (night.displayDate) map.set(key, night.displayDate);
-    }
-    return map;
-  });
+  const nightDateByDayKey = $derived(
+    indexBy(
+      buildNightsByDayKey(sleepNights),
+      ([key, night]) => (night.displayDate ? key : null),
+      ([, night]) => night.displayDate ?? ""
+    )
+  );
 
   function formatHoursMinutes(hours: number): string {
     const totalMinutes = Math.round(hours * 60);
@@ -128,13 +142,11 @@
     return formatShortDate(day);
   }
 
-  // --- Empty-state detection -------------------------------------------------
   const hasActogramSleep = $derived(sleepPoints.length > 0);
   const hasTrendsNights = $derived((sleepSummary?.nightCount ?? 0) > 0);
   const fullyEmpty = $derived(!hasTrendsNights && !hasActogramSleep);
   const showCompositionCard = $derived(hasTrendsNights);
 
-  // --- Delta arrows (adapted from the comparison report's diffRows) ---------
   function signedNumber(value: number, digits = 0): string {
     const abs = Math.abs(value);
     if (abs < (digits === 0 ? 0.5 : 0.05)) return "±0";
@@ -142,49 +154,21 @@
     return `${sign}${abs.toFixed(digits)}`;
   }
 
-  /** goodWhen="up": positive deltas render as an improvement (in-range green). */
-  function directionalDelta(
-    value: number | null | undefined,
-    goodWhen: "up" | "down",
-    format: (v: number) => string,
-    digits = 0
-  ): TileDelta | null {
-    if (value == null) return null;
-    const flat = Math.abs(value) < (digits === 0 ? 0.5 : 0.05);
-    const direction: TileDelta["direction"] = flat ? "flat" : value > 0 ? "up" : "down";
-    const tone: TileDelta["tone"] = flat
-      ? "neutral"
-      : (goodWhen === "up") === (direction === "up")
-        ? "good"
-        : "bad";
-    return { text: format(value), direction, tone, title: "vs prior 7 nights" };
+  function withDelta(caption: string, delta: string | null): string {
+    return delta == null ? caption : `${caption} · ${delta} vs prior 7 nights`;
   }
 
-  /** Always muted — direction of dawn rise isn't colored as better/worse. */
-  function neutralDelta(
-    value: number | null | undefined,
-    format: (v: number) => string
-  ): TileDelta | null {
-    if (value == null) return null;
-    const direction: TileDelta["direction"] =
-      Math.abs(value) < 0.05 ? "flat" : value > 0 ? "up" : "down";
-    return { text: format(value), direction, tone: "neutral", title: "vs prior 7 nights" };
-  }
-
+  const priorWeek = $derived(sleepSummary?.last7dVsPrior7d);
   const scoreDelta = $derived(
-    directionalDelta(sleepSummary?.last7dVsPrior7d?.scoreDelta, "up", (v) => signedNumber(v))
+    priorWeek?.scoreDelta == null ? null : signedNumber(priorWeek.scoreDelta)
   );
   const tirDelta = $derived(
-    directionalDelta(sleepSummary?.last7dVsPrior7d?.tirDelta, "up", (v) => `${signedNumber(v)} pp`)
+    priorWeek?.tirDelta == null ? null : `${signedNumber(priorWeek.tirDelta)} pp`
   );
   const dawnDelta = $derived(
-    neutralDelta(
-      sleepSummary?.last7dVsPrior7d?.dawnRiseDelta,
-      (v) => `${bgDelta(v)} ${bgLabel()}`
-    )
+    priorWeek?.dawnRiseDelta == null ? null : `${bgDelta(priorWeek.dawnRiseDelta)} ${bgLabel()}`
   );
 
-  // --- Tile captions -----------------------------------------------------
   const scoredNightsCount = $derived(sleepNights.filter((n) => n.sleepScore != null).length);
   const hasComputedScore = $derived(
     sleepNights.some((n) => n.sleepScore != null && n.scoreSource === "Computed")
@@ -205,6 +189,72 @@
   const lowsCaption = $derived(
     `${Math.round(sleepSummary?.nightsWithHypoPct ?? 0)}% of nights`
   );
+
+  const sleepFigures = $derived.by((): Figure[] => {
+    const s = sleepSummary;
+    const figures: Figure[] = [];
+    if (hasTrendsNights) {
+      figures.push({
+        label: "Average sleep",
+        value: formatHoursMinutes((s?.meanAsleepMinutes ?? 0) / 60),
+        note: "per night",
+      });
+    }
+    figures.push({
+      label: "Nights tracked",
+      value: `${s?.nightCount ?? 0} of ${s?.daysInRange ?? 0}`,
+      unit: "nights",
+      note: nightsTrackedCaption,
+    });
+    if (s?.meanScore != null) {
+      figures.push({
+        label: "Sleep score",
+        value: Math.round(s.meanScore).toString(),
+        note: withDelta(scoreCaption, scoreDelta),
+      });
+    }
+    if (s?.meanHrvMs != null) {
+      figures.push({
+        label: "HRV",
+        value: Math.round(s.meanHrvMs).toString(),
+        unit: "ms",
+        note: "overnight average",
+      });
+    }
+    return figures;
+  });
+
+  // meanTirPct is non-null exactly when overnight CGM data exists; hypo counts are only
+  // meaningful on CGM nights, so the lows figure shares the TIR figure's gate.
+  const overnightFigures = $derived.by((): Figure[] => {
+    const s = sleepSummary;
+    const figures: Figure[] = [];
+    if (s?.meanTirPct != null) {
+      figures.push({
+        label: "Overnight TIR",
+        value: Math.round(s.meanTirPct).toString(),
+        unit: "%",
+        note: withDelta(tirCaption, tirDelta),
+      });
+    }
+    if (s?.meanDawnRiseMg != null) {
+      figures.push({
+        label: "Dawn rise",
+        value: bgDelta(s.meanDawnRiseMg, true),
+        unit: bgLabel(),
+        note: withDelta("avg pre-wake change", dawnDelta),
+      });
+    }
+    if (s?.meanTirPct != null) {
+      figures.push({
+        label: "Overnight lows",
+        value: (s.totalHypoCount ?? 0).toString(),
+        unit: "lows",
+        note: lowsCaption,
+      });
+    }
+    return figures;
+  });
 </script>
 
 <svelte:head>
@@ -216,8 +266,7 @@
 </svelte:head>
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
-  <div>
+  <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Sleep & Overnight</h1>
     <p class="text-muted-foreground">
       Sleep patterns with overnight glucose overlay
@@ -244,88 +293,19 @@
       </CardContent>
     </Card>
   {:else}
-    <!-- Summary Cards -->
-    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-4">
-      {#if hasTrendsNights}
-        <SleepSummaryTile
-          icon={Moon}
-          iconClass="text-indigo-500"
-          label="Average Sleep"
-          value={formatHoursMinutes((sleepSummary?.meanAsleepMinutes ?? 0) / 60)}
-          caption="per night"
-        />
-      {/if}
-
-      <SleepSummaryTile
-        icon={Calendar}
-        label="Nights Tracked"
-        value={`${sleepSummary?.nightCount ?? 0} of ${sleepSummary?.daysInRange ?? 0}`}
-        caption={nightsTrackedCaption}
-      />
-
-      {#if sleepSummary?.meanScore != null}
-        <SleepSummaryTile
-          icon={Sparkles}
-          label="Sleep Score"
-          value={Math.round(sleepSummary.meanScore).toString()}
-          caption={scoreCaption}
-          delta={scoreDelta}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanTirPct != null}
-        <SleepSummaryTile
-          icon={Gauge}
-          label="Overnight TIR"
-          value={`${Math.round(sleepSummary.meanTirPct)}%`}
-          caption={tirCaption}
-          delta={tirDelta}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanDawnRiseMg != null}
-        <SleepSummaryTile
-          icon={Sunrise}
-          label="Dawn Rise"
-          value={bgDelta(sleepSummary.meanDawnRiseMg, true)}
-          unit={bgLabel()}
-          caption="avg pre-wake change"
-          delta={dawnDelta}
-        />
-      {/if}
-
-      <!-- meanTirPct is non-null exactly when overnight CGM data exists; hypo
-           counts are only meaningful on CGM nights, so the lows tile shares
-           the TIR tile's gate. -->
-      {#if sleepSummary?.meanTirPct != null}
-        <SleepSummaryTile
-          icon={TriangleAlert}
-          label="Overnight Lows"
-          value={(sleepSummary?.totalHypoCount ?? 0).toString()}
-          caption={lowsCaption}
-        />
-      {/if}
-
-      {#if sleepSummary?.meanHrvMs != null}
-        <SleepSummaryTile
-          icon={Activity}
-          label="HRV"
-          value={Math.round(sleepSummary.meanHrvMs).toString()}
-          unit="ms"
-          caption="overnight average"
-        />
-      {/if}
-    </div>
+    <FigureStrip figures={sleepFigures} />
+    {#if overnightFigures.length > 0}
+      <FigureStrip figures={overnightFigures} />
+    {/if}
 
     {#if hasTrendsNights && sleepWeeks.length > 0}
-      <!-- Weekly Breakdown -->
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <CalendarRange class="h-5 w-5 text-indigo-500" />
+            <CalendarRange class="h-5 w-5 text-report-lifestyle" />
             Weekly Breakdown
           </CardTitle>
-          <CardDescription>Each tracked night links to its full report.</CardDescription>
+          <CardDescription class="print:hidden">Each tracked night links to its full report.</CardDescription>
         </CardHeader>
         <CardContent>
           <SleepWeeklyBreakdown weeks={sleepWeeks} nights={sleepNights} />
@@ -334,24 +314,25 @@
     {/if}
 
     {#if showCompositionCard}
-      <!-- Sleep Composition -->
       <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <Moon class="h-5 w-5 text-indigo-500" />
+            <Moon class="h-5 w-5 text-report-lifestyle" />
             Sleep Composition
           </CardTitle>
           {#if sourceFilter !== "all"}
             <CardDescription>
               Showing all {sourceLabel} sessions — nights aren't deduplicated across devices.
             </CardDescription>
+          {:else}
+            <CardDescription class="hidden print:block">Source: {sourceLabel}</CardDescription>
           {/if}
-          <CardAction>
+          <CardAction class="print:hidden">
             <Select.Root
               type="single"
               value={sourceFilter}
               onValueChange={(v) =>
-                (viewParams.source = v && v !== "all" ? (v as SleepSource) : null)}
+                (viewParams.source = Object.values(SleepSource).find((s) => s === v) ?? null)}
             >
               <Select.Trigger class="w-44">
                 {sourceLabel}
@@ -377,11 +358,10 @@
       </Card>
     {/if}
 
-    <!-- Actogram -->
-    <Card>
+    <Card class="print:break-inside-auto!">
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Moon class="h-5 w-5 text-indigo-500" />
+          <Moon class="h-5 w-5 text-report-lifestyle" />
           Sleep Actogram
         </CardTitle>
       </CardHeader>
@@ -393,13 +373,15 @@
           thresholds={actogramResource.current?.thresholds}
           rowHeight={48}
           visibleCount={VISIBLE_DAYS}
+          printCount={report.rangeDayCount}
           initialOffset={0}
+          legend={actogramLegend}
         >
           {#snippet tooltipValue({ point })}
-            {@const span = point as { mills: number; state: string }}
-            <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={span.state.toLowerCase()}></div>
+            {@const span = sleepSpanOf(point)}
+            <div class="size-2 rounded-full bg-lane" data-lane={span.state.toLowerCase()}></div>
             <span class="text-muted-foreground">Sleep</span>
-            <span class="ml-auto font-mono font-medium tabular-nums capitalize">{span.state.toLowerCase()}</span>
+            <span class="ml-auto font-medium capitalize">{span.state.toLowerCase()}</span>
           {/snippet}
           {#snippet rowLabel({ day })}
             {@const linkDate = nightDateByDayKey.get(dayKeyFor(day))}
@@ -417,8 +399,8 @@
             {/if}
           {/snippet}
           {#snippet row(ctx: ActogramRowContext)}
-            {#each ctx.data as { point, hoursFromStart, isExtended }}
-              {@const span = point as { mills: number; startMills: number; endMills: number; state: string }}
+            {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
+              {@const span = sleepSpanOf(point)}
               {@const durationHours = (span.endMills - span.startMills) / MS_PER_HOUR}
               {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
               {@const endHours = hoursFromStart + durationHours}
@@ -431,7 +413,7 @@
                 width={rectWidth}
                 height={ctx.height - 8}
                 data-lane={span.state.toLowerCase()}
-                class="fill-[var(--lane-color)]"
+                class={["fill-lane", patternClass(laneTexture(laneForStage(span.state))), !isExtended && "print:opacity-90"]}
                 opacity={isExtended ? 0.25 : 0.5}
               />
             {/each}

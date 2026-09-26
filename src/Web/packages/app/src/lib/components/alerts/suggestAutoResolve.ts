@@ -1,5 +1,6 @@
 import {
 	stripEditorFields,
+	withPayload,
 	type ConditionNode,
 	type ComparisonOperator,
 } from "./types";
@@ -83,7 +84,7 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 			return {
 				type: "predicted",
 				predicted: {
-					operator: invertOperator(p.operator as ComparisonOperator),
+					operator: invertOperator(p.operator),
 					value: p.value,
 					within_minutes: p.within_minutes,
 				},
@@ -97,7 +98,7 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 			return {
 				type: "staleness",
 				staleness: {
-					operator: invertOperator(p.operator as ComparisonOperator),
+					operator: invertOperator(p.operator),
 					value: p.value,
 				},
 			};
@@ -112,13 +113,10 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 		case "sensitivity_ratio": {
 			const payload = node[node.type];
 			if (!payload) return null;
-			return {
-				type: node.type,
-				[node.type]: {
-					operator: invertOperator(payload.operator as ComparisonOperator),
-					value: payload.value,
-				},
-			} as ConditionNode;
+			return withPayload(node.type, {
+				operator: invertOperator(payload.operator),
+				value: payload.value,
+			});
 		}
 		case "loop_stale":
 		case "loop_enaction_stale":
@@ -132,10 +130,7 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 		case "do_not_disturb": {
 			const payload = node[node.type];
 			if (!payload) return null;
-			return {
-				type: node.type,
-				[node.type]: { is_active: !payload.is_active },
-			} as ConditionNode;
+			return withPayload(node.type, { is_active: !payload.is_active });
 		}
 		case "alert_state": {
 			const p = node.alert_state;
@@ -163,7 +158,7 @@ function invertNode(node: ConditionNode): ConditionNode | null {
 	return null;
 }
 
-function invertOperator(op: ComparisonOperator): ComparisonOperator {
+function invertOperator(op: string | undefined): ComparisonOperator | undefined {
 	switch (op) {
 		case "<":
 			return ">=";
@@ -173,6 +168,8 @@ function invertOperator(op: ComparisonOperator): ComparisonOperator {
 			return "<=";
 		case ">=":
 			return "<";
+		default:
+			return undefined;
 	}
 }
 

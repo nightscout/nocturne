@@ -1,14 +1,21 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.ClientDevices;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Tests.Shared.Mocks;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Services.Alerts;
@@ -16,9 +23,12 @@ namespace Nocturne.API.Tests.Services.Alerts;
 [Trait("Category", "Unit")]
 public class AlertAcknowledgementServiceTests
 {
+    private readonly string _databaseName = $"acknowledgement_tests_{Guid.NewGuid()}";
+    private readonly InMemoryDatabaseRoot _databaseRoot = new();
     private readonly DbContextOptions<NocturneDbContext> _options;
     private readonly TestDbContextFactory _factory;
     private readonly Mock<ISignalRBroadcastService> _broadcast = new();
+    private readonly Mock<ITenantMemberService> _members = new();
     private readonly AlertAcknowledgementService _service;
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -27,7 +37,7 @@ public class AlertAcknowledgementServiceTests
     public AlertAcknowledgementServiceTests()
     {
         _options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseInMemoryDatabase($"acknowledgement_tests_{Guid.NewGuid()}")
+            .UseInMemoryDatabase(_databaseName, _databaseRoot)
             .Options;
         using (var db = new NocturneDbContext(_options))
         {
@@ -43,6 +53,7 @@ public class AlertAcknowledgementServiceTests
             _factory,
             _tenantAccessor,
             _broadcast.Object,
+            _members.Object,
             NullLogger<AlertAcknowledgementService>.Instance);
     }
 
@@ -97,7 +108,7 @@ public class AlertAcknowledgementServiceTests
     {
         var (excursionId, instanceId) = await SeedActiveExcursionAsync();
 
-        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "system:auto-ack-on-trigger", AlertAcknowledgementAuthority.System, broadcast: true, CancellationToken.None);
 
         await using var db = NewUnfilteredContext();
         var excursion = await db.AlertExcursions.IgnoreQueryFilters()
@@ -128,7 +139,7 @@ public class AlertAcknowledgementServiceTests
             await db.SaveChangesAsync();
         }
 
-        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", AlertAcknowledgementAuthority.System, broadcast: true, CancellationToken.None);
 
         await using var db2 = NewUnfilteredContext();
         var excursion = await db2.AlertExcursions.IgnoreQueryFilters()
@@ -145,7 +156,7 @@ public class AlertAcknowledgementServiceTests
     {
         var (excursionId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddMinutes(-1));
 
-        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", AlertAcknowledgementAuthority.System, broadcast: true, CancellationToken.None);
 
         await using var db = NewUnfilteredContext();
         var excursion = await db.AlertExcursions.IgnoreQueryFilters()
@@ -166,7 +177,7 @@ public class AlertAcknowledgementServiceTests
         var (excursionId, instanceId) = await SeedActiveExcursionAsync(
             endedAt: DateTime.UtcNow.AddSeconds(90));
 
-        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, excursionId, "user:bob", AlertAcknowledgementAuthority.System, broadcast: true, CancellationToken.None);
 
         await using var db = NewUnfilteredContext();
         var excursion = await db.AlertExcursions.IgnoreQueryFilters()
@@ -186,11 +197,209 @@ public class AlertAcknowledgementServiceTests
     [Fact]
     public async Task AcknowledgeExcursion_NotFound_NoOp()
     {
-        await _service.AcknowledgeExcursionAsync(_tenantId, Guid.NewGuid(), "user:bob", broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(_tenantId, Guid.NewGuid(), "user:bob", AlertAcknowledgementAuthority.System, broadcast: true, CancellationToken.None);
 
         _broadcast.Verify(
             x => x.BroadcastAlertEventAsync(It.IsAny<string>(), It.IsAny<object>()),
             Times.Never);
+    }
+
+    // ---- AcknowledgeExcursionAsync: acknowledge for everyone or mute for the caller ----
+
+    private static readonly string[] ViewerPermissions =
+        [Scope.GlucoseRead, Scope.ReportsRead, Scope.DeviceNotify, Scope.DeviceActuate];
+
+    private AlertAcknowledgementAuthority Member(
+        Guid subjectId, IEnumerable<string> membership, params string[] credentialScopes)
+    {
+        _members
+            .Setup(m => m.GetEffectivePermissionsAsync(subjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(membership.ToHashSet());
+        return new AlertAcknowledgementAuthority(subjectId, credentialScopes.ToHashSet());
+    }
+
+    private async Task<List<AlertExcursionMuteEntity>> MutesAsync()
+    {
+        await using var db = NewUnfilteredContext();
+        return await db.AlertExcursionMutes.IgnoreQueryFilters().ToListAsync();
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_ViewerWithDeviceNotifyOnly_MutesForThemselvesAndLeavesEscalationRunning()
+    {
+        var (excursionId, instanceId) = await SeedActiveExcursionAsync();
+        var viewer = Guid.NewGuid();
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", Member(viewer, ViewerPermissions, Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Muted);
+        await using var db = NewUnfilteredContext();
+        var excursion = await db.AlertExcursions.IgnoreQueryFilters().FirstAsync(e => e.Id == excursionId);
+        excursion.AcknowledgedAt.Should().BeNull("a mute must not acknowledge the excursion for everyone");
+        var instance = await db.AlertInstances.IgnoreQueryFilters().FirstAsync(i => i.Id == instanceId);
+        instance.Status.Should().Be("triggered");
+
+        var mute = (await MutesAsync()).Should().ContainSingle().Subject;
+        mute.SubjectId.Should().Be(viewer);
+        mute.AlertExcursionId.Should().Be(excursionId);
+        mute.TenantId.Should().Be(_tenantId);
+
+        _broadcast.Verify(x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()), Times.Never);
+        _broadcast.Verify(
+            x => x.BroadcastDeviceActionToSubjectAsync(
+                viewer,
+                It.Is<DeviceActionIntent>(i =>
+                    i.ExcursionId == excursionId && i.Acknowledged && i.Intent == "acknowledged")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_RepeatMute_KeepsOneRow()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+        var authority = Member(Guid.NewGuid(), ViewerPermissions, Scope.DeviceNotify);
+
+        await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", authority, broadcast: true, CancellationToken.None);
+        await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", authority, broadcast: true, CancellationToken.None);
+
+        (await MutesAsync()).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_MuteThatLosesTheInsertRace_StillReportsMutedAndNudgesTheDevices()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+        var viewer = Guid.NewGuid();
+        var racingOptions = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(_databaseName, _databaseRoot)
+            .AddInterceptors(new ConcurrentMuteWinsInterceptor(_options))
+            .Options;
+        var service = new AlertAcknowledgementService(
+            new TestDbContextFactory(racingOptions) { TenantOverride = _tenantId },
+            _tenantAccessor,
+            _broadcast.Object,
+            _members.Object,
+            NullLogger<AlertAcknowledgementService>.Instance);
+
+        var outcome = await service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", Member(viewer, ViewerPermissions, Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Muted);
+        (await MutesAsync()).Should().ContainSingle().Which.SubjectId.Should().Be(viewer);
+        _broadcast.Verify(
+            x => x.BroadcastDeviceActionToSubjectAsync(viewer, It.IsAny<DeviceActionIntent>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_CredentialWithAlertsReadWrite_AcknowledgesForEveryone()
+    {
+        var (excursionId, instanceId) = await SeedActiveExcursionAsync();
+        var authority = new AlertAcknowledgementAuthority(
+            Guid.NewGuid(), new HashSet<string> { Scope.AlertsReadWrite, Scope.DeviceNotify });
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:caretaker", authority, broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Acknowledged);
+        await using var db = NewUnfilteredContext();
+        (await db.AlertExcursions.IgnoreQueryFilters().FirstAsync(e => e.Id == excursionId))
+            .AcknowledgedBy.Should().Be("user:caretaker");
+        (await db.AlertInstances.IgnoreQueryFilters().FirstAsync(i => i.Id == instanceId))
+            .Status.Should().Be("acknowledged");
+        (await MutesAsync()).Should().BeEmpty();
+        _broadcast.Verify(x => x.BroadcastAlertEventAsync("alert_acknowledged", It.IsAny<object>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_OwnersDeviceScopedCredential_AcknowledgesForEveryone()
+    {
+        // The Companion's grant resolves to device.notify alone even for an owner, so the decision
+        // has to look past the token to the membership.
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:owner", Member(Guid.NewGuid(), [Scope.FullAccess], Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Acknowledged);
+        await using var db = NewUnfilteredContext();
+        (await db.AlertExcursions.IgnoreQueryFilters().FirstAsync(e => e.Id == excursionId))
+            .AcknowledgedAt.Should().NotBeNull();
+        (await MutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_DeviceCredentialOfMemberHoldingAlertsReadWrite_AcknowledgesForEveryone()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:caretaker",
+            Member(Guid.NewGuid(), [Scope.GlucoseRead, Scope.AlertsReadWrite], Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Acknowledged);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_ClinicianWithAlertsRead_Mutes()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:clinician",
+            Member(Guid.NewGuid(), [Scope.GlucoseRead, Scope.AlertsRead, Scope.DeviceNotify], Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Muted);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_SubjectWithNoMembership_Mutes()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync();
+        var subject = Guid.NewGuid();
+        _members
+            .Setup(m => m.GetEffectivePermissionsAsync(subject, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlySet<string>?)null);
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:someone",
+            new AlertAcknowledgementAuthority(subject, new HashSet<string> { Scope.DeviceNotify }),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Muted);
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_ViewerOnAlreadyAcknowledgedExcursion_ReportsAcknowledgedWithoutMuting()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync(acknowledgedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", Member(Guid.NewGuid(), ViewerPermissions, Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Acknowledged);
+        (await MutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AcknowledgeExcursion_ViewerOnClosedExcursion_ReportsClosedWithoutMuting()
+    {
+        var (excursionId, _) = await SeedActiveExcursionAsync(endedAt: DateTime.UtcNow.AddMinutes(-1));
+
+        var outcome = await _service.AcknowledgeExcursionAsync(
+            _tenantId, excursionId, "user:viewer", Member(Guid.NewGuid(), ViewerPermissions, Scope.DeviceNotify),
+            broadcast: true, CancellationToken.None);
+
+        outcome.Should().Be(AlertAcknowledgementOutcome.Closed);
+        (await MutesAsync()).Should().BeEmpty();
     }
 
     // ---- AcknowledgeAllAsync ----
@@ -259,6 +468,7 @@ public class AlertAcknowledgementServiceTests
             _factory,
             _tenantAccessor,
             _broadcast.Object,
+            _members.Object,
             NullLogger<AlertAcknowledgementService>.Instance,
             audit);
 
@@ -266,6 +476,41 @@ public class AlertAcknowledgementServiceTests
 
         _factory.Created.Should().NotBeEmpty();
         _factory.Created.Should().OnlyContain(c => c.AuditContext == audit);
+    }
+
+    /// <summary>
+    /// Commits the same mute from another context just before the service's own insert, then
+    /// rejects that insert the way PostgreSQL's unique index would. The in-memory provider does
+    /// not enforce unique indexes, so the rejection is raised here.
+    /// </summary>
+    private sealed class ConcurrentMuteWinsInterceptor(DbContextOptions<NocturneDbContext> winnerOptions)
+        : SaveChangesInterceptor
+    {
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken ct = default)
+        {
+            var losing = eventData.Context!.ChangeTracker.Entries<AlertExcursionMuteEntity>()
+                .SingleOrDefault(e => e.State == EntityState.Added)?.Entity;
+            if (losing is null)
+                return result;
+
+            await using var winner = new NocturneDbContext(winnerOptions) { TenantId = losing.TenantId };
+            winner.AlertExcursionMutes.Add(new AlertExcursionMuteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = losing.TenantId,
+                SubjectId = losing.SubjectId,
+                AlertExcursionId = losing.AlertExcursionId,
+                CreatedAt = losing.CreatedAt,
+            });
+            await winner.SaveChangesAsync(ct);
+
+            throw new DbUpdateException(
+                "duplicate key value violates unique constraint",
+                new PostgresException(
+                    "duplicate key value violates unique constraint", "ERROR", "ERROR",
+                    PostgresErrorCodes.UniqueViolation));
+        }
     }
 
     private sealed class TestDbContextFactory(DbContextOptions<NocturneDbContext> options)

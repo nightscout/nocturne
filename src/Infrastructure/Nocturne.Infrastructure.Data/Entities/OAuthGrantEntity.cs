@@ -275,7 +275,6 @@ public class OAuthGrantEntity : ITenantScoped, IAuditable, IEntityCreated
             LegacySecretHash = legacySecretHash,
             LegacyTokenDigest = legacyTokenDigest,
             IsMigrated = true,
-            CreatedAt = DateTime.UtcNow,
         };
     }
 }

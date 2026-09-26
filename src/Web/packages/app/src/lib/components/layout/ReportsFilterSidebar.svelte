@@ -37,29 +37,17 @@
   // This is the single source of truth; the highlighted preset is derived from it.
   let draftCalendarValue = $state<DateRange | undefined>(undefined);
 
-  // Initialize draft state when sidebar opens
+  // Initialize draft state when the sidebar opens, from the resolved range
+  // rather than the URL-only params: a default range seeded during hydration
+  // never reaches the URL, so params.from/days can read as null while the range
+  // on screen is intact.
   $effect(() => {
     if (!open) return;
 
-    if (params.from && params.to) {
-      try {
-        draftCalendarValue = {
-          start: parseDate(params.from),
-          end: parseDate(params.to),
-        };
-        return;
-      } catch {
-        // Fall through to days-based calculation
-      }
-    }
-
-    if (params.days) {
-      const endDate = today(getLocalTimeZone());
-      draftCalendarValue = {
-        start: endDate.subtract({ days: params.days - 1 }),
-        end: endDate,
-      };
-    }
+    draftCalendarValue = {
+      start: parseDate(params.fromDay),
+      end: parseDate(params.toDay),
+    };
   });
 
   // The quick-selection preset to highlight: the whole-day span of the draft
@@ -134,15 +122,15 @@
 </script>
 
 <Sheet.Root bind:open {onOpenChange}>
-  <Sheet.Content side="right" class="w-[320px] sm:w-[400px] p-0">
-    <Sheet.Header class="px-6 py-4 border-b border-border">
+  <Sheet.Content side="right" class="w-[320px] sm:w-[400px]">
+    <Sheet.Header class="px-6 py-4 border-b">
       <div class="flex items-center justify-between">
         <Sheet.Title class="flex items-center gap-2">
           <Filter class="h-5 w-5" />
           Report Filters
         </Sheet.Title>
       </div>
-      <Sheet.Description class="text-sm text-muted-foreground">
+      <Sheet.Description>
         Adjust the date range for your report.
       </Sheet.Description>
     </Sheet.Header>
@@ -151,14 +139,13 @@
       <div class="px-6 py-4 space-y-6">
         <!-- Quick Date Presets -->
         <div class="space-y-3">
-          <Label class="text-sm font-medium">Quick Selection</Label>
+          <Label>Quick Selection</Label>
           <div class="grid grid-cols-3 gap-2">
-            {#each dayPresets as preset}
+            {#each dayPresets as preset (preset.days)}
               <Button
                 variant={selectedDays === preset.days ? "default" : "outline"}
-                size="sm"
+                size="xs"
                 onclick={() => selectPreset(preset.days)}
-                class="text-xs"
               >
                 {preset.label}
               </Button>
@@ -170,7 +157,7 @@
 
         <!-- Calendar Selection -->
         <div class="space-y-3">
-          <Label class="text-sm font-medium flex items-center gap-2">
+          <Label class="flex items-center">
             <Calendar class="h-4 w-4" />
             Custom Date Range
           </Label>
@@ -183,7 +170,6 @@
               captionLayout="dropdown"
               locale={formatLocale()}
               onValueChange={handleCalendarChange}
-              class="p-0"
             />
           </div>
         </div>

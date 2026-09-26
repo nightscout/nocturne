@@ -235,7 +235,7 @@
 
   <!-- Time markers -->
   <div class="flex justify-between text-xs text-muted-foreground px-2">
-    {#each [0, 6, 12, 18, 24] as hour}
+    {#each [0, 6, 12, 18, 24] as hour (hour)}
       <span>
         {hour === 0
           ? "12a"

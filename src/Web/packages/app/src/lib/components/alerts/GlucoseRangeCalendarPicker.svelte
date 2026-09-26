@@ -74,7 +74,8 @@
 
   // Reset pending selection when the confirmed props change from outside.
   $effect(() => {
-    startDate; endDate; // track deps
+    void startDate;
+    void endDate; // track deps
     pendingStart = null;
     hoverDate = null;
   });
@@ -120,8 +121,8 @@
   // from `.current` instead of flicking back through a loading state.
   const punchCardQuery = $derived(
     getPunchCardData({
-      startDate: startOfMonth(viewMonth).toDate(tz),
-      endDate: endOfMonth(viewMonth).toDate(tz),
+      startDate: startOfMonth(viewMonth).toString(),
+      endDate: endOfMonth(viewMonth).toString(),
     })
   );
   const entriesByDate = $derived.by<EntriesByDate>(() => {
@@ -231,8 +232,7 @@
   <div class="flex items-center justify-between mb-2">
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoPrevMonth}
       aria-label="Previous month"
     >
@@ -253,8 +253,7 @@
     </div>
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoNextMonth}
       disabled={!canGoNext}
       aria-label="Next month"
@@ -265,7 +264,7 @@
 
   <div class="grid grid-cols-7 gap-1 mb-1">
     {#each weekdayLabels as label, i (i)}
-      <div class="text-[10px] text-center text-muted-foreground uppercase tracking-wide font-medium">
+      <div class="text-2xs text-center text-muted-foreground uppercase tracking-wide font-medium">
         {label}
       </div>
     {/each}

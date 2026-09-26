@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Nocturne.Infrastructure.Data.Interceptors;
 
 namespace Nocturne.Infrastructure.Data.Tests.Interceptors;
@@ -47,6 +48,7 @@ public class TenantConnectionInterceptorTests
     {
         public int CommandsCreated { get; private set; }
 
+        [AllowNull]
         public override string ConnectionString { get; set; } = string.Empty;
 
         public override string Database => string.Empty;
@@ -77,6 +79,7 @@ public class TenantConnectionInterceptorTests
 
     private sealed class NoOpCommand : DbCommand
     {
+        [AllowNull]
         public override string CommandText { get; set; } = string.Empty;
 
         public override int CommandTimeout { get; set; }

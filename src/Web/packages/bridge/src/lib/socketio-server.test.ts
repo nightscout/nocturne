@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createServer } from 'http';
 import SocketIOServer, { pickHandshakeHost, resolveTenantSlug } from './socketio-server.js';
@@ -62,7 +63,33 @@ function makeServer(tenantSlugs: string[] = []): SocketIOServer {
 }
 
 function fakeSocket(headers: HandshakeHeaders, auth: { token?: string } = {}) {
-  return { id: 'sock1', handshake: { headers, auth }, data: {} as Record<string, unknown> };
+  return {
+    id: 'sock1',
+    handshake: { headers, auth },
+    data: {} as Record<string, unknown>,
+    join: vi.fn(),
+    on: vi.fn(),
+    emit: vi.fn(),
+  };
+}
+
+/** Admits `socket` through the handshake, then hands it to the server's own connection handler. */
+async function connect(server: SocketIOServer, socket: ReturnType<typeof fakeSocket>) {
+  await server.start();
+  const next = vi.fn();
+  await server.authorizeHandshake(socket as never, next);
+  const handlers = server.getIO()!.of('/').listeners('connection');
+  expect(handlers).toHaveLength(1);
+  handlers[0](socket);
+  await server.stop();
+  return next;
+}
+
+/** A ticket signed with the instance key but carrying no admission, as minted before it existed. */
+function ticketWithoutAdmission(host: string): string {
+  const payload = Buffer.from(JSON.stringify({ h: host, exp: Date.now() + 60_000 }), 'utf-8')
+    .toString('base64url');
+  return `${payload}.${createHmac('sha256', SECRET).update(payload).digest('hex')}`;
 }
 
 describe('SocketIOServer.authorizeHandshake', () => {
@@ -71,7 +98,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
 
     await server.authorizeHandshake(
-      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com') }) as never,
+      fakeSocket({ host: 'evil.com' }, { token: signHandshakeTicket(SECRET, 'evil.com', true) }) as never,
       next,
     );
 
@@ -100,7 +127,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     // only a connection offering no ticket at all falls through to the legacy path.
     const server = makeServer();
     const next = vi.fn();
-    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run');
+    const ticket = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true);
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
       { token: ticket.slice(0, -1) + (ticket.endsWith('a') ? 'b' : 'a') },
@@ -118,7 +145,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'someone-else.nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -131,7 +158,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const server = makeServer();
     const next = vi.fn();
     // Sign a ticket that expired one minute ago.
-    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', -60_000);
+    const expired = signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, undefined, -60_000);
     const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: expired });
 
     await server.authorizeHandshake(socket as never, next);
@@ -146,7 +173,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -160,7 +187,7 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { 'x-forwarded-host': 'rhys.nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443') },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run:443', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
@@ -174,13 +201,83 @@ describe('SocketIOServer.authorizeHandshake', () => {
     const next = vi.fn();
     const socket = fakeSocket(
       { host: 'nocturne.run' },
-      { token: signHandshakeTicket(SECRET, 'nocturne.run') },
+      { token: signHandshakeTicket(SECRET, 'nocturne.run', true) },
     );
 
     await server.authorizeHandshake(socket as never, next);
 
     expect(next).toHaveBeenCalledWith();
     expect(socket.data.tenantSlug).toBe('only');
+  });
+
+  it('joins a member ticket to the tenant room', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+  });
+
+  it('joins a member ticket to its own subject room only', async () => {
+    const server = makeServer();
+    const subjectA = '0a5f2c1e-1111-4222-8333-444455556666';
+    const subjectB = '0b6f2c1e-1111-4222-8333-444455556666';
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true, subjectA) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.join).toHaveBeenCalledWith('tenant:rhys');
+    expect(socket.join).toHaveBeenCalledWith(`tenant:rhys:subject:${subjectA}`);
+    expect(socket.join).not.toHaveBeenCalledWith(`tenant:rhys:subject:${subjectB}`);
+    expect(socket.data.subjectId).toBe(subjectA);
+  });
+
+  it('joins no subject room for a ticket without a subject', async () => {
+    const server = makeServer();
+    const socket = fakeSocket(
+      { 'x-forwarded-host': 'rhys.nocturne.run' },
+      { token: signHandshakeTicket(SECRET, 'rhys.nocturne.run', true) },
+    );
+
+    await connect(server, socket);
+
+    expect(socket.data.subjectId).toBeUndefined();
+    expect(
+      socket.join.mock.calls.some(([room]) => String(room).includes(':subject:')),
+    ).toBe(false);
+  });
+
+  it.each([
+    ['a restricted ticket', () => signHandshakeTicket(SECRET, 'rhys.nocturne.run', false)],
+    ['a ticket carrying no admission', () => ticketWithoutAdmission('rhys.nocturne.run')],
+    [
+      'a restricted ticket naming a subject',
+      () =>
+        signHandshakeTicket(
+          SECRET,
+          'rhys.nocturne.run',
+          false,
+          '0a5f2c1e-1111-4222-8333-444455556666',
+        ),
+    ],
+  ])('admits %s but keeps it out of every tenant room', async (_case, mint) => {
+    // The tenant room carries every category and every member's in-app
+    // notifications; a guest link or anonymous share holds single categories.
+    const server = makeServer();
+    const socket = fakeSocket({ 'x-forwarded-host': 'rhys.nocturne.run' }, { token: mint() });
+
+    const next = await connect(server, socket);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(socket.join).not.toHaveBeenCalled();
   });
 });
 
@@ -209,8 +306,12 @@ describe('SocketIOServer.handleAuthorize', () => {
     vi.unstubAllGlobals();
   });
 
-  it('joins the tenant room when the API accepts the credential', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+  function admission(body: unknown) {
+    return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  }
+
+  it('joins the tenant room when the API admits the credential to it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     const server = makeApiServer();
@@ -228,14 +329,74 @@ describe('SocketIOServer.handleAuthorize', () => {
     // The probe must carry the client's credential scoped to its own tenant, and
     // must NOT carry the bridge's instance key.
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toContain('/api/v1/entries');
+    expect(String(url)).toBe('http://api.internal/api/v4/me/realtime-admission');
     expect(init.headers['api-secret']).toBe('sha1hash');
     expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
     expect(init.headers['X-Instance-Key']).toBeUndefined();
   });
 
+  it.each([
+    ['restricted', { tenantRelay: false }],
+    ['silent on the tenant room', {}],
+  ])('authorizes a credential the API admission leaves %s without joining it', async (_case, body) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission(body)));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+    const callback = vi.fn();
+
+    await server.handleAuthorize(socket as never, { token: 'guest-token' }, callback);
+
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+
+  const SUBJECT = '0a5f2c1e-1111-4222-8333-444455556666';
+
+  it("joins the subject's room when the admission names a subject", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true, subjectId: SUBJECT })));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual([
+      'tenant:rhys',
+      `tenant:rhys:subject:${SUBJECT}`,
+    ]);
+  });
+
+  it('joins no room for a restricted credential that names a subject', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: false, subjectId: SUBJECT })));
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { token: 'guest-token' });
+
+    expect(socket.data.tenantSlug).toBe('rhys');
+    expect(socket.join).not.toHaveBeenCalled();
+  });
+
+  it('joins no subject room for a subject id not in canonical form', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(admission({ tenantRelay: true, subjectId: SUBJECT.toUpperCase() })),
+    );
+
+    const server = makeApiServer();
+    const socket = pendingSocket('rhys');
+
+    await server.handleAuthorize(socket as never, { secret: 'sha1hash' });
+
+    expect(socket.join.mock.calls.map(([room]) => room)).toEqual(['tenant:rhys']);
+  });
+
   it('passes a subject token through as a query parameter', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
     vi.stubGlobal('fetch', fetchMock);
 
     const server = makeApiServer();
@@ -306,6 +467,100 @@ describe('SocketIOServer.handleAuthorize', () => {
     expect(fetchMock).not.toHaveBeenCalled();
     expect(socket.disconnect).not.toHaveBeenCalled();
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ read: true }));
+  });
+});
+
+describe('SocketIOServer tracker broadcast fan-out', () => {
+  async function startedServer() {
+    const server = new SocketIOServer(
+      createServer(),
+      {},
+      'nocturne.run',
+      [],
+      SECRET,
+      'http://api.internal',
+    );
+    await server.start();
+    return server;
+  }
+
+  it('re-emits a trackerUpdate to the tenant room', async () => {
+    const server = await startedServer();
+
+    const emitted: { room: string; event: string; payload: unknown }[] = [];
+    vi.spyOn(server.getIO()!, 'to').mockImplementation(
+      (room: string) =>
+        ({
+          emit: (event: string, payload: unknown) => emitted.push({ room, event, payload }),
+        }) as never,
+    );
+
+    const payload = { action: 'create', instance: { id: 'tracker-1' } };
+    server.broadcastTrackerUpdate(payload, 'rhys');
+
+    expect(emitted).toEqual([{ room: 'tenant:rhys', event: 'trackerUpdate', payload }]);
+    server.getIO()!.close();
+  });
+
+  it('refuses to broadcast a trackerUpdate without a tenant slug', async () => {
+    const server = await startedServer();
+    const toSpy = vi.spyOn(server.getIO()!, 'to');
+
+    server.broadcastTrackerUpdate({ action: 'create', instance: { id: 'tracker-1' } });
+
+    expect(toSpy).not.toHaveBeenCalled();
+    server.getIO()!.close();
+  });
+});
+
+describe('SocketIOServer in-app notification fan-out', () => {
+  const SUBJECT_A = '0a5f2c1e-1111-4222-8333-444455556666';
+
+  async function startedServer() {
+    const server = new SocketIOServer(
+      createServer(),
+      {},
+      'nocturne.run',
+      [],
+      SECRET,
+      'http://api.internal',
+    );
+    await server.start();
+    return server;
+  }
+
+  it("routes a notification to the recipient's subject room and no other", async () => {
+    const server = await startedServer();
+    const emitted: { room: string; event: string; payload: unknown }[] = [];
+    vi.spyOn(server.getIO()!, 'to').mockImplementation(
+      (room: string) =>
+        ({
+          emit: (event: string, payload: unknown) => emitted.push({ room, event, payload }),
+        }) as never,
+    );
+
+    const payload = { id: 'notification-1' };
+    server.broadcastInAppNotification('notificationCreated', payload, 'rhys', SUBJECT_A);
+
+    // Member B's socket is in tenant:rhys:subject:B, so it is never a target here.
+    expect(emitted).toEqual([
+      {
+        room: `tenant:rhys:subject:${SUBJECT_A}`,
+        event: 'notificationCreated',
+        payload,
+      },
+    ]);
+    server.getIO()!.close();
+  });
+
+  it('drops a relayed notification that names no recipient', async () => {
+    const server = await startedServer();
+    const toSpy = vi.spyOn(server.getIO()!, 'to');
+
+    server.broadcastInAppNotification('notificationCreated', { id: 'notification-1' }, 'rhys');
+
+    expect(toSpy).not.toHaveBeenCalled();
+    server.getIO()!.close();
   });
 });
 
@@ -578,8 +833,12 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     };
   }
 
-  it('subscribes for alarms when the token is valid', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+  function admission(body: unknown) {
+    return { ok: true, status: 200, json: () => Promise.resolve(body) };
+  }
+
+  it('subscribes and joins when the API admits the token to the tenant relay', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: true })));
     const server = makeAlarmServer();
     const socket = alarmSocket('rhys');
     const ack = vi.fn();
@@ -589,6 +848,53 @@ describe('SocketIOServer v3 /alarm namespace', () => {
     expect(ack).toHaveBeenCalledWith({ success: true, message: 'Subscribed for alarms' });
     expect(socket.join).toHaveBeenCalledWith('alarm:rhys');
     expect(socket.data.tenantSlug).toBe('rhys');
+  });
+
+  it('denies a restricted credential the API will not admit to the tenant relay', async () => {
+    // An AAPS guest-style token can read entries, but it holds single
+    // categories and must not receive the tenant's alarms.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(admission({ tenantRelay: false })));
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'restricted' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+    expect(socket.data.tenantSlug).toBeUndefined();
+  });
+
+  it('denies when the admission probe throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+    const ack = vi.fn();
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'tok' }, ack);
+
+    expect(ack).toHaveBeenCalledWith({ success: false, message: 'Missing or bad accessToken' });
+    expect(socket.join).not.toHaveBeenCalled();
+    expect(socket.disconnect).toHaveBeenCalledWith(true);
+  });
+
+  it('probes the admission endpoint with a Bearer token, never the entries endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(admission({ tenantRelay: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = makeAlarmServer();
+    const socket = alarmSocket('rhys');
+
+    await server.handleAlarmSubscribe(socket as never, { accessToken: 'aaps-token' });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe('http://api.internal/api/v4/me/realtime-admission');
+    expect(String(url)).not.toContain('/api/v3/entries');
+    expect(init.headers['Authorization']).toBe('Bearer aaps-token');
+    expect(init.headers['X-Forwarded-Host']).toBe('rhys.nocturne.run');
+    // The bridge must NOT use its instance key to authorize the client.
+    expect(init.headers['X-Instance-Key']).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('disconnects on auth failure so subscribe is not a credential-guessing oracle', async () => {

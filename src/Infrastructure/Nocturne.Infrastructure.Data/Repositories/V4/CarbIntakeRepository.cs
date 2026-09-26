@@ -25,25 +25,19 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbIntakeEntity>, ICarbIntakeRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<CarbIntakeRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CarbIntakeRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     public CarbIntakeRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<CarbIntakeRepository> logger,
         IV4RecordBroadcaster<CarbIntake>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -159,9 +153,9 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
 
     /// <summary>
     /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
-    /// dedup linking is best-effort (a failure is logged and healed by the reconcile service, not allowed
-    /// to roll back the insert). Only runs on newly inserted entities — updated-in-place rows were already
-    /// linked when first inserted.
+    /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
+    /// missed here stays unlinked until the full dedup job: the reconcile pass reads only links. Only
+    /// runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
     /// </summary>
     protected override async Task PostCommitDedupAsync(
         NocturneDbContext ctx, IReadOnlyList<CarbIntakeEntity> inserted, WriteOrigin origin, CancellationToken ct)
@@ -182,7 +176,7 @@ public class CarbIntakeRepository : SyncUpsertRepositoryBase<CarbIntake, CarbInt
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "CarbIntake", inserted.Count);
         }
     }
 }

@@ -15,7 +15,7 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Label } from "$lib/components/ui/label";
+  import { Label, type LabelVariant } from "$lib/components/ui/label";
   import { cn } from "$lib/utils";
   import { fieldMessages, type FieldIssues } from "./field-messages";
 
@@ -31,7 +31,7 @@
     /** Validation messages for this field; replaces the description when present. */
     issues?: FieldIssues;
     class?: string;
-    labelClass?: string;
+    labelVariant?: LabelVariant;
     control: Snippet<[FormFieldControl]>;
   }
 
@@ -43,7 +43,7 @@
     hint,
     issues,
     class: className,
-    labelClass,
+    labelVariant,
     control,
   }: Props = $props();
 
@@ -64,7 +64,7 @@
 </script>
 
 <div class={cn("space-y-2", className)}>
-  <Label for={controlId} class={labelClass}>
+  <Label for={controlId} variant={labelVariant}>
     {label}
     {#if required}
       <span aria-hidden="true" class="text-destructive">*</span>
@@ -76,7 +76,7 @@
 
   {#if invalid}
     <div id={messageId} role="alert" class="space-y-1">
-      {#each messages as message}
+      {#each messages as message, i (i)}
         <p class="text-sm text-destructive">{message}</p>
       {/each}
     </div>

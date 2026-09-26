@@ -210,11 +210,36 @@ public interface IStatisticsService
     );
 
     /// <summary>
-    /// Calculate averaged statistics bucketed by time of day from <see cref="SensorGlucose"/> entries.
+    /// Averaged statistics for each hour of the day, bucketed on the tenant's local clock rather
+    /// than on each reading's own recorded offset.
     /// </summary>
     /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
-    /// <returns>Time-of-day averaged statistics for AGP-style charts.</returns>
-    IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries);
+    /// <param name="tenantTimeZone">
+    /// The tenant's local timezone, or null when none resolves, in which case each reading is placed
+    /// by its own recorded offset.
+    /// </param>
+    /// <returns>All 24 hours in order, midnight first.</returns>
+    IEnumerable<AveragedStats> CalculateAveragedStats(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? tenantTimeZone
+    );
+
+    /// <summary>
+    /// The band edges <see cref="CalculateAveragedStats"/> and <see cref="CalculateHourlyPatterns"/>
+    /// classify each reading on, as a fresh copy on every call: changing it changes nothing else.
+    /// </summary>
+    GlycemicThresholds HourlyBandThresholds { get; }
+
+    /// <summary>
+    /// The hourly-patterns report: each hour's statistics and split around the consensus range,
+    /// with the best, worst and most-below-range hours among those with enough data to rank.
+    /// </summary>
+    /// <param name="entries"><see cref="SensorGlucose"/> entries.</param>
+    /// <param name="tenantTimeZone">As for <see cref="CalculateAveragedStats"/>.</param>
+    HourlyPatterns CalculateHourlyPatterns(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? tenantTimeZone
+    );
 
     /// <summary>
     /// Mean glucose per weekday in each five-minute slot of the day, bucketed on the tenant's
@@ -237,8 +262,9 @@ public interface IStatisticsService
     /// <param name="boluses"><see cref="Bolus"/> records.</param>
     /// <param name="carbIntakes"><see cref="CarbIntake"/> records.</param>
     /// <param name="foodsByCarbIntake">Optional food breakdown keyed by <see cref="CarbIntake"/> ID.</param>
+    /// <param name="dayCount">Calendar days the records cover, for the per-day averages.</param>
     /// <returns>A <see cref="TreatmentSummary"/> with insulin and carb statistics.</returns>
-    TreatmentSummary CalculateTreatmentSummary(IEnumerable<Bolus> boluses, IEnumerable<CarbIntake> carbIntakes, IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null);
+    TreatmentSummary CalculateTreatmentSummary(IEnumerable<Bolus> boluses, IEnumerable<CarbIntake> carbIntakes, IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null, int dayCount = 1);
 
     /// <summary>
     /// Calculate overall daily averages from per-day data points.

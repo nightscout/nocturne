@@ -81,12 +81,12 @@
 
   <div class="space-y-4">
     <div
-      class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4"
+      class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
     >
-      <p class="text-sm font-semibold text-red-800 dark:text-red-200">
+      <p class="text-sm font-semibold text-destructive">
         THIS ACTION CANNOT BE UNDONE
       </p>
-      <p class="text-sm text-red-700 dark:text-red-300 mt-2">
+      <p class="text-sm text-destructive mt-2">
         {warning}
       </p>
     </div>

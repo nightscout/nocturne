@@ -39,7 +39,7 @@ describe("ImportProgress", () => {
       errorMessage:
         "1 of 7 collections imported, 1 failed, 5 not attempted. treatments: Could not reach your Nightscout server.",
       collectionProgress: {},
-    } as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-1", onComplete: () => {} });
 
@@ -63,43 +63,43 @@ describe("ImportProgress", () => {
           skippedReason: "Skipped: listing the people and devices that can sign in needs an admin API secret.",
         },
       },
-    } as unknown as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-3", onComplete: () => {} });
 
     const summary = page.getByText(/6 of 7 collections imported/);
     await expect.element(summary).toBeVisible();
-    await expect.element(summary).not.toHaveClass("text-amber-400");
+    await expect.element(summary).not.toHaveClass("text-warning");
   });
 
   it("colours the summary as a warning when a collection actually failed", async () => {
     status = {
       state: MigrationJobState.Completed,
       progressPercentage: 100,
-      errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered 500 for treatments.",
+      errorMessage: "1 of 2 collections imported, 1 failed. treatments: Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
       collectionProgress: {
         treatments: {
           collectionName: "treatments",
           isComplete: true,
-          failureReason: "Nightscout answered 500 for treatments.",
+          failureReason: "Nightscout answered with a server error (500). It may be down or restarting; try again shortly.",
         },
       },
-    } as unknown as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-4", onComplete: () => {} });
 
     await expect
       .element(page.getByText(/1 of 2 collections imported/))
-      .toHaveClass("text-amber-400");
+      .toHaveClass("text-warning");
   });
 
   it("says nothing extra when every collection imported", async () => {
     status = {
       state: MigrationJobState.Completed,
       progressPercentage: 100,
-      errorMessage: null,
+      errorMessage: undefined,
       collectionProgress: {},
-    } as MigrationJobStatus;
+    };
 
     render(ImportProgress, { jobId: "job-2", onComplete: () => {} });
 
@@ -114,9 +114,9 @@ describe("ImportProgress", () => {
       {
         id: "old-job",
         mode: MigrationMode.Api,
-        createdAt: new Date("2025-11-02T00:00:00Z"),
+        createdAt: "2025-11-02T00:00:00Z",
         state: MigrationJobState.Completed,
-        completedAt: new Date("2025-11-02T00:04:00Z"),
+        completedAt: "2025-11-02T00:04:00Z",
       },
     ];
     status = {
@@ -131,5 +131,56 @@ describe("ImportProgress", () => {
     await expect.element(page.getByText(/0 records migrated/)).toBeVisible();
     expect(statusSpy).not.toHaveBeenCalled();
     expect(onProgressChange).not.toHaveBeenCalled();
+  });
+
+  // Someone who deleted a stretch of readings and re-imports it gets none of them back. The lane
+  // has to say so beside the count, or the import reads as having restored them.
+  it("shows the records a collection skipped beside its count", async () => {
+    status = {
+      state: MigrationJobState.Completed,
+      progressPercentage: 100,
+      collectionProgress: {
+        entries: {
+          collectionName: "entries",
+          isComplete: true,
+          totalDocuments: 4210,
+          documentsMigrated: 4209,
+          documentsSkippedUnsupported: 1,
+          recordsSkippedDeleted: 412,
+        },
+      },
+    };
+
+    render(ImportProgress, { jobId: "job-5", onComplete: () => {} });
+
+    await expect
+      .element(page.getByText(/412 records were not added again/))
+      .toBeVisible();
+    await expect
+      .element(page.getByText(/1 record was not added because Nocturne does not store/))
+      .toBeVisible();
+  });
+
+  // A collection whose every document was dealt with is finished even when some were of a kind
+  // Nocturne does not store; the lane must not stall short of complete.
+  it("shows the server's percentage for a lane rather than stored over total", async () => {
+    status = {
+      state: MigrationJobState.Running,
+      progressPercentage: 50,
+      collectionProgress: {
+        entries: {
+          collectionName: "entries",
+          isComplete: false,
+          totalDocuments: 10,
+          documentsMigrated: 4,
+          documentsSkippedUnsupported: 3,
+          progressPercentage: 70,
+        },
+      },
+    };
+
+    render(ImportProgress, { jobId: "job-6", onComplete: () => {} });
+
+    await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
   });
 });

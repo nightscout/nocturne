@@ -1,12 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type {
-    AvailableConnector,
-    ConnectorConfigurationResponse,
-    ConnectorStatusInfo,
-    ConnectorDataSummary,
-    ConnectorCapabilities,
-  } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
@@ -119,15 +113,15 @@
       : null
   );
 
-  const existingConfig = $derived((configQuery?.current ?? null) as ConnectorConfigurationResponse | null);
-  const effectiveConfig = $derived((effectiveConfigQuery?.current ?? null) as Record<string, unknown> | null);
-  const dataSummary = $derived((dataSummaryQuery?.current ?? null) as ConnectorDataSummary | null);
-  const connectorCapabilities = $derived((capabilitiesQuery?.current ?? null) as ConnectorCapabilities | null);
+  const existingConfig = $derived(configQuery?.current ?? null);
+  const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
+  const dataSummary = $derived(dataSummaryQuery?.current ?? null);
+  const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
 
   const connectorStatus = $derived.by(() => {
     const statuses = statusQuery.current;
     if (!statuses || !activeId) return null;
-    return (statuses as ConnectorStatusInfo[]).find(
+    return statuses.find(
       (s) => s.connectorName?.toLowerCase() === activeId!.toLowerCase()
     ) ?? null;
   });
@@ -241,7 +235,7 @@
     try {
       await saveConfiguration({
         connectorName: connectorInfo.id,
-        request: config as any,
+        request: config,
       });
 
       if (Object.keys(newSecrets).length > 0) {
@@ -334,7 +328,7 @@
   {#if isLoading}
     <SettingsPageSkeleton cardCount={2} />
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="flex items-center gap-3 pt-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
         <div>
@@ -360,20 +354,16 @@
 
       <!-- Save Message -->
       {#if saveMessage}
-        <Card
-          class={saveMessage.type === "error"
-            ? "border-destructive"
-            : "border-green-500"}
-        >
+        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
           <CardContent class="flex items-center gap-3 py-3">
             {#if saveMessage.type === "error"}
               <AlertCircle class="h-5 w-5 text-destructive" />
             {:else}
               <div
-                class="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center"
+                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
               >
                 <svg
-                  class="h-3 w-3 text-white"
+                  class="h-3 w-3 text-success-foreground"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -397,7 +387,7 @@
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
-              <Label class="text-base">Enable Connector</Label>
+              <Label size="lg">Enable Connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
               </p>
@@ -475,7 +465,7 @@
               <div class="flex flex-wrap gap-1 justify-end">
                 {#if connectorCapabilities.supportedDataTypes && connectorCapabilities.supportedDataTypes.length > 0}
                   {#each connectorCapabilities.supportedDataTypes as dataType (dataType)}
-                    <Badge variant="outline" class="text-xs">
+                    <Badge variant="outline">
                       {dataType}
                     </Badge>
                   {/each}
@@ -492,7 +482,6 @@
                 variant={connectorCapabilities.supportsHistoricalSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsHistoricalSync
                   ? "Supported"
@@ -515,7 +504,6 @@
                 variant={connectorCapabilities.supportsManualSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsManualSync
                   ? "Enabled"
@@ -533,7 +521,7 @@
             <a
               href={connectorInfo.documentationUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="flex items-center gap-2 text-sm text-primary hover:underline"
             >
               <ExternalLink class="h-4 w-4" />

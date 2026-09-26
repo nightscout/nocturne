@@ -1,16 +1,19 @@
 <script lang="ts">
   import { Chart, Svg, Axis, Tooltip } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
-  import type { ScaleTime } from "d3-scale";
+  import { timeScale } from "$lib/components/charts/scale-guards";
   import { getActogramData } from "$api/actogram.remote";
   import { getBasalSeries } from "$api/generated/chartDatas.generated.remote";
   import { bg, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
   import { resolveChartColor } from "$lib/utils/chart-colors";
+  import { FALLBACK_GLUCOSE_Y_MAX } from "$lib/constants/glucose-thresholds";
   import {
     laneForStage,
     HYPNOGRAM_LANE_ORDER,
     HYPNOGRAM_LANE_LABELS,
+    laneTexture,
   } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { BasalDeliveryOrigin } from "$lib/api";
   import type { SleepStageInterval, SleepDawnPhenomenon } from "$lib/api";
 
@@ -51,7 +54,7 @@
   const glucosePoints = $derived(
     actogramQuery.error ? [] : (actogramQuery.current?.glucoseData ?? [])
   );
-  const glucoseYMax = $derived(actogramQuery.current?.thresholds?.glucoseYMax ?? 300);
+  const glucoseYMax = $derived(actogramQuery.current?.thresholds?.glucoseYMax ?? FALLBACK_GLUCOSE_Y_MAX);
   const hasGlucose = $derived(glucosePoints.length > 0);
 
   const basalPoints = $derived.by(() => {
@@ -158,7 +161,7 @@
 
   // Glucose overlay spans the stage-lane region.
   const glucoseScale = $derived(scaleLinear([0, glucoseYMax], [stagesHeight, 0]));
-  const glucoseTicks = $derived(hasGlucose ? glucoseScale.ticks(3).filter((v) => v > 0) : []);
+  const glucoseTicks = $derived(hasGlucose ? glucoseScale.ticks(3).filter((v) => v > 0 && v < glucoseYMax) : []);
 
   function buildGlucosePath(xScale: (d: Date) => number): string {
     return glucosePoints
@@ -229,7 +232,7 @@
 </script>
 
 <div class="w-full overflow-x-auto print:overflow-visible">
-  <div style="min-width: 480px; height: {chartHeight + 28}px;">
+  <div class="h-(--chart-h) min-w-[480px]" style:--chart-h="{chartHeight + 28}px">
     <Chart
       data={[]}
       xScale={scaleTime()}
@@ -254,7 +257,7 @@
             <text
               x={-LABEL_WIDTH + 8}
               y={y + LANE_HEIGHT / 2 + 4}
-              class="text-[10px] fill-muted-foreground font-medium"
+              class="text-2xs fill-muted-foreground font-medium"
             >
               {HYPNOGRAM_LANE_LABELS[lane]}
             </text>
@@ -265,7 +268,7 @@
             {@const dx = context.xScale(dawnWindow.start)}
             {@const dw = Math.max(context.xScale(dawnWindow.end) - dx, 0)}
             <rect x={dx} y={0} width={dw} height={stagesHeight} fill="var(--chart-4)" class="opacity-10 pointer-events-none" />
-            <text x={dx + 4} y={10} class="text-[9px] fill-muted-foreground pointer-events-none">
+            <text x={dx + 4} y={10} class="text-2xs fill-muted-foreground pointer-events-none">
               pre-wake window
             </text>
           {/if}
@@ -282,7 +285,7 @@
               height={LANE_HEIGHT - 6}
               data-lane={span.label.toLowerCase()}
               rx={2}
-              class="fill-[var(--lane-color)] opacity-70"
+              class={["fill-lane opacity-70", patternClass(laneTexture(span.lane))]}
             />
           {/each}
 
@@ -309,12 +312,12 @@
               <text
                 x={context.width + 6}
                 y={glucoseScale(tick) + 3}
-                class="text-[9px] fill-muted-foreground tabular-nums"
+                class="text-2xs fill-muted-foreground tabular-nums"
               >
                 {bg(tick)}
               </text>
             {/each}
-            <text x={context.width + 6} y={-2} class="text-[9px] fill-muted-foreground">
+            <text x={context.width + 6} y={-2} class="text-2xs fill-muted-foreground">
               {bgLabel()}
             </text>
           {/if}
@@ -332,7 +335,7 @@
             <text
               x={-LABEL_WIDTH + 8}
               y={basalTop + BASAL_LANE_HEIGHT / 2 + 4}
-              class="text-[10px] fill-muted-foreground font-medium"
+              class="text-2xs fill-muted-foreground font-medium"
             >
               Basal
             </text>
@@ -350,7 +353,7 @@
                   width={Math.max(x2 - x1, 1)}
                   height={h}
                   fill={resolveChartColor(point.fillColor ?? "insulin-basal")}
-                  style="opacity: {basalOpacity(point.origin)}"
+                  opacity={basalOpacity(point.origin)}
                 />
               {/if}
             {/each}
@@ -373,7 +376,7 @@
             rule
             ticks={8}
             format={(d: Date) => timeFormatter.format(d)}
-            tickLabelProps={{ class: "text-[10px] fill-muted-foreground" }}
+            tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
           />
 
           <!-- Interaction overlay for the tooltip (topmost layer) -->
@@ -388,7 +391,7 @@
               const svgRect = e.currentTarget.closest("svg")?.getBoundingClientRect();
               if (!svgRect) return;
               const localX = e.clientX - svgRect.left - LABEL_WIDTH;
-              const time = (context.xScale as unknown as ScaleTime<number, number>).invert(localX);
+              const time = timeScale(context.xScale).invert(localX);
               context.tooltip?.show(e, tooltipDataAt(time) satisfies TooltipData);
             }}
             onpointerleave={() => context.tooltip?.hide()}
@@ -399,31 +402,31 @@
           class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
         >
           {#snippet children({ data: tooltipData })}
-            {@const d = tooltipData as TooltipData}
+            {@const d: TooltipData | undefined = tooltipData}
             {#if d}
               <div class="space-y-1 text-xs">
                 <div class="font-medium tabular-nums">{timeFormatter.format(d.time)}</div>
                 {#if d.glucose}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full" style:background={d.glucose.color}></div>
+                    <div class="size-2 rounded-full bg-(--dot)" style:--dot={d.glucose.color}></div>
                     <span class="text-muted-foreground">Glucose</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {bg(d.glucose.sgv)} {bgLabel()}
                     </span>
                   </div>
                 {/if}
                 {#if d.stageLane}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={d.stageLane}></div>
+                    <div class="size-2 rounded-full bg-lane" data-lane={d.stageLane}></div>
                     <span class="text-muted-foreground">Stage</span>
                     <span class="ml-auto pl-3 font-medium">{HYPNOGRAM_LANE_LABELS[d.stageLane]}</span>
                   </div>
                 {/if}
                 {#if d.basalRate != null}
                   <div class="flex items-center gap-1.5">
-                    <div class="size-2 rounded-full" style:background="var(--insulin-basal)"></div>
+                    <div class="size-2 rounded-full bg-insulin-basal"></div>
                     <span class="text-muted-foreground">Basal</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {d.basalRate.toFixed(2)} U/h
                     </span>
                   </div>
@@ -432,7 +435,7 @@
                   <div class="flex items-center gap-1.5">
                     <div class="size-2 rounded-full border border-muted-foreground/50"></div>
                     <span class="text-muted-foreground">Scheduled</span>
-                    <span class="ml-auto pl-3 font-mono font-medium tabular-nums">
+                    <span class="ml-auto pl-3 font-medium tabular-nums">
                       {d.scheduledBasalRate.toFixed(2)} U/h
                     </span>
                   </div>

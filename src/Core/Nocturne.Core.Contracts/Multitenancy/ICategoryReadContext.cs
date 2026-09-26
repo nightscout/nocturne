@@ -1,13 +1,14 @@
 namespace Nocturne.Core.Contracts.Multitenancy;
 
 /// <summary>
-/// Scoped per-request signal for public-share per-category Row-Level Security.
-/// Carries two facts the <see cref="ITenantAccessor"/> does not: whether the request is
-/// an anonymous public share (known pre-auth, at tenant resolution) and, if so, which
-/// read-scope categories it may see (known post-auth, after the share's public scopes are
-/// resolved). The DbContext factory and the scoped-context registration read it to stamp
-/// the carrier properties the <c>TenantConnectionInterceptor</c> turns into the
-/// <c>app.is_share</c> and <c>app.visible_categories</c> GUCs.
+/// Scoped per-request signal for per-category and history-window Row-Level Security.
+/// Carries facts the <see cref="ITenantAccessor"/> does not: whether the request is an
+/// anonymous public share (known pre-auth, at tenant resolution), which read-scope categories
+/// and history window a share may see, and whether an authenticated member or credential is
+/// clamped to the last 24 hours (both known post-auth). The DbContext factory and the
+/// scoped-context registration read it to stamp the carrier properties the
+/// <c>TenantConnectionInterceptor</c> turns into the <c>app.is_share</c>,
+/// <c>app.visible_categories</c>, <c>app.share_full_history</c> and <c>app.history_clamped</c> GUCs.
 /// </summary>
 public interface ICategoryReadContext
 {
@@ -32,6 +33,16 @@ public interface ICategoryReadContext
     bool FullHistory { get; }
 
     /// <summary>
+    /// True when this request may read only the last 24 hours of time-series data: a share
+    /// without full history, or a member or credential clamped by
+    /// <see cref="ClampMemberHistory"/>. A non-share whose clamp is never resolved is not
+    /// clamped, so members, owners and background work read full history unless something
+    /// narrows them. The single predicate every tenant-keyed cache of such data checks, since
+    /// RLS narrows only database reads.
+    /// </summary>
+    bool IsHistoryClamped { get; }
+
+    /// <summary>
     /// Marks the request as an anonymous public share. Called by
     /// <c>TenantResolutionMiddleware</c> before the scoped context is pinned.
     /// </summary>
@@ -52,4 +63,11 @@ public interface ICategoryReadContext
     /// </summary>
     /// <param name="fullHistory">True to lift the 24-hour clamp for this share.</param>
     void SetFullHistory(bool fullHistory);
+
+    /// <summary>
+    /// Clamps an authenticated request to the last 24 hours. Called by
+    /// <c>MemberScopeMiddleware</c> once the membership and credential limits are combined.
+    /// There is no way to lift it within a request.
+    /// </summary>
+    void ClampMemberHistory();
 }

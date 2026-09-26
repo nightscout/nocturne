@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.API.Services.Realtime;
 using Nocturne.Core.Models;
@@ -28,10 +29,12 @@ public class SignalRBroadcastServiceTests
     private readonly Mock<IHubClients> _mockAlarmClients;
     private readonly Mock<IHubClients> _mockConfigClients;
     private readonly Mock<IHubClients> _mockAlertClients;
+    private readonly Mock<IHubClients> _mockHaClients;
     private readonly Mock<IClientProxy> _mockDataGroupProxy;
     private readonly Mock<IClientProxy> _mockAlarmGroupProxy;
     private readonly Mock<IClientProxy> _mockConfigGroupProxy;
     private readonly Mock<IClientProxy> _mockAlertGroupProxy;
+    private readonly Mock<IClientProxy> _mockHaProxy;
     private readonly Mock<IHubClients> _mockOverviewClients;
     private readonly Mock<IClientProxy> _mockOverviewGroupProxy;
     private readonly SignalRBroadcastService _service;
@@ -69,10 +72,10 @@ public class SignalRBroadcastServiceTests
         _mockAlertClients
             .Setup(x => x.Group(It.IsAny<string>()))
             .Returns(_mockAlertGroupProxy.Object);
-        var mockHaClients = new Mock<IHubClients>();
-        var mockHaProxy = new Mock<IClientProxy>();
-        _mockHomeAssistantHubContext.Setup(x => x.Clients).Returns(mockHaClients.Object);
-        mockHaClients.Setup(x => x.Group(It.IsAny<string>())).Returns(mockHaProxy.Object);
+        _mockHaClients = new Mock<IHubClients>();
+        _mockHaProxy = new Mock<IClientProxy>();
+        _mockHomeAssistantHubContext.Setup(x => x.Clients).Returns(_mockHaClients.Object);
+        _mockHaClients.Setup(x => x.Group(It.IsAny<string>())).Returns(_mockHaProxy.Object);
 
         _mockOverviewHubContext = new Mock<IHubContext<OverviewHub>>();
         _mockOverviewClients = new Mock<IHubClients>();
@@ -147,7 +150,68 @@ public class SignalRBroadcastServiceTests
 
         var act = () => _service.BroadcastDataUpdateAsync(new { test = "data" });
 
-        await act();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_ShouldRelayGlucoseReadingToTenantHomeAssistantGroup()
+    {
+        var testData = new { test = "data" };
+
+        await _service.BroadcastDataUpdateAsync(testData);
+
+        _mockHaClients.Verify(x => x.Group("00000000-0000-0000-0000-000000000001:ha-glucose"), Times.Once);
+        _mockHaClients.Verify(x => x.Group("ha-glucose"), Times.Never);
+        _mockHaProxy.Verify(
+            x => x.SendCoreAsync(
+                "glucose_reading",
+                It.Is<object[]>(args => args.Length == 1 && args[0] == testData),
+                default),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_DataHubFailure_StillRelaysToHomeAssistantAndOverview()
+    {
+        var testData = new { test = "data" };
+        _mockDataGroupProxy
+            .Setup(x => x.SendCoreAsync("dataUpdate", It.IsAny<object[]>(), default))
+            .ThrowsAsync(new Exception("data hub down"));
+
+        var act = () => _service.BroadcastDataUpdateAsync(testData);
+
+        await act.Should().NotThrowAsync();
+        _mockHaProxy.Verify(
+            x => x.SendCoreAsync(
+                "glucose_reading",
+                It.Is<object[]>(args => args.Length == 1 && args[0] == testData),
+                default),
+            Times.Once);
+        _mockOverviewGroupProxy.Verify(
+            x => x.SendCoreAsync("overviewUpdate", It.IsAny<object[]>(), default),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task BroadcastDataUpdateAsync_HomeAssistantFailure_StillSendsDataUpdateAndOverview()
+    {
+        var testData = new { test = "data" };
+        _mockHaProxy
+            .Setup(x => x.SendCoreAsync("glucose_reading", It.IsAny<object[]>(), default))
+            .ThrowsAsync(new Exception("home assistant hub down"));
+
+        var act = () => _service.BroadcastDataUpdateAsync(testData);
+
+        await act.Should().NotThrowAsync();
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "dataUpdate",
+                It.Is<object[]>(args => args[0] == testData),
+                default),
+            Times.Once);
+        _mockOverviewGroupProxy.Verify(
+            x => x.SendCoreAsync("overviewUpdate", It.IsAny<object[]>(), default),
+            Times.Once);
     }
 
     [Fact]
@@ -399,4 +463,163 @@ public class SignalRBroadcastServiceTests
             Times.Once
         );
     }
+
+    [Fact]
+    public async Task BroadcastTrackerUpdateAsync_PublicInstance_ReachesAuthorizedGroup()
+    {
+        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+
+        await _service.BroadcastTrackerUpdateAsync(
+            "create",
+            instance,
+            Guid.NewGuid().ToString(),
+            TrackerVisibility.Public
+        );
+
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync("trackerUpdate", It.Is<object[]>(args => args.Length == 1), default),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task BroadcastTrackerUpdateAsync_PrivateInstance_ReachesOnlyTheOwnersSubjectGroup()
+    {
+        var owner = Guid.NewGuid();
+        var instance = new TrackerInstanceDto { Id = Guid.NewGuid() };
+
+        await _service.BroadcastTrackerUpdateAsync(
+            "create",
+            instance,
+            owner.ToString(),
+            TrackerVisibility.Private
+        );
+
+        _mockDataClients.Verify(
+            x => x.Group($"00000000-0000-0000-0000-000000000001:user-{owner:D}"),
+            Times.Once
+        );
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:authorized"),
+            Times.Never
+        );
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public void NormalizeSubjectId_CanonicalizesCaseAndBraces()
+    {
+        var subject = Guid.NewGuid();
+
+        RealtimeGroups.NormalizeSubjectId(subject.ToString().ToUpperInvariant())
+            .Should().Be(subject.ToString("D"));
+        RealtimeGroups.NormalizeSubjectId(subject.ToString("B"))
+            .Should().Be(subject.ToString("D"));
+        RealtimeGroups.NormalizeSubjectId("not-a-guid").Should().Be("not-a-guid");
+    }
+
+    [Fact]
+    public async Task BroadcastNotificationCreatedAsync_RelayCopyNamesTheRecipient()
+    {
+        var subject = Guid.NewGuid();
+        var notification = new InAppNotificationDto();
+
+        await _service.BroadcastNotificationCreatedAsync(
+            subject.ToString().ToUpperInvariant(),
+            notification
+        );
+
+        _mockDataClients.Verify(
+            x => x.Group($"00000000-0000-0000-0000-000000000001:user-{subject:D}"),
+            Times.Once
+        );
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "notificationCreated",
+                It.Is<object[]>(args => args.Length == 1 && args[0] == notification),
+                default
+            ),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "notificationCreated",
+                It.Is<object[]>(args =>
+                    args.Length == 2
+                    && args[0] == notification
+                    && (string)args[1]! == subject.ToString("D")),
+                default
+            ),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task BroadcastNotificationArchivedAsync_RelayCopyNamesTheRecipient()
+    {
+        var subject = Guid.NewGuid();
+        var notification = new InAppNotificationDto();
+        var reason = NotificationArchiveReason.Dismissed;
+
+        await _service.BroadcastNotificationArchivedAsync(subject.ToString(), notification, reason);
+
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "notificationArchived",
+                It.Is<object[]>(args => args.Length == 1),
+                default
+            ),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "notificationArchived",
+                It.Is<object[]>(args =>
+                    args.Length == 2 && (string)args[1]! == subject.ToString("D")),
+                default
+            ),
+            Times.Once
+        );
+    }
+
+    [Fact]
+    public async Task BroadcastNotificationUpdatedAsync_RelayCopyNamesTheRecipient()
+    {
+        var subject = Guid.NewGuid();
+        var notification = new InAppNotificationDto();
+
+        await _service.BroadcastNotificationUpdatedAsync(subject.ToString(), notification);
+
+        _mockDataClients.Verify(
+            x => x.Group("00000000-0000-0000-0000-000000000001:relay"),
+            Times.Once
+        );
+        _mockDataGroupProxy.Verify(
+            x => x.SendCoreAsync(
+                "notificationUpdated",
+                It.Is<object[]>(args =>
+                    args.Length == 2
+                    && args[0] == notification
+                    && (string)args[1]! == subject.ToString("D")),
+                default
+            ),
+            Times.Once
+        );
+    }
+
 }

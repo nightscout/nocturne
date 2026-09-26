@@ -23,38 +23,48 @@
     deviceEvent: Smartphone,
     basalInjection: Syringe,
   } as const;
+
+  function toCategory(value: string): EntryCategoryId | "all" | undefined {
+    if (value === "all") return "all";
+    return Object.values(ENTRY_CATEGORIES).find((cat) => cat.id === value)?.id;
+  }
 </script>
 
 <Tabs.Root
   value={activeCategory}
-  onValueChange={(v: string) => onChange(v as EntryCategoryId | "all")}
+  onValueChange={(v: string) => {
+    const category = toCategory(v);
+    if (category) onChange(category);
+  }}
 >
+  <!-- eslint-disable shadcn/no-restyle -- the treatment filter is the only tab list drawn as a wrapping grid of tiles, each an icon over its label and count -->
   <Tabs.List
     class="grid h-auto w-full grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-2 bg-transparent p-0"
   >
     <Tabs.Trigger
       value="all"
-      class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg border data-[state=active]:border-primary/30"
+      class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg data-[state=active]:border-primary/30"
     >
       <List class="h-5 w-5" />
       <span class="text-xs font-medium">All</span>
-      <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
+      <Badge variant="secondary" size="sm">
         {categoryCounts.all}
       </Badge>
     </Tabs.Trigger>
 
-    {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
-      {@const Icon = categoryIcons[id as EntryCategoryId]}
+    {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+      {@const Icon = categoryIcons[cat.id]}
       <Tabs.Trigger
-        value={id}
-        class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg border data-[state=active]:border-primary/30"
+        value={cat.id}
+        class="flex flex-col items-center gap-1 p-3 data-[state=active]:bg-primary/10 data-[state=active]:text-primary rounded-lg data-[state=active]:border-primary/30"
       >
         <Icon class="h-5 w-5 {cat.colorClass}" />
         <span class="text-xs font-medium">{cat.name}</span>
-        <Badge variant="secondary" class="text-[10px] px-1.5 py-0">
-          {categoryCounts[id as EntryCategoryId]}
+        <Badge variant="secondary" size="sm">
+          {categoryCounts[cat.id]}
         </Badge>
       </Tabs.Trigger>
     {/each}
   </Tabs.List>
+  <!-- eslint-enable shadcn/no-restyle -->
 </Tabs.Root>

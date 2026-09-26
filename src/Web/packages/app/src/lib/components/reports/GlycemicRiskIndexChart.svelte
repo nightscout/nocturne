@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { Chart, Svg, Axis, Polygon, Points, Legend, Tooltip } from "layerchart";
-  import { scaleLinear, scaleOrdinal } from "d3-scale";
-  import type { GlycemicRiskIndex, GriTimelinePeriod } from "$lib/api/generated/nocturne-api-client";
+  import { Chart, Svg, Axis, Polygon, Points, Tooltip } from "layerchart";
+  import { scaleLinear } from "d3-scale";
+  import {
+    GRIZone,
+    type GlycemicRiskIndex,
+    type GriTimelinePeriod,
+  } from "$lib/api/generated/nocturne-api-client";
   import { formatGlucoseValue, formatMonthYear, getUnitLabel } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
-
-  // Stable categorical print-pattern slot per zone, so the same zone always
-  // carries the same monochrome texture regardless of render order.
-  const zonePrintSlot: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5 };
+  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     gri: GlycemicRiskIndex;
@@ -17,8 +18,24 @@
 
   let { gri, timeSeriesData }: Props = $props();
 
-  const HYPO_MAX = 20;
-  const HYPER_MAX = 40;
+  const HYPO_MAX = 30;
+  const HYPER_MAX = 60;
+  const HYPO_WEIGHT = 3.0;
+  const HYPER_WEIGHT = 1.6;
+
+  /** Consensus GRI value of a component pair. */
+  function griValue(hypo: number, hyper: number) {
+    return HYPO_WEIGHT * hypo + HYPER_WEIGHT * hyper;
+  }
+
+  /** Pins a point to the plot's edge so nothing is drawn outside the axes. */
+  function clampToPlot(hypo: number, hyper: number) {
+    return {
+      hypo: Math.min(Math.max(hypo, 0), HYPO_MAX),
+      hyper: Math.min(Math.max(hyper, 0), HYPER_MAX),
+      clamped: hypo > HYPO_MAX || hyper > HYPER_MAX,
+    };
+  }
 
   // Determine if we're in time-series mode (more than 1 data point)
   const isTimeSeries = $derived(
@@ -41,14 +58,15 @@
       const t = i / (n - 1);
       const gray = Math.round(t * 255);
       const fill = `rgb(${gray}, ${gray}, ${gray})`;
-      const stroke = gray > 200 ? "hsl(var(--border))" : fill;
+      const stroke = gray > 200 ? "var(--border)" : fill;
 
       return {
         ...period,
-        hypo: period.gri?.hypoglycemiaComponent ?? 0,
-        hyper: period.gri?.hyperglycemiaComponent ?? 0,
+        ...clampToPlot(period.gri?.hypoglycemiaComponent ?? 0, period.gri?.hyperglycemiaComponent ?? 0),
+        index: i + 1,
         fill,
         stroke,
+        ink: gray > 140 ? "black" : "white",
       };
     });
   });
@@ -60,33 +78,43 @@
     return formatMonthYear(date);
   }
 
-  // Zone boundaries: diagonal lines where hypo + hyper = GRI score threshold
-  // Raw GRI thresholds are used; areas beyond the max visible GRI (HYPO_MAX + HYPER_MAX) are unzoned
-  const zones = [
+  // Zone boundaries: consensus grid lines where 3.0 x hypo + 1.6 x hyper = GRI threshold.
+  // Zone E runs to the plot's far corner, since a GRI above 100 is capped into it.
+  const zones: {
+    label: string;
+    range: string;
+    texture: TextureKey;
+    vertices: { x: number; y: number }[];
+  }[] = [
     {
       label: "E",
-      color: "var(--gri-zone-e)",
-      vertices: buildZonePolygon(40, 50),
+      range: "81-100",
+      texture: "gri-zone-e",
+      vertices: buildZonePolygon(80, griValue(HYPO_MAX, HYPER_MAX)),
     },
     {
       label: "D",
-      color: "var(--gri-zone-d)",
-      vertices: buildZonePolygon(30, 40),
+      range: "61-80",
+      texture: "gri-zone-d",
+      vertices: buildZonePolygon(60, 80),
     },
     {
       label: "C",
-      color: "var(--gri-zone-c)",
-      vertices: buildZonePolygon(20, 30),
+      range: "41-60",
+      texture: "gri-zone-c",
+      vertices: buildZonePolygon(40, 60),
     },
     {
       label: "B",
-      color: "var(--gri-zone-b)",
-      vertices: buildZonePolygon(10, 20),
+      range: "21-40",
+      texture: "gri-zone-b",
+      vertices: buildZonePolygon(20, 40),
     },
     {
       label: "A",
-      color: "var(--gri-zone-a)",
-      vertices: buildZonePolygon(0, 10),
+      range: "0-20",
+      texture: "gri-zone-a",
+      vertices: buildZonePolygon(0, 20),
     },
   ];
 
@@ -112,8 +140,8 @@
 
     // Include rectangle corners that fall within this zone
     for (const corner of corners) {
-      const sum = corner.x + corner.y;
-      if (sum >= lower && sum <= upper) {
+      const value = griValue(corner.x, corner.y);
+      if (value >= lower && value <= upper) {
         allPoints.push(corner);
       }
     }
@@ -143,12 +171,12 @@
     b: { x: number; y: number },
     threshold: number
   ): { x: number; y: number } | null {
-    const sumA = a.x + a.y;
-    const sumB = b.x + b.y;
-    const denom = sumB - sumA;
+    const valueA = griValue(a.x, a.y);
+    const valueB = griValue(b.x, b.y);
+    const denom = valueB - valueA;
     if (Math.abs(denom) < 1e-10) return null;
 
-    const t = (threshold - sumA) / denom;
+    const t = (threshold - valueA) / denom;
     if (t < 0 || t > 1) return null;
 
     return {
@@ -157,40 +185,37 @@
     };
   }
 
-  const legendScale = scaleOrdinal<string, string>()
-    .domain([
-      "Zone E (81-100)",
-      "Zone D (61-80)",
-      "Zone C (41-60)",
-      "Zone B (21-40)",
-      "Zone A (0-20)",
-    ])
-    .range([
-      "var(--gri-zone-e)",
-      "var(--gri-zone-d)",
-      "var(--gri-zone-c)",
-      "var(--gri-zone-b)",
-      "var(--gri-zone-a)",
-    ]);
+  const zoneKey = $derived(
+    zones.map((zone) => ({
+      texture: zone.texture,
+      label: `Zone ${zone.label} (${zone.range})`,
+    }))
+  );
+
+  const ZONE_LETTER: Record<GRIZone, string> = {
+    [GRIZone.A]: "A",
+    [GRIZone.B]: "B",
+    [GRIZone.C]: "C",
+    [GRIZone.D]: "D",
+    [GRIZone.E]: "E",
+  };
+
+  const currentZone = $derived.by(() => {
+    if (gri.zone == null) return undefined;
+    const letter = ZONE_LETTER[gri.zone];
+    return zones.find((zone) => zone.label === letter);
+  });
+
+  const singlePoint = $derived(
+    clampToPlot(gri.hypoglycemiaComponent ?? 0, gri.hyperglycemiaComponent ?? 0)
+  );
+  const anyClamped = $derived(
+    isTimeSeries ? timeSeriesPoints.some((p) => p.clamped) : singlePoint.clamped
+  );
 </script>
 
 <div class="@container">
   <div class="flex flex-col items-center gap-4 @md:flex-row @md:items-start @md:gap-6">
-    <!-- GRI Score Display -->
-    <div class="flex shrink-0 flex-col items-center gap-1">
-      <span class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        GRI
-      </span>
-      <div class="flex h-24 w-24 items-center justify-center rounded-full border-4 border-muted">
-        <span class="text-3xl font-bold">{Math.round(gri.score ?? 0)}</span>
-      </div>
-      <p class="max-w-[120px] text-center text-[10px] leading-tight text-muted-foreground">
-        Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
-        highest risk
-      </p>
-    </div>
-
-    <!-- Scatter Plot -->
     <div class="w-full @md:max-w-[250px] @md:flex-1">
       <div class="aspect-square w-full">
         <Chart
@@ -204,24 +229,23 @@
         >
           {#snippet children({ context })}
             <Svg>
-              <!-- Zone polygons (rendered back-to-front: E first so A is on top) -->
-              {#each zones as zone}
+              <!-- E first so A draws on top. -->
+              {#each zones as zone (zone.label)}
                 <Polygon
                   points={zone.vertices.map((v) => ({
                     x: context.xScale(v.x),
                     y: context.yScale(v.y),
                   }))}
-                  fill={zone.color}
+                  fill="var(--{zone.texture})"
                   fillOpacity={0.35}
-                  stroke={zone.color}
+                  stroke="var(--{zone.texture})"
                   strokeWidth={0.5}
-                  class={categoryPatternClass(zonePrintSlot[zone.label])}
+                  class={patternClass(zone.texture)}
                 />
               {/each}
 
               {#if isTimeSeries}
-                <!-- Time-series connecting lines (dotted) -->
-                {#each timeSeriesPoints as point, i}
+                {#each timeSeriesPoints as point, i (i)}
                   {#if i > 0}
                     {@const prev = timeSeriesPoints[i - 1]}
                     <line
@@ -229,15 +253,14 @@
                       y1={context.yScale(prev.hyper)}
                       x2={context.xScale(point.hypo)}
                       y2={context.yScale(point.hyper)}
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       stroke-width="1"
                       stroke-dasharray="2,2"
                     />
                   {/if}
                 {/each}
 
-                <!-- Time-series data points -->
-                {#each timeSeriesPoints as point}
+                {#each timeSeriesPoints as point, i (i)}
                   <circle
                     cx={context.xScale(point.hypo)}
                     cy={context.yScale(point.hyper)}
@@ -250,16 +273,24 @@
                     onpointermove={(e) => context.tooltip?.show(e, point)}
                     onpointerleave={() => context.tooltip?.hide()}
                   />
+                  <!-- Paper has no tooltip, so each point carries its number in the printed period list. -->
+                  <text
+                    x={context.xScale(point.hypo)}
+                    y={context.yScale(point.hyper)}
+                    dy="0.35em"
+                    text-anchor="middle"
+                    font-size="8"
+                    font-weight="600"
+                    fill={point.ink}
+                    pointer-events="none"
+                    class="hidden print:inline"
+                  >
+                    {point.index}
+                  </text>
                 {/each}
               {:else}
-                <!-- Patient position dot (single point mode) -->
                 <Points
-                  data={[
-                    {
-                      hypo: gri.hypoglycemiaComponent ?? 0,
-                      hyper: gri.hyperglycemiaComponent ?? 0,
-                    },
-                  ]}
+                  data={[singlePoint]}
                   x="hypo"
                   y="hyper"
                   r={6}
@@ -272,13 +303,13 @@
                 placement="bottom"
                 ticks={5}
                 label="Hypoglycemia Component (%)"
-                tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+                tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
               <Axis
                 placement="left"
                 ticks={5}
                 label="Hyperglycemia Component (%)"
-                tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+                tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
               />
             </Svg>
 
@@ -287,7 +318,7 @@
                 class="bg-popover text-popover-foreground rounded-md border p-3 shadow-lg"
               >
                 {#snippet children({ data })}
-                  {@const d = data as typeof timeSeriesPoints[0]}
+                  {@const d: (typeof timeSeriesPoints)[number] = data}
                   <div class="min-w-44 space-y-1.5 text-xs">
                     <div class="font-semibold">
                       {formatPeriodLabel(d.periodStart)}
@@ -335,17 +366,40 @@
       </div>
     </div>
 
-    <!-- Legend -->
-    <div class="shrink-0">
-      <Legend
-        scale={legendScale}
-        variant="swatches"
-        orientation="vertical"
-        classes={{
-          label: "text-[10px] text-muted-foreground",
-          swatch: "rounded-sm",
-        }}
-      />
+    <div class="shrink-0 space-y-3">
+      <div class="border-b border-border pb-3">
+        <dl class="m-0">
+          <dt class="text-xs text-muted-foreground">GRI</dt>
+          <dd class="m-0 mt-0.5">
+            <span class="text-2xl font-semibold tabular-nums">{Math.round(gri.score ?? 0)}</span>
+            {#if currentZone}
+              <span class="ml-1 text-sm text-muted-foreground">
+                Zone {currentZone.label} ({currentZone.range})
+              </span>
+            {/if}
+          </dd>
+        </dl>
+        <p class="mt-1 max-w-40 text-2xs leading-tight text-muted-foreground">
+          Risk is indicated in percentiles &mdash; 0 is lowest risk and 100 is
+          highest risk
+        </p>
+      </div>
+      <ChartKey items={zoneKey} class="flex-col items-start gap-y-1.5 text-2xs" />
+      {#if isTimeSeries}
+        <ol class="hidden space-y-0.5 text-2xs text-muted-foreground print:block">
+          {#each timeSeriesPoints as point (point.index)}
+            <li class="tabular-nums">
+              <span class="font-semibold text-foreground">{point.index}</span>
+              {formatPeriodLabel(point.periodStart)} &middot; GRI {Math.round(point.gri?.score ?? 0)}
+            </li>
+          {/each}
+        </ol>
+      {/if}
+      {#if anyClamped}
+        <p class="max-w-40 text-2xs text-muted-foreground">
+          Points beyond the axes are drawn at the edge.
+        </p>
+      {/if}
     </div>
   </div>
 </div>

@@ -15,6 +15,9 @@ namespace Nocturne.API.Services.Entries;
 /// and demo-mode isolation for <see cref="Entry"/> queries.
 /// Only caches skip=0 queries with common counts to keep cache cardinality bounded.
 /// Demo mode queries use a separate key suffix to prevent real data from leaking into demo views.
+/// A history-clamped request (<see cref="ICategoryReadContext.IsHistoryClamped"/>) bypasses the
+/// cache entirely: the keys are per tenant, so a hit could serve it rows an unclamped reader
+/// loaded, and a write could hand its narrowed rows to an unclamped one.
 /// </summary>
 /// <seealso cref="IEntryCache"/>
 /// <seealso cref="EntryService"/>
@@ -24,6 +27,7 @@ public class EntryCacheAdapter : IEntryCache
     private readonly ICacheService _cache;
     private readonly IDemoModeService _demoMode;
     private readonly ITenantAccessor _tenant;
+    private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<EntryCacheAdapter> _logger;
 
     /// <summary>
@@ -32,16 +36,19 @@ public class EntryCacheAdapter : IEntryCache
     /// <param name="cache">The distributed cache service for get/set/remove operations.</param>
     /// <param name="demoMode">Demo mode service used to isolate demo and real data cache keys.</param>
     /// <param name="tenant">Provides the current tenant context for scoping all cache keys.</param>
+    /// <param name="categoryReadContext">Says whether this request is history-clamped.</param>
     /// <param name="logger">The logger instance.</param>
     public EntryCacheAdapter(
         ICacheService cache,
         IDemoModeService demoMode,
         ITenantAccessor tenant,
+        ICategoryReadContext categoryReadContext,
         ILogger<EntryCacheAdapter> logger)
     {
         _cache = cache;
         _demoMode = demoMode;
         _tenant = tenant;
+        _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
 
@@ -54,7 +61,9 @@ public class EntryCacheAdapter : IEntryCache
         CancellationToken ct = default)
     {
         // Only cache skip=0 with common counts
-        if (query.Skip != 0 || !EntryDomainLogic.IsCommonEntryCount(query.Count))
+        if (_categoryReadContext.IsHistoryClamped
+            || query.Skip != 0
+            || !EntryDomainLogic.IsCommonEntryCount(query.Count))
             return null;
 
         var demoSuffix = _demoMode.IsEnabled ? ":demo" : "";
@@ -81,6 +90,9 @@ public class EntryCacheAdapter : IEntryCache
         Func<Task<Entry?>> compute,
         CancellationToken ct = default)
     {
+        if (_categoryReadContext.IsHistoryClamped)
+            return await compute();
+
         var demoSuffix = _demoMode.IsEnabled ? ":demo" : "";
         var cacheKey = CacheKeyBuilder.BuildCurrentEntriesKey(TenantCacheId) + demoSuffix;
         var cacheTtl = TimeSpan.FromSeconds(CacheConstants.Defaults.CurrentEntryExpirationSeconds);

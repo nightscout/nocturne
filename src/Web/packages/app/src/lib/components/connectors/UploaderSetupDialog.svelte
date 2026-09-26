@@ -16,8 +16,7 @@
   import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
   import { KeyRound } from "lucide-svelte";
-  import { copyToClipboard } from "$lib/utils";
-  import { toast } from "svelte-sonner";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     getUploaderName,
     getUploaderDescription,
@@ -33,7 +32,7 @@
     onRequestApiKey?: (label: string, scopes: string[]) => void;
   } = $props();
 
-  let copiedField = $state<string | null>(null);
+  const copy = createCopyFeedback();
 
   const hasOAuthFlow = $derived(
     selectedUploader?.id === "xdrip" || selectedUploader?.id === "prelude",
@@ -45,17 +44,6 @@
     // this one can land underneath it and take no input. Hand off by stepping aside.
     open = false;
     onRequestApiKey?.(getUploaderName(selectedUploader), ["health.readwrite"]);
-  }
-
-  async function copyField(text: string, field: string) {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    copiedField = field;
-    setTimeout(() => {
-      copiedField = null;
-    }, 2000);
   }
 
   function getPlatformIcon(platform?: string) {
@@ -116,10 +104,10 @@
                 size="icon"
                 onclick={() =>
                   typeof window !== "undefined" &&
-                  copyField(window.location.origin, "dialogUrl")}
+                  copy.copy(window.location.origin, "dialogUrl")}
               >
-                {#if copiedField === "dialogUrl"}
-                  <Check class="h-4 w-4 text-green-500" />
+                {#if copy.isCopied("dialogUrl")}
+                  <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
                 {/if}
@@ -146,10 +134,9 @@
 
         {#if selectedUploader.url}
           <div class="pt-4">
-            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external uploader website URL from the API, not an internal app route -->
             <Button
               variant="outline"
-              class="w-full gap-2"
+              class="w-full"
               href={selectedUploader.url}
               target="_blank"
               rel="noopener"

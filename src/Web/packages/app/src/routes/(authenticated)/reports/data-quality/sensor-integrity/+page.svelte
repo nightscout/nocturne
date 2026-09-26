@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -7,18 +8,23 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import ArrowLeft from "lucide-svelte/icons/arrow-left";
+  import Activity from "lucide-svelte/icons/activity";
   import Info from "lucide-svelte/icons/info";
-  import Moon from "lucide-svelte/icons/moon";
   import { getDataQualityReport } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-   import { buildDayBuckets, type DayBucket } from "$lib/components/reports/sensor-integrity/buckets";
+  import { buildDayBuckets, type DayBucket } from "$lib/components/reports/sensor-integrity/buckets";
   import NoiseClusterStrips from "$lib/components/reports/sensor-integrity/NoiseClusterStrips.svelte";
   import NoiseDayChart from "$lib/components/reports/sensor-integrity/NoiseDayChart.svelte";
   import DataQualityHeadline from "$lib/components/reports/sensor-integrity/DataQualityHeadline.svelte";
   import HypoAfterNoiseLog from "$lib/components/reports/sensor-integrity/HypoAfterNoiseLog.svelte";
   import ClusterTable from "$lib/components/reports/sensor-integrity/ClusterTable.svelte";
+  import HypoMarker from "$lib/components/reports/sensor-integrity/HypoMarker.svelte";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import type { GlucoseCluster } from "$lib/api";
+
+  setReportPrintMeta(() => ({ title: "Signal Integrity" }));
 
   const params = requireDateParamsContext(14);
 
@@ -32,7 +38,15 @@
   const hypoEvents = $derived(integrity?.hypoEvents ?? []);
   const summary = $derived(integrity?.summary);
 
-  const buckets = $derived(buildDayBuckets(entries, clusters, hypoEvents));
+  const buckets = $derived(
+    buildDayBuckets(
+      entries,
+      clusters,
+      hypoEvents,
+      resource.current?.days ?? [],
+      resource.current?.timeZone ?? null
+    )
+  );
 
   let selectedDateMs = $state<number | null>(null);
   const selectedBucket = $derived(buckets.find((b) => b.dateMs === selectedDateMs) ?? null);
@@ -56,24 +70,29 @@
     <!-- Header -->
     <div class="space-y-3">
       <a
-        href="/reports/data-quality"
+        href={resolve("/reports/data-quality")}
         class="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
         Data Quality
       </a>
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">Signal Integrity</h1>
-        <p class="text-muted-foreground">
-          Windows where readings oscillate in a way that is unlikely to be physiologic
-        </p>
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 print:hidden">
+          <Activity class="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight print:hidden">Signal Integrity</h1>
+          <p class="text-muted-foreground">
+            Windows where readings oscillate in a way that is unlikely to be physiologic
+          </p>
+        </div>
       </div>
     </div>
 
     <DataQualityHeadline {summary} />
 
-    <!-- Daily overview -->
-    <Card>
+    <!-- Daily overview: taller than a page at 28 days, so it may break between rows -->
+    <Card class="print:break-inside-auto!">
       <CardHeader class="pb-3">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -83,20 +102,22 @@
               ></CardDescription
             >
           </div>
-          <!-- Legend -->
-          <div class="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span class="flex items-center gap-1">
-              <span class="inline-block h-3 w-3 rounded-sm bg-cluster-low/40"></span>Low
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="inline-block h-3 w-3 rounded-sm bg-cluster-medium/40"></span>Medium
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="inline-block h-3 w-3 rounded-sm bg-cluster-high/40"></span>High
-            </span>
-            <span class="flex items-center gap-1">
-              <Moon class="h-3 w-3 text-cluster-high" />Hypo nadir
-            </span>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <ChartKey
+              items={[
+                { texture: "cluster-low", label: "Low confidence" },
+                { texture: "cluster-medium", label: "Medium confidence" },
+                { texture: "cluster-high", label: "High confidence" },
+              ]}
+            />
+            {#each [{ nocturnal: true, label: "Overnight hypo nadir" }, { nocturnal: false, label: "Daytime hypo nadir" }] as marker (marker.label)}
+              <span class="flex items-center gap-1.5">
+                <svg viewBox="0 0 10 8" class="h-2.5 w-3" aria-hidden="true">
+                  <HypoMarker x={5} y={7} nocturnal={marker.nocturnal} />
+                </svg>
+                {marker.label}
+              </span>
+            {/each}
           </div>
         </div>
       </CardHeader>
@@ -155,8 +176,7 @@
       <p>
         This is a retrospective analysis of recorded readings. A flagged window indicates a pattern
         that is statistically unlikely to be physiologic; it does not by itself identify the cause.
-        Boundaries are determined after the fact from surrounding readings. Discuss any patterns with
-        your care team.
+        Boundaries are determined after the fact from surrounding readings.
       </p>
     </div>
   </div>

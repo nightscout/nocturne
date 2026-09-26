@@ -56,7 +56,7 @@ public class DataHubAuthorizeTests
     }
 
     private static HubAuthorization Authorized(params string[] scopes) =>
-        new(Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Subject);
+        new(Tenant, Scope.Normalize(scopes), HubCredentialKind.Subject, Subject, HistoryClamped: false);
 
     [Fact]
     public async Task Authorize_with_token_accepted_by_authorizer_joins_tenant_authorized_group()

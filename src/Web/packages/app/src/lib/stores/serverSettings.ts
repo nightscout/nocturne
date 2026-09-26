@@ -2,7 +2,7 @@ import type { Entry, Treatment } from "$lib/api";
 
 // Local type definition for device status
 export interface DeviceStatus {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ServerSettings {
@@ -39,9 +39,9 @@ export interface ServerSettings {
       bgTargetBottom?: number;
       bgLow?: number;
     };
-    extendedSettings?: any;
+    extendedSettings?: unknown;
   };
-  extendedSettings?: any;
+  extendedSettings?: unknown;
   authorized?: {
     role?: string[];
   };

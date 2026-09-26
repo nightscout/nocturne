@@ -16,15 +16,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: "pnpm"
@@ -35,8 +35,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Sync translations
-        working-directory: src/Web/packages/app
-        run: pnpm wuchale sync
+        working-directory: src/Web
+        run: pnpm run translations:sync
 
       - name: Commit translation changes
         uses: stefanzweifel/git-auto-commit-action@v5

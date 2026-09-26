@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { Pin, PinOff, X } from "@lucide/svelte";
+  import { Slider } from "@nocturne/ui/ui/slider";
   import { preferences } from "$lib/preferences.svelte";
 
   // The floating window hosts the web app's public clock page so the clock face renders from one
@@ -66,7 +67,7 @@
 <div class="group fixed inset-0 overflow-hidden bg-transparent">
   {#if src}
     <!-- Opacity applies to the clock only; the hover controls below stay fully opaque. -->
-    <div class="absolute inset-0" style="opacity: {opacity}">
+    <div class="absolute inset-0 opacity-(--clock-opacity)" style="--clock-opacity: {opacity}">
       <iframe
         {src}
         title="Nocturne glucose clock"
@@ -75,7 +76,7 @@
     </div>
   {:else}
     <div
-      class="absolute inset-0 flex items-center justify-center bg-neutral-950 p-4 text-center text-sm text-white/70"
+      class="absolute inset-0 flex items-center justify-center bg-black p-4 text-center text-sm text-white/70"
     >
       {message ?? "Loading…"}
     </div>
@@ -94,15 +95,15 @@
   <div
     class="pointer-events-none absolute right-2 top-2 flex items-center gap-2 rounded-full bg-black/55 px-2.5 py-1.5 opacity-0 backdrop-blur transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100"
   >
-    <input
-      type="range"
-      min="0.3"
-      max="1"
-      step="0.05"
+    <Slider
+      type="single"
+      min={0.3}
+      max={1}
+      step={0.05}
       value={opacity}
-      oninput={(e) => setOpacity(Number(e.currentTarget.value))}
+      onValueChange={setOpacity}
       aria-label="Opacity"
-      class="h-1 w-20 cursor-pointer"
+      class="w-20"
     />
     <button
       type="button"

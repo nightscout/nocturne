@@ -11,7 +11,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import {
-    Battery,
     BatteryCharging,
     BatteryFull,
     BatteryLow,
@@ -35,10 +34,8 @@
   // Default: 7 days is good for battery analysis (typical charge cycle period)
   const reportsParams = requireDateParamsContext(7);
 
-  // State for device selection
   let selectedDevice = $state<string | null>(null);
 
-  // Create resource with automatic layout registration
   const batteryResource = contextResource(
     () => getBatteryReportData({
       device: selectedDevice,
@@ -49,12 +46,10 @@
     { errorTitle: "Error Loading Battery Report" }
   );
 
-  // Derived state from resource with explicit types
   const statistics = $derived<BatteryStatistics[]>(batteryResource.current?.statistics ?? []);
   const cycles = $derived<ChargeCycle[]>(batteryResource.current?.cycles ?? []);
   const readings = $derived<BatteryReading[]>(batteryResource.current?.readings ?? []);
 
-  // Helper alias for template readability
   const dateRange = $derived(reportsParams.dateRangeMillis);
 
   function fetchData() {
@@ -94,7 +89,6 @@
     return device;
   }
 
-  // Derived values
   const allDevices = $derived([
     ...new Set(statistics.map((s) => s.device ?? "")),
   ]);
@@ -115,8 +109,7 @@
 
 {#if batteryResource.current}
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6">
-  <!-- Header -->
-  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
+  <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between print:hidden">
     <div>
       <h1 class="text-3xl font-bold">Battery Report</h1>
       <p class="text-muted-foreground">
@@ -127,16 +120,14 @@
       variant="outline"
       size="sm"
       onclick={fetchData}
-      class="shrink-0 print:hidden"
+      class="shrink-0"
     >
       <RefreshCw class="h-4 w-4 mr-2" />
       Refresh
     </Button>
   </div>
 
-
-  <!-- Date Range Info -->
-  <div class="flex items-center gap-2 text-sm text-muted-foreground">
+  <div class="flex items-center gap-2 text-sm text-muted-foreground print:hidden">
     <Calendar class="h-4 w-4" />
     <span>
       {formatNumericDate(new Date(dateRange.from))} – {formatNumericDate(new Date(
@@ -167,7 +158,6 @@
       </CardContent>
     </Card>
   {:else}
-    <!-- Device Filter (if multiple devices) -->
     {#if allDevices.length > 1}
       <div class="flex gap-2 flex-wrap print:hidden">
         <Button
@@ -177,7 +167,7 @@
         >
           All Devices
         </Button>
-        {#each allDevices as device}
+        {#each allDevices as device (device)}
           <Button
             variant={selectedDevice === device ? "default" : "outline"}
             size="sm"
@@ -189,9 +179,8 @@
       </div>
     {/if}
 
-    <!-- Statistics Cards -->
-    <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 gap-4">
-      {#each displayedStats as stat}
+    <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-3 print:grid-cols-2 gap-4">
+      {#each displayedStats as stat, i (i)}
         {@const StatIcon = getBatteryIconComponent(
           stat?.level,
           stat?.isCharging
@@ -217,14 +206,13 @@
             </div>
           </CardHeader>
           <CardContent class="space-y-4">
-            <!-- Current Status -->
             <div class="grid grid-cols-2 gap-2 text-sm">
               <div>
                 <span class="text-muted-foreground">Current:</span>
                 <span class="font-medium ml-1">
                   {stat.currentLevel ?? "?"}%
                   {#if stat.isCharging}
-                    <Zap class="inline h-3 w-3 text-yellow-500" />
+                    <Zap class="inline h-3 w-3" />
                   {/if}
                 </span>
               </div>
@@ -236,7 +224,6 @@
 
             <Separator />
 
-            <!-- Statistics -->
             <div class="grid grid-cols-2 gap-2 text-sm">
               {#if stat.averageLevel}
                 <div>
@@ -258,11 +245,8 @@
 
             <Separator />
 
-            <!-- Charge Cycle Stats -->
             <div class="space-y-2">
-              <h4
-                class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-              >
+              <h4 class="text-sm font-medium text-muted-foreground">
                 Charge Patterns
               </h4>
               <div class="grid grid-cols-2 gap-2 text-sm">
@@ -270,7 +254,7 @@
                   <span class="text-muted-foreground">Cycles:</span>
                   <span class="font-medium ml-1">{stat.chargeCycleCount}</span>
                 </div>
-                {#if stat.averageTimeBetweenChargesHours}
+                {#if stat.averageDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Avg life:</span>
                     <span class="font-medium ml-1">
@@ -281,7 +265,7 @@
                 {#if stat.longestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Longest:</span>
-                    <span class="font-medium ml-1 text-green-600">
+                    <span class="font-medium ml-1">
                       {formatDuration(stat.longestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -289,7 +273,7 @@
                 {#if stat.shortestDischargeDurationMinutes}
                   <div>
                     <span class="text-muted-foreground">Shortest:</span>
-                    <span class="font-medium ml-1 text-yellow-600">
+                    <span class="font-medium ml-1">
                       {formatDuration(stat.shortestDischargeDurationMinutes)}
                     </span>
                   </div>
@@ -297,68 +281,67 @@
               </div>
             </div>
 
-            <!-- Time in Zones -->
             {#if (stat?.readingCount ?? 0) > 0}
               <Separator />
               <div class="space-y-2">
-                <h4
-                  class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                >
+                <h4 class="text-sm font-medium text-muted-foreground">
                   Time Distribution
                 </h4>
                 <div class="space-y-1">
                   <div class="flex justify-between text-sm">
                     <span>Above 80%</span>
-                    <span class="font-medium text-green-600">
+                    <span class="font-medium tabular-nums">
                       {(stat?.timeAbove80Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-green-500"
-                      style="width: {stat?.timeAbove80Percent ?? 0}%"
+                      class="h-full bg-success w-(--share)"
+                      style:--share="{stat?.timeAbove80Percent ?? 0}%"
                     ></div>
                   </div>
                   <div class="flex justify-between text-sm">
                     <span>30% - 80%</span>
-                    <span class="font-medium">
+                    <span class="font-medium tabular-nums">
                       {(stat?.timeBetween30And80Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-blue-500"
-                      style="width: {stat?.timeBetween30And80Percent ?? 0}%"
+                      class="h-full bg-info w-(--share)"
+                      style:--share="{stat?.timeBetween30And80Percent ?? 0}%"
                     ></div>
                   </div>
                   <div class="flex justify-between text-sm">
                     <span>Below 30%</span>
-                    <span class="font-medium text-yellow-600">
+                    <span class="font-medium tabular-nums">
                       {(stat?.timeBelow30Percent ?? 0).toFixed(1)}%
                     </span>
                   </div>
                   <div class="h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      class="h-full bg-yellow-500"
-                      style="width: {stat?.timeBelow30Percent ?? 0}%"
+                      class="h-full bg-warning w-(--share)"
+                      style:--share="{stat?.timeBelow30Percent ?? 0}%"
                     ></div>
                   </div>
                 </div>
               </div>
             {/if}
 
-            <!-- Warning Events -->
             {#if (stat?.warningEventCount ?? 0) > 0 || (stat?.urgentEventCount ?? 0) > 0}
               <Separator />
               <div class="flex gap-4 text-sm">
                 {#if (stat?.warningEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-yellow-600">
+                  <div class="flex items-center gap-1 text-warning print:text-foreground">
                     <AlertTriangle class="h-4 w-4" />
-                    <span>{stat?.warningEventCount ?? 0} warnings</span>
+                    <span>
+                      {stat?.warningEventCount ?? 0}
+                      {stat?.warningEventCount === 1 ? "warning" : "warnings"}
+                    </span>
                   </div>
                 {/if}
                 {#if (stat?.urgentEventCount ?? 0) > 0}
-                  <div class="flex items-center gap-1 text-red-600">
+                  <div class="flex items-center gap-1 text-destructive print:text-foreground">
                     <AlertTriangle class="h-4 w-4" />
                     <span>{stat?.urgentEventCount ?? 0} critical</span>
                   </div>
@@ -370,7 +353,6 @@
       {/each}
     </div>
 
-    <!-- Charge Cycle History -->
     {#if cycles.length > 0}
       <Card>
         <CardHeader>
@@ -383,47 +365,40 @@
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div class="space-y-3">
-            {#each cycles.slice(0, 10) as cycle}
-              <div
-                class="flex flex-col gap-3 p-3 rounded-lg border @md:flex-row @md:items-center @md:justify-between"
+          <ul class="m-0 list-none divide-y divide-border border-y border-border p-0">
+            {#each cycles.slice(0, 10) as cycle (cycle.id)}
+              <li
+                class="flex flex-col gap-2 py-3 @md:flex-row @md:items-center @md:justify-between"
               >
-                <div class="flex items-center gap-3">
-                  <div class="flex flex-col items-center">
-                    <BatteryCharging class="h-4 w-4 text-green-500" />
-                    <div class="h-6 border-l border-dashed"></div>
-                    <Battery class="h-4 w-4 text-muted-foreground" />
+                <div class="space-y-1">
+                  <div class="text-sm font-medium">
+                    {extractDeviceName(cycle.device)}
                   </div>
-                  <div class="space-y-1">
-                    <div class="text-sm font-medium">
-                      {extractDeviceName(cycle.device)}
-                    </div>
-                    <div class="text-xs text-muted-foreground">
-                      {#if cycle.chargeStartMills}
-                        Charged: {formatDateShort(cycle.chargeStartMills)}
-                        ({cycle.chargeStartLevel ?? "?"}% → {cycle.chargeEndLevel ??
-                          "?"}%)
-                      {/if}
-                    </div>
-                    {#if cycle.dischargeDurationMinutes}
-                      <div class="text-xs text-muted-foreground">
-                        Lasted: {formatDuration(cycle.dischargeDurationMinutes)}
-                        ({cycle.dischargeStartLevel ?? "?"}% → {cycle.dischargeEndLevel ??
-                          "?"}%)
-                      </div>
+                  <div class="text-xs text-muted-foreground tabular-nums">
+                    {#if cycle.chargeStartMills}
+                      Charged: {formatDateShort(cycle.chargeStartMills)}
+                      ({cycle.chargeStartLevel ?? "?"}% to {cycle.chargeEndLevel ??
+                        "?"}%)
                     {/if}
                   </div>
-                </div>
-                <div class="text-right @md:shrink-0">
                   {#if cycle.dischargeDurationMinutes}
-                    <div class="text-lg font-bold">
+                    <div class="text-xs text-muted-foreground tabular-nums">
+                      Lasted: {formatDuration(cycle.dischargeDurationMinutes)}
+                      ({cycle.dischargeStartLevel ?? "?"}% to {cycle.dischargeEndLevel ??
+                        "?"}%)
+                    </div>
+                  {/if}
+                </div>
+                <div class="@md:shrink-0 @md:text-right">
+                  {#if cycle.dischargeDurationMinutes}
+                    <div class="text-lg font-semibold tabular-nums">
                       {formatDuration(cycle.dischargeDurationMinutes)}
                     </div>
                     <div class="text-xs text-muted-foreground">
                       battery life
                     </div>
                   {:else if cycle.chargeDurationMinutes}
-                    <div class="text-lg font-bold text-green-600">
+                    <div class="text-lg font-semibold tabular-nums">
                       {formatDuration(cycle.chargeDurationMinutes)}
                     </div>
                     <div class="text-xs text-muted-foreground">charge time</div>
@@ -431,14 +406,13 @@
                     <Badge variant="secondary">In Progress</Badge>
                   {/if}
                 </div>
-              </div>
+              </li>
             {/each}
-          </div>
+          </ul>
         </CardContent>
       </Card>
     {/if}
 
-    <!-- Footer -->
     <div class="text-center text-xs text-muted-foreground space-y-1">
       <p>
         Data collected from {allDevices.length} device{allDevices.length !== 1

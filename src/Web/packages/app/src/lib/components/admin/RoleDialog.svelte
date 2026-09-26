@@ -69,6 +69,18 @@
     },
   ];
 
+  interface Props {
+    open: boolean;
+    roleFormName: string;
+    roleFormNotes: string;
+    roleFormPermissions: string[];
+    isNewRole: boolean;
+    roleCreatedFromSubjectDialog: boolean;
+    editingRole: TenantRoleDto | null;
+    roleSaving: boolean;
+    saveRole: () => void;
+  }
+
   let {
     open = $bindable(false),
     roleFormName = $bindable(""),
@@ -79,17 +91,7 @@
     editingRole,
     roleSaving,
     saveRole,
-  } = $props<{
-    open: boolean;
-    roleFormName: string;
-    roleFormNotes: string;
-    roleFormPermissions: string[];
-    isNewRole: boolean;
-    roleCreatedFromSubjectDialog: boolean;
-    editingRole: TenantRoleDto | null;
-    roleSaving: boolean;
-    saveRole: () => void;
-  }>();
+  }: Props = $props();
 
   let customPermission = $state("");
 
@@ -154,11 +156,11 @@
         <Label>Permissions</Label>
 
         <div class="space-y-4">
-          {#each permissionCategories as category}
+          {#each permissionCategories as category (category.name)}
             <div class="border rounded-lg p-3 bg-muted/50">
               <h4 class="text-sm font-medium mb-2">{category.name}</h4>
               <div class="grid grid-cols-2 gap-2">
-                {#each category.permissions as perm}
+                {#each category.permissions as perm (perm)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={roleFormPermissions.includes(perm)}
@@ -201,17 +203,14 @@
                 Selected Permissions ({roleFormPermissions.length})
               </h4>
               <div class="flex flex-wrap gap-1">
-                {#each roleFormPermissions as perm}
-                  <Badge variant="secondary" class="font-mono text-xs">
+                {#each roleFormPermissions as perm, i (i)}
+                  <Badge
+                    variant="secondary"
+                    class="font-mono"
+                    onremove={editingRole?.isSystem ? undefined : () => togglePermission(perm)}
+                    removeLabel="Remove {perm}"
+                  >
                     {perm}
-                    {#if !editingRole?.isSystem}
-                      <button
-                        class="ml-1 hover:text-destructive"
-                        onclick={() => togglePermission(perm)}
-                      >
-                        ×
-                      </button>
-                    {/if}
                   </Badge>
                 {/each}
               </div>

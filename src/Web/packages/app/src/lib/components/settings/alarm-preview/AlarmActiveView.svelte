@@ -26,8 +26,8 @@
 <!-- Screen flash overlay -->
 {#if isFlashing && profile.visual.screenFlash}
   <div
-    class="fixed inset-0 z-100 pointer-events-none transition-opacity duration-100"
-    style="background-color: {profile.visual.flashColor}; opacity: 0.3;"
+    class="fixed inset-0 z-100 pointer-events-none bg-(--flash-color) opacity-30 transition-opacity duration-100"
+    style:--flash-color={profile.visual.flashColor}
   ></div>
 {/if}
 
@@ -61,18 +61,16 @@
       </div>
 
       {#if showEmergencyButton}
-        <Button
-          variant="destructive"
-          class="p-8 border mt-4 animate-in zoom-in duration-300 cursor-pointer"
-          onclick={onEmergencyClick}
-        >
-          <div class="flex items-center justify-center gap-2 mb-2">
-            <AlertCircle class="h-5 w-5" />
-            <h3 class="font-bold text-lg uppercase tracking-wider">
-              Emergency Contacts
-            </h3>
-          </div>
-        </Button>
+        <div class="mt-4 animate-in zoom-in duration-300">
+          <Button
+            variant="outline-destructive"
+            size="xl"
+            onclick={onEmergencyClick}
+          >
+            <AlertCircle />
+            Emergency Contacts
+          </Button>
+        </div>
       {/if}
     </div>
   </div>
@@ -83,11 +81,10 @@
   >
     {#if profile.snooze.options.length > 0}
       <div class="grid grid-cols-2 gap-3">
-        {#each profile.snooze.options as minutes}
+        {#each profile.snooze.options as minutes, i (i)}
           <Button
             variant="secondary"
-            size="lg"
-            class="h-16 text-lg font-semibold shadow-lg"
+            size="xl"
             onclick={() => onSnooze(minutes)}
           >
             <Clock class="h-5 w-5 mr-2" />
@@ -99,8 +96,7 @@
 
     <Button
       variant="destructive"
-      size="lg"
-      class="h-16 text-xl font-bold border-2 border-white/20 shadow-xl"
+      size="xl"
       onclick={onDismiss}
     >
       Dismiss Alarm

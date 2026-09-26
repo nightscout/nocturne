@@ -17,12 +17,12 @@ import {
 
 let grants: DirectGrantDto[];
 let listQuery: () => FakeQuery<DirectGrantDto[]>;
-let createImpl: () => Promise<{ token?: string }>;
+let createImpl: (body?: unknown) => Promise<{ token?: string }>;
 let revokeImpl: () => Promise<unknown>;
 
 vi.mock("$lib/api/generated/directGrants.generated.remote", () => ({
   list: () => listQuery(),
-  create: () => createImpl(),
+  create: (body: unknown) => createImpl(body),
   revoke: () => revokeImpl(),
 }));
 
@@ -73,6 +73,44 @@ describe("ApiTokens", () => {
       .element(page.getByText("Create API token"))
       .not.toBeInTheDocument();
     expect(onCreateClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ApiTokens history limit", () => {
+  it("sends the 24-hour limit the creator ticked", async () => {
+    const create = vi.fn((_body?: unknown) =>
+      Promise.resolve({ token: "noc_created" })
+    );
+    createImpl = create;
+
+    render(ApiTokens, {
+      createOpen: true,
+      prefillLabel: "Follower phone",
+      prefillScopes: ["glucose.read"],
+    });
+
+    await page.getByLabelText("Only last 24 hours").click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Create token" })
+      .click();
+
+    await expect.element(page.getByText("Token created")).toBeVisible();
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ limitTo24Hours: true })
+    );
+  });
+
+  it("marks a token the API reports as limited to 24 hours", async () => {
+    grants = [
+      { ...grant("g-limited", "Follower phone"), limitTo24Hours: true },
+      grant("g-full", "Uploader"),
+    ];
+
+    render(ApiTokens);
+
+    await expect.element(page.getByText("Follower phone")).toBeVisible();
+    expect(page.getByText("24-hour limit").elements()).toHaveLength(1);
   });
 });
 
@@ -190,7 +228,9 @@ describe("ApiTokens load failure", () => {
 
     render(ApiTokens);
 
-    await expect.element(page.getByText(LOAD_FAILURE)).toBeVisible();
+    // A reading surface shows a server-written 5xx reason in place of its
+    // fallback; see READ_SURFACE in $lib/forms/submit-error.
+    await expect.element(page.getByText("boom", { exact: true })).toBeVisible();
     await expect
       .element(page.getByText("No API tokens.", { exact: false }))
       .not.toBeInTheDocument();

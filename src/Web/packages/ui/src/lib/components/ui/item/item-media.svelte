@@ -4,7 +4,7 @@
   import {
     itemMediaVariants,
     type ItemMediaVariant,
-  } from "./item-media-variants";
+  } from "./index.js";
 
   let {
     ref = $bindable(null),

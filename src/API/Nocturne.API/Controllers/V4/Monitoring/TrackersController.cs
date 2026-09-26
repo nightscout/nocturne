@@ -171,7 +171,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         foreach (var excursionId in excursions)
         {
             await _acknowledgementService.AcknowledgeExcursionAsync(
-                db.TenantId, excursionId, userId, broadcast: true, ct);
+                db.TenantId, excursionId, userId, HttpContext.GetAlertAcknowledgementAuthority(),
+                broadcast: true, ct);
         }
     }
 
@@ -591,7 +592,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
             "create",
-            TrackerInstanceDto.FromEntity(instance)
+            TrackerInstanceDto.FromEntity(instance),
+            instance.UserId,
+            definition.Visibility
         );
 
         return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
@@ -639,7 +642,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
             "complete",
-            TrackerInstanceDto.FromEntity(completed!)
+            TrackerInstanceDto.FromEntity(completed!),
+            existing.UserId,
+            existing.Definition.Visibility
         );
 
         return Ok(TrackerInstanceDto.FromEntity(completed!));
@@ -681,7 +686,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
                     "ack",
-                    TrackerInstanceDto.FromEntity(updated)
+                    TrackerInstanceDto.FromEntity(updated),
+                    updated.UserId,
+                    updated.Definition.Visibility
                 );
             }
         }
@@ -712,7 +719,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         await _repository.DeleteInstanceAsync(id, HttpContext.RequestAborted);
 
         // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync("delete", dto);
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "delete",
+            dto,
+            existing.UserId,
+            existing.Definition.Visibility
+        );
 
         return NoContent();
     }

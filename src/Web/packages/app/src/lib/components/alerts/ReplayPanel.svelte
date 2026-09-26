@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { onDestroy, untrack, type ComponentProps } from "svelte";
+  import { timeDay } from "d3-time";
+  import { indexBy } from "$lib/utils/collections";
+  import { onDestroy, untrack } from "svelte";
   import {
     type DateValue,
     getLocalTimeZone,
@@ -7,6 +9,7 @@
     today,
   } from "@internationalized/date";
   import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import GlucoseCalendarPicker from "./GlucoseCalendarPicker.svelte";
   import * as Popover from "$lib/components/ui/popover";
@@ -157,25 +160,13 @@
     const toHm = parseHHmm(toTime);
     if (!fromHm || !toHm) return null;
 
-    const baseLocal = selectedDate
-      ? selectedDate.toDate(getLocalTimeZone())
-      : (() => {
-          // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-          const t = new Date();
-          t.setHours(0, 0, 0, 0);
-          return t;
-        })();
+    const day = selectedDate ? selectedDate.toDate(getLocalTimeZone()) : new Date();
+    const at = ([hours, minutes]: [number, number]) =>
+      new Date(day.getFullYear(), day.getMonth(), day.getDate(), hours, minutes);
 
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-    const from = new Date(baseLocal.getTime());
-    from.setHours(fromHm[0], fromHm[1], 0, 0);
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-    const to = new Date(baseLocal.getTime());
-    to.setHours(toHm[0], toHm[1], 0, 0);
-    if (to.getTime() <= from.getTime()) {
-      to.setDate(to.getDate() + 1);
-    }
-    return { from, to };
+    const from = at(fromHm);
+    const to = at(toHm);
+    return { from, to: to.getTime() <= from.getTime() ? timeDay.offset(to, 1) : to };
   }
 
   // Per-run derived state populated by handleRun. Kept as plain $state (not
@@ -257,33 +248,20 @@
     maxPct = 0;
     try {
       const range = computeRange();
-      const date = !range && selectedDate ? selectedDate.toString() : null;
-      // Zod schema for from/to is `string (date-time)`. The generated client
-      // types claim Date, but the request travels as JSON, so we send ISO
-      // strings and cast for the type checker.
-      const fromIso = range
-        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
-          (range.from.toISOString() as unknown as Date)
-        : undefined;
-      const toIso = range
-        ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format ISO string typed as Date by the generated client
-          (range.to.toISOString() as unknown as Date)
-        : undefined;
+      const date = !range && selectedDate ? selectedDate.toString() : undefined;
       const replayResult = rule
         ? await replayDryRun({
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
-            date: date as unknown as Date | undefined,
+            date,
             timezone: browserTimezone,
-            from: fromIso,
-            to: toIso,
+            from: range?.from.toISOString(),
+            to: range?.to.toISOString(),
             rule: typeof rule === "function" ? rule() : rule,
           })
         : await replay({
-            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- wire-format date string typed as Date by the generated client
-            date: date as unknown as Date | undefined,
+            date,
             timezone: browserTimezone,
-            from: fromIso,
-            to: toIso,
+            from: range?.from.toISOString(),
+            to: range?.to.toISOString(),
           });
       result = replayResult ?? null;
 
@@ -301,25 +279,15 @@
       // Build per-rule tree + leaf-id maps. The rule under edit substitutes
       // its in-memory tree so the sidebar reflects the editor's current
       // typing rather than the saved version.
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-      const trees = new Map<string, ConditionNode>();
-      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, non-reactive
-      const ids = new Map<string, Map<string, number>>();
-      for (const r of rulesList) {
-        if (!r.id) continue;
-        let parsed: ConditionNode | null;
-        if (editingRuleId && r.id === editingRuleId && editingTree) {
-          parsed = editingTree;
-        } else {
-          parsed = nodeFromApi(r.conditionType, r.conditionParams);
-        }
-        if (!parsed) continue;
-        const tree = ensureCompositeRoot(parsed);
-        trees.set(r.id, tree);
-        ids.set(r.id, assignLeafIds(tree));
-      }
-      treeByRule = trees;
-      leafIdsByRule = ids;
+      const parsedTrees = rulesList.flatMap((r) => {
+        const parsed =
+          editingRuleId && r.id === editingRuleId && editingTree
+            ? editingTree
+            : nodeFromApi(r.conditionType, r.conditionParams);
+        return r.id && parsed ? [{ id: r.id, tree: ensureCompositeRoot(parsed) }] : [];
+      });
+      treeByRule = indexBy(parsedTrees, (t) => t.id, (t) => t.tree);
+      leafIdsByRule = indexBy(parsedTrees, (t) => t.id, (t) => assignLeafIds(t.tree));
       leafLog = new LeafTransitionLog(result?.leafTransitionsByRule ?? {});
       factLog = new FactSnapshotLog(result?.factTimelines ?? {});
     } catch (err) {
@@ -457,10 +425,6 @@
   let firedMarkers = $derived(
     currentTimeMs != null ? markers.filter((m) => m.tMs <= currentTimeMs) : []
   );
-  const overlayMarkers = $derived(
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bridge to ReplayOverlay's structural Marker prop type
-    firedMarkers as unknown as ComponentProps<typeof ReplayOverlay>["firedMarkers"]
-  );
 
   // Auto-run on mount and on every window-selection change. We track the
   // serialised window inputs so a re-pick of the same value doesn't re-fire,
@@ -515,8 +479,9 @@
         {#snippet child({ props }: { props: Record<string, unknown> })}
           <Button
             {...props}
-            variant="outline"
-            class="h-8 justify-start gap-2 font-normal"
+            variant="combobox"
+            size="sm"
+            class="justify-start"
           >
             <CalendarIcon class="h-3.5 w-3.5 text-muted-foreground" />
             {dateLabel(selectedDate)}
@@ -527,8 +492,8 @@
         <div class="border-b p-2">
           <Button
             variant="ghost"
-            size="sm"
-            class="w-full justify-start text-xs"
+            size="xs"
+            class="w-full justify-start"
             onclick={clearDate}
           >
             Last 24 hours
@@ -544,18 +509,20 @@
 
     <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
       From
-      <input
+      <Input
         type="time"
-        class="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+        size="sm"
+        class="w-auto"
         bind:value={fromTime}
         oninput={() => (brushDomain = null)}
       />
     </label>
     <label class="flex items-center gap-1.5 text-xs text-muted-foreground">
       To
-      <input
+      <Input
         type="time"
-        class="h-8 rounded-md border bg-background px-2 text-xs text-foreground"
+        size="sm"
+        class="w-auto"
         bind:value={toTime}
         oninput={() => (brushDomain = null)}
       />
@@ -574,7 +541,8 @@
       <Button
         variant="outline"
         href={dayInReviewHref}
-        class="ml-auto h-8 gap-2 font-normal"
+        size="sm"
+        class="ml-auto"
         title="Open Day in Review for this day"
       >
         <CalendarDays class="h-3.5 w-3.5 text-muted-foreground" />
@@ -623,7 +591,7 @@
                   <ThresholdRules />
                   <GlucoseTrack />
                   <IobCobTrack />
-                  <ReplayOverlay firedMarkers={overlayMarkers} {currentDate} />
+                  <ReplayOverlay {firedMarkers} {currentDate} />
                 {/snippet}
                 {#snippet overlays()}
                   <ChartTooltip tooltipExtras={replayTooltipExtras} />
@@ -680,8 +648,8 @@
                 >
                   {#if isResolved}
                     <CheckCircle2
-                      class="h-3.5 w-3.5 shrink-0"
-                      style="color: {severityVar(m.ev.severity)}"
+                      class="h-3.5 w-3.5 shrink-0 text-(--severity)"
+                      style="--severity: {severityVar(m.ev.severity)}"
                       aria-hidden="true"
                     />
                   {:else if isSuppressed}
@@ -691,8 +659,8 @@
                     />
                   {:else}
                     <Bell
-                      class="h-3.5 w-3.5 shrink-0"
-                      style="color: {severityVar(m.ev.severity)}"
+                      class="h-3.5 w-3.5 shrink-0 text-(--severity)"
+                      style="--severity: {severityVar(m.ev.severity)}"
                       aria-hidden="true"
                     />
                   {/if}

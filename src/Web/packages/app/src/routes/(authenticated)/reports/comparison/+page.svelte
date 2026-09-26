@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
+  import { ArrowLeft, ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -7,6 +7,7 @@
   import * as Select from "$lib/components/ui/select";
   import GlucoseRangeCalendarPicker from "$lib/components/alerts/GlucoseRangeCalendarPicker.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
   import { getReportsAnalysis, type DateRangeInput } from "$api/reports.remote";
   import { bg, bgDelta, bgLabel, formatShortDate } from "$lib/utils/formatting";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
@@ -138,6 +139,12 @@
 
   const committed = $derived.by(readCommitted);
 
+  setReportPrintMeta(() => ({
+    period: {
+      label: `${committed.a.label} (${rangeDisplay(committed.a.from, committed.a.to)}) vs ${committed.b.label} (${rangeDisplay(committed.b.from, committed.b.to)})`,
+    },
+  }));
+
   let openPopover = $state<Side | null>(null);
   let preset = $state<Preset>(untrack(() => urlParams.preset ?? DEFAULT_PRESET));
   /** Pending edits to the compared ranges, applied to the URL by Load. */
@@ -229,7 +236,7 @@
       formatDelta: (d) => `${signed(d)} pp`,
     },
     gmi: {
-      label: "GMI",
+      label: "Est. A1C",
       format: (v) => `${v.toFixed(1)}%`,
       formatDelta: (d) => `${signed(d, 2)} pp`,
     },
@@ -262,6 +269,14 @@
 
   type Analysis = NonNullable<NonNullable<typeof queryA.current>["analysis"]>;
 
+  // A period with no readings still comes back as an analysis of zeros; read it as absent so
+  // its figures show "No data" instead of 0 %, 0 mg/dL and a delta measured against them.
+  function withReadings(a: Analysis | undefined): Analysis | undefined {
+    return a && a.basicStats?.count !== 0 ? a : undefined;
+  }
+  const analysisA = $derived(withReadings(queryA.current?.analysis));
+  const analysisB = $derived(withReadings(queryB.current?.analysis));
+
   function getMetric(a: Analysis | undefined, key: MetricKey): number | null {
     if (!a) return null;
     const tir = a.timeInRange;
@@ -271,7 +286,7 @@
       case "tirTarget":
         return tir?.percentages?.target ?? null;
       case "gmi":
-        return gv?.estimatedA1c ?? a.gmi?.value ?? null;
+        return a.gmi?.value ?? null;
       case "cv":
         return gv?.coefficientOfVariation ?? null;
       case "gri":
@@ -298,7 +313,6 @@
 
   // Cap percent change at ±60 % so outliers don't blow out the bar.
   const BAR_CAP_PCT = 60;
-  const BAR_COLOR = "var(--foreground)";
 
   // Signed percent change from the first period to the second. A zero baseline admits no
   // proportional change, so any move off it saturates the bar in the move's direction
@@ -314,13 +328,14 @@
     label: string;
     av: number | null;
     bv: number | null;
-    fillStyle: string;
+    bar: "flat" | "up" | "down";
+    barWidth: number;
     deltaText: string;
   };
 
   const diffRows = $derived.by<DiffRow[]>(() => {
-    const aAnalysis = queryA.current?.analysis;
-    const bAnalysis = queryB.current?.analysis;
+    const aAnalysis = analysisA;
+    const bAnalysis = analysisB;
 
     return metricKeys.map<DiffRow>((key) => {
       const def = metricDefs[key];
@@ -333,7 +348,8 @@
           label: def.label,
           av,
           bv,
-          fillStyle: `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`,
+          bar: "flat",
+          barWidth: 0,
           deltaText: "—",
         };
       }
@@ -347,30 +363,27 @@
 
       // The bar carries the sign of the change: it grows right when the second
       // period is higher and left when it is lower.
-      const fillStyle = flat
-        ? `left: calc(50% - 1px); width: 2px; background: ${BAR_COLOR};`
-        : delta > 0
-          ? `left: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`
-          : `right: 50%; width: ${halfWidth}%; background: ${BAR_COLOR};`;
+      const bar = flat ? "flat" : delta > 0 ? "up" : "down";
 
       return {
         key,
         label: def.label,
         av,
         bv,
-        fillStyle,
+        bar,
+        barWidth: halfWidth,
         deltaText: def.formatDelta(delta),
       };
     });
   });
 
   function valueText(key: MetricKey, v: number | null): string {
-    if (v == null) return "—";
+    if (v == null) return "No data";
     return metricDefs[key].format(v);
   }
 
-  const tirA = $derived(queryA.current?.analysis?.timeInRange?.percentages);
-  const tirB = $derived(queryB.current?.analysis?.timeInRange?.percentages);
+  const tirA = $derived(analysisA?.timeInRange?.percentages);
+  const tirB = $derived(analysisB?.timeInRange?.percentages);
   const presetLabel = $derived(
     presetOptions.find((p) => p.value === preset)?.label ?? "Custom"
   );
@@ -411,7 +424,10 @@
           <Select.Root
             type="single"
             value={preset}
-            onValueChange={(v) => applyPreset(v as Preset)}
+            onValueChange={(v) => {
+              const next = PRESETS.find((p) => p === v);
+              if (next) applyPreset(next);
+            }}
           >
             <Select.Trigger id="cmp-preset" class="w-full">
               {presetLabel}
@@ -424,7 +440,7 @@
           </Select.Root>
         </div>
 
-        <Button variant="outline" size="sm" onclick={swap} class="gap-2">
+        <Button variant="outline" size="sm" onclick={swap}>
           <ArrowLeftRight class="h-4 w-4" />
           Swap
         </Button>
@@ -432,28 +448,28 @@
           size="sm"
           disabled={!isDirty}
           onclick={() => commit(draft, preset)}
-          class="gap-2"
         >
           Load
         </Button>
       </div>
 
-      <div class="grid gap-4 @xl:grid-cols-2">
+      <div class="grid gap-4 border-t border-border pt-4 @xl:grid-cols-2">
         {#each sideConfigs as cfg (cfg.side)}
           {@const p = draft[cfg.side]}
-          <div class="rounded-md border border-border bg-card p-3">
+          <div>
             <div class="mb-2 flex items-center gap-2">
               <span
-                class="inline-block h-2 w-2 rounded-full"
-                style="background: {cfg.color};"
+                class="inline-block h-2 w-2 rounded-full bg-(--dot)"
+                style:--dot={cfg.color}
               ></span>
               <Input
                 value={p.label}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) =>
                   setLabel(cfg.side, e.currentTarget.value)}
-                class="h-7 border-0 bg-transparent px-1 text-sm font-semibold focus-visible:ring-1"
+                size="sm"
+                variant="title"
               />
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+              <span class="ml-auto text-xs text-muted-foreground tabular-nums">
                 {dayCount(p.from, p.to)}d
               </span>
             </div>
@@ -463,15 +479,17 @@
             >
               <Popover.Trigger>
                 {#snippet child({ props }: { props: Record<string, unknown> })}
-                  <button
+                  <Button
                     {...props}
-                    class="flex w-full items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-xs text-left hover:bg-muted/40 transition-colors"
+                    variant="outline"
+                    size="sm"
+                    class="w-full justify-start"
                   >
                     <CalendarDays class="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    <span class="font-mono">
+                    <span class="tabular-nums">
                       {rangeDisplay(p.from, p.to)}
                     </span>
-                  </button>
+                  </Button>
                 {/snippet}
               </Popover.Trigger>
               <Popover.Content class="p-0 w-auto" align="start">
@@ -496,55 +514,63 @@
     </Card.Content>
   </Card.Root>
 
-  <!-- Diff-first strip -->
   <Card.Root>
-    <Card.Content class="space-y-4 p-6">
-      <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-        <span class="inline-flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs font-medium">
+    <Card.Content class="space-y-4 p-6 print:space-y-2 print:p-4">
+      <div class="flex flex-wrap items-center gap-3 border-b border-border pb-3 print:hidden">
+        <span class="inline-flex items-center gap-2 text-sm font-medium">
           <span
-            class="inline-block h-2 w-2 rounded-full"
-            style="background: var(--muted-foreground);"
+            class="inline-block h-2 w-2 rounded-full bg-muted-foreground"
           ></span>
           {committed.a.label}
         </span>
-        <span class="font-mono text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-          vs
-        </span>
-        <span class="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium">
+        <span class="text-sm text-muted-foreground">vs</span>
+        <span class="inline-flex items-center gap-2 text-sm font-medium">
           <span
-            class="inline-block h-2 w-2 rounded-full"
-            style="background: var(--glucose-in-range);"
+            class="inline-block h-2 w-2 rounded-full bg-glucose-in-range"
           ></span>
           {committed.b.label}
         </span>
-        <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+        <span class="ml-auto text-xs text-muted-foreground tabular-nums">
           {rangeDisplay(committed.a.from, committed.a.to)}
           <ArrowRight class="mx-1 inline h-3 w-3" />
           {rangeDisplay(committed.b.from, committed.b.to)}
         </span>
       </div>
 
-      <div class="space-y-1">
+      <div class="divide-y divide-border">
+        <div
+          class="hidden gap-4 px-3 text-xs font-medium text-muted-foreground print:grid print:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
+        >
+          <div>Metric</div>
+          <div class="text-right">{committed.a.label}</div>
+          <div class="text-right">{committed.b.label}</div>
+          <div></div>
+          <div class="text-right">Change</div>
+        </div>
         {#each diffRows as row (row.key)}
           <div
-            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded border border-border bg-card px-3 py-2.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
+            class="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5 print:py-1.5 @2xl:grid @2xl:flex-nowrap @2xl:gap-4 @2xl:[grid-template-columns:minmax(140px,1fr)_90px_90px_minmax(120px,2fr)_100px]"
           >
             <div class="w-full text-sm font-medium @2xl:w-auto">{row.label}</div>
-            <div class="font-mono text-sm tabular-nums text-muted-foreground @2xl:text-right">
+            <div class="text-sm tabular-nums text-muted-foreground @2xl:text-right">
               {valueText(row.key, row.av)}
             </div>
-            <div class="font-mono text-sm font-semibold tabular-nums @2xl:text-right">
+            <div class="text-sm font-semibold tabular-nums @2xl:text-right">
               {valueText(row.key, row.bv)}
             </div>
             <div class="relative order-last h-2 w-full overflow-hidden rounded-full bg-muted @2xl:order-none @2xl:w-auto">
               <div class="absolute top-0 bottom-0 left-1/2 w-px bg-border"></div>
               <div
-                class="absolute top-0 bottom-0 rounded-full transition-all duration-200"
-                style={row.fillStyle}
+                class="absolute top-0 bottom-0 rounded-full bg-foreground transition-all duration-200 {row.bar === 'flat'
+                  ? 'left-[calc(50%-1px)] w-0.5'
+                  : row.bar === 'up'
+                    ? 'left-1/2 w-(--bar-w)'
+                    : 'right-1/2 w-(--bar-w)'}"
+                style:--bar-w="{row.barWidth}%"
               ></div>
             </div>
             <div
-              class="ml-auto font-mono text-xs font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
+              class="ml-auto text-sm font-semibold tabular-nums @2xl:ml-0 @2xl:text-right"
             >
               {row.deltaText}
             </div>
@@ -552,15 +578,20 @@
         {/each}
       </div>
 
-      <div class="flex justify-between font-mono text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
-        <span>← lower in {committed.b.label}</span>
-        <span>no change</span>
-        <span>higher in {committed.b.label} →</span>
+      <div class="flex justify-between text-xs text-muted-foreground">
+        <span class="inline-flex items-center gap-1">
+          <ArrowLeft class="h-3 w-3" aria-hidden="true" />
+          Lower in {committed.b.label}
+        </span>
+        <span>No change</span>
+        <span class="inline-flex items-center gap-1">
+          Higher in {committed.b.label}
+          <ArrowRight class="h-3 w-3" aria-hidden="true" />
+        </span>
       </div>
     </Card.Content>
   </Card.Root>
 
-  <!-- Stacked TIR comparison -->
   <Card.Root>
     <Card.Header>
       <Card.Title>Time in Range — stacked comparison</Card.Title>
@@ -574,15 +605,15 @@
           <div class="flex flex-col">
             <div class="mb-3 flex items-center gap-2">
               <span
-                class="inline-block h-2 w-2 rounded-full"
-                style="background: {col.accent};"
+                class="inline-block h-2 w-2 rounded-full bg-(--dot) print:hidden"
+                style:--dot={col.accent}
               ></span>
               <span class="text-sm font-semibold">{col.periodLabel}</span>
-              <span class="ml-auto font-mono text-[11px] text-muted-foreground">
+              <span class="ml-auto text-xs text-muted-foreground tabular-nums">
                 {col.range}
               </span>
             </div>
-            <div class="h-80 w-full">
+            <div class="h-80 w-full print:h-56">
               {#if col.tir}
                 <TIRStackedChart percentages={col.tir} />
               {:else}

@@ -122,12 +122,12 @@
             {member.name ?? "Unknown"}
           </span>
           {#each member.roles ?? [] as role (role.slug)}
-            <Badge variant="secondary" class="text-xs">
+            <Badge variant="secondary">
               {role.name ?? role.slug ?? "Unknown"}
             </Badge>
           {/each}
           {#if member.directPermissions?.length}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               {member.directPermissions.length} direct permission{member
                 .directPermissions.length !== 1
                 ? "s"
@@ -159,9 +159,8 @@
             {#snippet trigger(props)}
               <Button
                 {...props}
-                variant="outline"
+                variant="outline-destructive"
                 size="sm"
-                class="text-destructive border-destructive/30 hover:bg-destructive/10"
                 disabled={isSaving}
               >
                 {#if isSaving}
@@ -229,13 +228,17 @@
         open={showDirectPermissions}
         onOpenChange={(open: boolean) => (showDirectPermissions = open)}
       >
-        <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-          {#if showDirectPermissions}
-            <ChevronUp class="h-4 w-4" />
-          {:else}
-            <ChevronDown class="h-4 w-4" />
-          {/if}
-          Direct permissions (advanced)
+        <Collapsible.Trigger>
+          {#snippet child({ props }: { props: Record<string, unknown> })}
+            <Button {...props} variant="subtle" size="inline" class="w-full justify-start">
+              {#if showDirectPermissions}
+                <ChevronUp class="h-4 w-4" />
+              {:else}
+                <ChevronDown class="h-4 w-4" />
+              {/if}
+              Direct permissions (advanced)
+            </Button>
+          {/snippet}
         </Collapsible.Trigger>
         <Collapsible.Content>
           <div class="mt-3">
@@ -298,7 +301,7 @@
       >
         {#if member.limitTo24Hours}
           <span
-            class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+            class="flex items-center gap-1.5 text-warning"
           >
             <Clock class="h-3 w-3" />
             24-hour limit

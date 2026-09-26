@@ -1,9 +1,10 @@
 <script lang="ts">
   import { Scale } from "@lucide/svelte";
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";
   import { FormField } from "$lib/forms";
-  import { DiabetesType, BiologicalSex } from "$api";
+  import { DiabetesType } from "$api";
   import { diabetesTypeLabels, biologicalSexLabels } from "./labels";
   import { ClinicalState } from "./state.svelte";
   import TimezoneCombobox from "./TimezoneCombobox.svelte";
@@ -38,10 +39,10 @@
     <input type="hidden" name="avatarUrl" value={clinical.record.avatarUrl} />
   {/if}
   {#if clinical.record?.createdAt}
-    <input type="hidden" name="createdAt" value={clinical.record.createdAt instanceof Date ? clinical.record.createdAt.toISOString() : clinical.record.createdAt} />
+    <input type="hidden" name="createdAt" value={clinical.record.createdAt} />
   {/if}
   {#if clinical.record?.modifiedAt}
-    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt instanceof Date ? clinical.record.modifiedAt.toISOString() : clinical.record.modifiedAt} />
+    <input type="hidden" name="modifiedAt" value={clinical.record.modifiedAt} />
   {/if}
 
   <div class="grid gap-4 @sm:grid-cols-2">
@@ -65,11 +66,11 @@
             aria-describedby={field["aria-describedby"]}
           >
             {clinical.diabetesType
-              ? (diabetesTypeLabels[clinical.diabetesType as DiabetesType] ?? clinical.diabetesType)
+              ? (labelFor(diabetesTypeLabels, clinical.diabetesType) ?? clinical.diabetesType)
               : "Select type"}
           </Select.Trigger>
           <Select.Content>
-            {#each Object.entries(diabetesTypeLabels) as [value, label]}
+            {#each Object.entries(diabetesTypeLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
           </Select.Content>
@@ -123,12 +124,12 @@
         <Select.Root type="single" name="sex" bind:value={clinical.sex}>
           <Select.Trigger {...field}>
             {clinical.sex
-              ? (biologicalSexLabels[clinical.sex as BiologicalSex] ?? clinical.sex)
+              ? (labelFor(biologicalSexLabels, clinical.sex) ?? clinical.sex)
               : "Select sex"}
           </Select.Trigger>
           <Select.Content>
             <Select.Item value="" label="Prefer not to say" />
-            {#each Object.entries(biologicalSexLabels) as [value, label]}
+            {#each Object.entries(biologicalSexLabels) as [value, label] (value)}
               <Select.Item {value} {label} />
             {/each}
           </Select.Content>
@@ -196,7 +197,7 @@
     >
       {#snippet control(field)}
         <div class="flex items-center gap-2">
-          <Scale class="size-6 shrink-0 text-emerald-500" />
+          <Scale class="size-6 shrink-0 text-muted-foreground" />
           <Input
             {...field}
             type="number"

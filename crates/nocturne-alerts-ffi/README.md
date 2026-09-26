@@ -20,19 +20,28 @@ The crate builds a `cdylib` and a `staticlib`, library name `nocturne_alerts`.
 
 ```c
 char* nocturne_alerts_version(void);
+char* nocturne_alerts_tzdb_version(void);
 char* nocturne_alerts_evaluate(const char* request_json);
 char* nocturne_alerts_evaluate_node(const char* request_json);
 char* nocturne_alerts_leaf_paths(const char* condition_node_json);
 char* nocturne_alerts_classify(const char* request_json);
+char* nocturne_alerts_references_wall_clock(const char* request_json);
 char* nocturne_alerts_describe(const char* request_json);
+char* nocturne_alerts_validate(const char* request_json);
+char* nocturne_alerts_tracker_process(const char* request_json);
+char* nocturne_alerts_tracker_force_close(const char* request_json);
+char* nocturne_alerts_tracker_close_elapsed_hysteresis(const char* request_json);
+char* nocturne_alerts_replay(const char* request_json);
 void  nocturne_alerts_free_string(char* ptr);
 ```
 
 - All strings are UTF-8, NUL-terminated. Every returned pointer is owned by
   the caller and must be released with `nocturne_alerts_free_string` exactly
   once (null is a no-op).
-- `nocturne_alerts_version` returns a plain version string (e.g. `0.1.0`),
-  not JSON. Everything else returns a JSON envelope.
+- `nocturne_alerts_version` returns the crate version (e.g. `0.1.0`) and
+  `nocturne_alerts_tzdb_version` the IANA time zone database release compiled
+  in (e.g. `2025b`), both plain strings, not JSON. Everything else returns a
+  JSON envelope.
 - The library never panics across the boundary and never crashes on bad
   input: panics, null pointers, invalid UTF-8 and malformed JSON all come
   back as the error envelope:
@@ -43,9 +52,8 @@ void  nocturne_alerts_free_string(char* ptr);
 
 ## Evaluate envelope (`nocturne_alerts_evaluate`)
 
-One call = one rule evaluated for one tick, mirroring the orchestrator
-contract (`AlertOrchestrator.EvaluateRuleAsync`: root eval → leaf force-eval
-log → excursion tracker → auto-resolve). The engine is stateless between
+One call evaluates one rule for one tick: root, leaf log, excursion tracker,
+then auto-resolve (`docs/alerts/engine-semantics.md` §7). The engine is stateless between
 calls: **all** evaluation state (sustained timers, tracker) is carried in and
 out as data, and the host persists it.
 
@@ -77,14 +85,22 @@ preserves sub-second precision when present.
     "sustained": "2026-01-05T11:55:00Z"     // condition path -> first-true instant
   },
   "tracker": {                              // optional; absent = never evaluated
-    "state": "active",                      // idle|confirming|active|hysteresis; absent = no per-rule state yet
+    "state": "active",                      // idle|confirming|active|hysteresis; absent = no per-rule state yet; any other string reads as active with an excursion, else idle (semantics §6)
     "confirmation_count": 0,
     "active_excursion_ordinal": 3,          // present only while an excursion is active
-    "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present (drives hysteresis expiry)
+    "updated_at": "2026-01-05T11:55:00Z",   // REQUIRED whenever state is present
+    "hysteresis_started_at": null,          // set only in hysteresis; absent there = adopt updated_at once
+    "awaiting_rearm": true,                 // present only when true; absent = armed (§6.3)
     "next_excursion_ordinal": 4             // default 1; see "State threading"
-  }
+  },
+  "include_leaves": true                    // optional; default true
 }
 ```
+
+`include_leaves: false` skips the leaf log: every leaf is otherwise evaluated
+alone on every call, and `result.leaves` is then absent. Nothing else in the
+response changes, so a host that does not read `result.leaves` on the live
+path should send `false`.
 
 Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
 `ScenarioRule` object can be passed as `rule` verbatim.
@@ -97,7 +113,8 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
   "ok": true,
   "result": { /* ExpectedRuleResult corpus shape:
                  rule_id, skipped?, root, leaves[], transition, close_reason?,
-                 tracker {state, confirmation_count, excursion?},
+                 tracker {state, confirmation_count, excursion?,
+                          hysteresis_started_at?, awaiting_rearm?},
                  auto_resolved?, timer_ops[] */ },
   "timers": { "sustained": "2026-01-05T12:00:00Z" },  // full post-state; persist verbatim
   "tracker": {                                        // full post-state; persist verbatim
@@ -105,21 +122,28 @@ Unknown fields (e.g. the scenario `name`) are ignored, so a corpus
     "confirmation_count": 0,
     "active_excursion_ordinal": 3,
     "updated_at": "2026-01-05T12:00:00Z",
+    "hysteresis_started_at": "…",                     // present only while in hysteresis
+    "awaiting_rearm": true,                            // present only when true
     "next_excursion_ordinal": 4
   }
 }
 ```
 
-Failure modes that are **data**, not errors (matching C# engine semantics):
-unknown leaf types, malformed payloads inside trees, null condition records —
-these evaluate `false` inside `result`. Envelope-level errors (`ok: false`)
-are reserved for unusable requests: malformed JSON, wrong `schema_version`,
-unknown root `condition_type`, unknown `tracker.state`, or a tracker `state`
-without `updated_at`.
+Failure modes that are **data**, not errors: unknown leaf types,
+unrecognised operators or directions, a `not` or `sustained` with no child, a
+composite with an empty `conditions` list, a JSON `null` rule body — these
+evaluate `false` inside `result` (and `not` inverts them). Envelope-level
+errors (`ok: false`) are reserved for unusable requests: malformed JSON, wrong
+`schema_version`, unknown root `condition_type`, a tracker `state` without
+`updated_at`, an instant (`now`, a timer, a tracker or context timestamp)
+before 0001-01-01 or from 10000-01-01 UTC on, and a rule body that cannot be evaluated — malformed anywhere in the tree, or one of the shapes in
+`docs/alerts/engine-semantics.md` §1.4. That last error reads
+`malformed condition_params for '<type>': <reason> at '<path>'`; the host
+skips the rule and keeps its timers and tracker unchanged. An auto-resolve
+tree that cannot be evaluated never resolves and is not an error.
 
-A rule whose root type has no evaluator (`signal_loss`) is skipped exactly
-like the orchestrator skips it: `result` is `{rule_id, skipped: true}` and the
-state passes through unchanged.
+`result.skipped` belongs to the corpus shape; since a body that cannot be
+evaluated is an error envelope, this envelope never sets it.
 
 ### State threading
 
@@ -128,8 +152,13 @@ state passes through unchanged.
   send it back on the rule's next evaluation. (It is keyed by path only — the
   rule id is implicit in the call.)
 - **`tracker`** per-rule fields (`state`, `confirmation_count`,
-  `active_excursion_ordinal`, `updated_at`) round-trip the same way and are
-  absent until the rule's first non-skipped evaluation.
+  `active_excursion_ordinal`, `updated_at`, `hysteresis_started_at`,
+  `awaiting_rearm`) round-trip the same way and are absent until the rule's first non-skipped
+  evaluation. `hysteresis_started_at` is what hysteresis expiry measures
+  from; dropping it makes every restore adopt `updated_at`, which slides the
+  window forward on each evaluation. `awaiting_rearm` holds an auto-resolved
+  rule off while both its condition and its auto-resolve tree hold; dropping
+  it lets the next evaluation re-open and re-dispatch.
 - **`next_excursion_ordinal`** is the 1-based ordinal the next opened
   excursion will receive. It is **shared across all rules** of a tenant (the
   corpus assigns excursion ordinals in creation order across the whole
@@ -142,9 +171,8 @@ state passes through unchanged.
 
 Evaluates a single condition tree for one instant **outside** the per-rule
 driver: no tracker, no auto-resolve, no leaf log — just the node's truth plus
-sustained-timer state threading. This is the FFI counterpart of
-`ConditionEvaluatorRegistry.EvaluateNodeAsync` and exists for the auxiliary
-evaluation scopes the backend runs against reserved path roots:
+sustained-timer state threading. It serves the auxiliary evaluation scopes a
+host runs against reserved path roots:
 smart-snooze conditions (`root: "snooze"`) and the sweep's periodic
 auto-resolve (`root: "auto_resolve"`).
 
@@ -179,23 +207,23 @@ auto-resolve (`root: "auto_resolve"`).
 }
 ```
 
-Unknown node kinds and missing payloads evaluate `false` (silent-fail
-parity). A structurally malformed `node` is an envelope error (`ok: false`) —
-mirroring the C# callers, which all deserialise the tree (and skip on
-`JsonException`) before dispatching into the registry. Timers are keyed by
+Unknown node kinds and missing leaf payloads evaluate `false`. A `node` that
+is malformed, or that cannot be evaluated (`docs/alerts/engine-semantics.md`
+§1.4, with paths under `root`), is an envelope error (`ok: false`), which a
+host treats as `false`. Timers are keyed by
 the same `(rule_id, path)` identity as `evaluate`; sharing rows between the
 per-reading and sweep variants of a scope is intentional (see
 `docs/alerts/engine-semantics.md` §2.3).
 
 ## Leaf paths (`nocturne_alerts_leaf_paths`)
 
-For timer-pruning hosts (`IConditionTimerStore.PruneToPathsAsync`): given a
-condition tree, returns the canonical path of every node slot plus the
-leaf-id/path pairs (`LeafIdentity.AssignLeafIds` pre-order ids).
+For hosts that prune stale timers: given a condition tree, returns the
+condition path of every node slot and each leaf's path by leaf id
+(`docs/alerts/engine-semantics.md` §2.2–2.3).
 
-Input is either a full ConditionNode object, or a wrapper that overrides the
-root path segment (defaults to the node's verbatim `type` string, matching
-`ConditionPath.Walk`; pass `"auto_resolve"` for auto-resolve trees):
+Input is either a full condition node, or a wrapper naming the root path
+segment (default: the node's `type` as written; pass `"auto_resolve"` for
+auto-resolve trees):
 
 ```jsonc
 { "type": "composite", "composite": { … } }
@@ -223,8 +251,8 @@ Response:
 }
 ```
 
-Container nodes whose payload/child is missing are leaves (the normative
-`LeafIdentity` anomaly); a JSON-null child slot of a composite is a leaf whose
+Container nodes whose payload or child is missing are leaves (§2.2); a
+JSON-null child slot of a composite is a leaf whose
 path has an empty type segment (`composite[2].`). Pruning timers to the
 `paths` set is always safe — it is a superset of every path a timer can be
 keyed under for that tree.
@@ -260,6 +288,38 @@ an error** — `classify` silent-fails to `undirected` (all-only), the safe
 default that never lets a scoped mute silence an unclassifiable rule. Only a
 structurally malformed *envelope* (bad JSON, wrong `schema_version`) comes back
 as the error envelope.
+
+## References wall clock (`nocturne_alerts_references_wall_clock`)
+
+Whether a rule must be evaluated on a timer as well as per reading: its root
+kind, or any leaf of its tree, measures elapsed time against an anchor a
+reading does not move (`docs/alerts/engine-semantics.md` §5.1). A host that
+evaluates only when a reading arrives never fires such a rule while readings
+stop, so it schedules these rules on its sweep. The request is the rule body,
+as for `classify`:
+
+```jsonc
+{
+  "schema_version": 1,
+  "condition_type": "composite",
+  "condition_params": { "operator": "and", "conditions": [ /* … */ ] }
+}
+```
+
+Response:
+
+```jsonc
+{ "schema_version": 1, "ok": true, "references_wall_clock": true }
+```
+
+`condition_type` is read as `evaluate` reads it: a kind's wire name, ignoring
+ASCII case. Anything else (a member name such as `SignalLoss`, an ordinal, an
+unknown kind) is `false`, not an error. A wall-clock root kind is `true`
+whatever its body, so a host sweeps it and its `evaluate` rejects the body as
+it would per reading. Any other root is `true` only when its body can be
+evaluated and holds a wall-clock kind at any depth, a nested `type` resolving
+as node dispatch resolves it (semantics §1.2). Only a malformed envelope is
+the error envelope.
 
 ## Describe (`nocturne_alerts_describe`)
 
@@ -322,8 +382,8 @@ Response — a recursive `tree`:
   `operator` / `minutes` / nested `conditions`/`child` — and **no `leaf_id`**.
 - **Leaves** carry `leaf_id`, the verbatim `type`, the resolved canonical
   `kind` (or `null` for an unknown/`null` slot), and decoded `params`.
-- **Leaf ids match `evaluate` exactly.** The walk is the same pre-order
-  `collect_leaves` over the same reconstituted node, so a malformed container
+- **Leaf ids match `evaluate` exactly.** Both number the same node's leaves in
+  the same pre-order walk, so a malformed container
   (missing `child`/`conditions`) collapses to a single leaf and a JSON-`null`
   composite slot is a typeless leaf — identical to the force-eval log.
 - **Operands are decoded for rendering:** enum ordinals become wire names
@@ -333,6 +393,205 @@ Response — a recursive `tree`:
   wrong `schema_version`) is an error envelope. A malformed *payload* is not —
   it collapses to a single best-effort leaf with default operands, mirroring
   the engine's silent-fail.
+
+## Validate (`nocturne_alerts_validate`)
+
+The save-time check of a rule's condition trees: everything
+`docs/alerts/engine-semantics.md` §1.4 rejects, both the shapes that cannot be
+evaluated and the ones that evaluate but can never mean what was written
+(unknown kinds, unrecognised operators, empty groups, …). Hosts call it before
+storing a rule and refuse the save when `valid` is false; the backend does so in
+`AlertRulesController` (a 400).
+
+Request:
+
+```jsonc
+{
+  "schema_version": 1,
+  "condition_type": "composite",                     // wire name, checked exactly
+  "condition_params": { "operator": "and", "conditions": [ /* … */ ] },
+  "auto_resolve_params": { "type": "threshold", /* … */ },  // optional; null/absent = not checked
+  "snooze_conditions": [ /* ConditionNode, … */ ],   // optional; checked as composite{and}
+  "stored": {                                        // optional; the rule being edited, as stored
+    "condition_type": "composite",
+    "condition_params": { /* … */ },
+    "auto_resolve_params": null,                     // every tree it holds, evaluated or not
+    "snooze_conditions": null
+  }
+}
+```
+
+Pass `auto_resolve_params` only when auto-resolve is enabled, and
+`snooze_conditions` only when smart snooze is on — the trees the rule actually
+evaluates. An empty `snooze_conditions` list is valid (the trend fallback).
+
+`stored` makes the request an edit. A property that would be `unknown_field`
+and that the stored tree of the same scope already has, at the same condition
+path, in the same object and under the same name, is removed from the request
+tree instead of reported: neither engine reads it, so removing it cannot change
+what the rule does, and the rule editor sends back whatever it loaded. Rules
+stored before the check (the alerts-redesign migration copied legacy payloads
+verbatim) stay editable. A property the stored rule does not have is still
+reported, so a new misspelling is not dropped silently.
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "valid": false,
+  "issues": [
+    { "scope": "condition", "path": "composite[1].", "reason": "condition_missing", "field": null },
+    { "scope": "snooze", "path": "snooze[0].sustained", "reason": "minutes_not_positive", "field": "minutes" }
+  ]
+}
+```
+
+With `stored`, the response also carries `stripped`, one
+`{ "scope", "path", "field" }` per property removed (`field` is its name as
+written), and, for each scope that lost one, the tree to store in its place:
+`condition_params`, `auto_resolve_params` or `snooze_conditions`. `issues` are
+those of the trees after removal.
+
+`scope` is `condition`, `auto_resolve` or `snooze`; `path` is the offending
+node's condition path under that scope's root (a null slot's path ends in
+`.`); `reason` is a stable code from §1.4 and `field` the payload field it is
+on, when there is one. Neither ever carries a payload value. A malformed tree
+reports only its first structural error, as the reader stops there. A rule with
+issues is `ok: true`; only an unusable envelope is the error envelope.
+
+## Tracker (`nocturne_alerts_tracker_*`)
+
+The excursion state machine (`docs/alerts/engine-semantics.md` §6) without a
+condition tree, for the host paths that move a tracker without evaluating a
+rule: feeding an externally decided truth, closing an excursion by hand or on
+auto-resolve, and the periodic close of hysteresis windows no evaluation
+arrives to close. The `tracker` object in and out is the evaluate envelope's,
+threaded the same way (see "State threading").
+
+Requests (all take `schema_version` and `now`; `tracker` absent or null means
+the rule has never been evaluated):
+
+```jsonc
+// nocturne_alerts_tracker_process: one evaluation's truth
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "config": { "confirmation_readings": 1, "hysteresis_minutes": 0 },  // both optional
+  "condition_met": true,
+  "auto_resolve_met": true }                 // optional, default false; see below
+
+// nocturne_alerts_tracker_force_close: from any state holding an excursion (§6.2)
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "reason": "manual" }                       // hysteresis | auto | manual | rule-disabled
+
+// nocturne_alerts_tracker_close_elapsed_hysteresis: only in hysteresis, only once the window has elapsed (§6.1)
+{ "schema_version": 1, "tracker": { /* … */ }, "now": "…",
+  "config": { "hysteresis_minutes": 30 } }
+```
+
+`auto_resolve_met` is the rule's auto-resolve tree this evaluation, and is read
+only while the tracker awaits re-arm (§6.3): the rule then stays held off when
+both it and `condition_met` are true, and otherwise re-arms and goes on through
+the state machine in the same call, so a `condition_met` of true opens (or
+starts confirming) at once. Evaluate the tree at the `auto_resolve` root with
+`nocturne_alerts_evaluate_node` before this call when the stored tracker has
+`awaiting_rearm`; a rule without an enabled, evaluable tree sends false.
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "transition": { "type": "closed", "excursion_ordinal": 3, "close_reason": "manual" },
+  "tracker": { /* full post-state; persist verbatim */ }
+}
+```
+
+`transition.type` is the evaluate result's `transition` vocabulary;
+`excursion_ordinal` names the excursion the transition involved, which a close
+has already cleared from `tracker`. A hysteresis state without
+`hysteresis_started_at` adopts `updated_at` on the close-elapsed call even when
+the window has not elapsed, so persist the returned `tracker` either way. An
+unknown `reason` is the error envelope.
+
+## Replay (`nocturne_alerts_replay`)
+
+Re-evaluates a whole rule set over a series of ticks in one call
+(`docs/alerts/engine-semantics.md` §8): what the rules would have done over a
+historical window. The host builds each tick's context as of that instant;
+the engine owns everything else for the call — one fresh timer store,
+replay-local firing state instead of the excursion tracker, and the active
+alerts `alert_state` reads. Nothing carries over between calls and nothing is
+persisted.
+
+Request:
+
+```jsonc
+{
+  "schema_version": 1,
+  "rules": [ /* ScenarioRule corpus shape, as for evaluate; any order */ ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:00:00Z",         // the tick instant ("now")
+      "context": { /* ScenarioContext corpus shape */ },
+      "suppressed_rule_ids": [ "…" ]         // optional; see below
+    }
+  ],
+  "include_ticks": false                    // optional; default false
+}
+```
+
+- **Order.** Rules are evaluated so that every rule runs after the rules its
+  `alert_state` leaves reference; a reference cycle keeps the given order.
+  `confirmation_readings` and `hysteresis_minutes` are ignored.
+- **Active alerts.** A tick context's `active_alerts` is replaced by the
+  replay's own: a rule is in it, `firing` from the tick it fired, until it
+  clears or auto-resolves. A rule's fire is visible to rules later in the
+  order on the same tick.
+- **No reading.** A context with neither `latest_timestamp` nor
+  `last_reading_at` reads `last_reading_at` as the tick instant, so staleness
+  and `signal_loss` see a fresh reading rather than none. Send the last
+  reading at or before the tick when there is one.
+- **Suppression.** `suppressed_rule_ids` names the rules a fire opening on
+  that tick is recorded for as `suppressed_by_dnd` instead of `fired` (the
+  host resolves Do Not Disturb). The rule fires either way.
+- A rule whose body cannot be evaluated (§1.4), or whose `condition_params`
+  is neither an object nor null, is skipped on every tick, not an error.
+
+Response:
+
+```jsonc
+{
+  "schema_version": 1,
+  "ok": true,
+  "order": [ "…" ],                         // rule ids in evaluation order
+  "events": [                               // by tick, then evaluation order
+    { "at": "2026-01-05T12:00:00Z", "rule_id": "…", "kind": "fired" }
+  ],
+  "leaf_transitions": [                     // evaluation order; absent for a rule never evaluated
+    { "rule_id": "…", "leaves": [
+        { "leaf_id": 0, "points": [ { "at_ms": 1767614400000, "value": true } ] } ] }
+  ],
+  "ticks": [                                // only with include_ticks
+    { "at": "2026-01-05T12:00:00Z", "rules": [
+        { "rule_id": "…", "met": true, "firing": true },
+        { "rule_id": "…", "skipped": true } ] }
+  ]
+}
+```
+
+`kind` is `fired`, `suppressed_by_dnd`, `auto_resolved`, or `cleared` (the
+body went false while firing). Each close removes the rule from the active
+alerts. A `cleared` also clears all its sustained timers, so a later fire
+starts its durations over; an `auto_resolved` keeps them. Auto-resolve is
+evaluated while the rule is firing, including on the tick it fired, and on
+every tick while it awaits re-arm (engine-semantics.md §6.3, §8). The leaf log holds,
+per leaf id, the first observation and every flip, at unix milliseconds;
+`firing` is the rule's state after the tick. Errors are an unusable envelope,
+an unknown `condition_type`, a rule id listed twice, or a tick instant outside
+the supported range. The replay corpus in `tests/Parity/AlertEngineCorpus/replay/`
+pins this envelope.
 
 ## Kotlin (UniFFI)
 
@@ -344,18 +603,26 @@ bindings and the compiled library must come from the same uniffi version.
 
 The Kotlin surface is deliberately JSON-in/JSON-out — the **same envelope
 documented above is the contract for both consumers** (no parallel typed
-surface that could drift). Five functions, delegating to the exact same
-internal handlers as the C ABI, with the same panic guard (panics and unusable
-requests come back as the `ok: false` envelope, never as an exception):
+surface that could drift). Each function runs the same internal handler as its
+C counterpart, with the same panic guard (panics and unusable requests come
+back as the `ok: false` envelope, never as an exception):
 
 ```kotlin
 package uniffi.nocturne_alerts
 
-fun evaluate(requestJson: String): String      // nocturne_alerts_evaluate
-fun evaluateNode(requestJson: String): String  // nocturne_alerts_evaluate_node
-fun leafPaths(requestJson: String): String     // nocturne_alerts_leaf_paths
-fun describe(requestJson: String): String      // nocturne_alerts_describe
-fun version(): String                          // plain version string, not JSON
+fun evaluate(requestJson: String): String             // nocturne_alerts_evaluate
+fun evaluateNode(requestJson: String): String         // nocturne_alerts_evaluate_node
+fun classify(requestJson: String): String             // nocturne_alerts_classify
+fun referencesWallClock(requestJson: String): String  // nocturne_alerts_references_wall_clock
+fun leafPaths(requestJson: String): String            // nocturne_alerts_leaf_paths
+fun describe(requestJson: String): String             // nocturne_alerts_describe
+fun validate(requestJson: String): String             // nocturne_alerts_validate
+fun trackerProcess(requestJson: String): String       // nocturne_alerts_tracker_process
+fun trackerForceClose(requestJson: String): String    // nocturne_alerts_tracker_force_close
+fun trackerCloseElapsedHysteresis(requestJson: String): String // nocturne_alerts_tracker_close_elapsed_hysteresis
+fun replay(requestJson: String): String               // nocturne_alerts_replay
+fun version(): String                                 // plain string, not JSON
+fun tzdbVersion(): String                             // plain string, not JSON
 ```
 
 Memory is managed by the generated bindings (no `free` counterpart needed).
@@ -401,7 +668,11 @@ checksum the API at load time and refuse a mismatched library.
 
 ## Versioning
 
-`schema_version` covers the envelope layer. Behavioural changes to evaluation
+`schema_version` covers the envelope layer. The time zone rules `time_of_day`
+and `day_of_week` apply are the IANA release compiled into the library
+(`chrono-tz`), not the host's; `nocturne_alerts_tzdb_version` reports it, so a
+host can log it at load and notice when it falls behind a zone change. Keeping
+it current means updating the `chrono-tz` dependency and rebuilding. Behavioural changes to evaluation
 itself are governed by the golden corpus: both the Rust core (`tests/parity.rs`),
 this crate's FFI round-trip test, and the .NET three-way suite
 (`tests/Unit/Nocturne.Alerts.Native.Tests`) pin every scenario against the

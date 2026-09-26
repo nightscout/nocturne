@@ -15,19 +15,26 @@
     children: Snippet;
   } = $props();
 
-  const styles: Record<CalloutType, string> = {
-    info: 'border-blue-500/40 bg-blue-50 dark:bg-blue-950/20 text-blue-900 dark:text-blue-100',
-    warning: 'border-yellow-500/40 bg-yellow-50 dark:bg-yellow-950/20 text-yellow-900 dark:text-yellow-100',
-    danger: 'border-red-500/40 bg-red-50 dark:bg-red-950/20 text-red-900 dark:text-red-100',
-    tip: 'border-green-500/40 bg-green-50 dark:bg-green-950/20 text-green-900 dark:text-green-100',
+  const frame: Record<CalloutType, string> = {
+    info: 'border-info/30 bg-info/5',
+    warning: 'border-warning/30 bg-warning/5',
+    danger: 'border-destructive/40 bg-destructive/5',
+    tip: 'border-success/30 bg-success/5',
+  };
+  const heading: Record<CalloutType, string> = {
+    info: 'text-info',
+    warning: 'text-warning',
+    danger: 'text-destructive',
+    tip: 'text-success',
   };
 </script>
 
-<div class="rounded-lg border-l-4 p-4 my-4 {styles[type]}" role="note">
+<!-- The body is mdsvex markdown, so it arrives as paragraphs; the frame owns their spacing. -->
+<div class="not-prose my-4 rounded-lg border p-4 {frame[type]}" role="note">
   {#if title}
-    <p class="font-semibold mb-1">{title}</p>
+    <p class="mb-1 font-semibold {heading[type]}">{title}</p>
   {/if}
-  <div class="text-sm">
+  <div class="space-y-2 text-sm leading-relaxed text-foreground/90 [&_a]:underline [&_a]:underline-offset-4 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_strong]:font-semibold [&_strong]:text-foreground">
     {@render children()}
   </div>
 </div>

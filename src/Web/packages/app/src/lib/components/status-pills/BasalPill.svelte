@@ -76,16 +76,9 @@
     return items;
   });
 
-  /** Build label with temp/combo indicators */
   const pillLabel = $derived.by(() => {
-    let label = "BASAL";
-    if (data?.isTempBasal) {
-      label = "T: " + label;
-    }
-    if (data?.isComboActive) {
-      label = "C" + (data?.isTempBasal ? "" : ": ") + label;
-    }
-    return label;
+    const label = data?.isTempBasal ? "Temp basal" : "Basal";
+    return data?.isComboActive ? `${label} · combo` : label;
   });
 
   const level = $derived<AlertLevel>(data?.level ?? "none");

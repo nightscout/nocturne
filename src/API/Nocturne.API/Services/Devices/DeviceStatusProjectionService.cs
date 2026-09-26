@@ -324,6 +324,7 @@ public class DeviceStatusProjectionService
             Id = anchor.LegacyId ?? anchor.Id.ToString(),
             Mills = anchor.Mills,
             Date = anchor.Mills,
+            SrvModified = new DateTimeOffset(anchor.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             CreatedAt = anchor.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             UtcOffset = anchor.UtcOffset,
             Device = anchor.Device ?? string.Empty,
@@ -489,7 +490,7 @@ public class DeviceStatusProjectionService
 
         if (overrideSpan.EndTimestamp.HasValue)
         {
-            ds.Override.Duration = (overrideSpan.EndTimestamp.Value - overrideSpan.StartTimestamp).TotalMinutes;
+            ds.Override.Duration = (overrideSpan.EndTimestamp.Value - overrideSpan.StartTimestamp).TotalSeconds;
         }
     }
 
@@ -526,13 +527,14 @@ public class DeviceStatusProjectionService
                 case "mmtune":
                     ds.MmTune = DeserializeValue<OpenApsMmTune>(value, logger);
                     break;
-                // Route to the typed properties: leaving these in ExtensionData would
-                // serialize the key twice (typed Mills fallback + stored extras value).
-                case "srvModified":
-                    ds.SrvModified = CoerceLong(value);
-                    break;
+                // Route srvCreated to the typed property: leaving it in ExtensionData would
+                // serialize the key twice (typed fallback + stored extras value).
                 case "srvCreated":
                     ds.SrvCreated = CoerceLong(value);
+                    break;
+                // The record reports the server write clock (see ProjectFromSnapshots); a
+                // client-supplied srvModified must neither override it nor re-emit as an extra.
+                case "srvModified":
                     break;
                 // An NS v3 uploader sends its own identifier and it is stored verbatim.
                 // DeviceStatus has no member to absorb it, so re-emitting it would put a

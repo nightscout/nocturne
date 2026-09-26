@@ -294,21 +294,116 @@ public class ApsSnapshotRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task GetModifiedSinceAsync_FiltersOnEventTimestampNotWriteClock()
+    public async Task GetModifiedSinceAsync_PagesOnWriteClock_SoLateUploadIsDelivered()
     {
-        // AAPS advances its devicestatus history cursor on the event Timestamp (the V3 DTO's
-        // srvModified), so the query must filter on Timestamp, not the write clock SysUpdatedAt.
-        // SeedAsync stamps SysUpdatedAt = UtcNow (now), so filtering on SysUpdatedAt would return
-        // both rows for any past cursor and re-loop the sync.
+        // The record reports srvModified as its write clock, so the query pages on SysUpdatedAt. A
+        // row whose event timestamp predates the cursor but whose write clock is newer is delivered;
+        // one already at the cursor is not.
         var cursor = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
-        await SeedAsync(TenantA,
-            (cursor, false, null),                 // exactly at the cursor -> excluded
-            (cursor.AddMinutes(1), false, null));  // strictly newer -> returned
+        await SeedModifiedAsync(TenantA,
+            (cursor.AddHours(-2), cursor),                // write exactly at the cursor -> excluded
+            (cursor.AddHours(-1), cursor.AddMinutes(1))); // late upload: write newer -> delivered
 
-        var cursorMills = new DateTimeOffset(cursor).ToUnixTimeMilliseconds();
+        var cursorMills = Mills(cursor);
         var result = (await _repository.GetModifiedSinceAsync(cursorMills)).ToList();
 
         result.Should().ContainSingle()
-            .Which.Timestamp.Should().Be(cursor.AddMinutes(1));
+            .Which.ModifiedAt.Should().Be(cursor.AddMinutes(1));
     }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_MillisecondHoldingMoreThanLimit_ComesBackInOnePageAndAdvances()
+    {
+        // A millisecond holding at least `limit` rows must not be re-served: the cursor is that
+        // millisecond, so a page cut inside it never advances. The page is extended to the end of
+        // the millisecond instead.
+        var at = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        await SeedModifiedAsync(TenantA, Enumerable.Range(1, 8)
+            .Select(_ => (at, at))
+            .ToArray());
+
+        var start = Mills(at) - 1;
+        var first = (await _repository.GetModifiedSinceAsync(start, limit: 3)).ToList();
+
+        first.Should().HaveCount(8);
+
+        var second = (await _repository.GetModifiedSinceAsync(Mills(first.Max(a => a.ModifiedAt)), limit: 3)).ToList();
+
+        second.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_TieGroupSplitByLimit_DeliveredOnceAcrossPages()
+    {
+        // Three rows share a write millisecond; limit 2 would cut the group and re-serve its rows
+        // while the cursor stayed put.
+        var at = new DateTime(2026, 4, 30, 12, 1, 0, DateTimeKind.Utc);
+        var later = at.AddMinutes(1);
+        var ids = await SeedModifiedAsync(TenantA,
+            (at.AddTicks(10), at),
+            (at.AddTicks(20), at),
+            (at.AddTicks(30), at),
+            (later, later));
+
+        var delivered = new List<Guid>();
+        var cursor = Mills(at) - 1;
+        for (var page = 0; page < 10; page++)
+        {
+            var rows = (await _repository.GetModifiedSinceAsync(cursor, limit: 2)).ToList();
+            if (rows.Count == 0)
+                break;
+
+            delivered.AddRange(rows.Select(r => r.Id));
+            cursor = rows.Max(r => Mills(r.ModifiedAt));
+        }
+
+        delivered.Should().BeEquivalentTo(ids);
+        delivered.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_RowOnMillisecondBoundary_IsNotSkipped()
+    {
+        var boundary = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        var nextMillisecond = boundary.AddMilliseconds(1);
+        await SeedModifiedAsync(TenantA,
+            (boundary, boundary),
+            (nextMillisecond, nextMillisecond));
+
+        var start = Mills(boundary) - 1;
+        var first = (await _repository.GetModifiedSinceAsync(start, limit: 1)).ToList();
+        first.Should().ContainSingle().Which.ModifiedAt.Should().Be(boundary);
+
+        var second = (await _repository.GetModifiedSinceAsync(Mills(first[0].ModifiedAt), limit: 1)).ToList();
+        second.Should().ContainSingle().Which.ModifiedAt.Should().Be(nextMillisecond);
+    }
+
+    private async Task<List<Guid>> SeedModifiedAsync(
+        Guid tenantId, params (DateTime Timestamp, DateTime SysUpdatedAt)[] rows)
+    {
+        var entities = rows.Select(r => new ApsSnapshotEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = tenantId,
+            Timestamp = r.Timestamp,
+            UtcOffset = 0,
+            AidAlgorithm = "Loop",
+            SysCreatedAt = DateTime.UtcNow,
+        }).ToList();
+
+        foreach (var entity in entities)
+            _context.ApsSnapshots.Add(entity);
+        await _context.SaveChangesAsync();
+
+        // SaveChanges stamped SysUpdatedAt = UtcNow on insert; a second save that touches only that
+        // column keeps the assigned value, letting a test place rows either side of the cursor.
+        for (var i = 0; i < entities.Count; i++)
+            entities[i].SysUpdatedAt = rows[i].SysUpdatedAt;
+        await _context.SaveChangesAsync();
+
+        return entities.Select(e => e.Id).ToList();
+    }
+
+    private static long Mills(DateTime value) =>
+        new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 }

@@ -109,9 +109,9 @@
           </div>
           <Button
             type="button"
-            variant="ghost"
+            variant="ghost-destructive"
             size="sm"
-            class="text-destructive hover:text-destructive shrink-0"
+            class="shrink-0"
             disabled={!canRemove || removingId === credential.id}
             onclick={() => onRemove(credential)}
           >

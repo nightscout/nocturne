@@ -79,7 +79,7 @@ public class MyLifeConnectorService(
         MyLifeConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -100,7 +100,6 @@ public class MyLifeConnectorService(
             {
                 result.Success = false;
                 result.Errors.Add("MyLife authentication failed; see connector logs for the failing step");
-                result.EndTime = DateTimeOffset.UtcNow;
                 _logger.LogWarning(
                     "[{ConnectorSource}] Sync failed: MyLife authentication unsuccessful",
                     ConnectorSource);
@@ -241,7 +240,6 @@ public class MyLifeConnectorService(
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

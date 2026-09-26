@@ -26,11 +26,13 @@ function make_provider(
 	};
 }
 
+const NO_ROLES: TenantRoleDto[] = [];
+
 function default_props(overrides: Record<string, unknown> = {}) {
 	return {
 		open: false,
-		editingProvider: null as OidcProviderResponse | null,
-		roles: [] as TenantRoleDto[],
+		editingProvider: null,
+		roles: NO_ROLES,
 		onSave: vi.fn(async () => {}),
 		onCancel: vi.fn(),
 		...overrides,
@@ -55,7 +57,7 @@ describe("OidcProviderDialog", () => {
 		await expect
 			.element(
 				page.getByText(
-					"Configure an OpenID Connect provider for single sign-on.",
+					"Configure an external identity provider (OpenID Connect or OAuth 2.0) for single sign-on.",
 				),
 			)
 			.toBeVisible();

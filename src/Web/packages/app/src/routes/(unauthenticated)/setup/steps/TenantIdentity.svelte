@@ -67,12 +67,10 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       Name your <em
-        class="not-italic font-light"
-        style="color: var(--onb-teal);"
+        class="not-italic font-light text-(--onb-teal)"
       >
         instance
       </em>
@@ -92,7 +90,7 @@
       label="Slug"
       id="setup-slug"
       required
-      labelClass="text-white/70"
+      labelVariant="muted"
       issues={availability.error}
     >
       {#snippet control(field)}
@@ -106,18 +104,15 @@
           spellcheck={false}
           autofocus
           minlength={3}
-          class="font-mono bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
-            ? 'border-red-500/50'
-            : availability.valid
-              ? 'border-green-500/50'
-              : ''}"
+          valid={availability.valid && !availability.error}
+          class="font-mono"
         />
       {/snippet}
       {#snippet hint()}
         {#if availability.validating}
           <p class="text-xs text-white/40">Checking availability...</p>
         {:else if availability.valid}
-          <p class="flex items-center gap-1.5 text-xs text-green-400">
+          <p class="flex items-center gap-1.5 text-xs text-success">
             <Check class="h-3 w-3" />
             Available
           </p>
@@ -133,7 +128,7 @@
       label="Instance name"
       id="setup-display-name"
       required
-      labelClass="text-white/70"
+      labelVariant="muted"
       description="A friendly name shown in the UI. You can change this anytime."
     >
       {#snippet control(field)}
@@ -143,7 +138,6 @@
           bind:value={displayName}
           placeholder="My Nocturne"
           autocomplete="organization"
-          class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
         />
       {/snippet}
     </FormField>

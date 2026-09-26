@@ -131,16 +131,18 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     <see cref="SyncResult.Errors"/> and the summary in <see cref="SyncResult.Message"/>
     ///     because the terminal progress message reads the former and the tenant's sync card the latter.
     /// </summary>
+    /// <remarks>
+    ///     A reason recorded through <see cref="TrackFailedAuthentication"/> names the failure
+    ///     instead. A connector that never reached its source has no credential to fix; telling
+    ///     that person their secret was rejected sends them after the wrong thing.
+    /// </remarks>
     protected SyncResult AuthenticationFailedResult()
     {
-        var now = DateTimeOffset.UtcNow;
         return new SyncResult
         {
             Success = false,
-            StartTime = now,
-            EndTime = now,
-            Message = "Authentication failed",
-            Errors = { $"Authentication failed for {ConnectorSource}" },
+            Message = _authenticationFailureReason ?? "Authentication failed",
+            Errors = { _authenticationFailureReason ?? $"Authentication failed for {ConnectorSource}" },
         };
     }
 
@@ -157,17 +159,23 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     )
     {
         _progressReporter = progressReporter;
+        var skippedBefore = _publisher?.SkippedDeleted ?? 0;
         try
         {
             var result = await body();
+            result.ItemsSkipped = (_publisher?.SkippedDeleted ?? 0) - skippedBefore;
             StandInFailureMessage(result);
             await ReportSyncOutcomeAsync(result.Success, FailureMessage(result), cancellationToken);
             return result;
         }
-        // A cancelled run has no outcome to report — the caller withdrew it. The background
-        // entry point's own catch-all converts its timeout into a failed result first, so that
-        // path still reports a terminal message through the success path above.
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // A run the caller withdrew still resolves the tenant's in-progress indicator: report one
+        // reasonless terminal failure under CancellationToken.None, then let the cancellation travel.
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ReportSyncOutcomeAsync(false, null, CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex)
         {
             await ReportSyncOutcomeAsync(false, ex.Message, cancellationToken);
             throw;
@@ -569,9 +577,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Submits glucose data directly to the API via HTTP
-    /// </summary>
-    /// <summary>
     ///     The broadcast origin for this run's glucose-family publishes: <see cref="WriteOrigin.Backfill"/>
     ///     on the source's first-ever glucose sync (no prior data — suppress so a first sync of history
     ///     doesn't flood clients), else <see cref="WriteOrigin.Live"/>. Memoized for the run.
@@ -837,7 +842,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     ///     page cannot erase what an earlier one landed. Callers report the count once the publish has
     ///     returned, so a publish that throws records nothing while one that reports failure records
     ///     the batch it handed over — the count is what reached the publisher, not what the publisher
-    ///     accepted.
+    ///     accepted. What it withheld as deleted is <see cref="SyncResult.ItemsSkipped"/>.
     /// </remarks>
     /// <param name="context">
     ///     Detail about this batch — where it came from, or what it held — appended to the success log
@@ -1314,9 +1319,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
-    ///     Main sync method that handles data synchronization based on connector mode
-    /// </summary>
-    /// <summary>
     ///     Main sync method for background synchronization.
     ///     Uses PerformSyncInternalAsync for sequential processing.
     /// </summary>
@@ -1389,7 +1391,7 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
             return result;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(
                 ex,
@@ -1399,8 +1401,6 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
             return new SyncResult
             {
                 Success = false,
-                StartTime = DateTimeOffset.UtcNow,
-                EndTime = DateTimeOffset.UtcNow,
                 Errors = { ex.Message }
             };
         }
@@ -1413,31 +1413,39 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
 
     #region Failure Tracking
 
-    private int _failedRequestCount;
+    private string? _authenticationFailureReason;
+
+    /// <summary>
+    ///     Records a failed authentication along with what the tenant has to fix, for
+    ///     <see cref="AuthenticationFailedResult"/> to report in place of the generic wording.
+    /// </summary>
+    /// <remarks>
+    ///     Separate from <see cref="TrackFailedRequest"/>: most reasons recorded there are written
+    ///     for the log — "HTTP Unauthorized", "JSON parsing error". Those must not become what a
+    ///     tenant is told to go and do, so only a reason passed here is user-facing.
+    /// </remarks>
+    protected void TrackFailedAuthentication(string reason)
+    {
+        _authenticationFailureReason = reason;
+        TrackFailedRequest(reason);
+    }
 
     protected void TrackFailedRequest(string? reason = null)
     {
-        var newCount = Interlocked.Increment(ref _failedRequestCount);
         _logger.LogWarning(
-            "[{ConnectorSource}] Request failed (consecutive: {FailedCount}){Reason}",
+            "[{ConnectorSource}] Request failed{Reason}",
             ConnectorSource,
-            newCount,
             reason != null ? $": {reason}" : ""
         );
     }
 
+    /// <summary>
+    ///     Clears a stale <see cref="TrackFailedAuthentication"/> reason so a later refusal in the
+    ///     same run does not report a failure the source has since accepted.
+    /// </summary>
     protected void TrackSuccessfulRequest()
     {
-        var previousCount = Volatile.Read(ref _failedRequestCount);
-        if (previousCount > 0)
-        {
-            _logger.LogInformation(
-                "[{ConnectorSource}] Request succeeded, resetting failed count from {PreviousCount}",
-                ConnectorSource,
-                previousCount
-            );
-            Interlocked.Exchange(ref _failedRequestCount, 0);
-        }
+        _authenticationFailureReason = null;
     }
 
     #endregion

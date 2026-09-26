@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { parseDate } from "@internationalized/date";
   import { formatLongDate, formatShortDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -68,16 +70,15 @@
     { showDefaults: false, noScroll: true }
   );
 
-  const hidden = $derived(
-    new Set((viewParams.hide ?? "").split(",").filter(Boolean) as CategoryKey[])
-  );
+  const hidden = $derived.by(() => {
+    const hiddenKeys = (viewParams.hide ?? "").split(",");
+    return new Set(CATEGORIES.filter((c) => hiddenKeys.includes(c.key)).map((c) => c.key));
+  });
 
   const isShown = (key: CategoryKey) => !hidden.has(key);
 
   function setShown(key: CategoryKey, shown: boolean) {
-    const next = new Set(hidden);
-    if (shown) next.delete(key);
-    else next.add(key);
+    const next = toggled(hidden, key, !shown);
     viewParams.hide =
       next.size > 0
         ? CATEGORIES.filter((c) => next.has(c.key))
@@ -92,13 +93,13 @@
     const newFirst = anchor.add({ days: direction * (direction === -1 ? dayCount : 1) });
     const newLast = newFirst.add({ days: dayCount - 1 });
     goto(
-      `/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`,
+      resolve(`/time-spans?from=${newFirst.toString()}&to=${newLast.toString()}`),
       { invalidateAll: true }
     );
   }
 
   function goBack() {
-    goto("/dashboard");
+    goto(resolve("/"));
   }
 
   // Format date range for display
@@ -162,8 +163,8 @@
             aria-label="Toggle {category.label.toLowerCase()}"
           >
             <span
-              class="w-2 h-2 rounded-full mr-2"
-              style="background-color: {category.color};"
+              class="w-2 h-2 rounded-full mr-2 bg-(--swatch)"
+              style:--swatch={category.color}
             ></span>
             {category.label}
           </Toggle>

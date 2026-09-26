@@ -6,28 +6,29 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import {
     Syringe,
     Calendar,
     Target,
-    Printer,
     Activity,
     Droplets,
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import GlycemicRiskIndexChart from "$lib/components/reports/GlycemicRiskIndexChart.svelte";
   import ScheduledBasalRateChart from "$lib/components/reports/ScheduledBasalRateChart.svelte";
   import HourlyBolusChart from "$lib/components/reports/HourlyBolusChart.svelte";
   import ScheduleFooter from "$lib/components/reports/ScheduleFooter.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { getIdpData } from "$api/idp.remote";
   import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-    
+
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard IDP report period
   const reportsParams = requireDateParamsContext(14);
@@ -55,6 +56,8 @@
   const insulinStats = $derived(data.insulinDeliveryStats);
   const analysis = $derived(data.analysis);
   const aidMetrics = $derived(data.aidSystemMetrics);
+  const stats = $derived(analysis?.basicStats ?? {});
+  const variability = $derived(analysis?.glycemicVariability ?? {});
   const lastUpdated = $derived(reportsResource.current?.dateRange?.lastUpdated);
   const startDate = $derived(reportsResource.date.from);
   const endDate = $derived(reportsResource.date.to);
@@ -71,51 +74,47 @@
 
 {#if reportsResource.current}
 <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
   <div class="space-y-4">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
-        <h1 class="text-2xl @md:text-3xl font-bold">
-          Insulin Dosing Profile
-        </h1>
-        <p class="text-muted-foreground mt-1">
-          Comprehensive insulin delivery analysis with glucose context
-        </p>
-      </div>
-      <div class="flex items-center gap-2 print:hidden">
-        <Button
-          variant="outline"
-          size="sm"
-          class="gap-2"
-          onclick={() => window.print()}
-        >
-          <Printer class="w-4 h-4" />
-          Print
-        </Button>
-      </div>
+    <div class="print:hidden">
+      <h1 class="text-2xl @md:text-3xl font-bold flex items-center gap-3">
+        <Syringe class="w-6 h-6 @md:w-8 @md:h-8 text-primary" />
+        Insulin Dosing Profile
+      </h1>
+      <p class="text-muted-foreground mt-1">
+        Comprehensive insulin delivery analysis with glucose context
+      </p>
     </div>
 
-
-    <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Calendar class="w-4 h-4" />
-      <span>
+      <Calendar class="w-4 h-4 print:hidden" />
+      <span class="print:hidden">
         {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{dayCount} days</span>
-      <span class="text-muted-foreground/50">•</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
+      <span class="print:hidden">{dayCount} days</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
       <span>{formatNumber(entries.length)} readings</span>
     </div>
   </div>
 
-  <!-- Top Row: Insulin Summary + Glucose Metrics -->
-  <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-    <!-- Insulin Summary Card -->
-    <Card class="border-2">
+  <FigureStrip
+    figures={[
+      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
+      { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel() },
+      { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "--", unit: "%", note: "From mean glucose" },
+      { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: "Target: ≤33%" },
+    ]}
+  />
+
+  {#if analysis?.reliability}
+    <ReliabilityBadge reliability={analysis.reliability} />
+  {/if}
+
+  <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Syringe class="w-5 h-5 text-blue-600" />
+          <Syringe class="w-5 h-5 text-insulin" />
           Insulin Summary
         </CardTitle>
         <CardDescription>
@@ -127,37 +126,33 @@
         {@const avgBolus = insulinStats?.totalBolus != null ? insulinStats.totalBolus / dayCount : null}
         {@const avgScheduled = insulinStats?.scheduledBasal != null ? insulinStats.scheduledBasal / dayCount : null}
 
-        <!-- TDD -->
-        <div class="flex items-baseline justify-between">
-          <span class="text-sm text-muted-foreground">Avg Total Daily Dose</span>
-          <span class="text-2xl font-bold">
-            {insulinStats?.tdd?.toFixed(1) ?? "--"} U/day
-          </span>
-        </div>
-
-        <!-- Basal / Bolus Split Bar -->
         {@const basalPct = insulinStats?.basalPercent ?? 0}
         {@const bolusPct = insulinStats?.bolusPercent ?? 0}
         <div class="space-y-1">
           <div class="flex justify-between text-xs text-muted-foreground">
-            <span>Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)</span>
-            <span>Bolus: {avgBolus?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)</span>
+            <span class="flex items-center gap-1">
+              <TextureSwatch texture="insulin-scheduled-basal" color="var(--basal)" />
+              Basal: {avgBasal?.toFixed(1) ?? "--"} U/day ({basalPct.toFixed(0)}%)
+            </span>
+            <span class="flex items-center gap-1">
+              <TextureSwatch texture="insulin-bolus" />
+              Bolus: {avgBolus?.toFixed(1) ?? "--"} U/day ({bolusPct.toFixed(0)}%)
+            </span>
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="transition-all"
-              style="width: {basalPct}%; background-color: var(--insulin-scheduled-basal)"
+              class="w-(--share) bg-basal {bgPatternClass('insulin-scheduled-basal')} transition-all"
+              style:--share="{basalPct}%"
             ></div>
             <div
-              class="transition-all"
-              style="width: {bolusPct}%; background-color: var(--insulin-bolus)"
+              class="w-(--share) bg-insulin-bolus {bgPatternClass('insulin-bolus')} transition-all"
+              style:--share="{bolusPct}%"
             ></div>
           </div>
         </div>
 
         <Separator />
 
-        <!-- Delivered vs Scheduled (daily avg) -->
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">Avg Delivered Basal</div>
@@ -171,7 +166,6 @@
 
         <Separator />
 
-        <!-- Bolus breakdown (daily avg) -->
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">Boluses/Day</div>
@@ -197,11 +191,10 @@
       </CardContent>
     </Card>
 
-    <!-- Glucose Metrics Card -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Droplets class="w-5 h-5 text-green-600" />
+          <Droplets class="w-5 h-5 text-glucose-in-range" />
           Glucose Metrics
         </CardTitle>
         <CardDescription>
@@ -210,38 +203,11 @@
       </CardHeader>
       <CardContent class="space-y-4">
         {#if analysis}
-          {@const stats = analysis.basicStats ?? {}}
-          {@const variability = analysis.glycemicVariability ?? {}}
           {@const tir = analysis.timeInRange?.percentages ?? {}}
-
-          <!-- Average, GMI, CV -->
-          <div class="grid grid-cols-3 gap-2 @sm:gap-4 text-center">
-            <div>
-              <div class="text-2xl font-bold">{stats.mean ? bg(stats.mean) : "--"}</div>
-              <div class="text-xs text-muted-foreground">Average</div>
-              <div class="text-[10px] text-muted-foreground/70">{bgLabel()}</div>
-            </div>
-            <div>
-              <div class="text-2xl font-bold">{variability.estimatedA1c?.toFixed(1) ?? "--"}%</div>
-              <div class="text-xs text-muted-foreground">GMI</div>
-              <div class="text-[10px] text-muted-foreground/70">Est. A1C</div>
-            </div>
-            <div>
-              <div class="text-2xl font-bold">{variability.coefficientOfVariation?.toFixed(0) ?? "--"}%</div>
-              <div class="text-xs text-muted-foreground">CV</div>
-              <div class="text-[10px] {(variability.coefficientOfVariation ?? 50) <= 33 ? 'text-green-600' : 'text-orange-600'}">
-                Target: ≤33%
-              </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          <!-- TIR Horizontal Stacked Bar -->
           <div class="space-y-2">
             <div class="text-sm font-medium">Time in Range</div>
-            <div class="h-32 w-full">
-              <TIRStackedChart percentages={tir} orientation="horizontal" />
+            <div class="h-56 w-full">
+              <TIRStackedChart percentages={tir} />
             </div>
           </div>
         {:else}
@@ -253,17 +219,11 @@
     </Card>
   </div>
 
-  {#if analysis?.reliability}
-    <ReliabilityBadge reliability={analysis.reliability} />
-  {/if}
-
-  <!-- Middle Row: AID Use (stub) + GRI -->
   <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-    <!-- AID Use Card (stubbed) -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Activity class="w-5 h-5 text-purple-600" />
+          <Activity class="w-5 h-5" />
           AID System Use
         </CardTitle>
         <CardDescription>
@@ -271,7 +231,7 @@
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div class="grid grid-cols-1 @xs:grid-cols-2 gap-4 text-sm">
+        <div class="grid grid-cols-1 @xs:grid-cols-2 print:grid-cols-3 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">CGM</div>
             <div class="font-semibold text-lg">{aidMetrics?.cgmDeviceNames ?? '--'}</div>
@@ -300,11 +260,10 @@
       </CardContent>
     </Card>
 
-    <!-- GRI Card -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
-          <Target class="w-5 h-5 text-red-600" />
+          <Target class="w-5 h-5" />
           Glycemic Risk Index
         </CardTitle>
         <CardDescription>
@@ -323,8 +282,7 @@
     </Card>
   </div>
 
-  <!-- Glucose Pattern — unified section matching iCoDE-2 layout -->
-  <Card class="border-2">
+  <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Activity class="w-5 h-5" />
@@ -335,12 +293,10 @@
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-6">
-      <!-- AGP -->
       <div class="h-80 w-full @2xl:h-96">
         <AmbulatoryGlucoseProfile averagedStats={data.averagedStats} />
       </div>
 
-      <!-- Scheduled Basal Rate -->
       <div>
         <h4 class="text-sm font-semibold text-muted-foreground mb-1">Scheduled Basal Rate</h4>
         <div class="h-24 w-full">
@@ -348,18 +304,16 @@
         </div>
       </div>
 
-      <!-- User-Initiated Boluses Per Day -->
       <div class="w-full">
         <h4 class="text-sm font-semibold text-muted-foreground mb-1">User-Initiated Boluses Per Day</h4>
         <HourlyBolusChart {boluses} {dayCount} />
       </div>
 
-      <!-- Schedule Bands -->
       <ScheduleFooter profile={data.profileSummary} />
     </CardContent>
   </Card>
 
-  <div class="text-xs text-muted-foreground text-center">
+  <div class="text-xs text-muted-foreground text-center print:hidden">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
       Last updated {formatMediumDateTime(new Date(lastUpdated))}.

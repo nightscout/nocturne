@@ -86,7 +86,7 @@ const catalog: DeviceCapabilityCatalog = {
 
 // The Device picker item's accessible name includes its description text.
 const deviceItem = () =>
-	page.getByRole("button", { name: /actuation intent/i });
+	page.getByRole("menuitem", { name: /actuation intent/i });
 
 describe("ChannelsSection", () => {
 	beforeEach(() => {
@@ -105,7 +105,7 @@ describe("ChannelsSection", () => {
 		await page.getByRole("button", { name: "Add channel" }).click();
 
 		await expect
-			.element(page.getByRole("button", { name: /POST to a custom URL/i }))
+			.element(page.getByRole("menuitem", { name: /POST to a custom URL/i }))
 			.toBeDisabled();
 		expect(channels).toHaveLength(0);
 	});
@@ -118,10 +118,10 @@ describe("ChannelsSection", () => {
 		await page.getByRole("button", { name: "Add channel" }).click();
 
 		await expect
-			.element(page.getByRole("button", { name: /POST to a custom URL/i }))
+			.element(page.getByRole("menuitem", { name: /POST to a custom URL/i }))
 			.toBeVisible();
 		expect(
-			page.getByRole("button", { name: /Post to a Slack channel/i }).elements(),
+			page.getByRole("menuitem", { name: /Post to a Slack channel/i }).elements(),
 		).toHaveLength(0);
 	});
 

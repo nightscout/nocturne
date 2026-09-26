@@ -40,10 +40,46 @@ packageExtensions:
   "@microsoft/signalr":
     dependencies:
       tough-cookie: "*"
+  # The packages below import these in their shipped .d.ts (and vaul-svelte at runtime too) but
+  # declare them only as devDependencies, or not at all. Under the global virtual store a package
+  # resolves only what it declares, so each import is "Cannot find module" and the types that
+  # depend on it silently degrade to `any` in every consumer.
+  bits-ui:
+    dependencies:
+      csstype: "~3.1.3"
+  svelte-toolbelt:
+    dependencies:
+      csstype: "~3.1.3"
+  vaul-svelte:
+    peerDependencies:
+      bits-ui: "^2.0.0"
+  layerchart:
+    dependencies:
+      "@types/d3-array": "^3.2.1"
+      "@types/d3-delaunay": "^6.0.4"
+      "@types/d3-geo": "^3.1.0"
+      "@types/d3-hierarchy": "^3.1.7"
+      "@types/d3-path": "^3.1.0"
+      "@types/d3-sankey": "^0.12.4"
+      "@types/d3-scale": "^4.0.8"
+      "@types/d3-shape": "^3.1.6"
+      "@types/d3-time": "^3.0.3"
+  "@layerstack/utils":
+    dependencies:
+      "@types/d3-time": "^3.0.3"
+  "@tiptap/extension-list":
+    dependencies:
+      prosemirror-model: "^1.22.1"
+  remark-parse:
+    dependencies:
+      vfile: "^6.0.0"
+  remark-html:
+    dependencies:
+      vfile: "^6.0.0"
 
 # pnpm rejects a lockfile entry published within the last day. openapi-remote-codegen
 # is ours (ryceg/openapi-remote-codegen) and each release exists to fix a defect in
 # the wrappers this workspace generates, so waiting a day to adopt one buys nothing.
 # Drop an entry once its version ages past the cutoff.
 minimumReleaseAgeExclude:
-  - openapi-remote-codegen@0.6.0
+  - openapi-remote-codegen@0.8.0

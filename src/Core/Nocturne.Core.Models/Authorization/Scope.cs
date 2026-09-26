@@ -111,7 +111,11 @@ public static class Scope
     // registered client devices (Prelude, the desktop Companion), whose rows are RLS-scoped to the
     // member's subject. They have no read/write tiers and do not imply one another.
 
-    /// <summary>Allows the alert engine to push notifications to a registered client device.</summary>
+    /// <summary>
+    /// Allows the alert engine to push notifications to a registered client device, and lets the
+    /// member mute an excursion for themselves. Acknowledging for everyone needs
+    /// <see cref="AlertsReadWrite"/>.
+    /// </summary>
     public const string DeviceNotify = "device.notify";
     /// <summary>Allows the alert engine to actuate hardware on a registered client device (torch, vibration, sound, full-screen).</summary>
     public const string DeviceActuate = "device.actuate";
@@ -217,6 +221,7 @@ public static class Scope
     /// anyone — including the data owner whose subject id the grant records.
     /// </summary>
     /// <seealso cref="ValidateGrantScopes"/>
+    /// <seealso cref="NormalizeGuest"/>
     public static readonly IReadOnlySet<string> AllowedGuestScopes =
         new HashSet<string>(StringComparer.Ordinal)
         {
@@ -246,8 +251,10 @@ public static class Scope
     /// Member-personal capability scopes. These authorize the alert engine to drive the member's
     /// OWN registered client devices (rows are RLS-scoped to the member's subject), not access to
     /// the patient record, so <c>MemberScopeMiddleware</c> exempts them from the role-permission
-    /// intersection for any member holding at least one permission. See the note on
-    /// <see cref="RoleSeeds.Permissions"/> for why enforcement cannot rely on role rows.
+    /// intersection for any member holding at least one permission. What one member does with them
+    /// reaches only that member: <see cref="DeviceNotify"/> mutes an alert for its holder and never
+    /// changes anyone else's escalation. See the note on <see cref="RoleSeeds.Permissions"/> for why
+    /// enforcement cannot rely on role rows.
     /// </summary>
     public static readonly IReadOnlySet<string> MemberPersonalScopes =
         new HashSet<string>(StringComparer.Ordinal) { DeviceNotify, DeviceActuate };
@@ -432,6 +439,19 @@ public static class Scope
     /// <seealso cref="ReadScopes"/>
     public static bool IsReadScope(string scope) => ReadScopes.Contains(scope);
 
+    /// <summary>
+    /// Whether <paramref name="permissions"/> let a member see the record while changing no
+    /// records, no treatment settings and nobody's access. This is narrower than "changes
+    /// nothing": <see cref="MemberPersonalScopes"/> are allowed, and <see cref="DeviceNotify"/>
+    /// mutes an alert for the member themselves. Counting it as a change instead would make no
+    /// member view-only, since every member with a permission holds it.
+    /// False when nothing is readable.
+    /// </summary>
+    /// <param name="permissions">A member's effective permissions.</param>
+    public static bool IsViewOnlyForRecordsAndAccess(IReadOnlyCollection<string> permissions) =>
+        permissions.Any(IsReadScope)
+        && permissions.All(p => IsReadScope(p) || MemberPersonalScopes.Contains(p));
+
     /// <summary>Whether a scope string is one an OAuth client may request.</summary>
     public static bool IsValid(string scope)
     {
@@ -465,6 +485,19 @@ public static class Scope
     public static IReadOnlySet<string> NormalizeMemberPermissions(IEnumerable<string> permissions)
     {
         return Normalize(permissions, MemberGrantableScopes);
+    }
+
+    /// <summary>
+    /// Resolve a guest grant's stored scopes into the session's granted scopes: normalized, then cut
+    /// to <see cref="AllowedGuestScopes"/>. The cut is on read because alias expansion can reach
+    /// atoms the allow-list excludes (<see cref="HealthReadExpansion"/> includes
+    /// <see cref="FoodRead"/>), and it holds for grants stored before any change to the list.
+    /// </summary>
+    public static IReadOnlySet<string> NormalizeGuest(IEnumerable<string> grantScopes)
+    {
+        return Normalize(grantScopes)
+            .Where(AllowedGuestScopes.Contains)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -605,6 +638,37 @@ public static class Scope
 
         return null;
     }
+
+    /// <summary>
+    /// Validates scopes a caller is delegating against the scopes the caller itself holds. Unlike
+    /// <see cref="ValidateGrant"/> this speaks the scope vocabulary rather than permission atoms:
+    /// aliases such as <see cref="HealthRead"/> are expanded through <see cref="Normalize"/> first,
+    /// and a scope need not be an atom to be delegable.
+    /// </summary>
+    /// <param name="requested">The scopes being delegated. <c>null</c> or empty is always allowed.</param>
+    /// <param name="callerScopes">The delegating caller's resolved scopes.</param>
+    /// <returns>The first violation, or <c>null</c> when the whole set is delegable.</returns>
+    public static GrantCeilingViolation? ValidateDelegation(
+        IEnumerable<string>? requested,
+        IEnumerable<string> callerScopes)
+    {
+        if (requested is null)
+            return null;
+
+        var granter = callerScopes as IReadOnlyCollection<string> ?? callerScopes.ToList();
+
+        foreach (var scope in Normalize(requested))
+        {
+            if (!Satisfies(granter, scope))
+            {
+                return new GrantCeilingViolation(
+                    GrantCeilingViolation.ExceedsGranter,
+                    $"Cannot grant '{scope}' because the caller does not hold it.");
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>
@@ -618,4 +682,19 @@ public record GrantCeilingViolation(string Code, string Description)
 
     /// <summary>The caller does not hold the permission it is trying to confer.</summary>
     public const string ExceedsGranter = "grant_exceeds_granter";
+}
+
+/// <summary>
+/// Thrown when a caller tries to delegate a scope wider than the one it holds. Carries the
+/// <see cref="GrantCeilingViolation"/> so a controller can report its stable code.
+/// </summary>
+public class GrantCeilingViolationException : Exception
+{
+    public GrantCeilingViolationException(GrantCeilingViolation violation)
+        : base(violation.Description)
+    {
+        Violation = violation;
+    }
+
+    public GrantCeilingViolation Violation { get; }
 }

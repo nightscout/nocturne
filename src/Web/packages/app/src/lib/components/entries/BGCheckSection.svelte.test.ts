@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
 import BGCheckSection from "./BGCheckSection.svelte";
+import { GlucoseType, GlucoseUnit } from "$lib/api/generated/nocturne-api-client";
 
 describe("BGCheckSection", () => {
 	it("renders section heading", async () => {
@@ -40,8 +41,8 @@ describe("BGCheckSection", () => {
 		render(BGCheckSection, {
 			bgCheck: {
 				glucose: 120,
-				glucoseType: "Sensor" as any,
-				units: "Mmol" as any,
+				glucoseType: GlucoseType.Sensor,
+				units: GlucoseUnit.Mmol,
 			},
 		});
 

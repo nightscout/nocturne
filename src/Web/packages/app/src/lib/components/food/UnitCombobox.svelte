@@ -38,7 +38,7 @@
   <Popover.Trigger bind:ref={triggerRef}>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         class={cn("w-full justify-between", className)}
         {...props}
         role="combobox"
@@ -55,7 +55,7 @@
       <Command.List>
         <Command.Empty>No unit found.</Command.Empty>
         <Command.Group>
-          {#each FOOD_UNITS as unit}
+          {#each FOOD_UNITS as unit (unit)}
             <Command.Item value={unit} onSelect={() => selectUnit(unit)}>
               <Check
                 class={cn("mr-2 size-4", value !== unit && "text-transparent")}

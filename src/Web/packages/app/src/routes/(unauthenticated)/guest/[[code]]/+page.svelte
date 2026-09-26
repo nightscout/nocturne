@@ -1,19 +1,8 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Loader2, KeyRound, Activity } from "lucide-svelte";
+  import { Activity } from "lucide-svelte";
   import { page } from "$app/state";
-  import { FormError, FormField, useSubmission } from "$lib/forms";
-  import { activateGuestCode } from "../guest.remote";
-
-  let code = $state(page.params.code ?? "");
-
-  const submission = useSubmission({
-    fallback: "We couldn't check that code just now. Please try again.",
-  });
-
-  const pending = $derived(activateGuestCode.pending > 0);
+  import GuestCodeForm from "$lib/components/auth/GuestCodeForm.svelte";
 </script>
 
 <svelte:head>
@@ -36,51 +25,7 @@
     </Card.Header>
 
     <Card.Content>
-      <form
-        class="space-y-4"
-        {...activateGuestCode.enhance(async ({ submit }) => {
-          await submission.run(submit);
-        })}
-      >
-        <FormError issues={submission.error} focusOnShow />
-
-        <FormField
-          label="Guest code"
-          id="guest-code"
-          required
-          issues={activateGuestCode.fields.code.issues()}
-        >
-          {#snippet control(field)}
-            <Input
-              {...field}
-              name="code"
-              bind:value={code}
-              placeholder="ABC-DEFG"
-              autocomplete="one-time-code"
-              autocapitalize="characters"
-              spellcheck={false}
-              autofocus
-              disabled={pending}
-              class="text-center text-lg tracking-wider"
-            />
-          {/snippet}
-        </FormField>
-
-        <Button
-          type="submit"
-          class="w-full"
-          size="lg"
-          disabled={pending || !code.trim()}
-        >
-          {#if pending}
-            <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-            Verifying...
-          {:else}
-            <KeyRound class="mr-2 h-5 w-5" />
-            Access Data
-          {/if}
-        </Button>
-      </form>
+      <GuestCodeForm initialCode={page.params.code ?? ""} />
     </Card.Content>
   </Card.Root>
 </div>

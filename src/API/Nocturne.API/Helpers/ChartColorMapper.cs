@@ -86,7 +86,7 @@ public static class ChartColorMapper
     public static ChartColor FillFromBasalOrigin(BasalDeliveryOrigin origin) =>
         origin switch
         {
-            BasalDeliveryOrigin.Algorithm => ChartColor.InsulinBasal,
+            BasalDeliveryOrigin.Algorithm => ChartColor.InsulinTempBasal,
             BasalDeliveryOrigin.Manual => ChartColor.InsulinTempBasal,
             BasalDeliveryOrigin.Suspended => ChartColor.PumpModeSuspended,
             BasalDeliveryOrigin.Inferred => ChartColor.InsulinBasal,

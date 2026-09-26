@@ -53,7 +53,7 @@
   import { getUploaderName } from "$lib/utils/uploader-labels";
   import { coachmark } from "@nocturne/coach";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
@@ -78,7 +78,7 @@
   );
   let selectedUploader = $state<UploaderApp | null>(null);
   let showSetupDialog = $state(false);
-  let copiedField = $state<string | null>(null);
+  const copy = createCopyFeedback();
 
   // Data source management dialog state
   let selectedDataSource = $state<DataSourceInfo | null>(null);
@@ -362,16 +362,6 @@
     }
   }
 
-  async function copyField(text: string, field: string) {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    copiedField = field;
-    setTimeout(() => {
-      copiedField = null;
-    }, 2000);
-  }
 </script>
 
 <svelte:head>
@@ -392,7 +382,7 @@
         </p>
       </div>
     </div>
-    <Button variant="outline" size="sm" onclick={refreshAll} class="gap-2">
+    <Button variant="outline" size="sm" onclick={refreshAll}>
       <RefreshCw
         class="h-4 w-4 {isLoading || isLoadingConnectorStatuses
           ? 'animate-spin'
@@ -405,7 +395,7 @@
   {#if isLoading && !servicesOverview}
     <SettingsPageSkeleton cardCount={3} />
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-8">
         <div class="text-center">
           <AlertCircle class="h-12 w-12 mx-auto mb-4 text-destructive" />
@@ -456,6 +446,7 @@
                 icon={source.icon}
                 status={mapDataSourceStatus(source)}
                 totalEntries={source.totalEntries}
+                totalCoversLast30Days
                 entriesLast24h={source.entriesLast24h}
                 lastSeen={source.lastSeen}
                 subtitle={source.name !== source.deviceId ? source.deviceId : undefined}
@@ -463,16 +454,13 @@
               >
                 {#snippet badges()}
                   {#if isDemo}
-                    <Badge
-                      variant="secondary"
-                      class="bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100 text-xs"
-                    >
+                    <Badge variant="demo">
                       <Sparkles class="h-3 w-3 mr-1" />
                       Demo
                     </Badge>
                   {/if}
                   {#if matchingUploader}
-                    <Badge variant="outline" class="text-xs">
+                    <Badge variant="outline">
                       {getUploaderName(matchingUploader)}
                     </Badge>
                   {/if}
@@ -541,10 +529,10 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => copyField(window.location.origin, "baseUrl")}
+                onclick={() => copy.copy(window.location.origin, "baseUrl")}
               >
-                {#if copiedField === "baseUrl"}
-                  <Check class="h-4 w-4 text-green-500" />
+                {#if copy.isCopied("baseUrl")}
+                  <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
                 {/if}

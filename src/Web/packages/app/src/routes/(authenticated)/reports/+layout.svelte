@@ -1,10 +1,18 @@
 <script lang="ts">
-  import { formatMediumDateTime } from "$lib/utils/formatting";
     import {page} from "$app/state";
+    import {formatMediumDateRange} from "$lib/utils/formatting";
     import { Button } from "$lib/components/ui/button";
     import {ReportsFilterSidebar} from "$lib/components/layout";
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
-    import {Filter, Calendar, ChevronDown} from "lucide-svelte";
+    import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
+    import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
+    import {
+        createReportPrintContext,
+        installPrintFitFallback,
+        printReport,
+    } from "$lib/components/reports/print/report-print.svelte";
+    import {reportCategories} from "$lib/navigation/report-navigation.svelte";
+    import {Filter, Calendar, ChevronDown, Printer} from "lucide-svelte";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -35,8 +43,20 @@
     // Whether to use the ResourceGuard (skip for main reports page which has custom design)
     const useResourceGuard = $derived(page.url.pathname !== "/reports");
 
+    const printCtx = createReportPrintContext();
+
+    let reportRoot = $state<HTMLElement | null>(null);
+    $effect(() => installPrintFitFallback(() => reportRoot));
+
+    const registryTitles = $derived(
+        new Map(reportCategories().flatMap((c) => c.reports).map((r) => [r.href, r.title]))
+    );
+
     // Extract report name from the URL
     const reportName = $derived.by(() => {
+        const declared = printCtx.meta.title ?? registryTitles.get(page.url.pathname);
+        if (declared) return declared;
+
         const pathSegments = page.url.pathname.split("/");
         const reportSegment = pathSegments[pathSegments.length - 1];
 
@@ -58,16 +78,18 @@
         page.url.pathname !== "/reports" && sharedRangeUse.consumed
     );
 
+    const printPeriod = $derived(
+        printCtx.meta.period ??
+            (sharedRangeUse.consumed ? {from: params.fromDay, to: params.toDay} : undefined)
+    );
+
     // Format date range for display
+    // Read from the resolved range, not the URL: a default range seeded during
+    // hydration never reaches the URL, which would otherwise read as no range.
     const dateRangeDisplay = $derived.by(() => {
-        if (params.days) {
-            if (params.days === 1) return "Today";
-            return `Last ${params.days} days`;
-        }
-        if (params.from && params.to) {
-            return `${params.from} to ${params.to}`;
-        }
-        return "Last 7 days";
+        const {days} = params.dateRangeInput;
+        if (days) return days === 1 ? "Today" : `Last ${days} days`;
+        return formatMediumDateRange(params.startDate, params.endDate);
     });
 </script>
 
@@ -80,22 +102,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<div class="relative min-h-full bg-background">
+<div class="relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
     {#if page.url.pathname !== "/reports"}
-        <!-- Print-only report header: gives the printed page the context the
-             interactive sticky header (hidden below) carries on screen. -->
-        <div class="hidden print:block border-b border-border pb-3 mb-4 px-3">
-            <h1 class="text-xl font-bold text-foreground">{reportName}</h1>
-            <p class="text-sm text-muted-foreground">
-                {#if showFilters}{dateRangeDisplay} · {/if}Generated {formatMediumDateTime(new Date())}
-            </p>
-        </div>
+        <ReportPrintHeader title={reportName} period={printPeriod} />
 
-        <!-- Report Header - unified sticky header with sidebar trigger -->
-        <!-- On mobile (md:hidden), position below the MobileHeader with top-14 -->
-        <!-- On desktop (md:top-0), position at top since main header is hidden for reports -->
+        <!-- top-0 at every width: <main> (overflow-auto) is the sticky container and already
+             starts below the fixed MobileHeader, so an extra top-14 pushed this bar onto the
+             page heading on phones. -->
         <div
-                class="sticky top-14 md:top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <div class="flex items-center gap-2">
@@ -103,37 +118,51 @@
                     <div class="flex items-center gap-3">
                         <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
                         {#if showFilters}
-                            <button
-                                    type="button"
+                            <Button
+                                    variant="outline"
+                                    size="sm"
+                                    class="hidden sm:inline-flex"
                                     onclick={() => (filterSidebarOpen = true)}
-                                    class="hidden sm:flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                                     aria-label="Change date range"
                             >
                                 <Calendar class="h-3.5 w-3.5"/>
                                 <span>{dateRangeDisplay}</span>
                                 <ChevronDown class="h-3 w-3 opacity-60"/>
-                            </button>
+                            </Button>
                         {/if}
                     </div>
                 </div>
 
-                {#if showFilters}
+                <div class="flex items-center gap-2">
                     <Button
                             variant="outline"
                             size="sm"
-                            onclick={() => (filterSidebarOpen = true)}
-                            class="gap-2"
+                            onclick={printReport}
+                            aria-label="Print report"
                     >
-                        <Filter class="w-4 h-4"/>
-                        <span class="hidden sm:inline">Filters</span>
+                        <Printer class="w-4 h-4"/>
+                        <span class="hidden sm:inline">Print</span>
                     </Button>
-                {/if}
+                    {#if showFilters}
+                        <Button
+                                variant="outline"
+                                size="sm"
+                                onclick={() => (filterSidebarOpen = true)}
+                                aria-label="Filters"
+                        >
+                            <Filter class="w-4 h-4"/>
+                            <span class="hidden sm:inline">Filters</span>
+                        </Button>
+                    {/if}
+                </div>
             </div>
         </div>
     {/if}
 
+    <HistoryLimitNotice class="mx-3 mt-3 w-auto @md:mx-6 print:hidden" />
+
     <!-- Main Content -->
-    <main class="relative">
+    <div class="relative">
         {#if useResourceGuard}
             <ResourceGuard
                 loading={resourceCtx.loading}
@@ -148,7 +177,7 @@
         {:else}
             {@render children()}
         {/if}
-    </main>
+    </div>
 
     <!-- Filter Sidebar -->
     {#if showFilters}

@@ -23,6 +23,17 @@
   import type { OidcProviderResponse } from "$api";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
 
+  interface Props {
+    providers: OidcProviderResponse[];
+    configManaged: boolean;
+    loading: boolean;
+    error: string | null;
+    onAdd: () => void;
+    onEdit: (provider: OidcProviderResponse) => void;
+    onDelete: (provider: OidcProviderResponse) => void;
+    onToggle: (provider: OidcProviderResponse) => void;
+  }
+
   let {
     providers,
     configManaged,
@@ -32,16 +43,7 @@
     onEdit,
     onDelete,
     onToggle,
-  } = $props<{
-    providers: OidcProviderResponse[];
-    configManaged: boolean;
-    loading: boolean;
-    error: string | null;
-    onAdd: () => void;
-    onEdit: (provider: OidcProviderResponse) => void;
-    onDelete: (provider: OidcProviderResponse) => void;
-    onToggle: (provider: OidcProviderResponse) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 {#if !configManaged}
@@ -54,7 +56,7 @@
             Configure OpenID Connect providers for single sign-on.
           </CardDescription>
         </div>
-        <Button onclick={onAdd} class="gap-2">
+        <Button onclick={onAdd}>
           <Plus class="h-4 w-4" />
           Add Provider
         </Button>

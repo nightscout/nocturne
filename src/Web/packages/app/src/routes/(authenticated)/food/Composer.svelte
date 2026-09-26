@@ -1,13 +1,18 @@
 <script lang="ts">
+	import { distinct } from "$lib/utils/collections";
 	import type { Food } from '$api';
 	import { Plus, X, ChevronRight } from 'lucide-svelte';
 	import GiIcon from './GiIcon.svelte';
+	import GiLabel from './GiLabel.svelte';
 	import { getFoodState } from './food-context.js';
-	import { giFromInt, giToInt } from './types.js';
+	import { giFromInt, giToInt, isGiLevel } from './types.js';
 	import type { GiLevel } from './types.js';
 	import { FOOD_UNITS, DEFAULT_PORTION, DEFAULT_GI } from '$lib/components/food';
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import * as InputGroup from '$lib/components/ui/input-group';
+	import { Label } from '$lib/components/ui/label';
 	import * as ToggleGroup from '$lib/components/ui/toggle-group';
 	import * as Collapsible from '$lib/components/ui/collapsible';
 
@@ -39,7 +44,7 @@
 
 	let draft = $state<Food>(emptyDraft());
 	let showDetails = $state(false);
-	let nameInput: HTMLInputElement | undefined = $state();
+	let nameInput: HTMLInputElement | null = $state(null);
 
 	let saving = $state(false);
 	const canSave = $derived(
@@ -48,13 +53,11 @@
 
 	const subcategories = $derived.by(() => {
 		if (!draft.category) return [];
-		const subs = new Set<string>();
-		for (const f of foodState.foods) {
-			if (f.category === draft.category && f.subcategory) {
-				subs.add(f.subcategory);
-			}
-		}
-		return [...subs].sort();
+		return distinct(
+			foodState.foods
+				.filter((f) => f.category === draft.category)
+				.map((f) => f.subcategory || null)
+		).sort();
 	});
 
 	$effect(() => {
@@ -110,81 +113,73 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <form
 	data-testid="food-composer"
-	class="mx-4 my-3 rounded-[10px] p-3.5"
-	style="border: 1px solid var(--carbs-border); background: var(--carbs-bg-subtle)"
+	class="mx-4 my-3 rounded-lg border border-carbs/22 bg-carbs/4 p-3.5"
 	onsubmit={handleSubmit}
 	onkeydown={handleKeydown}
 >
 	<!-- Header -->
 	<div class="mb-3 flex items-center gap-3">
-		<div class="flex items-center justify-center rounded-[7px]" style="width: 26px; height: 26px; background: var(--carbs-soft)">
-			<Plus size={14} style="color: var(--carbs)" />
+		<div class="flex items-center justify-center rounded-md size-6.5 bg-carbs/12">
+			<Plus size={14} class="text-entry-carbs" />
 		</div>
-		<span class="font-semibold" style="font-size: 13px">Add food</span>
-		<span class="text-muted-foreground" style="font-size: 11px">
+		<span class="font-semibold text-sm">Add food</span>
+		<span class="text-muted-foreground text-xs">
 			Tab through fields · Enter to save · ⌘+Enter to save and add another · Esc to close
 		</span>
-		<Button type="button" variant="ghost" size="icon" class="ml-auto h-8 w-8" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
+		<Button type="button" variant="ghost" size="icon-sm" class="ml-auto" onclick={onclose}><X class="h-3.5 w-3.5" /></Button>
 	</div>
 
 	<!-- Single-row form -->
-	<div class="grid items-end gap-3" style="grid-template-columns: 1.6fr 110px 90px 1fr 1.4fr; height: 42px">
+	<div class="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1.6fr_110px_90px_1fr_1.4fr]">
 		<!-- Name -->
-		<div class="flex h-full flex-col gap-1">
-			<label for="composer-name" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Name</label>
-			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
-				<input
-					id="composer-name"
-					name="name"
-					type="text"
-					required
-					class="w-full bg-transparent text-sm outline-none"
-					placeholder="e.g. Greek yogurt, plain"
-					bind:this={nameInput}
-					bind:value={draft.name}
-				/>
-			</div>
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
+			<label for="composer-name" class="text-muted-foreground font-medium uppercase text-2xs">Name</label>
+			<Input
+				id="composer-name"
+				name="name"
+				type="text"
+				required
+				placeholder="e.g. Greek yogurt, plain"
+				bind:ref={nameInput}
+				bind:value={draft.name}
+			/>
 		</div>
 
 		<!-- Carbs -->
-		<div class="flex h-full flex-col gap-1">
-			<label for="composer-carbs" class="font-medium uppercase" style="font-size: 10px; color: var(--carbs)">Carbs</label>
-			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid var(--carbs-border-strong); background: var(--carbs-bg)">
-				<input
+		<div class="flex flex-col gap-1">
+			<label for="composer-carbs" class="font-medium uppercase text-2xs text-entry-carbs">Carbs</label>
+			<InputGroup.Root>
+				<InputGroup.Input
 					id="composer-carbs"
 					name="carbs"
 					type="number"
 					required
-					class="w-full bg-transparent text-sm outline-none"
 					bind:value={draft.carbs}
 					min="0"
 					step="0.1"
 				/>
-				<span class="ml-1 shrink-0 text-xs" style="color: var(--carbs)">g</span>
-			</div>
+				<InputGroup.Addon align="inline-end">g</InputGroup.Addon>
+			</InputGroup.Root>
 		</div>
 
 		<!-- Per (portion) -->
-		<div class="flex h-full flex-col gap-1">
-			<label for="composer-portion" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Per</label>
-			<div class="flex flex-1 items-center rounded-md px-3" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
-				<input
-					id="composer-portion"
-					name="portion"
-					type="number"
-					required
-					class="w-full bg-transparent text-sm outline-none"
-					bind:value={draft.portion}
-					min="0"
-					step="1"
-				/>
-			</div>
+		<div class="flex flex-col gap-1">
+			<label for="composer-portion" class="text-muted-foreground font-medium uppercase text-2xs">Per</label>
+			<Input
+				id="composer-portion"
+				name="portion"
+				type="number"
+				required
+				bind:value={draft.portion}
+				min="0"
+				step="1"
+			/>
 		</div>
 
 		<!-- Unit -->
-		<div class="flex h-full flex-col gap-1">
-			<span id="composer-unit-label" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Unit</span>
-			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" size="sm" class="w-full flex-1">
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
+			<span id="composer-unit-label" class="text-muted-foreground font-medium uppercase text-2xs">Unit</span>
+			<ToggleGroup.Root aria-labelledby="composer-unit-label" type="single" value={draft.unit ?? 'g'} onValueChange={(v: string) => { if (v) draft = { ...draft, unit: v }; }} variant="outline" class="w-full">
 				{#each FOOD_UNITS as u (u)}
 					<ToggleGroup.Item value={u} class="flex-1">{u}</ToggleGroup.Item>
 				{/each}
@@ -192,12 +187,12 @@
 		</div>
 
 		<!-- GI -->
-		<div class="flex h-full flex-col gap-1">
-			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">GI</span>
-			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (v) draft = { ...draft, gi: giToInt(v as GiLevel) }; }} variant="outline" size="sm" class="w-full flex-1">
+		<div class="col-span-2 flex flex-col gap-1 sm:col-span-1">
+			<span id="composer-gi-label" class="text-muted-foreground font-medium uppercase text-2xs">GI</span>
+			<ToggleGroup.Root aria-labelledby="composer-gi-label" type="single" value={giFromInt(draft.gi)} onValueChange={(v: string) => { if (isGiLevel(v)) draft = { ...draft, gi: giToInt(v) }; }} variant="outline" class="w-full">
 				{#each giLevels as g (g)}
-					<ToggleGroup.Item value={g} class="flex-1 capitalize gap-1.5">
-						<GiIcon level={g} size={7} />{g}
+					<ToggleGroup.Item value={g}>
+						<GiIcon level={g} size={7} /><GiLabel level={g} />
 					</ToggleGroup.Item>
 				{/each}
 			</ToggleGroup.Root>
@@ -205,70 +200,71 @@
 	</div>
 
 	<!-- Footer -->
-	<div class="mt-3 flex items-center justify-between">
+	<div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
 		<!-- Details toggle -->
 		<Collapsible.Root bind:open={showDetails}>
-			<Collapsible.Trigger data-testid="food-composer-details" class="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
-				<span class="inline-flex transition-transform" style:transform={showDetails ? 'rotate(90deg)' : ''}><ChevronRight class="h-3 w-3" /></span> {showDetails ? 'Hide' : 'Add'} fat, protein, category...
+			<Collapsible.Trigger>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Button {...props} data-testid="food-composer-details" variant="subtle" size="inline-xs" class="select-none">
+						<span class="inline-flex transition-transform" class:rotate-90={showDetails}><ChevronRight class="h-3 w-3" /></span> {showDetails ? 'Hide' : 'Add'} fat, protein, category...
+					</Button>
+				{/snippet}
 			</Collapsible.Trigger>
 			<Collapsible.Content>
-			<div class="mt-3 grid gap-3" style="grid-template-columns: 1fr 1fr 1fr 1fr 1fr">
+			<div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
 				<!-- Fat -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-fat" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Fat</label>
-					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
-						<input
+					<Label for="composer-fat" size="sm" variant="muted">Fat</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-fat"
 							name="fat"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.fat}
 							min="0"
 							step="0.1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">g</span>
+						<span class="shrink-0 text-xs text-muted-foreground">g</span>
 					</div>
 				</div>
 
 				<!-- Protein -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-protein" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Protein</label>
-					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
-						<input
+					<Label for="composer-protein" size="sm" variant="muted">Protein</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-protein"
 							name="protein"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.protein}
 							min="0"
 							step="0.1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">g</span>
+						<span class="shrink-0 text-xs text-muted-foreground">g</span>
 					</div>
 				</div>
 
 				<!-- Energy -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-energy" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Energy</label>
-					<div class="flex items-center rounded-md px-3 py-2" style="border: 1px solid oklch(1 0 0 / 0.18); background: oklch(1 0 0 / 0.04)">
-						<input
+					<Label for="composer-energy" size="sm" variant="muted">Energy</Label>
+					<div class="flex items-center gap-2">
+						<Input
 							type="number"
 							id="composer-energy"
 							name="energy"
-							class="w-full bg-transparent text-sm outline-none"
 							bind:value={draft.energy}
 							min="0"
 							step="1"
 						/>
-						<span class="ml-1 shrink-0 text-xs text-muted-foreground">kcal</span>
+						<span class="shrink-0 text-xs text-muted-foreground">kcal</span>
 					</div>
 				</div>
 
 				<!-- Category -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-category" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Category</label>
+					<Label for="composer-category" size="sm" variant="muted">Category</Label>
 					<Select.Root type="single" name="category" value={draft.category ?? ''} onValueChange={(v) => { draft = { ...draft, category: v }; }}>
-						<Select.Trigger id="composer-category" class="h-9 w-full text-xs">
+						<Select.Trigger id="composer-category" class="w-full">
 							{draft.category || 'Category'}
 						</Select.Trigger>
 						<Select.Content>
@@ -282,9 +278,9 @@
 
 				<!-- Subcategory -->
 				<div class="flex flex-col gap-1">
-					<label for="composer-subcategory" class="text-muted-foreground font-medium uppercase" style="font-size: 10px">Subcategory</label>
+					<Label for="composer-subcategory" size="sm" variant="muted">Subcategory</Label>
 					<Select.Root type="single" name="subcategory" value={draft.subcategory ?? ''} onValueChange={(v) => { draft = { ...draft, subcategory: v }; }}>
-						<Select.Trigger id="composer-subcategory" class="h-9 w-full text-xs">
+						<Select.Trigger id="composer-subcategory" class="w-full">
 							{draft.subcategory || 'Subcategory'}
 						</Select.Trigger>
 						<Select.Content>
@@ -302,7 +298,7 @@
 		<!-- Action buttons -->
 		<div class="flex items-center gap-2">
 			<Button type="submit" variant="outline" size="sm" disabled={!canSave}>Save</Button>
-			<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-[11px] opacity-60">⌘+Enter</span></Button>
+			<Button type="button" size="sm" disabled={!canSave} onclick={() => submit(true)}>Save & add another <span class="ml-1 text-xs opacity-60">⌘+Enter</span></Button>
 		</div>
 	</div>
 </form>

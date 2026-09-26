@@ -16,6 +16,7 @@
   import { databaseArtwork } from "$lib/watercolour-icons";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { findSessionJob } from "../migration-session";
+  import { SkippedRecordsNote } from "$lib/components/shared";
 
   let {
     jobId,
@@ -50,6 +51,8 @@
       migrated: number;
       pct: number;
       isComplete: boolean;
+      skippedDeleted: number;
+      skippedUnsupported: number;
     }[]
   >([]);
   let etaText = $state<string | null>(null);
@@ -145,14 +148,17 @@
             const meta = COLLECTION_META[key] ?? { icon: Database, label: key };
             const total = col.totalDocuments ?? 0;
             const migrated = col.documentsMigrated ?? 0;
+            const pct = Math.round(col.progressPercentage ?? 0);
             return {
               key,
               icon: meta.icon,
               label: meta.label,
               total,
               migrated,
-              pct: total > 0 ? Math.round((migrated / total) * 100) : 0,
+              pct,
               isComplete: col.isComplete ?? false,
+              skippedDeleted: col.recordsSkippedDeleted ?? 0,
+              skippedUnsupported: col.documentsSkippedUnsupported ?? 0,
             };
           });
 
@@ -264,12 +270,10 @@
       class="size-48"
     />
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
       Bringing your <em
-        class="not-italic font-light"
-        style="color: var(--onb-accent);"
+        class="not-italic font-light text-(--onb-accent)"
       >
         history
       </em>
@@ -285,47 +289,44 @@
   {#if loading}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <Loader2
-        class="h-12 w-12 animate-spin"
-        style="color: var(--onb-accent);"
+        class="h-12 w-12 animate-spin text-(--onb-accent)"
       />
       <p class="text-sm text-white/40">Finding active migration...</p>
     </div>
   {:else if error && !collections.length}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
-      <AlertTriangle class="h-12 w-12 text-amber-400" />
+      <AlertTriangle class="h-12 w-12 text-warning" />
       <p class="text-sm text-white/60">{error}</p>
     </div>
   {:else}
     <!-- Import hero card -->
     <div
-      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative"
-      style="border-color: var(--onb-border); background: linear-gradient(135deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.015));"
+      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative border-(--onb-border) bg-linear-135 from-white/4 to-white/2"
     >
       <!-- Left side -->
       <div class="flex flex-col gap-3">
         <span
-          class="font-mono text-[13px] uppercase tracking-widest text-white/40"
+          class="font-mono text-xs uppercase tracking-widest text-white/40"
         >
           Overall progress
         </span>
         <div class="flex items-baseline gap-1">
           <span
-            class="font-[Montserrat] font-[250] tabular-nums"
-            style="font-size: clamp(52px, 6vw, 72px); color: var(--onb-accent);"
+            class="font-brand font-hairline tabular-nums text-5xl md:text-6xl xl:text-7xl text-(--onb-accent)"
           >
             {Math.round(progress)}
           </span>
           <span
-            class="text-[28px] font-[Montserrat] font-[250] tabular-nums text-white/40"
+            class="text-3xl font-brand font-hairline tabular-nums text-white/40"
           >
             %
           </span>
         </div>
         <p class="text-sm text-white/40">
           {#if failed}
-            <span class="text-amber-400">{error}</span>
+            <span class="text-warning">{error}</span>
           {:else if caveat}
-            <span class={caveatIsFault ? "text-amber-400" : ""}>{caveat}</span>
+            <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>
           {:else if etaText}
             About <span class="font-semibold text-white/60">{etaText}</span>
             remaining &middot; {formatCount(totalMigrated)} records
@@ -346,7 +347,7 @@
           width="200"
           height="200"
           viewBox="0 0 200 200"
-          style="transform: rotate(-90deg);"
+          class="-rotate-90"
         >
           <!-- Track -->
           <circle
@@ -363,19 +364,17 @@
             cy="100"
             r="88"
             fill="none"
-            stroke={failed ? "#f59e0b" : "var(--onb-accent)"}
+            stroke="currentColor"
+            class="progress-arc {failed ? 'text-(--onb-warn)' : 'text-(--onb-accent)'}"
             stroke-width="6"
             stroke-linecap="round"
             stroke-dasharray={circumference}
             stroke-dashoffset={circumference * (1 - progress / 100)}
-            style="transition: stroke-dashoffset 0.6s ease; filter: drop-shadow(0 0 6px {failed
-              ? '#f59e0b'
-              : 'var(--onb-accent)'});"
           />
         </svg>
         <!-- Center overlay -->
         <span
-          class="absolute font-[Montserrat] text-[38px] font-light tabular-nums text-white"
+          class="absolute font-brand text-4xl font-light tabular-nums text-white"
         >
           {Math.round(progress)}%
         </span>
@@ -385,24 +384,22 @@
     <!-- Import lanes -->
     {#if collections.length > 0}
       <div class="flex flex-col gap-2.5">
-        {#each collections as col}
+        {#each collections as col (col.key)}
           <div
-            class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border"
-            style="border-color: rgb(255 255 255 / 0.06); background: rgb(255 255 255 / 0.02);"
+            class="flex flex-col gap-2 p-3.5 px-4 rounded-xl border border-white/6 bg-white/2"
           >
             <div class="grid grid-cols-[36px_1fr_auto] gap-3 items-center">
               <!-- Icon box -->
               <div
-                class="flex h-9 w-9 items-center justify-center rounded-lg"
-                style="background: {col.isComplete || col.pct > 0
-                  ? 'var(--onb-accent-dim)'
-                  : 'rgb(255 255 255 / 0.03)'};"
+                class="flex h-9 w-9 items-center justify-center rounded-lg {col.isComplete ||
+                col.pct > 0
+                  ? 'bg-(--onb-accent-dim)'
+                  : 'bg-white/3'}"
               >
                 <col.icon
-                  class="h-[18px] w-[18px]"
-                  style="color: {col.isComplete || col.pct > 0
-                    ? 'var(--onb-accent)'
-                    : 'rgb(255 255 255 / 0.4)'};"
+                  class="h-[18px] w-[18px] {col.isComplete || col.pct > 0
+                    ? 'text-(--onb-accent)'
+                    : 'text-white/40'}"
                 />
               </div>
 
@@ -425,7 +422,7 @@
               <!-- Percentage or checkmark -->
               <div class="flex items-center justify-end">
                 {#if col.isComplete}
-                  <Check class="h-4 w-4" style="color: var(--onb-accent);" />
+                  <Check class="h-4 w-4 text-(--onb-accent)" />
                 {:else}
                   <span class="font-mono text-xs text-white/40">
                     {col.pct}%
@@ -434,18 +431,21 @@
               </div>
             </div>
 
+            <SkippedRecordsNote
+              deleted={col.skippedDeleted}
+              unsupported={col.skippedUnsupported}
+              class="text-xs text-white/60"
+            />
+
             <!-- Progress bar -->
             <div
-              class="h-1 w-full overflow-hidden rounded-full"
-              style="background: var(--onb-border);"
+              class="h-1 w-full overflow-hidden rounded-full bg-(--onb-border)"
             >
               <div
-                class="h-full rounded-full transition-all duration-500 ease-out"
-                style="width: {col.isComplete
-                  ? 100
-                  : col.pct}%; background: {col.isComplete
-                  ? '#22c55e'
-                  : 'var(--onb-accent)'};"
+                class="h-full w-(--progress) rounded-full transition-all duration-500 ease-out {col.isComplete
+                  ? 'bg-(--onb-ok)'
+                  : 'bg-(--onb-accent)'}"
+                style:--progress="{col.isComplete ? 100 : col.pct}%"
               ></div>
             </div>
           </div>
@@ -454,3 +454,10 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  .progress-arc {
+    transition: stroke-dashoffset 0.6s ease;
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+</style>

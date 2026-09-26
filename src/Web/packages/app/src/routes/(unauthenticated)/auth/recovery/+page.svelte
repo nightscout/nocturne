@@ -23,6 +23,7 @@
     parseCeremonyOptions,
   } from "$lib/components/auth/passkey-errors";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
 
   // Steps: identify -> codes -> done
@@ -107,7 +108,7 @@
   }
 
   function handleContinue() {
-    goto("/", { replaceState: true });
+    goto(resolve("/"), { replaceState: true });
   }
 </script>
 
@@ -118,8 +119,8 @@
 <div class="flex min-h-screen items-center justify-center p-4">
   <Card.Root class="w-full max-w-md">
     <Card.Header class="text-center">
-      <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
-        <ShieldAlert class="h-6 w-6 text-amber-500" />
+      <div class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
+        <ShieldAlert class="h-6 w-6 text-warning" />
       </div>
       <Card.Title class="text-xl">Recovery Mode</Card.Title>
       <Card.Description>
@@ -184,9 +185,9 @@
         </form>
       {:else if step === "codes"}
         <div class="space-y-4">
-          <div class="flex items-start gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3">
-            <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-            <p class="text-sm text-green-700 dark:text-green-400">
+          <div class="flex items-start gap-3 rounded-md border border-success/20 bg-success/5 p-3">
+            <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+            <p class="text-sm text-success">
               Passkey registered successfully.
             </p>
           </div>
@@ -195,9 +196,9 @@
         </div>
       {:else if step === "done"}
         <div class="space-y-4">
-          <div class="flex items-start gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3">
-            <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-            <p class="text-sm text-green-700 dark:text-green-400">
+          <div class="flex items-start gap-3 rounded-md border border-success/20 bg-success/5 p-3">
+            <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+            <p class="text-sm text-success">
               Passkey registered successfully. Recovery mode has been deactivated.
             </p>
           </div>

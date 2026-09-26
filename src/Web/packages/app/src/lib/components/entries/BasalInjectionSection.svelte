@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { BasalInjection, PatientInsulin, InsulinCategory } from "$lib/api";
+  import { labelFor } from "$lib/components/ui/enum-value";
+  import type { BasalInjection, PatientInsulin } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -20,9 +21,7 @@
   // role). The hidden form submits insulinContext.patientInsulinId; the server
   // resolves the full TreatmentInsulinContext snapshot at write time.
   const insulinsResource = patientRemote.getInsulins();
-  let patientInsulins = $derived(
-    (insulinsResource.current ?? []) as PatientInsulin[],
-  );
+  let patientInsulins: PatientInsulin[] = $derived(insulinsResource.current ?? []);
 
   let eligibleInsulins = $derived(
     patientInsulins.filter(
@@ -59,11 +58,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Syringe class="h-4 w-4 text-indigo-500" />
+      <Syringe class="h-4 w-4 text-entry-basal-injection" />
       Long-acting injection
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -85,9 +84,8 @@
             <div>
               <div>{insulin.name}</div>
               <div class="text-xs text-muted-foreground">
-                {insulinCategoryLabels[
-                  insulin.insulinCategory as InsulinCategory
-                ] ?? insulin.insulinCategory}
+                {labelFor(insulinCategoryLabels, insulin.insulinCategory) ??
+                  insulin.insulinCategory}
               </div>
             </div>
           </Select.Item>
@@ -96,7 +94,7 @@
     </Select.Root>
     {#if isPremix}
       <div
-        class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+        class="flex items-start gap-1.5 text-xs text-warning"
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>
@@ -119,7 +117,7 @@
     />
     {#if isHighDose}
       <div
-        class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500"
+        class="flex items-start gap-1.5 text-xs text-warning"
       >
         <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <span>Confirm the dose &mdash; this is higher than typical.</span>

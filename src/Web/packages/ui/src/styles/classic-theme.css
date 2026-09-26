@@ -40,6 +40,7 @@
   --insulin-temp-basal: rgba(0, 153, 255, 0.25);
   --insulin-manual-temp-basal: rgba(0, 153, 255, 0.8);
   --insulin-scheduled-basal: rgb(60, 170, 255);
+  --basal: rgb(60, 170, 255);
   --insulin-additional-basal: rgb(100, 190, 255);
 
   /* Carbohydrates - warm orange */
@@ -53,7 +54,8 @@
   --pred-zt: rgb(0, 210, 210);              /* #00d2d2 */
   --pred-uam: rgb(201, 189, 96);            /* #c9bd60 */
 
-  /* Status Colors */
+  /* Status Colors. Chat cards and e-mail use the default theme's values
+     (see @nocturne/ui/tokens); overrides here apply in-browser only. */
   --status-warning: oklch(0.9 0.18 105);    /* Yellow */
   --status-critical: oklch(0.55 0.25 29);   /* Red */
   --status-normal: oklch(0.8 0.35 142);     /* Neon green */

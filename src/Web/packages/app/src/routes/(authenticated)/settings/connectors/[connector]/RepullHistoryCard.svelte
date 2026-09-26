@@ -171,7 +171,7 @@
                     : excludedTypes.add(type)}
                 data-testid="repull-type-{type}"
               />
-              <Label for="repull-type-{type}" class="text-sm font-normal">
+              <Label for="repull-type-{type}" variant="option">
                 {getDataTypeLabel(type)}
               </Label>
             </div>

@@ -7,14 +7,14 @@
 
   // Get error details from URL params
   const rawError = $derived(page.url.searchParams.get("error") || AuthErrorCode.ServerError);
-  const error = $derived(rawError as AuthErrorCode);
+  const error = $derived(Object.values(AuthErrorCode).find((c) => c === rawError));
   const description = $derived(
     page.url.searchParams.get("description") ||
       "An authentication error occurred"
   );
 
   /** Get a user-friendly error title based on error code */
-  function getErrorTitle(code: AuthErrorCode): string {
+  function getErrorTitle(code: AuthErrorCode | undefined): string {
     const titles: Partial<Record<AuthErrorCode, string>> = {
       [AuthErrorCode.InvalidState]: "Session Expired",
       [AuthErrorCode.InvalidIntent]: "Session Expired",
@@ -30,11 +30,11 @@
       [AuthErrorCode.ProviderError]: "Provider Error",
       [AuthErrorCode.OidcDisabled]: "Authentication Disabled",
     };
-    return titles[code] ?? "Authentication Error";
+    return (code && titles[code]) || "Authentication Error";
   }
 
   /** Get a user-friendly suggestion based on error code */
-  function getSuggestion(code: AuthErrorCode): string {
+  function getSuggestion(code: AuthErrorCode | undefined): string {
     const suggestions: Partial<Record<AuthErrorCode, string>> = {
       [AuthErrorCode.InvalidState]:
         "Your session may have expired. Please try linking again.",
@@ -54,7 +54,7 @@
         "Authentication is not currently enabled. Please contact your administrator.",
     };
     return (
-      suggestions[code] ??
+      (code && suggestions[code]) ||
       "Please try logging in again. If the problem persists, contact your administrator."
     );
   }
@@ -103,7 +103,7 @@
       <div class="text-center text-xs text-muted-foreground">
         <p>
           Error code: <code class="bg-muted px-1 py-0.5 rounded">
-            {error}
+            {rawError}
           </code>
         </p>
       </div>

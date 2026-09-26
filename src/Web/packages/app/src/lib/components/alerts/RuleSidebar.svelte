@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { onMount, untrack } from "svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Switch } from "$lib/components/ui/switch";
@@ -146,7 +147,7 @@
   });
 
   const ruleById = $derived(
-    new Map(rules.filter((r) => r.id).map((r) => [r.id as string, r])),
+    new Map(rules.flatMap((r): [string, AlertRuleResponse][] => (r.id ? [[r.id, r]] : []))),
   );
 
   function nameLookup(id: string): string | undefined {
@@ -228,10 +229,7 @@
   }
 
   function toggleDisabled(id: string, enabled: boolean): void {
-    const next = new Set(disabledRuleIds);
-    if (enabled) next.delete(id);
-    else next.add(id);
-    disabledRuleIds = next;
+    disabledRuleIds = toggled(disabledRuleIds, id, !enabled);
   }
 </script>
 
@@ -264,10 +262,10 @@
     {@const leaves = tree ? collectLeaves(rule, tree) : []}
     {@const isEditing = editingRuleId === id}
 
-    <Collapsible.Root open={isEditing} class="rounded-md border bg-background">
-      <div class="flex items-center gap-2 px-2 py-1.5">
+    <Collapsible.Root open={isEditing} variant="outline">
+      <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
         <Collapsible.Trigger
-          class="group flex flex-1 min-w-0 items-center gap-2 text-left text-sm"
+          class="group flex flex-1 min-w-0 items-center gap-2 text-left"
         >
           <ChevronRight
             class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
@@ -275,22 +273,21 @@
           <span
             data-testid="rule-status-pip"
             data-truth={truth ? "true" : "false"}
-            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-(--severity) {truth ? 'bg-(--severity)' : ''}"
             class:opacity-50={disabled}
-            style:background-color={truth ? severityVar(rule.severity) : "transparent"}
-            style:border={`1.5px solid ${severityVar(rule.severity)}`}
+            style:--severity={severityVar(rule.severity)}
             aria-hidden="true"
           ></span>
           <span class="flex-1 min-w-0 truncate">
             {rule.name ?? "(unnamed)"}
             {#if isEditing}
-              <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span class="ml-1 text-2xs uppercase tracking-wide text-muted-foreground">
                 (editing)
               </span>
             {/if}
           </span>
           <span
-            class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+            class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
           >
             {disabled ? "Off" : "On"}
           </span>

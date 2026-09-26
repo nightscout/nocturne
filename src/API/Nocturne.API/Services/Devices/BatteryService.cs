@@ -466,7 +466,13 @@ public class BatteryService : IBatteryService
         {
             if (reading.IsCharging && !wasCharging)
             {
-                // Started charging - new cycle begins
+                if (currentCycle is { DischargeStartMills: not null })
+                {
+                    currentCycle.DischargeEndMills = reading.Mills;
+                    currentCycle.DischargeEndLevel = reading.Battery;
+                    cycles.Add(currentCycle);
+                }
+
                 currentCycle = new ChargeCycle
                 {
                     Id = Guid.NewGuid().ToString(),
@@ -477,33 +483,10 @@ public class BatteryService : IBatteryService
             }
             else if (!reading.IsCharging && wasCharging && currentCycle != null)
             {
-                // Stopped charging - end of charge phase
                 currentCycle.ChargeEndMills = reading.Mills;
                 currentCycle.ChargeEndLevel = reading.Battery;
                 currentCycle.DischargeStartMills = reading.Mills;
                 currentCycle.DischargeStartLevel = reading.Battery;
-            }
-            else if (
-                reading.IsCharging
-                && currentCycle != null
-                && currentCycle.DischargeStartMills.HasValue
-            )
-            {
-                // Started charging again - end of discharge phase
-                currentCycle.DischargeEndMills = reading.Mills;
-                currentCycle.DischargeEndLevel = reading.Battery;
-
-                // Cycle is complete, add it
-                cycles.Add(currentCycle);
-
-                // Start a new cycle
-                currentCycle = new ChargeCycle
-                {
-                    Id = Guid.NewGuid().ToString(),
-                    Device = device,
-                    ChargeStartMills = reading.Mills,
-                    ChargeStartLevel = reading.Battery,
-                };
             }
 
             wasCharging = reading.IsCharging;

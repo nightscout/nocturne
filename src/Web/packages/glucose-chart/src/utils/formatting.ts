@@ -14,10 +14,15 @@ type ClassValue = string | number | boolean | null | undefined | ClassValue[];
  * Lightweight alternative to clsx/twMerge for the standalone package.
  */
 export function cn(...inputs: ClassValue[]): string {
-  return inputs
-    .flat(Infinity as 1)
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-    .join(' ');
+  return classNames(inputs, []).join(' ');
+}
+
+function classNames(inputs: ClassValue[], found: string[]): string[] {
+  for (const input of inputs) {
+    if (Array.isArray(input)) classNames(input, found);
+    else if (typeof input === 'string' && input.length > 0) found.push(input);
+  }
+  return found;
 }
 
 // =============================================================================

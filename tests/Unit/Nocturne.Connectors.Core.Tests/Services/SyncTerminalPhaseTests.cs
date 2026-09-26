@@ -36,6 +36,8 @@ public class SyncTerminalPhaseTests
 
         public bool AuthenticationSucceeds { get; init; } = true;
 
+        public string? AuthenticationFailureReason { get; init; }
+
         public int AuthenticateCalls { get; private set; }
         public int EnsureAuthenticatedCalls { get; private set; }
 
@@ -45,6 +47,7 @@ public class SyncTerminalPhaseTests
         public override Task<bool> AuthenticateAsync()
         {
             AuthenticateCalls++;
+            RecordAuthenticationFailure();
             return Task.FromResult(AuthenticationSucceeds);
         }
 
@@ -53,7 +56,14 @@ public class SyncTerminalPhaseTests
             CancellationToken cancellationToken)
         {
             EnsureAuthenticatedCalls++;
+            RecordAuthenticationFailure();
             return Task.FromResult(AuthenticationSucceeds);
+        }
+
+        private void RecordAuthenticationFailure()
+        {
+            if (!AuthenticationSucceeds && AuthenticationFailureReason is not null)
+                TrackFailedAuthentication(AuthenticationFailureReason);
         }
 
         protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -61,7 +71,7 @@ public class SyncTerminalPhaseTests
             TestConfig config,
             CancellationToken cancellationToken)
         {
-            var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+            var result = new SyncResult { Success = true };
             await _syncBody(result);
             return result;
         }
@@ -81,12 +91,13 @@ public class SyncTerminalPhaseTests
     private static Task<SyncResult> RunAsync(
         Func<SyncResult, Task> body,
         ISyncProgressReporter reporter,
+        CancellationToken cancellationToken = default,
         bool authenticationSucceeds = true)
         => new TestConnectorService(body) { AuthenticationSucceeds = authenticationSucceeds }
             .SyncDataAsync(
                 new SyncRequest { DataTypes = [SyncDataType.Glucose] },
                 new TestConfig(),
-                CancellationToken.None,
+                cancellationToken,
                 reporter);
 
     [Fact]
@@ -181,17 +192,60 @@ public class SyncTerminalPhaseTests
     }
 
     [Fact]
-    public async Task CancelledSync_ReportsNothing()
+    public async Task CancelledSync_ReportsOneTerminalFailureWithoutExceptionText()
     {
-        // Arrange: a run the caller withdrew has no outcome to report.
+        // Arrange: a withdrawn run still has to release the tenant's in-progress indicator, so it
+        // reports the same terminal failure as any other ending rather than falling silent.
         var (reporter, reported) = BuildReporter();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
         // Act
-        var act = () => RunAsync(_ => throw new OperationCanceledException(), reporter.Object);
+        var act = () => RunAsync(
+            _ => throw new OperationCanceledException(), reporter.Object, cts.Token);
 
         // Assert
         await act.Should().ThrowAsync<OperationCanceledException>();
-        reported.Should().BeEmpty();
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CancelledBackgroundSync_PropagatesAndReportsOneTerminalFailureWithoutExceptionText()
+    {
+        // Arrange: the background entry point's own catch-all must let a cancellation of the caller's
+        // token through to the poller's timeout handler instead of turning it into a failed result.
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new TaskCanceledException("HttpClient.Timeout"));
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        // Act
+        var act = async () =>
+            await service.SyncDataAsync(new TestConfig(), cts.Token, null, reporter.Object);
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task SourceTimeout_IsAFailedResultCarryingTheExceptionText()
+    {
+        // Arrange: an HttpClient timeout arrives as a TaskCanceledException while the caller's token
+        // is still live, so it is the source falling silent, not a withdrawn run.
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => throw new TaskCanceledException("HttpClient.Timeout"));
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().Be("HttpClient.Timeout");
+        reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported[0].ErrorMessage.Should().Be("HttpClient.Timeout");
     }
 
     [Fact]
@@ -209,6 +263,49 @@ public class SyncTerminalPhaseTests
         result.Success.Should().BeFalse();
         reported.Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
         reported[0].ErrorMessage.Should().Be("Authentication failed for test");
+    }
+
+    /// <summary>
+    /// The connector that tried is the only thing that knows why it failed, so its reason is the
+    /// tenant's whole explanation. A source that could not be reached has no credential to fix,
+    /// and "authentication failed" sends that person after the wrong thing.
+    /// </summary>
+    [Fact]
+    public async Task BackgroundSync_AuthenticationFailureWithARecordedReason_ReportsThatReason()
+    {
+        // Arrange
+        var (reporter, reported) = BuildReporter();
+        var service = new TestConnectorService(_ => Task.CompletedTask)
+        {
+            AuthenticationSucceeds = false,
+            AuthenticationFailureReason = "Could not reach the source",
+        };
+
+        // Act
+        var result = await service.SyncDataAsync(new TestConfig(), CancellationToken.None, null, reporter.Object);
+
+        // Assert
+        result.Message.Should().Be("Could not reach the source");
+        result.Errors.Should().ContainSingle().Which.Should().Be("Could not reach the source");
+        reported.Should().ContainSingle().Which.ErrorMessage.Should().Be("Could not reach the source");
+    }
+
+    [Fact]
+    public async Task RequestedSync_AuthenticationFailureWithARecordedReason_ReportsThatReason()
+    {
+        // Arrange
+        var service = new TestConnectorService(_ => Task.CompletedTask)
+        {
+            AuthenticationSucceeds = false,
+            AuthenticationFailureReason = "Could not reach the source",
+        };
+
+        // Act
+        var result = await service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, new TestConfig(), CancellationToken.None);
+
+        // Assert
+        result.Message.Should().Be("Could not reach the source");
     }
 
     [Fact]

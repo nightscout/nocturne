@@ -5,28 +5,30 @@
 
   interface BandMeta {
     key: BandKey;
-    label: string;
     color: string;
     pattern: GlucoseRange;
   }
 
   // Stacking order: bottom-to-top in vertical mode, left-to-right in horizontal mode
-  // (lowest glucose first). Labels render top-down (highest first).
+  // (lowest glucose first). Labels render top-down (highest first). Labels live in the
+  // instance script: a module-scope string is evaluated before the locale loads.
   const BANDS_STACK_ORDER: BandMeta[] = [
-    { key: "veryLow", label: "Very Low", color: "var(--glucose-very-low)", pattern: "very-low" },
-    { key: "low", label: "Low", color: "var(--glucose-low)", pattern: "low" },
-    { key: "target", label: "In Range", color: "var(--glucose-in-range)", pattern: "in-range" },
-    { key: "high", label: "High", color: "var(--glucose-high)", pattern: "high" },
-    { key: "veryHigh", label: "Very High", color: "var(--glucose-very-high)", pattern: "very-high" },
+    { key: "veryLow", color: "var(--glucose-very-low)", pattern: "very-low" },
+    { key: "low", color: "var(--glucose-low)", pattern: "low" },
+    { key: "target", color: "var(--glucose-in-range)", pattern: "in-range" },
+    { key: "high", color: "var(--glucose-high)", pattern: "high" },
+    { key: "veryHigh", color: "var(--glucose-very-high)", pattern: "very-high" },
   ];
   const BANDS_TOP_DOWN = BANDS_STACK_ORDER.toReversed();
 </script>
 
 <script lang="ts">
-  import { Chart, Svg, Bars, Bar, Text, Tooltip } from "layerchart";
-  import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
+  import { Chart, Svg, Bars, Bar, Tooltip } from "layerchart";
+  import { scaleBand, scaleLinear } from "d3-scale";
+  import { bandScale as toBandScale, numericScale } from "$lib/components/charts/scale-guards";
   import { bgRange } from "$lib/utils/formatting";
-  import { glucosePatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import type { TimeInRangePercentages } from "$api-clients";
 
   interface Props {
@@ -38,7 +40,10 @@
     orientation?: "vertical" | "horizontal";
     /** Whether to show the "Target Range" caption below the chart (default: false) */
     showThresholds?: boolean;
-    /** Whether to show band labels beside the bar (vertical mode only; default: true) */
+    /**
+     * Band labels: beside the bar when vertical; when horizontal, a key under the bar on paper
+     * only, where there is no tooltip to read the segments from (default: true).
+     */
     showLabels?: boolean;
     /** Compact mode - smaller text and tighter spacing */
     compact?: boolean;
@@ -70,6 +75,14 @@
   }: Props = $props();
 
   const vertical = $derived(orientation === "vertical");
+
+  const bandLabel = $derived<Record<BandKey, string>>({
+    veryLow: "Very Low",
+    low: "Low",
+    target: "In Range",
+    high: "High",
+    veryHigh: "Very High",
+  });
 
   const pct = $derived({
     veryLow: percentages?.veryLow ?? 0,
@@ -116,15 +129,15 @@
   });
 
   const labelRows = $derived(
-    BANDS_TOP_DOWN.map((band) => ({ ...band, value: pct[band.key] }))
+    BANDS_TOP_DOWN.map((band) => ({ ...band, label: bandLabel[band.key], value: pct[band.key] }))
   );
 </script>
 
 {#snippet marks(context: { xScale: unknown; yScale: unknown; width: number; height: number })}
-  {@const bandScale = (vertical ? context.xScale : context.yScale) as ScaleBand<string>}
+  {@const bandScale = toBandScale(vertical ? context.xScale : context.yScale)}
   {@const bandPos = bandScale("TIR") ?? 0}
   {@const bandSize = bandScale.bandwidth()}
-  {@const valueScale = (vertical ? context.yScale : context.xScale) as (v: number) => number}
+  {@const valueScale = numericScale(vertical ? context.yScale : context.xScale)}
   <Svg>
           <Bars>
             <!-- Round only the outer ends of the stack: the first segment's outer edge and
@@ -143,7 +156,7 @@
                       ? vertical ? "top" : "right"
                       : "none"}
                 fill={segment.color}
-                class={glucosePatternClass(segment.pattern)}
+                class={patternClass(segment.pattern)}
               />
             {/each}
           </Bars>
@@ -159,7 +172,7 @@
               width={vertical ? bandSize : Math.abs(b - a)}
               height={vertical ? Math.abs(b - a) : bandSize}
               rx={2}
-              class={["fill-[var(--glucose-tight-range)]", glucosePatternClass("tight-range")].join(" ")}
+              class={["fill-[var(--glucose-tight-range)]", patternClass("tight-range")].join(" ")}
               data-testid="tight-range-inset"
             />
           {/if}
@@ -180,37 +193,6 @@
                 stroke-dasharray="3 2"
                 data-testid="personal-range-marker"
               />
-            {/each}
-          {/if}
-
-          <!-- Evenly-spaced band labels beside the bar, highest range first; 0% bands
-               print their 0 here even though they render no segment. -->
-          {#if vertical && showLabels}
-            {#each labelRows as row, i (row.key)}
-              {@const y = ((i + 0.5) / labelRows.length) * context.height}
-              <Text
-                x={context.width + 10}
-                {y}
-                textAnchor="start"
-                verticalAnchor="middle"
-                class={[
-                  "tabular-nums",
-                  row.key === "target"
-                    ? compact ? "fill-foreground text-base font-bold" : "fill-foreground text-xl font-bold"
-                    : compact ? "fill-muted-foreground text-xs" : "fill-muted-foreground text-sm",
-                ].join(" ")}
-                value={`${Math.round(row.value)}% ${row.label}`}
-              />
-              {#if row.key === "target" && pct.tightTarget > 0 && !compact}
-                <Text
-                  x={context.width + 10}
-                  y={y + 18}
-                  textAnchor="start"
-                  verticalAnchor="middle"
-                  class="fill-muted-foreground text-xs"
-                  value={`${Math.round(pct.tightTarget)}% in tight range`}
-                />
-              {/if}
             {/each}
           {/if}
   </Svg>
@@ -239,27 +221,63 @@
   </Tooltip.Root>
 {/snippet}
 
-<div class={vertical ? "flex h-full w-full flex-col" : "w-full"}>
-  <div class={vertical ? "min-h-0 flex-1" : compact ? "h-4" : "h-6"}>
-    {#if vertical}
-      <Chart
-        data={stackedData}
-        x="category"
-        xScale={scaleBand().paddingInner(0.4).paddingOuter(0.2)}
-        y={["start", "end"]}
-        yScale={scaleLinear()}
-        yDomain={[0, 100]}
-        c="key"
-        cDomain={stackedData.map((s) => s.key)}
-        cRange={stackedData.map((s) => s.color)}
-        padding={{ top: 4, bottom: 4, left: 0, right: showLabels ? (compact ? 96 : 130) : 0 }}
-        tooltipContext={{ mode: "band" }}
+<!-- Vertical labels stack highest-first beside the bar; the horizontal key reads
+     left to right in the bar's own order, one size so it wraps evenly. -->
+{#snippet bandLabels()}
+  {#each vertical ? labelRows : labelRows.toReversed() as row (row.key)}
+    {@const isTarget = row.key === "target"}
+    <li class="flex items-center gap-1.5">
+      <TextureSwatch texture={row.pattern} />
+      <span
+        class={!vertical
+          ? isTarget ? "font-semibold text-foreground" : ""
+          : isTarget
+            ? compact ? "text-base font-bold text-foreground" : "text-xl font-bold text-foreground"
+            : compact ? "text-xs" : "text-sm"}
       >
-        {#snippet children({ context })}
-          {@render marks(context)}
-        {/snippet}
-      </Chart>
-    {:else}
+        {Math.round(row.value)}% {row.label}
+      </span>
+    </li>
+    <!-- A compact bar on screen names the inset in its tooltip; paper has only this key. -->
+    {#if isTarget && pct.tightTarget > 0}
+      <li class={["items-center gap-1.5 text-xs", compact ? "hidden print:flex" : "flex", vertical && "-mt-1 pl-5"]}>
+        <TextureSwatch texture="tight-range" />
+        <span>{Math.round(pct.tightTarget)}% in tight range</span>
+      </li>
+    {/if}
+  {/each}
+{/snippet}
+
+<div class={vertical ? "flex h-full w-full flex-col" : "w-full"}>
+  {#if vertical}
+    <div class="flex min-h-0 flex-1 gap-3">
+      <div class="min-h-0 min-w-0 flex-1">
+        <Chart
+          data={stackedData}
+          x="category"
+          xScale={scaleBand().paddingInner(0.4).paddingOuter(0.2)}
+          y={["start", "end"]}
+          yScale={scaleLinear()}
+          yDomain={[0, 100]}
+          c="key"
+          cDomain={stackedData.map((s) => s.key)}
+          cRange={stackedData.map((s) => s.color)}
+          padding={{ top: 4, bottom: 4, left: 0, right: 0 }}
+          tooltipContext={{ mode: "band" }}
+        >
+          {#snippet children({ context })}
+            {@render marks(context)}
+          {/snippet}
+        </Chart>
+      </div>
+      {#if showLabels}
+        <ul class="flex shrink-0 flex-col justify-around whitespace-nowrap tabular-nums text-muted-foreground">
+          {@render bandLabels()}
+        </ul>
+      {/if}
+    </div>
+  {:else}
+    <div class={compact ? "h-4" : "h-6"}>
       <Chart
         data={stackedData}
         x={["start", "end"]}
@@ -277,11 +295,16 @@
           {@render marks(context)}
         {/snippet}
       </Chart>
+    </div>
+    {#if showLabels}
+      <ul class="hidden flex-wrap items-center gap-x-4 gap-y-1 pt-2 text-xs tabular-nums text-muted-foreground print:flex">
+        {@render bandLabels()}
+      </ul>
     {/if}
-  </div>
+  {/if}
 
   {#if showThresholds || personalRange}
-    <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-[10px]" : "text-xs"].join(" ")}>
+    <div class={["mt-2 shrink-0 text-center text-muted-foreground", compact ? "text-2xs" : "text-xs"].join(" ")}>
       {#if showThresholds}
         <p><span class="font-semibold text-foreground">Target Range:</span> {bgRange(thresholds.low, thresholds.high)}</p>
       {/if}

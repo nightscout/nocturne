@@ -19,14 +19,21 @@
       case "connected":
         return {
           variant: "default" as const,
-          color: "bg-green-500",
+          color: "bg-success",
           text: "Connected",
           description: "Real-time data active",
+        };
+      case "idle":
+        return {
+          variant: "outline" as const,
+          color: "bg-gray-500",
+          text: "Starting",
+          description: "Waiting to connect",
         };
       case "connecting":
         return {
           variant: "secondary" as const,
-          color: "bg-yellow-500",
+          color: "bg-warning",
           text: "Connecting...",
           description: "Establishing connection",
         };
@@ -44,10 +51,17 @@
           text: "Disconnected",
           description: "Using cached data",
         };
+      case "unauthorized":
+        return {
+          variant: "outline" as const,
+          color: "bg-gray-500",
+          text: "Not available",
+          description: "Live updates are not permitted for this view",
+        };
       case "error":
         return {
           variant: "destructive" as const,
-          color: "bg-red-500",
+          color: "bg-destructive",
           text: "Error",
           description: connectionError?.message || "Connection failed",
         };
@@ -78,7 +92,7 @@
   <div class="flex items-center justify-between space-x-2">
     <div class="flex items-center space-x-2">
       <div class="w-2 h-2 rounded-full {statusConfig.color}"></div>
-      <Badge variant={statusConfig.variant} class="text-xs">
+      <Badge variant={statusConfig.variant}>
         {statusConfig.text}
       </Badge>
     </div>
@@ -86,9 +100,8 @@
     {#if !isConnected}
       <Button
         variant="outline"
-        size="sm"
+        size="xs"
         onclick={handleReconnect}
-        class="h-6 px-2 text-xs"
       >
         Retry
       </Button>

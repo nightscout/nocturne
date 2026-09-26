@@ -1,6 +1,7 @@
 import type { Chat } from "chat";
 import type { BotApiClient, AlertDispatchEvent } from "../types.js";
 import { AlertCard } from "../cards/alert.js";
+import { withAlertAccent } from "../lib/severity.js";
 import { createLogger } from "../lib/logger.js";
 
 const logger = createLogger();
@@ -64,7 +65,9 @@ export class AlertDeliveryHandler {
       const target = await this.target(channelType, destination);
 
       const card = AlertCard({ payload });
-      const sent = await target.post(card);
+      const sent = await withAlertAccent(payload.severity, () =>
+        target.post(card),
+      );
 
       await this.api.alerts.markDelivered(deliveryId, {
         platformMessageId: sent?.id,

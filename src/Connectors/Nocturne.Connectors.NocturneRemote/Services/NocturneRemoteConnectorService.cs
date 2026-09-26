@@ -100,8 +100,8 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             // A status the retry loop re-threw; `answered` holds it.
         }
         // The retry loop re-throws every cancellation, and a client timeout reaches it as one. Only
-        // the caller's own token means the run was withdrawn, and a withdrawn run has no outcome to
-        // report; the rest is the remote falling silent.
+        // the caller's own token means the run was withdrawn and must travel; the rest is the remote
+        // falling silent.
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             return UnansweredResult();
@@ -126,15 +126,12 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
     private SyncResult UnansweredResult()
     {
         var unanswered = $"The remote Nocturne instance at {_resolvedBaseUrl} did not answer";
-        var now = DateTimeOffset.UtcNow;
 
         _logger.LogError("[{ConnectorSource}] {Detail}", ConnectorSource, unanswered);
 
         return new SyncResult
         {
             Success = false,
-            StartTime = now,
-            EndTime = now,
             Message = unanswered,
             Errors = { unanswered },
         };
@@ -151,7 +148,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         if (await AuthenticateWithConfigAsync(config, cancellationToken) is { } refused)
             return refused;
 
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -228,7 +225,6 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

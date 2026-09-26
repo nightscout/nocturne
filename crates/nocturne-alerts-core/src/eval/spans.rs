@@ -2,135 +2,72 @@
 //! do_not_disturb, pump_state, state_span_active, sleep_session_active.
 
 use super::Env;
-use crate::compare::total_minutes;
+use crate::enums::{AlertStateKind, EnumValue, StateSpanCategory};
 use crate::model::{
     ActiveForPayload, AlertStatePayload, PumpStatePayload, SleepSessionPayload, StateSpanPayload,
 };
 
-/// Cross-alert state. `firing`: snapshot state equals "firing" (ci);
-/// `unacknowledged`: firing and not acknowledged; `acknowledged`: acknowledged
-/// regardless of state. `for_minutes` anchors at `AcknowledgedAt` for
-/// acknowledged, `TriggeredAt` otherwise (f64 minutes, `>=`).
+/// Cross-alert state. `firing`: the snapshot's state is "firing" (ASCII case
+/// ignored); `unacknowledged`: firing and not acknowledged; `acknowledged`:
+/// acknowledged whatever the state. `for_minutes` holds from the
+/// acknowledgement for `acknowledged`, from the trigger otherwise.
 pub(super) fn alert_state(p: &AlertStatePayload, env: &Env) -> bool {
     let Some(snapshot) = env.ctx.active_alerts.get(&p.alert_id) else {
         return false;
     };
-    let Some(state) = p.state.as_deref() else {
-        return false;
-    };
-    let state_lower = state.to_lowercase();
-    let state_matches = match state_lower.as_str() {
-        "firing" => snapshot.state.eq_ignore_ascii_case("firing"),
-        "unacknowledged" => {
-            snapshot.state.eq_ignore_ascii_case("firing") && snapshot.acknowledged_at.is_none()
+    let firing = snapshot.state.eq_ignore_ascii_case("firing");
+    let anchor = match p.state.value {
+        Some(AlertStateKind::Firing) if firing => Some(snapshot.triggered_at),
+        Some(AlertStateKind::Unacknowledged) if firing && snapshot.acknowledged_at.is_none() => {
+            Some(snapshot.triggered_at)
         }
-        "acknowledged" => snapshot.acknowledged_at.is_some(),
-        _ => false,
+        Some(AlertStateKind::Acknowledged) => snapshot.acknowledged_at,
+        _ => None,
     };
-    if !state_matches {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    let anchor = if state_lower == "acknowledged" {
-        snapshot
-            .acknowledged_at
-            .expect("acknowledged match implies acknowledged_at")
-    } else {
-        snapshot.triggered_at
-    };
-    total_minutes(env.now - anchor) >= f64::from(for_minutes)
+    anchor.is_some_and(|at| p.for_minutes.is_none_or(|m| env.held_for(at, m)))
 }
 
-/// No `HasEver*` guard: absence of an override is the legitimate "no override"
-/// state. `for_minutes` is a no-op on the inactive side.
+/// No `has_ever_*` guard: no override is the legitimate "no override" state.
 pub(super) fn override_active(p: &ActiveForPayload, env: &Env) -> bool {
-    let is_currently_active = env.ctx.active_override.is_some();
-    if is_currently_active != p.is_active {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    if !p.is_active {
-        return true;
-    }
-    let started_at = env
-        .ctx
-        .active_override
-        .expect("override present when is_active matched")
-        .started_at;
-    total_minutes(env.now - started_at) >= f64::from(for_minutes)
+    env.active_for(
+        p.is_active,
+        p.for_minutes,
+        env.ctx.active_override.map(|s| s.started_at),
+    )
 }
 
-/// Same shape as `override_active`; a null snapshot simply means DND is off.
+/// A null snapshot means DND is off.
 pub(super) fn do_not_disturb(p: &ActiveForPayload, env: &Env) -> bool {
-    let is_currently_active = env.ctx.active_do_not_disturb.is_some();
-    if is_currently_active != p.is_active {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    if !p.is_active {
-        return true;
-    }
-    let started_at = env
-        .ctx
-        .active_do_not_disturb
-        .expect("dnd present when is_active matched")
-        .started_at;
-    total_minutes(env.now - started_at) >= f64::from(for_minutes)
+    env.active_for(
+        p.is_active,
+        p.for_minutes,
+        env.ctx.active_do_not_disturb.map(|s| s.started_at),
+    )
 }
 
 /// `is_active: false` is true whenever the active mode differs from the
-/// configured mode — including when no mode-span is active at all.
+/// configured one, including when no mode is active.
 pub(super) fn pump_state(p: &PumpStatePayload, env: &Env) -> bool {
-    let active_mode = env.ctx.active_pump_state.map(|s| s.mode);
-
-    if !p.is_active {
-        return active_mode != Some(p.mode);
-    }
-
-    let Some(snapshot) = env.ctx.active_pump_state else {
-        return false;
-    };
-    if snapshot.mode != p.mode {
-        return false;
-    }
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    total_minutes(env.now - snapshot.started_at) >= f64::from(for_minutes)
+    let in_mode = env
+        .ctx
+        .active_pump_state
+        .filter(|s| EnumValue::Known(s.mode) == p.mode);
+    env.active_for(p.is_active, p.for_minutes, in_mode.map(|s| s.started_at))
 }
 
-/// Generic state-span leaf. The PumpMode category (ordinal 0) is always false
-/// (defence in depth). The lookup key is the exact `(category, state)` pair —
-/// a null state means "any state of this category" because the enricher loads
-/// that key shape.
+/// Generic state-span leaf. The PumpMode category is always false (pump
+/// modes are `pump_state`'s). The lookup key is the exact `(category, state)`
+/// pair; a null state means "any state of this category".
 pub(super) fn state_span_active(p: &StateSpanPayload, env: &Env) -> bool {
-    if p.category == 0 {
-        return false;
-    }
-    let key = (p.category, p.state.clone());
-    let snapshot = env.ctx.active_state_spans.get(&key);
-
-    if !p.is_active {
-        return snapshot.is_none();
-    }
-    let Some(snapshot) = snapshot else {
-        return false;
+    let span = match p.category {
+        EnumValue::Known(StateSpanCategory::PumpMode) => return false,
+        EnumValue::Known(category) => env.ctx.active_state_spans.get(&(category, p.state.clone())),
+        EnumValue::Undefined(_) => None,
     };
-    let Some(for_minutes) = p.for_minutes else {
-        return true;
-    };
-    total_minutes(env.now - snapshot.started_at) >= f64::from(for_minutes)
+    env.active_for(p.is_active, p.for_minutes, span.map(|s| s.started_at))
 }
 
-/// Sleep-session leaf. Matches the pre-computed `sleep_session_active` signal
-/// against the asserted side: `is_active` true fires while a session is active,
-/// false fires while none is.
+/// `is_active` true fires while a sleep session is active, false while none is.
 pub(super) fn sleep_session_active(p: &SleepSessionPayload, env: &Env) -> bool {
     env.ctx.sleep_session_active == p.is_active
 }

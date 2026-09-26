@@ -3,6 +3,7 @@ import { getRequestEvent, query } from "$app/server";
 import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
+import { errorStatus } from "$lib/forms/submit-error";
 
 const getPredictionsSchema = z.object({
   profileId: z.string().optional(),
@@ -90,7 +91,7 @@ export const getPredictions = query(getPredictionsSchema, async (props) => {
     } satisfies PredictionData;
   } catch (err) {
     // 404 means predictions are not configured — this is expected for optional features
-    if ((err as any)?.status === 404) {
+    if (errorStatus(err) === 404) {
       return null;
     }
     console.error("Error loading predictions:", err);

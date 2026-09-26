@@ -28,6 +28,11 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
     /// </summary>
     public Func<int, Exception?>? ThrowFor { get; set; }
 
+    /// <summary>
+    /// Builds the reply from the request's URI, in place of an empty one with the handler's status.
+    /// </summary>
+    public Func<Uri, HttpResponseMessage>? Respond { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken)
@@ -50,6 +55,6 @@ internal sealed class RecordingHttpMessageHandler(HttpStatusCode statusCode = Ht
         if (toThrow is not null)
             throw toThrow;
 
-        return new HttpResponseMessage(statusCode);
+        return Respond?.Invoke(request.RequestUri!) ?? new HttpResponseMessage(statusCode);
     }
 }

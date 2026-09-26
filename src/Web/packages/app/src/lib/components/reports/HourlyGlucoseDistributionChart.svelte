@@ -1,35 +1,37 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import { timeFormat } from "$lib/stores/appearance-store.svelte";
-  import { bg } from "$lib/utils/formatting";
   import { BarChart2 } from "lucide-svelte";
-  import type { AveragedStats } from "$lib/api";
-  import { glucosePatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import type { AveragedStats, GlycemicThresholds } from "$lib/api";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import { hourlyBandSeries } from "./hourly-bands";
 
   interface Props {
     averagedStats?: AveragedStats[];
+    /** The band edges the API partitioned each hour on. */
+    thresholds?: GlycemicThresholds;
   }
 
   interface HourlyRangeData {
     hour: number;
     veryLow: number;
     low: number;
-    normal: number;
-    aboveTarget: number;
+    tightTarget: number;
+    aboveTightTarget: number;
     high: number;
     veryHigh: number;
     count: number;
   }
 
-  let { averagedStats }: Props = $props();
+  let { averagedStats, thresholds }: Props = $props();
 
   function transformToChartData(stats: AveragedStats[]): HourlyRangeData[] {
     return stats.map((s) => ({
       hour: s.hour ?? 0,
       veryLow: s.timeInRange?.veryLow ?? 0,
       low: s.timeInRange?.low ?? 0,
-      normal: s.timeInRange?.normal ?? 0,
-      aboveTarget: s.timeInRange?.aboveTarget ?? 0,
+      tightTarget: s.timeInRange?.tightTarget ?? 0,
+      aboveTightTarget: s.timeInRange?.aboveTightTarget ?? 0,
       high: s.timeInRange?.high ?? 0,
       veryHigh: s.timeInRange?.veryHigh ?? 0,
       count: s.count ?? 0,
@@ -47,18 +49,7 @@
     return `${hour - 12}PM`;
   }
 
-  // Chart series configuration - labels respect mmol/mg/dL preference
-  // Using $derived to make labels reactive to unit changes
-  // Each series' filled area is distinguished only by its glucose-range colour,
-  // so the matching print pattern keeps the stacked bands readable in mono.
-  const chartSeries = $derived([
-    { key: "veryLow", label: `<${bg(54)}`, color: "var(--glucose-very-low)", props: { class: glucosePatternClass("very-low") } },
-    { key: "low", label: `${bg(54)}-${bg(63)}`, color: "var(--glucose-low)", props: { class: glucosePatternClass("low") } },
-    { key: "normal", label: `${bg(63)}-${bg(140)}`, color: "var(--glucose-tight-range)", props: { class: glucosePatternClass("tight-range") } },
-    { key: "aboveTarget", label: `${bg(140)}-${bg(180)}`, color: "var(--glucose-in-range)", props: { class: glucosePatternClass("in-range") } },
-    { key: "high", label: `${bg(180)}-${bg(200)}`, color: "var(--glucose-high)", props: { class: glucosePatternClass("high") } },
-    { key: "veryHigh", label: `>${bg(200)}`, color: "var(--glucose-very-high)", props: { class: glucosePatternClass("very-high") } },
-  ]);
+  const chartSeries = $derived(hourlyBandSeries(thresholds));
 
   // Derived chart data
   const chartData = $derived(
@@ -78,7 +69,6 @@
         yDomain={[0, 100]}
         series={chartSeries}
         seriesLayout="stack"
-        legend
         props={{
           xAxis: {
             format: formatHour,
@@ -91,6 +81,10 @@
         padding={{ top: 20, right: 20, bottom: 40, left: 50 }}
       />
     </div>
+    <ChartKey
+      class="pt-2"
+      items={chartSeries.map((s) => ({ texture: s.texture, label: s.label }))}
+    />
   {:else}
     <div
       class="flex h-[350px] w-full items-center justify-center text-muted-foreground"

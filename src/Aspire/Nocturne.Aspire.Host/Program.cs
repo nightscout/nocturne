@@ -9,7 +9,6 @@ using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host;
 using Nocturne.Aspire.Host.Publishing;
 using Nocturne.Aspire.Hosting;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
 using Yarp.ReverseProxy.Transforms;
 
@@ -46,6 +45,22 @@ class Program
         {
             compose.WithDashboard(enabled: false);
         }
+
+        // ------------------------------------------------------------------
+        // Published compose defaults: restart policy and log rotation.
+        // ------------------------------------------------------------------
+        compose.ConfigureComposeFile(file =>
+        {
+            foreach (var service in file.Services.Values)
+            {
+                service.Restart ??= "unless-stopped";
+                service.Logging ??= new()
+                {
+                    Driver = "json-file",
+                    Options = { ["max-size"] = "10m", ["max-file"] = "3" },
+                };
+            }
+        });
 
         // ------------------------------------------------------------------
         // PostgreSQL: managed local container vs external/remote DB.
@@ -270,6 +285,10 @@ class Program
             "",
             secret: false
         );
+        var resendApiKey = builder.AddParameter("resend-api-key", "", secret: true);
+        var resendFromAddress = builder.AddParameter("resend-from-address", "", secret: false);
+        var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
+        var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
@@ -426,7 +445,11 @@ class Program
                 .WithEnvironment("WHATSAPP_ACCESS_TOKEN", whatsappAccessToken)
                 .WithEnvironment("WHATSAPP_VERIFY_TOKEN", whatsappVerifyToken)
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
-                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
+                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId)
+                .WithEnvironment("RESEND_API_KEY", resendApiKey)
+                .WithEnvironment("RESEND_FROM_ADDRESS", resendFromAddress)
+                .WithEnvironment("RESEND_FROM_NAME", resendFromName)
+                .WithEnvironment("RESEND_WEBHOOK_SECRET", resendWebhookSecret);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
             // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
             // dashboard endpoint automatically; in publish mode the operator-
@@ -531,7 +554,6 @@ class Program
 
         // API needs WEB_URL to POST chat bot alert dispatches to the SvelteKit app
         api.WithEnvironment("WEB_URL", web.GetEndpoint("http"));
-        api.WithEnvironment("SCALAR_CUSTOM_CSS", NocturneScalarTheme.Build(solutionRoot));
 
         var webEndpoints = (IResourceBuilder<IResourceWithEndpoints>)web;
 

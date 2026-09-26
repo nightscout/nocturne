@@ -11,7 +11,8 @@ namespace Nocturne.API.Services.Alerts;
 /// Shared cleanup pathway invoked after an excursion closes (whether via the
 /// orchestrator's per-reading state machine or the sweep service's periodic
 /// tick): stamps <c>resolution_reason</c> on instances, expires their
-/// pending deliveries, and broadcasts <c>alert_resolved</c>.
+/// pending deliveries, deletes members' mutes of the excursion, and broadcasts
+/// <c>alert_resolved</c>.
 /// </summary>
 /// <remarks>
 /// The tracker is the single owner of <see cref="Nocturne.Core.Models.AlertTrackerState"/>
@@ -49,6 +50,8 @@ internal sealed class ExcursionResolutionHandler(
         {
             await repository.ExpirePendingDeliveriesAsync(tenantId, instanceIds, ct);
         }
+
+        await repository.DeleteExcursionMutesAsync(tenantId, excursionId, ct);
 
         try
         {

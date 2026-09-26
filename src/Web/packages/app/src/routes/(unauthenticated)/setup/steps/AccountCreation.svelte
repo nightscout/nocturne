@@ -173,10 +173,9 @@
       class="size-56"
     />
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
-      Create your <em class="not-italic font-light" style="color: var(--onb-teal);">account</em>.
+      Create your <em class="not-italic font-light text-(--onb-teal)">account</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
       Set up the owner account for your Nocturne instance. You will be the
@@ -190,8 +189,7 @@
       <div class="space-y-4">
         <div class="flex flex-col items-center gap-2 text-center">
           <div
-            class="flex h-12 w-12 items-center justify-center rounded-full"
-            style="background: var(--onb-ok); color: var(--onb-navy);"
+            class="flex h-12 w-12 items-center justify-center rounded-full bg-(--onb-ok) text-(--onb-navy)"
           >
             <UserPlus class="h-6 w-6" />
           </div>
@@ -220,7 +218,7 @@
           label="Display name"
           id="display-name"
           required
-          labelClass="text-white/70"
+          labelVariant="muted"
           description="This is how you will appear to others."
         >
           {#snippet control(field)}
@@ -233,7 +231,6 @@
               autofocus
               bind:value={displayName}
               disabled={isRedirecting || isRegistering}
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/25"
             />
           {/snippet}
         </FormField>
@@ -242,7 +239,7 @@
           label="Username"
           id="pk-username"
           required
-          labelClass="text-white/70"
+          labelVariant="muted"
           issues={availability.error}
         >
           {#snippet control(field)}
@@ -257,18 +254,14 @@
               minlength={3}
               bind:value={username}
               disabled={isRedirecting || isRegistering}
-              class="bg-white/5 border-white/10 text-white placeholder:text-white/25 {availability.error
-                ? 'border-red-500/50'
-                : availability.valid
-                  ? 'border-green-500/50'
-                  : ''}"
+              valid={availability.valid && !availability.error}
             />
           {/snippet}
           {#snippet hint()}
             {#if availability.validating}
               <p class="text-xs text-white/40">Checking availability...</p>
             {:else if availability.valid}
-              <p class="flex items-center gap-1.5 text-xs text-green-400">
+              <p class="flex items-center gap-1.5 text-xs text-success">
                 <Check class="h-3 w-3" />
                 Available
               </p>

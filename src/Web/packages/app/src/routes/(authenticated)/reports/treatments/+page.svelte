@@ -2,13 +2,7 @@
   import { page } from "$app/state";
   import { replaceState } from "$app/navigation";
 
-  interface TreatmentSummary {
-    totals?: {
-      insulin?: { bolus?: number; basal?: number; scheduledBasal?: number; additionalBasal?: number };
-      food?: { carbs?: number };
-    };
-    treatmentCount?: number;
-  }
+  import type { TreatmentSummary } from "$lib/api";
   import {
     TreatmentsDataTable,
     TreatmentEditDialog,
@@ -44,7 +38,7 @@
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-    
+
   // Import remote function forms and commands
   import {
     getTreatmentsData,
@@ -75,12 +69,13 @@
   );
   const dateInfo = $derived(reportsResource.date);
 
+  const emptyTreatmentSummary: TreatmentSummary = {
+    totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
+    treatmentCount: 0,
+  };
+
   const treatmentSummary = $derived(
-    reportsResource.current?.treatmentSummary ??
-      ({
-        totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
-        treatmentCount: 0,
-      } as TreatmentSummary)
+    reportsResource.current?.treatmentSummary ?? emptyTreatmentSummary
   );
 
   const counts = $derived(countEntryRecords(allRows));
@@ -89,8 +84,12 @@
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
 
+  function isCategoryFilter(value: string | null): value is EntryCategoryId | "all" {
+    return value === "all" || (value !== null && Object.hasOwn(ENTRY_CATEGORIES, value));
+  }
+
   let activeCategory = $state<EntryCategoryId | "all">(
-    (initialCategory as EntryCategoryId | "all") || "all"
+    isCategoryFilter(initialCategory) ? initialCategory : "all"
   );
   let searchQuery = $state(initialSearch || "");
 
@@ -136,6 +135,7 @@
       // Stale / out-of-range link: drop the param so the URL isn't misleading.
       const url = new URL(page.url);
       url.searchParams.delete(EDIT_PARAM);
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, page.state);
     }
   });
@@ -212,6 +212,7 @@
     const url = new URL(page.url);
     if (value) url.searchParams.set(name, value);
     else url.searchParams.delete(name);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
     replaceState(url, page.state);
   }
 
@@ -252,8 +253,21 @@
     const data = {
       mills: Date.now(),
       utcOffset: -new Date().getTimezoneOffset(),
-    } as EntryRecord["data"];
-    return { kind, data } as EntryRecord;
+    };
+    switch (kind) {
+      case "bolus":
+        return { kind, data };
+      case "carbs":
+        return { kind, data };
+      case "bgCheck":
+        return { kind, data };
+      case "note":
+        return { kind, data };
+      case "deviceEvent":
+        return { kind, data };
+      case "basalInjection":
+        return { kind, data };
+    }
   }
 
   function handleAddTreatment(kind: EntryCategoryId) {
@@ -358,7 +372,7 @@
 {#if reportsResource.current}
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6">
   <!-- Header -->
-  <div class="space-y-2">
+  <div class="space-y-2 print:hidden">
     <div
       class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
     >
@@ -372,13 +386,18 @@
     <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
-      device events.<span class="print:hidden"> Use filters to find specific
-        records.</span>
+      device events. Use filters to find specific records.
     </p>
   </div>
+  {#if hasActiveFilters}
+    <p class="hidden text-sm print:block">
+      Showing {formatNumber(filteredRows.length)} of {formatNumber(allRows.length)} records
+      {#if activeCategory !== "all"}· {ENTRY_CATEGORIES[activeCategory].name}{/if}
+      {#if searchQuery.trim()}· matching "{searchQuery.trim()}"{/if}
+    </p>
+  {/if}
 
-  <!-- Summary Stats -->
-  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
+  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} />
 
   <!-- Category Tabs — view toggle, print chaff -->
   <div class="print:hidden">
@@ -397,7 +416,7 @@
       >
         <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
           <div class="flex-1 max-w-sm">
-            <Label for="search" class="text-sm font-medium">Search</Label>
+            <Label for="search">Search</Label>
             <Input
               id="search"
               type="text"
@@ -426,10 +445,10 @@
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
-              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
-                {@const Icon = addKindIcons[id as EntryCategoryId]}
+              {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+                {@const Icon = addKindIcons[cat.id]}
                 <DropdownMenu.Item
-                  onclick={() => handleAddTreatment(id as EntryCategoryId)}
+                  onclick={() => handleAddTreatment(cat.id)}
                 >
                   <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
                   {cat.name}
@@ -450,26 +469,22 @@
           </span>
 
           {#if activeCategory !== "all"}
-            <Badge variant="secondary" class="gap-1">
+            <Badge
+              variant="secondary"
+              onremove={() => setCategory("all")}
+              removeLabel="Clear category filter"
+            >
               {ENTRY_CATEGORIES[activeCategory].name}
-              <button
-                onclick={() => setCategory("all")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
 
           {#if searchQuery.trim()}
-            <Badge variant="outline" class="gap-1">
+            <Badge
+              variant="outline"
+              onremove={() => setSearch("")}
+              removeLabel="Clear search"
+            >
               "{searchQuery}"
-              <button
-                onclick={() => setSearch("")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
         </div>
@@ -492,7 +507,7 @@
   </Card.Root>
 
   <!-- Footer -->
-  <div class="text-center text-xs text-muted-foreground">
+  <div class="text-center text-xs text-muted-foreground print:hidden">
     <p>
       Report generated from {formatNumber(allRows.length)} records between
       {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
@@ -569,7 +584,7 @@
                 isLoading = false;
               }
             })}
-          style="flex: 1;"
+          class="flex-1"
         >
           <input
             type="hidden"
@@ -618,7 +633,7 @@
           <Alert.Title>Selected Records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
-              {#each rowsToDelete.slice(0, 5) as row}
+              {#each rowsToDelete.slice(0, 5) as row (`${row.kind}-${row.data.id}`)}
                 <div
                   class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
                 >

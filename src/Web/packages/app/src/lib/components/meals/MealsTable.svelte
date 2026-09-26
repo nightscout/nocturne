@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { MealSortColumn } from "./meal-sort";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -12,7 +13,6 @@
     X,
   } from "lucide-svelte";
   import type { MealEvent, TreatmentFood, SuggestedMealMatch } from "$lib/api";
-  import { cn } from "$lib/utils";
   import SortableColumnHeader from "./SortableColumnHeader.svelte";
   import MealSuggestionRow from "./MealSuggestionRow.svelte";
   import CarbBreakdownBar from "$lib/components/treatments/CarbBreakdownBar.svelte";
@@ -28,7 +28,7 @@
 
   interface Props {
     mealsByDay: MealsByDay[];
-    sortColumn: string;
+    sortColumn: MealSortColumn;
     sortDirection: "asc" | "desc";
     expandedRows: Set<string>;
     collapsedDates: Set<string>;
@@ -36,7 +36,7 @@
     filteredAndSortedMealsCount: number;
     mealsCount: number;
     suggestionsByCarbIntake: Map<string, SuggestedMealMatch[]>;
-    onSort: (column: string) => void;
+    onSort: (column: MealSortColumn) => void;
     onToggleRow: (id: string) => void;
     onToggleDate: (date: string) => void;
     onAddFood: (meal: MealEvent) => void;
@@ -146,7 +146,7 @@
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {#each mealsByDay as day}
+          {#each mealsByDay as day (day.date)}
             {@const isDateCollapsed = collapsedDates.has(day.date)}
             {@const dayTotalCarbs = day.meals.reduce(
               (sum, m) => sum + (m.totalCarbs ?? 0),
@@ -158,7 +158,8 @@
             )}
             <!-- Day separator row -->
             <Table.Row
-              class="bg-muted/50 hover:bg-muted/60 cursor-pointer transition-colors"
+              variant="group"
+              class="cursor-pointer"
               onclick={() => onToggleDate(day.date)}
             >
               <Table.Cell class="py-2">
@@ -206,18 +207,15 @@
 
                 <!-- Main meal row -->
                 <Table.Row
-                  class={cn(
-                    "transition-colors cursor-pointer",
-                    isExpanded && "bg-accent/30"
-                  )}
+                  class="cursor-pointer"
+                  data-state={isExpanded ? "open" : "closed"}
                   onclick={() => onAddFood(meal)}
                 >
                   <Table.Cell class="py-3">
                     {#if hasFoods}
                       <Button
                         variant="ghost"
-                        size="icon"
-                        class="h-6 w-6"
+                        size="icon-xs"
                         onclick={(e: MouseEvent) => {
                           e.stopPropagation();
                           onToggleRow(meal.carbIntakes?.[0]?.id ?? "");
@@ -265,6 +263,7 @@
                     </div>
                   </Table.Cell>
                   <Table.Cell class="py-3 text-right">
+                    <!-- eslint-disable-next-line no-restricted-syntax -- clickable value inside a table cell -->
                     <button
                       type="button"
                       class="cursor-pointer hover:opacity-80 transition-opacity"
@@ -295,6 +294,7 @@
 
                 <!-- Suggested matches row (only for unattributed meals with suggestions) -->
                 {#if !meal.isAttributed && mealSuggestions.length > 0}
+                  <!-- eslint-disable-next-line shadcn/no-restyle -- the only row that asks for a decision; the primary rule sets the suggestion apart from the meal it would attribute -->
                   <Table.Row class="bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary">
                     <Table.Cell colspan={7} class="py-2 px-4">
                       <div class="space-y-2">
@@ -313,7 +313,7 @@
 
                 <!-- Expanded details row (only shown when there are foods) -->
                 {#if isExpanded && hasFoods}
-                  <Table.Row class="bg-accent/20 hover:bg-accent/20">
+                  <Table.Row variant="detail">
                     <Table.Cell colspan={7} class="py-4">
                       <div class="space-y-4 px-4">
                         <!-- Food details -->
@@ -324,8 +324,9 @@
                           <div
                             class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3"
                           >
-                            {#each meal.foods ?? [] as food}
+                            {#each meal.foods ?? [] as food (food.id)}
                               <div class="rounded-lg border bg-card p-3 text-sm transition-colors group relative hover:bg-accent/50">
+                                <!-- eslint-disable-next-line no-restricted-syntax -- table row region -->
                                 <button
                                   type="button"
                                   onclick={() => onEditFood(meal, food)}
@@ -339,17 +340,19 @@
                                     class="text-muted-foreground"
                                   />
                                 </button>
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="ghost-destructive"
+                                  size="icon-2xs"
+                                  reveal
+                                  class="absolute top-2 right-2"
                                   onclick={(e) => {
                                     e.stopPropagation();
                                     onUnlinkFood(meal, food);
                                   }}
-                                  class="absolute top-2 right-2 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
                                   title="Unlink food"
                                 >
-                                  <X class="h-3.5 w-3.5" />
-                                </button>
+                                  <X />
+                                </Button>
                               </div>
                             {/each}
                           </div>

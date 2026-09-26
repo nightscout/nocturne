@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
   import WidgetCard from "./WidgetCard.svelte";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -18,9 +19,7 @@
   // Calculate daily stats from today's entries
   const dailyStats = $derived.by(() => {
     const now = realtimeStore.now;
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const startOfDayMs = startOfDay.getTime();
+    const startOfDayMs = timeDay.floor(new Date(now)).getTime();
 
     const todayEntries = realtimeStore.entries.filter(
       (e) => (e.mills || 0) >= startOfDayMs
@@ -73,8 +72,8 @@
 
   const cvStatus = $derived.by(() => {
     if (!dailyStats) return { text: "—", color: "text-muted-foreground" };
-    if (dailyStats.cv < 33) return { text: "Stable", color: "text-green-400" };
-    if (dailyStats.cv > 50) return { text: "Variable", color: "text-yellow-400" };
+    if (dailyStats.cv < 33) return { text: "Stable", color: "text-success" };
+    if (dailyStats.cv > 50) return { text: "Variable", color: "text-warning" };
     return { text: "Moderate", color: "text-muted-foreground" };
   });
 </script>
@@ -91,7 +90,7 @@
           <span class="text-xs text-muted-foreground ml-1">{unitLabel} avg</span>
         </div>
         <div class="text-right">
-          <span class="text-lg font-semibold" style="color: var(--glucose-in-range);">
+          <span class="text-lg font-semibold text-glucose-in-range">
             {dailyStats.tir.toFixed(0)}%
           </span>
           <span class="text-xs text-muted-foreground ml-1">TIR</span>

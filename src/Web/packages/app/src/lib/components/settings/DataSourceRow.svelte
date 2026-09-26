@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item, type ItemVariant } from "$lib/components/ui/item";
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
     CheckCircle,
@@ -13,7 +14,11 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import type { SyncProgressEvent } from "$lib/websocket/types";
-  import { formatNumber, formatNumericDate, lastSeen as formatAge } from "$lib/utils/formatting";
+  import {
+    formatNumber,
+    formatNumericDate,
+    lastSeen as formatAge,
+  } from "$lib/utils/formatting";
 
   export type DataSourceStatus =
     | "active"
@@ -33,10 +38,11 @@
     status: DataSourceStatus;
     statusMessage?: string;
     totalEntries?: number;
+    totalCoversLast30Days?: boolean;
     entriesLast24h?: number;
-    lastSeen?: Date;
-    lastSyncAttempt?: Date;
-    lastSuccessfulSync?: Date;
+    lastSeen?: string;
+    lastSyncAttempt?: string;
+    lastSuccessfulSync?: string;
     totalBreakdown?: Record<string, number>;
     last24hBreakdown?: Record<string, number>;
     syncProgress?: Pick<
@@ -55,6 +61,7 @@
     status,
     statusMessage,
     totalEntries,
+    totalCoversLast30Days = false,
     entriesLast24h,
     lastSeen,
     lastSyncAttempt,
@@ -76,29 +83,29 @@
       case "active":
       case "syncing":
         return {
-          bg: "bg-green-100 dark:bg-green-900/30",
-          text: "text-green-600 dark:text-green-400",
+          bg: "bg-success/10",
+          text: "text-success",
         };
       case "demo":
         return {
-          bg: "bg-purple-100 dark:bg-purple-900/30",
-          text: "text-purple-600 dark:text-purple-400",
+          bg: "bg-demo/10",
+          text: "text-demo",
         };
       case "configured":
         return {
-          bg: "bg-blue-100 dark:bg-blue-900/30",
-          text: "text-blue-600 dark:text-blue-400",
+          bg: "bg-info/10",
+          text: "text-info",
         };
       case "stale":
       case "backing-off":
         return {
-          bg: "bg-yellow-100 dark:bg-yellow-900/30",
-          text: "text-yellow-600 dark:text-yellow-400",
+          bg: "bg-warning/10",
+          text: "text-warning",
         };
       case "error":
         return {
-          bg: "bg-red-100 dark:bg-red-900/30",
-          text: "text-red-600 dark:text-red-400",
+          bg: "bg-destructive/10",
+          text: "text-destructive",
         };
       case "disabled":
       case "offline":
@@ -111,22 +118,21 @@
     }
   }
 
-  function getBorderClass(s: DataSourceStatus): string {
+  function getItemVariant(s: DataSourceStatus): ItemVariant {
     switch (s) {
       case "active":
       case "syncing":
-        return "border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20";
+        return "success";
       case "demo":
-        return "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20";
+        return "demo";
       case "error":
-        return "border-red-300 dark:border-red-700 bg-red-50/50 dark:bg-red-950/20";
+        return "destructive";
       default:
-        return "";
+        return "outline";
     }
   }
 
-
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Never";
     const d = new Date(date);
     const now = new Date();
@@ -140,21 +146,56 @@
       return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
     if (diffHours < 24)
       return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
-    if (diffDays < 7)
-      return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
 
     return formatNumericDate(d);
   }
 
   const iconColors = $derived(getIconColors(status));
-  const borderClass = $derived(getBorderClass(status));
+  const itemVariant = $derived(getItemVariant(status));
+  const totalRecordsLabel = $derived(
+    totalCoversLast30Days
+      ? `${formatNumber(totalEntries)} records in the last 30 days`
+      : `${formatNumber(totalEntries)} records`
+  );
 </script>
 
+<!-- The row is the button, so the breakdown triggers are hover-only spans; the details dialog it opens lists the same breakdown. -->
+{#snippet breakdownTerm(
+  label: string,
+  heading: string,
+  breakdown: Record<string, number>
+)}
+  <Tooltip.Root>
+    <Tooltip.Trigger variant="term">
+      {#snippet child({
+        props: { tabindex: _tabindex, ...props },
+      }: {
+        props: Record<string, unknown>;
+      })}
+        <span {...props}>{label}</span>
+      {/snippet}
+    </Tooltip.Trigger>
+    <Tooltip.Content variant="popover" class="z-50 overflow-hidden">
+      <div class="space-y-1">
+        <div class="font-medium text-xs text-muted-foreground mb-1">
+          {heading}
+        </div>
+        {#each Object.entries(breakdown) as [type, count] (type)}
+          <div class="flex justify-between gap-4 text-xs">
+            <span>{getDataTypeLabel(type)}</span>
+            <span class="font-mono">
+              {formatNumber(count)}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </Tooltip.Content>
+  </Tooltip.Root>
+{/snippet}
+
 <div class="relative">
-  <button
-    class="w-full flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors text-left {borderClass}"
-    {onclick}
-  >
+  <Item variant={itemVariant} size="lg" class="justify-between" {onclick}>
     <div class="flex items-center gap-4 min-w-0 flex-1">
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {iconColors.bg}"
@@ -170,75 +211,57 @@
 
           <!-- Status badge -->
           {#if syncProgress?.phase === "Syncing" || status === "syncing"}
-            <Badge
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
-            >
+            <Badge variant="info">
               <Loader2 class="h-3 w-3 mr-1 animate-spin" />
               Syncing
             </Badge>
           {:else if syncProgress?.phase === "Completed"}
-            <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-            >
+            <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Sync Complete
             </Badge>
           {:else if syncProgress?.phase === "Failed"}
-            <Badge variant="destructive" class="text-xs">
+            <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
               Sync Failed
             </Badge>
           {:else if status === "backing-off"}
-            <Badge
-              variant="secondary"
-              class="bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-100 text-xs"
-            >
+            <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
               Backing Off
             </Badge>
           {:else if status === "error"}
-            <Badge variant="destructive" class="text-xs">
+            <Badge variant="destructive">
               <AlertCircle class="h-3 w-3 mr-1" />
               Error
             </Badge>
           {:else if status === "configured"}
-            <Badge
-              variant="secondary"
-              class="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 text-xs"
-            >
+            <Badge variant="info">
               <Clock class="h-3 w-3 mr-1" />
               Configured
             </Badge>
           {:else if status === "active"}
-            <Badge
-              class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-            >
+            <Badge variant="success">
               <CheckCircle class="h-3 w-3 mr-1" />
               Active
             </Badge>
           {:else if status === "stale"}
-            <Badge
-              variant="secondary"
-              class="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100 text-xs"
-            >
+            <Badge variant="warning">
               <Clock class="h-3 w-3 mr-1" />
               Stale
             </Badge>
           {:else if status === "disabled"}
-            <Badge
-              variant="secondary"
-              class="bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100 text-xs"
-            >
+            <Badge variant="secondary">
               <WifiOff class="h-3 w-3 mr-1" />
               Disabled
             </Badge>
           {:else if status === "offline"}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               <WifiOff class="h-3 w-3 mr-1" />
               Offline
             </Badge>
           {:else if status === "inactive"}
-            <Badge variant="outline" class="text-xs">
+            <Badge variant="outline">
               <AlertCircle class="h-3 w-3 mr-1" />
               Inactive
             </Badge>
@@ -251,108 +274,57 @@
         </div>
 
         <!-- Metrics line -->
-        {#if (syncProgress?.phase === "Syncing") && syncProgress.messageType}
-        <p class="text-sm text-blue-600 dark:text-blue-400">
-          {formatSyncMessage(syncProgress.messageType, syncProgress.messageParams)}
-        </p>
+        {#if syncProgress?.phase === "Syncing" && syncProgress.messageType}
+          <p class="text-sm text-info">
+            {formatSyncMessage(
+              syncProgress.messageType,
+              syncProgress.messageParams
+            )}
+          </p>
         {:else}
-        <p class="text-sm text-muted-foreground">
-          {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
-            <Tooltip.Root>
-              <Tooltip.Trigger>
-                <span
-                  class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                >
-                  {formatNumber(totalEntries)} records
-                </span>
-              </Tooltip.Trigger>
-              <Tooltip.Portal>
-                <Tooltip.Content
-                  class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-                >
-                  <div class="space-y-1">
-                    <div class="font-medium text-xs text-muted-foreground mb-1">
-                      Breakdown by type:
-                    </div>
-                    {#each Object.entries(totalBreakdown) as [type, count]}
-                      <div class="flex justify-between gap-4 text-xs">
-                        <span>{getDataTypeLabel(type)}</span>
-                        <span class="font-mono">
-                          {formatNumber(count)}
-                        </span>
-                      </div>
-                    {/each}
-                  </div>
-                </Tooltip.Content>
-              </Tooltip.Portal>
-            </Tooltip.Root>
-          {:else}
-            {formatNumber(totalEntries)} records
-          {/if}
-
-          {#if (entriesLast24h ?? 0) > 0}
-            <span class="mx-1">&middot;</span>
-            {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
-              <Tooltip.Root>
-                <Tooltip.Trigger>
-                  <span
-                    class="cursor-help underline decoration-dotted decoration-muted-foreground/50"
-                  >
-                    {formatNumber(entriesLast24h)} in 24h
-                  </span>
-                </Tooltip.Trigger>
-                <Tooltip.Portal>
-                  <Tooltip.Content
-                    class="z-50 overflow-hidden rounded-md bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md"
-                  >
-                    <div class="space-y-1">
-                      <div
-                        class="font-medium text-xs text-muted-foreground mb-1"
-                      >
-                        Last 24h by type:
-                      </div>
-                      {#each Object.entries(last24hBreakdown) as [type, count]}
-                        <div class="flex justify-between gap-4 text-xs">
-                          <span>{getDataTypeLabel(type)}</span>
-                          <span class="font-mono">
-                            {formatNumber(count)}
-                          </span>
-                        </div>
-                      {/each}
-                    </div>
-                  </Tooltip.Content>
-                </Tooltip.Portal>
-              </Tooltip.Root>
+          <p class="text-sm text-muted-foreground">
+            {#if totalBreakdown && Object.keys(totalBreakdown).length > 0}
+              {@render breakdownTerm(
+                totalRecordsLabel,
+                "Breakdown by type:",
+                totalBreakdown
+              )}
             {:else}
-              {formatNumber(entriesLast24h)} in 24h
+              {totalRecordsLabel}
             {/if}
-          {/if}
 
-          <span class="mx-1">&middot;</span>
-          <Clock class="inline h-3 w-3" />
-          {formatAge(lastSuccessfulSync ?? lastSeen)}
-        </p>
+            {#if (entriesLast24h ?? 0) > 0}
+              <span class="mx-1">&middot;</span>
+              {#if last24hBreakdown && Object.keys(last24hBreakdown).length > 0}
+                {@render breakdownTerm(
+                  `${formatNumber(entriesLast24h)} in 24h`,
+                  "Last 24h by type:",
+                  last24hBreakdown
+                )}
+              {:else}
+                {formatNumber(entriesLast24h)} in 24h
+              {/if}
+            {/if}
+
+            <span class="mx-1">&middot;</span>
+            <Clock class="inline h-3 w-3" />
+            {formatAge(lastSuccessfulSync ?? lastSeen)}
+          </p>
         {/if}
 
         <!-- Error detail -->
         {#if status === "error" && statusMessage}
           <div
-            class="mt-2 rounded-md bg-red-50 dark:bg-red-950/30 p-2 border border-red-200 dark:border-red-800"
+            class="mt-2 rounded-md bg-destructive/10 p-2 border border-destructive/30"
           >
             <div class="flex items-start gap-2">
-              <AlertCircle
-                class="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5"
-              />
+              <AlertCircle class="h-4 w-4 text-destructive shrink-0 mt-0.5" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium text-red-800 dark:text-red-200">
-                  Error
-                </p>
-                <p class="text-xs text-red-700 dark:text-red-300 mt-1">
+                <p class="text-sm font-medium text-destructive">Error</p>
+                <p class="text-xs text-destructive mt-1">
                   {statusMessage}
                 </p>
-                <p
-                  class="text-xs text-red-600/80 dark:text-red-400/80 mt-1"
-                >
+                <p class="text-xs text-destructive/80 mt-1">
                   {#if lastSyncAttempt}
                     Last attempted: {formatRelativeTime(lastSyncAttempt)}
                   {/if}
@@ -374,7 +346,7 @@
         <!-- Default: no trailing content -->
       </div>
     {/if}
-  </button>
+  </Item>
 
   <!-- Actions rendered outside the button for proper event handling -->
   {#if actions}

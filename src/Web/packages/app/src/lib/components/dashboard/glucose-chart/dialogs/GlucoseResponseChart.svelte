@@ -104,21 +104,21 @@
         <Rule
           y={highThreshold}
           class="stroke-glucose-high/40"
-          stroke-dasharray="4,4"
+          dashArray="4,4"
         />
 
         <!-- Low threshold line -->
         <Rule
           y={lowThreshold}
           class="stroke-glucose-very-low/40"
-          stroke-dasharray="4,4"
+          dashArray="4,4"
         />
 
         <!-- Center time vertical rule -->
         <Rule
           x={centerTime}
           class="stroke-muted-foreground/60"
-          stroke-dasharray="6,3"
+          dashArray="6,3"
         />
 
         <!-- Center time label -->
@@ -128,7 +128,7 @@
             y={context.yScale(yDomain[1]) - 4}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-muted-foreground"
+            class="text-2xs fill-muted-foreground"
           >
             {label}
           </text>
@@ -163,7 +163,7 @@
               x={(d: { time: Date; sgv: number }) => d.time}
               y="sgv"
               curve={curveMonotoneX}
-              class="stroke-purple-400/60 stroke-1 fill-none"
+              class="stroke-pred-main/60 stroke-1 fill-none"
               stroke-dasharray="4,2"
             />
           {/if}
@@ -176,7 +176,7 @@
             y={context.yScale(peakPoint.sgv) - 10}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(peakPoint.sgv)}
           </text>
@@ -189,7 +189,7 @@
             y={context.yScale(nadirPoint.sgv) + 14}
             dy="-0.355em"
             text-anchor="middle"
-            class="text-[9px] fill-foreground font-medium"
+            class="text-2xs fill-foreground font-medium"
           >
             {bg(nadirPoint.sgv)}
           </text>
@@ -199,8 +199,8 @@
         <Axis
           placement="left"
           ticks={4}
-          format={(v) => String(bg(v as number))}
-          tickLabelProps={{ class: "text-[10px] fill-muted-foreground" }}
+          format={(v) => String(bg(Number(v)))}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
 
         <!-- Bottom X-axis with time labels -->
@@ -211,7 +211,7 @@
             v instanceof Date
               ? time(v)
               : String(v)}
-          tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+          tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
         />
       </Svg>
     {/snippet}

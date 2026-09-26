@@ -23,9 +23,11 @@ function make_provider(
 	};
 }
 
+const NO_PROVIDERS: OidcProviderResponse[] = [];
+
 function default_props(overrides: Record<string, unknown> = {}) {
 	return {
-		providers: [] as OidcProviderResponse[],
+		providers: NO_PROVIDERS,
 		configManaged: false,
 		loading: false,
 		error: null,

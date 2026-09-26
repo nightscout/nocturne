@@ -226,8 +226,6 @@ const strings = {
 			caseSensitive: 'Case Sensitive',
 			goToPrevious: 'Go to Previous',
 			goToNext: 'Go to Next',
-			previous: 'Previous',
-			next: 'Next',
 			replacePlaceholder: 'Replace...',
 			replace: 'Replace',
 			replaceAll: 'Replace All'

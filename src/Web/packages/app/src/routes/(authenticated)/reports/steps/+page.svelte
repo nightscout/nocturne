@@ -6,7 +6,8 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Footprints, TrendingUp, Calendar } from "lucide-svelte";
+  import { Footprints } from "lucide-svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,
     extentOf,
@@ -16,7 +17,7 @@
   import { MS_PER_HOUR } from "$lib/components/actogram/actogram";
   import { useActogramReport } from "$lib/hooks/actogram-report.svelte";
   import { toDayString } from "$lib/utils/date-range";
-  
+
   const VISIBLE_DAYS = 14;
 
   const report = useActogramReport("Error Loading Step Count Report");
@@ -64,67 +65,22 @@
 </svelte:head>
 
 <div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
-  <!-- Header -->
-  <div>
+  <div class="print:hidden">
     <h1 class="text-2xl @md:text-3xl font-bold">Step Count</h1>
     <p class="text-muted-foreground">
       Daily step patterns with glucose overlay
     </p>
   </div>
 
-  <!-- Summary Cards -->
-  <div class="grid grid-cols-1 @sm:grid-cols-3 gap-4">
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
-          Total Steps
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <Footprints class="h-5 w-5 text-primary" />
-          <span class="text-2xl font-bold tabular-nums">
-            {formatNumber(totalSteps)}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
+  <FigureStrip
+    figures={[
+      { label: "Total steps", value: formatNumber(totalSteps), unit: "steps" },
+      { label: "Daily average", value: formatNumber(dailyAverage), unit: "steps/day" },
+      { label: "Period", value: String(dayCount), unit: "days" },
+    ]}
+  />
 
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
-          Daily Average
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <TrendingUp class="h-5 w-5 text-primary" />
-          <span class="text-2xl font-bold tabular-nums">
-            {formatNumber(dailyAverage)}
-          </span>
-          <span class="text-sm text-muted-foreground">steps/day</span>
-        </div>
-      </CardContent>
-    </Card>
-
-    <Card>
-      <CardHeader class="pb-2">
-        <CardTitle class="text-sm font-medium text-muted-foreground">
-          Period
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div class="flex items-center gap-2">
-          <Calendar class="h-5 w-5 text-muted-foreground" />
-          <span class="text-2xl font-bold tabular-nums">{dayCount}</span>
-          <span class="text-sm text-muted-foreground">days</span>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
-
-  <!-- Actogram -->
-  <Card>
+  <Card class="print:break-inside-auto!">
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
         <Footprints class="h-5 w-5 text-muted-foreground" />
@@ -139,6 +95,8 @@
         thresholds={actogramResource.current?.thresholds}
         rowHeight={64}
         visibleCount={VISIBLE_DAYS}
+        printCount={report.rangeDayCount}
+        legend={[{ texture: "steps", label: "Steps" }]}
       >
         {#snippet rowLabel({ day })}
           <div class="text-right pr-2">
@@ -149,13 +107,13 @@
           </div>
         {/snippet}
         {#snippet tooltipValue({ point })}
-          {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+          {@const steps = typeof point.steps === "number" ? point.steps : 0}
           <span class="text-muted-foreground">Steps</span>
-          <span class="ml-auto font-mono font-medium tabular-nums">{formatNumber(steps)}</span>
+          <span class="ml-auto font-medium tabular-nums">{formatNumber(steps)}</span>
         {/snippet}
         {#snippet row(ctx: ActogramRowContext)}
-          {#each ctx.data as { point, hoursFromStart, isExtended }}
-            {@const steps = (point as { mills: number; steps: number }).steps ?? 0}
+          {#each ctx.data as { point, hoursFromStart, isExtended }, i (i)}
+            {@const steps = typeof point.steps === "number" ? point.steps : 0}
             {@const barHeight = (steps / barScale) * ctx.height}
             {@const x = ctx.xScale(new Date(ctx.day.getTime() + hoursFromStart * MS_PER_HOUR))}
             <rect

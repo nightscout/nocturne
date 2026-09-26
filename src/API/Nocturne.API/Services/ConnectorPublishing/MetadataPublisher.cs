@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Identity;
@@ -23,7 +25,7 @@ namespace Nocturne.API.Services.ConnectorPublishing;
 /// connectors into the Nocturne domain via the appropriate service and repository interfaces.
 /// </summary>
 /// <seealso cref="IMetadataPublisher"/>
-internal sealed class MetadataPublisher : IMetadataPublisher
+internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPublisher
 {
     private readonly IProfileWriteService _profileWriteService;
     private readonly IFoodService _foodService;
@@ -38,7 +40,6 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     private readonly ITenantOwnerResolver _tenantOwnerResolver;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly NocturneDbContext _db;
-    private readonly ILogger<MetadataPublisher> _logger;
 
     public MetadataPublisher(
         IProfileWriteService profileWriteService,
@@ -54,7 +55,10 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         ITenantOwnerResolver tenantOwnerResolver,
         ITenantAccessor tenantAccessor,
         NocturneDbContext db,
+        IAuditContext auditContext,
+        PublishSkipTally skips,
         ILogger<MetadataPublisher> logger)
+        : base(auditContext, skips, logger)
     {
         _profileWriteService = profileWriteService ?? throw new ArgumentNullException(nameof(profileWriteService));
         _foodService = foodService ?? throw new ArgumentNullException(nameof(foodService));
@@ -69,7 +73,6 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         _tenantOwnerResolver = tenantOwnerResolver ?? throw new ArgumentNullException(nameof(tenantOwnerResolver));
         _tenantAccessor = tenantAccessor ?? throw new ArgumentNullException(nameof(tenantAccessor));
         _db = db ?? throw new ArgumentNullException(nameof(db));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
@@ -82,7 +85,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
     {
         if (!_tenantAccessor.IsResolved)
         {
-            _logger.LogWarning(
+            Logger.LogWarning(
                 "No tenant resolved while publishing for {Source}; cannot attribute its notifications",
                 source);
             return null;
@@ -93,7 +96,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
 
         if (subjectId == null)
         {
-            _logger.LogWarning(
+            Logger.LogWarning(
                 "Tenant {TenantId} has no owner; {Source} food entries will import without match suggestions",
                 _tenantAccessor.TenantId,
                 source);
@@ -115,7 +118,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish profiles for {Source}", source);
+            Logger.LogError(ex, "Failed to publish profiles for {Source}", source);
             return false;
         }
     }
@@ -133,7 +136,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish food for {Source}", source);
+            Logger.LogError(ex, "Failed to publish food for {Source}", source);
             return false;
         }
     }
@@ -153,7 +156,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
+            Logger.LogError(ex, "Failed to publish connector food entries for {Source}", source);
             return null;
         }
     }
@@ -178,7 +181,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to reconcile connector food entries for {Source}", source);
+            Logger.LogError(ex, "Failed to reconcile connector food entries for {Source}", source);
             return null;
         }
     }
@@ -202,7 +205,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish activities for {Source}", source);
+            Logger.LogError(ex, "Failed to publish activities for {Source}", source);
             return false;
         }
     }
@@ -234,7 +237,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish state spans for {Source}", source);
+            Logger.LogError(ex, "Failed to publish state spans for {Source}", source);
             return false;
         }
     }
@@ -252,32 +255,16 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish system events for {Source}", source);
+            Logger.LogError(ex, "Failed to publish system events for {Source}", source);
             return false;
         }
     }
 
-    public async Task<bool> PublishNotesAsync(
+    public Task<bool> PublishNotesAsync(
         IEnumerable<Note> records,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var recordList = records.ToList();
-            if (recordList.Count == 0) return true;
-
-            await _noteRepository.BulkCreateAsync(recordList, origin, cancellationToken);
-            _logger.LogDebug("Published {Count} Note records for {Source}", recordList.Count, source);
-            return true;
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish Note records for {Source}", source);
-            return false;
-        }
-    }
+        => PublishAsync(records, _noteRepository, source, origin, cancellationToken);
 
     public async Task<bool> PublishBodyWeightsAsync(
         IEnumerable<BodyWeight> records,
@@ -305,13 +292,13 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             if (toCreate.Count > 0)
                 await _bodyWeightService.CreateBodyWeightsAsync(toCreate, cancellationToken);
 
-            _logger.LogDebug("Published {Count} BodyWeight records for {Source}", list.Count, source);
+            Logger.LogDebug("Published {Count} BodyWeight records for {Source}", list.Count, source);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish BodyWeight records for {Source}", source);
+            Logger.LogError(ex, "Failed to publish BodyWeight records for {Source}", source);
             return false;
         }
     }
@@ -341,13 +328,13 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             if (toCreate.Count > 0)
                 await _stepCountService.CreateStepCountsAsync(toCreate, cancellationToken);
 
-            _logger.LogDebug("Published {Count} StepCount records for {Source}", list.Count, source);
+            Logger.LogDebug("Published {Count} StepCount records for {Source}", list.Count, source);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish StepCount records for {Source}", source);
+            Logger.LogError(ex, "Failed to publish StepCount records for {Source}", source);
             return false;
         }
     }
@@ -377,13 +364,13 @@ internal sealed class MetadataPublisher : IMetadataPublisher
             if (toCreate.Count > 0)
                 await _heartRateService.CreateHeartRatesAsync(toCreate, cancellationToken);
 
-            _logger.LogDebug("Published {Count} HeartRate records for {Source}", list.Count, source);
+            Logger.LogDebug("Published {Count} HeartRate records for {Source}", list.Count, source);
             return true;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to publish HeartRate records for {Source}", source);
+            Logger.LogError(ex, "Failed to publish HeartRate records for {Source}", source);
             return false;
         }
     }
@@ -428,7 +415,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         var config = await FindConnectorConfigurationAsync(source, cancellationToken);
         if (config is null)
         {
-            _logger.LogWarning(
+            Logger.LogWarning(
                 "No connector configuration found for {Source}; cannot persist backfill low-water mark",
                 source);
             return;
@@ -490,9 +477,10 @@ internal sealed class MetadataPublisher : IMetadataPublisher
         CancellationToken cancellationToken)
     {
         const string suffix = "-connector";
-        var name = source.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
-            ? source[..^suffix.Length]
-            : source;
+        var canonicalSource = ConnectorNames.Canonical(source);
+        var canonicalName = canonicalSource.EndsWith(suffix, StringComparison.Ordinal)
+            ? canonicalSource[..^suffix.Length]
+            : canonicalSource;
 
         var query = _db.Database.IsNpgsql()
             ? _db.ConnectorConfigurations.AsNoTracking()
@@ -500,8 +488,7 @@ internal sealed class MetadataPublisher : IMetadataPublisher
 
         return await query
             .FirstOrDefaultAsync(
-                c => c.ConnectorName.ToLower() == name.ToLower()
-                    || c.ConnectorName.ToLower() == source.ToLower(),
+                c => c.ConnectorName == canonicalName || c.ConnectorName == canonicalSource,
                 cancellationToken);
     }
 }

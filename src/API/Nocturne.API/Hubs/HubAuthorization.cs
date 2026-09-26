@@ -64,11 +64,17 @@ public enum HubCredentialKind
 /// refuses a non-<see cref="HubCredentialKind.Subject"/> credential a subject group whatever it
 /// carries here.
 /// </param>
+/// <param name="HistoryClamped">
+/// Whether the credential may read only the last 24 hours: its own limit combined with its
+/// membership's by <see cref="MemberScopeResolver.IsHistoryClamped"/>. Required rather than defaulted,
+/// so a construction site cannot leave a limited credential reading full history by omission.
+/// </param>
 public sealed record HubAuthorization(
     Guid TenantId,
     IReadOnlySet<string> Scopes,
     HubCredentialKind Kind,
-    Guid? SubjectId)
+    Guid? SubjectId,
+    bool HistoryClamped)
 {
     /// <summary>Whether the credential satisfies <paramref name="scope"/>.</summary>
     public bool Satisfies(string scope) => Scope.Satisfies(Scopes, scope);
@@ -132,16 +138,17 @@ public sealed record HubAuthorization(
 public sealed class HubAuthenticationMethodAttribute : Attribute;
 
 /// <summary>
-/// The OAuth scope a hub method requires, enforced by <see cref="HubAuthorizationFilter"/> against
-/// the connection's <see cref="HubAuthorization.Scopes"/>. A method without it still requires an
-/// authorized connection; declare a scope on any method that reads or changes tenant data.
+/// The OAuth scopes a hub method accepts, enforced by <see cref="HubAuthorizationFilter"/> against
+/// the connection's <see cref="HubAuthorization.Scopes"/>: any one of them admits the call, as
+/// with <c>RequireScope</c> over HTTP. A method without it still requires an authorized
+/// connection; declare a scope on any method that reads or changes tenant data.
 /// </summary>
-/// <param name="scope">The required scope, from <see cref="Scope"/>.</param>
+/// <param name="scopes">The accepted scopes, from <see cref="Scope"/>.</param>
 [AttributeUsage(AttributeTargets.Method)]
-public sealed class HubScopeAttribute(string scope) : Attribute
+public sealed class HubScopeAttribute(params string[] scopes) : Attribute
 {
-    /// <summary>The required scope.</summary>
-    public string Scope { get; } = scope;
+    /// <summary>The accepted scopes; the call needs one of them.</summary>
+    public IReadOnlyList<string> Scopes { get; } = scopes;
 }
 
 /// <summary>
@@ -174,10 +181,21 @@ public static class HubAuthorizationState
     /// Records the result of a successful in-band authentication on the connection. Only an
     /// authentication method that has verified a credential may call this.
     /// </summary>
+    /// <remarks>
+    /// A clamped credential clamps the handshake request's services, which is the scope every hub
+    /// method reads tenant data through. An in-band credential never passed
+    /// <see cref="Middleware.MemberScopeMiddleware"/>, so without this its reads would run unclamped.
+    /// The clamp is applied before the credential is recorded, so a clamp that throws leaves the
+    /// connection unauthorized rather than authorized and unclamped. It lives only on the handshake
+    /// scope, so a hub method must read tenant data through that scope and not through
+    /// <see cref="HubInvocationContext.ServiceProvider"/>.
+    /// </remarks>
     /// <param name="context">The connection to record the credential on.</param>
     /// <param name="authorization">The verified credential.</param>
     public static HubAuthorization Grant(HubCallerContext context, HubAuthorization authorization)
     {
+        if (authorization.HistoryClamped)
+            context.GetHttpContext()?.ClampMemberHistory();
         context.Items[ItemKey] = authorization;
         return authorization;
     }
@@ -200,27 +218,44 @@ public static class HubAuthorizationState
             return granted;
         }
 
-        var httpContext = context.GetHttpContext();
-
-        // GetAuthContext() reads Items["AuthContext"] as Core.Models.Authorization.AuthContext —
-        // the type AuthenticationMiddleware actually stores there.
-        if (httpContext?.GetAuthContext() is not { IsAuthenticated: true } authContext)
-        {
-            return null;
-        }
-
-        if (httpContext.Items[TenantAwareHub.TenantContextKey] is not TenantContext tenantContext)
-        {
-            return null;
-        }
-
         // Scopes come from the handshake, which is where membership and token scopes were resolved;
         // they cannot change for the life of the connection.
-        return Grant(context, new HubAuthorization(
+        return context.GetHttpContext() is { } httpContext && FromRequest(httpContext) is { } authorization
+            ? Grant(context, authorization)
+            : null;
+    }
+
+    /// <summary>
+    /// The credential an HTTP request authenticated, or null when it proved none.
+    /// </summary>
+    /// <remarks>
+    /// The one reading of a request's credential for realtime admission. The hub applies it to its
+    /// upgrade handshake and <see cref="Controllers.V4.Identity.RealtimeAdmissionController"/> to
+    /// the request the socket.io bridge admits a browser on, so both keep the same credentials out
+    /// of the tenant-wide groups. An anonymous public share resolves with
+    /// <c>IsAuthenticated: false</c> and so proves none.
+    /// </remarks>
+    /// <param name="httpContext">A request that has passed authentication and tenant resolution.</param>
+    public static HubAuthorization? FromRequest(HttpContext httpContext)
+    {
+        // GetAuthContext() reads Items["AuthContext"] as Core.Models.Authorization.AuthContext —
+        // the type AuthenticationMiddleware actually stores there.
+        if (httpContext.GetAuthContext() is not { IsAuthenticated: true } authContext)
+        {
+            return null;
+        }
+
+        if (httpContext.GetTenantContext() is not { } tenantContext)
+        {
+            return null;
+        }
+
+        return new HubAuthorization(
             tenantContext.TenantId,
             httpContext.GetGrantedScopes(),
             HubAuthorization.Classify(authContext.AuthType),
-            authContext.SubjectId));
+            authContext.SubjectId,
+            authContext.LimitTo24Hours);
     }
 }
 
@@ -250,10 +285,11 @@ public sealed class HubAuthorizationFilter : IHubFilter
             var authorization = HubAuthorizationState.Resolve(invocationContext.Context)
                 ?? throw new HubException($"{method.Name} requires an authorized connection.");
 
-            var requiredScope = method.GetCustomAttribute<HubScopeAttribute>()?.Scope;
-            if (requiredScope is not null && !authorization.Satisfies(requiredScope))
+            var acceptedScopes = method.GetCustomAttribute<HubScopeAttribute>()?.Scopes;
+            if (acceptedScopes is not null && !acceptedScopes.Any(authorization.Satisfies))
             {
-                throw new HubException($"{method.Name} requires the {requiredScope} scope.");
+                throw new HubException(
+                    $"{method.Name} requires the {string.Join(" or ", acceptedScopes)} scope.");
             }
 
             if (method.GetCustomAttribute<HubTenantGroupAttribute>() is not null

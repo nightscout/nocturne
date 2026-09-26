@@ -110,7 +110,7 @@
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
     {#key chartKey}
-      <div class="h-full" style="width: {chartWidthPercent}%;">
+      <div class="h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
         <BarChart
           data={chartData}
           orientation="horizontal"

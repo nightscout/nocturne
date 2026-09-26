@@ -27,7 +27,10 @@ function parse(points: string): [number, number][] {
   return points
     .trim()
     .split(/\s+/)
-    .map((pair) => pair.split(",").map(Number) as [number, number]);
+    .map((pair): [number, number] => {
+      const [x = NaN, y = NaN] = pair.split(",").map(Number);
+      return [x, y];
+    });
 }
 
 describe("marker shapes", () => {

@@ -42,17 +42,12 @@
 
 {#if timeUntilExpiry > 0 && timeUntilExpiry < 300}
   <div
-    class="fixed bottom-4 right-4 z-50 max-w-sm animate-in slide-in-from-bottom-4"
+    class="fixed print:hidden bottom-4 right-4 z-50 max-w-sm animate-in slide-in-from-bottom-4"
   >
-    <Alert.Root
-      variant="default"
-      class="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/50"
-    >
-      <Clock class="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-      <Alert.Title class="text-yellow-800 dark:text-yellow-200">
-        Session Expiring
-      </Alert.Title>
-      <Alert.Description class="text-yellow-700 dark:text-yellow-300">
+    <Alert.Root variant="warning">
+      <Clock class="h-4 w-4" />
+      <Alert.Title>Session Expiring</Alert.Title>
+      <Alert.Description>
         Your session will expire in {formatSessionExpiry(timeUntilExpiry)}.
         Click refresh to extend your session.
       </Alert.Description>
@@ -64,7 +59,12 @@
           {isRefreshing ? "Refreshing..." : "Refresh Session"}
         </Button>
         {#if onDismiss}
-          <Button size="sm" variant="ghost" onclick={onDismiss}>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="Dismiss"
+            onclick={onDismiss}
+          >
             <X class="h-3 w-3" />
           </Button>
         {/if}

@@ -1,298 +1,156 @@
 <script lang="ts">
     import { Artwork } from "@nocturne/watercolour";
-    import {
-        ArrowRight,
-        Play,
-        Check,
-        Activity,
-        FileText,
-        Plug,
-        Server,
-        Shield,
-        Users,
-    } from "@lucide/svelte";
+    import { ArrowRight, Play } from "@lucide/svelte";
     import { Button } from "@nocturne/ui/ui/button";
-        import ReportsDemo from "$lib/components/features/ReportsDemo.svelte";
-    import ConnectorsDemo from "$lib/components/features/ConnectorsDemo.svelte";
-    import AlarmsDemo from "$lib/components/features/AlarmsDemo.svelte";
-    import AuthDemo from "$lib/components/features/AuthDemo.svelte";
-    import { PILLARS } from "$lib/data/pillars";
+    import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
     import { DATA_SOURCES } from "$lib/data/connectors";
     import { AVAILABLE_REPORT_COUNT } from "$lib/data/reports";
 
-    type SupportingCard = {
-        title: string;
-        copy: string;
-        icon: typeof Server;
-        color: string;
-    };
-
-    const SUPPORTING: SupportingCard[] = [
+    const SUPPORTING = [
         {
             title: "Your server, your data",
             copy: "Self-hosted with Docker Compose, Portainer, or Helm. No cloud middleman and no third-party analytics. Your health data never leaves your infrastructure.",
-            icon: Server,
-            color: "oklch(0.577 0.245 27.325)",
         },
         {
             title: "One install, many people",
-            copy: "Run a household, a clinic, or a community on a single deployment. Each tenant lives in its own database schema, behind its own subdomain.",
-            icon: Users,
-            color: "oklch(0.65 0.18 270)",
+            copy: "Run a household, a clinic, or a community on a single deployment. Each tenant gets its own subdomain, and row-level security in the database keeps one tenant's data out of another's.",
         },
         {
             title: "Real-time updates",
             copy: "New readings reach every open dashboard and follower the moment they are written, over WebSockets rather than polling.",
-            icon: Activity,
-            color: "oklch(0.769 0.188 70)",
         },
         {
             title: "Drop-in Nightscout",
             copy: "Speaks the Nightscout v1, v2, and v3 APIs. xDrip+, Loop, AndroidAPS, Trio, and watch faces keep working after you switch.",
-            icon: Plug,
-            color: "oklch(0.72 0.16 150)",
         },
         {
             title: "Built for years of data",
             copy: "PostgreSQL underneath, with the reports written to query years of readings. Jumping to a date from years ago stays quick.",
-            icon: FileText,
-            color: "oklch(0.6 0.118 184.704)",
         },
         {
             title: "Free and open source",
             copy: "AGPL-3.0 licensed, so you can read it, fork it, and self-host it for nothing. Stewarded by the Nightscout Foundation.",
-            icon: Shield,
-            color: "oklch(0.488 0.243 264.376)",
+        },
+    ];
+
+    const COMPARISON = [
+        {
+            aspect: "Who it serves",
+            nightscout: "One instance per person",
+            nocturne: "One install for a household, a clinic, or a community",
+        },
+        {
+            aspect: "Getting data in",
+            nightscout: "Uploader apps or bridge plugins you configure",
+            nocturne: `Sign in to ${DATA_SOURCES.length} sources from the dashboard; uploaders still work`,
+        },
+        {
+            aspect: "Alarms",
+            nightscout: "High and low thresholds, with a snooze",
+            nocturne: "Rules with thresholds, durations, and trends, delivered anywhere",
+        },
+        {
+            aspect: "Access",
+            nightscout: "One shared API secret for every app and follower",
+            nocturne: "Passkeys and social sign-in, with a scoped token per app",
+        },
+        {
+            aspect: "Reports",
+            nightscout: "A fixed set of report pages",
+            nocturne: `${AVAILABLE_REPORT_COUNT} reports, with your own target range drawn on them`,
         },
     ];
 </script>
 
-<div class="max-w-[1200px] mx-auto px-6 overflow-x-clip">
-
-    <!-- Hero -->
-    <div class="pt-20 pb-16 border-b border-border relative overflow-hidden">
-        <div class="aurora-subtle absolute inset-0 pointer-events-none" aria-hidden="true"></div>
-        <!-- The copy caps at 900px, so on a wide screen the paint takes the
-             rest of the band rather than shrinking into a well. -->
-        <Artwork
-            artwork="heart-rate"
-            palette="ember"
-            motion="auto"
-            autoplay="once"
-            position="absolute"
-            class="pointer-events-none -right-12 top-10 hidden size-[380px] opacity-90 lg:block xl:size-[440px]"
-        />
-        <div class="relative flex flex-col gap-6 max-w-[900px]">
-            <div class="flex items-center gap-3 text-[17px] font-semibold uppercase tracking-[0.02em] text-glucose-in-range">
-                <span class="size-2.5 rounded-full bg-glucose-in-range eyebrow-dot"></span>
-                Everything Nocturne does
-            </div>
-            <h1 class="text-[clamp(2.4rem,5.5vw,4.5rem)] font-bold leading-[1.04] tracking-[-0.025em] text-foreground m-0">
-                Big features.<br/>
-                <em class="not-italic text-glucose-in-range font-semibold">Plain English.</em>
-            </h1>
-            <p class="text-[1.1rem] leading-[1.6] text-muted-foreground m-0 max-w-[680px]">
-                Nocturne is a free, open-source diabetes dashboard you run on your own
-                server. It connects to your CGM, pump, and apps; shows your numbers
-                the way you want; and tells you the moment something needs attention.
-            </p>
-            <div class="flex flex-wrap gap-3 mt-2">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base">
-                    Get started <ArrowRight class="size-4" />
-                </Button>
-                <Button href="/demo" variant="outline" size="lg" class="gap-2 text-base">
-                    <Play class="size-4" /> See a real day
-                </Button>
-            </div>
+<div class="relative max-w-[1200px] mx-auto px-6 overflow-x-clip">
+    <!-- The copy caps at 900px, so on a wide screen the paint takes the
+         rest of the band rather than shrinking into a well. -->
+    <Artwork
+        artwork="heart-rate"
+        palette="ember"
+        motion="auto"
+        autoplay="once"
+        position="absolute"
+        class="pointer-events-none -right-12 top-10 hidden size-[380px] opacity-90 lg:block xl:size-[440px]"
+    />
+    <div class="pt-20 pb-16 flex flex-col gap-6 max-w-[900px]">
+        <h1 class="text-display font-bold text-foreground m-0">Everything Nocturne does</h1>
+        <p class="text-lead text-muted-foreground m-0 max-w-[680px]">
+            Nocturne is a free, open-source diabetes dashboard you run on your own
+            server. It connects to your CGM, pump, and apps; shows your numbers
+            the way you want; and tells you the moment something needs attention.
+        </p>
+        <div class="flex flex-wrap gap-3 mt-2">
+            <Button href="/docs/installation" size="cta">
+                Get started <ArrowRight class="size-4" />
+            </Button>
+            <Button href="/demo" variant="outline" size="cta">
+                <Play class="size-4" /> See a real day
+            </Button>
         </div>
     </div>
+</div>
 
-    <!-- The four headline features, alternating layout -->
-    {#each PILLARS as p, i (p.n)}
-        {@const flip = i % 2 === 1}
-        <section class="py-20 border-t border-border grid gap-16 items-center
-                        {flip ? 'md:grid-cols-[1.05fr_1fr]' : 'md:grid-cols-[1fr_1.05fr]'}">
+<FeaturePillars demoHeight={440} standalone={false} />
 
-            <!-- Text -->
-            <div class="flex flex-col gap-5 min-w-0 {flip ? 'md:order-2' : 'md:order-1'}">
-                <!-- Eyebrow -->
-                <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase"
-                     style:color={p.color}>
-                    <span class="font-mono text-[14px] px-2.5 py-0.5 rounded-full border border-current leading-6">
-                        {String(p.n).padStart(2, '0')}
-                    </span>
-                    <span class="size-2.5 rounded-full shrink-0 eyebrow-dot" style:background={p.color} style:--dot-color={p.color}></span>
-                    <span>{p.eyebrow}</span>
-                </div>
-
-                <!-- Heading -->
-                <h2 class="text-[clamp(2rem,3.8vw,3.25rem)] font-bold leading-[1.06] tracking-[-0.025em] text-foreground m-0">
-                    {p.title}<br/>
-                    <em class="not-italic font-semibold" style:color={p.color}>{p.accent}</em>
-                </h2>
-
-                <!-- Body -->
-                <p class="text-[1.0625rem] leading-[1.6] text-muted-foreground m-0 max-w-[520px]">{p.body}</p>
-
-                <!-- Bullets -->
-                <ul class="m-0 mt-2 p-0 list-none flex flex-col gap-3.5">
-                    {#each p.bullets as b (b)}
-                        <li class="flex items-start gap-3.5 text-[1rem] text-foreground/85">
-                            <span class="shrink-0 size-[26px] rounded-full border-[1.5px] grid place-items-center mt-0.5"
-                                  style:border-color={p.color}>
-                                <Check class="size-3.5" style="color: {p.color}" />
-                            </span>
-                            {b}
-                        </li>
-                    {/each}
-                </ul>
-            </div>
-
-            <!-- Demo -->
-            <div class="relative min-w-0 {flip ? 'md:order-1' : 'md:order-2'}">
-                <div class="absolute -inset-10 rounded-3xl pointer-events-none"
-                     style="background: radial-gradient(60% 60% at 50% 50%, color-mix(in oklch, {p.color}, transparent 80%), transparent 70%); filter: blur(24px);"
-                     aria-hidden="true"></div>
-                <div class="relative">
-                    {#if p.n === 1}
-                        <ReportsDemo height={440} />
-                    {:else if p.n === 2}
-                        <ConnectorsDemo height={440} />
-                    {:else if p.n === 3}
-                        <AlarmsDemo height={560} />
-                    {:else}
-                        <AuthDemo height={440} />
-                    {/if}
-                </div>
-            </div>
-        </section>
-    {/each}
-
-    <!-- Supporting: security, multitenant, developer -->
-    <section class="py-20 border-t border-border">
-        <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-muted-foreground mb-4">
-            <span class="size-2.5 rounded-full bg-muted-foreground/40 shrink-0"></span>
-            Also inside
-        </div>
-        <h2 class="text-[clamp(1.6rem,3.2vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.025em] text-foreground m-0 mb-10">
-            The unglamorous stuff <em class="text-glucose-in-range">still matters.</em>
-        </h2>
-
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {#each SUPPORTING as card (card.title)}
-                <div class="p-7 rounded-2xl border border-border/60 bg-card/50 backdrop-blur-sm flex flex-col gap-3.5">
-                    <div class="size-[52px] rounded-xl grid place-items-center overflow-hidden"
-                         style:background="color-mix(in oklch, {card.color}, transparent 85%)"
-                         style:border="1px solid color-mix(in oklch, {card.color}, transparent 60%)">
-                        <card.icon class="size-6" color={card.color} />
-                    </div>
-                    <h3 class="text-[1.15rem] font-bold text-foreground m-0 leading-[1.25]">{card.title}</h3>
-                    <p class="text-[0.9375rem] leading-[1.6] text-muted-foreground m-0">{card.copy}</p>
+<div class="max-w-[1200px] mx-auto px-6">
+    <section class="py-20 border-t border-border grid gap-10 md:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] md:gap-16">
+        <h2 class="text-section font-bold text-foreground m-0">Also inside</h2>
+        <dl class="m-0 border-t border-border">
+            {#each SUPPORTING as item (item.title)}
+                <div class="grid gap-2 py-6 border-b border-border sm:grid-cols-[13rem_1fr] sm:gap-8">
+                    <dt class="font-semibold text-foreground">{item.title}</dt>
+                    <dd class="m-0 leading-relaxed text-muted-foreground">{item.copy}</dd>
                 </div>
             {/each}
-        </div>
+        </dl>
     </section>
 
-    <!-- Compare: plain-English before/after -->
     <section class="py-20 border-t border-border">
-        <div class="flex items-center gap-3 text-[17px] font-semibold tracking-[0.02em] uppercase text-glucose-in-range mb-4">
-            <span class="size-2.5 rounded-full bg-glucose-in-range shrink-0"></span>
-            What changes
-        </div>
-        <h2 class="text-[clamp(1.6rem,3.2vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.025em] text-foreground m-0 mb-10">
-            The same data. <em class="text-glucose-in-range">A new home for it.</em>
-        </h2>
+        <h2 class="text-section font-bold text-foreground m-0 mb-4">Coming from Nightscout</h2>
+        <p class="text-lead text-muted-foreground m-0 mb-10 max-w-[640px]">
+            The same data, and the same API your apps already speak. What changes
+            is everything around it.
+        </p>
 
-        <div class="rounded-2xl overflow-hidden border border-border grid md:grid-cols-2">
-            <!-- Old -->
-            <div class="p-8 md:p-10 bg-[oklch(0.10_0.025_261)] flex flex-col gap-5">
-                <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-muted-foreground font-bold">
-                    The old way
-                </div>
-                <h3 class="text-[1.5rem] font-bold text-muted-foreground m-0">Nightscout</h3>
-                {#each [
-                    "One instance per person",
-                    "Readings arrive through uploader apps or bridge plugins you configure",
-                    "Alarms are high and low thresholds, with a snooze",
-                    "One shared API secret for every app and follower",
-                    "A fixed set of report pages",
-                ] as line (line)}
-                    <div class="flex items-center gap-3 text-[1rem] text-muted-foreground/70">
-                        <span class="size-5 rounded-full bg-white/[0.06] grid place-items-center shrink-0
-                                     font-mono text-[13px] text-muted-foreground/50">&middot;</span>
-                        {line}
-                    </div>
-                {/each}
-            </div>
-
-            <!-- New -->
-            <div class="p-8 md:p-10 bg-gradient-to-b from-[oklch(0.16_0.03_261)] to-background flex flex-col gap-5 border-t md:border-t-0 md:border-l border-border relative overflow-hidden">
-                <div class="absolute -top-5 -right-5 size-40 rounded-full pointer-events-none"
-                     style="background: radial-gradient(circle, oklch(0.6 0.118 184.704 / 18%), transparent 60%)"
-                     aria-hidden="true"></div>
-                <div class="font-mono text-[13px] tracking-[0.08em] uppercase text-glucose-in-range font-bold relative">
-                    Nocturne
-                </div>
-                <h3 class="text-[1.5rem] font-bold text-foreground m-0 relative">Nocturne</h3>
-                {#each [
-                    "One install for a household, a clinic, or a community",
-                    `Sign in to ${DATA_SOURCES.length} sources from the dashboard; uploaders still work`,
-                    "Rules with thresholds, durations, and trends, delivered anywhere",
-                    "Passkeys and social sign-in, with a scoped token per app",
-                    `${AVAILABLE_REPORT_COUNT} reports, with your own target range drawn on them`,
-                ] as line (line)}
-                    <div class="flex items-center gap-3 text-[1rem] text-foreground/90 font-medium relative">
-                        <span class="size-5 rounded-full bg-glucose-in-range/[0.18] border border-glucose-in-range/40
-                                     grid place-items-center shrink-0">
-                            <Check class="size-3 text-glucose-tight-range" />
-                        </span>
-                        {line}
-                    </div>
-                {/each}
-            </div>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[640px] border-collapse text-left">
+                <thead>
+                    <tr class="border-b border-border">
+                        <th scope="col" class="w-[22%] py-3 pr-6"><span class="sr-only">Aspect</span></th>
+                        <th scope="col" class="w-[39%] py-3 pr-6 font-semibold text-muted-foreground">Nightscout</th>
+                        <th scope="col" class="w-[39%] py-3 font-semibold text-foreground">Nocturne</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each COMPARISON as row (row.aspect)}
+                        <tr class="border-b border-border align-top">
+                            <th scope="row" class="py-5 pr-6 font-medium text-foreground">{row.aspect}</th>
+                            <td class="py-5 pr-6 text-muted-foreground">{row.nightscout}</td>
+                            <td class="py-5 text-foreground/90">{row.nocturne}</td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
         </div>
     </section>
 
-    <!-- CTA -->
-    <section class="border-t border-border py-20 relative overflow-hidden">
-        <div class="aurora-subtle absolute inset-0 pointer-events-none" aria-hidden="true"></div>
-        <div class="relative max-w-[680px]">
-            <h2 class="text-[clamp(2rem,4vw,3.5rem)] font-bold leading-[1.06] tracking-[-0.025em] text-foreground m-0 mb-4">
-                Ready to take a look?<br/>
-                <em class="not-italic text-glucose-in-range font-semibold">Start with the demo.</em>
-            </h2>
-            <p class="text-[1.0625rem] leading-[1.6] text-muted-foreground m-0 mb-8">
-                Poke around the demo, then run your own copy with Docker Compose.
-                No account, no credit card, no waitlist.
-            </p>
-            <div class="flex flex-wrap gap-3">
-                <Button href="/docs/installation" size="lg" class="gap-2 text-base">
-                    Installation guide <ArrowRight class="size-4" />
-                </Button>
-                <Button href="/demo" variant="outline" size="lg" class="gap-2 text-base">
-                    <Play class="size-4" /> See the demo
-                </Button>
-                <Button href="/docs" variant="ghost" size="lg" class="text-base">
-                    Read the docs
-                </Button>
-            </div>
+    <section class="border-t border-border py-20 max-w-[680px]">
+        <h2 class="text-headline font-bold text-foreground m-0 mb-4">Start with the demo</h2>
+        <p class="text-lead text-muted-foreground m-0 mb-8">
+            Poke around the demo, then run your own copy with Docker Compose.
+            No account, no credit card, no waitlist.
+        </p>
+        <div class="flex flex-wrap gap-3">
+            <Button href="/docs/installation" size="cta">
+                Installation guide <ArrowRight class="size-4" />
+            </Button>
+            <Button href="/demo" variant="outline" size="cta">
+                <Play class="size-4" /> See the demo
+            </Button>
+            <Button href="/docs" variant="ghost" size="cta">
+                Read the docs
+            </Button>
         </div>
     </section>
 </div>
-
-<style>
-    .aurora-subtle {
-        background:
-            radial-gradient(50% 40% at 80% 10%, oklch(0.5 0.18 264 / 18%) 0%, transparent 70%),
-            radial-gradient(40% 30% at 10% 100%, oklch(0.72 0.16 150 / 12%) 0%, transparent 70%);
-    }
-
-    @keyframes eyebrow-pulse {
-        0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 80%); }
-        50%       { box-shadow: 0 0 0 7px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 92%); }
-    }
-    .eyebrow-dot {
-        box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot-color, var(--glucose-in-range)), transparent 80%);
-        animation: eyebrow-pulse 2.4s ease-in-out infinite;
-    }
-</style>

@@ -4,16 +4,18 @@
   import { getSingleNightByDate } from "$api/generated/sleepReports.generated.remote";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
-  import { ArrowLeft, Gauge, Bed, Percent, Activity } from "lucide-svelte";
+  import { ArrowLeft } from "lucide-svelte";
+  import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import Hypnogram from "$lib/components/reports/sleep/single-night/Hypnogram.svelte";
   import StageCompositionCard from "$lib/components/reports/sleep/single-night/StageCompositionCard.svelte";
   import DawnPhenomenonCard from "$lib/components/reports/sleep/single-night/DawnPhenomenonCard.svelte";
   import BiometricsCard from "$lib/components/reports/sleep/single-night/BiometricsCard.svelte";
+  import OvernightLowsCard from "$lib/components/reports/sleep/single-night/OvernightLowsCard.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import { bg, bgLabel, formatLocale, time, toDate } from "$lib/utils/formatting";
-  
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+
   const date = $derived(page.params.date ?? "");
 
   const nightResource = contextResource(() => getSingleNightByDate(date), {
@@ -25,15 +27,13 @@
   const startTime = $derived(toDate(session?.startTime));
   const endTime = $derived(toDate(session?.endTime));
 
-  const dateDisplay = $derived(
+  const formatNightDate = (options: Intl.DateTimeFormatOptions) =>
     startTime
-      ? new Intl.DateTimeFormat(formatLocale(), {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        }).format(startTime)
-      : ""
-  );
+      ? new Intl.DateTimeFormat(formatLocale(), { weekday: "long", month: "long", day: "numeric", ...options }).format(startTime)
+      : "";
+  const dateDisplay = $derived(formatNightDate({}));
+  // Paper is read away from the app's own date context, so its period names the year.
+  const printedDate = $derived(formatNightDate({ year: "numeric" }));
 
   const durationLabel = $derived(
     startTime && endTime
@@ -46,14 +46,13 @@
     return session.sourceDevice ? `${session.source} · ${session.sourceDevice}` : session.source;
   });
 
-  const subtitle = $derived.by(() => {
-    if (!startTime || !endTime) return "";
-    const parts = [`${time(startTime)} – ${time(endTime)}`, durationLabel];
-    if (sourceLabel) parts.push(sourceLabel);
-    return parts.join(" · ");
-  });
+  const timeSpan = $derived(startTime && endTime ? `${time(startTime)} – ${time(endTime)}` : "");
+  const subtitleDetail = $derived([durationLabel, sourceLabel].filter(Boolean).join(" · "));
 
-  // ---- Tile row -----------------------------------------------------------
+  setReportPrintMeta(() => ({
+    title: "Sleep Night Report",
+    period: printedDate && timeSpan ? { label: `${printedDate}, ${timeSpan}` } : undefined,
+  }));
 
   const scoreBadgeLabel = $derived(report?.scoreSource === "Device" ? "Device" : "Estimated");
 
@@ -63,7 +62,20 @@
     return Math.max(0, (b.totalMinutes ?? 0) - (b.awakeMinutes ?? 0));
   });
 
-  // ---- TIR strip ------------------------------------------------------------
+  // Overnight TIR is left to the stacked chart below, which already labels every band.
+  const figures = $derived.by((): Figure[] => {
+    const list: Figure[] = [];
+    if (report?.score != null) {
+      list.push({ label: "Sleep score", value: Math.round(report.score).toString(), note: scoreBadgeLabel });
+    }
+    if (timeAsleepMinutes != null) {
+      list.push({ label: "Time asleep", value: formatMinutesDuration(timeAsleepMinutes) });
+    }
+    if (session?.efficiency != null) {
+      list.push({ label: "Efficiency", value: Math.round(session.efficiency).toString(), unit: "%" });
+    }
+    return list;
+  });
 
   const tirPercentages = $derived.by(() => {
     const tir = report?.overnightTir;
@@ -84,90 +96,27 @@
 
 {#if report && session}
   <div class="@container container mx-auto max-w-7xl space-y-6 p-3 @md:p-6">
-    <!-- Header -->
     <div>
       <a
         href={resolve("/(authenticated)/reports/sleep")}
-        class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground print:hidden"
       >
         <ArrowLeft class="h-4 w-4" />
         Sleep & Overnight
       </a>
-      <h1 class="mt-2 text-2xl font-bold @md:text-3xl">{dateDisplay}</h1>
-      {#if subtitle}
-        <p class="text-muted-foreground tabular-nums">{subtitle}</p>
+      <h1 class="mt-2 text-2xl font-bold @md:text-3xl print:hidden">{dateDisplay}</h1>
+      {#if timeSpan}
+        <!-- The printed header's period already carries the time span. -->
+        <p class="text-muted-foreground tabular-nums">
+          <span class="print:hidden">{timeSpan} · </span>{subtitleDetail}
+        </p>
       {/if}
     </div>
 
+    {#if figures.length > 0}
+      <FigureStrip {figures} />
+    {/if}
 
-    <!-- Tile row -->
-    <div class="grid grid-cols-2 gap-4 @lg:grid-cols-4">
-      {#if report.score != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Sleep Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Gauge class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">{Math.round(report.score)}</span>
-              <Badge variant="outline" class="ml-auto text-xs">{scoreBadgeLabel}</Badge>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if timeAsleepMinutes != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Time Asleep</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Bed class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">
-                {formatMinutesDuration(timeAsleepMinutes)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if report.overnightTir}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Overnight TIR</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Percent class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">
-                {Math.round(report.overnightTir.inRangePct ?? 0)}%
-              </span>
-            </div>
-            <p class="mt-1 text-xs text-muted-foreground tabular-nums">
-              Mean {bg(report.overnightTir.meanBg ?? 0)} {bgLabel()}
-            </p>
-          </CardContent>
-        </Card>
-      {/if}
-
-      {#if session.efficiency != null}
-        <Card>
-          <CardHeader class="pb-2">
-            <CardTitle class="text-sm font-medium text-muted-foreground">Efficiency</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div class="flex items-center gap-2">
-              <Activity class="h-5 w-5 text-muted-foreground" />
-              <span class="text-2xl font-bold tabular-nums">{Math.round(session.efficiency)}%</span>
-            </div>
-          </CardContent>
-        </Card>
-      {/if}
-    </div>
-
-    <!-- Hypnogram -->
     {#if startTime && endTime}
       <Card>
         <CardHeader>
@@ -184,9 +133,7 @@
       </Card>
     {/if}
 
-    <!-- Overnight TIR / stage composition / pre-wake / biometrics, paired 2×2 -->
     <div class="grid gap-6 @lg:grid-cols-2">
-      <!-- TIR strip -->
       <Card class="@container">
         <CardHeader>
           <CardTitle>Overnight Time in Range</CardTitle>
@@ -205,15 +152,16 @@
         </CardContent>
       </Card>
 
-      <!-- Stage composition -->
+      {#if tirPercentages}
+        <OvernightLowsCard lows={report.hypoEvents ?? []} />
+      {/if}
+
       <StageCompositionCard breakdown={report.stageBreakdown} />
 
-      <!-- Dawn phenomenon -->
       {#if report.dawnPhenomenon}
         <DawnPhenomenonCard dawnPhenomenon={report.dawnPhenomenon} />
       {/if}
 
-      <!-- Biometrics -->
       <BiometricsCard
         avgHeartRate={session.avgHeartRate}
         minHeartRate={session.minHeartRate}

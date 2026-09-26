@@ -79,16 +79,17 @@
     <div class="flex items-center gap-2">
       <Button
         variant="link"
-        class="h-auto p-0 text-sm font-semibold truncate"
+        size="inline"
+        class="min-w-0"
         onclick={onEdit}
       >
-        {rule.name ?? "(unnamed)"}
+        <span class="truncate">{rule.name ?? "(unnamed)"}</span>
       </Button>
       {#if !rule.isEnabled}
-        <Badge variant="secondary" class="text-[10px]">Disabled</Badge>
+        <Badge variant="secondary" size="sm">Disabled</Badge>
       {/if}
       {#if rule.managedBy}
-        <Badge variant="secondary" class="text-[10px]">Managed by tracker</Badge>
+        <Badge variant="secondary" size="sm">Managed by tracker</Badge>
       {/if}
     </div>
     <div class="truncate text-xs text-muted-foreground" title={chip}>
@@ -138,8 +139,7 @@
             {...props}
             type="button"
             variant="ghost"
-            size="icon"
-            class="h-8 w-8"
+            size="icon-sm"
             aria-label="Row actions"
           >
             <MoreHorizontal class="h-4 w-4" />
@@ -177,7 +177,7 @@
             {#snippet trigger(props)}
               <DropdownMenu.Item
                 {...props}
-                class="text-destructive"
+                variant="destructive"
                 onSelect={(e: Event) => e.preventDefault()}
               >
                 <Trash2 class="h-4 w-4 mr-2" /> Delete

@@ -56,7 +56,7 @@ public class MyTenantsControllerTests
         _overviewService.Verify(
             s => s.GetOverviewAsync(
                 It.IsAny<Guid>(), It.IsAny<IReadOnlySet<string>>(), It.IsAny<AuthType>(),
-                It.IsAny<CancellationToken>()),
+                It.IsAny<bool>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

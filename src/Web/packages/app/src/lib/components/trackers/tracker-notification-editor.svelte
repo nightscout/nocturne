@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -32,21 +33,21 @@
     label: string;
     color: string;
   }[] = [
-    { value: NotificationUrgency.Info, label: "Info", color: "text-blue-500" },
+    { value: NotificationUrgency.Info, label: "Info", color: "text-severity-info" },
     {
       value: NotificationUrgency.Warn,
       label: "Warning",
-      color: "text-yellow-500",
+      color: "text-severity-warn",
     },
     {
       value: NotificationUrgency.Hazard,
       label: "Hazard",
-      color: "text-orange-500",
+      color: "text-severity-hazard",
     },
     {
       value: NotificationUrgency.Urgent,
       label: "Urgent",
-      color: "text-red-500",
+      color: "text-severity-urgent",
     },
   ];
 
@@ -67,10 +68,10 @@
     notifications = notifications.filter((_, i) => i !== index);
   }
 
-  function updateNotification(
+  function updateNotification<K extends keyof TrackerNotification>(
     index: number,
-    field: keyof TrackerNotification,
-    value: any
+    field: K,
+    value: TrackerNotification[K]
   ) {
     notifications = notifications.map((n, i) =>
       i === index ? { ...n, [field]: value } : n
@@ -80,7 +81,7 @@
 
 <div class={cn("space-y-3", className)}>
   <div class="flex items-center justify-between">
-    <Label class="text-sm font-medium">Notification Thresholds</Label>
+    <Label>Notification Thresholds</Label>
     <Button
       variant="outline"
       size="sm"
@@ -104,23 +105,27 @@
     </div>
   {:else}
     <div class="space-y-3">
+      <!-- eslint-disable-next-line svelte/require-each-key -- each notification is replaced on every edit and new ones have no id, so neither the object nor an id identifies a row -->
       {#each notifications as notification, i}
         {@const config = getUrgencyConfig(notification.urgency)}
         <div class="flex gap-2 items-start p-3 border rounded-lg bg-muted/30">
           <div class="flex-shrink-0 w-28">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               Level
             </Label>
             <Select.Root
               type="single"
               value={notification.urgency}
-              onValueChange={(v) => updateNotification(i, "urgency", v)}
+              onValueChange={(v) => {
+                const urgency = enumValue(NotificationUrgency, v);
+                if (urgency) updateNotification(i, "urgency", urgency);
+              }}
             >
               <Select.Trigger class="w-full">
                 <span class={config.color}>{config.label}</span>
               </Select.Trigger>
               <Select.Content>
-                {#each urgencyOptions as option}
+                {#each urgencyOptions as option (option.value)}
                   <Select.Item value={option.value}>
                     <span class={option.color}>{option.label}</span>
                   </Select.Item>
@@ -130,7 +135,7 @@
           </div>
 
           <div class="flex-shrink-0 w-36">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               {mode === "Event" ? "Hours" : "After (hours)"}
             </Label>
             <DurationInput
@@ -143,7 +148,7 @@
           </div>
 
           <div class="flex-1 min-w-0">
-            <Label class="text-xs text-muted-foreground mb-1 block">
+            <Label size="sm" variant="muted" class="mb-1 block">
               Description (optional)
             </Label>
             <Input
@@ -159,9 +164,7 @@
                  would discard the tracker edits made so far. -->
             {#if notification.alertRuleId}
               <Button
-                variant="ghost"
-                size="sm"
-                class="h-9 text-muted-foreground"
+                variant="ghost-muted"
                 href="/alerts/{notification.alertRuleId}"
                 target="_blank"
                 rel="noopener"
@@ -172,10 +175,9 @@
               </Button>
             {/if}
             <Button
-              variant="ghost"
+              variant="ghost-destructive"
               size="icon"
               type="button"
-              class="h-9 w-9 text-muted-foreground hover:text-destructive"
               onclick={() => removeNotification(i)}
             >
               <Trash2 class="h-4 w-4" />

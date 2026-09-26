@@ -282,13 +282,15 @@
             >{"{slug}"}.{transitionStatus?.baseDomain}</code
           >.
         </span>
-        <button
+        <Button
+          variant="ghost-muted"
+          size="icon-xs"
+          class="shrink-0"
           onclick={dismissNotice}
-          class="shrink-0 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100"
           aria-label="Dismiss"
         >
           <X class="h-4 w-4" />
-        </button>
+        </Button>
       </Alert.Description>
     </Alert.Root>
   {/if}
@@ -373,7 +375,7 @@
                   {member.name ?? "Unnamed user"}
                 </p>
                 {#if member.isPlatformAdmin}
-                  <Badge variant="default" class="mt-1 text-xs">
+                  <Badge variant="default" class="mt-1">
                     <ShieldCheck class="mr-1 h-3 w-3" />
                     Platform admin
                   </Badge>
@@ -461,18 +463,16 @@
           id="new-slug"
           bind:value={slug}
           placeholder="my-instance"
-          class="font-mono {slugError
-            ? 'border-destructive'
-            : slugValid
-              ? 'border-green-500'
-              : ''}"
+          aria-invalid={!!slugError}
+          valid={slugValid && !slugError}
+          class="font-mono"
         />
         {#if validating}
           <p class="text-xs text-muted-foreground">Checking availability...</p>
         {:else if slugError}
           <p class="text-xs text-destructive">{slugError}</p>
         {:else if slugValid}
-          <p class="text-xs text-green-600">Available</p>
+          <p class="text-xs text-success">Available</p>
         {/if}
       </div>
 

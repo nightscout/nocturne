@@ -23,7 +23,6 @@ public class SensorGlucoseControllerTests
     private readonly Mock<ICanonicalAlertEvaluator> _alertEvaluatorMock = new();
     private readonly Mock<IPatientDeviceRepository> _patientDevicesMock = new();
     private readonly Mock<IPatientDeviceStamper> _deviceStamperMock = new();
-    private readonly Mock<ILogger<SensorGlucoseController>> _loggerMock = new();
 
     private SensorGlucoseController CreateController()
     {
@@ -32,8 +31,7 @@ public class SensorGlucoseControllerTests
             _glucoseResolverMock.Object,
             _alertEvaluatorMock.Object,
             _patientDevicesMock.Object,
-            _deviceStamperMock.Object,
-            _loggerMock.Object);
+            _deviceStamperMock.Object);
 
         controller.ControllerContext = new ControllerContext
         {
@@ -96,7 +94,7 @@ public class SensorGlucoseControllerTests
 
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(created);
+            .ReturnsAsync([.. created]);
 
         var controller = CreateController();
 
@@ -194,7 +192,7 @@ public class SensorGlucoseControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
-            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
 
         var controller = CreateController();
 
@@ -390,7 +388,7 @@ public class SensorGlucoseControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
-            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => m);
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
 
         await CreateController().CreateBulk(requests);
 

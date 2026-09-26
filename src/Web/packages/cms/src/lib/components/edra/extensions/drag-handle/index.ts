@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Fragment, type Node, Slice } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey, type Selection, TextSelection } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { serializeForClipboard } from './ClipboardSerializer.ts';
 
@@ -118,7 +118,7 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 		const diff = from - to;
 
 		const fromSelectionPos = calcNodePos(from, view);
-		let differentNodeSelected = false;
+		let differentNodeSelected: boolean;
 
 		const nodePos = view.state.doc.resolve(fromSelectionPos);
 
@@ -132,20 +132,18 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 				draggedNodePos + 1 >= nodeSelection.$from.pos && draggedNodePos <= nodeSelection.$to.pos
 			);
 		}
-		let selection = view.state.selection;
+		let selection: Selection;
 		if (!differentNodeSelected && diff !== 0 && !(view.state.selection instanceof NodeSelection)) {
 			const endSelection = NodeSelection.create(view.state.doc, to - 1);
 			selection = TextSelection.create(view.state.doc, draggedNodePos, endSelection.$to.pos);
 		} else {
-			selection = NodeSelection.create(view.state.doc, draggedNodePos);
+			const dragged = NodeSelection.create(view.state.doc, draggedNodePos);
+			selection = dragged;
 
 			// if inline node is selected, e.g mention -> go to the parent node to select the whole node
 			// if table row is selected, go to the parent node to select the whole node
-			if (
-				(selection as NodeSelection).node.type.isInline ||
-				(selection as NodeSelection).node.type.name === 'tableRow'
-			) {
-				const $pos = view.state.doc.resolve(selection.from);
+			if (dragged.node.type.isInline || dragged.node.type.name === 'tableRow') {
+				const $pos = view.state.doc.resolve(dragged.from);
 				selection = NodeSelection.create(view.state.doc, $pos.before());
 			}
 		}
@@ -189,7 +187,7 @@ export function DragHandlePlugin(options: GlobalDragHandleOptions & { pluginKey:
 	function hideHandleOnEditorOut(event: MouseEvent) {
 		if (event.target instanceof Element) {
 			// Check if the relatedTarget class is still inside the editor
-			const relatedTarget = event.relatedTarget as HTMLElement;
+			const relatedTarget = event.relatedTarget instanceof Element ? event.relatedTarget : null;
 			const isInsideEditor =
 				relatedTarget?.classList.contains('tiptap') ||
 				relatedTarget?.classList.contains('drag-handle');

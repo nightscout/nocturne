@@ -30,8 +30,10 @@ From the application you just created:
 | **Bot Token** | **Bot** tab: click **Reset Token** and copy the value |
 
 <Callout type="warning" title="Save the bot token now">
+
   Discord shows the bot token only once when it's generated. If you lose it, reset it again
   on the <strong>Bot</strong> tab; note that resetting invalidates the previous token.
+
 </Callout>
 
 ## 3. Configure Nocturne
@@ -75,9 +77,11 @@ When you save, Discord sends a signed test request that Nocturne verifies with y
 Key**. Discord rejects the URL if verification fails.
 
 <Callout type="info" title="Order matters">
+
   Configure the credentials in Nocturne (step 3) and restart <em>before</em> saving the
   interactions endpoint URL. The verification request only passes once Nocturne has the
   public key loaded.
+
 </Callout>
 
 ## 5. Register the slash commands
@@ -93,8 +97,10 @@ DISCORD_APPLICATION_ID=... DISCORD_BOT_TOKEN=... \
 This bulk-overwrites the application's global commands to match Nocturne's manifest.
 
 <Callout type="tip" title="Global commands take time to appear">
+
   Newly registered global commands can take up to an hour to propagate across Discord. They
   show up in servers and DMs once Discord has distributed them.
+
 </Callout>
 
 ## 6. Invite the bot to a server

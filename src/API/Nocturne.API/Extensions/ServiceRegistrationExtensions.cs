@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.Options;
 using Fido2NetLib;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Nocturne.API.Authorization;
@@ -15,6 +18,8 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.Core.Contracts.Content;
+using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
 using Nocturne.API.Services.ChartData;
 using Nocturne.API.Services.ChartData.Stages;
@@ -44,6 +49,7 @@ using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
@@ -79,6 +85,7 @@ using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Infrastructure.Shared.Services;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
 using OidcOptions = Nocturne.Core.Models.Configuration.OidcOptions;
+using OpenTelemetry.Metrics;
 
 namespace Nocturne.API.Extensions;
 
@@ -159,6 +166,11 @@ public static class ServiceRegistrationExtensions
         // real ceiling is DemoSessionLimits.MaxLiveSessions, enforced on the subject id.
         ("demo-session", 10, TimeSpan.FromMinutes(5)),
         ("support-issues", 5, TimeSpan.FromHours(1)),
+        // Each contribution opens an upstream PR, directly or through the relay, so the ceiling
+        // bounds how much of that a caller can spend. The page is server-rendered, so the address
+        // only distinguishes contributors when it comes off the signed header. One bucket for
+        // every contribution flow: what is bounded is pull requests upstream, not endpoints.
+        (ContributionsRateLimitPolicy, 10, TimeSpan.FromHours(1)),
         // Connector credential verification drives a live sign-in against the external provider
         // from this deployment's address, so the ceiling bounds both provider-side lockouts and
         // use of the API as a credential-testing proxy.
@@ -192,6 +204,79 @@ public static class ServiceRegistrationExtensions
         context.Request.Host.Host.ToLowerInvariant();
 
     /// <summary>
+    /// Rate-limiting policy for the per-session translation draft store.
+    /// </summary>
+    public const string TranslationDraftsRateLimitPolicy = "translation-drafts";
+
+    /// <summary>
+    /// Rate-limiting policy shared by every contribution flow that opens an
+    /// upstream pull request (translations, CMS content). One bucket on
+    /// purpose: the cost being bounded is PRs on the upstream repository, not
+    /// requests to any one endpoint.
+    /// </summary>
+    public const string ContributionsRateLimitPolicy = "contributions";
+
+    /// <summary>Shared bucket for draft requests that present no credential.</summary>
+    internal const string AnonymousDraftPartition = "anonymous";
+
+    /// <summary>
+    /// Partition key for the translation-drafts limiter: the hashed credential
+    /// the request presents. Not the IP — <c>UseForwardedHeaders</c> takes
+    /// <c>RemoteIpAddress</c> from X-Forwarded-For with no trusted-proxy list,
+    /// so the sibling per-IP policies are the wrong model to copy here.
+    /// Hashing keeps no token as a dictionary key. Requests with no credential
+    /// share one fixed bucket, so an anonymous flood cannot evict an editor's.
+    /// Channel precedence follows the handler chain in
+    /// <c>AuthenticationMiddleware</c> and is pinned by
+    /// <c>TranslationDraftPartitionKeyTests</c>. Two residual bypasses remain,
+    /// each needing a platform-admin or api-secret credential to reach;
+    /// closing them needs partitioning after authentication.
+    /// </summary>
+    internal static string TranslationDraftPartitionKey(HttpContext context)
+    {
+        var cookie = context.RequestServices.GetRequiredService<IOptions<OidcOptions>>().Value.Cookie;
+        var credential =
+            context.Request.Cookies[cookie.AccessTokenName]
+            ?? context.Request.Cookies[cookie.RefreshTokenName]
+            ?? TokenCredential(context.Request);
+
+        return string.IsNullOrEmpty(credential)
+            ? AnonymousDraftPartition
+            : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(credential)));
+    }
+
+    /// <summary>
+    /// Reduces the Authorization header and <c>?token=</c> query parameter to
+    /// the one token the handlers would authenticate on, collapsing the
+    /// spellings they treat as one credential — hashing each separately would
+    /// give one caller a 60/min allowance per variant.
+    /// </summary>
+    private static string? TokenCredential(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(header)
+            && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            var bearer = header["Bearer ".Length..].Trim();
+            if (!string.IsNullOrEmpty(bearer))
+            {
+                return bearer;
+            }
+        }
+
+        var queryToken = request.Query["token"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(queryToken))
+        {
+            return queryToken.StartsWith(DirectGrantTokenHandler.TokenPrefix, StringComparison.Ordinal)
+                ? queryToken
+                : DirectGrantTokenHandler.TokenPrefix + queryToken;
+        }
+
+        return string.IsNullOrEmpty(header) ? header : header.Trim();
+    }
+
+    /// <summary>
     /// Core API utility and calculation services (status, versioning, time queries,
     /// IOB/COB, predictions, statistics, etc.)
     /// </summary>
@@ -205,6 +290,7 @@ public static class ServiceRegistrationExtensions
         // AddNocturneMemoryCache has already TryAdded it, so this is the registration for hosts
         // that do not add the cache.
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ActiveTenantSnapshot>();
 
         services.AddScoped<IStatusService, StatusService>();
         services.AddScoped<IVersionService, VersionService>();
@@ -260,6 +346,12 @@ public static class ServiceRegistrationExtensions
         services.Configure<GitHubIssueOptions>(configuration.GetSection("GitHub"));
         services.AddSingleton<GitHubIssueService>();
         services.AddScoped<ISupportDiagnosticsService, SupportDiagnosticsService>();
+
+        services.Configure<GitHubContributionOptions>(configuration.GetSection("GitHub"));
+        services.AddSingleton<GitHubPrClient>();
+        services.AddSingleton<ITranslationContributionService, GitHubTranslationService>();
+        services.AddSingleton<IContentContributionService, GitHubContentService>();
+        services.AddScoped<ITranslationDraftService, TranslationDraftService>();
 
         return services;
     }
@@ -319,6 +411,7 @@ public static class ServiceRegistrationExtensions
         services.AddHostedService<AuthorizationSeedService>();
 
         services.AddSingleton<GuestSessionCacheService>();
+        services.AddScoped<GrantRevocationService>();
         services.AddSingleton<PublicAccessCacheService>();
         services.AddSingleton<ShareTokenCacheService>();
         // Same instance behind the seam, so the cache is shared rather than duplicated.
@@ -454,6 +547,27 @@ public static class ServiceRegistrationExtensions
                         {
                             PermitLimit = 60,
                             Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                        }
+                    )
+            );
+
+            // Translation drafts: 60 per session per minute, sliding. Autosave
+            // batches every 800ms while typing, so the ceiling has to clear
+            // normal editing while still bounding the per-call database work an
+            // editor session can force. Partitioned by credential rather than
+            // IP because the caller controls X-Forwarded-For; see
+            // TranslationDraftPartitionKey.
+            options.AddPolicy(
+                TranslationDraftsRateLimitPolicy,
+                context =>
+                    RateLimitPartition.GetSlidingWindowLimiter(
+                        partitionKey: TranslationDraftPartitionKey(context),
+                        factory: _ => new SlidingWindowRateLimiterOptions
+                        {
+                            PermitLimit = 60,
+                            Window = TimeSpan.FromMinutes(1),
+                            SegmentsPerWindow = 6,
                             QueueLimit = 0,
                         }
                     )
@@ -624,6 +738,7 @@ public static class ServiceRegistrationExtensions
 
         // Timezone timeline (fake-UTC connector conversion + travel/relocation)
         services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
+        services.AddScoped<IDeviceClockService, DeviceClockService>();
 
         // UI and display
         services.AddScoped<IUISettingsService, UISettingsService>();
@@ -852,12 +967,13 @@ public static class ServiceRegistrationExtensions
         // Sustained-condition timer store
         services.AddScoped<IConditionTimerStore, ConditionTimerRepository>();
 
-        // Excursion tracker. Its per-rule serialisation gate is a singleton: the sweep and the
+        // The excursion tracker's per-rule serialisation gate is a singleton: the sweep and the
         // per-reading path evaluate the same rule from different scopes.
         services.AddSingleton<AlertRuleEvaluationGate>();
-        services.AddScoped<IExcursionTracker, ExcursionTracker>();
+        services.AddScoped<AlertRuleRearm>();
+        services.AddScoped<AlertRuleRetirement>();
 
-        // Alert evaluation engine seam (Alerts:Engine = managed | shadow | rust)
+        // Alert evaluation engine and excursion tracker seams (Alerts:Engine = managed | shadow | rust)
         services.AddAlertEvaluationEngine(configuration);
 
         // Alert engine core
@@ -871,6 +987,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<IAlertOrchestrator, AlertOrchestrator>();
         services.AddScoped<IAlertDeliveryService, AlertDeliveryService>();
         services.AddScoped<IAlertAcknowledgementService, AlertAcknowledgementService>();
+        services.AddScoped<IAlertSnoozeService, AlertSnoozeService>();
         services.AddScoped<IExcursionResolutionHandler, ExcursionResolutionHandler>();
         services.AddScoped<IAlertReferenceService, AlertReferenceService>();
         services.AddScoped<IAlertReplayService, AlertReplayService>();
@@ -878,6 +995,8 @@ public static class ServiceRegistrationExtensions
         // the static native engine, so a singleton. Backfilled once at startup.
         services.AddSingleton<IRuleScopeClassifier, RuleScopeClassifier>();
         services.AddHostedService<RuleScopeClassBackfillService>();
+        services.AddSingleton<IAlertRuleConditionValidator, AlertRuleConditionValidator>();
+        services.AddHostedService<AlertRuleConditionAuditService>();
 
         // Delivery providers
         services.AddScoped<Nocturne.API.Services.Alerts.Providers.WebPushProvider>();
@@ -923,12 +1042,16 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<PlatformSettingsService>();
         services.AddScoped<IConnectorSyncService, ConnectorSyncService>();
         services.AddScoped<IConnectorCursorResetService, ConnectorCursorResetService>();
+        // One process-wide gate shared by every connector caller, so a manual sync and the
+        // scheduled poller agree on which (tenant, connector) keys are in flight.
+        services.TryAddSingleton<TenantRunGuard>();
         // Singleton: holds the in-memory job registry so a reset started by one request can be
         // polled by later requests. Creates its own DI scopes for the scoped reset engine.
         services.AddSingleton<IConnectorCursorResetJobService, ConnectorCursorResetJobService>();
 
         // Connector runtime
         services.AddBaseConnectorServices();
+        services.AddScoped<PublishSkipTally>();
         services.AddScoped<IGlucosePublisher, GlucosePublisher>();
         services.AddScoped<ITreatmentPublisher, TreatmentPublisher>();
         services.AddScoped<IDevicePublisher, DevicePublisher>();
@@ -939,6 +1062,11 @@ public static class ServiceRegistrationExtensions
             pollingService: typeof(ConnectorBackgroundService<,>)
         );
         services.AddSingleton(ConnectorSyncBudget.FromConfiguration(configuration, services));
+        // IMeterFactory comes from the host; AddMetrics keeps the registration self-sufficient for a
+        // host that has not enabled the OpenTelemetry metrics pipeline.
+        services.AddMetrics();
+        services.AddSingleton<ConnectorSyncMetrics>();
+        services.ConfigureOpenTelemetryMeterProvider(metrics => metrics.AddMeter(ConnectorSyncMetrics.MeterName));
         // After AddConnectors: the installers register the token caches as IConnectorCacheInvalidator
         // with TryAddSingleton, which a prior registration of the interface would silently suppress.
         services.AddSingleton<ConnectorPollerNudge>();
@@ -952,25 +1080,35 @@ public static class ServiceRegistrationExtensions
     }
 
     /// <summary>
-    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/>
-    /// seam: all three engine implementations plus the singleton
+    /// Registers the <see cref="Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine"/> and
+    /// <see cref="IExcursionTracker"/> seams: all three engine implementations, the tracker
+    /// deciding with the selected engine, plus the singleton
     /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelection"/> resolved
     /// from the <c>Alerts:Engine</c> flag (<c>managed</c> | <c>shadow</c> | <c>rust</c>,
-    /// default <c>managed</c>). The native-library probe runs once, on first resolution;
-    /// rust/shadow degrade gracefully to managed with a logged warning when the
-    /// nocturne_alerts library can't load.
+    /// default <c>managed</c>). Program resolves the selection at startup so the native-library
+    /// probe runs once, before the host serves traffic; see
+    /// <see cref="Nocturne.API.Services.Alerts.Engines.AlertEngineSelector"/> for what a failed
+    /// probe does in each mode.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">Configuration carrying the <c>Alerts:Engine</c> flag.</param>
     /// <param name="nativeProbe">
-    /// Native-library availability probe override for tests; defaults to
-    /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable"/> (the version export).
+    /// Native-library probe override for tests; defaults to
+    /// <see cref="Nocturne.Core.Alerts.Native.AlertsInterop.Probe"/>.
     /// </param>
     public static IServiceCollection AddAlertEvaluationEngine(
         this IServiceCollection services,
         IConfiguration configuration,
-        Func<bool>? nativeProbe = null)
+        Func<Nocturne.Core.Alerts.Native.NativeProbeResult>? nativeProbe = null)
     {
+        services.AddMetrics();
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ConditionVersionLog>();
+        services.ConfigureOpenTelemetryMeterProvider(metrics =>
+            metrics.AddMeter(Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.MeterName));
+        services.AddHealthChecks()
+            .AddCheck<Nocturne.API.Services.Alerts.Engines.AlertEngineHealthCheck>("alert-engine");
+
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ManagedAlertEngine>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.RustBackedAlertEngine>();
         services.AddScoped<
@@ -978,16 +1116,65 @@ public static class ServiceRegistrationExtensions
             Nocturne.API.Services.Alerts.Engines.RustShadowRuleEvaluator>();
         services.AddScoped<Nocturne.API.Services.Alerts.Engines.ShadowAlertEngine>();
 
-        // Singleton so the configuration parse + native probe + selection log happen once
-        // (lazily, on the first scope that evaluates alerts).
+        // The managed engine always tracks with the managed decider; shadow mode compares
+        // through ShadowAlertEngine instead.
+        services.AddScoped(sp => new ExcursionTracker(
+            sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
+            sp.GetRequiredService<AlertRuleEvaluationGate>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ExcursionTracker>>()));
+        services.AddScoped<IExcursionTracker>(sp =>
+        {
+            var mode = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode;
+            if (mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Managed)
+                return sp.GetRequiredService<ExcursionTracker>();
+
+            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+            IExcursionDecider decider = mode == Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust
+                ? new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
+                    errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.RustEngine)
+                : new Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider(
+                    ManagedExcursionDecider.Instance,
+                    new Nocturne.API.Services.Alerts.Engines.RustExcursionDecider(
+                        errors, Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine),
+                    sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowExcursionDecider>>());
+            return new ExcursionTracker(
+                sp.GetRequiredService<Nocturne.Core.Contracts.Repositories.IAlertTrackerRepository>(),
+                sp.GetRequiredService<AlertRuleEvaluationGate>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<ExcursionTracker>>(),
+                decider);
+        });
+
         services.AddSingleton(sp =>
         {
             var logger = sp.GetRequiredService<ILoggerFactory>()
                 .CreateLogger(typeof(Nocturne.API.Services.Alerts.Engines.AlertEngineSelector).FullName!);
             return Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.Select(
                 configuration[Nocturne.API.Services.Alerts.Engines.AlertEngineSelector.ConfigurationKey],
-                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.IsAvailable,
+                nativeProbe ?? Nocturne.Core.Alerts.Native.AlertsInterop.Probe,
                 logger);
+        });
+
+        services.AddSingleton<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
+        services.AddSingleton<Nocturne.Core.Contracts.Alerts.IAlertReplayEngine>(sp =>
+        {
+            var managed = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.ManagedAlertReplayEngine>();
+            var errors = sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineErrors>();
+            return sp.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>().Mode switch
+            {
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Rust =>
+                    new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors),
+                Nocturne.API.Services.Alerts.Engines.AlertEngineMode.Shadow =>
+                    new Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine(
+                        managed,
+                        new Nocturne.API.Services.Alerts.Engines.RustAlertReplayEngine(errors)
+                        {
+                            EngineTag = Nocturne.API.Services.Alerts.Engines.AlertEngineErrors.ShadowEngine,
+                        },
+                        sp.GetRequiredService<ILogger<Nocturne.API.Services.Alerts.Engines.ShadowAlertReplayEngine>>()),
+                _ => managed,
+            };
         });
 
         services.AddScoped<Nocturne.Core.Contracts.Alerts.IAlertEvaluationEngine>(sp =>
@@ -1014,6 +1201,7 @@ public static class ServiceRegistrationExtensions
     {
         services.AddScoped<IConditionEvaluator, ThresholdEvaluator>();
         services.AddScoped<IConditionEvaluator, RateOfChangeEvaluator>();
+        services.AddScoped<IConditionEvaluator, SignalLossEvaluator>();
         services.AddScoped<IConditionEvaluator, StalenessEvaluator>();
         services.AddScoped<IConditionEvaluator, CompositeEvaluator>();
         services.AddScoped<IConditionEvaluator, NotEvaluator>();
@@ -1052,6 +1240,8 @@ public static class ServiceRegistrationExtensions
     /// </summary>
     public static IServiceCollection AddMigrationServices(this IServiceCollection services)
     {
+        // Shared with the connector gate so both are the one instance the process holds.
+        services.TryAddSingleton<TenantRunGuard>();
         services.AddSingleton<
             Nocturne.API.Services.Migration.IMigrationJobService,
             Nocturne.API.Services.Migration.MigrationJobService

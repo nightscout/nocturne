@@ -130,7 +130,8 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             connectionTenantId.Value,
             new HashSet<string> { Scope.FullAccess },
             HubCredentialKind.Infrastructure,
-            SubjectId: null);
+            SubjectId: null,
+            HistoryClamped: false);
     }
 
     private async Task<HubAuthorization?> AuthorizeJwtAsync(
@@ -165,10 +166,10 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         // every JWT credential through the membership row and AuthenticationMiddleware rejects a
         // subject that has none. A token's scopes are frozen at issue, so without this a member
         // demoted or removed after issue keeps the access the token was minted with until it expires.
-        var effectivePermissions = await _memberService.GetEffectivePermissionsAsync(
+        var membership = await _memberService.GetMemberAccessAsync(
             claims.SubjectId, connectionTenantId);
 
-        if (effectivePermissions is null)
+        if (membership is null)
         {
             _logger.LogWarning(
                 "Hub JWT subject {SubjectId} is not a member of connection tenant {ConnectionTenant}",
@@ -177,7 +178,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         }
 
         var scopes = MemberScopeResolver.Resolve(
-            effectivePermissions,
+            membership.EffectivePermissions,
             AuthType.OAuthAccessToken,
             Scope.Normalize(claims.Scopes));
 
@@ -189,7 +190,12 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         // A bearer JWT always belongs to a subject: guest links are cookie-only (activation returns
         // no token), so no share-style credential reaches this path.
         return new HubAuthorization(
-            connectionTenantId, scopes, HubCredentialKind.Subject, claims.SubjectId);
+            connectionTenantId,
+            scopes,
+            HubCredentialKind.Subject,
+            claims.SubjectId,
+            MemberScopeResolver.IsHistoryClamped(
+                claims.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
     }
 
     /// <summary>
@@ -222,10 +228,10 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
             return null;
         }
 
-        var effectivePermissions = await _memberService.GetEffectivePermissionsAsync(
+        var membership = await _memberService.GetMemberAccessAsync(
             grant.SubjectId, connectionTenantId);
 
-        if (effectivePermissions is null)
+        if (membership is null)
         {
             _logger.LogWarning(
                 "Hub direct grant {GrantId} belongs to subject {SubjectId}, who is not a member of connection tenant {ConnectionTenant}",
@@ -234,7 +240,7 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         }
 
         var scopes = MemberScopeResolver.Resolve(
-            effectivePermissions, AuthType.DirectGrant, grant.Scopes.ToHashSet());
+            membership.EffectivePermissions, AuthType.DirectGrant, grant.Scopes.ToHashSet());
 
         if (!Scope.Satisfies(scopes, requiredScope))
         {
@@ -242,6 +248,11 @@ public class HubTokenAuthorizer : IHubTokenAuthorizer
         }
 
         return new HubAuthorization(
-            connectionTenantId, scopes, HubCredentialKind.Subject, grant.SubjectId);
+            connectionTenantId,
+            scopes,
+            HubCredentialKind.Subject,
+            grant.SubjectId,
+            MemberScopeResolver.IsHistoryClamped(
+                grant.LimitTo24Hours, membership.LimitTo24Hours, membership.EffectivePermissions));
     }
 }

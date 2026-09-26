@@ -2,6 +2,7 @@
   import type { EntryRecord } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { time } from "$lib/utils/formatting";
@@ -28,11 +29,7 @@
     <div class="space-y-2 py-2">
       {#each entries as entry, i (entry.data.id ?? `${entry.data.mills}-${i}`)}
         {@const category = ENTRY_CATEGORIES[entry.kind]}
-        <button
-          type="button"
-          class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
-          onclick={() => onSelect(entry)}
-        >
+        <Item variant="muted" onclick={() => onSelect(entry)}>
           <div class="flex-1">
             <div class="font-medium text-sm">
               {entrySummary(entry)}
@@ -43,10 +40,10 @@
                 : ""}
             </div>
           </div>
-          <Badge variant="outline" class="text-xs {category.colorClass}">
+          <Badge variant={category.badge}>
             {category.name}
           </Badge>
-        </button>
+        </Item>
       {/each}
     </div>
     <Dialog.Footer>

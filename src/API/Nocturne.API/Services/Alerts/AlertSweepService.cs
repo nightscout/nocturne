@@ -3,9 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Audit;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -14,16 +16,16 @@ namespace Nocturne.API.Services.Alerts;
 /// </summary>
 /// <remarks>
 /// <list type="number">
-///   <item>Close excursions whose hysteresis window has expired.</item>
-///   <item>Evaluate signal-loss rules for tenants with stale CGM readings.</item>
+///   <item>Close excursions whose hysteresis window has elapsed.</item>
 ///   <item>Check snoozed instances for smart-snooze extension or re-fire.</item>
+///   <item>Evaluate rules with a wall-clock-sensitive condition (<see cref="WallClockConditions"/>).</item>
 ///   <item>Run periodic auto-resolve for excursions whose conditions don't depend on the latest reading.</item>
 /// </list>
+/// The wall-clock pass evaluates every such rule of every tenant, so it runs after the two
+/// cheap, time-critical passes rather than delaying them.
 /// Each sweep creates a child DI scope so that scoped services (DbContext, tenant repositories)
 /// are properly isolated and disposed. Individual tenant failures are caught and logged without
-/// aborting the rest of the sweep. The escalation-advancement step that previously lived here
-/// went away with the schedule/escalation-step rip-out — express delayed escalation as a
-/// separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
+/// aborting the rest of the sweep.
 /// </remarks>
 /// <seealso cref="AlertOrchestrator"/>
 /// <seealso cref="ExcursionTracker"/>
@@ -31,29 +33,49 @@ public class AlertSweepService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<AlertSweepService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
-    /// Audit endpoint recorded for the sweep's writes. The sweep runs with no request and no
-    /// actor, and <see cref="AlertAcknowledgementService"/> — reached through the orchestrator's
-    /// Info-severity auto-acknowledgement — stamps the scope's ambient context onto its own
-    /// contexts, so without an explicit push those acks are recorded as user mutations with every
-    /// actor field null. The other scopes' writers fall to the null-context system default today;
-    /// they carry the push so attribution is explicit rather than an accident of which context
-    /// path a writer uses.
+    /// Audit endpoint recorded for the sweep's writes, which have no request and no actor.
+    /// <see cref="AlertAcknowledgementService"/>, reached through the orchestrator's Info-severity
+    /// auto-acknowledgement, stamps the scope's ambient context onto its own contexts. Without
+    /// the push those acks would be recorded as user mutations with every actor field null.
     /// </summary>
     private const string AuditEndpoint = "service:alert-sweep";
+
+    /// <summary>
+    /// <see cref="WallClockConditions.ReferencesWallClock"/> per enabled rule, kept while the
+    /// rule's condition is unchanged, so a tree is walked, and an unwalkable one reported, once
+    /// per version rather than every tick.
+    /// </summary>
+    private readonly Dictionary<Guid, WallClockVerdict> _wallClock = [];
+
+    private sealed record WallClockVerdict(AlertConditionType Type, string Params, bool References);
+
+    /// <summary>
+    /// Per tenant whose newest canonical reading has no glucose value, what
+    /// <see cref="LastUsableReadingAsync"/> found looking back from it. The look back reads up to
+    /// <see cref="UsableReadingLookback"/> of readings, and each sweep pass would repeat it every
+    /// 30 s for as long as the outage lasts; it is repeated only once a newer reading arrives.
+    /// </summary>
+    private readonly Dictionary<Guid, UsableLookback> _usableLookbacks = [];
+
+    private sealed record UsableLookback(Guid NewestId, DateTime NewestAt, UsableReading Found);
 
     /// <summary>
     /// Initializes a new instance of <see cref="AlertSweepService"/>.
     /// </summary>
     /// <param name="serviceProvider">Root service provider for creating per-sweep DI scopes.</param>
     /// <param name="logger">The logger instance.</param>
+    /// <param name="timeProvider">Clock for snooze expiry; the system clock when omitted.</param>
     public AlertSweepService(
         IServiceProvider serviceProvider,
-        ILogger<AlertSweepService> logger)
+        ILogger<AlertSweepService> logger,
+        TimeProvider? timeProvider = null)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -74,20 +96,20 @@ public class AlertSweepService : BackgroundService
 
             try
             {
-                await EvaluateSignalLossAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error evaluating signal loss");
-            }
-
-            try
-            {
                 await CheckSnoozedInstancesAsync(ct);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error checking snoozed instances");
+            }
+
+            try
+            {
+                await EvaluateWallClockRulesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error evaluating wall-clock rules");
             }
 
             try
@@ -98,23 +120,15 @@ public class AlertSweepService : BackgroundService
             {
                 _logger.LogError(ex, "Error evaluating auto-resolve");
             }
-
-            try
-            {
-                await EvaluateTrackerAgeRulesAsync(ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error evaluating tracker-age rules");
-            }
         }
 
         _logger.LogInformation("Alert Sweep Service stopped");
     }
 
     /// <summary>
-    /// Close excursions that are currently in hysteresis. Routes through the tracker
-    /// (single owner of <c>AlertTrackerState.ActiveExcursionId</c>) and the shared
+    /// Closes excursions whose hysteresis window has elapsed, so a window still expires when no
+    /// evaluation arrives. Routes through the tracker (single owner of
+    /// <c>AlertTrackerState.ActiveExcursionId</c>, and of the window check) and the shared
     /// resolution handler so resolution_reason="hysteresis" is stamped, pending deliveries
     /// expire, and <c>alert_resolved</c> broadcasts — same close pathway the orchestrator's
     /// per-reading hysteresis-expiry uses.
@@ -136,27 +150,15 @@ public class AlertSweepService : BackgroundService
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
-
-            var tracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
-            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
+            using var tenantScope = BeginTenantScope(tenantContext);
+            var tracker = tenantScope.Services.GetRequiredService<IExcursionTracker>();
+            var resolutionHandler = tenantScope.Services.GetRequiredService<IExcursionResolutionHandler>();
 
             foreach (var excursion in tenantGroup)
             {
                 try
                 {
-                    var transition = await tracker.ForceCloseAsync(
-                        excursion.AlertRuleId, ExcursionCloseReason.Hysteresis, ct);
+                    var transition = await tracker.CloseElapsedHysteresisAsync(excursion.AlertRuleId, ct);
                     if (transition.Type == ExcursionTransitionType.ExcursionClosed)
                     {
                         await resolutionHandler.HandleClosedAsync(transition, tenantId, ct);
@@ -179,80 +181,19 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Evaluate signal loss rules: for tenants whose last reading is older than the timeout,
-    /// feed conditionMet=true into the excursion tracker.
+    /// Extends or clears each snoozed instance whose snooze has expired. Extension needs the rule's
+    /// <see cref="SmartSnoozeConfig"/> to enable it with count to spare, and then either its
+    /// <see cref="SmartSnoozeConfig.Conditions"/> to hold against a context built from the tenant's
+    /// fresh canonical reading, or, when it configures none, <see cref="SmartSnoozeTrendGate"/> to
+    /// pass. Anything else clears the snooze and hands the instance to
+    /// <see cref="IAlertSnoozeService.ResumeAsync"/>, which re-notifies if the alert still stands.
     /// </summary>
-    private async Task EvaluateSignalLossAsync(CancellationToken ct)
-    {
-        using var lookupScope = _serviceProvider.CreateScope();
-        var repository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
-
-        var now = DateTime.UtcNow;
-
-        var signalLossRules = await repository.GetEnabledSignalLossRulesAsync(ct);
-
-        if (signalLossRules.Count == 0) return;
-
-        // Group rules by tenant
-        var rulesByTenant = signalLossRules.GroupBy(r => r.TenantId);
-
-        foreach (var tenantGroup in rulesByTenant)
-        {
-            var tenantId = tenantGroup.Key;
-
-            // Get tenant context
-            var tenantContext = await repository.GetTenantAlertContextAsync(tenantId, ct);
-            if (tenantContext is null || !tenantContext.IsActive) continue;
-
-            foreach (var rule in tenantGroup)
-            {
-                try
-                {
-                    // Parse timeout from condition params
-                    var conditionParams = JsonSerializer.Deserialize<SignalLossCondition>(rule.ConditionParams);
-                    if (conditionParams is null) continue;
-
-                    var timeout = TimeSpan.FromMinutes(conditionParams.TimeoutMinutes);
-                    var lastReading = tenantContext.LastReadingAt ?? DateTime.MinValue;
-
-                    if (now - lastReading < timeout) continue;
-
-                    // Signal loss detected for this rule. Create a scoped service and evaluate.
-                    using var tenantScope = _serviceProvider.CreateScope();
-                    var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-                    tenantAccessor.SetTenant(new TenantContext(tenantContext.TenantId, tenantContext.Slug ?? string.Empty, tenantContext.DisplayName ?? string.Empty, true, IsDemo: false));
-
-                    using var systemScope = SystemAuditScope.PushForScope(
-                        tenantScope.ServiceProvider, AuditEndpoint);
-
-                    var excursionTracker = tenantScope.ServiceProvider.GetRequiredService<IExcursionTracker>();
-                    await excursionTracker.ProcessEvaluationAsync(rule.Id, true, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error evaluating signal loss for rule {RuleId}", rule.Id);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Check snoozed instances whose snooze has expired. Per-instance snooze
-    /// configuration may include either:
-    /// <list type="bullet">
-    ///   <item><c>conditions</c> — an array of <see cref="ConditionNode"/> evaluated as
-    ///         <c>composite{and, conditions}</c> against an enriched context. If true, extend; else re-fire.</item>
-    ///   <item><c>smartSnooze=true</c> with no conditions — fall back to glucose-trend
-    ///         heuristic <see cref="IsTrendFavorable"/>.</item>
-    /// </list>
-    /// Otherwise clear the snooze so the alert re-fires and escalation resumes.
-    /// </summary>
-    private async Task CheckSnoozedInstancesAsync(CancellationToken ct)
+    internal async Task CheckSnoozedInstancesAsync(CancellationToken ct)
     {
         using var scope = _serviceProvider.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var now = DateTime.UtcNow;
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
 
         var instances = await repository.GetExpiredSnoozedInstancesAsync(now, ct);
 
@@ -260,73 +201,19 @@ public class AlertSweepService : BackgroundService
 
         _logger.LogDebug("Processing {Count} expired snoozed instances", instances.Count);
 
-        // Parse per-instance snooze configuration once.
         var configsByInstance = instances.ToDictionary(i => i.InstanceId, i => ParseSnoozeConfig(i));
         var modifiedCount = 0;
 
-        // Group by tenant so we batch-load trend rates and (if any conditions are configured)
-        // build a single enriched context per tenant.
-        var instancesByTenant = instances.GroupBy(i => i.TenantId);
-
-        foreach (var tenantGroup in instancesByTenant)
+        foreach (var tenantGroup in instances.GroupBy(i => i.TenantId))
         {
-            var tenantId = tenantGroup.Key;
-            var latestTrend = await repository.GetLatestTrendRateAsync(tenantId, ct);
-            var anyConditions = tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 });
-
-            SensorContext? enrichedContext = null;
-            if (anyConditions)
+            try
             {
-                enrichedContext = await BuildSnoozeContextAsync(tenantId, latestTrend, tenantGroup, configsByInstance, ct);
+                modifiedCount += await ProcessTenantSnoozesAsync(
+                    repository, tenantGroup.Key, tenantGroup.ToList(), configsByInstance, now, ct);
             }
-
-            foreach (var instance in tenantGroup)
+            catch (Exception ex)
             {
-                var cfg = configsByInstance[instance.InstanceId];
-                var canExtend = cfg.SmartSnooze && instance.SnoozeCount < cfg.MaxCount;
-
-                bool extend;
-                string? extendReason = null;
-                if (!canExtend)
-                {
-                    extend = false;
-                }
-                else if (cfg.Conditions is { Count: > 0 } conditions && enrichedContext is not null)
-                {
-                    extend = await EvaluateSnoozeConditionsAsync(instance, conditions, enrichedContext, ct);
-                    extendReason = extend ? "conditions" : "conditions-failed";
-                }
-                else
-                {
-                    extend = IsTrendFavorable(instance.ConditionType, instance.ConditionParams, latestTrend);
-                    extendReason = extend ? "trend-favorable" : "trend-unfavorable";
-                }
-
-                if (extend)
-                {
-                    await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                        tenantId,
-                        instance.InstanceId,
-                        SnoozedUntil: now.AddMinutes(cfg.ExtendMinutes),
-                        SnoozeCount: instance.SnoozeCount + 1), ct);
-
-                    _logger.LogDebug(
-                        "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count}, reason: {Reason})",
-                        instance.InstanceId, cfg.ExtendMinutes, instance.SnoozeCount + 1, extendReason);
-                }
-                else
-                {
-                    await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
-                        tenantId,
-                        instance.InstanceId,
-                        SnoozedUntil: DateTime.MinValue), ct);
-
-                    _logger.LogDebug(
-                        "Snooze cleared for instance {InstanceId} (smartSnooze={Smart}, count={Count}/{Max}, reason: {Reason})",
-                        instance.InstanceId, cfg.SmartSnooze, instance.SnoozeCount, cfg.MaxCount, extendReason ?? "max-count");
-                }
-
-                modifiedCount++;
+                _logger.LogError(ex, "Error processing expired snoozes for tenant {TenantId}", tenantGroup.Key);
             }
         }
 
@@ -336,42 +223,202 @@ public class AlertSweepService : BackgroundService
         }
     }
 
-    private async Task<SensorContext?> BuildSnoozeContextAsync(
+    private async Task<int> ProcessTenantSnoozesAsync(
+        IAlertRepository repository,
         Guid tenantId,
-        double? latestTrend,
-        IEnumerable<SnoozedInstanceSnapshot> tenantInstances,
-        Dictionary<Guid, SnoozeConfig> configsByInstance,
+        IReadOnlyList<SnoozedInstanceSnapshot> tenantGroup,
+        Dictionary<Guid, SmartSnoozeConfig> configsByInstance,
+        DateTime now,
         CancellationToken ct)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IAlertRepository>();
-        var enricher = scope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
-        var tenantAccessor = scope.ServiceProvider.GetRequiredService<ITenantAccessor>();
+        var modifiedCount = 0;
 
         var tenantContext = await repository.GetTenantAlertContextAsync(tenantId, ct);
-        if (tenantContext is null) return null;
 
-        tenantAccessor.SetTenant(new TenantContext(
-            tenantContext.TenantId,
-            tenantContext.Slug ?? string.Empty,
-            tenantContext.DisplayName ?? string.Empty,
-            true,
-            IsDemo: false));
+        using var tenantScope = BeginTenantScope(tenantContext);
 
-        // Wrap each instance's snooze conditions in a synthetic composite{and, conditions}
-        // rule. RuleDataNeeds.Walk inspects the trees to decide what to enrich; rule identity
-        // is not used during enrichment.
-        var syntheticRules = new List<AlertRuleSnapshot>();
-        foreach (var instance in tenantInstances)
+        var readings = tenantContext is null
+            ? []
+            : await LoadRecentReadingsAsync(tenantScope.Services, tenantId, now, ct);
+        var points = readings.Select(r => new GlucosePoint(r.Timestamp, r.Mgdl)).ToList();
+
+        SensorContext? enrichedContext = null;
+        if (tenantContext is not null
+            && tenantGroup.Any(i => configsByInstance[i.InstanceId].Conditions is { Count: > 0 }))
         {
-            var conditions = configsByInstance[instance.InstanceId].Conditions;
-            if (conditions is null || conditions.Count == 0) continue;
+            enrichedContext = await BuildSnoozeContextAsync(
+                tenantScope.Services, tenantContext, now, tenantGroup, configsByInstance, ct);
+        }
 
-            var composite = new CompositeCondition("and", conditions);
+        foreach (var instance in tenantGroup)
+        {
+            var cfg = configsByInstance[instance.InstanceId];
+
+            bool extend;
+            string reason;
+            if (!cfg.SmartSnooze)
+            {
+                extend = false;
+                reason = "smart-snooze-off";
+            }
+            else if (instance.SnoozeCount >= cfg.MaxCount)
+            {
+                extend = false;
+                reason = "max-count";
+            }
+            else if (cfg.Conditions is { Count: > 0 } conditions)
+            {
+                extend = enrichedContext is not null
+                         && await EvaluateSnoozeConditionsAsync(
+                             tenantScope.Services, instance, conditions, enrichedContext, ct);
+                reason = extend ? "conditions" : "conditions-failed";
+            }
+            else
+            {
+                var outcome = SmartSnoozeTrendGate.Evaluate(
+                    instance.ConditionType, instance.ConditionParams, points, now);
+                extend = outcome == TrendGateOutcome.Favorable;
+                reason = outcome switch
+                {
+                    TrendGateOutcome.Favorable => "trend-favorable",
+                    TrendGateOutcome.NotFavorable => "trend-unfavorable",
+                    TrendGateOutcome.InsufficientData => "trend-insufficient-data",
+                    _ => "trend-not-applicable",
+                };
+            }
+
+            if (extend)
+            {
+                await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
+                    tenantId,
+                    instance.InstanceId,
+                    SnoozedUntil: now.AddMinutes(cfg.ExtendMinutes),
+                    SnoozeCount: instance.SnoozeCount + 1), ct);
+
+                _logger.LogInformation(
+                    "Smart snooze extended instance {InstanceId} by {Minutes}m (count: {Count}/{Max}, reason: {Reason})",
+                    instance.InstanceId, cfg.ExtendMinutes, instance.SnoozeCount + 1, cfg.MaxCount, reason);
+            }
+            else
+            {
+                await repository.UpdateInstanceAsync(new UpdateAlertInstanceRequest(
+                    tenantId,
+                    instance.InstanceId,
+                    SnoozedUntil: DateTime.MinValue), ct);
+
+                _logger.LogInformation(
+                    "Snooze cleared for instance {InstanceId} (count: {Count}/{Max}, reason: {Reason})",
+                    instance.InstanceId, instance.SnoozeCount, cfg.MaxCount, reason);
+
+                if (tenantContext is not null)
+                    await ResumeAsync(tenantScope.Services, instance.InstanceId, ct);
+            }
+
+            modifiedCount++;
+        }
+
+        return modifiedCount;
+    }
+
+    /// <summary>
+    /// A child DI scope running as <paramref name="tenant"/>, when there is one, with
+    /// <see cref="AuditEndpoint"/> pushed for its writes.
+    /// </summary>
+    private TenantScope BeginTenantScope(TenantAlertContext? tenant)
+    {
+        var scope = _serviceProvider.CreateScope();
+        try
+        {
+            if (tenant is not null)
+            {
+                scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(new TenantContext(
+                    tenant.TenantId,
+                    tenant.Slug ?? string.Empty,
+                    tenant.DisplayName ?? string.Empty,
+                    true,
+                    IsDemo: false));
+            }
+            return new TenantScope(scope, SystemAuditScope.PushForScope(scope.ServiceProvider, AuditEndpoint));
+        }
+        catch
+        {
+            scope.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class TenantScope(IServiceScope scope, IDisposable audit) : IDisposable
+    {
+        public IServiceProvider Services => scope.ServiceProvider;
+
+        public void Dispose()
+        {
+            audit.Dispose();
+            scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Re-notifies a cleared snooze through <see cref="IAlertSnoozeService.ResumeAsync"/>. One
+    /// instance's failure is logged, not rethrown, so the rest of the tenant's pass still runs.
+    /// </summary>
+    private async Task ResumeAsync(IServiceProvider tenantServices, Guid instanceId, CancellationToken ct)
+    {
+        try
+        {
+            await tenantServices.GetRequiredService<IAlertSnoozeService>().ResumeAsync(instanceId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to resume alert instance {InstanceId} after its snooze lapsed", instanceId);
+        }
+    }
+
+    private async Task<IReadOnlyList<SensorGlucose>> LoadRecentReadingsAsync(
+        IServiceProvider tenantServices, Guid tenantId, DateTime now, CancellationToken ct)
+    {
+        try
+        {
+            var canonical = tenantServices.GetRequiredService<ICanonicalGlucoseService>();
+            return await canonical.GetRecentAsync(now - SmartSnoozeTrendGate.RequiredHistory, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "Failed to load recent glucose for snooze evaluation on tenant {TenantId}", tenantId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Context for snooze conditions, measured from <see cref="LastUsableReadingAsync"/>. Its
+    /// glucose facts are taken only when that reading is within
+    /// <see cref="SmartSnoozeTrendGate.MaxLatestAge"/>: a stale value would let a
+    /// <c>threshold</c> or <c>trend</c> condition hold a snooze on data that no longer describes
+    /// the patient, so it is left null and those conditions read false.
+    /// </summary>
+    private async Task<SensorContext?> BuildSnoozeContextAsync(
+        IServiceProvider tenantServices,
+        TenantAlertContext tenantContext,
+        DateTime now,
+        IEnumerable<SnoozedInstanceSnapshot> tenantInstances,
+        Dictionary<Guid, SmartSnoozeConfig> configsByInstance,
+        CancellationToken ct)
+    {
+        var enricher = tenantServices.GetRequiredService<ISensorContextEnricher>();
+
+        // Each instance's conditions become a synthetic composite{and, conditions} rule so
+        // RuleDataNeeds.Walk sees what to enrich; rule identity is not used during enrichment.
+        var syntheticRules = new List<AlertRuleSnapshot>();
+        var withConditions = tenantInstances
+            .Select(i => (Instance: i, configsByInstance[i.InstanceId].Conditions))
+            .Where(x => x.Conditions is { Count: > 0 });
+        foreach (var (instance, conditions) in withConditions)
+        {
+            var composite = new CompositeCondition("and", conditions!.ToList());
             var json = JsonSerializer.Serialize(composite, EvaluatorJson.Options);
             syntheticRules.Add(new AlertRuleSnapshot(
                 instance.AlertRuleId,
-                tenantId,
+                tenantContext.TenantId,
                 "<snooze>",
                 AlertConditionType.Composite,
                 json,
@@ -382,37 +429,41 @@ public class AlertSweepService : BackgroundService
                 AutoResolveParams: null));
         }
 
-        var baseContext = new SensorContext
-        {
-            LatestValue = null,
-            LatestTimestamp = tenantContext.LastReadingAt,
-            TrendRate = (decimal?)latestTrend,
-            LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
-        };
-
         try
         {
-            return await enricher.EnrichAsync(baseContext, syntheticRules, tenantId, ct);
+            var last = await LastUsableReadingAsync(
+                tenantServices.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+            var fresh = last.Reading is { } usable && now - usable.Timestamp <= SmartSnoozeTrendGate.MaxLatestAge
+                ? usable
+                : null;
+            var baseContext = new SensorContext
+            {
+                LatestValue = fresh is null ? null : (decimal)fresh.Mgdl,
+                LatestTimestamp = last.At,
+                TrendRate = (decimal?)fresh?.TrendRate,
+                LastReadingAt = last.At,
+            };
+            return await enricher.EnrichAsync(baseContext, syntheticRules, tenantContext.TenantId, ct);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to enrich sensor context for snooze evaluation on tenant {TenantId}", tenantId);
+            _logger.LogError(ex, "Failed to enrich sensor context for snooze evaluation on tenant {TenantId}", tenantContext.TenantId);
             return null;
         }
     }
 
     private async Task<bool> EvaluateSnoozeConditionsAsync(
+        IServiceProvider tenantServices,
         SnoozedInstanceSnapshot instance,
-        List<ConditionNode> conditions,
+        IReadOnlyList<ConditionNode> conditions,
         SensorContext enrichedContext,
         CancellationToken ct)
     {
-        using var scope = _serviceProvider.CreateScope();
-        var engine = scope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
+        var engine = tenantServices.GetRequiredService<IAlertEvaluationEngine>();
 
         var node = new ConditionNode(
             "composite",
-            Composite: new CompositeCondition("and", conditions));
+            Composite: new CompositeCondition("and", conditions.ToList()));
 
         try
         {
@@ -429,45 +480,17 @@ public class AlertSweepService : BackgroundService
         }
     }
 
-    private SnoozeConfig ParseSnoozeConfig(SnoozedInstanceSnapshot instance)
+    private SmartSnoozeConfig ParseSnoozeConfig(SnoozedInstanceSnapshot instance)
     {
-        var smartSnooze = false;
-        var extendMinutes = 15;
-        var maxCount = 3;
-        List<ConditionNode>? conditions = null;
-
-        try
+        var config = SmartSnoozeConfig.Parse(instance.ClientConfiguration);
+        if (config.Malformed)
         {
-            using var doc = JsonDocument.Parse(instance.ClientConfiguration);
-            if (doc.RootElement.TryGetProperty("snooze", out var snoozeEl))
-            {
-                if (snoozeEl.TryGetProperty("smartSnooze", out var smartEl))
-                    smartSnooze = smartEl.GetBoolean();
-                if (snoozeEl.TryGetProperty("smartSnoozeExtendMinutes", out var extendEl))
-                    extendMinutes = extendEl.GetInt32();
-                if (snoozeEl.TryGetProperty("maxCount", out var maxEl))
-                    maxCount = maxEl.GetInt32();
-                if (snoozeEl.TryGetProperty("conditions", out var conditionsEl)
-                    && conditionsEl.ValueKind == JsonValueKind.Array)
-                {
-                    conditions = JsonSerializer.Deserialize<List<ConditionNode>>(
-                        conditionsEl.GetRawText(), EvaluatorJson.Options);
-                }
-            }
+            _logger.LogWarning(
+                "Snooze configuration for rule {RuleId} is partly unreadable; unreadable fields use their defaults",
+                instance.AlertRuleId);
         }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "Failed to parse client configuration for rule {RuleId}", instance.AlertRuleId);
-        }
-
-        return new SnoozeConfig(smartSnooze, extendMinutes, maxCount, conditions);
+        return config;
     }
-
-    private readonly record struct SnoozeConfig(
-        bool SmartSnooze,
-        int ExtendMinutes,
-        int MaxCount,
-        List<ConditionNode>? Conditions);
 
     /// <summary>
     /// Periodic counterpart to the orchestrator's per-reading auto-resolve. Catches
@@ -479,9 +502,10 @@ public class AlertSweepService : BackgroundService
     /// LatestValue is left null on the synthesised <see cref="SensorContext"/>: any
     /// LatestValue-dependent auto-resolve params (e.g. threshold-based) are still the
     /// orchestrator's job and will have been evaluated on the most recent reading.
-    /// The enricher fills in IOB/COB/predictions/etc. as needed.
+    /// Reading times come from <see cref="LastUsableReadingAsync"/>; the enricher fills in
+    /// IOB/COB/predictions/etc. as needed.
     /// </remarks>
-    private async Task EvaluateAutoResolveAsync(CancellationToken ct)
+    internal async Task EvaluateAutoResolveAsync(CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
@@ -490,7 +514,6 @@ public class AlertSweepService : BackgroundService
         if (openExcursions.Count == 0) return;
 
         var byTenant = openExcursions.GroupBy(x => x.TenantId);
-        var now = DateTime.UtcNow;
 
         foreach (var tenantGroup in byTenant)
         {
@@ -498,35 +521,24 @@ public class AlertSweepService : BackgroundService
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
-
-            var engine = tenantScope.ServiceProvider.GetRequiredService<IAlertEvaluationEngine>();
-            var enricher = tenantScope.ServiceProvider.GetRequiredService<ISensorContextEnricher>();
-            var resolutionHandler = tenantScope.ServiceProvider.GetRequiredService<IExcursionResolutionHandler>();
-
-            // Build a baseline context from tenant freshness; enricher fills the rest.
-            var baseContext = new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenantContext.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
-            };
+            using var tenantScope = BeginTenantScope(tenantContext);
+            var engine = tenantScope.Services.GetRequiredService<IAlertEvaluationEngine>();
+            var enricher = tenantScope.Services.GetRequiredService<ISensorContextEnricher>();
+            var resolutionHandler = tenantScope.Services.GetRequiredService<IExcursionResolutionHandler>();
 
             var rules = tenantGroup.Select(x => x.Rule).ToList();
             SensorContext enriched;
             try
             {
+                var last = await LastUsableReadingAsync(
+                    tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+                var baseContext = new SensorContext
+                {
+                    LatestValue = null,
+                    LatestTimestamp = last.At,
+                    TrendRate = null,
+                    LastReadingAt = last.At,
+                };
                 enriched = await enricher.EnrichAsync(baseContext, rules, tenantId, ct);
             }
             catch (Exception ex)
@@ -563,89 +575,138 @@ public class AlertSweepService : BackgroundService
     }
 
     /// <summary>
-    /// Periodically evaluates enabled <c>tracker_age</c> rules through the orchestrator's
-    /// full pipeline. Tracker ages advance with the wall clock, not with readings — the
-    /// per-reading path alone would delay (or, with a dead sensor, entirely drop) a
-    /// "sensor expired" alert. The excursion state machine dedupes: once opened, further
-    /// sweep passes are ExcursionContinues no-ops.
+    /// Evaluates every enabled rule whose tree contains a <see cref="WallClockConditions"/> kind
+    /// through the orchestrator's full pipeline. Those conditions change truth with the clock
+    /// alone, so between readings, or with no readings at all, only this pass moves them. The
+    /// excursion tracker dedupes: a condition that stays true is <c>ExcursionContinues</c>.
+    /// <c>alert_state</c> references resolve against every enabled rule of the tenant, since an
+    /// escalation's parent is usually reading-driven and so not in the swept set.
     /// </summary>
-    internal async Task EvaluateTrackerAgeRulesAsync(CancellationToken ct)
+    /// <remarks>
+    /// The context is the one the per-reading path builds for <see cref="LastUsableReadingAsync"/>
+    /// (<see cref="CanonicalAlertEvaluator.ContextFor"/>), so reading-driven leaves in the same
+    /// tree judge exactly what its last pass judged. A context without the glucose facts would
+    /// read them false and close an excursion they hold open.
+    /// </remarks>
+    internal async Task EvaluateWallClockRulesAsync(CancellationToken ct)
     {
         using var lookupScope = _serviceProvider.CreateScope();
         var lookupRepository = lookupScope.ServiceProvider.GetRequiredService<IAlertRepository>();
 
-        var trackerRules = await lookupRepository.GetEnabledRulesByConditionTypeAsync(
-            AlertConditionType.TrackerAge, ct);
-        if (trackerRules.Count == 0) return;
+        var enabled = await lookupRepository.GetAllEnabledRulesAsync(ct);
+        var enabledIds = enabled.Select(r => r.Id).ToHashSet();
+        foreach (var gone in _wallClock.Keys.Where(id => !enabledIds.Contains(id)).ToList())
+            _wallClock.Remove(gone);
 
-        foreach (var tenantGroup in trackerRules.GroupBy(r => r.TenantId))
+        foreach (var tenantRules in enabled.GroupBy(r => r.TenantId))
         {
-            var tenantId = tenantGroup.Key;
+            var wallClockRules = tenantRules.Where(ReferencesWallClock).ToList();
+            if (wallClockRules.Count == 0) continue;
+
+            var tenantId = tenantRules.Key;
             var tenantContext = await lookupRepository.GetTenantAlertContextAsync(tenantId, ct);
             if (tenantContext is null || !tenantContext.IsActive) continue;
 
-            using var tenantScope = _serviceProvider.CreateScope();
-            var tenantAccessor = tenantScope.ServiceProvider.GetRequiredService<ITenantAccessor>();
-            tenantAccessor.SetTenant(new TenantContext(
-                tenantContext.TenantId,
-                tenantContext.Slug ?? string.Empty,
-                tenantContext.DisplayName ?? string.Empty,
-                true,
-                IsDemo: false));
-
-            using var systemScope = SystemAuditScope.PushForScope(
-                tenantScope.ServiceProvider, AuditEndpoint);
-
-            var orchestrator = tenantScope.ServiceProvider.GetRequiredService<IAlertOrchestrator>();
-
-            // LatestValue stays null: tracker_age doesn't read it, and the most recent
-            // reading-dependent evaluation already ran on the per-reading path.
-            var baseContext = new SensorContext
-            {
-                LatestValue = null,
-                LatestTimestamp = tenantContext.LastReadingAt,
-                TrendRate = null,
-                LastReadingAt = tenantContext.LastReadingAt ?? DateTime.MinValue,
-            };
+            using var tenantScope = BeginTenantScope(tenantContext);
 
             try
             {
-                await orchestrator.EvaluateRulesAsync(tenantGroup.ToList(), baseContext, ct);
+                var last = await LastUsableReadingAsync(
+                    tenantScope.Services.GetRequiredService<ICanonicalGlucoseService>(), tenantContext, ct);
+                var context = last.Reading is { } usable
+                    ? CanonicalAlertEvaluator.ContextFor(usable)
+                    : new SensorContext
+                    {
+                        LatestValue = null,
+                        LatestTimestamp = last.At,
+                        TrendRate = null,
+                        LastReadingAt = last.At,
+                    };
+
+                var orchestrator = tenantScope.Services.GetRequiredService<IAlertOrchestrator>();
+                await orchestrator.EvaluateRulesAsync(
+                    wallClockRules, tenantRules.Select(r => r.Id).ToHashSet(), context, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex,
-                    "Tracker-age rule evaluation failed for tenant {TenantId}", tenantId);
+                _logger.LogError(ex, "Wall-clock rule evaluation failed for tenant {TenantId}", tenantId);
             }
         }
     }
 
-    /// <summary>
-    /// Determines whether the current glucose trend is favorable for extending a snooze.
-    /// For "below" (low alerts): favorable if BG is rising (trend rate > 0).
-    /// For "above" (high alerts): favorable if BG is falling (trend rate &lt; 0).
-    /// For other condition types: not favorable (don't extend).
-    /// </summary>
-    private static bool IsTrendFavorable(AlertConditionType conditionType, string conditionParams, double? trendRate)
-    {
-        if (trendRate is null) return false;
-        if (conditionType != AlertConditionType.Threshold) return false;
+    /// <summary>How far before an unusable newest reading the sweep looks for a usable one.</summary>
+    internal static readonly TimeSpan UsableReadingLookback = TimeSpan.FromHours(24);
 
+    /// <summary>
+    /// The reading every swept context measures <see cref="SensorContext.LastReadingAt"/> from:
+    /// the newest canonical reading with a glucose value, the only kind the per-reading path
+    /// evaluates, so <c>signal_loss</c> counts sensor-error and warm-up readings as no signal.
+    /// </summary>
+    /// <remarks>
+    /// It is looked for at most <see cref="UsableReadingLookback"/> before the newest canonical
+    /// reading. With none there, <see cref="UsableReading.At"/> is the oldest reading looked at:
+    /// the outage is at least that old. With no canonical reading at all it is the tenant's
+    /// newest reading of any source, null for a tenant that has never had one, which
+    /// <c>signal_loss</c> and <c>staleness</c> treat as cold start.
+    /// <para>
+    /// The look back is kept per tenant (<see cref="_usableLookbacks"/>) until the newest
+    /// canonical reading changes, so a usable reading backfilled behind an unchanged newest one
+    /// is seen once the next reading arrives.
+    /// </para>
+    /// </remarks>
+    internal async Task<UsableReading> LastUsableReadingAsync(
+        ICanonicalGlucoseService canonical, TenantAlertContext tenant, CancellationToken ct)
+    {
+        var latest = await canonical.GetLatestAsync(ct);
+        if (latest is null || latest.Mgdl > 0)
+        {
+            _usableLookbacks.Remove(tenant.TenantId);
+            return latest is null
+                ? new UsableReading(null, tenant.LastReadingAt)
+                : new UsableReading(latest, latest.Timestamp);
+        }
+
+        if (_usableLookbacks.TryGetValue(tenant.TenantId, out var kept)
+            && kept.NewestId == latest.Id && kept.NewestAt == latest.Timestamp)
+        {
+            return kept.Found;
+        }
+
+        var recent = await canonical.GetRecentAsync(latest.Timestamp - UsableReadingLookback, ct);
+        var found = recent.Where(r => r.Mgdl > 0).MaxBy(r => r.Timestamp) is { } usable
+            ? new UsableReading(usable, usable.Timestamp)
+            : new UsableReading(null, recent.Count > 0 ? recent.Min(r => r.Timestamp) : latest.Timestamp);
+        _usableLookbacks[tenant.TenantId] = new UsableLookback(latest.Id, latest.Timestamp, found);
+        return found;
+    }
+
+    /// <param name="Reading">The last usable reading, or null when none was found.</param>
+    /// <param name="At">What <see cref="SensorContext.LastReadingAt"/> is.</param>
+    internal sealed record UsableReading(SensorGlucose? Reading, DateTime? At);
+
+    private bool ReferencesWallClock(AlertRuleSnapshot rule)
+    {
+        if (_wallClock.TryGetValue(rule.Id, out var cached)
+            && cached.Type == rule.ConditionType
+            && string.Equals(cached.Params, rule.ConditionParams, StringComparison.Ordinal))
+        {
+            return cached.References;
+        }
+
+        bool references;
         try
         {
-            var condition = JsonSerializer.Deserialize<ThresholdCondition>(conditionParams);
-            if (condition is null) return false;
-
-            return condition.Direction.ToLowerInvariant() switch
-            {
-                "below" => trendRate > 0,  // Low alert: favorable if BG rising
-                "above" => trendRate < 0,  // High alert: favorable if BG falling
-                _ => false
-            };
+            references = WallClockConditions.ReferencesWallClock(rule);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            _logger.LogWarning(ex,
+                "Condition tree of rule {AlertRuleId} could not be walked; it evaluates per reading only",
+                rule.Id);
+            references = false;
         }
+
+        _wallClock[rule.Id] = new WallClockVerdict(rule.ConditionType, rule.ConditionParams, references);
+        return references;
     }
 }

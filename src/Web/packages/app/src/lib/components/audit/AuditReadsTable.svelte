@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { ReadAccessAuditDto } from "$lib/api/generated/nocturne-api-client";
   import type {
+    Column,
     ColumnDef,
     SortingState,
     ColumnFiltersState,
@@ -52,6 +53,20 @@
   // Expandable row state
   let expandedId = $state<string | null>(null);
 
+  interface EntityTypeFilterHeaderProps {
+    uniqueEntityTypes: string[];
+    selectedEntityTypes: string[];
+    toggleEntityTypeFilter: (value: string) => void;
+    clearEntityTypeFilter: () => void;
+  }
+
+  interface StatusFilterHeaderProps {
+    uniqueStatusCodes: string[];
+    selectedStatusCodes: string[];
+    toggleStatusCodeFilter: (value: string) => void;
+    clearStatusCodeFilter: () => void;
+  }
+
   // Column filter states
   let selectedEntityTypes = $state<string[]>([]);
   let selectedStatusCodes = $state<string[]>([]);
@@ -85,9 +100,9 @@
     })
   );
 
-  function formatCompactDateTime(date: Date | undefined): string {
+  function formatCompactDateTime(date: string | undefined): string {
     if (!date) return "\u2014";
-    return dtf.format(date instanceof Date ? date : new Date(date));
+    return dtf.format(new Date(date));
   }
 
   function getStatusBadgeVariant(
@@ -164,7 +179,7 @@
       id: "time",
       accessorFn: (row) => row.createdAt,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Time",
         }),
@@ -185,7 +200,7 @@
       accessorFn: (row) =>
         row.subjectName ?? row.credentialFingerprint ?? "anonymous",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Subject",
         }),
@@ -199,12 +214,12 @@
       id: "endpoint",
       accessorFn: (row) => row.endpoint,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Endpoint",
         }),
       cell: ({ row }) =>
-        renderSnippet(endpointCellSnippet as any, {
+        renderSnippet(endpointCellSnippet, {
           endpoint: row.original.endpoint,
         }),
     },
@@ -213,7 +228,7 @@
       id: "entityType",
       accessorFn: (row) => row.entityType,
       header: () =>
-        renderSnippet(entityTypeFilterHeaderSnippet as any, {
+        renderSnippet(entityTypeFilterHeaderSnippet, {
           uniqueEntityTypes,
           selectedEntityTypes,
           toggleEntityTypeFilter,
@@ -230,7 +245,7 @@
       id: "records",
       accessorFn: (row) => row.recordCount,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, {
+        renderSnippet(sortableHeaderSnippet, {
           column,
           label: "Records",
         }),
@@ -245,14 +260,14 @@
       id: "status",
       accessorFn: (row) => row.statusCode,
       header: () =>
-        renderSnippet(statusFilterHeaderSnippet as any, {
+        renderSnippet(statusFilterHeaderSnippet, {
           uniqueStatusCodes,
           selectedStatusCodes,
           toggleStatusCodeFilter,
           clearStatusCodeFilter,
         }),
       cell: ({ row }) =>
-        renderSnippet(statusBadgeSnippet as any, {
+        renderSnippet(statusBadgeSnippet, {
           statusCode: row.original.statusCode,
         }),
       filterFn: (row, _id, filterValue: string[]) => {
@@ -266,7 +281,7 @@
       accessorFn: (row) => row.ipAddress,
       header: "IP Address",
       cell: ({ row }) =>
-        renderSnippet(ipCellSnippet as any, { ip: row.original.ipAddress }),
+        renderSnippet(ipCellSnippet, { ip: row.original.ipAddress }),
       enableSorting: false,
     },
   ];
@@ -342,13 +357,13 @@
   column,
   label,
 }: {
-  column: any;
+  column: Column<ReadAccessAuditDto, unknown>;
   label: string;
 })}
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8 data-[state=open]:bg-accent"
+    class="-ml-3"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -385,7 +400,7 @@
   selectedEntityTypes,
   toggleEntityTypeFilter,
   clearEntityTypeFilter,
-}: any)}
+}: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
     label="Entity Type"
     options={uniqueEntityTypes.map((t: string) => ({ value: t, label: t }))}
@@ -402,7 +417,7 @@
   selectedStatusCodes,
   toggleStatusCodeFilter,
   clearStatusCodeFilter,
-}: any)}
+}: StatusFilterHeaderProps)}
   <ColumnFilterPopover
     label="Status"
     options={uniqueStatusCodes.map((c: string) => ({ value: c, label: c }))}
@@ -469,9 +484,9 @@
           <Table.Row>
             {#each headerGroup.headers as header (header.id)}
               <Table.Head
-                class="whitespace-nowrap"
+                class="whitespace-nowrap w-(--col-w)"
                 style={header.getSize()
-                  ? `width: ${header.getSize()}px`
+                  ? `--col-w: ${header.getSize()}px`
                   : undefined}
               >
                 {#if !header.isPlaceholder}
@@ -490,8 +505,9 @@
           <Table.Row
             class="cursor-pointer"
             onclick={(e: MouseEvent) => {
-              const target = e.target as HTMLElement;
+              const target = e.target;
               if (
+                target instanceof Element &&
                 target.closest(
                   'button, input[type="checkbox"], [role="checkbox"]'
                 )
@@ -510,16 +526,15 @@
             {/each}
           </Table.Row>
           {#if expandedId === row.id}
-            <Table.Row>
-              <Table.Cell colspan={columns.length} class="bg-muted/30 p-0">
+            <Table.Row variant="detail">
+              <Table.Cell colspan={columns.length} class="p-0">
                 <div class="flex items-center justify-between border-b px-4 py-1">
                   <span class="text-xs font-medium text-muted-foreground"
                     >Details</span
                   >
                   <Button
                     variant="ghost"
-                    size="sm"
-                    class="h-6 w-6 p-0"
+                    size="icon-xs"
                     onclick={() => (expandedId = null)}
                   >
                     <ChevronUp class="h-3 w-3" />
@@ -532,8 +547,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={columns.length}
-              class="h-24 text-center text-muted-foreground"
+              class="h-24 text-center"
             >
               No audit records found.
             </Table.Cell>

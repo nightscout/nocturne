@@ -3,3 +3,72 @@
 @source "../node_modules/@nocturne/cms/src";
 @source "../node_modules/@nocturne/watercolour/src";
 @source not "../locales/";
+
+/* The portal renders dark only (app.html pins class="dark"); the light values keep each
+   token's hue for a light render. */
+:root {
+  /* The portal's own accent. Not --glucose-in-range, which theme packs swap to green. */
+  --brand: oklch(0.52 0.1 184.704);
+  /* Recessed below the page: terminal windows, demo canvases, the "before" column. */
+  --sunken: oklch(0.967 0.003 264.542);
+
+  /* A headline feature's identity (lib/data/pillars.ts and the /features cards). */
+  --feature-reports: oklch(0.52 0.1 184.704);
+  --feature-connectors: oklch(0.6 0.16 150);
+  --feature-alarms: oklch(0.58 0.2 41.116);
+  --feature-sign-in: oklch(0.55 0.18 270);
+  --feature-privacy: oklch(0.577 0.245 27.325);
+  --feature-realtime: oklch(0.666 0.179 58.318);
+  --feature-open-source: oklch(0.488 0.243 264.376);
+
+}
+
+.dark {
+  --brand: oklch(0.6 0.118 184.704);
+  --sunken: oklch(0.1 0.025 261);
+
+  --feature-reports: oklch(0.6 0.118 184.704);
+  --feature-connectors: oklch(0.72 0.16 150);
+  --feature-alarms: oklch(0.646 0.222 41.116);
+  --feature-sign-in: oklch(0.65 0.18 270);
+  --feature-privacy: oklch(0.577 0.245 27.325);
+  --feature-realtime: oklch(0.769 0.188 70);
+  --feature-open-source: oklch(0.488 0.243 264.376);
+
+}
+
+@theme inline {
+  /* Marketing headings; each carries its own leading and tracking. */
+  --text-display: clamp(2.5rem, 7vw, 4.8rem);
+  --text-display--line-height: 1.06;
+  --text-display--letter-spacing: -0.025em;
+  --text-headline: clamp(2rem, 4vw, 3.25rem);
+  --text-headline--line-height: 1.08;
+  --text-headline--letter-spacing: -0.025em;
+  --text-section: clamp(1.6rem, 3.5vw, 2.5rem);
+  --text-section--line-height: 1.2;
+  --text-section--letter-spacing: -0.02em;
+  --text-subsection: clamp(1.4rem, 2.5vw, 2rem);
+  --text-subsection--line-height: 1.2;
+  --text-subsection--letter-spacing: -0.02em;
+  /* The paragraph under a heading. */
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.6;
+  /* The uppercase kicker above a section heading. */
+  --tracking-eyebrow: 0.14em;
+  /* Copy set over the hero's aurora, which has no fixed contrast. */
+  --text-shadow-hero: 0 2px 8px oklch(0 0 0 / 70%), 0 4px 40px oklch(0 0 0 / 80%);
+  --text-shadow-hero-sm: 0 1px 3px oklch(0 0 0 / 90%), 0 2px 12px oklch(0 0 0 / 75%);
+
+  --color-brand: var(--brand);
+  --color-sunken: var(--sunken);
+  /* A per-item accent: the element sets --highlight to one of the tokens above. */
+  --color-highlight: var(--highlight);
+  --color-feature-reports: var(--feature-reports);
+  --color-feature-connectors: var(--feature-connectors);
+  --color-feature-alarms: var(--feature-alarms);
+  --color-feature-sign-in: var(--feature-sign-in);
+  --color-feature-privacy: var(--feature-privacy);
+  --color-feature-realtime: var(--feature-realtime);
+  --color-feature-open-source: var(--feature-open-source);
+}

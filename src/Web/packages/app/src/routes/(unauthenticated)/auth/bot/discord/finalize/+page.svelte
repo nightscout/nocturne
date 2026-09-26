@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import { Loader2 } from "lucide-svelte";
 	import { claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
+	import { describeSubmitError } from "$lib/forms/submit-error";
 
 	// Read token from URL
 	const token = $derived(page.url.searchParams.get("token") ?? "");
@@ -11,7 +13,7 @@
 	$effect(() => {
 		if (!page.data.isAuthenticated && token) {
 			const returnUrl = `/auth/bot/discord/finalize?token=${token}`;
-			goto(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`, { replaceState: true });
+			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(returnUrl)}`), { replaceState: true });
 		}
 	});
 
@@ -32,14 +34,17 @@
 			const link = await claimLink({ token });
 			result = {
 				success: true,
-				label: (link as any).label ?? "",
-				displayName: (link as any).displayName ?? "",
+				label: link.label ?? "",
+				displayName: link.displayName ?? "",
 			};
 		} catch (err: unknown) {
 			console.error("Failed to claim OAuth2 link:", err);
 			result = {
 				success: false,
-				message: "We couldn't complete the Discord link. The token may have expired. Please try again from Settings.",
+				message: describeSubmitError(
+					err,
+					"We couldn't complete the Discord link. The token may have expired. Please try again from Settings."
+				),
 			};
 		} finally {
 			loading = false;
@@ -60,7 +65,7 @@
 			(label <code>{result.label}</code>). Run <code>/bg</code> in Discord to get started.
 		</p>
 		<a
-			href="/settings/integrations/discord"
+			href={resolve("/settings/integrations/discord")}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to Settings
@@ -69,7 +74,7 @@
 		<h1 class="text-2xl font-bold">Link failed</h1>
 		<p class="text-destructive max-w-md">{result.message}</p>
 		<a
-			href="/settings/integrations/discord"
+			href={resolve("/settings/integrations/discord")}
 			class="px-6 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
 		>
 			Back to Settings

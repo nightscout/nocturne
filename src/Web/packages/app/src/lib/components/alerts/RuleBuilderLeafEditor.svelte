@@ -3,6 +3,9 @@
   import * as Select from "$lib/components/ui/select";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Switch } from "$lib/components/ui/switch";
+  import { Button } from "$lib/components/ui/button";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import { X } from "lucide-svelte";
   import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { untrack } from "svelte";
@@ -13,14 +16,14 @@
     type ComparisonOperator,
     type StalenessOperator,
     type TrendBucket,
-    type TimeSinceLastCarbCondition,
-    type TimeSinceLastBolusCondition,
+    isStringEnumMember,
     TempBasalMetric,
     GlucoseBucket,
     PumpModeState,
     StateSpanCategory,
     DayOfWeek,
   } from "./types";
+  import { AlertComparisonOperator } from "$api-clients";
 
   interface AvailableRule {
     id: string;
@@ -128,6 +131,15 @@
     [DayOfWeek.Saturday]: "Sat",
   };
 
+  /** Label for a stored key, or undefined when the key is not one the editor offers. */
+  function labelFor(labels: Partial<Record<string, string>>, key: string): string | undefined {
+    return Object.entries(labels).find(([k]) => k === key)?.[1];
+  }
+
+  function isDayOfWeek(value: number): value is DayOfWeek {
+    return Object.values(DayOfWeek).some((day) => day === value);
+  }
+
   function parseNumber(value: string, fallback: number): number {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -165,10 +177,10 @@
       type="single"
       value={node.threshold.direction ?? "below"}
       onValueChange={(v) => {
-        if (node.threshold) node.threshold.direction = v as "above" | "below";
+        if (node.threshold) node.threshold.direction = v;
       }}
     >
-      <Select.Trigger class="h-7 w-[5rem] px-2 text-xs">
+      <Select.Trigger size="xs" class="w-[5rem]">
         {node.threshold.direction === "above" ? ">" : "<"}
       </Select.Trigger>
       <Select.Content>
@@ -179,12 +191,13 @@
     <Input
       type="number"
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={bg(node.threshold.value ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.threshold)
           node.threshold.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.threshold.value ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -195,11 +208,11 @@
       type="single"
       value={node.predicted.operator ?? "<="}
       onValueChange={(v) => {
-        if (node.predicted) node.predicted.operator = v as ComparisonOperator;
+        if (node.predicted) node.predicted.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(node.predicted.operator as ComparisonOperator) ?? "<="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, node.predicted.operator ?? "<=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -210,12 +223,13 @@
     <Input
       type="number"
       step={glucoseUnits.current === "mmol" ? "0.1" : "1"}
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={bg(node.predicted.value ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.predicted)
           node.predicted.value = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.predicted.value ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -224,7 +238,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       value={node.predicted.within_minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.predicted)
@@ -241,10 +256,10 @@
       value={node.rate_of_change.direction ?? "falling"}
       onValueChange={(v) => {
         if (node.rate_of_change)
-          node.rate_of_change.direction = v as "rising" | "falling";
+          node.rate_of_change.direction = v;
       }}
     >
-      <Select.Trigger class="h-7 w-24 px-2 text-xs">
+      <Select.Trigger size="xs" class="w-24">
         {node.rate_of_change.direction ?? "falling"}
       </Select.Trigger>
       <Select.Content>
@@ -256,12 +271,13 @@
     <Input
       type="number"
       step={glucoseUnits.current === "mmol" ? "0.01" : "0.1"}
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={bg(node.rate_of_change.rate ?? 0)}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.rate_of_change)
           node.rate_of_change.rate = convertFromDisplayUnits(
-            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0) as number),
+            parseNumber(e.currentTarget.value, bg(node.rate_of_change.rate ?? 0)),
             glucoseUnits.current,
           );
       }}
@@ -272,11 +288,11 @@
       type="single"
       value={node.trend.bucket ?? "falling"}
       onValueChange={(v) => {
-        if (node.trend) node.trend.bucket = v as TrendBucket;
+        if (node.trend) node.trend.bucket = v;
       }}
     >
-      <Select.Trigger class="h-7 w-32 px-2 text-xs">
-        {trendLabels[(node.trend.bucket as TrendBucket) ?? "falling"]}
+      <Select.Trigger size="xs" class="w-32">
+        {labelFor(trendLabels, node.trend.bucket ?? "falling")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(trendLabels) as [bucket, label] (bucket)}
@@ -292,8 +308,8 @@
         if (node.staleness) node.staleness.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(node.staleness.operator as ComparisonOperator) ?? ">="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, node.staleness.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -304,7 +320,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       value={node.staleness.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.staleness)
@@ -318,7 +335,8 @@
   {:else if node.type === "time_of_day" && node.time_of_day}
     <Input
       type="time"
-      class="h-7 w-24 px-2 text-xs tabular-nums"
+      size="xs"
+      class="w-24 tabular-nums"
       value={node.time_of_day.from ?? "00:00"}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.time_of_day) node.time_of_day.from = e.currentTarget.value;
@@ -327,24 +345,46 @@
     <span class="text-xs text-muted-foreground">–</span>
     <Input
       type="time"
-      class="h-7 w-24 px-2 text-xs tabular-nums"
+      size="xs"
+      class="w-24 tabular-nums"
       value={node.time_of_day.to ?? "23:59"}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.time_of_day) node.time_of_day.to = e.currentTarget.value;
       }}
     />
+    <TimezoneCombobox
+      class="w-44"
+      placeholder="Profile time zone"
+      value={node.time_of_day.timezone ?? undefined}
+      onValueChange={(zone) => {
+        if (node.time_of_day) node.time_of_day.timezone = zone;
+      }}
+    />
+    {#if node.time_of_day.timezone}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Use the profile time zone"
+        onclick={() => {
+          if (node.time_of_day) node.time_of_day.timezone = undefined;
+        }}
+      >
+        <X class="h-3.5 w-3.5" />
+      </Button>
+    {/if}
   {:else if (node.type === "iob" || node.type === "cob" || node.type === "reservoir" || node.type === "site_age" || node.type === "sensor_age" || node.type === "pump_battery" || node.type === "uploader_battery" || node.type === "sensitivity_ratio") && node[node.type]}
     {@const payload = node[node.type]!}
     {@const suffix = leafSuffix(node.type)}
     <Select.Root
       type="single"
-      value={(payload.operator as ComparisonOperator) ?? ">="}
+      value={payload.operator ?? ">="}
       onValueChange={(v) => {
-        payload.operator = v as ComparisonOperator;
+        payload.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(payload.operator as ComparisonOperator) ?? ">="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -355,7 +395,8 @@
     <Input
       type="number"
       step={node.type === "sensitivity_ratio" ? "0.01" : "0.1"}
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={payload.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.value = parseNumber(e.currentTarget.value, payload.value ?? 0);
@@ -366,13 +407,13 @@
     {@const payload = node[node.type]!}
     <Select.Root
       type="single"
-      value={(payload.operator as StalenessOperator) ?? ">"}
+      value={payload.operator ?? ">"}
       onValueChange={(v) => {
-        payload.operator = v as StalenessOperator;
+        payload.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {stalenessOpLabels[(payload.operator as StalenessOperator) ?? ">"]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(stalenessOpLabels, payload.operator ?? ">")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(stalenessOpLabels) as [op, label] (op)}
@@ -383,7 +424,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       value={payload.minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.minutes = parseNumber(e.currentTarget.value, payload.minutes ?? 0);
@@ -395,7 +437,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       value={node.signal_loss.timeout_minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.signal_loss)
@@ -409,15 +452,13 @@
   {:else if node.type === "temp_basal" && node.temp_basal}
     <Select.Root
       type="single"
-      value={(node.temp_basal.metric ?? TempBasalMetric.Rate) as string}
+      value={node.temp_basal.metric ?? TempBasalMetric.Rate}
       onValueChange={(v) => {
-        if (node.temp_basal) node.temp_basal.metric = v as TempBasalMetric;
+        if (node.temp_basal && isStringEnumMember(TempBasalMetric, v)) node.temp_basal.metric = v;
       }}
     >
-      <Select.Trigger class="h-7 w-32 px-2 text-xs">
-        {tempBasalMetricLabels[
-          (node.temp_basal.metric as TempBasalMetric) ?? TempBasalMetric.Rate
-        ]}
+      <Select.Trigger size="xs" class="w-32">
+        {tempBasalMetricLabels[node.temp_basal.metric ?? TempBasalMetric.Rate]}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(tempBasalMetricLabels) as [m, label] (m)}
@@ -427,13 +468,13 @@
     </Select.Root>
     <Select.Root
       type="single"
-      value={(node.temp_basal.operator as ComparisonOperator) ?? ">="}
+      value={node.temp_basal.operator ?? ">="}
       onValueChange={(v) => {
-        if (node.temp_basal) node.temp_basal.operator = v as ComparisonOperator;
+        if (node.temp_basal) node.temp_basal.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(node.temp_basal.operator as ComparisonOperator) ?? ">="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, node.temp_basal.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -444,7 +485,8 @@
     <Input
       type="number"
       step="0.1"
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={node.temp_basal.value ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.temp_basal)
@@ -458,7 +500,7 @@
     {@const payload = node[node.type]!}
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={payload.is_active ?? true}
+      checked={payload.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         payload.is_active = checked;
         if (!checked) payload.for_minutes = undefined;
@@ -470,7 +512,8 @@
       <Input
         type="number"
         min="1"
-        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        size="xs"
+        class="w-16 text-right tabular-nums"
         placeholder="any"
         value={payload.for_minutes ?? ""}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -489,7 +532,7 @@
         if (node.alert_state) node.alert_state.alert_id = v;
       }}
     >
-      <Select.Trigger class="h-7 w-44 px-2 text-xs">
+      <Select.Trigger size="xs" class="w-44">
         {selectedRule?.name ?? "Select a rule"}
       </Select.Trigger>
       <Select.Content>
@@ -506,7 +549,7 @@
         if (node.alert_state) node.alert_state.state = v;
       }}
     >
-      <Select.Trigger class="h-7 w-32 px-2 text-xs">
+      <Select.Trigger size="xs" class="w-32">
         {node.alert_state.state ?? "firing"}
       </Select.Trigger>
       <Select.Content>
@@ -519,7 +562,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       placeholder="any"
       value={node.alert_state.for_minutes ?? ""}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -533,33 +577,32 @@
     {@const selected = new Set(node.glucose_bucket.buckets ?? [])}
     <ToggleGroup.Root
       type="multiple"
-      size="sm"
-      value={[...selected] as string[]}
+      size="xs"
+      spacing={1}
+      value={[...selected]}
       onValueChange={(v: string[]) => {
         if (node.glucose_bucket)
-          node.glucose_bucket.buckets = v as GlucoseBucket[];
+          node.glucose_bucket.buckets = v.filter((b) => isStringEnumMember(GlucoseBucket, b));
       }}
-      class="flex flex-wrap gap-1"
+      class="flex-wrap"
     >
       {#each Object.entries(glucoseBucketLabels) as [bucket, label] (bucket)}
-        <ToggleGroup.Item value={bucket} aria-label={label} class="h-7 px-2 text-xs">
+        <ToggleGroup.Item value={bucket} aria-label={label}>
           {label}
         </ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
   {:else if (node.type === "time_since_last_carb" || node.type === "time_since_last_bolus") && node[node.type]}
-    {@const payload = node[node.type]! as TimeSinceLastCarbCondition | TimeSinceLastBolusCondition}
+    {@const payload = node[node.type]!}
     <Select.Root
       type="single"
-      value={(payload.operator as unknown as ComparisonOperator) ?? ">="}
+      value={payload.operator ?? ">="}
       onValueChange={(v) => {
-        // AlertComparisonOperator is generated as a numeric enum but the wire
-        // shape carries the symbol literal — cast at the boundary.
-        payload.operator = v as unknown as typeof payload.operator;
+        if (isStringEnumMember(AlertComparisonOperator, v)) payload.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(payload.operator as unknown as ComparisonOperator) ?? ">="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, payload.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -570,7 +613,8 @@
     <Input
       type="number"
       min="1"
-      class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-16 text-right tabular-nums"
       value={payload.minutes ?? 0}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         payload.minutes = parseNumber(e.currentTarget.value, payload.minutes ?? 0);
@@ -581,16 +625,17 @@
     {@const selectedDays = new Set(node.day_of_week.days ?? [])}
     <ToggleGroup.Root
       type="multiple"
-      size="sm"
+      size="xs"
+      spacing={1}
       value={[...selectedDays].map(String)}
       onValueChange={(v: string[]) => {
         if (node.day_of_week)
-          node.day_of_week.days = v.map((s: string) => Number(s) as DayOfWeek);
+          node.day_of_week.days = v.map(Number).filter(isDayOfWeek);
       }}
-      class="flex flex-wrap gap-1"
+      class="flex-wrap"
     >
       {#each weekdayOrder as day (day)}
-        <ToggleGroup.Item value={String(day)} aria-label={weekdayLabels[day]} class="h-7 w-9 px-1 text-xs">
+        <ToggleGroup.Item value={String(day)} aria-label={weekdayLabels[day]}>
           {weekdayLabels[day]}
         </ToggleGroup.Item>
       {/each}
@@ -598,13 +643,13 @@
   {:else if node.type === "pump_state" && node.pump_state}
     <Select.Root
       type="single"
-      value={(node.pump_state.mode ?? PumpModeState.Suspended) as string}
+      value={node.pump_state.mode ?? PumpModeState.Suspended}
       onValueChange={(v) => {
-        if (node.pump_state) node.pump_state.mode = v as PumpModeState;
+        if (node.pump_state && isStringEnumMember(PumpModeState, v)) node.pump_state.mode = v;
       }}
     >
-      <Select.Trigger class="h-7 w-32 px-2 text-xs">
-        {pumpModeLabels[(node.pump_state.mode as PumpModeState) ?? PumpModeState.Suspended]}
+      <Select.Trigger size="xs" class="w-32">
+        {pumpModeLabels[node.pump_state.mode ?? PumpModeState.Suspended]}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(pumpModeLabels) as [mode, label] (mode)}
@@ -614,7 +659,7 @@
     </Select.Root>
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.pump_state.is_active ?? true}
+      checked={node.pump_state.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.pump_state) return;
         node.pump_state.is_active = checked;
@@ -627,7 +672,8 @@
       <Input
         type="number"
         min="1"
-        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        size="xs"
+        class="w-16 text-right tabular-nums"
         placeholder="any"
         value={node.pump_state.for_minutes ?? ""}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -641,16 +687,15 @@
   {:else if node.type === "state_span_active" && node.state_span_active}
     <Select.Root
       type="single"
-      value={(node.state_span_active.category ?? StateSpanCategory.Override) as string}
+      value={node.state_span_active.category ?? StateSpanCategory.Override}
       onValueChange={(v) => {
-        if (node.state_span_active)
-          node.state_span_active.category = v as StateSpanCategory;
+        if (node.state_span_active && isStringEnumMember(StateSpanCategory, v))
+          node.state_span_active.category = v;
       }}
     >
-      <Select.Trigger class="h-7 w-40 px-2 text-xs">
-        {stateCategoryLabels[
-          (node.state_span_active.category as StateSpanCategory) ?? StateSpanCategory.Override
-        ] ?? "category"}
+      <Select.Trigger size="xs" class="w-40">
+        {stateCategoryLabels[node.state_span_active.category ?? StateSpanCategory.Override] ??
+          "category"}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(stateCategoryLabels) as [cat, label] (cat)}
@@ -660,7 +705,8 @@
     </Select.Root>
     <Input
       type="text"
-      class="h-7 w-28 px-2 text-xs"
+      size="xs"
+      class="w-28"
       placeholder="any state"
       value={node.state_span_active.state ?? ""}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -671,7 +717,7 @@
     />
     <span class="text-xs text-muted-foreground">is</span>
     <Switch
-      checked={node.state_span_active.is_active ?? true}
+      checked={node.state_span_active.is_active ?? false}
       onCheckedChange={(checked: boolean) => {
         if (!node.state_span_active) return;
         node.state_span_active.is_active = checked;
@@ -684,7 +730,8 @@
       <Input
         type="number"
         min="1"
-        class="h-7 w-16 px-2 text-right text-xs tabular-nums"
+        size="xs"
+        class="w-16 text-right tabular-nums"
         placeholder="any"
         value={node.state_span_active.for_minutes ?? ""}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -698,7 +745,7 @@
   {:else if node.type === "sleep_session_active" && node.sleep_session_active}
     <span class="text-xs text-muted-foreground">sleep session is</span>
     <Switch
-      checked={node.sleep_session_active.is_active ?? true}
+      checked={node.sleep_session_active.is_active ?? false}
       onCheckedChange={(checked) => {
         if (node.sleep_session_active)
           node.sleep_session_active.is_active = checked;
@@ -716,7 +763,7 @@
         if (node.tracker_age) node.tracker_age.tracker_definition_id = v;
       }}
     >
-      <Select.Trigger class="h-7 w-44 px-2 text-xs">
+      <Select.Trigger size="xs" class="w-44">
         {selectedDef?.name ?? "Select a tracker"}
       </Select.Trigger>
       <Select.Content>
@@ -727,13 +774,13 @@
     </Select.Root>
     <Select.Root
       type="single"
-      value={(node.tracker_age.operator as ComparisonOperator) ?? ">="}
+      value={node.tracker_age.operator ?? ">="}
       onValueChange={(v) => {
-        if (node.tracker_age) node.tracker_age.operator = v as ComparisonOperator;
+        if (node.tracker_age) node.tracker_age.operator = v;
       }}
     >
-      <Select.Trigger class="h-7 w-14 px-2 text-xs">
-        {opLabels[(node.tracker_age.operator as ComparisonOperator) ?? ">="]}
+      <Select.Trigger size="xs" class="w-14">
+        {labelFor(opLabels, node.tracker_age.operator ?? ">=")}
       </Select.Trigger>
       <Select.Content>
         {#each Object.entries(opLabels) as [op, label] (op)}
@@ -744,7 +791,8 @@
     <Input
       type="number"
       step="1"
-      class="h-7 w-20 px-2 text-right text-xs tabular-nums"
+      size="xs"
+      class="w-20 text-right tabular-nums"
       value={(node.tracker_age.minutes ?? 0) / 60}
       oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
         if (node.tracker_age)

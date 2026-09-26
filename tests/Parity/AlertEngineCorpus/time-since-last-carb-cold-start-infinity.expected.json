@@ -100,7 +100,8 @@
           "tracker": {
             "state": "hysteresis",
             "confirmation_count": 0,
-            "excursion": 1
+            "excursion": 1,
+            "hysteresis_started_at": "2026-01-05T12:05:00Z"
           }
         },
         {
@@ -200,7 +201,8 @@
           "tracker": {
             "state": "hysteresis",
             "confirmation_count": 0,
-            "excursion": 2
+            "excursion": 2,
+            "hysteresis_started_at": "2026-01-05T12:10:00Z"
           }
         },
         {
@@ -248,7 +250,8 @@
           "tracker": {
             "state": "hysteresis",
             "confirmation_count": 0,
-            "excursion": 4
+            "excursion": 4,
+            "hysteresis_started_at": "2026-01-05T12:10:00Z"
           }
         }
       ]

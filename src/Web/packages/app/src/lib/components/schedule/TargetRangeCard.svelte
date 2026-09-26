@@ -109,7 +109,7 @@
         description="Desired blood glucose range"
         unit={bgLabel()}
         icon={Target}
-        iconClass="text-amber-600"
+        iconClass="text-glucose-in-range"
         entries={draft}
         onchange={(entries) => (draft = entries)}
         step={displayUnits === "mmol" ? 0.1 : 1}
@@ -137,7 +137,7 @@
     description="Desired blood glucose range"
     unit={bgLabel()}
     icon={Target}
-    iconClass="text-amber-600"
+    iconClass="text-glucose-in-range"
     entries={schedule.entries}
     sourceUnits="mg/dl"
   >
@@ -155,11 +155,11 @@
     <CardHeader class="pb-3">
       <div class="flex items-center gap-3">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-          <Target class="h-5 w-5 text-amber-600" />
+          <Target class="h-5 w-5 text-glucose-in-range" />
         </div>
         <div>
           <CardTitle class="text-base">Target Range</CardTitle>
-          <CardDescription class="text-xs">Desired blood glucose range</CardDescription>
+          <CardDescription size="sm">Desired blood glucose range</CardDescription>
         </div>
       </div>
     </CardHeader>

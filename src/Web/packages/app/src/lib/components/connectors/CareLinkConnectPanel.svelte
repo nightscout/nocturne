@@ -21,7 +21,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Label } from "$lib/components/ui/label";
   import { CheckCircle2, Copy, Download, ExternalLink, KeyRound, Monitor } from "lucide-svelte";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   // Stable rolling release that always holds the current installers (see desktop-release.yml).
   const DESKTOP_DOWNLOAD_URL =
@@ -119,14 +119,13 @@
 
   // Desktop-app handoff: a short-lived link code the user pastes into the companion app,
   // which then runs the CareLink sign-in in its own window and captures the code itself.
+  const copy = createCopyFeedback();
   let desktopLinkCode = $state<string | null>(null);
   let desktopExpiresMinutes = $state(10);
-  let desktopCopied = $state(false);
 
   async function generateDesktopLinkCode() {
     busy = true;
     error = null;
-    desktopCopied = false;
     try {
       const res = await mintDesktopLinkCode();
       desktopLinkCode = res.linkCode ?? null;
@@ -140,12 +139,7 @@
 
   async function copyDesktopLinkCode() {
     if (!desktopLinkCode) return;
-    if (!(await copyToClipboard(desktopLinkCode))) {
-      error = "Couldn't copy the code to the clipboard. Copy it manually instead.";
-      return;
-    }
-    desktopCopied = true;
-    setTimeout(() => (desktopCopied = false), 2000);
+    await copy.copy(desktopLinkCode);
   }
 </script>
 
@@ -222,7 +216,7 @@
             </Button>
             <Button variant="outline" size="sm" onclick={copyDesktopLinkCode}>
               <Copy class="h-3.5 w-3.5 mr-1" />
-              {desktopCopied ? "Copied" : "Copy"}
+              {copy.isCopied() ? "Copied" : "Copy"}
             </Button>
             <span class="text-xs text-muted-foreground">
               Expires in {desktopExpiresMinutes} minutes.
@@ -262,12 +256,12 @@
           id="carelink-code"
           bind:value={codeInput}
           rows={3}
-          class="font-mono text-xs break-all"
+          class="font-mono break-all"
           placeholder="{REDIRECT_PREFIX}?code=…&state=…"
           disabled={busy}
         />
         {#if codeInput.trim() && detectedCode}
-          <p class="flex items-center gap-1 text-xs text-green-600">
+          <p class="flex items-center gap-1 text-xs text-success">
             <CheckCircle2 class="h-3.5 w-3.5" /> Authorization code detected.
           </p>
         {:else if codeInput.trim()}
@@ -288,7 +282,7 @@
 
     {#if phase === "done"}
       <div class="flex items-start gap-2 text-sm">
-        <CheckCircle2 class="h-5 w-5 text-green-600 shrink-0" />
+        <CheckCircle2 class="h-5 w-5 text-success shrink-0" />
         <div>
           <p class="font-medium">CareLink connected.</p>
           <p class="text-muted-foreground">

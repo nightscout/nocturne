@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
-  import { copyToClipboard } from "$lib/utils";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     Globe,
     Lock,
@@ -32,12 +35,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   const canManageSharing = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("sharing.manage"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "sharing.manage"),
   );
 
   const shareQuery = $derived(canManageSharing ? getShareLink() : null);
@@ -55,7 +54,7 @@
 
   let busy = $state(false);
   let confirmingRotate = $state(false);
-  let copied = $state(false);
+  const copy = createCopyFeedback();
   let errorMessage = $state<string | null>(null);
   let scopeWritesInFlight = $state(0);
 
@@ -159,10 +158,7 @@
   }
 
   async function toggleScope(scope: string) {
-    const next = new Set(scopes);
-    if (next.has(scope)) next.delete(scope);
-    else next.add(scope);
-    const list = [...next];
+    const list = [...toggled(new Set(scopes), scope)];
     pendingScopes = list;
     errorMessage = null;
     scopeWritesInFlight++;
@@ -193,12 +189,7 @@
   async function copyLink() {
     const url = await loadUrl();
     if (!url) return;
-    if (!(await copyToClipboard(url))) {
-      errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
-      return;
-    }
-    copied = true;
-    setTimeout(() => (copied = false), 2000);
+    await copy.copy(url);
   }
 
   function formatDate(date: Date | string | undefined | null): string {
@@ -214,7 +205,7 @@
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {enabled
-          ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+          ? 'bg-success/15 text-success'
           : 'bg-muted text-muted-foreground'}"
       >
         {#if enabled}
@@ -293,8 +284,8 @@
                   disabled={revealing}
                   onclick={copyLink}
                 >
-                  {#if copied}
-                    <Check class="mr-1.5 h-4 w-4 text-green-600" />
+                  {#if copy.isCopied()}
+                    <Check class="mr-1.5 h-4 w-4 text-success" />
                   {:else}
                     <Copy class="mr-1.5 h-4 w-4" />
                   {/if}
@@ -315,9 +306,9 @@
 
           {#if confirmingRotate}
             <div
-              class="flex items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 dark:border-amber-900/50 dark:bg-amber-900/20"
+              class="flex items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/10 p-2"
             >
-              <span class="text-xs text-amber-800 dark:text-amber-200">
+              <span class="text-xs text-warning">
                 Regenerating invalidates the current link immediately.
               </span>
               <div class="flex shrink-0 gap-2">
@@ -362,12 +353,12 @@
               {@const ScopeIcon = cat.icon}
               <label
                 class="flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors {on
-                  ? 'border-green-500/40 bg-green-500/5'
+                  ? 'border-success/40 bg-success/5'
                   : 'border-border bg-background hover:border-muted-foreground/40'}"
               >
                 <div
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {on
-                    ? 'bg-green-500/15 text-green-600 dark:text-green-400'
+                    ? 'bg-success/15 text-success'
                     : 'bg-muted text-muted-foreground'}"
                 >
                   <ScopeIcon class="h-4 w-4" />
@@ -390,32 +381,26 @@
               Limit public viewers to recent data only. Older history stays private.
             </div>
           </div>
-          <div class="inline-flex shrink-0 rounded-lg bg-muted p-1" data-testid="public-access-window">
-            <button
-              type="button"
-              onclick={() => setWindow(true)}
-              class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {fullHistory
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'}"
-            >
-              All history
-            </button>
-            <button
-              type="button"
-              onclick={() => setWindow(false)}
-              class="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors {!fullHistory
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'}"
-            >
+          <ToggleGroup.Root
+            type="single"
+            variant="segmented"
+            size="xs"
+            class="shrink-0"
+            data-testid="public-access-window"
+            value={fullHistory ? "all" : "24h"}
+            onValueChange={(v: string) => v && setWindow(v === "all")}
+          >
+            <ToggleGroup.Item value="all">All history</ToggleGroup.Item>
+            <ToggleGroup.Item value="24h">
               <Clock class="h-3 w-3" />
               Last 24 hours
-            </button>
-          </div>
+            </ToggleGroup.Item>
+          </ToggleGroup.Root>
         </div>
 
         <!-- Plain-language summary -->
-        <div class="flex gap-3 rounded-lg border border-green-500/30 bg-green-500/5 p-4">
-          <Eye class="mt-0.5 h-5 w-5 shrink-0 text-green-600 dark:text-green-400" />
+        <div class="flex gap-3 rounded-lg border border-success/30 bg-success/5 p-4">
+          <Eye class="mt-0.5 h-5 w-5 shrink-0 text-success" />
           <p class="text-sm leading-relaxed">
             {#if scopes.length === 0}
               <strong class="font-semibold">Your link is live, but nothing is shared yet.</strong>

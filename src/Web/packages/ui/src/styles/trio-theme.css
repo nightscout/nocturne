@@ -40,6 +40,7 @@
   --insulin-temp-basal: rgba(162, 214, 249, 0.5);
   --insulin-manual-temp-basal: rgba(30, 150, 252, 1.0);
   --insulin-scheduled-basal: rgba(30, 150, 252, 0.7); /* Opaque --insulin-basal for chart fills */
+  --basal: rgba(30, 150, 252, 0.7);
   --insulin-additional-basal: rgb(162, 214, 249); /* Opaque --insulin-temp-basal for chart fills */
 
   /* Carbohydrates - Trio Colors */
@@ -68,7 +69,8 @@
   --pred-zt: rgb(113, 97, 239);         /* Purple */
   --pred-uam: rgb(255, 132, 69);        /* Orange UAM */
 
-  /* Status Colors */
+  /* Status Colors. Chat cards and e-mail use the default theme's values
+     (see @nocturne/ui/tokens); overrides here apply in-browser only. */
   --status-warning: rgb(255, 193, 69);
   --status-critical: rgb(235, 87, 87);
   --status-normal: rgb(111, 207, 151);

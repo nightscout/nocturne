@@ -5,7 +5,7 @@
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
   import { NotificationUrgency, TrackerCategory } from "$lib/api";
   import { cn } from "$lib/utils";
-  import { Check, Clock } from "lucide-svelte";
+  import { Check, Clock, TriangleAlert } from "lucide-svelte";
   import { TrackerCategoryIcon } from "$lib/components/icons";
 
   type AlertLevel = "none" | "info" | "warn" | "hazard" | "urgent";
@@ -98,34 +98,30 @@
     return "none";
   });
 
-  const pillClasses = $derived.by(() => {
-    const baseClasses =
-      "relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer select-none overflow-hidden";
+  // eslint-disable-next-line shadcn/require-static-classes -- this is the pill component: levelClasses is its variant table, and PopoverTrigger renders unstyled.
+  const pillClasses = $derived(
+    cn(
+      "relative inline-flex flex-col items-start rounded-md px-3 py-1 text-left whitespace-nowrap transition-colors cursor-pointer select-none overflow-hidden hover:bg-accent/50",
+      className
+    )
+  );
 
-    const levelClasses: Record<AlertLevel, string> = {
-      none: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      info: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50",
-      warn: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-900/50",
-      hazard:
-        "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 hover:bg-orange-200 dark:hover:bg-orange-900/50",
-      urgent:
-        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50",
-    };
+  const valueTone: Record<AlertLevel, string> = {
+    none: "",
+    info: "text-severity-info",
+    warn: "text-severity-warn",
+    hazard: "text-severity-hazard",
+    urgent: "text-severity-urgent",
+  };
 
-    return cn(baseClasses, levelClasses[level], className);
-  });
-
-  // Progress fill colors - slightly more saturated/darker version of each alert level
-  const progressFillClasses = $derived.by((): string => {
-    const fillClasses: Record<AlertLevel, string> = {
-      none: "bg-secondary-foreground/10 dark:bg-secondary-foreground/15",
-      info: "bg-blue-200/60 dark:bg-blue-700/40",
-      warn: "bg-yellow-200/60 dark:bg-yellow-700/40",
-      hazard: "bg-orange-200/60 dark:bg-orange-700/40",
-      urgent: "bg-red-200/60 dark:bg-red-700/40",
-    };
-    return fillClasses[level];
-  });
+  // The share of the tracker's lifespan used, drawn as a hairline under the item.
+  const progressFillClasses: Record<AlertLevel, string> = {
+    none: "bg-muted-foreground/40",
+    info: "bg-severity-info",
+    warn: "bg-severity-warn",
+    hazard: "bg-severity-hazard",
+    urgent: "bg-severity-urgent",
+  };
 
   const label = $derived(
     instance.definitionName ?? definition?.name ?? "Tracker"
@@ -148,17 +144,25 @@
   <Popover.Trigger class={pillClasses}>
     {#if showProgress}
       <span
-        class="absolute inset-y-0 left-0 {progressFillClasses} transition-all duration-500 ease-out"
-        style="width: {progressPercent}%"
+        class="absolute bottom-0 left-3 h-px {progressFillClasses[level]} w-[calc((100%-1.5rem)*var(--progress))] transition-all duration-500 ease-out"
+        style:--progress={progressPercent / 100}
         aria-hidden="true"
       ></span>
     {/if}
-    <TrackerCategoryIcon
-      category={definition?.category ?? TrackerCategory.Custom}
-      class="relative h-3 w-3 opacity-75"
-    />
-    <span class="relative text-xs font-normal opacity-75">{label}</span>
-    <span class="relative">{ageDisplay}</span>
+    <span class="flex items-center gap-1 text-xs text-muted-foreground">
+      <TrackerCategoryIcon
+        category={definition?.category ?? TrackerCategory.Custom}
+        class="size-3"
+      />
+      {label}
+    </span>
+    <span class="flex items-center gap-1 text-sm font-medium tabular-nums {valueTone[level]}">
+      {#if level === "warn" || level === "hazard" || level === "urgent"}
+        <TriangleAlert class="size-3.5" aria-hidden="true" />
+        <span class="sr-only">{level === "urgent" ? "Urgent:" : "Warning:"}</span>
+      {/if}
+      {ageDisplay}
+    </span>
   </Popover.Trigger>
   <Popover.Content class="w-72 p-0" align="center" side="bottom">
     <div class="px-4 py-3 border-b border-border">
@@ -194,7 +198,7 @@
               timeRemaining !== undefined && timeRemaining <= 0
                 ? "text-destructive"
                 : timeRemaining !== undefined && timeRemaining < 6
-                  ? "text-yellow-600 dark:text-yellow-400"
+                  ? "text-severity-warn"
                   : ""
             )}
           >

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
   import { UserPlus, Info } from "lucide-svelte";
@@ -11,12 +12,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   const canManage = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("members.manage"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "members.manage"),
   );
 
   const settingsQuery = $derived(canManage ? getMembershipRequestSettings() : null);
@@ -54,7 +51,7 @@
     <div class="flex items-start gap-4 p-5 @md:p-6">
       <div
         class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {allow
-          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+          ? 'bg-warning/15 text-warning'
           : 'bg-muted text-muted-foreground'}"
       >
         <UserPlus class="h-5 w-5" />

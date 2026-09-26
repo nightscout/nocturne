@@ -11,9 +11,8 @@ export const TREATMENT_CATEGORIES = {
     description: "Insulin doses, corrections, and combo boluses",
     eventTypes: ["Snack Bolus", "Meal Bolus", "Correction Bolus", "Combo Bolus"],
     icon: "syringe" as const,
-    colorClass: "text-blue-600 dark:text-blue-400",
-    bgClass: "bg-blue-100 dark:bg-blue-900/30",
-    borderClass: "border-blue-200 dark:border-blue-700",
+    colorClass: "text-entry-bolus",
+    badge: "entry-bolus" as const,
   },
   basal: {
     id: "basal",
@@ -21,9 +20,8 @@ export const TREATMENT_CATEGORIES = {
     description: "Temp basals and profile switches",
     eventTypes: ["Temp Basal Start", "Temp Basal End", "Temp Basal", "Profile Switch"],
     icon: "activity" as const,
-    colorClass: "text-purple-600 dark:text-purple-400",
-    bgClass: "bg-purple-100 dark:bg-purple-900/30",
-    borderClass: "border-purple-200 dark:border-purple-700",
+    colorClass: "text-entry-basal",
+    badge: "entry-basal" as const,
   },
   carbs: {
     id: "carbs",
@@ -31,9 +29,8 @@ export const TREATMENT_CATEGORIES = {
     description: "Meals, snacks, and carb corrections",
     eventTypes: ["Carb Correction"],
     icon: "utensils" as const,
-    colorClass: "text-green-600 dark:text-green-400",
-    bgClass: "bg-green-100 dark:bg-green-900/30",
-    borderClass: "border-green-200 dark:border-green-700",
+    colorClass: "text-entry-carbs",
+    badge: "entry-carbs" as const,
   },
   device: {
     id: "device",
@@ -48,9 +45,8 @@ export const TREATMENT_CATEGORIES = {
       "Insulin Change",
     ],
     icon: "smartphone" as const,
-    colorClass: "text-orange-600 dark:text-orange-400",
-    bgClass: "bg-orange-100 dark:bg-orange-900/30",
-    borderClass: "border-orange-200 dark:border-orange-700",
+    colorClass: "text-entry-device-event",
+    badge: "entry-device-event" as const,
   },
   notes: {
     id: "notes",
@@ -58,9 +54,8 @@ export const TREATMENT_CATEGORIES = {
     description: "Notes, announcements, and BG checks",
     eventTypes: ["BG Check", "Note", "Announcement", "Question", "D.A.D. Alert"],
     icon: "file-text" as const,
-    colorClass: "text-gray-600 dark:text-gray-400",
-    bgClass: "bg-gray-100 dark:bg-gray-800/50",
-    borderClass: "border-gray-200 dark:border-gray-600",
+    colorClass: "text-muted-foreground",
+    badge: "secondary" as const,
   },
 } as const;
 
@@ -71,36 +66,21 @@ export type TreatmentCategory = (typeof TREATMENT_CATEGORIES)[TreatmentCategoryI
  * Get the category for an event type
  */
 export function getCategoryForEventType(eventType: string): TreatmentCategoryId | null {
-  for (const [categoryId, category] of Object.entries(TREATMENT_CATEGORIES)) {
-    if ((category.eventTypes as readonly string[]).includes(eventType)) {
-      return categoryId as TreatmentCategoryId;
-    }
-  }
-  return null;
+  const category = Object.values(TREATMENT_CATEGORIES).find((c) =>
+    c.eventTypes.some((type) => type === eventType)
+  );
+  return category?.id ?? null;
 }
 
 /**
  * Get style classes for an event type
  */
-export function getEventTypeStyle(eventType: string): {
-  colorClass: string;
-  bgClass: string;
-  borderClass: string;
-} {
+export function getEventTypeStyle(eventType: string): { colorClass: string } {
   const categoryId = getCategoryForEventType(eventType);
   if (categoryId) {
-    const category = TREATMENT_CATEGORIES[categoryId];
-    return {
-      colorClass: category.colorClass,
-      bgClass: category.bgClass,
-      borderClass: category.borderClass,
-    };
+    return { colorClass: TREATMENT_CATEGORIES[categoryId].colorClass };
   }
-  return {
-    colorClass: "text-muted-foreground",
-    bgClass: "bg-muted/20",
-    borderClass: "border-muted/30",
-  };
+  return { colorClass: "text-muted-foreground" };
 }
 
 /**
@@ -250,16 +230,14 @@ export const V4_CATEGORIES = {
   bolus: {
     id: "bolus" as const,
     name: "Bolus",
-    colorClass: "text-blue-600 dark:text-blue-400",
-    bgClass: "bg-blue-100 dark:bg-blue-900/30",
-    borderClass: "border-blue-200 dark:border-blue-700",
+    colorClass: "text-entry-bolus",
+    badge: "entry-bolus" as const,
   },
   carbs: {
     id: "carbs" as const,
     name: "Carbs",
-    colorClass: "text-green-600 dark:text-green-400",
-    bgClass: "bg-green-100 dark:bg-green-900/30",
-    borderClass: "border-green-200 dark:border-green-700",
+    colorClass: "text-entry-carbs",
+    badge: "entry-carbs" as const,
   },
 } as const;
 
@@ -287,11 +265,7 @@ export function countV4Rows(rows: TreatmentRow[]): V4TreatmentCounts {
   return { total: rows.length, bolus, carbs };
 }
 
-export function getRowTypeStyle(rowType: "bolus" | "carbIntake"): {
-  colorClass: string;
-  bgClass: string;
-  borderClass: string;
-} {
+export function getRowTypeStyle(rowType: "bolus" | "carbIntake") {
   if (rowType === "bolus") return V4_CATEGORIES.bolus;
   return V4_CATEGORIES.carbs;
 }

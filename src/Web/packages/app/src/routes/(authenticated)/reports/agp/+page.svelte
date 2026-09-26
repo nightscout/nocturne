@@ -14,17 +14,17 @@
     Target,
     TrendingUp,
     ArrowRight,
-    Printer,
     HelpCircle,
   } from "lucide-svelte";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
   import { getReportsData } from "$api/reports.remote";
   import { bg, bgLabel, bgRange, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
-  
+
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is the standard AGP report period
   const reportsParams = requireDateParamsContext(14);
@@ -58,7 +58,7 @@
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">
-      <div>
+      <div class="print:hidden">
         <h1 class="text-3xl font-bold flex items-center gap-3">
           <BarChart3 class="w-8 h-8 text-primary" />
           Ambulatory Glucose Profile
@@ -69,19 +69,9 @@
       </div>
       <div class="flex items-center gap-2 print:hidden">
         <Button
-          variant="outline"
-          size="sm"
-          class="gap-2"
-          onclick={() => window.print()}
-        >
-          <Printer class="w-4 h-4" />
-          Print
-        </Button>
-        <Button
           href="/reports/executive-summary"
           variant="outline"
           size="sm"
-          class="gap-2"
         >
           Summary
           <ArrowRight class="w-4 h-4" />
@@ -89,41 +79,38 @@
       </div>
     </div>
 
-
     <!-- Period info -->
     <div class="flex items-center gap-2 text-sm text-muted-foreground">
-      <Calendar class="w-4 h-4" />
-      <span>
+      <Calendar class="w-4 h-4 print:hidden" />
+      <span class="print:hidden">
         {formatNumericDate(startDate)} – {formatNumericDate(endDate)}
       </span>
-      <span class="text-muted-foreground/50">•</span>
-      <span>{dayCount} days</span>
-      <span class="text-muted-foreground/50">•</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
+      <span class="print:hidden">{dayCount} days</span>
+      <span class="text-muted-foreground/50 print:hidden">•</span>
       <span>{formatNumber(entries.length)} readings</span>
     </div>
   </div>
 
   <!-- What is AGP - Educational Card -->
-  <Card
-    class="border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30"
-  >
+  <Card variant="info">
     <CardHeader class="pb-3">
       <CardTitle class="flex items-center gap-2 text-base">
-        <HelpCircle class="w-5 h-5 text-blue-600" />
+        <HelpCircle class="w-5 h-5 text-info" />
         What is an AGP?
       </CardTitle>
     </CardHeader>
-    <CardContent class="text-sm space-y-2">
+    <CardContent size="sm" class="space-y-2">
       <p>
         The <strong>Ambulatory Glucose Profile</strong>
         shows what a "typical" day looks like for your glucose levels. It overlays
         all your daily readings to reveal consistent patterns.
       </p>
       <details class="text-muted-foreground">
-        <summary class="cursor-pointer text-blue-600 hover:underline">
+        <summary class="cursor-pointer text-info hover:underline">
           How to read this chart
         </summary>
-        <div class="mt-2 space-y-2 pl-4 border-l-2 border-blue-200">
+        <div class="mt-2 space-y-2 pl-4 border-l border-info/30">
           <p>
             <strong>The dark line</strong>
             is your median (middle) glucose at each hour — what happens most often.
@@ -137,7 +124,7 @@
             (10th-90th percentile) shows where you are 80% of the time.
           </p>
           <p>
-            <strong>Green zone</strong>
+            <strong>The shaded band</strong>
             ({bgRange(70, 180)}) is the consensus target range. The consensus target
             is at least 70% of time in this zone.
           </p>
@@ -152,56 +139,21 @@
     {@const stats = analysis.basicStats ?? {}}
     {@const variability = analysis.glycemicVariability ?? {}}
 
-    <!-- Quick Stats Grid -->
-    <div class="grid grid-cols-2 @lg:grid-cols-4 @3xl:grid-cols-6 gap-4">
-      <Card
-        class="p-4 text-center border-2 border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/30"
-      >
-        <div class="text-3xl font-bold text-green-600">
-          {tir.target?.toFixed(0) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">Time in Range</div>
-        <div class="text-[10px] text-green-600">Target: ≥70%</div>
-      </Card>
-      <Card class="p-4 text-center">
-        <div class="text-3xl font-bold">{stats.mean ? bg(stats.mean) : "–"}</div>
-        <div class="text-xs text-muted-foreground">Average</div>
-        <div class="text-[10px] text-muted-foreground/70">{bgLabel()}</div>
-      </Card>
-      <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-red-600">
-          {variability.estimatedA1c?.toFixed(1) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">Est. A1C</div>
-        <div class="text-[10px] text-muted-foreground/70">GMI</div>
-      </Card>
-      <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-purple-600">
-          {variability.coefficientOfVariation?.toFixed(0) ?? "–"}%
-        </div>
-        <div class="text-xs text-muted-foreground">CV</div>
-        <div class="text-[10px] text-purple-600">Target: ≤33%</div>
-      </Card>
-      <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-red-500">
-          {((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1)}%
-        </div>
-        <div class="text-xs text-muted-foreground">Below Range</div>
-        <div class="text-[10px] text-red-500">Target: &lt;4%</div>
-      </Card>
-      <Card class="p-4 text-center">
-        <div class="text-3xl font-bold text-orange-500">
-          {((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1)}%
-        </div>
-        <div class="text-xs text-muted-foreground">Above Range</div>
-        <div class="text-[10px] text-orange-500">Target: &lt;25%</div>
-      </Card>
-    </div>
+    <FigureStrip
+      figures={[
+        { label: "Time in range", value: tir.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%" },
+        { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "–", unit: bgLabel() },
+        { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "–", unit: "%", note: "From mean glucose" },
+        { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%" },
+        { label: "Below range", value: ((tir.low ?? 0) + (tir.veryLow ?? 0)).toFixed(1), unit: "%", note: "Target: <4%" },
+        { label: "Above range", value: ((tir.high ?? 0) + (tir.veryHigh ?? 0)).toFixed(1), unit: "%", note: "Target: <25%" },
+      ]}
+    />
 
     <ReliabilityBadge reliability={analysis?.reliability} />
 
     <!-- Main AGP Chart -->
-    <Card class="border-2">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <BarChart3 class="w-5 h-5" />
@@ -218,11 +170,11 @@
     </Card>
 
     <!-- Time in Range Visual -->
-    <div class="grid grid-cols-1 @3xl:grid-cols-2 gap-6">
-      <Card class="border-2">
+    <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <Target class="w-5 h-5 text-green-600" />
+            <Target class="w-5 h-5 text-glucose-in-range" />
             Time in Range Distribution
           </CardTitle>
           <CardDescription>
@@ -235,10 +187,10 @@
       </Card>
 
       <!-- Key Patterns / Insights -->
-      <Card class="border-2">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
-            <TrendingUp class="w-5 h-5 text-purple-600" />
+            <TrendingUp class="w-5 h-5" />
             Measured Against Consensus Targets
           </CardTitle>
           <CardDescription>
@@ -272,7 +224,7 @@
           ]}
           {#each observations as observation (observation.label)}
             <div
-              class="flex flex-wrap items-baseline justify-between gap-2 rounded-lg bg-muted/50 p-3"
+              class="flex flex-wrap items-baseline justify-between gap-2 border-b pb-3 last-of-type:border-b-0"
             >
               <div>
                 <p class="font-medium">{observation.label}</p>
@@ -280,7 +232,7 @@
                   Consensus target: {observation.target}
                 </p>
               </div>
-              <p class="text-2xl font-bold tabular-nums">
+              <p class="text-lg font-semibold tabular-nums">
                 {observation.value != null
                   ? observation.format(observation.value)
                   : "No data"}
@@ -289,25 +241,25 @@
           {/each}
           <p class="text-xs text-muted-foreground">
             The percentile bands above show when in the day variation and
-            excursions occur. Discuss any patterns with your care team.
+            excursions occur.
           </p>
         </CardContent>
       </Card>
     </div>
   {/if}
 
-  <Separator />
+  <Separator class="print:hidden" />
 
   <!-- Clinical Context Footer -->
-  <Card class="border bg-muted/30">
+  <Card variant="muted">
     <CardContent class="pt-6">
-      <div class="grid grid-cols-1 @3xl:grid-cols-3 gap-6 text-sm">
+      <div class="grid grid-cols-1 @3xl:grid-cols-2 print:grid-cols-2 gap-6 text-sm">
         <div>
           <h4 class="font-semibold mb-2">About This Report</h4>
           <p class="text-muted-foreground">
             The AGP is a standardized report format recommended by diabetes
-            organizations worldwide. It's designed to quickly show patterns that
-            help optimize treatment.
+            organizations worldwide. It shows how glucose varies across a typical
+            day.
           </p>
         </div>
         <div>
@@ -318,18 +270,11 @@
             patterns and timing of excursions.
           </p>
         </div>
-        <div>
-          <h4 class="font-semibold mb-2">Next Steps</h4>
-          <p class="text-muted-foreground">
-            Use this report with your care team to identify specific times of
-            day that need attention and to track progress over time.
-          </p>
-        </div>
       </div>
     </CardContent>
   </Card>
 
-  <div class="text-xs text-muted-foreground text-center">
+  <div class="text-xs text-muted-foreground text-center print:hidden">
     Data from {formatNumericDate(startDate)} – {formatNumericDate(endDate)}.
     {#if lastUpdated}
       Last updated {formatMediumDateTime(new Date(lastUpdated))}.
@@ -337,15 +282,3 @@
   </div>
 </div>
 {/if}
-
-<style>
-  /* Expand collapsible clinical detail when printing. */
-  @media print {
-    details > :not(summary) {
-      display: block;
-    }
-    summary {
-      display: none;
-    }
-  }
-</style>

@@ -43,27 +43,29 @@ member account instead of waiting for you to send them an invite. See
 
 ## Which should I use?
 
-- **One-off, short-lived look** (a single appointment) →
+- **One-off, short-lived look** (a single appointment):
   [temporary guest link](/docs/sharing/guest-links). It cleans itself up 48 hours
   after you make it and can only be used once.
-- **A screen lots of people glance at** (a daycare, a classroom display) →
+- **A screen lots of people glance at** (a daycare, a classroom display):
   [public share link](/docs/sharing/public-link), with the fewest categories you
   can manage and the 24-hour window on.
 - **A named person who needs ongoing access** (a regular clinician, a teacher, a
-  nurse, a family member) → a [member account](/docs/sharing/members) with the
+  nurse, a family member): a [member account](/docs/sharing/members) with the
   right role.
 - **Someone who should come to you** (you'd rather approve people than collect
-  details and hand out links) → turn on
+  details and hand out links): turn on
   [membership requests](/docs/sharing/members#membership-requests) and approve
   each one with the right role.
 - **A screen that shows just your current glucose** (a bedside clock, a tablet on
-  the counter) → a [clock](/docs/sharing/clock), opened by its own unguessable
+  the counter): a [clock](/docs/sharing/clock), opened by its own unguessable
   link.
 
 <Callout type="tip" title="Share the least, for the shortest time">
+
   If two options would both work, pick the narrower one. A guest link that expires
   on its own is easier to live with than a public link you have to remember to
   switch off, and a Viewer role shows far less than an Administrator one.
+
 </Callout>
 
 ## Turning access back off

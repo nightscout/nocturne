@@ -1,18 +1,35 @@
 <script lang="ts">
+    import { resolve } from "$app/paths";
     import { ArtworkHero, ConfirmationBackground } from "@nocturne/watercolour";
     import Content from "../../content/docs/index.svx";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
+    import { ArrowRight } from "@lucide/svelte";
     import { DOCS_HERO } from "$lib/data/docs-artwork";
-    import {
-        ArrowRight,
-        Download,
-        Settings,
-        Code2,
-        BookOpen,
-        Rocket,
-    } from "@lucide/svelte";
 
     const hero = DOCS_HERO[""];
+
+    const GUIDES = [
+        {
+            href: resolve("/docs/getting-started"),
+            title: "Quick Start",
+            desc: "Get up and running with Nocturne in just a few minutes.",
+        },
+        {
+            href: resolve("/docs/installation"),
+            title: "Installation Guide",
+            desc: "Step-by-step guides for deploying Nocturne with Docker Compose, Portainer, and more.",
+        },
+        {
+            href: resolve("/docs/configuration"),
+            title: "Configuration Guide",
+            desc: "Learn how to configure connectors, settings, and customize your instance.",
+        },
+        {
+            href: resolve("/scalar"),
+            title: "API Reference",
+            desc: "Interactive API documentation powered by Scalar. Explore endpoints, test requests, and integrate with Nocturne.",
+        },
+    ];
 </script>
 
 <div class="max-w-3xl">
@@ -26,134 +43,29 @@
     />
     <Content />
 
-    <div class="grid gap-4 not-prose">
-        <a
-            href="/docs/getting-started"
-            class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-        >
-            <div class="flex items-start gap-4">
-                <div
-                    class="w-12 h-12 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0"
-                >
-                    <Rocket class="size-6 text-green-500" />
-                </div>
-                <div class="flex-1">
-                    <h2
-                        class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-                    >
-                        Quick Start
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        Get up and running with Nocturne in just a few minutes.
-                    </p>
-                </div>
-                <ArrowRight
-                    class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors"
-                />
-            </div>
-        </a>
-
-        <a
-            href="/docs/installation"
-            class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-        >
-            <div class="flex items-start gap-4">
-                <div
-                    class="w-12 h-12 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0"
-                >
-                    <Download class="w-6 h-6 text-blue-500" />
-                </div>
-                <div class="flex-1">
-                    <h2
-                        class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-                    >
-                        Installation Guide
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        Step-by-step guides for deploying Nocturne with Docker Compose,
-                        Portainer, and more.
-                    </p>
-                </div>
-                <ArrowRight
-                    class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors"
-                />
-            </div>
-        </a>
-
-        <a
-            href="/docs/configuration"
-            class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-        >
-            <div class="flex items-start gap-4">
-                <div
-                    class="w-12 h-12 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0"
-                >
-                    <Settings class="w-6 h-6 text-purple-500" />
-                </div>
-                <div class="flex-1">
-                    <h2
-                        class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-                    >
-                        Configuration Guide
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        Learn how to configure connectors, settings, and
-                        customize your instance.
-                    </p>
-                </div>
-                <ArrowRight
-                    class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors"
-                />
-            </div>
-        </a>
-
-        <a
-            href="/scalar"
-            class="p-6 rounded-xl border border-border/60 bg-card/50 hover:bg-card hover:border-primary/30 transition-colors group"
-        >
-            <div class="flex items-start gap-4">
-                <div
-                    class="w-12 h-12 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0"
-                >
-                    <Code2 class="w-6 h-6 text-orange-500" />
-                </div>
-                <div class="flex-1">
-                    <h2
-                        class="text-lg font-semibold mb-1 group-hover:text-primary transition-colors"
-                    >
-                        API Reference
-                    </h2>
-                    <p class="text-sm text-muted-foreground">
-                        Interactive API documentation powered by Scalar. Explore
-                        endpoints, test requests, and integrate with Nocturne.
-                    </p>
-                </div>
-                <ArrowRight
-                    class="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors"
-                />
-            </div>
-        </a>
-    </div>
+    <ul class="not-prose m-0 p-0 list-none border-t border-border">
+        {#each GUIDES as guide (guide.href)}
+            <li class="border-b border-border">
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- guide.href is resolve()d in GUIDES -->
+                <a href={guide.href} class="group flex items-start gap-4 py-5 no-underline text-inherit">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-semibold text-foreground m-0 mb-1 group-hover:underline underline-offset-4">
+                            {guide.title}
+                        </h2>
+                        <p class="text-sm text-muted-foreground m-0">{guide.desc}</p>
+                    </div>
+                    <ArrowRight class="size-5 mt-1 text-muted-foreground group-hover:text-foreground transition-colors" aria-hidden="true" />
+                </a>
+            </li>
+        {/each}
+    </ul>
 
     <SupportNocturne />
 
-    <div class="mt-12 p-6 rounded-xl border border-amber-500/30 bg-amber-500/5">
-        <div class="flex items-start gap-3">
-            <BookOpen class="size-6 shrink-0 text-amber-500" />
-            <div>
-                <h3
-                    class="font-semibold text-amber-700 dark:text-amber-400 mb-1"
-                >
-                    Documentation In Progress
-                </h3>
-                <p class="text-sm text-muted-foreground">
-                    We're actively working on expanding the documentation. Check
-                    back soon for more guides and tutorials, or contribute on
-                    GitHub!
-                </p>
-            </div>
-        </div>
-    </div>
+    <p class="mt-12 text-sm text-muted-foreground">
+        The documentation is still growing. If a guide you need is missing,
+        check back soon or contribute one on GitHub.
+    </p>
 
     <div
         class="relative mt-4 h-8 w-24 overflow-hidden sm:h-10 sm:w-[120px] dark:hidden"

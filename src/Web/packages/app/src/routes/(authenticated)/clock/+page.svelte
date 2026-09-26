@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import { formatNumericDate } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
@@ -37,13 +39,13 @@
         config: createDefaultConfig(),
       });
       if (result.id) {
-        goto(`/clock/config/${result.id}`);
+        goto(resolve("/(authenticated)/clock/config/[id]", { id: result.id }));
       } else {
         toast.error("Failed to create clock face");
       }
     } catch (err) {
       console.error("Failed to create clock face:", err);
-      toast.error("Failed to create clock face");
+      toast.error(describeSubmitError(err, "Failed to create clock face"));
     } finally {
       creating = false;
     }
@@ -81,7 +83,7 @@
           Create and manage your custom clock displays
         </p>
       </div>
-      <Button onclick={handleCreate} disabled={creating} class="gap-2">
+      <Button onclick={handleCreate} disabled={creating}>
         {#if creating}
           <Loader2 class="size-4 animate-spin" />
         {:else}
@@ -98,7 +100,7 @@
         </div>
       {/snippet}
       {#snippet failed(error, reset)}
-        <Card.Root class="border-destructive">
+        <Card.Root variant="destructive">
           <Card.Content class="py-8 text-center space-y-3">
             <p class="text-destructive">
               {remoteErrorMessage(error, "Failed to load clock faces")}
@@ -112,7 +114,7 @@
 
       {#if clockFaces.length === 0}
         <!-- Empty State -->
-        <Card.Root class="border-dashed">
+        <Card.Root variant="dashed">
           <Card.Content class="flex flex-col items-center justify-center py-12">
             <Artwork
               artwork="clock"
@@ -126,7 +128,7 @@
               Create your first custom clock face to display your glucose data
               exactly how you want it.
             </p>
-            <Button onclick={handleCreate} disabled={creating} class="gap-2">
+            <Button onclick={handleCreate} disabled={creating}>
               {#if creating}
                 <Loader2 class="size-4 animate-spin" />
               {:else}
@@ -140,9 +142,7 @@
         <!-- Clock Face Grid -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {#each clockFaces as face (face.id)}
-            <Card.Root
-              class="group cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg"
-            >
+            <Card.Root interactive class="group cursor-pointer">
               <!-- Each preview reads its own query's state rather than awaiting it: an await here
                    is work the enclosing boundary has to finish before it can show the list at all,
                    and one preview that never resolves holds the whole page on its placeholder. -->
@@ -154,7 +154,7 @@
               <div class="flex items-start justify-between">
                 <div>
                   <Card.Title class="font-semibold">{face.name}</Card.Title>
-                  <Card.Description class="text-xs">
+                  <Card.Description size="sm">
                     {#if face.updatedAt}
                       Updated {formatNumericDate(new Date(face.updatedAt))}
                     {:else if face.createdAt}
@@ -163,15 +163,16 @@
                   </Card.Description>
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="opacity-0 transition-opacity group-hover:opacity-100"
+                  reveal
+                  aria-label="Delete clock face"
                   onclick={(e: MouseEvent) => {
                     e.stopPropagation();
                     openDeleteDialog(face.id ?? "", face.name ?? "Untitled");
                   }}
                 >
-                  <Trash2 class="size-4 text-destructive" />
+                  <Trash2 />
                 </Button>
               </div>
 
@@ -180,14 +181,14 @@
                   variant="outline"
                   size="sm"
                   class="flex-1"
-                  onclick={() => goto(`/clock/config/${face.id}`)}
+                  onclick={() => goto(resolve(`/clock/config/${face.id}`))}
                 >
                   Edit
                 </Button>
                 <Button
                   size="sm"
                   class="flex-1"
-                  onclick={() => goto(`/clock/${face.id}`)}
+                  onclick={() => goto(resolve(`/clock/${face.id}`))}
                 >
                   Open
                 </Button>

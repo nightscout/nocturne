@@ -149,7 +149,7 @@
         <div class="text-sm">
           <span class="font-medium">{foodPortion}{foodUnit}</span>
           <span class="text-muted-foreground">=</span>
-          <span class="font-semibold text-green-600 dark:text-green-400">
+          <span class="font-semibold text-success">
             {foodCarbs}g carbs
           </span>
         </div>
@@ -167,7 +167,7 @@
       >
         <Star
           class="h-4 w-4 {favorites.some((fav) => fav._id === selectedFood?._id)
-            ? 'text-yellow-500 fill-yellow-500'
+            ? 'text-favorite fill-favorite'
             : 'text-muted-foreground'}"
         />
       </Button>
@@ -176,16 +176,18 @@
 
   <!-- Collapsible nutritional details -->
   <Collapsible.Root bind:open={nutritionDetailsOpen}>
-    <Collapsible.Trigger
-      class="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-medium hover:bg-muted/50 transition-colors"
-    >
-      <span>Nutritional Details</span>
-      <ChevronDown
-        class={cn(
-          "h-4 w-4 transition-transform",
-          nutritionDetailsOpen && "rotate-180"
-        )}
-      />
+    <Collapsible.Trigger>
+      {#snippet child({ props }: { props: Record<string, unknown> })}
+        <Button {...props} variant="outline" class="w-full justify-between">
+          <span>Nutritional Details</span>
+          <ChevronDown
+            class={cn(
+              "h-4 w-4 transition-transform",
+              nutritionDetailsOpen && "rotate-180"
+            )}
+          />
+        </Button>
+      {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content class="pt-3 space-y-4">
       <!-- Portion and unit row -->
@@ -206,7 +208,7 @@
             <Popover.Trigger bind:ref={unitTriggerRef}>
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
-                  variant="outline"
+                  variant="combobox"
                   class="w-full justify-between"
                   {...props}
                   role="combobox"
@@ -223,7 +225,7 @@
                 <Command.List>
                   <Command.Empty>No unit found.</Command.Empty>
                   <Command.Group>
-                    {#each foodUnits as unit}
+                    {#each foodUnits as unit (unit)}
                       <Command.Item
                         value={unit}
                         onSelect={() => selectUnit(unit)}
@@ -259,7 +261,7 @@
             <Popover.Trigger bind:ref={giTriggerRef}>
               {#snippet child({ props }: { props: Record<string, unknown> })}
                 <Button
-                  variant="outline"
+                  variant="combobox"
                   class="w-full justify-between"
                   {...props}
                   role="combobox"
@@ -276,7 +278,7 @@
                 <Command.List>
                   <Command.Empty>No GI found.</Command.Empty>
                   <Command.Group>
-                    {#each giOptions as option}
+                    {#each giOptions as option (option.value)}
                       <Command.Item
                         value={option.label}
                         onSelect={() => selectGi(option.value)}

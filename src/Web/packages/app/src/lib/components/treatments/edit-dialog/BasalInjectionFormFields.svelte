@@ -2,7 +2,6 @@
   import type {
     CreateBasalInjectionRequest,
     PatientInsulin,
-    InsulinCategory,
   } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
@@ -50,8 +49,8 @@
 </script>
 
 <div class="space-y-2">
-  <Label class="flex items-center gap-1.5">
-    <Syringe class="h-3.5 w-3.5 text-blue-500" />
+  <Label>
+    <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
     Basal Insulin
   </Label>
   <Select.Root
@@ -68,7 +67,7 @@
           <div>
             <div>{insulin.name}</div>
             <div class="text-xs text-muted-foreground">
-              {insulinCategoryLabels[insulin.insulinCategory as InsulinCategory] ?? insulin.insulinCategory}
+              {(insulin.insulinCategory ? insulinCategoryLabels[insulin.insulinCategory] : undefined) ?? insulin.insulinCategory}
             </div>
           </div>
         </Select.Item>
@@ -76,7 +75,7 @@
     </Select.Content>
   </Select.Root>
   {#if isPremix}
-    <div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+    <div class="flex items-start gap-1.5 text-xs text-warning">
       <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
       <span>
         This insulin is used for both bolus and basal &mdash; log the basal portion only.
@@ -86,8 +85,8 @@
 </div>
 
 <div class="space-y-2">
-  <Label for="basal-units" class="flex items-center gap-1.5">
-    <Syringe class="h-3.5 w-3.5 text-blue-500" />
+  <Label for="basal-units">
+    <Syringe class="h-3.5 w-3.5 text-entry-basal-injection" />
     Units (U)
   </Label>
   <Input
@@ -99,7 +98,7 @@
     bind:value={value.units}
   />
   {#if isHighDose}
-    <div class="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-500">
+    <div class="flex items-start gap-1.5 text-xs text-warning">
       <AlertTriangle class="h-3.5 w-3.5 mt-0.5 shrink-0" />
       <span>Confirm the dose &mdash; this is higher than typical.</span>
     </div>

@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
+import { z } from "zod";
 
 /**
  * HMAC-signed state token for the Discord OAuth2 link flow.
@@ -20,14 +21,16 @@ import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
  * dominated by JWT invalidation, not state token invalidation.
  */
 
-export interface OAuthLinkStatePayload {
+const OAuthLinkStatePayloadSchema = z.object({
 	/** Tenant subdomain slug the user came from — the callback redirects back here. */
-	slug: string;
+	slug: z.string(),
 	/** Random nonce to prevent replay. */
-	nonce: string;
+	nonce: z.string(),
 	/** Expiration timestamp in unix milliseconds. */
-	exp: number;
-}
+	exp: z.number(),
+});
+
+export type OAuthLinkStatePayload = z.infer<typeof OAuthLinkStatePayloadSchema>;
 
 const STATE_LIFETIME_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -74,15 +77,16 @@ export function verifyOAuthLinkState(state: string): OAuthLinkStatePayload | nul
 		return null;
 	}
 
-	let payload: OAuthLinkStatePayload;
+	let json: unknown;
 	try {
-		payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8")) as OAuthLinkStatePayload;
+		json = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf-8"));
 	} catch {
 		return null;
 	}
 
-	if (typeof payload.slug !== "string" || typeof payload.exp !== "number") return null;
-	if (payload.exp < Date.now()) return null;
+	const parsed = OAuthLinkStatePayloadSchema.safeParse(json);
+	if (!parsed.success) return null;
+	if (parsed.data.exp < Date.now()) return null;
 
-	return payload;
+	return parsed.data;
 }

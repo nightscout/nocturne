@@ -33,7 +33,8 @@
   // Let the consuming app wire in its router's beforeNavigate hook.
   // The callback sets a flag so Popover uses replaceState instead of
   // history.back() when cleaning up the sentinel entry during navigation.
-  // svelte-ignore state_referenced_locally — intentional: beforeNavigate must be called at init time
+  // beforeNavigate must be called at init time.
+  // svelte-ignore state_referenced_locally
   if (onBeforeNavigate) {
     onBeforeNavigate(() => {
       navigationFlag.navigating = true;

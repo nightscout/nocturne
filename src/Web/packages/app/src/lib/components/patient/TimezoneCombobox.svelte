@@ -8,6 +8,7 @@
   interface Props {
     /** Currently selected IANA timezone id */
     value?: string;
+    onValueChange?: (value: string) => void;
     id?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -18,6 +19,7 @@
 
   let {
     value = $bindable(),
+    onValueChange,
     id,
     placeholder = "Select timezone...",
     disabled = false,
@@ -27,8 +29,8 @@
   }: Props = $props();
 
   const allTimezones: string[] =
-    typeof Intl !== "undefined" && "supportedValuesOf" in Intl
-      ? (Intl as unknown as { supportedValuesOf(key: string): string[] }).supportedValuesOf("timeZone")
+    typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function"
+      ? Intl.supportedValuesOf("timeZone")
       : [];
 
   let popoverOpen = $state(false);
@@ -42,6 +44,7 @@
 
   function selectTimezone(tz: string) {
     value = tz;
+    onValueChange?.(tz);
     popoverOpen = false;
     searchValue = "";
   }
@@ -54,12 +57,12 @@
          `for` targets the caller's id. -->
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         role="combobox"
         aria-expanded={popoverOpen}
         aria-invalid={ariaInvalid}
         aria-describedby={ariaDescribedby}
-        class={cn("w-full justify-between font-normal", className)}
+        class={cn("w-full justify-between", className)}
         {disabled}
         {...props}
         {...id ? { id } : {}}
@@ -79,7 +82,7 @@
       <Command.List>
         <Command.Empty>No timezone found.</Command.Empty>
         <Command.Group>
-          {#each filteredTimezones as tz}
+          {#each filteredTimezones as tz (tz)}
             <Command.Item
               value={tz}
               onSelect={() => selectTimezone(tz)}

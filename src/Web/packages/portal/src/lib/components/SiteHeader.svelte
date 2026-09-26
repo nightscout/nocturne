@@ -1,5 +1,7 @@
 <script lang="ts">
     import { page } from "$app/state";
+    import { resolve } from "$app/paths";
+    import type { Pathname } from "$app/types";
     import { Button } from "@nocturne/ui/ui/button";
     import { Menu, X } from "@lucide/svelte";
     import {
@@ -9,7 +11,9 @@
 
     let mobileMenuOpen = $state(false);
 
-    const baseNavLinks = [
+    type NavLink = { href: Pathname; label: string };
+
+    const baseNavLinks: NavLink[] = [
         { href: "/features", label: "Features" },
         { href: "/docs", label: "Docs" },
         { href: "/scalar", label: "API" },
@@ -18,7 +22,7 @@
     ];
 
     // Add Demo link when demo is enabled
-    const navLinks = DEMO_ENABLED
+    const navLinks: NavLink[] = DEMO_ENABLED
         ? [...baseNavLinks.slice(0, 2), { href: "/demo", label: "Demo" }, ...baseNavLinks.slice(2)]
         : baseNavLinks;
 
@@ -32,7 +36,7 @@
         <div class="flex h-16 items-center justify-between">
             <!-- Logo -->
             <a
-                href="/"
+                href={resolve("/")}
                 class="flex items-center gap-2.5 hover:opacity-80 transition-opacity"
             >
                 <img src="/logos/nocturne.png" alt="Nocturne" class="w-9 h-9" />
@@ -41,9 +45,9 @@
 
             <!-- Desktop Navigation -->
             <nav class="hidden md:flex items-center gap-1">
-                {#each navLinks as link}
-                    <a
-                        href={link.href}
+                {#each navLinks as link (link.href)}
+                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a Pathname from navLinks, checked against the route manifest -->
+                    <a href={link.href}
                         class="px-4 py-2 text-sm font-medium rounded-md transition-colors {isActive(link.href)
                             ? 'text-foreground bg-muted'
                             : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"
@@ -62,27 +66,28 @@
             </div>
 
             <!-- Mobile Menu Button -->
-            <button
-                type="button"
-                class="md:hidden p-2 rounded-md hover:bg-muted transition-colors"
+            <Button
+                variant="ghost"
+                size="icon"
+                class="md:hidden"
                 onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
                 aria-label="Toggle menu"
             >
                 {#if mobileMenuOpen}
-                    <X class="w-5 h-5" />
+                    <X class="size-5" />
                 {:else}
-                    <Menu class="w-5 h-5" />
+                    <Menu class="size-5" />
                 {/if}
-            </button>
+            </Button>
         </div>
 
         <!-- Mobile Navigation -->
         {#if mobileMenuOpen}
             <nav class="md:hidden py-4 border-t border-border/40">
                 <div class="flex flex-col gap-1">
-                    {#each navLinks as link}
-                        <a
-                            href={link.href}
+                    {#each navLinks as link (link.href)}
+                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- link.href is a Pathname from navLinks, checked against the route manifest -->
+                        <a href={link.href}
                             class="px-4 py-3 text-sm font-medium rounded-md transition-colors {isActive(link.href)
                                 ? 'text-foreground bg-muted'
                                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'}"

@@ -26,16 +26,21 @@ Telemetry is **push-based over OTLP**. Nocturne does **not** expose a Prometheus
 is your stack.
 
 <Callout type="info" title="You provide the backend">
+
   Nocturne does not bundle a collector or a metrics store. You point it at an
   OTLP endpoint you already run (an OpenTelemetry Collector, or a SaaS backend
   such as Grafana Cloud, Honeycomb, Dash0, etc.).
+
 </Callout>
 
 ## The single switch
 
 Both containers enable their exporters only when `OTEL_EXPORTER_OTLP_ENDPOINT`
 is set. Setting it on a container turns telemetry on; leaving it unset keeps it
-off. The standard OpenTelemetry SDK environment variables apply:
+off. With the endpoint set, the API sends its logs to the collector only and
+stops writing them to the container log, so `docker compose logs nocturne-api`
+shows little. Read them in your backend instead. The standard OpenTelemetry SDK
+environment variables apply:
 
 | Variable | Description |
 |----------|-------------|
@@ -68,10 +73,12 @@ docker compose up -d
 ```
 
 <Callout type="tip" title="Only instrument what you need">
+
   Both services read the same two variables. If you only want backend telemetry,
   override <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> to empty for
   <code>nocturne-web</code> in the Compose file. Otherwise the single
   <code>.env</code> endpoint enables both.
+
 </Callout>
 
 ## Kubernetes (Helm)
@@ -118,12 +125,14 @@ can scrape or receive.
 ## Privacy: telemetry can contain identifiers
 
 <Callout type="danger" title="Review telemetry before sending it off-site">
+
   Request URLs and client-error reports can include tenant subdomains and
   identifiers, and traces may carry request metadata. Telemetry only leaves your
   instance once you set <code>OTEL_EXPORTER_OTLP_ENDPOINT</code>. If you send it
   to a third-party backend, treat it as sensitive: prefer a collector you
   control, and use the collector's processors (e.g. attribute/redaction
   processors) to scrub or drop anything you do not want to retain.
+
 </Callout>
 
 ## Verifying it works

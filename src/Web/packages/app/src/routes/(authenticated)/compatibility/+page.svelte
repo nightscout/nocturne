@@ -2,6 +2,7 @@
   import { Link } from "@lucide/svelte";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount, onDestroy } from "svelte";
   import {
     getCompatibilityData,
@@ -13,6 +14,10 @@
   import type { AnalysisListItemDto } from "$lib/api";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
   import { Artwork } from "@nocturne/watercolour";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as Select from "$lib/components/ui/select";
 
   // Get filter params from URL
   const urlParams = $derived({
@@ -61,12 +66,19 @@
   let polledMetrics = $state<typeof metrics | null>(null);
 
   // Polling interval (5 seconds)
-  let pollInterval: NodeJS.Timeout | null = null;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   // Filter state - initialized from derived fetchedData
   let filterPath = $state("");
   let filterMethod = $state("");
   let filterMatch = $state("");
+  const matchOptions = [
+    { value: "", label: "All" },
+    { value: "0", label: "Perfect" },
+    { value: "1", label: "Minor Differences" },
+    { value: "2", label: "Major Differences" },
+    { value: "3", label: "Critical" },
+  ];
   let showCompatible = $state(false); // Hide compatible by default
 
   // Initialize filter state from fetched data
@@ -137,11 +149,14 @@
 
   // Apply filters
   function applyFilters() {
-    const params = new URLSearchParams();
-    if (filterPath) params.set("requestPath", filterPath);
-    if (filterMethod) params.set("requestMethod", filterMethod);
-    if (filterMatch) params.set("overallMatch", filterMatch);
-    goto(`/compatibility?${params.toString()}`);
+    const params = new URLSearchParams(
+      Object.entries({
+        requestPath: filterPath,
+        requestMethod: filterMethod,
+        overallMatch: filterMatch,
+      }).filter(([, value]) => value)
+    );
+    goto(resolve(`/compatibility?${params.toString()}`));
   }
 
   // Clear filters
@@ -149,7 +164,7 @@
     filterPath = "";
     filterMethod = "";
     filterMatch = "";
-    goto("/compatibility");
+    goto(resolve("/compatibility"));
   }
 
   // Filtered analyses based on showCompatible
@@ -173,32 +188,30 @@
       <h1 class="text-3xl font-bold">Compatibility Testing</h1>
     </div>
     <div class="flex gap-2 items-center">
-      <span class="text-sm text-gray-500">
+      <span class="text-sm text-muted-foreground">
         Last update: {formatDateTimeCompact(lastUpdate.toISOString())}
       </span>
-      <button
+      <Button
+        variant={isPolling ? "default" : "secondary"}
         onclick={togglePolling}
-        class="px-4 py-2 rounded-md {isPolling
-          ? 'bg-green-600 hover:bg-green-700'
-          : 'bg-gray-600 hover:bg-gray-700'} text-white transition"
       >
         {isPolling ? "Polling Active" : "Polling Paused"}
-      </button>
+      </Button>
     </div>
   </div>
 
   <!-- Configuration Card -->
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+  <div class="bg-card rounded-lg shadow p-6">
     <h2 class="text-xl font-semibold mb-4">Configuration</h2>
     <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
       <div>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Nightscout URL</p>
+        <p class="text-sm text-muted-foreground">Nightscout URL</p>
         <p class="font-mono text-sm">
           {config.nightscoutUrl || "Not configured"}
         </p>
       </div>
       <div>
-        <p class="text-sm text-gray-500 dark:text-gray-400">Nocturne URL</p>
+        <p class="text-sm text-muted-foreground">Nocturne URL</p>
         <p class="font-mono text-sm">{nocturneUrl || "Auto-detecting..."}</p>
       </div>
     </div>
@@ -206,30 +219,30 @@
 
   <!-- Metrics Cards -->
   <div class="grid grid-cols-1 @xl:grid-cols-2 @5xl:grid-cols-4 gap-4">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+    <div class="bg-card rounded-lg shadow p-6">
+      <h3 class="text-sm text-muted-foreground mb-2">
         Total Requests
       </h3>
       <p class="text-3xl font-bold">{activeMetrics.totalRequests || 0}</p>
     </div>
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+    <div class="bg-card rounded-lg shadow p-6">
+      <h3 class="text-sm text-muted-foreground mb-2">
         Compatibility Score
       </h3>
       <p class="text-3xl font-bold">
         {(activeMetrics.compatibilityScore || 0).toFixed(1)}%
       </p>
     </div>
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+    <div class="bg-card rounded-lg shadow p-6">
+      <h3 class="text-sm text-muted-foreground mb-2">
         Critical Issues
       </h3>
-      <p class="text-3xl font-bold text-red-600">
+      <p class="text-3xl font-bold text-destructive">
         {activeMetrics.criticalDifferences || 0}
       </p>
     </div>
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-      <h3 class="text-sm text-gray-500 dark:text-gray-400 mb-2">
+    <div class="bg-card rounded-lg shadow p-6">
+      <h3 class="text-sm text-muted-foreground mb-2">
         Avg Response Time
       </h3>
       <p class="text-3xl font-bold">
@@ -239,18 +252,17 @@
   </div>
 
   <!-- Filters -->
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+  <div class="bg-card rounded-lg shadow p-6">
     <h2 class="text-xl font-semibold mb-4">Filters</h2>
     <div class="grid grid-cols-1 @xl:grid-cols-2 @4xl:grid-cols-4 gap-4">
       <div>
         <label for="filterPath" class="block text-sm font-medium mb-1">
           Request Path
         </label>
-        <input
+        <Input
           type="text"
           id="filterPath"
           bind:value={filterPath}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
           placeholder="/api/v1/entries"
         />
       </div>
@@ -258,52 +270,42 @@
         <label for="filterMethod" class="block text-sm font-medium mb-1">
           Method
         </label>
-        <select
-          id="filterMethod"
-          bind:value={filterMethod}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
-        >
-          <option value="">All</option>
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="DELETE">DELETE</option>
-        </select>
+        <Select.Root type="single" bind:value={filterMethod}>
+          <Select.Trigger id="filterMethod" class="w-full">
+            {filterMethod || "All"}
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="" label="All" />
+            <Select.Item value="GET" label="GET" />
+            <Select.Item value="POST" label="POST" />
+            <Select.Item value="PUT" label="PUT" />
+            <Select.Item value="DELETE" label="DELETE" />
+          </Select.Content>
+        </Select.Root>
       </div>
       <div>
         <label for="filterMatch" class="block text-sm font-medium mb-1">
           Match Type
         </label>
-        <select
-          id="filterMatch"
-          bind:value={filterMatch}
-          class="w-full px-3 py-2 border rounded-md dark:bg-gray-700"
-        >
-          <option value="">All</option>
-          <option value="0">Perfect</option>
-          <option value="1">Minor Differences</option>
-          <option value="2">Major Differences</option>
-          <option value="3">Critical</option>
-        </select>
+        <Select.Root type="single" bind:value={filterMatch}>
+          <Select.Trigger id="filterMatch" class="w-full">
+            {matchOptions.find((o) => o.value === filterMatch)?.label ?? "All"}
+          </Select.Trigger>
+          <Select.Content>
+            {#each matchOptions as option (option.value)}
+              <Select.Item value={option.value} label={option.label} />
+            {/each}
+          </Select.Content>
+        </Select.Root>
       </div>
       <div class="flex items-end gap-2">
-        <button
-          onclick={applyFilters}
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition"
-        >
-          Apply
-        </button>
-        <button
-          onclick={clearFilters}
-          class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md transition"
-        >
-          Clear
-        </button>
+        <Button onclick={applyFilters}>Apply</Button>
+        <Button variant="secondary" onclick={clearFilters}>Clear</Button>
       </div>
     </div>
     <div class="mt-4">
       <label class="flex items-center gap-2">
-        <input type="checkbox" bind:checked={showCompatible} class="rounded" />
+        <Checkbox bind:checked={showCompatible} />
         <span class="text-sm">
           Show compatible requests (Perfect & Minor Differences)
         </span>
@@ -312,8 +314,8 @@
   </div>
 
   <!-- Analyses Table -->
-  <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-    <div class="px-6 py-4 border-b dark:border-gray-700">
+  <div class="bg-card rounded-lg shadow overflow-hidden">
+    <div class="px-6 py-4 border-b">
       <h2 class="text-xl font-semibold">
         Recent Requests ({filteredAnalyses.length}{showCompatible
           ? ""
@@ -322,54 +324,54 @@
     </div>
     <div class="overflow-x-auto">
       <table class="w-full">
-        <thead class="bg-gray-50 dark:bg-gray-900">
+        <thead class="bg-muted/50">
           <tr>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Time
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Method
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Path
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Status
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Match
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Issues
             </th>
             <th
-              class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+              class="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase"
             >
               Response Time
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-          {#each filteredAnalyses as analysis}
+        <tbody class="divide-y divide-border">
+          {#each filteredAnalyses as analysis (analysis.id)}
             {@const matchType = getMatchTypeDisplay(analysis.overallMatch)}
             {@const compatible = isCompatible(analysis.overallMatch)}
             <tr
-              class="hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer transition {compatible
+              class="hover:bg-muted/50 cursor-pointer transition {compatible
                 ? 'opacity-60'
                 : ''}"
-              onclick={() => goto(`/compatibility/${analysis.id}`)}
+              onclick={() => goto(resolve(`/compatibility/${analysis.id}`))}
             >
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 {formatDateTimeCompact(analysis.analysisTimestamp)}
@@ -385,7 +387,7 @@
                   {analysis.nightscoutStatusCode || "N/A"}
                 </span>
                 {#if analysis.nightscoutStatusCode !== analysis.nocturneStatusCode}
-                  <span class="text-red-600">≠</span>
+                  <span class="text-destructive">≠</span>
                   <span class="font-mono">
                     {analysis.nocturneStatusCode || "N/A"}
                   </span>
@@ -400,19 +402,19 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm">
                 {#if (analysis.criticalDiscrepancyCount ?? 0) > 0}
-                  <span class="text-red-600 font-semibold">
+                  <span class="text-destructive font-semibold">
                     {analysis.criticalDiscrepancyCount} critical
                   </span>
                 {:else if (analysis.majorDiscrepancyCount ?? 0) > 0}
-                  <span class="text-yellow-600 font-semibold">
+                  <span class="text-warning font-semibold">
                     {analysis.majorDiscrepancyCount} major
                   </span>
                 {:else if (analysis.minorDiscrepancyCount ?? 0) > 0}
-                  <span class="text-blue-600">
+                  <span class="text-info">
                     {analysis.minorDiscrepancyCount} minor
                   </span>
                 {:else}
-                  <span class="text-green-600">None</span>
+                  <span class="text-success">None</span>
                 {/if}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm font-mono">
@@ -428,7 +430,7 @@
             </tr>
           {:else}
             <tr>
-              <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+              <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
                 <Artwork
                   artwork="linked-rings"
                   palette="dusk"

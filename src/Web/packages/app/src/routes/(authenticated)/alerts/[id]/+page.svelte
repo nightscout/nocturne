@@ -2,6 +2,7 @@
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { untrack } from "svelte";
   import {
     getRule,
@@ -12,8 +13,10 @@
     testFire,
   } from "$api/generated/alertRules.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { conditionIssuesMessage } from "$lib/components/alerts/conditionIssues.svelte";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
-  import { AlertRuleSeverity, AlertConditionType } from "$api-clients";
+  import { z } from "zod";
+  import { AlertRuleSeverity } from "$api-clients";
   import type { HistoryExcursionResponse } from "$api-clients";
 
   import { Button } from "$lib/components/ui/button";
@@ -51,9 +54,6 @@
   import { severity, severityLabel } from "$lib/components/alerts/severity";
   import {
     parseRule,
-    flattenSingleChildRoot,
-    nodeToApi,
-    stripEditorFields,
     ensureCompositeRoot,
     defaultPayload,
     buildBody,
@@ -71,11 +71,11 @@
   let testingSaved = $state(false);
   let error = $state<string | null>(null);
 
-  let state = $state<RuleEditorState>(parseRule(null));
+  let editor = $state<RuleEditorState>(parseRule(null));
   let seededId = $state<string | null>(null);
   let savedBody = $state<ReturnType<typeof buildBody> | null>(null);
   const isDirty = $derived(
-    isNew || savedBody === null || JSON.stringify(buildBody(state)) !== JSON.stringify(savedBody)
+    isNew || savedBody === null || JSON.stringify(buildBody(editor)) !== JSON.stringify(savedBody)
   );
 
   // Queries — fire on the server during SSR, results land in cache for hydration.
@@ -107,9 +107,9 @@
   let replayInitialDate = $state<string | undefined>(undefined);
 
   // Smart-snooze controls — driven by the snooze sub-tree on clientConfig.
-  let smartSnoozeOn = $derived(state.clientConfig.snooze.smartSnooze);
+  let smartSnoozeOn = $derived(editor.clientConfig.snooze.smartSnooze);
   let smartSnoozeMinutes = $derived(
-    state.clientConfig.snooze.smartSnoozeExtendMinutes
+    editor.clientConfig.snooze.smartSnoozeExtendMinutes
   );
 
   // Seed the editor state from the loaded rule once per ruleId. Rebuilds when
@@ -118,7 +118,7 @@
     if (seededId === ruleId) return;
     if (isNew) {
       untrack(() => {
-        state = parseRule(null);
+        editor = parseRule(null);
         savedBody = null;
         seededId = ruleId;
       });
@@ -127,8 +127,8 @@
     const rule = ruleQuery?.current;
     if (rule === undefined) return;
     untrack(() => {
-      state = parseRule(rule ?? null);
-      savedBody = buildBody(state);
+      editor = parseRule(rule ?? null);
+      savedBody = buildBody(editor);
       seededId = ruleId;
     });
   });
@@ -136,7 +136,7 @@
   // ---- Save ------------------------------------------------------------
 
   async function save(): Promise<void> {
-    const channelError = validateChannels(state.channels);
+    const channelError = validateChannels(editor.channels);
     if (channelError) {
       error = channelError;
       return;
@@ -144,16 +144,21 @@
     saving = true;
     error = null;
     try {
-      const body = buildBody(state);
+      const body = buildBody(editor);
       if (isNew) {
-        const created = await createRule(body as never);
-        await goto(`/alerts/${created?.id ?? ""}`);
+        const created = await createRule(body);
+        await goto(
+          created?.id
+            ? resolve("/(authenticated)/alerts/[id]", { id: created.id })
+            : resolve("/alerts")
+        );
       } else {
-        await updateRule({ id: ruleId, request: body as never });
-        savedBody = buildBody(state);
+        await updateRule({ id: ruleId, request: body });
+        savedBody = buildBody(editor);
       }
     } catch (e) {
-      error = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
+      const described = describeSubmitError(e, "Failed to save the alert rule. Please try again.");
+      error = conditionIssuesMessage(e) ?? described;
     } finally {
       saving = false;
     }
@@ -161,12 +166,12 @@
 
   async function destroy(): Promise<void> {
     if (isNew) return;
-    if (!confirm(`Delete "${state.name}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete "${editor.name}"? This cannot be undone.`)) return;
     deleting = true;
     error = null;
     try {
       await deleteRule(ruleId);
-      await goto("/alerts");
+      await goto(resolve("/alerts"));
     } catch (e) {
       error = describeSubmitError(e, "Failed to delete the alert rule. Please try again.");
     } finally {
@@ -230,32 +235,30 @@
   // ---- Smart snooze -----------------------------------------------------
 
   /**
-   * Snapshot the editor state into the dry-run rule shape. Re-evaluated each
-   * time Run is pressed so unsaved edits between presses are picked up.
+   * Snapshot the editor state into the dry-run rule shape, from the same body a
+   * save sends. Re-evaluated each time Run is pressed so unsaved edits between
+   * presses are picked up.
    */
+  const severitySchema = z.enum(AlertRuleSeverity);
+
   function buildReplayRule() {
-    const flat = flattenSingleChildRoot(state.condition!);
-    const api = nodeToApi(flat);
-    const params = api?.conditionParams;
-    const autoResolve = state.autoResolveCondition
-      ? stripEditorFields(flattenSingleChildRoot(state.autoResolveCondition))
-      : undefined;
+    const body = buildBody(editor);
     return {
       id: isNew ? undefined : ruleId,
-      name: state.name,
-      conditionType: api?.conditionType as AlertConditionType,
-      conditionParams: params == null ? undefined : JSON.stringify(params),
-      severity: state.severity,
-      allowThroughDnd: state.allowThroughDnd,
-      autoResolveEnabled: state.autoResolveEnabled,
-      autoResolveParams: autoResolve ? JSON.stringify(autoResolve) : undefined,
+      name: body.name,
+      conditionType: body.conditionType,
+      conditionParams: body.conditionParams == null ? undefined : JSON.stringify(body.conditionParams),
+      severity: body.severity,
+      allowThroughDnd: body.allowThroughDnd,
+      autoResolveEnabled: body.autoResolveEnabled,
+      autoResolveParams: body.autoResolveParams ? JSON.stringify(body.autoResolveParams) : undefined,
     };
   }
 
   function toggleSmartSnooze(checked: boolean): void {
-    state.clientConfig.snooze.smartSnooze = checked;
-    if (checked && state.clientConfig.snooze.conditions.length === 0) {
-      state.clientConfig.snooze.conditions = [
+    editor.clientConfig.snooze.smartSnooze = checked;
+    if (checked && editor.clientConfig.snooze.conditions.length === 0) {
+      editor.clientConfig.snooze.conditions = [
         ensureCompositeRoot(defaultPayload("trend")),
       ];
     }
@@ -263,7 +266,7 @@
 </script>
 
 <svelte:head>
-  <title>{isNew ? "New alert" : state.name || "Alert"} · Nocturne</title>
+  <title>{isNew ? "New alert" : editor.name || "Alert"} · Nocturne</title>
 </svelte:head>
 
 <div class="@container container mx-auto p-3 @md:p-6 max-w-7xl max-md:pb-24">
@@ -274,14 +277,14 @@
         type="button"
         variant="ghost"
         size="icon"
-        onclick={() => goto("/alerts")}
+        onclick={() => goto(resolve("/alerts"))}
         aria-label="Back to alerts"
       >
         <ArrowLeft class="h-4 w-4" />
       </Button>
       <div class="min-w-0">
         <h1 class="text-2xl font-bold truncate">
-          {isNew ? "New alert" : state.name || "Alert"}
+          {isNew ? "New alert" : editor.name || "Alert"}
         </h1>
         <p class="text-sm text-muted-foreground">
           {isNew ? "Define a new alert rule" : "Edit alert rule"}
@@ -348,14 +351,14 @@
               </CardDescription>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <Label class="cursor-pointer text-sm" for="rule-enabled">
+              <Label class="cursor-pointer" for="rule-enabled">
                 Enabled
               </Label>
               <Switch
                 id="rule-enabled"
-                checked={state.isEnabled}
+                checked={editor.isEnabled}
                 onCheckedChange={(c: boolean) => {
-                  state.isEnabled = c;
+                  editor.isEnabled = c;
                 }}
               />
             </div>
@@ -367,9 +370,9 @@
                 id="rule-name"
                 type="text"
                 placeholder="Approaching low"
-                value={state.name}
+                value={editor.name}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
-                  state.name = e.currentTarget.value;
+                  editor.name = e.currentTarget.value;
                 }}
               />
             </div>
@@ -379,9 +382,9 @@
                 id="rule-desc"
                 rows={2}
                 placeholder="Why this alert exists, what it should trigger"
-                value={state.description}
+                value={editor.description}
                 oninput={(e: Event & { currentTarget: HTMLTextAreaElement }) => {
-                  state.description = e.currentTarget.value;
+                  editor.description = e.currentTarget.value;
                 }}
               />
             </div>
@@ -389,12 +392,13 @@
               <Label>Severity</Label>
               <Select.Root
                 type="single"
-                value={state.severity}
+                value={editor.severity}
                 onValueChange={(v) => {
-                  state.severity = v as AlertRuleSeverity;
+                  const parsed = severitySchema.safeParse(v);
+                  if (parsed.success) editor.severity = parsed.data;
                 }}
               >
-                <Select.Trigger>{severityLabel(state.severity)}</Select.Trigger>
+                <Select.Trigger>{severityLabel(editor.severity)}</Select.Trigger>
                 <Select.Content>
                   {#each severityOptions as o (o.value)}
                     <Select.Item value={o.value} label={o.label} />
@@ -405,13 +409,13 @@
             <div class="flex items-start gap-2 rounded border bg-muted/30 p-3">
               <Checkbox
                 id="rule-allow-dnd"
-                checked={state.allowThroughDnd}
+                checked={editor.allowThroughDnd}
                 onCheckedChange={(c: boolean) => {
-                  state.allowThroughDnd = c === true;
+                  editor.allowThroughDnd = c === true;
                 }}
               />
               <div class="space-y-0.5">
-                <Label class="cursor-pointer text-sm" for="rule-allow-dnd">
+                <Label class="cursor-pointer" for="rule-allow-dnd">
                   Allow through Do Not Disturb
                 </Label>
                 <p class="text-xs text-muted-foreground">
@@ -433,8 +437,8 @@
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {#if state.condition}
-              <RuleBuilder bind:node={state.condition} {availableRules} />
+            {#if editor.condition}
+              <RuleBuilder bind:node={editor.condition} {availableRules} />
             {/if}
           </CardContent>
         </Card>
@@ -449,8 +453,8 @@
           </CardHeader>
           <CardContent>
             <ChannelsSection
-              bind:channels={state.channels}
-              severity={state.severity}
+              bind:channels={editor.channels}
+              severity={editor.severity}
             />
           </CardContent>
         </Card>
@@ -462,9 +466,9 @@
           </CardHeader>
           <CardContent>
             <AutoResolveSection
-              bind:enabled={state.autoResolveEnabled}
-              bind:condition={state.autoResolveCondition}
-              firingCondition={state.condition}
+              bind:enabled={editor.autoResolveEnabled}
+              bind:condition={editor.autoResolveCondition}
+              firingCondition={editor.condition}
               {availableRules}
             />
           </CardContent>
@@ -476,7 +480,8 @@
             <CardTitle>Smart snooze</CardTitle>
             <CardDescription>
               When the user snoozes, extend the snooze automatically while these
-              conditions hold.
+              conditions hold. Each extension counts toward the alert's snooze
+              limit, and without a recent glucose reading the alert fires again.
             </CardDescription>
           </CardHeader>
           <CardContent class="space-y-4">
@@ -502,19 +507,24 @@
                   oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
                     const n = Number(e.currentTarget.value);
                     if (Number.isFinite(n))
-                      state.clientConfig.snooze.smartSnoozeExtendMinutes = n;
+                      editor.clientConfig.snooze.smartSnoozeExtendMinutes = n;
                   }}
                 />
               </div>
               <div class="space-y-2">
                 <Label>Extend while</Label>
-                {#each state.clientConfig.snooze.conditions as _c, i (i)}
+                {#each editor.clientConfig.snooze.conditions as _c, i (i)}
                   <RuleBuilder
-                    bind:node={state.clientConfig.snooze.conditions[i]}
+                    bind:node={editor.clientConfig.snooze.conditions[i]}
                     {availableRules}
                   />
                 {/each}
               </div>
+              <p class="text-sm text-muted-foreground">
+                With no conditions, only high and low glucose alerts are
+                extended, and only while glucose is clearly moving back toward
+                range. Every other alert fires again when its snooze ends.
+              </p>
             {/if}
           </CardContent>
         </Card>
@@ -526,7 +536,7 @@
       <Card>
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>
-          <CardDescription class="text-xs">
+          <CardDescription size="sm">
             Fire a real notification, or replay the rule against historical
             glucose.
           </CardDescription>
@@ -567,7 +577,7 @@
             <CardTitle class="text-base flex items-center gap-2">
               <HistoryIcon class="h-4 w-4" /> Historic firings
             </CardTitle>
-            <CardDescription class="text-xs">
+            <CardDescription size="sm">
               Real fires for this rule. Click any to replay the day in the
               simulator.
             </CardDescription>
@@ -593,8 +603,8 @@
                   >
                     <Button
                       variant="ghost"
-                      size="sm"
-                      class="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-xs h-auto"
+                      size="xs"
+                      class="flex min-w-0 flex-1 items-center text-left"
                       onclick={() => openReplay(h.startedAt)}
                       title="Replay this day in the simulator"
                     >
@@ -609,16 +619,16 @@
                         {formatHistoryRow(h.startedAt)}
                       </span>
                       {#if h.acknowledgedAt}
-                        <span class="text-[10px] text-muted-foreground shrink-0">
+                        <span class="text-2xs text-muted-foreground shrink-0">
                           ack
                         </span>
                       {/if}
                     </Button>
                     {#if dayInReviewHref(h.startedAt)}
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-6 w-6 shrink-0 text-muted-foreground"
+                        variant="ghost-muted"
+                        size="icon-xs"
+                        class="shrink-0"
                         href={dayInReviewHref(h.startedAt)}
                         title="Open day in review"
                         aria-label="Open day in review"
@@ -638,9 +648,8 @@
 </div>
 
 <Dialog.Root bind:open={replayOpen}>
-  <Dialog.Content
-    class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl"
-  >
+  <!-- eslint-disable-next-line shadcn/no-restyle -- the replay workbench fills the viewport; its bordered header and scrolling body pad themselves, so the dialog cannot -->
+  <Dialog.Content class="flex h-[90vh] max-h-[90vh] w-[calc(100vw-1rem)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:w-[95vw] sm:max-w-7xl">
     <Dialog.Header class="border-b px-4 py-3">
       <Dialog.Title class="flex items-center gap-2">
         <PlayCircle class="h-4 w-4" /> Replay
@@ -656,7 +665,7 @@
         initialCustomDate={replayInitialDate}
         rule={buildReplayRule}
         editingRuleId={isNew ? undefined : ruleId}
-        editingTree={state.condition ?? undefined}
+        editingTree={editor.condition ?? undefined}
         availableRules={rulesQuery.current ?? []}
       />
     </div>

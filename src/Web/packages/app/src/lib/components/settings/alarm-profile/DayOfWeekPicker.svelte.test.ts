@@ -16,9 +16,9 @@ test("renders all seven days", async () => {
 test("marks all days active when activeDays is undefined", async () => {
 	render(DayOfWeekPicker);
 
-	// When activeDays is undefined, all days should be active (bg-primary)
+	// When activeDays is undefined, all days should be pressed
 	const mon = page.getByRole("button", { name: "Mon" });
-	await expect.element(mon).toHaveClass(/bg-primary/);
+	await expect.element(mon).toHaveAttribute("aria-pressed", "true");
 });
 
 test("marks selected days as active", async () => {
@@ -27,17 +27,17 @@ test("marks selected days as active", async () => {
 	// Mon (1) should be active
 	await expect
 		.element(page.getByRole("button", { name: "Mon" }))
-		.toHaveClass(/bg-primary/);
+		.toHaveAttribute("aria-pressed", "true");
 
 	// Wed (3) should be active
 	await expect
 		.element(page.getByRole("button", { name: "Wed" }))
-		.toHaveClass(/bg-primary/);
+		.toHaveAttribute("aria-pressed", "true");
 
 	// Fri (5) should NOT be active
 	await expect
 		.element(page.getByRole("button", { name: "Fri" }))
-		.not.toHaveClass(/bg-primary/);
+		.toHaveAttribute("aria-pressed", "false");
 });
 
 test("toggles a day on click", async () => {
@@ -45,22 +45,22 @@ test("toggles a day on click", async () => {
 
 	// Fri is not active initially
 	const fri = page.getByRole("button", { name: "Fri" });
-	await expect.element(fri).not.toHaveClass(/bg-primary/);
+	await expect.element(fri).toHaveAttribute("aria-pressed", "false");
 
 	await fri.click();
 
-	// Fri should now have the active class
-	await expect.element(fri).toHaveClass(/bg-primary/);
+	// Fri should now be pressed
+	await expect.element(fri).toHaveAttribute("aria-pressed", "true");
 });
 
 test("deactivates an active day on click", async () => {
 	render(DayOfWeekPicker, { activeDays: [1, 3] });
 
 	const mon = page.getByRole("button", { name: "Mon" });
-	await expect.element(mon).toHaveClass(/bg-primary/);
+	await expect.element(mon).toHaveAttribute("aria-pressed", "true");
 
 	await mon.click();
 
-	// Mon should no longer have the active class
-	await expect.element(mon).not.toHaveClass(/bg-primary/);
+	// Mon should no longer be pressed
+	await expect.element(mon).toHaveAttribute("aria-pressed", "false");
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Syringe } from "lucide-svelte";
   import {
     bg,
@@ -117,17 +118,16 @@
   });
 
   // Calculation type badge styling
-  const calcTypeBadgeClass = $derived.by(() => {
-    if (!bolusCalc?.calculationType) return "";
-    switch (bolusCalc.calculationType) {
+  const calcTypeBadgeVariant = $derived.by(() => {
+    switch (bolusCalc?.calculationType) {
       case CalculationType.Suggested:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "info" as const;
       case CalculationType.Manual:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "warning" as const;
       case CalculationType.Automatic:
-        return "bg-green-500/20 text-green-400 border-green-500/30";
+        return "success" as const;
       default:
-        return "bg-muted text-muted-foreground border-border";
+        return "secondary" as const;
     }
   });
 
@@ -158,19 +158,13 @@
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-3 flex-wrap">
         {#if bolusInsulin != null}
-          <Badge
-            variant="outline"
-            class="{ENTRY_CATEGORIES.bolus.colorClass} {ENTRY_CATEGORIES.bolus.bgClass} {ENTRY_CATEGORIES.bolus.borderClass}"
-          >
+          <Badge variant={ENTRY_CATEGORIES.bolus.badge}>
             <Syringe class="mr-1 h-3.5 w-3.5" />
             {formatInsulinDisplay(bolusInsulin)}U{bolusType ? ` ${bolusType}` : ""}
           </Badge>
         {/if}
         {#if carbGrams != null}
-          <Badge
-            variant="outline"
-            class="{ENTRY_CATEGORIES.carbs.colorClass} {ENTRY_CATEGORIES.carbs.bgClass} {ENTRY_CATEGORIES.carbs.borderClass}"
-          >
+          <Badge variant={ENTRY_CATEGORIES.carbs.badge}>
             {formatCarbDisplay(carbGrams)}g{carbLabel ? ` ${carbLabel}` : " carbs"}
           </Badge>
         {/if}
@@ -269,7 +263,7 @@
           {#if bolusCalc.calculationType}
             <span class="text-muted-foreground">Calculation Type</span>
             <span>
-              <Badge variant="outline" class={calcTypeBadgeClass}>
+              <Badge variant={calcTypeBadgeVariant}>
                 {bolusCalc.calculationType}
               </Badge>
             </span>
@@ -308,13 +302,7 @@
         <div class="space-y-2">
           {#each correlatedRecords as record, i (record.data.id ?? `${record.data.mills}-${i}`)}
             {@const category = ENTRY_CATEGORIES[record.kind]}
-            <button
-              type="button"
-              class="w-full flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-left"
-              onclick={() => {
-                /* correlated record click — currently informational */
-              }}
-            >
+            <Item variant="muted">
               <div class="flex-1">
                 <div class="font-medium text-sm">
                   {entrySummary(record)}
@@ -325,10 +313,10 @@
                     : ""}
                 </div>
               </div>
-              <Badge variant="outline" class="text-xs {category.colorClass}">
+              <Badge variant={category.badge}>
                 {category.name}
               </Badge>
-            </button>
+            </Item>
           {/each}
         </div>
       </div>

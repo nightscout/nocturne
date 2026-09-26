@@ -224,4 +224,12 @@ public static class DataSources
     {
         return dataSource is DemoService or Testing;
     }
+
+    /// <summary>
+    /// True for a source known to report one event twice under two ids, whose same-source
+    /// duplicates deduplication must still merge. Tidepool imports some carb events as two data
+    /// records.
+    /// </summary>
+    public static bool EmitsDuplicateEvents(string? dataSource) =>
+        string.Equals(dataSource, TidepoolConnector, StringComparison.OrdinalIgnoreCase);
 }

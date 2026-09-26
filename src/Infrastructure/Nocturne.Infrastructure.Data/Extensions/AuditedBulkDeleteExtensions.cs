@@ -81,22 +81,16 @@ public static class AuditedBulkDeleteExtensions
         if (auditContext.IsSystemMutation())
             return await query.ExecuteDeleteAsync(ct);
 
-        var strategy = context.Database.CreateExecutionStrategy();
         var total = 0;
         int page;
 
         do
         {
-            page = await strategy.ExecuteAsync(async () =>
+            page = await context.ExecuteInTransactionAsync(async token =>
             {
-                await using var transaction = await context.Database.BeginTransactionAsync(ct);
-
-                var records = await query.Take(HardDeletePageSize).ToListAsync(ct);
+                var records = await query.Take(HardDeletePageSize).ToListAsync(token);
                 if (records.Count == 0)
-                {
-                    await transaction.CommitAsync(ct);
                     return 0;
-                }
 
                 var auditEntries = BuildDeleteAuditEntries(context, records, auditContext);
                 var ids = records.Select(IdOf).ToList();
@@ -106,15 +100,12 @@ public static class AuditedBulkDeleteExtensions
                     context.Entry(record).State = EntityState.Detached;
 
                 context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
-                await context.SaveChangesAsync(ct);
+                await context.SaveChangesAsync(token);
 
-                var deleted = await query
+                return await query
                     .Where(e => ids.Contains(EF.Property<Guid>(e, "Id")))
-                    .ExecuteDeleteAsync(ct);
-
-                await transaction.CommitAsync(ct);
-                return deleted;
-            });
+                    .ExecuteDeleteAsync(token);
+            }, ct: ct);
 
             total += page;
         }
@@ -143,17 +134,11 @@ public static class AuditedBulkDeleteExtensions
         string scope,
         CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
     {
-        var strategy = context.Database.CreateExecutionStrategy();
-
-        return await strategy.ExecuteAsync(async () =>
+        return await context.ExecuteInTransactionAsync(async token =>
         {
-            await using var transaction = await context.Database.BeginTransactionAsync(ct);
-
-            var count = await context.AuditedSoftDeleteInTransactionAsync(query, auditContext, scope, ct);
-
-            await transaction.CommitAsync(ct);
+            var count = await context.AuditedSoftDeleteInTransactionAsync(query, auditContext, scope, token);
             return count;
-        });
+        }, ct: ct);
     }
 
     /// <summary>
@@ -208,14 +193,10 @@ public static class AuditedBulkDeleteExtensions
         string scope,
         CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
     {
-        var strategy = context.Database.CreateExecutionStrategy();
-
-        return await strategy.ExecuteAsync(async () =>
+        return await context.ExecuteInTransactionAsync(async token =>
         {
-            await using var transaction = await context.Database.BeginTransactionAsync(ct);
-
             // One row past the cap is all it takes to know the match set exceeds it.
-            var records = await query.Take(BroadcastMaterializationCap + 1).ToListAsync(ct);
+            var records = await query.Take(BroadcastMaterializationCap + 1).ToListAsync(token);
             var collapsed = records.Count > BroadcastMaterializationCap;
 
             List<MutationAuditLogEntity> auditEntries =
@@ -231,17 +212,16 @@ public static class AuditedBulkDeleteExtensions
             if (auditEntries.Count > 0)
             {
                 context.Set<MutationAuditLogEntity>().AddRange(auditEntries);
-                await context.SaveChangesAsync(ct);
+                await context.SaveChangesAsync(token);
             }
 
-            var count = await SoftDeleteRowsAsync(query, auditContext, ct);
+            var count = await SoftDeleteRowsAsync(query, auditContext, token);
 
             if (collapsed)
-                await WriteBulkDeleteSummaryAsync<T>(context, count, scope, auditContext, ct);
+                await WriteBulkDeleteSummaryAsync<T>(context, count, scope, auditContext, token);
 
-            await transaction.CommitAsync(ct);
             return new AuditedSoftDeleteResult<T>(count, records);
-        });
+        }, ct: ct);
     }
 
     /// <summary>

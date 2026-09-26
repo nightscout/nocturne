@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -155,7 +156,7 @@
       showEditFoodDialog = true;
     } catch (err) {
       console.error("Failed to load food for editing:", err);
-      toast.error("Failed to load food");
+      toast.error(remoteErrorMessage(err, "Failed to load food"));
     } finally {
       isLoadingFood = false;
     }
@@ -253,8 +254,7 @@
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              class="h-8 w-8"
+              size="icon-sm"
               onclick={openEditFood}
               disabled={isLoadingFood}
               title="Edit food"

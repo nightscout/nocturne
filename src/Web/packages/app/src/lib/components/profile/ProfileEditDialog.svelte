@@ -11,25 +11,35 @@
   import { Badge } from "$lib/components/ui/badge";
 
   // Local type definitions for profile
+  interface TimeValue {
+    time?: string;
+    value?: number;
+  }
+
+  interface ProfileData {
+    units?: string;
+    timezone?: string;
+    dia?: number;
+    carbs_hr?: number;
+    basal?: TimeValue[];
+    carbratio?: TimeValue[];
+    sens?: TimeValue[];
+    target_low?: TimeValue[];
+    target_high?: TimeValue[];
+  }
+
   interface Profile {
     id?: string;
     defaultProfile?: string;
     created_at?: string;
-    store?: Record<string, any>;
-    [key: string]: any;
-  }
-
-  interface ProfileData {
-    [key: string]: any;
-  }
-
-  interface TimeValue {
-    time?: number;
-    value?: number;
-    [key: string]: any;
+    units?: string;
+    icon?: string;
+    isExternallyManaged?: boolean;
+    store?: Record<string, ProfileData>;
   }
   import { BG_UNITS } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
   import {
     Edit,
     Plus,
@@ -148,7 +158,7 @@
     if (!store || !store[field]?.[index]) return;
 
     if (prop === "time") {
-      store[field]![index].time = value as string;
+      store[field]![index].time = String(value);
     } else {
       store[field]![index].value = Number(value);
     }
@@ -157,19 +167,19 @@
     editedProfile = { ...editedProfile };
   }
 
-  function updateStoreField(field: keyof ProfileData, value: any) {
+  function updateStoreField<K extends keyof ProfileData>(field: K, value: ProfileData[K]) {
     if (!editedProfile?.store || !editedStoreName) return;
 
     const store = editedProfile.store[editedStoreName];
     if (!store) return;
 
-    (store as any)[field] = value;
+    store[field] = value;
     editedProfile = { ...editedProfile };
   }
 
-  function updateProfileField(field: keyof Profile, value: any) {
+  function updateProfileField<K extends keyof Profile>(field: K, value: Profile[K]) {
     if (!editedProfile) return;
-    (editedProfile as any)[field] = value;
+    editedProfile[field] = value;
     editedProfile = { ...editedProfile };
   }
 </script>
@@ -219,7 +229,7 @@
               <div class="space-y-2">
                 <Label>Icon</Label>
                 <ProfileIconPicker
-                  selectedIcon={(editedProfile as any).icon ?? "user"}
+                  selectedIcon={editedProfile.icon ?? "user"}
                   disabled={false}
                 />
               </div>
@@ -239,7 +249,7 @@
                     {editedProfile.units ?? "mg/dL"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each BG_UNITS as unit}
+                    {#each BG_UNITS as unit (unit.value)}
                       <Select.Item value={unit.value}>{unit.label}</Select.Item>
                     {/each}
                   </Select.Content>
@@ -249,20 +259,10 @@
               <!-- Timezone -->
               <div class="space-y-2">
                 <Label>Timezone</Label>
-                <Select.Root
-                  type="single"
+                <TimezoneCombobox
                   value={storeData.timezone ?? ""}
                   onValueChange={(v) => updateStoreField("timezone", v)}
-                >
-                  <Select.Trigger class="w-full">
-                    {storeData.timezone ?? "Select timezone"}
-                  </Select.Trigger>
-                  <Select.Content>
-                    {#each Intl.DateTimeFormat().resolvedOptions().timeZone as tz}
-                      <Select.Item value={tz}>{tz}</Select.Item>
-                    {/each}
-                  </Select.Content>
-                </Select.Root>
+                />
               </div>
 
               <!-- DIA -->
@@ -340,9 +340,9 @@
           <Tabs.Content value="targets" class="mt-0 space-y-6">
             <div class="flex items-center gap-3 mb-4">
               <div
-                class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10"
+                class="flex h-10 w-10 items-center justify-center rounded-lg bg-glucose-in-range/10"
               >
-                <Target class="h-5 w-5 text-amber-600" />
+                <Target class="h-5 w-5 text-glucose-in-range" />
               </div>
               <div>
                 <h3 class="font-medium">Target Blood Glucose Range</h3>
@@ -356,7 +356,7 @@
               <!-- Target Low -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label class="text-base font-medium">Target Low</Label>
+                  <Label size="lg">Target Low</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -375,7 +375,7 @@
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {#each storeData.target_low ?? [] as tv, i}
+                    {#each storeData.target_low ?? [] as tv, i (tv)}
                       <Table.Row>
                         <Table.Cell>
                           <Input
@@ -412,9 +412,8 @@
                         </Table.Cell>
                         <Table.Cell>
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            class="h-8 w-8 text-destructive"
+                            variant="ghost-destructive"
+                            size="icon-sm"
                             onclick={() => removeTimeValue("target_low", i)}
                           >
                             <Trash2 class="h-4 w-4" />
@@ -429,7 +428,7 @@
               <!-- Target High -->
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
-                  <Label class="text-base font-medium">Target High</Label>
+                  <Label size="lg">Target High</Label>
                   <Button
                     variant="outline"
                     size="sm"
@@ -448,7 +447,7 @@
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {#each storeData.target_high ?? [] as tv, i}
+                    {#each storeData.target_high ?? [] as tv, i (tv)}
                       <Table.Row>
                         <Table.Cell>
                           <Input
@@ -485,9 +484,8 @@
                         </Table.Cell>
                         <Table.Cell>
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            class="h-8 w-8 text-destructive"
+                            variant="ghost-destructive"
+                            size="icon-sm"
                             onclick={() => removeTimeValue("target_high", i)}
                           >
                             <Trash2 class="h-4 w-4" />
@@ -588,7 +586,7 @@
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#each values as tv, i}
+        {#each values as tv, i (tv)}
           <Table.Row>
             <Table.Cell>
               <Input
@@ -616,9 +614,8 @@
             </Table.Cell>
             <Table.Cell>
               <Button
-                variant="ghost"
-                size="icon"
-                class="h-8 w-8 text-destructive hover:text-destructive"
+                variant="ghost-destructive"
+                size="icon-sm"
                 onclick={() => removeTimeValue(field, i)}
               >
                 <Trash2 class="h-4 w-4" />
@@ -628,8 +625,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={3}
-              class="text-center py-4 text-muted-foreground"
+              class="text-center py-4"
             >
               No time blocks configured. Click "Add Time Block" to get started.
             </Table.Cell>

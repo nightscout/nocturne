@@ -330,6 +330,79 @@ public class UpdateTimestampsTests : IDisposable
             "modifying a row owned by another tenant must fail closed");
     }
 
+    [Fact]
+    public async Task SystemTimestamped_BulkSaveOfOneType_SpreadsSysUpdatedAtInGroupsOfAThousand()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.AddRange(Enumerable.Range(0, 2500).Select(_ => new FoodEntity { Id = Guid.CreateVersion7() }));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var stamps = await verify.Foods.Select(f => f.SysUpdatedAt).ToListAsync();
+
+            stamps.GroupBy(s => s).Select(g => g.Count()).OrderByDescending(c => c)
+                .Should().Equal(new[] { 1000, 1000, 500 },
+                    "the 2500th row shares its millisecond with 999 others, so the save spans three");
+            stamps.Distinct().Should().HaveCount(3);
+        }
+    }
+
+    [Fact]
+    public async Task SystemTimestamped_SaveOfTenRows_KeepsASingleStamp()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.AddRange(Enumerable.Range(0, 10).Select(_ => new FoodEntity { Id = Guid.CreateVersion7() }));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var stamps = await verify.Foods.Select(f => f.SysUpdatedAt).ToListAsync();
+
+            stamps.Distinct().Should().HaveCount(1, "a group under the threshold is stamped with one utcNow");
+        }
+    }
+
+    [Fact]
+    public async Task SystemTimestamped_BulkSaveCountsEachEntityTypeSeparately()
+    {
+        var tenantId = Guid.NewGuid();
+        var options = NewStore(tenantId);
+
+        await using (var ctx = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            ctx.Foods.AddRange(Enumerable.Range(0, 1200).Select(_ => new FoodEntity { Id = Guid.CreateVersion7() }));
+            ctx.BodyWeights.AddRange(
+                Enumerable.Range(0, 1200).Select(_ => new BodyWeightEntity { Id = Guid.CreateVersion7() }));
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var verify = new NocturneDbContext(options) { TenantId = tenantId })
+        {
+            var foodStamps = await verify.Foods.Select(f => f.SysUpdatedAt).ToListAsync();
+            var weightStamps = await verify.BodyWeights.Select(w => w.SysUpdatedAt).ToListAsync();
+
+            foodStamps.GroupBy(s => s).Select(g => g.Count()).OrderByDescending(c => c)
+                .Should().Equal(new[] { 1000, 200 },
+                    "the food count starts fresh at each millisecond, not after the weights");
+            weightStamps.GroupBy(s => s).Select(g => g.Count()).OrderByDescending(c => c)
+                .Should().Equal(new[] { 1000, 200 },
+                    "the second type's own 1200 rows fill its own first millisecond");
+            foodStamps.Min().Should().Be(weightStamps.Min(),
+                "each type's first row gets the same base utcNow");
+        }
+    }
+
     /// <summary>
     /// Creates an isolated SQLite store with the schema applied and the supplied tenants
     /// seeded (every ITenantScoped table carries an FK to <c>tenants</c>, which a relational

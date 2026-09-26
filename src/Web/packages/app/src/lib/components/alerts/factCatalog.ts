@@ -120,7 +120,7 @@ export function getFact(kind: LeafKind): FactDef | undefined {
 
 /** True iff <paramref name="kind"/> is a leaf (i.e. has a corresponding {@link FactDef}). */
 export function isLeafKind(kind: ConditionKind): kind is LeafKind {
-	return FACT_BY_KIND.has(kind as LeafKind);
+	return LEAF_FACTS.some((f) => f.kind === kind);
 }
 
 /**

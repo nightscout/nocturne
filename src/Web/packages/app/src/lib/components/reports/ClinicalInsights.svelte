@@ -5,36 +5,24 @@
     slots: {
       container: "rounded-lg border p-4 transition-all",
       icon: "h-5 w-5",
-      badge: "text-[10px]",
     },
     variants: {
       type: {
         success: {
-          container:
-            "border-emerald-200 bg-emerald-50/50 dark:border-emerald-800/50 dark:bg-emerald-950/20",
-          icon: "text-emerald-600 dark:text-emerald-400",
-          badge:
-            "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
+          container: "border-success/30 bg-success/5",
+          icon: "text-success",
         },
         warning: {
-          container:
-            "border-amber-200 bg-amber-50/50 dark:border-amber-800/50 dark:bg-amber-950/20",
-          icon: "text-amber-600 dark:text-amber-400",
-          badge:
-            "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
+          container: "border-warning/30 bg-warning/5",
+          icon: "text-warning",
         },
         info: {
-          container:
-            "border-sky-200 bg-sky-50/50 dark:border-sky-800/50 dark:bg-sky-950/20",
-          icon: "text-sky-600 dark:text-sky-400",
-          badge: "bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300",
+          container: "border-info/30 bg-info/5",
+          icon: "text-info",
         },
         action: {
-          container:
-            "border-violet-200 bg-violet-50/50 dark:border-violet-800/50 dark:bg-violet-950/20",
-          icon: "text-violet-600 dark:text-violet-400",
-          badge:
-            "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
+          container: "border-primary/30 bg-primary/5",
+          icon: "text-primary",
         },
       },
     },
@@ -53,7 +41,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Badge } from "$lib/components/ui/badge";
+  import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
   import {
     Lightbulb,
     TrendingUp,
@@ -109,6 +97,13 @@
   }
 
   let { analysis, showClinicalNotes = true, maxInsights = 5 }: Props = $props();
+
+  const badgeVariants = {
+    success: "success",
+    warning: "warning",
+    info: "info",
+    action: "secondary",
+  } as const satisfies Record<NonNullable<InsightType>, BadgeVariant>;
 
   const typeIcons: Record<NonNullable<InsightType>, typeof CheckCircle2> = {
     success: CheckCircle2,
@@ -166,10 +161,10 @@
   });
 </script>
 
-<Card class="border">
+<Card>
   <CardHeader>
     <CardTitle class="flex items-center gap-2">
-      <Lightbulb class="h-5 w-5 text-amber-500" />
+      <Lightbulb class="h-5 w-5" />
       What Your Data is Telling Us
     </CardTitle>
   </CardHeader>
@@ -179,7 +174,7 @@
         Not enough data yet to generate insights. Keep tracking!
       </p>
     {:else}
-      {#each insights as insight}
+      {#each insights as insight, i (i)}
         {@const styles = insightVariants({ type: insight.type })}
         {@const InsightIcon = typeIcons[insight.type]}
         {@const CategoryIcon = categoryIcons[insight.category]}
@@ -194,7 +189,7 @@
                 <h4 class="text-sm font-semibold text-foreground">
                   {insight.title}
                 </h4>
-                <Badge variant="outline" class={styles.badge()}>
+                <Badge variant={badgeVariants[insight.type]} class="print:hidden">
                   <CategoryIcon class="mr-1 h-3 w-3" />
                   {insight.category}
                 </Badge>

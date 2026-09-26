@@ -7,6 +7,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import {
@@ -160,7 +161,7 @@
               role="listitem"
             >
               <GripVertical class="h-4 w-4 text-muted-foreground cursor-grab" />
-              <Badge variant="outline" class="w-6 h-6 p-0 justify-center">
+              <Badge variant="outline" class="min-w-6 h-6 tabular-nums">
                 {index + 1}
               </Badge>
               <Icon class="h-4 w-4 text-muted-foreground" />
@@ -170,9 +171,8 @@
                 </div>
               </div>
               <Button
-                variant="ghost"
-                size="sm"
-                class="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                variant="ghost-muted"
+                size="icon-sm"
                 onclick={() => removeWidget(index)}
               >
                 <X class="h-4 w-4" />
@@ -200,12 +200,9 @@
           <div class="grid grid-cols-1 @sm:grid-cols-2 gap-2">
             {#each availableWidgets as widget (widget.id)}
               {@const Icon = WIDGET_ICONS[widget.id]}
-              <button
-                type="button"
-                class="flex items-center gap-2 p-2 rounded-lg border border-dashed text-left transition-colors
-                {canAddMore
-                  ? 'hover:border-primary hover:bg-accent cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed'}"
+              <Item
+                variant="dashed"
+                size="sm"
                 onclick={() => addWidget(widget.id)}
                 disabled={!canAddMore}
               >
@@ -214,7 +211,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="font-medium text-sm">{widget.name}</div>
                 </div>
-              </button>
+              </Item>
             {/each}
           </div>
         </div>

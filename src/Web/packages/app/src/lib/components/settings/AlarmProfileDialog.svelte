@@ -55,7 +55,7 @@
   function initializeProfile(
     p: AlarmProfileConfiguration
   ): AlarmProfileConfiguration {
-    const copy = JSON.parse(JSON.stringify(p)) as AlarmProfileConfiguration;
+    const copy: AlarmProfileConfiguration = JSON.parse(JSON.stringify(p));
     copy.alarmType = normalizeAlarmType(copy.alarmType);
     // Ensure schedule.activeDays is initialized
     if (!copy.schedule.activeDays) {

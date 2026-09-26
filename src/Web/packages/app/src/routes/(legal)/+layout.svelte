@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import { ArrowLeft } from "lucide-svelte";
 
@@ -13,7 +14,7 @@
   <!-- Header -->
   <header class="border-b border-border/40">
     <div class="container mx-auto px-4 py-4">
-      <a href="/" class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+      <a href={resolve("/")} class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
         <div class="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
           <span class="text-primary font-bold">N</span>
         </div>
@@ -32,7 +33,7 @@
   <!-- Footer -->
   <footer class="border-t border-border/40 bg-muted/30">
     <div class="container mx-auto px-4 py-6 flex flex-col md:flex-row justify-between items-center gap-4">
-      <Button variant="ghost" href="/auth/login" class="gap-2">
+      <Button variant="ghost" href="/auth/login">
         <ArrowLeft class="w-4 h-4" />
         Back to Login
       </Button>

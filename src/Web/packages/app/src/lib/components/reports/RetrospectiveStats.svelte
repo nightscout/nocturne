@@ -39,7 +39,7 @@
 </script>
 
 {#if !retrospectiveQuery.current && !retrospectiveQuery.error}
-  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
+  <Card.Root variant="primary" class="@container">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />
@@ -47,11 +47,10 @@
       </Card.Title>
     </Card.Header>
     <Card.Content>
-      <!-- Skeleton loading state - matches the layout below -->
-      <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
-        {#each [1, 2, 3, 4] as _}
+      <div class="grid grid-cols-2 gap-x-4 @lg:grid-cols-4 @lg:gap-x-0 @lg:divide-x @lg:divide-border">
+        {#each [1, 2, 3, 4] as _, i (i)}
           <div
-            class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
+            class="flex flex-col gap-1 py-3 @lg:px-4 @lg:first:pl-0"
           >
             <div class="flex items-center gap-1">
               <div
@@ -62,7 +61,7 @@
               ></div>
             </div>
             <div
-              class="h-8 w-16 rounded bg-muted-foreground/20 animate-pulse mt-1"
+              class="h-6 w-16 rounded bg-muted-foreground/20 animate-pulse mt-1"
             ></div>
             <div
               class="h-3 w-20 rounded bg-muted-foreground/20 animate-pulse mt-1"
@@ -74,9 +73,9 @@
   </Card.Root>
 {:else if retrospectiveQuery.error}
   {@const error = retrospectiveQuery.error}
-  <Card.Root class="border-2 border-destructive/20 bg-destructive/5">
+  <Card.Root variant="destructive">
     <Card.Header class="pb-2">
-      <Card.Title class="flex items-center gap-2 text-base text-destructive">
+      <Card.Title variant="destructive" class="flex items-center gap-2 text-base">
         <AlertTriangle class="h-4 w-4" />
         Error Loading Status
       </Card.Title>
@@ -99,7 +98,7 @@
   </Card.Root>
 {:else}
   {@const data = retrospectiveQuery.current}
-  <Card.Root class="@container border-2 border-primary/20 bg-primary/5">
+  <Card.Root variant="primary" class="@container">
     <Card.Header class="pb-2">
       <Card.Title class="flex items-center gap-2 text-base">
         <Activity class="h-4 w-4" />
@@ -107,10 +106,9 @@
       </Card.Title>
     </Card.Header>
     <Card.Content>
-      <div class="grid grid-cols-2 @lg:grid-cols-4 gap-4">
-        <!-- Glucose -->
+      <div class="grid grid-cols-2 gap-x-4 @lg:grid-cols-4 @lg:gap-x-0 @lg:divide-x @lg:divide-border">
         <div
-          class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
+          class="flex flex-col gap-1 py-3 @lg:px-4 @lg:first:pl-0"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
             <Droplet class="h-4 w-4" />
@@ -120,7 +118,7 @@
             {@const trend = getDirectionInfo(data.glucose.direction)}
             {@const TrendIcon = trend.icon}
             <div class="flex items-center gap-1">
-              <span class="text-2xl font-bold tabular-nums">
+              <span class="text-lg font-semibold tabular-nums">
                 {formatGlucoseValue(data.glucose.value ?? 0, units)}
               </span>
               <span class="text-sm text-muted-foreground">{unitLabel}</span>
@@ -137,24 +135,21 @@
               {/if}
             </div>
           {:else}
-            <span class="text-2xl font-bold text-muted-foreground">—</span>
+            <span class="text-lg font-semibold text-muted-foreground">—</span>
             <span class="text-xs text-muted-foreground">No data</span>
           {/if}
         </div>
 
-        <!-- IOB -->
         <div
-          class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
+          class="flex flex-col gap-1 py-3 @lg:px-4 @lg:first:pl-0"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Syringe class="h-4 w-4 text-blue-500" />
+            <Syringe class="h-4 w-4 text-insulin" />
             <span class="text-xs font-medium">IOB</span>
           </div>
           {#if data?.iob}
             <div class="flex items-center gap-1">
-              <span
-                class="text-2xl font-bold tabular-nums text-blue-600 dark:text-blue-400"
-              >
+              <span class="text-lg font-semibold tabular-nums">
                 {(data.iob.total ?? 0).toFixed(2)}
               </span>
               <span class="text-sm text-muted-foreground">U</span>
@@ -166,59 +161,53 @@
               {/if}
             </div>
           {:else}
-            <span class="text-2xl font-bold text-muted-foreground">—</span>
+            <span class="text-lg font-semibold text-muted-foreground">—</span>
             <span class="text-xs text-muted-foreground">No data</span>
           {/if}
         </div>
 
-        <!-- COB -->
         <div
-          class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
+          class="flex flex-col gap-1 py-3 @lg:px-4 @lg:first:pl-0"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Apple class="h-4 w-4 text-orange-500" />
+            <Apple class="h-4 w-4 text-entry-carbs" />
             <span class="text-xs font-medium">COB</span>
           </div>
           {#if data?.cob}
             <div class="flex items-center gap-1">
-              <span
-                class="text-2xl font-bold tabular-nums text-orange-600 dark:text-orange-400"
-              >
+              <span class="text-lg font-semibold tabular-nums">
                 {(data.cob.total ?? 0).toFixed(0)}
               </span>
               <span class="text-sm text-muted-foreground">g</span>
             </div>
             <div class="text-xs text-muted-foreground">Carbs on Board</div>
           {:else}
-            <span class="text-2xl font-bold text-muted-foreground">—</span>
+            <span class="text-lg font-semibold text-muted-foreground">—</span>
             <span class="text-xs text-muted-foreground">No data</span>
           {/if}
         </div>
 
-        <!-- Basal Rate -->
         <div
-          class="flex flex-col items-center gap-1 p-3 rounded-lg bg-background/50"
+          class="flex flex-col gap-1 py-3 @lg:px-4 @lg:first:pl-0"
         >
           <div class="flex items-center gap-1 text-muted-foreground">
-            <Activity class="h-4 w-4 text-cyan-500" />
+            <Activity class="h-4 w-4 text-entry-basal" />
             <span class="text-xs font-medium">Basal</span>
           </div>
           {#if data?.basal}
             <div class="flex items-center gap-1">
-              <span
-                class="text-2xl font-bold tabular-nums text-cyan-600 dark:text-cyan-400"
-              >
+              <span class="text-lg font-semibold tabular-nums">
                 {(data.basal.rate ?? 0).toFixed(2)}
               </span>
               <span class="text-sm text-muted-foreground">U/hr</span>
             </div>
             {#if data.basal.isTemp}
-              <Badge variant="secondary" class="text-xs">Temp</Badge>
+              <Badge variant="secondary">Temp</Badge>
             {:else}
               <span class="text-xs text-muted-foreground">Scheduled</span>
             {/if}
           {:else}
-            <span class="text-2xl font-bold text-muted-foreground">—</span>
+            <span class="text-lg font-semibold text-muted-foreground">—</span>
             <span class="text-xs text-muted-foreground">No data</span>
           {/if}
         </div>

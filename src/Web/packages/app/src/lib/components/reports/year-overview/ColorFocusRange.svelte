@@ -111,6 +111,10 @@
       : colorFocusGradient(resolveColorFocusRange(values)!, maximum, cssVar, lowColor, highColor, invert, colors)
   );
 
+  const themeSwatchGradient = $derived(
+    `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`
+  );
+
   const activeBandLeftPercent = $derived.by(() => {
     return Math.max(0, Math.min(100, ((focusBandValues[0] - minimum) / (maximum - minimum)) * 100));
   });
@@ -353,26 +357,25 @@
           aria-label={glucose
             ? "Average glucose color boundaries"
             : `${metricLabel} color focus`}
-          aria-describedby={id + "-description"}
         >
           {#snippet children({ thumbItems })}
             <span
-              class="relative h-3.5 w-full rounded-sm overflow-hidden"
-              style:background={gradient}
+              class="relative h-3.5 w-full rounded-sm overflow-hidden bg-(image:--scale-gradient)"
+              style:--scale-gradient={gradient}
               role="img"
               aria-label={`${metricLabel} color scale from ${formatted(minimum)} to ${formatted(maximum)} ${unitLabel}`}
               data-testid={glucose ? "glucose-color-track" : "color-focus-track"}
             >
               {#if activeBandLeftPercent > 0}
                 <span
-                  class="absolute left-0 top-0 bottom-0 bg-background/85 pointer-events-none"
-                  style:width="{activeBandLeftPercent}%"
+                  class="absolute left-0 top-0 bottom-0 w-(--band-left) bg-background/85 pointer-events-none"
+                  style:--band-left="{activeBandLeftPercent}%"
                 ></span>
               {/if}
               {#if activeBandRightPercent < 100}
                 <span
-                  class="absolute right-0 top-0 bottom-0 bg-background/85 pointer-events-none"
-                  style:left="{activeBandRightPercent}%"
+                  class="absolute right-0 top-0 bottom-0 left-(--band-right) bg-background/85 pointer-events-none"
+                  style:--band-right="{activeBandRightPercent}%"
                 ></span>
               {/if}
             </span>
@@ -388,7 +391,7 @@
         </Slider.Root>
       </div>
 
-      <div class="flex justify-between tabular-nums text-[11px]" aria-hidden="true">
+      <div class="flex justify-between tabular-nums text-xs" aria-hidden="true">
         <span>{formatted(minimum)} {unitLabel}</span>
         <span>{formatted(maximum)} {unitLabel}</span>
       </div>
@@ -399,15 +402,15 @@
       <div class="space-y-2 pt-1">
         <div class="grid grid-cols-2 gap-2">
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="size-2.5 rounded-full bg-primary/70"></span>
               Color Boundaries
             </div>
             <div class="grid grid-cols-2 gap-1.5">
               {#if usesCustomPalette}
                 <div class="min-w-0">
-                  <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[0], stops)}></span>
+                  <label for={id + "-bound-0"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
+                    <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[0], stops)}></span>
                     Low
                   </label>
                   <Input
@@ -422,12 +425,13 @@
                       changeCustomPaletteBound(0, event)}
                     aria-label={accessibleLabel(0)}
                     aria-invalid={invalidBound === 0}
-                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                    size="xs"
+                    class="w-full tabular-nums"
                   />
                 </div>
                 <div class="min-w-0">
-                  <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                    <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[3], stops)}></span>
+                  <label for={id + "-bound-3"} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
+                    <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[3], stops)}></span>
                     High
                   </label>
                   <Input
@@ -442,14 +446,15 @@
                       changeCustomPaletteBound(1, event)}
                     aria-label={accessibleLabel(1)}
                     aria-invalid={invalidBound === 3}
-                    class="h-7 w-full px-1.5 text-xs tabular-nums"
+                    size="xs"
+                    class="w-full tabular-nums"
                   />
                 </div>
               {:else}
-                {#each labels as label, index}
+                {#each labels as label, index (index)}
                   <div class="min-w-0">
-                    <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-[10px] truncate">
-                      <span class="inline-block size-2 shrink-0 rounded-full" style:background={getGlucoseHeatmapFill(values[index], stops)}></span>
+                    <label for={id + "-bound-" + index} class="mb-0.5 flex items-center gap-1 text-muted-foreground text-2xs truncate">
+                      <span class="inline-block size-2 shrink-0 rounded-full bg-(--dot)" style:--dot={getGlucoseHeatmapFill(values[index], stops)}></span>
                       {label}
                     </label>
                     <Input
@@ -464,7 +469,8 @@
                         changeBound(index, event)}
                       aria-label={accessibleLabel(index)}
                       aria-invalid={invalidBound === index}
-                      class="h-7 w-full px-1.5 text-xs tabular-nums"
+                      size="xs"
+                      class="w-full tabular-nums"
                     />
                   </div>
                 {/each}
@@ -473,7 +479,7 @@
           </div>
 
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
               Focus Window
             </div>
@@ -487,7 +493,8 @@
                 bind:value={focusDrafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
                 aria-label={`${metricLabel} focus minimum value`}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -499,12 +506,13 @@
                 bind:value={focusDrafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
                 aria-label={`${metricLabel} focus maximum value`}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
             <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
-              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <span class="text-2xs text-muted-foreground">Dim:</span>
               <Input
                 type="number"
                 min={0}
@@ -512,25 +520,27 @@
                 bind:value={dimDraft}
                 oninput={changeDim}
                 aria-invalid={invalidDim}
-                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+                size="xs"
+                class="w-12 tabular-nums"
               />
-              <span class="text-[10px] text-muted-foreground">%</span>
+              <span class="text-2xs text-muted-foreground">%</span>
             </div>
           </div>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
-            {#each COLOR_PALETTES as pal}
+            {#each COLOR_PALETTES as pal (pal.label)}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
               {@const themeColors = (themeStops ?? stops).map((stop) => stop.color)}
+              <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
               <button
                 type="button"
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
-                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={paletteSwatchGradient(pal.colors ?? themeColors)}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'} bg-(image:--swatch)"
+                style:--swatch={paletteSwatchGradient(pal.colors ?? themeColors)}
                 onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
@@ -538,14 +548,13 @@
           <div class="flex items-center gap-1.5">
             <Button
               variant="outline"
-              size="sm"
-              class="h-6 px-2 text-[11px]"
+              size="xs"
               aria-pressed={invert}
               disabled={!usesCustomPalette}
               title={usesCustomPalette ? undefined : "Theme colors are fixed; pick a palette to invert"}
               onclick={() => onInvertChange?.(!invert)}
             >Invert</Button>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
+            <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
@@ -554,7 +563,7 @@
       <div class="space-y-2 pt-1">
         <div class="grid grid-cols-2 gap-2">
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="size-2.5 rounded-full bg-primary/70"></span>
               Color Range
             </div>
@@ -566,7 +575,10 @@
                 step={inputStep}
                 bind:value={drafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(0, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                aria-label={accessibleLabel(0)}
+                aria-invalid={invalidBound === 0}
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -576,14 +588,17 @@
                 step={inputStep}
                 bind:value={drafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeBound(1, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                aria-label={accessibleLabel(1)}
+                aria-invalid={invalidBound === 1}
+                size="xs"
+                class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
           </div>
 
           <div class="p-2 rounded border border-border/60 bg-muted/20 space-y-1.5">
-            <div class="text-[11px] font-medium text-foreground/80 flex items-center gap-1">
+            <div class="text-xs font-medium text-foreground/80 flex items-center gap-1">
               <span class="w-1.5 h-3 rounded-sm bg-foreground/70"></span>
               Focus Window
             </div>
@@ -595,7 +610,8 @@
                 step={inputStep}
                 bind:value={focusDrafts[0]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(0, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
               <span class="text-muted-foreground text-xs">→</span>
               <Input
@@ -605,12 +621,13 @@
                 step={inputStep}
                 bind:value={focusDrafts[1]}
                 oninput={(e: Event & { currentTarget: HTMLInputElement }) => changeFocusBound(1, e)}
-                class="h-7 w-16 px-1.5 text-xs tabular-nums"
+                size="xs"
+                class="w-16 tabular-nums"
               />
-              <span class="text-muted-foreground text-[11px]">{unitLabel}</span>
+              <span class="text-muted-foreground text-xs">{unitLabel}</span>
             </div>
             <div class="flex items-center gap-1.5 pt-1 mt-1 border-t border-border/30">
-              <span class="text-[10px] text-muted-foreground">Dim:</span>
+              <span class="text-2xs text-muted-foreground">Dim:</span>
               <Input
                 type="number"
                 min={0}
@@ -618,31 +635,33 @@
                 bind:value={dimDraft}
                 oninput={changeDim}
                 aria-invalid={invalidDim}
-                class="h-6 w-12 px-1 text-[11px] tabular-nums"
+                size="xs"
+                class="w-12 tabular-nums"
               />
-              <span class="text-[10px] text-muted-foreground">%</span>
+              <span class="text-2xs text-muted-foreground">%</span>
             </div>
           </div>
         </div>
 
         <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded bg-muted/30 border border-border/40">
           <div class="flex items-center gap-2 flex-wrap" aria-label="Color palette presets">
-            {#each COLOR_PALETTES as pal}
+            {#each COLOR_PALETTES as pal (pal.label)}
               {@const isSelected = (colors?.join(",") ?? "") === (pal.colors?.join(",") ?? "")}
+              <!-- eslint-disable-next-line no-restricted-syntax -- palette swatch; its gradient background is the content -->
               <button
                 type="button"
                 title={pal.label}
                 aria-label={pal.label + " palette"}
                 aria-pressed={isSelected}
-                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'}"
-                style:background={pal.colors ? paletteSwatchGradient(pal.colors) : `linear-gradient(135deg, color-mix(in srgb, var(${cssVar}) 18%, transparent), var(${cssVar}))`}
+                class="size-6 rounded-full border border-border shadow-sm transition-transform {isSelected ? 'scale-110 ring-2 ring-primary ring-offset-1 ring-offset-background' : 'hover:scale-105'} bg-(image:--swatch)"
+                style:--swatch={pal.colors ? paletteSwatchGradient(pal.colors) : themeSwatchGradient}
                 onclick={() => onCustomColorsChange?.(pal.colors ? [...pal.colors] : undefined)}
               ></button>
             {/each}
           </div>
           <div class="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
-            <Button variant="outline" size="sm" class="h-6 px-2 text-[11px]" aria-label={resetLabel} onclick={reset}>Reset</Button>
+            <Button variant="outline" size="xs" aria-pressed={invert} onclick={() => onInvertChange?.(!invert)}>Invert</Button>
+            <Button variant="outline" size="xs" aria-label={resetLabel} onclick={reset}>Reset</Button>
           </div>
         </div>
       </div>
@@ -650,7 +669,7 @@
 
     <!-- Validation error alert -->
     {#if invalidBound !== null || invalidFocusBound !== null || invalidDim}
-      <p id={id + "-error"} class="text-destructive text-[11px] pt-1" role="alert">
+      <p id={id + "-error"} class="text-destructive text-xs pt-1" role="alert">
         {#if invalidDim}
           Enter a dim percentage between 0 and 100.
         {:else if glucose}
@@ -659,7 +678,7 @@
             : "Enter valid focus line boundaries (min < max)."}
         {:else}
           {invalidBound !== null
-            ? `Enter valid color scale boundaries (min < max).`
+            ? `Enter valid color scale boundaries (min < max${fixedMax !== undefined ? `, up to ${fixedMax} ${unitLabel}` : ""}).`
             : `Enter valid focus line boundaries (min < max).`}
         {/if}
       </p>
@@ -668,8 +687,8 @@
 
   <div class="hidden print:block">
     <div
-      class="h-3.5 w-full rounded-sm"
-      style:background={gradient}
+      class="h-3.5 w-full rounded-sm bg-(image:--scale-gradient)"
+      style:--scale-gradient={gradient}
       role="img"
       aria-label={metricLabel + " color scale"}
     ></div>

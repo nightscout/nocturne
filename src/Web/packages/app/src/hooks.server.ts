@@ -1,6 +1,7 @@
 import { isInternalOnlyApiPath } from "$lib/server/internal-only-api-paths";
 import { type Handle } from "@sveltejs/kit";
 import { randomUUID } from "$lib/utils";
+import { isRecord, nonEmptyString } from "$lib/utils/type-guards";
 import type { HandleServerError } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { env as publicEnv } from "$env/dynamic/public";
@@ -9,12 +10,7 @@ import {
   getApiBaseUrl,
   createServerApiClient,
 } from "$lib/server/api-client-factory";
-import {
-  getHashedInstanceKey,
-  INSTANCE_KEY_HEADER,
-  INSTANCE_SERVICE_HEADER,
-  INSTANCE_SERVICE_NAME,
-} from "$lib/server/instance-key";
+import { authenticateGuestSession } from "$lib/server/guest-session-auth";
 import { sequence } from "@sveltejs/kit/hooks";
 import type { AuthUser } from "./app.d";
 import { AUTH_COOKIE_NAMES } from "$lib/config/auth-cookies";
@@ -31,15 +27,17 @@ import {
   installRequestScopedBitsIdCounter,
   withFreshBitsIdCounter,
 } from "$lib/server/bits-id";
-// WUCHALE-DISABLED: wuchale temporarily disabled
-// import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
-// import * as main from '../../../locales/main.loader.server.svelte.js'
-// import * as js from '../../../locales/js.loader.server.js'
-// import { locales } from '../../../locales/data.js'
+import { runWithLocale, loadLocales } from 'wuchale/load-utils/server';
+import * as main from '../../../locales/main.loader.server.svelte.js'
+import * as js from '../../../locales/js.loader.server.js'
+import { locales } from '../../../locales/data.js'
 import supportedLocales from '../../../supportedLocales.json';
 import { LANGUAGE_COOKIE_NAME } from "$lib/stores/appearance-store.svelte";
 
-// WUCHALE-DISABLED: wuchale temporarily disabled — locale catalogs not loaded at startup
+// Await so no request can render before catalogs are registered: a lookup
+// against an unloaded runtime silently renders every message as ''.
+await loadLocales(main.key, main.loadCount, main.loadCatalog, locales)
+await loadLocales(js.key, js.loadCount, js.loadCatalog, locales)
 
 // Turn off SSL validation during development for self-signed certs
 if (dev) {
@@ -77,45 +75,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
   const accessToken = event.cookies.get(AUTH_COOKIE_NAMES.accessToken);
 
   if (!authCookie && !accessToken) {
-    // Check for guest session cookie before giving up
-    const guestSessionCookie = event.cookies.get(AUTH_COOKIE_NAMES.guestSession);
-    if (guestSessionCookie) {
-      try {
-        const forwardedHost = getEffectiveHost(event.request, event.cookies);
-        const headers: Record<string, string> = {
-          Cookie: `${AUTH_COOKIE_NAMES.guestSession}=${guestSessionCookie}`,
-        };
-        if (forwardedHost) headers["X-Forwarded-Host"] = forwardedHost;
-        headers["X-Forwarded-Proto"] = getOriginalProto(event.request);
-
-        const hashedKey = getHashedInstanceKey();
-        if (hashedKey) {
-          headers[INSTANCE_KEY_HEADER] = hashedKey;
-          // Genuine SSR service call — declare the service so the API honors
-          // the instance key (a bare key is ignored).
-          headers[INSTANCE_SERVICE_HEADER] = INSTANCE_SERVICE_NAME;
-        }
-
-        const sessionRes = await fetch(`${apiBaseUrl}/api/auth/oidc/session`, { headers });
-        const session = await sessionRes.json();
-
-        if (session?.isAuthenticated) {
-          event.locals.user = {
-            subjectId: session.subjectId ?? "guest",
-            name: "Guest",
-            email: undefined,
-            roles: [],
-            permissions: session.permissions ?? [],
-            expiresAt: session.expiresAt,
-          };
-          event.locals.isAuthenticated = true;
-          event.locals.isGuestSession = true;
-          event.locals.guestExpiresAt = session.expiresAt;
-        }
-      } catch (error) {
-        console.error("Failed to validate guest session:", error);
-      }
-    }
+    await authenticateGuestSession(event, apiBaseUrl, fetch);
     return resolve(event);
   }
 
@@ -133,7 +93,6 @@ const authHandle: Handle = async ({ event, resolve }) => {
       accessToken,
       refreshToken,
       platformAccessToken,
-      hashedInstanceKey: getHashedInstanceKey(),
       extraHeaders: authExtraHeaders,
       responseCookies: event.cookies,
       rawSetCookies: event.locals.rawSetCookies,
@@ -160,9 +119,11 @@ const authHandle: Handle = async ({ event, resolve }) => {
       event.locals.isPlatformAdmin = session.isPlatformAdmin ?? false;
       event.locals.isPlatformAccessGrant = session.isPlatformAccessGrant ?? false;
 
-      // Fetch effective permissions (granted scopes) for the current tenant
+      // Fetch effective permissions (granted scopes and history window) for the current tenant
       try {
-        event.locals.effectivePermissions = await apiClient.myPermissions.getMyPermissions();
+        const permissions = await apiClient.myPermissions.getMyPermissions();
+        event.locals.effectivePermissions = permissions.scopes ?? [];
+        event.locals.limitTo24Hours = permissions.limitTo24Hours ?? false;
       } catch {
         // Non-fatal — permissions will default to empty
       }
@@ -233,16 +194,18 @@ const readinessHandle: Handle = async ({ event, resolve }) => {
     }
   } catch (error) {
     if (error && typeof error === "object" && "status" in error) {
-      let body: any = {};
+      let body: Record<string, unknown> = {};
       try {
-        body = JSON.parse((error as any).response ?? "{}");
+        const response = "response" in error ? error.response : undefined;
+        const parsed: unknown = JSON.parse(typeof response === "string" ? response : "{}");
+        if (isRecord(parsed)) body = parsed;
       } catch {
         // Couldn't parse — leave recoveryMode unset, which reads as "not ready"
       }
 
       const redirect = statusProbeRedirect({
         isShareHost: event.locals.isShareHost,
-        apiStatus: (error as any).status,
+        apiStatus: error.status,
         recoveryMode: body.recoveryMode === true,
         errorCode: typeof body.error === "string" ? body.error : undefined,
         marketingUrl: env.MARKETING_URL,
@@ -347,8 +310,8 @@ const apiClientHandle: Handle = async ({ event, resolve }) => {
   // NB: this client carries ONLY the end user's credentials (cookies) — it
   // deliberately does NOT attach the instance key. Forwarding the instance key
   // on user-originated requests elevated anonymous visitors to admin and
-  // bypassed per-tenant public access. Genuine service calls (bot dispatch,
-  // webhooks, realtime tickets) build their own instance-key client explicitly.
+  // bypassed per-tenant public access. Only genuine service calls (bot
+  // dispatch, webhooks) build their own instance-key client.
   event.locals.apiClient = createServerApiClient(apiBaseUrl, event.fetch, {
     accessToken,
     refreshToken,
@@ -379,13 +342,15 @@ export const handleError: HandleServerError = async ({ error, event }) => {
     message = error.message;
 
     // Check for ApiException-style errors with response property
-    const apiError = error as Error & { response?: string; status?: number };
-    if (apiError.response) {
+    const response =
+      "response" in error && typeof error.response === "string" ? error.response : undefined;
+    if (response) {
       try {
-        const parsed = JSON.parse(apiError.response);
-        details = parsed.error || parsed.message || apiError.response;
+        const parsed: unknown = JSON.parse(response);
+        const fields = isRecord(parsed) ? parsed : {};
+        details = nonEmptyString(fields.error) ?? nonEmptyString(fields.message) ?? response;
       } catch {
-        details = apiError.response;
+        details = response;
       }
     }
   } else if (typeof error === "string") {
@@ -474,13 +439,9 @@ function resolveLocale(event: Parameters<Handle>[0]["event"]): string {
   return "en";
 }
 
-// WUCHALE-DISABLED: wuchale temporarily disabled — resolveLocale still runs (so cookie-driven
-// locale selection logic stays exercised and helpers stay referenced) but
-// no runWithLocale wrapping happens. Re-enabling wuchale only requires
-// restoring the runWithLocale call below.
 export const locale: Handle = async ({ event, resolve }) => {
-  resolveLocale(event);
-  return resolve(event);
+  const locale = resolveLocale(event);
+  return await runWithLocale(locale, () => resolve(event));
 }
 
 installRequestScopedBitsIdCounter();

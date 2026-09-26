@@ -14,6 +14,20 @@
   import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
 
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    activeInstances: TrackerInstanceDto[];
+    openStartDialog: (def: TrackerDefinitionDto) => void;
+    openCompleteDialog: (id: string) => void;
+    openReservoirReportDialog: () => void;
+    openDeleteInstanceDialog: (id: string) => void;
+    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
+    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
+    getLevelStyle: (level: NotificationUrgency | null) => string;
+    formatAge: (hours: number) => string;
+    formatDate: (dateStr: Date | undefined | string) => string;
+  }
+
   let {
     definitions,
     activeInstances,
@@ -26,19 +40,7 @@
     getLevelStyle,
     formatAge,
     formatDate,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    activeInstances: TrackerInstanceDto[];
-    openStartDialog: (def: TrackerDefinitionDto) => void;
-    openCompleteDialog: (id: string) => void;
-    openReservoirReportDialog: () => void;
-    openDeleteInstanceDialog: (id: string) => void;
-    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
-    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
-    getLevelStyle: (level: NotificationUrgency | null) => string;
-    formatAge: (hours: number) => string;
-    formatDate: (dateStr: Date | undefined | string) => string;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="active">
@@ -57,7 +59,7 @@
             Start Tracker
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item
                 value={def.id ?? ""}
                 label={def.name ?? ""}
@@ -77,7 +79,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each activeInstances as instance}
+          {#each activeInstances as instance (instance.id)}
             {@const level = getInstanceLevel(instance)}
             {@const remaining = getTimeRemaining(instance)}
             <div
@@ -93,7 +95,7 @@
                     remaining !== undefined && remaining <= 0
                       ? "text-destructive"
                       : remaining !== undefined && remaining < 6
-                        ? "text-yellow-600 dark:text-yellow-400"
+                        ? "text-warning"
                         : ""
                   )}
                 >

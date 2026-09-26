@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
@@ -15,11 +16,11 @@
   import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "lucide-svelte/icons/arrow-right";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   const realtimeStore = tryGetRealtimeStore();
 
   // Engine for the sidebar chart — no predictions, no inspection
-  // svelte-ignore state_referenced_locally
   const sidebarEngine = createChartDataEngine({
     enablePredictions: false,
     focusHours: 3,
@@ -49,24 +50,12 @@
   const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const now = $derived(realtimeStore?.now ?? Date.now());
-  const isConnected = $derived(realtimeStore?.isConnected ?? false);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
-  // Debounce the connected→disconnected transition so a brief blip (e.g. the
-  // socket reconnecting during page load) doesn't flash the "Connection error"
-  // state. Reconnecting clears it immediately; dropping waits this long first.
-  const DISCONNECT_GRACE_MS = 3000;
-  let isDisconnected = $state(false);
-  $effect(() => {
-    if (isConnected) {
-      isDisconnected = false;
-      return;
-    }
-    const timeout = setTimeout(() => {
-      isDisconnected = true;
-    }, DISCONNECT_GRACE_MS);
-    return () => clearTimeout(timeout);
-  });
+  const connection = createConnectionIndicator(
+    () => realtimeStore?.connectionStatus ?? "idle"
+  );
+  const isDisconnected = $derived(connection.isDisconnected);
   const isLoading = $derived(
     rawCurrentBG === 0 && (realtimeStore?.entries.length ?? 0) === 0
   );
@@ -106,12 +95,12 @@
         <div class="flex flex-col items-center gap-0.5">
           <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
             <ArrowRight
-              class="size-4"
-              style="transform: rotate({arrowAngle.current}deg)"
+              class="size-4 rotate-(--arrow-angle)"
+              style="--arrow-angle: {arrowAngle.current}deg"
             />
             <span class="text-sm font-medium">{displayDelta}</span>
           </div>
-          <span class="text-[10px] text-muted-foreground leading-tight">
+          <span class="text-2xs text-muted-foreground leading-tight">
             {timeSinceReading}
           </span>
         </div>
@@ -120,7 +109,7 @@
     <div
       class="px-2 border border-sidebar-border hover:border-sidebar-ring rounded"
     >
-      <a href="/">
+      <a href={resolve("/")}>
         <GlucoseChartShell
           engine={sidebarEngine}
           legend={sidebarLegend}
@@ -155,10 +144,10 @@
   {#if hasData && !isStale}
     <div class="flex items-center gap-0.5 {deltaColorClass(direction)}">
       <ArrowRight
-        class="size-3"
-        style="transform: rotate({arrowAngle.current}deg)"
+        class="size-3 rotate-(--arrow-angle)"
+        style="--arrow-angle: {arrowAngle.current}deg"
       />
-      <span class="text-[10px] font-medium">{displayDelta}</span>
+      <span class="text-2xs font-medium">{displayDelta}</span>
     </div>
   {/if}
 </div>

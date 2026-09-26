@@ -16,8 +16,8 @@
 
 <div class="grid grid-cols-3 gap-4">
   <div class="space-y-2">
-    <Label for="carbs" class="flex items-center gap-1.5">
-      <Apple class="h-3.5 w-3.5 text-green-500" />
+    <Label for="carbs">
+      <Apple class="h-3.5 w-3.5 text-entry-carbs" />
       Carbs (g)
     </Label>
     <Input
@@ -39,7 +39,7 @@
       step="1"
       min="0"
       bind:value={form.absorptionTime}
-      placeholder={"\u2014"}
+      placeholder="—"
     />
   </div>
   <div class="space-y-2">
@@ -49,7 +49,7 @@
       type="number"
       step="1"
       bind:value={form.carbTime}
-      placeholder={"\u2014"}
+      placeholder="—"
     />
   </div>
 </div>

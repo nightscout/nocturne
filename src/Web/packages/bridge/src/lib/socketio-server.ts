@@ -1,8 +1,43 @@
-import { Server as SocketIOServerClass, Socket, Namespace } from 'socket.io';
+import { Server as SocketIOServerClass, Socket, Namespace, type DefaultEventsMap } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import logger from './logger.js';
 import type { ClientInfo, AlarmData, ServerStats } from '../types.js';
-import { verifyHandshakeTicket, normalizeHandshakeHost } from './handshake-ticket.js';
+import {
+  verifyHandshakeTicket,
+  normalizeHandshakeHost,
+  REALTIME_ADMISSION_PATH,
+  canonicalSubjectId,
+} from './handshake-ticket.js';
+import { isRecord, stringField, type Payload } from './payload.js';
+
+/** What a socket carries from its handshake to its handlers. */
+interface BridgeSocketData {
+  /** The tenant whose rooms the socket is authorized for. */
+  tenantSlug?: string;
+  /** The tenant the socket's host resolved to, before it has authorized. */
+  pendingTenantSlug?: string;
+  /**
+   * Whether the socket's credential may join the tenant-wide room. The room
+   * carries every category and every member's in-app notifications, so a guest
+   * link or anonymous share that holds single categories stays out of it.
+   */
+  tenantRelay?: boolean;
+  /**
+   * The subject whose per-subject room the socket joined, carried from the API
+   * admission via the handshake ticket. Absent for a credential that owns no
+   * subject, which then receives no per-subject notifications.
+   */
+  subjectId?: string;
+}
+
+/** Room a socket joins for one subject's per-subject payloads within a tenant. */
+function subjectRoom(tenantSlug: string, subjectId: string): string {
+  return `tenant:${tenantSlug}:subject:${subjectId}`;
+}
+
+type BridgeServer = SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
+type BridgeNamespace = Namespace<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
+type BridgeSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>;
 
 /**
  * The six collection names the Nightscout v3 `/storage` namespace lets a client
@@ -18,6 +53,11 @@ const KNOWN_STORAGE_COLLECTIONS = [
   'foods',
   'settings',
 ] as const;
+
+type StorageCollection = (typeof KNOWN_STORAGE_COLLECTIONS)[number];
+
+const isStorageCollection = (name: string): name is StorageCollection =>
+  KNOWN_STORAGE_COLLECTIONS.some((known) => known === name);
 
 /**
  * The API broadcasts storage events under its own collection names, which don't
@@ -132,7 +172,7 @@ export function resolveTenantSlug(
 }
 
 class SocketIOServer {
-  private io: SocketIOServerClass | null = null;
+  private io: BridgeServer | null = null;
   private httpServer: HttpServer;
   private clients: Map<string, ClientInfo> = new Map();
   private config: SocketIOConfig;
@@ -142,8 +182,8 @@ class SocketIOServer {
   private apiBaseUrl: string;
   /** Nightscout v3 namespaces for uploaders (AAPS, xDrip+, ...). null until
    *  start() attaches them to the same httpServer as the default namespace. */
-  private storageNsp: Namespace | null = null;
-  private alarmNsp: Namespace | null = null;
+  private storageNsp: BridgeNamespace | null = null;
+  private alarmNsp: BridgeNamespace | null = null;
 
   constructor(
     httpServer: HttpServer,
@@ -170,9 +210,9 @@ class SocketIOServer {
     return new Promise((resolve, reject) => {
       try {
         // Create Socket.IO server attached to existing HTTP server
-        this.io = new SocketIOServerClass(this.httpServer, {
+        this.io = new SocketIOServerClass<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, BridgeSocketData>(this.httpServer, {
           cors: this.config.cors,
-          transports: this.config.transports as any,
+          transports: this.config.transports,
           pingTimeout: this.config.pingTimeout,
           pingInterval: this.config.pingInterval,
           // Legacy Nightscout clients (LoopFollow's socket.io-client-swift) speak
@@ -199,11 +239,10 @@ class SocketIOServer {
   /** Authorize every handshake before it can join a tenant room. The tenant is
    *  resolved from the connection's Host, and the connection must present a valid
    *  handshake ticket (see handshake-ticket.ts) in its Socket.IO `auth` payload.
-   *  The ticket is minted by the web app's `/realtime/ticket` endpoint only after
-   *  it has replayed the connection's read against the API's per-tenant read
-   *  policy, so verifying the ticket here mirrors that policy without a
-   *  per-connection API call. Unauthorized handshakes are rejected so the socket
-   *  never receives broadcasts. */
+   *  The web app's `/realtime/ticket` endpoint mints it from the API's realtime
+   *  admission for the connection, so verifying it here applies the API's
+   *  policy without a per-connection API call. Unauthorized handshakes are
+   *  rejected so the socket never receives broadcasts. */
   private setupHandshakeAuth(): void {
     if (!this.io) return;
     this.io.use((socket, next) => this.authorizeHandshake(socket, next));
@@ -212,7 +251,7 @@ class SocketIOServer {
   /** Resolve the tenant for a handshake and authorize it from its ticket. Sets
    *  `socket.data.tenantSlug` for room assignment on success; calls `next` with
    *  an error to reject. Exposed for unit testing. */
-  async authorizeHandshake(socket: Socket, next: (err?: Error) => void): Promise<void> {
+  async authorizeHandshake(socket: BridgeSocket, next: (err?: Error) => void): Promise<void> {
     try {
       const host = pickHandshakeHost(socket.handshake.headers);
       const tenantSlug = resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
@@ -224,7 +263,7 @@ class SocketIOServer {
       // Engine.IO v3 clients have no `auth` payload — that arrived with the v4
       // protocol — so also accept the ticket from the handshake query.
       const token =
-        (socket.handshake.auth as { token?: string } | undefined)?.token
+        stringField(socket.handshake.auth, 'token')
         ?? queryValue(socket.handshake.query?.token);
       if (token) {
         // A ticket was offered, so this is the browser path: reject it outright if
@@ -245,6 +284,8 @@ class SocketIOServer {
         }
 
         socket.data.tenantSlug = tenantSlug;
+        socket.data.tenantRelay = ticket.tenantRelay;
+        socket.data.subjectId = ticket.subjectId;
         return next();
       }
 
@@ -265,7 +306,7 @@ class SocketIOServer {
   private setupEventHandlers(): void {
     if (!this.io) return;
 
-    this.io.on('connection', (socket: Socket) => {
+    this.io.on('connection', (socket: BridgeSocket) => {
       const clientId = socket.id;
       const clientInfo: ClientInfo = {
         id: clientId,
@@ -278,13 +319,7 @@ class SocketIOServer {
       logger.info(`Client connected: ${clientId} from ${clientInfo.address}`);
       logger.debug(`Total connected clients: ${this.clients.size}`);
 
-      // Join the client to the tenant room resolved and authorized during the
-      // handshake (see setupHandshakeAuth).
-      const tenantSlug = socket.data.tenantSlug as string | undefined;
-      if (tenantSlug) {
-        socket.join(`tenant:${tenantSlug}`);
-        logger.info(`Client ${clientId} joined tenant room: ${tenantSlug}`);
-      }
+      this.joinTenantRoom(socket);
 
       // Classic Nightscout authorization: legacy clients connect first and then
       // send their credentials in an `authorize` message.
@@ -308,24 +343,45 @@ class SocketIOServer {
     });
   }
 
+  /** Join an authorized socket to its tenant room and, when its credential owns a subject, that
+   *  subject's room. A restricted socket stays authorized and joins nothing, as the API hub's
+   *  Authorize does; the bridge has no per-category room for the default namespace to offer it
+   *  instead. A socket with no subject receives no per-subject notifications. */
+  private joinTenantRoom(socket: BridgeSocket): void {
+    const { tenantSlug, tenantRelay, subjectId } = socket.data;
+    if (!tenantSlug) return;
+
+    if (tenantRelay !== true) {
+      logger.info(`Client ${socket.id} is restricted; not joining tenant room: ${tenantSlug}`);
+      return;
+    }
+
+    socket.join(`tenant:${tenantSlug}`);
+    logger.info(`Client ${socket.id} joined tenant room: ${tenantSlug}`);
+
+    if (subjectId) {
+      socket.join(subjectRoom(tenantSlug, subjectId));
+      logger.info(`Client ${socket.id} joined subject room: ${subjectId}`);
+    }
+  }
+
   /** Handle the classic Nightscout `authorize` message.
    *
    *  Legacy clients (LoopFollow, Nightscout watchfaces) don't have — and can't
-   *  obtain — a handshake ticket, because /realtime/ticket mints one only after
-   *  replaying the read against the API with the caller's browser session. They
+   *  obtain — a handshake ticket, because /realtime/ticket mints one only for a
+   *  browser session the API admits to realtime. They
    *  authenticate the way they do against classic Nightscout instead: an API
    *  secret (already SHA-1 hashed by the client) and/or a subject token.
    *
    *  Rather than interpret those credentials here, replay them against the same
-   *  read the ticket endpoint probes. The API applies its own per-tenant policy,
-   *  so this grants exactly what a REST read with the same credential would.
-   *  Only on success does the socket join its tenant room.
+   *  admission the ticket endpoint asks for. The API applies its own per-tenant
+   *  policy and decides whether the credential may join the tenant room.
    *
    *  The probe carries the client's credential and nothing else — never the
    *  bridge's instance key, which would authenticate any anonymous caller as a
    *  service and hand them another tenant's data. */
   async handleAuthorize(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     callback?: (result: unknown) => void,
   ): Promise<void> {
@@ -341,20 +397,44 @@ class SocketIOServer {
       return;
     }
 
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) return deny('no resolvable tenant');
 
     if (!this.apiBaseUrl) return deny('bridge has no API base URL configured');
 
-    const message = (payload ?? {}) as { secret?: unknown; token?: unknown };
-    const secret = typeof message.secret === 'string' ? message.secret : undefined;
-    const token = typeof message.token === 'string' ? message.token : undefined;
+    const secret = stringField(payload, 'secret');
+    const token = stringField(payload, 'token');
     if (!secret && !token) return deny('no credentials supplied');
 
+    const admission = await this.probeRealtimeAdmission(tenantSlug, { apiSecret: secret, token });
+    if (admission === null) return deny('API denied the credential');
+
+    socket.data.tenantSlug = tenantSlug;
+    socket.data.pendingTenantSlug = undefined;
+    socket.data.tenantRelay = admission.tenantRelay;
+    socket.data.subjectId = admission.subjectId;
+    this.joinTenantRoom(socket);
+    logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
+    callback?.({ read: true, write: false, write_treatment: false });
+  }
+
+  /** Replays a client credential against the API's realtime admission endpoint,
+   *  scoped to the connection's own tenant, and returns its `tenantRelay`
+   *  decision and the admitted subject, or null when the API refused the credential or the probe failed.
+   *  The probe carries the client's credential and nothing else: the bridge's
+   *  instance key would authenticate any anonymous caller as a service. */
+  private async probeRealtimeAdmission(
+    tenantSlug: string,
+    credential: { apiSecret?: string; token?: string; accessToken?: string },
+  ): Promise<{ tenantRelay: boolean; subjectId: string | undefined } | null> {
+    if (!this.apiBaseUrl) {
+      logger.warn('Realtime admission probe has no API base URL configured');
+      return null;
+    }
+
     try {
-      const url = new URL(`${this.apiBaseUrl}/api/v1/entries`);
-      url.searchParams.set('count', '1');
-      if (token) url.searchParams.set('token', token);
+      const url = new URL(`${this.apiBaseUrl}${REALTIME_ADMISSION_PATH}`);
+      if (credential.token) url.searchParams.set('token', credential.token);
 
       const headers: Record<string, string> = {
         'X-Forwarded-Host': `${tenantSlug}.${this.baseDomain}`,
@@ -363,7 +443,8 @@ class SocketIOServer {
         // unauthenticated probe.
         'Cache-Control': 'no-cache, no-store',
       };
-      if (secret) headers['api-secret'] = secret;
+      if (credential.apiSecret) headers['api-secret'] = credential.apiSecret;
+      if (credential.accessToken) headers['Authorization'] = `Bearer ${credential.accessToken}`;
 
       const probe = await fetch(url, {
         method: 'GET',
@@ -371,16 +452,17 @@ class SocketIOServer {
         signal: AbortSignal.timeout(5000),
       });
 
-      if (!probe.ok) return deny(`API denied the credential (${probe.status})`);
-
-      socket.data.tenantSlug = tenantSlug;
-      socket.data.pendingTenantSlug = undefined;
-      socket.join(`tenant:${tenantSlug}`);
-      logger.info(`Client ${socket.id} authorized via legacy credentials for tenant: ${tenantSlug}`);
-      callback?.({ read: true, write: false, write_treatment: false });
+      if (!probe.ok) return null;
+      const admission: unknown = await probe.json();
+      if (!isRecord(admission)) return { tenantRelay: false, subjectId: undefined };
+      return {
+        tenantRelay: admission.tenantRelay === true,
+        subjectId: canonicalSubjectId(admission.subjectId),
+      };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      return deny(`credential probe failed: ${reason}`);
+      logger.warn(`Realtime admission probe failed: ${reason}`);
+      return null;
     }
   }
 
@@ -399,7 +481,7 @@ class SocketIOServer {
   }
 
   // Methods to broadcast messages to clients
-  broadcastDataUpdate(data: any, tenantSlug?: string): void {
+  broadcastDataUpdate(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -407,7 +489,15 @@ class SocketIOServer {
     target.emit('dataUpdate', data);
   }
 
-  broadcastAnnouncement(message: any, tenantSlug?: string): void {
+  broadcastTrackerUpdate(data: unknown, tenantSlug?: string): void {
+    const target = this.emitTarget(tenantSlug);
+    if (!target) return;
+
+    logger.debug(`Broadcasting trackerUpdate${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
+    target.emit('trackerUpdate', data);
+  }
+
+  broadcastAnnouncement(message: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -444,7 +534,7 @@ class SocketIOServer {
     }
   }
 
-  broadcastNotification(notification: any, tenantSlug?: string): void {
+  broadcastNotification(notification: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -452,7 +542,7 @@ class SocketIOServer {
     target.emit('notification', notification);
   }
 
-  broadcastStatusUpdate(status: any, tenantSlug?: string): void {
+  broadcastStatusUpdate(status: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -460,7 +550,7 @@ class SocketIOServer {
     target.emit('status', status);
   }
 
-  broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: any, tenantSlug?: string): void {
+  broadcastStorageEvent(eventType: 'create' | 'update' | 'delete', data: Payload, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
 
@@ -484,10 +574,7 @@ class SocketIOServer {
     // `colName` is amended to the client spelling too, since AAPS routes the
     // event by reading `colName` from the payload.
     if (this.storageNsp && tenantSlug) {
-      const broadcastCollection =
-        typeof data?.colName === 'string' ? data.colName
-        : typeof data?.collection === 'string' ? data.collection
-        : null;
+      const broadcastCollection = stringField(data, 'colName') ?? stringField(data, 'collection') ?? null;
       if (broadcastCollection) {
         const clientCollection = clientCollectionName(broadcastCollection);
         this.storageNsp
@@ -497,22 +584,38 @@ class SocketIOServer {
     }
   }
 
-  broadcastInAppNotification(eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated', data: any, tenantSlug?: string): void {
-    const target = this.emitTarget(tenantSlug);
-    if (!target) return;
+  /** Emit an in-app notification only to the room of the subject it belongs to. A relayed event
+   *  that carries no recipient is dropped, never falling back to the tenant room: the tenant room
+   *  holds every member, so a fallback would deliver one member's notification to all of them. */
+  broadcastInAppNotification(
+    eventType: 'notificationCreated' | 'notificationArchived' | 'notificationUpdated',
+    data: unknown,
+    tenantSlug?: string,
+    subjectId?: string,
+  ): void {
+    if (!this.io) return;
+    if (!tenantSlug) {
+      logger.warn('Refusing to broadcast without a tenant slug');
+      return;
+    }
+    if (!subjectId) {
+      logger.debug(`Not broadcasting ${eventType}: no subject id for tenant ${tenantSlug}`);
+      return;
+    }
 
-    logger.debug(`Broadcasting ${eventType}${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
-    target.emit(eventType, data);
+    const room = subjectRoom(tenantSlug, subjectId);
+    logger.debug(`Broadcasting ${eventType} to ${room}`);
+    this.io.to(room).emit(eventType, data);
   }
 
-  broadcastSyncProgress(data: any, tenantSlug?: string): void {
+  broadcastSyncProgress(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
     logger.debug(`Broadcasting syncProgress${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
     target.emit('syncProgress', data);
   }
 
-  broadcastConfigChanged(data: any, tenantSlug?: string): void {
+  broadcastConfigChanged(data: unknown, tenantSlug?: string): void {
     const target = this.emitTarget(tenantSlug);
     if (!target) return;
     logger.debug(`Broadcasting configChanged${tenantSlug ? ` to tenant ${tenantSlug}` : ''}`);
@@ -520,7 +623,7 @@ class SocketIOServer {
   }
 
   // Send message to specific room
-  sendToRoom(room: string, event: string, data: any): void {
+  sendToRoom(room: string, event: string, data: unknown): void {
     if (!this.io) return;
 
     logger.debug(`Sending ${event} to room: ${room}`);
@@ -540,7 +643,7 @@ class SocketIOServer {
     this.tenantSlugs = slugs;
   }
 
-  getIO(): SocketIOServerClass | null {
+  getIO(): BridgeServer | null {
     return this.io;
   }
 
@@ -553,7 +656,7 @@ class SocketIOServer {
    * Returns the slug, or null when the host resolves to no tenant. Exposed for
    * unit testing.
    */
-  resolveNamespaceTenant(socket: Socket): string | null {
+  resolveNamespaceTenant(socket: BridgeSocket): string | null {
     const host = pickHandshakeHost(socket.handshake.headers);
     return resolveTenantSlug(host, this.baseDomain, this.tenantSlugs);
   }
@@ -628,7 +731,7 @@ class SocketIOServer {
       next();
     });
 
-    this.storageNsp.on('connection', (socket: Socket) => {
+    this.storageNsp.on('connection', (socket: BridgeSocket) => {
       logger.info(`v3 /storage client connected: ${socket.id}`);
 
       socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
@@ -652,19 +755,18 @@ class SocketIOServer {
    * immediately retrying `subscribe` as a credential-guessing oracle.
    */
   async handleStorageSubscribe(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     ack?: (result: unknown) => void,
   ): Promise<void> {
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) {
       ack?.({ success: false, message: 'no resolvable tenant' });
       socket.disconnect(true);
       return;
     }
 
-    const message = (payload ?? {}) as { accessToken?: unknown; collections?: unknown };
-    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    const accessToken = stringField(payload, 'accessToken');
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);
@@ -673,11 +775,12 @@ class SocketIOServer {
 
     // Normalize the requested collections to the known v3 set, preserving order
     // and dropping anything unrecognized.
-    const requested = Array.isArray(message.collections)
-      ? message.collections.filter((c): c is string => typeof c === 'string')
+    const collections = isRecord(payload) ? payload.collections : undefined;
+    const requested = Array.isArray(collections)
+      ? collections.filter((c): c is string => typeof c === 'string')
       : [];
-    const candidateCollections = requested.length > 0
-      ? requested.filter((c) => (KNOWN_STORAGE_COLLECTIONS as readonly string[]).includes(c))
+    const candidateCollections: StorageCollection[] = requested.length > 0
+      ? requested.filter(isStorageCollection)
       : [...KNOWN_STORAGE_COLLECTIONS];
 
     // Probe each collection's read endpoint independently so authorization is
@@ -741,7 +844,7 @@ class SocketIOServer {
       next();
     });
 
-    this.alarmNsp.on('connection', (socket: Socket) => {
+    this.alarmNsp.on('connection', (socket: BridgeSocket) => {
       logger.info(`v3 /alarm client connected: ${socket.id}`);
 
       socket.on('subscribe', async (payload: unknown, ack?: (result: unknown) => void) => {
@@ -751,7 +854,7 @@ class SocketIOServer {
       // Positional ack: AAPS emits ("ack", level, group, silenceTime) — three
       // separate arguments, not a JSON object (matches cgm-remote-monitor).
       socket.on('ack', (level: unknown, group: unknown, silenceTime: unknown) => {
-        const tenantSlug = socket.data.tenantSlug as string | undefined;
+        const tenantSlug = socket.data.tenantSlug;
         if (!tenantSlug) return;
         this.onAlarmAck(
           tenantSlug,
@@ -775,33 +878,29 @@ class SocketIOServer {
    * credential-guessing oracle.
    */
   async handleAlarmSubscribe(
-    socket: Socket,
+    socket: BridgeSocket,
     payload: unknown,
     ack?: (result: unknown) => void,
   ): Promise<void> {
-    const tenantSlug = socket.data.pendingTenantSlug as string | undefined;
+    const tenantSlug = socket.data.pendingTenantSlug;
     if (!tenantSlug) {
       ack?.({ success: false, message: 'no resolvable tenant' });
       socket.disconnect(true);
       return;
     }
 
-    const message = (payload ?? {}) as { accessToken?: unknown };
-    const accessToken = typeof message.accessToken === 'string' ? message.accessToken : undefined;
+    const accessToken = stringField(payload, 'accessToken');
     if (!accessToken) {
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);
       return;
     }
 
-    // Probe the entries read endpoint — alarm subscription requires the same
-    // tenant read access as a storage subscription.
-    const authorized = await this.probeAccessToken(
-      accessToken,
-      tenantSlug,
-      COLLECTION_READ_ENDPOINT.entries,
-    );
-    if (!authorized) {
+    // The alarm room carries every category and every member's alert state, so
+    // the subscriber must be a credential the API admits to the tenant relay,
+    // not merely one that can read entries.
+    const admitted = await this.probeRealtimeAdmission(tenantSlug, { accessToken });
+    if (admitted?.tenantRelay !== true) {
       logger.warn(`/alarm subscribe denied for ${socket.id} (tenant ${tenantSlug})`);
       ack?.({ success: false, message: 'Missing or bad accessToken' });
       socket.disconnect(true);

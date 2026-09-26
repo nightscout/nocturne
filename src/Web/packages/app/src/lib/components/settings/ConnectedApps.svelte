@@ -82,10 +82,10 @@
 
   {#if successMessage}
     <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
     >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">
+      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <p class="text-sm text-success">
         {successMessage}
       </p>
     </div>
@@ -123,7 +123,7 @@
                     Verified
                   </Badge>
                 {:else}
-                  <Badge variant="outline" class="shrink-0 text-xs">
+                  <Badge variant="outline" class="shrink-0">
                     Self-registered
                   </Badge>
                 {/if}
@@ -136,7 +136,7 @@
                   <a
                     href={app.clientUri}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel="external noopener noreferrer"
                     class="inline-flex items-center gap-1 text-xs hover:underline"
                   >
                     {app.clientUri}
@@ -154,9 +154,9 @@
                 <Button
                   {...props}
                   type="button"
-                  variant="outline"
+                  variant="outline-destructive"
                   size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  class="shrink-0"
                   disabled={isRevoking === app.grantId}
                 >
                   {#if isRevoking === app.grantId}
@@ -170,6 +170,10 @@
               {#snippet description()}
                 Revoke {app.clientName ?? "this app"}'s access to your data?
                 The app will need to be re-authorized to regain access.
+                {#if (app.deviceCount ?? 0) > 0}
+                  Its {app.deviceCount} paired device{app.deviceCount === 1 ? "" : "s"} will
+                  also be removed and stop receiving alerts.
+                {/if}
               {/snippet}
             </ConfirmDialog>
           </div>
@@ -182,7 +186,7 @@
               Permissions
             </p>
             <ul class="space-y-1.5">
-              {#each app.scopes ?? [] as scope}
+              {#each app.scopes ?? [] as scope, i (i)}
                 <li class="flex items-start gap-2 text-sm">
                   <Check class="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                   <span class="text-muted-foreground">

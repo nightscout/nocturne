@@ -8,7 +8,7 @@ namespace Nocturne.API.Filters;
 
 /// <summary>
 /// Answers a <see cref="RecreationBlockedException"/> with the <c>409 Conflict</c>
-/// <see cref="ProblemDetails"/> body that <see cref="ControllerBase.Problem"/> would have produced.
+/// <see cref="ProblemDetails"/> body that <see cref="ControllerBase.Problem(string, string, int?, string, string)"/> would have produced.
 /// </summary>
 /// <remarks>
 /// Registered globally rather than caught in

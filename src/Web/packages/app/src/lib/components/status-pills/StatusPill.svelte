@@ -1,8 +1,9 @@
 <script lang="ts">
   import * as Popover from "$lib/components/ui/popover";
+  import { Button } from "$lib/components/ui/button";
   import type { AlertLevel, PillInfoItem } from "$lib/types/status-pills";
   import { cn } from "$lib/utils";
-  import { PlusCircle } from "lucide-svelte";
+  import { PlusCircle, TriangleAlert, History } from "lucide-svelte";
 
   interface StatusPillProps {
     /** Display value shown in the pill */
@@ -37,40 +38,45 @@
     onAction,
   }: StatusPillProps = $props();
 
-  /** Get pill styling based on alert level */
-  const pillClasses = $derived.by(() => {
-    const baseClasses =
-      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm font-medium transition-colors cursor-pointer select-none";
+  // eslint-disable-next-line shadcn/require-static-classes -- this is the status item itself, and PopoverTrigger renders unstyled.
+  const pillClasses = $derived(
+    cn(
+      "inline-flex flex-col items-start rounded-md px-3 py-1 text-left whitespace-nowrap transition-colors cursor-pointer select-none hover:bg-accent/50",
+      isStale && "opacity-60",
+      className
+    )
+  );
 
-    const levelClasses: Record<AlertLevel, string> = {
-      none: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-      info: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50",
-      warn: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-900/50",
-      urgent:
-        "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50",
-    };
-
-    const staleClasses = isStale ? "opacity-60" : "";
-
-    return cn(baseClasses, levelClasses[level], staleClasses, className);
-  });
-
-  /** Get label styling based on level */
-  const labelClasses = $derived.by(() => {
-    const baseClasses = "text-xs font-normal opacity-75";
-    return cn(baseClasses);
-  });
+  // Severity is urgency, read as text; warn and urgent also carry an icon so the level is never colour alone.
+  const valueTone: Record<AlertLevel, string> = {
+    none: "",
+    info: "text-severity-info",
+    warn: "text-severity-warn",
+    urgent: "text-severity-urgent",
+  };
+  const labelClasses = "text-xs text-muted-foreground";
   let popoverOpen = $state(false);
 </script>
+
+{#snippet item()}
+  <span class={labelClasses}>{label}</span>
+  <span class="flex items-center gap-1 text-sm font-medium tabular-nums {valueTone[level]}">
+    {#if level === "warn" || level === "urgent"}
+      <TriangleAlert class="size-3.5" aria-hidden="true" />
+      <span class="sr-only">{level === "urgent" ? "Urgent:" : "Warning:"}</span>
+    {/if}
+    {value}
+    {#if isStale}
+      <History class="size-3 text-muted-foreground" aria-hidden="true" />
+      <span class="sr-only">(not current)</span>
+    {/if}
+  </span>
+{/snippet}
 
 {#if showPopover && info.length > 0}
   <Popover.Root bind:open={popoverOpen}>
     <Popover.Trigger class={pillClasses}>
-      <span class={labelClasses}>{label}</span>
-      <span>{value}</span>
-      {#if isStale}
-        <span class="text-xs opacity-50">?</span>
-      {/if}
+      {@render item()}
     </Popover.Trigger>
     <Popover.Content class="w-80 p-0" align="center" side="bottom">
       <div class="px-4 py-3 border-b border-border">
@@ -78,14 +84,19 @@
         <p class="text-xs text-muted-foreground">{value}</p>
       </div>
       <div class="px-4 py-3 space-y-2 max-h-80 overflow-y-auto">
-        {#each info as item}
+        {#each info as item, i (i)}
           {#if item.label === "------------"}
             <hr class="border-border my-2" />
           {:else}
             <div class="flex justify-between items-start gap-2 text-sm">
               <span class="text-muted-foreground shrink-0">{item.label}</span>
-              <span class="text-right font-medium wrap-break-word">
-                {@html item.value}
+              <span
+                class={cn(
+                  "text-right font-medium wrap-break-word",
+                  item.tone === "destructive" && "text-destructive"
+                )}
+              >
+                {#if item.lead}<b>{item.lead}</b>{/if}{item.value}
               </span>
             </div>
           {/if}
@@ -93,26 +104,24 @@
       </div>
       {#if actionLabel && onAction}
         <div class="p-2 border-t border-border">
-          <button
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer"
+          <Button
+            variant="ghost"
+            size="sm"
+            class="w-full justify-start"
             onclick={() => {
               onAction();
               popoverOpen = false;
             }}
           >
-            <PlusCircle class="mr-2 h-4 w-4 flex items-center justify-center" />
+            <PlusCircle class="h-4 w-4" />
             {actionLabel}
-          </button>
+          </Button>
         </div>
       {/if}
     </Popover.Content>
   </Popover.Root>
 {:else}
   <div class={pillClasses}>
-    <span class={labelClasses}>{label}</span>
-    <span>{value}</span>
-    {#if isStale}
-      <span class="text-xs opacity-50">?</span>
-    {/if}
+    {@render item()}
   </div>
 {/if}

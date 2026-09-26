@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import {
     get as getDnd,
     update as updateDnd,
@@ -10,14 +12,10 @@
   import { Bell, BellOff } from "lucide-svelte";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   // Manual DND is tenant-wide — it suppresses delivery of every non-critical
   // alert for every member — so the server gates it on alerts.readwrite.
   const canSetDnd = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("alerts.readwrite"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
 
   let settings = $state<TenantAlertSettingsResponse | null>(null);
@@ -79,7 +77,7 @@
     data-slot="sidebar-menu-sub-button"
   >
     <a
-      {href}
+      href={resolve(href)}
       class="flex flex-1 items-center gap-2 min-w-0 text-sm hover:text-sidebar-accent-foreground"
       title={isScheduled && !isManualActive
         ? "Scheduled Do Not Disturb window configured"

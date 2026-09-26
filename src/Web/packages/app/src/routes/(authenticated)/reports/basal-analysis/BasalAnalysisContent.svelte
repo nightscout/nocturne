@@ -13,10 +13,8 @@
     Layers,
     Calendar,
     Info,
-    TrendingUp,
-    TrendingDown,
     ArrowRight,
-    Printer,
+    ArrowLeft,
     HelpCircle,
     Clock,
     Gauge,
@@ -24,13 +22,14 @@
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     getBasalAnalysis,
     getHourlyInsulinDelivery,
   } from "$api/generated/statistics.generated.remote";
-    
+
   interface Props {
-    analysisDates: { startDate: Date; endDate: Date };
+    analysisDates: { startDate: string; endDate: string };
     dateInfo: { from: Date; to: Date; dayCount: number };
   }
   let { analysisDates, dateInfo }: Props = $props();
@@ -72,18 +71,14 @@
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
   <div class="@container container mx-auto max-w-7xl p-3 @md:p-6">
-    <Card
-      class="border-2 border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
-    >
+    <Card variant="destructive">
       <CardHeader>
-        <CardTitle
-          class="flex items-center gap-2 text-base text-red-700 dark:text-red-400"
-        >
+        <CardTitle variant="destructive" class="flex items-center gap-2 text-base">
           <Info class="h-5 w-5" />
           Error Loading Basal Analysis
         </CardTitle>
       </CardHeader>
-      <CardContent class="text-sm text-muted-foreground">
+      <CardContent variant="muted">
         {String(hourlyDeliveryQuery.error ?? analysisQuery.error)}
       </CardContent>
     </Card>
@@ -92,32 +87,22 @@
   <ReportsSkeleton />
 {:else}
   <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
-    <!-- Header -->
     <div class="space-y-4">
-      <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div>
-          <h1 class="text-2xl font-bold @md:text-3xl">
+          <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
+            <Layers class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
             Basal Rate Analysis
           </h1>
           <p class="mt-1 text-muted-foreground">
             Understand your background insulin delivery patterns over time
           </p>
         </div>
-        <div class="flex items-center gap-2 print:hidden">
-          <Button
-            variant="outline"
-            size="sm"
-            class="gap-2"
-            onclick={() => window.print()}
-          >
-            <Printer class="h-4 w-4" />
-            Print
-          </Button>
+        <div class="flex items-center gap-2">
           <Button
             href="/reports/insulin-delivery"
             variant="outline"
             size="sm"
-            class="gap-2"
           >
             Insulin Delivery
             <ArrowRight class="h-4 w-4" />
@@ -125,10 +110,8 @@
         </div>
       </div>
 
-
-      <!-- Period info -->
       <div
-        class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+        class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground print:hidden"
       >
         <Calendar class="h-4 w-4" />
         <span>
@@ -141,17 +124,14 @@
       </div>
     </div>
 
-    <!-- What is this report - Educational Card -->
-    <Card
-      class="border-2 border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30"
-    >
+    <Card variant="info">
       <CardHeader class="pb-3">
         <CardTitle class="flex items-center gap-2 text-base">
-          <HelpCircle class="h-5 w-5 text-amber-600" />
+          <HelpCircle class="h-5 w-5 text-info" />
           Understanding This Report
         </CardTitle>
       </CardHeader>
-      <CardContent class="space-y-2 text-sm">
+      <CardContent size="sm" class="space-y-2">
         <p>
           This report shows how your <strong>
             basal (background) insulin delivery
@@ -167,72 +147,21 @@
             The <strong>shaded bands</strong>
             show the range of variation (10th-90th percentile)
           </li>
-          <li>Wider bands indicate more variability in your basal needs</li>
+          <li>Wider bands mean the delivered rate varied more at that hour</li>
         </ul>
-        <p class="text-muted-foreground">
-          Use this to identify times when your basal insulin may need
-          adjustment, or to discuss temp basal patterns with your healthcare
-          provider.
-        </p>
       </CardContent>
     </Card>
 
-    <!-- Key Stats Cards -->
-    <div class="grid grid-cols-2 gap-4 @lg:grid-cols-4">
-      <Card class="border">
-        <CardContent class="pt-6 text-center">
-          <div class="text-2xl font-bold tabular-nums">
-            {basalStats.avgRate.toFixed(2)}
-          </div>
-          <div class="text-xs font-medium text-muted-foreground">Avg Rate</div>
-          <div class="text-[10px] text-muted-foreground/60">U/hr</div>
-        </CardContent>
-      </Card>
-      <Card class="border">
-        <CardContent class="pt-6 text-center">
-          <div class="text-2xl font-bold tabular-nums">
-            {basalStats.totalDelivered.toFixed(1)}
-          </div>
-          <div class="text-xs font-medium text-muted-foreground">
-            Total Basal
-          </div>
-          <div class="text-[10px] text-muted-foreground/60">
-            units delivered
-          </div>
-        </CardContent>
-      </Card>
-      <Card class="border">
-        <CardContent class="pt-6 text-center">
-          <div class="text-2xl font-bold tabular-nums">
-            {tempBasalInfo.perDay.toFixed(1)}
-          </div>
-          <div class="text-xs font-medium text-muted-foreground">
-            Temp Basals
-          </div>
-          <div class="text-[10px] text-muted-foreground/60">per day avg</div>
-        </CardContent>
-      </Card>
-      <Card class="border">
-        <CardContent class="pt-6 text-center">
-          <div class="flex items-center justify-center gap-2">
-            <span class="text-lg font-bold text-green-600">
-              {tempBasalInfo.highTemps}
-            </span>
-            <span class="text-muted-foreground">/</span>
-            <span class="text-lg font-bold text-red-600">
-              {tempBasalInfo.lowTemps}
-            </span>
-          </div>
-          <div class="text-xs font-medium text-muted-foreground">
-            High / Low
-          </div>
-          <div class="text-[10px] text-muted-foreground/60">temp basals</div>
-        </CardContent>
-      </Card>
-    </div>
+    <FigureStrip
+      figures={[
+        { label: "Avg Rate", value: basalStats.avgRate.toFixed(2), unit: "U/hr" },
+        { label: "Total Basal", value: basalStats.totalDelivered.toFixed(1), unit: "units delivered" },
+        { label: "Temp Basals", value: tempBasalInfo.perDay.toFixed(1), unit: "per day avg" },
+        { label: "High / Low", value: `${tempBasalInfo.highTemps} / ${tempBasalInfo.lowTemps}`, unit: "temp basals" },
+      ]}
+    />
 
-    <!-- Main Percentile Chart -->
-    <Card class="border">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Gauge class="h-5 w-5 text-muted-foreground" />
@@ -251,8 +180,7 @@
       </CardContent>
     </Card>
 
-    <!-- Hourly Insulin Delivery -->
-    <Card class="border">
+    <Card>
       <CardHeader>
         <CardTitle class="flex items-center gap-2">
           <Clock class="h-5 w-5 text-muted-foreground" />
@@ -267,121 +195,69 @@
       </CardContent>
     </Card>
 
-    <!-- Insights Section -->
     {#if basalStats.count > 0}
-      <Card class="border">
+      <Card>
         <CardHeader>
           <CardTitle class="flex items-center gap-2">
             <Info class="h-5 w-5 text-muted-foreground" />
             Basal Insights
           </CardTitle>
         </CardHeader>
-        <CardContent class="space-y-4">
-          <div class="grid gap-4 @3xl:grid-cols-2">
-            <!-- Rate Range -->
-            <div class="rounded-lg border bg-card p-4">
-              <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-primary/10 p-2">
-                  <TrendingUp class="h-4 w-4 text-primary" />
-                </div>
-                <div>
-                  <h4 class="font-medium">Basal Rate Range</h4>
-                  <p class="text-sm text-muted-foreground">
-                    Your basal rates ranged from <strong>
-                      {basalStats.minRate.toFixed(2)} U/hr
-                    </strong>
-                    to
-                    <strong>{basalStats.maxRate.toFixed(2)} U/hr</strong>
-                    .
-                    {#if basalStats.maxRate - basalStats.minRate > 0.5}
-                      This indicates significant variation in your basal needs
-                      throughout the day.
-                    {:else}
-                      Your basal rates are relatively consistent.
-                    {/if}
-                  </p>
-                </div>
-              </div>
+        <CardContent>
+          <div class="divide-y divide-border">
+            <div class="py-3 first:pt-0">
+              <h4 class="font-medium">Basal Rate Range</h4>
+              <p class="text-sm text-muted-foreground">
+                Your basal rates ranged from
+                <strong>{basalStats.minRate.toFixed(2)} U/hr</strong>
+                to <strong>{basalStats.maxRate.toFixed(2)} U/hr</strong>.
+              </p>
             </div>
 
-            <!-- Temp Basal Usage -->
-            <div class="rounded-lg border bg-card p-4">
-              <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-amber-500/10 p-2">
-                  <Layers class="h-4 w-4 text-amber-600" />
-                </div>
-                <div>
-                  <h4 class="font-medium">Temp Basal Activity</h4>
-                  <p class="text-sm text-muted-foreground">
-                    {#if tempBasalInfo.perDay > 10}
-                      High temp basal activity ({tempBasalInfo.perDay.toFixed(
-                        1
-                      )}/day) suggests active automated or manual adjustments.
-                    {:else if tempBasalInfo.perDay > 3}
-                      Moderate temp basal activity — typical for automated
-                      insulin delivery systems.
-                    {:else if tempBasalInfo.perDay > 0}
-                      Low temp basal activity — your basal rates may be
-                      well-tuned.
-                    {:else}
-                      No temp basal activity recorded in this period.
-                    {/if}
-                  </p>
-                </div>
-              </div>
+            <div class="py-3">
+              <h4 class="font-medium">Temp Basal Activity</h4>
+              <p class="text-sm text-muted-foreground">
+                {#if tempBasalInfo.perDay > 0}
+                  <strong class="tabular-nums">{tempBasalInfo.perDay.toFixed(1)}</strong>
+                  temp basals per day on average.
+                {:else}
+                  No temp basal activity recorded in this period.
+                {/if}
+              </p>
             </div>
 
-            <!-- Zero Temps -->
             {#if tempBasalInfo.zeroTemps > 0}
-              <div
-                class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30"
-              >
-                <div class="flex items-start gap-3">
-                  <div class="rounded-lg bg-red-500/10 p-2">
-                    <TrendingDown class="h-4 w-4 text-red-600" />
-                  </div>
-                  <div>
-                    <h4 class="font-medium text-red-700 dark:text-red-400">
-                      Suspend/Zero Temp Basals
-                    </h4>
-                    <p class="text-sm text-muted-foreground">
-                      <strong>{tempBasalInfo.zeroTemps}</strong>
-                      zero or suspend temp basals were recorded. This often indicates
-                      low glucose prevention or manual suspensions.
-                    </p>
-                  </div>
-                </div>
+              <div class="py-3">
+                <h4 class="font-medium">Suspend/Zero Temp Basals</h4>
+                <p class="text-sm text-muted-foreground">
+                  <strong>{tempBasalInfo.zeroTemps}</strong>
+                  zero or suspend temp basals were recorded.
+                </p>
               </div>
             {/if}
 
-            <!-- Daily Average -->
-            <div class="rounded-lg border bg-card p-4">
-              <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-blue-500/10 p-2">
-                  <Calendar class="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <h4 class="font-medium">Daily Basal Insulin</h4>
-                  <p class="text-sm text-muted-foreground">
-                    Average of <strong>
-                      {(basalStats.totalDelivered / dateInfo.dayCount).toFixed(1)} units
-                    </strong>
-                    of basal insulin delivered per day over this {dateInfo.dayCount}-day
-                    period.
-                  </p>
-                </div>
-              </div>
+            <div class="py-3 last:pb-0">
+              <h4 class="font-medium">Daily Basal Insulin</h4>
+              <p class="text-sm text-muted-foreground">
+                Average of <strong>
+                  {(basalStats.totalDelivered / dateInfo.dayCount).toFixed(1)} units
+                </strong>
+                of basal insulin delivered per day over this {dateInfo.dayCount}-day
+                period.
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
     {/if}
 
-    <!-- Navigation -->
     <Separator class="print:hidden" />
     <div class="flex flex-wrap items-center justify-center gap-2 print:hidden">
-      <Button href="/reports" variant="outline" size="sm">← All Reports</Button>
-      <Button href="/reports/insulin-delivery" size="sm" class="gap-2">
+      <Button href="/reports" variant="outline" size="sm">
+        <ArrowLeft class="h-4 w-4" />
+        All Reports
+      </Button>
+      <Button href="/reports/insulin-delivery" size="sm">
         Insulin Delivery Report
         <ArrowRight class="h-4 w-4" />
       </Button>
@@ -390,9 +266,8 @@
       </Button>
     </div>
 
-    <!-- Footer -->
     <div class="space-y-1 text-center text-xs text-muted-foreground">
-      <p>
+      <p class="print:hidden">
         Report generated from {formatNumber(basalStats.count)} basal events between
         {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
       </p>

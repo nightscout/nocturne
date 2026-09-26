@@ -72,6 +72,7 @@ public class DataOverviewZoneCharacterisationTests : IDisposable
             statistics.Object,
             cacheService.Object,
             tenantAccessor.Object,
+            new CategoryReadContext(),
             NullLogger<DataOverviewService>.Instance
         );
     }

@@ -82,6 +82,7 @@
     const encoded = encodeBase64Utf8(JSON.stringify(items));
     const url = new URL(page.url);
     url.searchParams.set("d", encodeURIComponent(encoded));
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
     goto(url.toString(), { replaceState: true, noScroll: true });
   }
 
@@ -95,7 +96,7 @@
 <div class="container mx-auto p-6 max-w-2xl space-y-5">
   <!-- Header -->
   <div class="flex flex-col gap-3">
-    <Button variant="ghost" size="sm" href="/tools/packing" class="gap-1 -ml-2 w-fit">
+    <Button variant="ghost" size="sm" href="/tools/packing" class="-ml-2 w-fit">
       <ArrowLeft class="h-4 w-4" />
       Back to calculator
     </Button>
@@ -126,24 +127,23 @@
     {#if totalCount > 0}
       <div class="h-2 rounded-full bg-muted overflow-hidden">
         <div
-          class="h-full rounded-full bg-primary transition-all duration-300"
-          style="width: {(totalChecked / totalCount) * 100}%"
+          class="h-full w-(--progress) rounded-full bg-primary transition-all duration-300"
+          style:--progress="{(totalChecked / totalCount) * 100}%"
         ></div>
       </div>
     {/if}
 
     <!-- Grouped checklist -->
-    {#each Object.entries(grouped) as [category, categoryItems]}
+    {#each Object.entries(grouped) as [category, categoryItems] (category)}
       <Card>
         <CardHeader class="py-3">
           <div class="flex items-center justify-between">
-            <CardTitle class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+            <CardTitle variant="muted" class="text-sm font-semibold uppercase tracking-wider">
               {category}
             </CardTitle>
             <Button
               variant="ghost"
-              size="sm"
-              class="h-7 px-2 text-xs"
+              size="xs"
               onclick={() => startAdding(category)}
             >
               <Plus class="h-3 w-3 mr-1" />
@@ -152,6 +152,7 @@
           </div>
         </CardHeader>
         <CardContent class="pt-0 pb-2">
+          <!-- eslint-disable-next-line svelte/require-each-key -- rows are positional: items carry no id, and removing one shifts the checked map by index -->
           {#each categoryItems as { item, index }, i}
             {#if i > 0}
               <Separator class="my-0" />
@@ -168,6 +169,7 @@
               >
                 &times;{item.q}
               </span>
+              <!-- eslint-disable-next-line no-restricted-syntax -- inline-editable item text -->
               <input
                 type="text"
                 value={item.l}
@@ -181,13 +183,15 @@
                 }}
                 onkeydown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
               />
-              <button
-                type="button"
-                class="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+              <Button
+                variant="ghost-destructive"
+                size="icon-2xs"
+                reveal
                 onclick={() => removeItem(index)}
+                aria-label="Remove {item.l}"
               >
-                <X class="h-3.5 w-3.5 text-muted-foreground hover:text-destructive" />
-              </button>
+                <X />
+              </Button>
             </div>
           {/each}
 
@@ -200,21 +204,22 @@
                 bind:value={newQty}
                 min={1}
                 step={1}
-                class="w-16 h-8 text-xs"
+                size="sm"
+                class="w-16"
               />
               <Input
                 bind:value={newLabel}
                 placeholder="Item name..."
-                class="flex-1 h-8 text-sm"
+                size="sm"
+                class="flex-1"
                 onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
               />
-              <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
+              <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
                 Add
               </Button>
               <Button
                 variant="ghost"
-                size="sm"
-                class="h-8 px-2"
+                size="icon-sm"
                 onclick={() => (addingToCategory = null)}
               >
                 <X class="h-4 w-4" />
@@ -229,7 +234,7 @@
     {#if addingToCategory === "Custom"}
       <Card>
         <CardHeader class="py-3">
-          <CardTitle class="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <CardTitle variant="muted" class="text-sm font-semibold uppercase tracking-wider">
             Custom
           </CardTitle>
         </CardHeader>
@@ -240,21 +245,22 @@
               bind:value={newQty}
               min={1}
               step={1}
-              class="w-16 h-8 text-xs"
+              size="sm"
+              class="w-16"
             />
             <Input
               bind:value={newLabel}
               placeholder="Item name..."
-              class="flex-1 h-8 text-sm"
+              size="sm"
+              class="flex-1"
               onkeydown={(e: KeyboardEvent) => e.key === "Enter" && addItem()}
             />
-            <Button size="sm" class="h-8" onclick={addItem} disabled={!newLabel.trim()}>
+            <Button size="sm" onclick={addItem} disabled={!newLabel.trim()}>
               Add
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              class="h-8 px-2"
+              size="icon-sm"
               onclick={() => (addingToCategory = null)}
             >
               <X class="h-4 w-4" />
@@ -265,7 +271,7 @@
     {:else if addingToCategory === null}
       <Button
         variant="outline"
-        class="w-full gap-2"
+        class="w-full"
         onclick={() => startAdding("Custom")}
       >
         <Plus class="h-4 w-4" />

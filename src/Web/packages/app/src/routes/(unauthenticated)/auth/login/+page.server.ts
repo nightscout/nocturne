@@ -1,6 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import type { PageServerLoad } from "./$types";
+import { GUEST_CODE_DISMISSED_COOKIE } from "$lib/components/auth/guest-code-dismissal";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard
@@ -23,9 +24,15 @@ const AUTO_LOGIN_MARKER = "__autologin";
 const DEV_LOGIN_ENDPOINT = "/api/v4/dev-only/auth/login";
 const DEMO_LOGIN_ENDPOINT = "/api/v4/demo/session";
 
-export const load: PageServerLoad = async ({ url, locals }) => {
+export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => {
   const endpoint = await resolveAutoLoginEndpoint(locals);
-  if (!endpoint) return;
+  if (!endpoint) {
+    const { tenantless } = await parent();
+    return {
+      guestCodePending: await hasPendingGuestCode(locals, tenantless),
+      guestCodeDismissed: cookies.get(GUEST_CODE_DISMISSED_COOKIE) === "1",
+    };
+  }
 
   const raw = url.searchParams.get("returnUrl") || "/";
   // Same-origin paths only, mirroring the endpoint's IsLocalUrl guard: a
@@ -71,6 +78,25 @@ async function resolveAutoLoginEndpoint(
     return status?.isDemo ? DEMO_LOGIN_ENDPOINT : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether the tenant has an unredeemed guest code, in which case the page opens
+ * on code entry so a guest can be sent to the bare site rather than /guest.
+ * The share host has no sessions and a tenantless host has no codes.
+ */
+async function hasPendingGuestCode(
+  locals: App.Locals,
+  tenantless: boolean,
+): Promise<boolean> {
+  if (tenantless || locals.isShareHost) return false;
+
+  try {
+    const { pending } = await locals.apiClient.guestLink.getGuestCodePending();
+    return pending === true;
+  } catch {
+    return false;
   }
 }
 

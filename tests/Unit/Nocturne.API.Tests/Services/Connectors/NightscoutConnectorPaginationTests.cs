@@ -251,8 +251,8 @@ public class NightscoutConnectorPaginationTests
     [Fact]
     public async Task SyncGlucose_PaginationUsesOldestEntryDate()
     {
-        // Arrange: verify that the second page's $lte parameter corresponds to the
-        // oldest entry's date minus 1ms from the first page
+        // Arrange: the second page's $lte is the first page's oldest date, inclusive, since
+        // records sharing that millisecond may not all have fitted on the first page
         var page1 = CreateEntries(MaxCount, BaseTime);
         var oldestMs = page1.Min(e => e.Mills);
 
@@ -267,11 +267,9 @@ public class NightscoutConnectorPaginationTests
         // Act
         await service.SyncDataAsync(OpenEndedGlucoseSync(), config, CancellationToken.None);
 
-        // Assert: the second page's URL should contain $lte with oldestMs - 1
         var secondPageUrl = handler.RequestUrls[2];
-        var expectedLte = (oldestMs - 1).ToString();
-        secondPageUrl.Should().Contain($"find[date][$lte]={expectedLte}",
-            "pagination should request entries older than the oldest seen entry");
+        secondPageUrl.Should().Contain($"find[date][$lte]={oldestMs}",
+            "pagination should request entries at or before the oldest seen entry");
     }
 
     [Fact]
@@ -686,7 +684,13 @@ public class NightscoutConnectorPaginationTests
     private const string InWindowUtc = "2025-06-15T11:00:00.000Z";
 
     private static Treatment OffsetTreatment(string createdAt) =>
-        new() { Created_at = createdAt, EventType = "Correction Bolus", Insulin = 1.0 };
+        new()
+        {
+            Id = Guid.NewGuid().ToString("N")[..24],
+            Created_at = createdAt,
+            EventType = "Correction Bolus",
+            Insulin = 1.0,
+        };
 
     private static async Task<(Nocturne.Connectors.Core.Models.SyncResult Result, List<Treatment> Published)> SyncTreatmentsAsync(
         LegacyTreatmentsHandler handler,

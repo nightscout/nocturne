@@ -9,30 +9,29 @@
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { create as createReservoirReport } from "$api/generated/reservoirReports.generated.remote";
-
-  type ReportKind = "Reading" | "Fill";
+  import { ReservoirReportKind } from "$api";
 
   interface ReservoirReportDialogProps {
     open: boolean;
     /** Preselected kind when opening (e.g. "Fill" from a reservoir tracker row). */
-    defaultKind?: ReportKind;
+    defaultKind?: ReservoirReportKind;
     onClose?: () => void;
     onReported?: () => void;
   }
 
   let {
     open = $bindable(false),
-    defaultKind = "Reading",
+    defaultKind = ReservoirReportKind.Reading,
     onClose,
     onReported,
   }: ReservoirReportDialogProps = $props();
 
-  let kind = $state<ReportKind>("Reading");
+  let kind = $state<ReservoirReportKind>(ReservoirReportKind.Reading);
   let units = $state<number | undefined>(undefined);
   let observedAt = $state("");
   const submission = useToastSubmission("Failed to record reservoir value");
 
-  const kindLabels: Record<ReportKind, string> = {
+  const kindLabels: Record<ReservoirReportKind, string> = {
     Reading: "Current level",
     Fill: "Fresh fill",
   };
@@ -63,7 +62,7 @@
         app: "Nocturne",
       });
       toast.success(
-        kind === "Fill" ? `Fill of ${units}U recorded` : `Reservoir level of ${units}U recorded`
+        kind === ReservoirReportKind.Fill ? `Fill of ${units}U recorded` : `Reservoir level of ${units}U recorded`
       );
       open = false;
       await tick();
@@ -94,8 +93,8 @@
             {kindLabels[kind]}
           </Select.Trigger>
           <Select.Content>
-            <Select.Item value="Reading" label={kindLabels.Reading} />
-            <Select.Item value="Fill" label={kindLabels.Fill} />
+            <Select.Item value={ReservoirReportKind.Reading} label={kindLabels.Reading} />
+            <Select.Item value={ReservoirReportKind.Fill} label={kindLabels.Fill} />
           </Select.Content>
         </Select.Root>
       </div>
@@ -108,7 +107,7 @@
           min="0.5"
           max="1000"
           step="0.5"
-          placeholder={kind === "Fill" ? "e.g. 85" : "e.g. 62"}
+          placeholder={kind === ReservoirReportKind.Fill ? "e.g. 85" : "e.g. 62"}
           bind:value={units}
         />
       </div>

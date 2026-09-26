@@ -4,6 +4,7 @@
   import { scaleTime, scaleLinear } from 'd3-scale';
   import { bisector } from 'd3';
   import type { TransformedChartData } from './types.js';
+  import { metadataString, tempBasalFields } from './utils/metadata.js';
   import GlucoseTrack from './tracks/GlucoseTrack.svelte';
   import BasalTrack from './tracks/BasalTrack.svelte';
   import IobCobTrack from './tracks/IobCobTrack.svelte';
@@ -39,7 +40,6 @@
   // Basal: 12%, IOB/COB: 18%, Glucose: 70%
   const BASAL_RATIO = 0.12;
   const IOB_RATIO = 0.18;
-  const GLUCOSE_RATIO = 0.70;
 
   const basalHeight = $derived(Math.round(height * BASAL_RATIO));
   const iobHeight = $derived(Math.round(height * IOB_RATIO));
@@ -75,7 +75,6 @@
 
   const maxBasalRate = $derived(data.maxBasalRate > 0 ? data.maxBasalRate : 2.5);
   const maxIob = $derived(data.maxIob > 0 ? data.maxIob : 3);
-  const maxCob = $derived(data.maxCob > 0 ? data.maxCob : 60);
   const glucoseYMax = $derived(data.thresholds.glucoseYMax > 0 ? data.thresholds.glucoseYMax : 300);
   const highThreshold = $derived(data.thresholds.high);
   const lowThreshold = $derived(data.thresholds.low);
@@ -88,8 +87,7 @@
   );
 
   // Stale basal: none in the package version (no live sync), always null
-  // eslint-disable-next-line prefer-const
-  let staleBasalData: { start: Date; end: Date } | null = null;
+  const staleBasalData: { start: Date; end: Date } | null = null;
 
   // ===== LEGEND TOGGLE STATE =====
   let showBasal = $state(true);
@@ -191,7 +189,7 @@
   const findActiveProfile = (t: Date) => {
     const s = findActiveSpanRaw(profileSpans, t);
     if (!s) return undefined;
-    return { ...withDisplay(s), profileName: (s.metadata?.profileName as string) ?? s.state ?? '' };
+    return { ...withDisplay(s), profileName: metadataString(s.metadata, 'profileName') ?? s.state ?? '' };
   };
   const findActiveActivities = (t: Date) => findAllActiveSpansRaw(activitySpans, t).map(withDisplay);
   const findActiveTempBasal = (t: Date) => {
@@ -199,8 +197,7 @@
     if (!s) return undefined;
     return {
       ...withDisplay(s),
-      rate: (s.metadata?.rate as number) ?? (s.metadata?.absolute as number) ?? null,
-      percent: (s.metadata?.percent as number) ?? null,
+      ...tempBasalFields(s.metadata),
     };
   };
   const findActiveBasalDelivery = (t: Date) => {
@@ -282,18 +279,14 @@
     return idx >= 2 ? glucoseData[idx - 2]?.sgv : undefined;
   });
 
-  const isStaleBasalAtInspection = $derived.by(() => {
-    const stale = staleBasalData as { start: Date; end: Date } | null;
-    if (!inspectionTime || !stale) return false;
-    const t = inspectionTime.getTime();
-    return t >= stale.start.getTime() && t <= stale.end.getTime();
-  });
+  // Basal is never stale without live sync; see staleBasalData.
+  const isStaleBasalAtInspection = false;
 
   // Tracker markers with display range for legend
   const scheduledTrackerMarkers = $derived(data.trackerMarkers);
 </script>
 
-<div style="width: {width ? width + 'px' : '100%'};">
+<div class="w-(--chart-width)" style:--chart-width={width ? `${width}px` : '100%'}>
   <!-- Legend -->
   {#if showLegend}
   <ChartLegend
@@ -337,7 +330,7 @@
 
   <!-- Basal Chart -->
   {#if showBasal}
-    <div style="height: {basalHeight}px;">
+    <div class="h-(--track-height)" style:--track-height="{basalHeight}px">
       <Chart
         data={basalData}
         x={(d) => new Date(d.timestamp ?? 0)}
@@ -363,8 +356,7 @@
                 ...s,
                 displayStart: s.startTime,
                 displayEnd: s.endTime ?? new Date(),
-                rate: (s.metadata?.rate as number) ?? (s.metadata?.absolute as number) ?? null,
-                percent: (s.metadata?.percent as number) ?? null,
+                ...tempBasalFields(s.metadata),
               }))}
               {staleBasalData}
               {maxBasalRate}
@@ -383,7 +375,7 @@
   {/if}
 
   <!-- Glucose Chart -->
-  <div style="height: {glucoseHeight}px;">
+  <div class="h-(--track-height)" style:--track-height="{glucoseHeight}px">
     <Chart
       data={glucoseData}
       x="time"
@@ -454,7 +446,7 @@
 
   <!-- IOB/COB Chart -->
   {#if showIobTrack}
-    <div style="height: {iobHeight}px;">
+    <div class="h-(--track-height)" style:--track-height="{iobHeight}px">
       <Chart
         data={iobData}
         x="time"

@@ -34,9 +34,9 @@ public class ClientDeviceEntity : ITenantScoped, IAuditable
     public Guid SubjectId { get; set; }
 
     /// <summary>
-    /// The OAuth grant this device was paired under, for revoke-cascade (removing the app in
-    /// "connected apps" should remove its devices). Reserved: not populated until the device
-    /// management flow wires grant resolution.
+    /// The OAuth grant this device last registered under. Set on every registration, so a device
+    /// re-paired under a new grant follows that grant. Revoking the grant removes the device. A
+    /// device that has not re-registered since grant recording has none and is not removed by a revoke.
     /// </summary>
     [Column("grant_id")]
     public Guid? GrantId { get; set; }

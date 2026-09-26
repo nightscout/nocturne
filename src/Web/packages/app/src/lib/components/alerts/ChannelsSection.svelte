@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import * as Popover from "$lib/components/ui/popover";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Plus, Bell, X } from "lucide-svelte";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import { getChannelStatuses } from "$api/generated/systems.generated.remote";
@@ -39,7 +39,7 @@
   const statusQuery = getChannelStatuses();
   const statuses = $derived<Map<string, ChannelStatusEntry>>(
     new Map(
-      (statusQuery.current?.channels ?? []).map((c) => [c.channelType as string, c]),
+      (statusQuery.current?.channels ?? []).flatMap((c): [string, ChannelStatusEntry][] => (c.channelType ? [[c.channelType, c]] : [])),
     ),
   );
   const statusPending = $derived(
@@ -59,11 +59,11 @@
   }
 
   function isOffered(opt: ChannelMetaEntry): boolean {
-    return statuses.get(opt.type as string)?.offered === true;
+    return statuses.get(opt.type)?.offered === true;
   }
 
   function needsDestination(channelType: ChannelType | undefined): boolean {
-    return statuses.get(channelType as string)?.requiresDestination === true;
+    return channelType !== undefined && statuses.get(channelType)?.requiresDestination === true;
   }
 
   // Every entry is listed but disabled until the API has answered, so the menu never
@@ -143,8 +143,7 @@
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            class="h-7 w-7"
+            size="icon-xs"
             aria-label="Remove channel"
             onclick={() => removeChannel(i)}
           >
@@ -162,11 +161,11 @@
           {#if opt && needsDestination(ch.channelType)}
             {@const error = destinationError(opt, ch.destination)}
             <div class="space-y-1.5">
-              <Label class="text-xs" for="channel-dest-{i}">{opt.destinationLabel}</Label>
+              <Label size="sm" for="channel-dest-{i}">{opt.destinationLabel}</Label>
               <Input
                 id="channel-dest-{i}"
                 type="text"
-                class="h-8 text-sm"
+                size="sm"
                 placeholder={opt.destinationPlaceholder}
                 aria-invalid={error != null}
                 aria-describedby={error != null
@@ -194,13 +193,13 @@
           {/if}
           {#if ch.channelType === ChannelType.Webhook}
             <div class="space-y-1.5">
-              <Label class="text-xs" for="channel-secret-{i}">Signing secret (optional)</Label>
+              <Label size="sm" for="channel-secret-{i}">Signing secret (optional)</Label>
               <div class="flex items-center gap-2">
                 <Input
                   id="channel-secret-{i}"
                   type="password"
                   autocomplete="off"
-                  class="h-8 text-sm"
+                  size="sm"
                   placeholder={ch.hasSecret ? "Saved — type to replace" : "Shared with your receiver"}
                   aria-describedby="channel-secret-helper-{i}"
                   value={ch.secret ?? ""}
@@ -212,8 +211,8 @@
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    class="h-8 shrink-0 text-xs"
+                    size="xs"
+                    class="shrink-0"
                     onclick={() => {
                       channels[i].hasSecret = false;
                       channels[i].secret = "";
@@ -233,11 +232,11 @@
             </div>
           {/if}
           <div class="space-y-1.5">
-            <Label class="text-xs" for="channel-label-{i}">Label (optional)</Label>
+            <Label size="sm" for="channel-label-{i}">Label (optional)</Label>
             <Input
               id="channel-label-{i}"
               type="text"
-              class="h-8 text-sm"
+              size="sm"
               placeholder="Family channel, work phone…"
               value={ch.destinationLabel ?? ""}
               oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
@@ -250,81 +249,71 @@
     </div>
   {/each}
 
-  <Popover.Root>
-    <Popover.Trigger>
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
           {...props}
           type="button"
-          variant="outline"
+          variant="dashed"
           size="sm"
-          class="border-dashed text-muted-foreground"
         >
           <Plus class="h-4 w-4 mr-2" /> Add channel
         </Button>
       {/snippet}
-    </Popover.Trigger>
-    <Popover.Content class="w-80 p-1" align="start">
-      <div class="max-h-96 overflow-y-auto">
-        {#each channelOptions as o (o.type)}
-          {@const Glyph = o.icon ?? Bell}
-          {@const linked = isLinked(o)}
-          {@const catalogFailed =
-            o.isDeviceAction === true &&
-            catalog === null &&
-            catalogQuery.error != null}
-          {@const catalogPending =
-            o.isDeviceAction === true && catalog === null && !catalogFailed}
-          {@const pending = statusPending || catalogPending}
-          {@const unavailable = statusFailed || catalogFailed}
-          <Popover.Close>
-            {#snippet child({ props })}
-              <Button
-                {...props}
-                type="button"
-                variant="ghost"
-                class="flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted"
-                disabled={pending || unavailable}
-                title={linked
-                  ? undefined
-                  : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
-                onclick={() => addChannel(o)}
-              >
-                <span
-                  class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded bg-muted text-muted-foreground overflow-hidden {!linked
-                    ? 'opacity-50'
-                    : ''}"
-                >
-                  {#if o.logo}
-                    <img src={o.logo} alt="" class="h-4 w-4 object-contain" />
-                  {:else}
-                    <Glyph class="h-3.5 w-3.5" />
-                  {/if}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content class="w-80 max-h-96" align="start">
+      {#each channelOptions as o (o.type)}
+        {@const Glyph = o.icon ?? Bell}
+        {@const linked = isLinked(o)}
+        {@const catalogFailed =
+          o.isDeviceAction === true &&
+          catalog === null &&
+          catalogQuery.error != null}
+        {@const catalogPending =
+          o.isDeviceAction === true && catalog === null && !catalogFailed}
+        {@const pending = statusPending || catalogPending}
+        {@const unavailable = statusFailed || catalogFailed}
+        <DropdownMenu.Item
+          class="items-start"
+          disabled={pending || unavailable}
+          title={linked
+            ? undefined
+            : `${platformLabel(o.platform!)} not linked — connect it in Connectors & Apps to enable delivery.`}
+          onSelect={() => addChannel(o)}
+        >
+          <span
+            class="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded bg-muted text-muted-foreground overflow-hidden {!linked
+              ? 'opacity-50'
+              : ''}"
+          >
+            {#if o.logo}
+              <img src={o.logo} alt="" class="h-4 w-4 object-contain" />
+            {:else}
+              <Glyph class="h-3.5 w-3.5" />
+            {/if}
+          </span>
+          <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
+            <span class="flex items-center gap-1.5">
+              <span class="text-sm font-medium">{o.label}</span>
+              {#if pending}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Loading
                 </span>
-                <span class="flex flex-1 flex-col {!linked ? 'opacity-60' : ''}">
-                  <span class="flex items-center gap-1.5">
-                    <span class="text-sm font-medium">{o.label}</span>
-                    {#if pending}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Loading
-                      </span>
-                    {:else if unavailable}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Unavailable
-                      </span>
-                    {:else if !linked}
-                      <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Not linked
-                      </span>
-                    {/if}
-                  </span>
-                  <span class="text-xs text-muted-foreground leading-tight">{o.description}</span>
+              {:else if unavailable}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Unavailable
                 </span>
-              </Button>
-            {/snippet}
-          </Popover.Close>
-        {/each}
-      </div>
-    </Popover.Content>
-  </Popover.Root>
+              {:else if !linked}
+                <span class="rounded bg-muted px-1.5 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
+                  Not linked
+                </span>
+              {/if}
+            </span>
+            <span class="text-xs text-muted-foreground leading-tight">{o.description}</span>
+          </span>
+        </DropdownMenu.Item>
+      {/each}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
 </div>

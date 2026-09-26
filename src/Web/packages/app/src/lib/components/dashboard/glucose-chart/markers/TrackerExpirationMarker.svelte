@@ -53,7 +53,7 @@
     x={3}
     y={0}
     text-anchor="start"
-    class="text-[7px] fill-muted-foreground font-medium"
+    class="text-4xs fill-muted-foreground font-medium"
   >
     {formatTime(time)}
   </text>

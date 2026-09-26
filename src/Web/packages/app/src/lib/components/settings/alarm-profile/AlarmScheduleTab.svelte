@@ -61,7 +61,7 @@
           </Button>
         </div>
         <div class="space-y-2">
-          {#each profile.schedule.activeRanges as range, index}
+          {#each profile.schedule.activeRanges as range, index (range)}
             <div
               class="flex items-center gap-2 p-3 bg-muted/50 rounded-lg"
             >
@@ -78,9 +78,8 @@
               />
               {#if profile.schedule.activeRanges.length > 1}
                 <Button
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => removeTimeRange(index)}
                 >
                   ×

@@ -31,7 +31,6 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Configuration;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Interceptors;
-using OpenTelemetry.Logs;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using JwtOptions = Nocturne.Core.Models.Configuration.JwtOptions;
@@ -132,14 +131,6 @@ builder.Services.AddCompatibilityProxyServices(builder.Configuration);
 
 // In-process, so each replica caches independently and entries are lost on restart.
 builder.Services.AddNocturneMemoryCache();
-
-builder.Logging.ClearProviders();
-builder.Logging.AddOpenTelemetry(logging => logging.AddConsoleExporter());
-
-var loopApnsKeyId = builder.Configuration["Loop:ApnsKeyId"];
-Console.WriteLine(
-    $"Loop configuration loaded - APNS Key ID: {(string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****")}"
-);
 
 // Add response caching for GET endpoints
 builder.Services.AddResponseCaching();
@@ -283,6 +274,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+var loopApnsKeyId = app.Configuration["Loop:ApnsKeyId"];
+app.Logger.LogInformation(
+    "Loop configuration loaded - APNS Key ID: {LoopApnsKeyId}",
+    string.IsNullOrEmpty(loopApnsKeyId) ? "Not configured" : $"{loopApnsKeyId[..Math.Min(4, loopApnsKeyId.Length)]}****");
+
 // Surface the effective credentialed-CORS base domain so operators can see what's active.
 // An invalid base (bare suffix, single-label, or empty) fails closed: cross-origin CORS is
 // disabled and only same-origin (plus loopback in Development) requests are admitted.
@@ -350,9 +346,11 @@ app.UseRouting();
 
 // Ahead of the documentation branch below, which jumps straight to its endpoint and would
 // otherwise skip the limiter entirely; the policies are attached to endpoints, so this needs
-// UseRouting to have run. Everything without a policy passes through untouched, and every
-// policy that exists partitions on pre-auth request data (the remote address or the Host),
-// so none of their accounting depends on running after UseAuthorization.
+// UseRouting to have run. Everything without a policy passes through untouched, and no policy
+// partitions on anything this position withholds: all but one partition on pre-auth request data
+// (the remote address or the Host), and translation-drafts partitions on the raw credential
+// because HttpContext.Items["AuthContext"] is not populated until AuthenticationMiddleware,
+// further down.
 app.UseRateLimiter();
 
 app.UseMiddleware<PublicDocsMiddleware>();
@@ -411,7 +409,7 @@ app.MapHub<OverviewHub>("/hubs/overview");
 // Serve OpenAPI specs at /openapi/{documentName}.json
 app.MapOpenApi().RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
-var scalarCss = app.Configuration["SCALAR_CUSTOM_CSS"];
+var scalarCss = NocturneScalarTheme.Build();
 
 // Scalar interactive API docs at /scalar/{documentName}
 app.MapScalarApiReference((options, httpContext) =>
@@ -457,7 +455,7 @@ app.MapScalarApiReference((options, httpContext) =>
     {
         options
             .AddPreferredSecuritySchemes("bearer", "oauth2", "apiSecret")
-            .WithHttpBearerAuthentication(bearer => bearer.Token = demoToken);
+            .AddHttpAuthentication("bearer", bearer => bearer.Token = demoToken);
     }
 }).RequireRateLimiting(ServiceRegistrationExtensions.DocsRateLimitPolicy);
 
@@ -528,6 +526,9 @@ app.MapDefaultEndpoints();
 // Skip database migrations when running in NSwag/OpenAPI generation mode
 // NSwag launches the app to extract the OpenAPI schema, but we don't need DB access for that
 var isNSwagGeneration = IsRunningInNSwagContext();
+
+if (!isNSwagGeneration)
+    app.Services.GetRequiredService<Nocturne.API.Services.Alerts.Engines.AlertEngineSelection>();
 if (!isNSwagGeneration && !app.Environment.IsEnvironment("Testing"))
 {
     // Validate that the migrator connection string is present and uses a different role.

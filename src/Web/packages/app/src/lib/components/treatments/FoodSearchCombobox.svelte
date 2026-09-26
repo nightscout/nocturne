@@ -69,7 +69,7 @@
             <div
               class="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1"
             >
-              <Star class="h-3 w-3 text-yellow-500" />
+              <Star class="h-3 w-3 text-favorite" />
               Favorites
             </div>
             {#each favorites as food (food._id)}
@@ -100,7 +100,7 @@
             <div
               class="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-1"
             >
-              <Clock class="h-3 w-3 text-sky-500" />
+              <Clock class="h-3 w-3" />
               Recent
             </div>
             {#each recents as food (food._id)}
@@ -154,7 +154,7 @@
                   </span>
                 </div>
                 {#if food.category}
-                  <Badge variant="outline" class="text-xs">
+                  <Badge variant="outline">
                     {food.category}
                   </Badge>
                 {/if}
@@ -170,7 +170,7 @@
               <Command.Item
                 value="__create_new__"
                 onSelect={onCreateNew}
-                class="cursor-pointer text-primary"
+                variant="create" class="cursor-pointer"
               >
                 <Plus class="mr-2 h-4 w-4" />
                 Create "{searchQuery.trim()}"
@@ -179,7 +179,7 @@
             <Command.Item
               value="__log_without_saving__"
               onSelect={onLogWithoutSaving}
-              class="cursor-pointer text-muted-foreground"
+              variant="muted" class="cursor-pointer"
             >
               <FileText class="mr-2 h-4 w-4" />
               Log without saving food

@@ -86,7 +86,7 @@
   Color is determined by the treatment category unless overridden.
 -->
 <IconComponent
-  class="{colorClass} {className}"
-  style={color ? `color: ${color}` : undefined}
+  class="{color ? 'text-(--icon-color)' : colorClass} {className}"
+  style={color ? `--icon-color: ${color}` : undefined}
   {...rest}
 />

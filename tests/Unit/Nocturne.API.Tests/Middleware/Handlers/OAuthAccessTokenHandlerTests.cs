@@ -191,6 +191,22 @@ public class OAuthAccessTokenHandlerTests
     }
 
     [Fact]
+    public async Task Puts_the_tokens_grant_on_the_auth_context()
+    {
+        var grantId = Guid.CreateVersion7();
+        _grantService
+            .Setup(g => g.IsGrantRevokedAsync(grantId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var context = Request(MintGrantBoundToken(grantId), Tenant());
+
+        var result = await _handler.AuthenticateAsync(context);
+
+        result.Succeeded.Should().BeTrue(result.Error);
+        result.AuthContext!.TokenId.Should().Be(grantId);
+    }
+
+    [Fact]
     public async Task Rejects_a_grant_bound_token_once_its_grant_is_revoked()
     {
         // Disconnecting a connected app revokes the grant; the app's still-valid access token must

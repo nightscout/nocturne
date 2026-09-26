@@ -30,7 +30,7 @@
   onready((range) => (dateRange = range));
 </script>
 
-<div style="width: 600px; height: 400px;">
+<div class="h-[400px] w-[600px]">
   {#if component === "card"}
     <GlucoseChartCard {dateRange} showPredictions={false} />
   {:else}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { Item } from "$lib/components/ui/item";
   import {
     getBrowserCapabilities,
     requestNotificationPermission,
@@ -129,10 +130,10 @@
 
   function getStatusIcon(supported: boolean, permission?: string) {
     if (!supported) return { icon: X, class: "text-muted-foreground" };
-    if (permission === "denied") return { icon: X, class: "text-red-500" };
+    if (permission === "denied") return { icon: X, class: "text-destructive" };
     if (permission === "default")
-      return { icon: AlertTriangle, class: "text-yellow-500" };
-    return { icon: Check, class: "text-green-500" };
+      return { icon: AlertTriangle, class: "text-warning" };
+    return { icon: Check, class: "text-success" };
   }
 </script>
 
@@ -142,7 +143,7 @@
 
   {@const notificationStatus = getStatusIcon(
     capabilities.notifications,
-    capabilities.notificationPermission as string
+    capabilities.notificationPermission
   )}
   {@const NotificationStatusIcon = notificationStatus.icon}
   {@const vibrationStatus = getStatusIcon(capabilities.vibration)}
@@ -157,14 +158,10 @@
 
     <div class="grid gap-3 @xl:grid-cols-2">
       <!-- Audio -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.audio
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingAudio
-          ? 'ring-2 ring-primary'
-          : ''}"
-        onclick={capabilities.audio ? testAudio : undefined}
+      <Item
+        disabled={!capabilities.audio}
+        aria-busy={testingAudio}
+        onclick={testAudio}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -180,7 +177,7 @@
             <span class="font-medium text-sm">Audio Playback</span>
             {#if !capabilities.audio}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
@@ -201,23 +198,16 @@
         {#if capabilities.audio}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Notifications -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.notifications &&
-        capabilities.notificationPermission !== 'denied'
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {requestingPermission
-          ? 'ring-2 ring-primary animate-pulse'
-          : ''}"
-        onclick={!capabilities.notifications ||
-        capabilities.notificationPermission === "denied"
-          ? undefined
-          : capabilities.notificationPermission === "granted"
-            ? testNotification
-            : handleRequestNotificationPermission}
+      <Item
+        disabled={!capabilities.notifications ||
+          capabilities.notificationPermission === "denied"}
+        aria-busy={requestingPermission}
+        onclick={capabilities.notificationPermission === "granted"
+          ? testNotification
+          : handleRequestNotificationPermission}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -229,19 +219,19 @@
             <span class="font-medium text-sm">Notifications</span>
             {#if !capabilities.notifications}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
             {:else if capabilities.notificationPermission === "denied"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-500/10 text-red-500"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-destructive/10 text-destructive"
               >
                 Blocked
               </span>
             {:else if capabilities.notificationPermission === "default"}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-warning/10 text-warning"
               >
                 Needs Permission
               </span>
@@ -268,17 +258,13 @@
         {#if capabilities.notifications && capabilities.notificationPermission !== "denied"}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Vibration -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.vibration
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingVibration
-          ? 'ring-2 ring-primary animate-pulse'
-          : ''}"
-        onclick={capabilities.vibration ? testVibrate : undefined}
+      <Item
+        disabled={!capabilities.vibration}
+        aria-busy={testingVibration}
+        onclick={testVibrate}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -290,7 +276,7 @@
             <span class="font-medium text-sm">Vibration</span>
             {#if !capabilities.vibration}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
@@ -311,17 +297,13 @@
         {#if capabilities.vibration}
           <Play class="h-4 w-4 text-muted-foreground" />
         {/if}
-      </button>
+      </Item>
 
       <!-- Wake Lock -->
-      <button
-        type="button"
-        class="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 transition-colors text-left w-full {capabilities.wakeLock
-          ? 'hover:bg-muted/50 cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'} {testingWakeLock
-          ? 'ring-2 ring-primary'
-          : ''}"
-        onclick={capabilities.wakeLock ? testWakeLock : undefined}
+      <Item
+        disabled={!capabilities.wakeLock}
+        aria-busy={testingWakeLock}
+        onclick={testWakeLock}
       >
         <div
           class="flex items-center justify-center w-10 h-10 rounded-lg bg-background"
@@ -333,7 +315,7 @@
             <span class="font-medium text-sm">Screen Wake Lock</span>
             {#if !capabilities.wakeLock}
               <span
-                class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+                class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
               >
                 Unavailable
               </span>
@@ -358,7 +340,7 @@
             <Play class="h-4 w-4 text-muted-foreground" />
           {/if}
         {/if}
-      </button>
+      </Item>
     </div>
 
     <p class="text-xs text-muted-foreground">

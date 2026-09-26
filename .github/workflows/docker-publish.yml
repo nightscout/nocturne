@@ -15,33 +15,187 @@ env:
   NODE_VERSION: "24"
   PNPM_VERSION: "11.5.0"
 
+# A newer push supersedes a branch's image, but a tag's is a release and always finishes.
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+# The images build in two parallel jobs, since the web image needs only the generated client and
+# the dotnet images need only the native library. `report` checks and announces what both pushed.
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  dotnet-images:
+    # The native library is built on the runner and links against its glibc, which must be
+    # no newer than the API base image's (mcr.microsoft.com/dotnet/aspnet:10.0, Ubuntu 24.04).
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
-      pull-requests: write
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Install Aspire CLI
-        run: dotnet tool install --global aspire.cli
+      # Its own key, not tests.yml's: an exact hit on another job's cache is never re-saved, so
+      # packages this job restores and that one does not would download on every run.
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-publish-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-publish-${{ runner.os }}-
+
+      # The native-library check below runs the arm64 image.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tags
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: .github/scripts/image-tags.sh
+
+      # The scoped-DND rule classifier (and the optional rust/shadow alert engines)
+      # load the nocturne_alerts cdylib at runtime. The API csproj packs it only when
+      # crates/target/release contains it at publish time, so build it here or the
+      # image ships without it and every rule classifies as undirected.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install aarch64 cross-linker
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: actions/cache restores crates/target with mtimes
+          # newer than the checkout, and cargo's path-package fingerprint is mtime-based, so a
+          # lockfile-only key lets a source-only change reuse a stale cdylib and never re-save it.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+
+      - name: Build nocturne_alerts native library
+        working-directory: crates
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release -p nocturne-alerts-ffi
+          cargo build --release -p nocturne-alerts-ffi --target aarch64-unknown-linux-gnu
+          test -f target/release/libnocturne_alerts.so
+          test -f target/aarch64-unknown-linux-gnu/release/libnocturne_alerts.so
+
+      # The API's post-build targets would run the client codegen, which needs pnpm; only the
+      # web image uses that client, so it is switched off here.
+      - name: Build and push Nocturne.API container
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        working-directory: src/API/Nocturne.API
+        run: |
+          dotnet publish \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
+            -p:GenerateNSwagClient=false \
+            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}" \
+            "-p:ContainerGitCommit=${GITHUB_SHA}" \
+            "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Build and push Nocturne.Services.Demo container
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        working-directory: src/Services/Nocturne.Services.Demo
+        run: |
+          dotnet publish \
+            -c Release \
+            -p:PublishProfile=DefaultContainer \
+            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
+            -p:ContainerRegistry=${{ env.REGISTRY }} \
+            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
+            "-p:ContainerImageTags=${{ steps.tags.outputs.version }}"
+
+      - name: Set up Docker Buildx
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/setup-buildx-action@v3
+
+      - name: Tag dotnet containers as latest
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          for image in nocturne-api nocturne-demo; do
+            docker buildx imagetools create \
+              --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:latest \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}
+          done
+
+      # The API csproj silently skips packing the cdylib when it is missing, and
+      # Alerts:Engine=rust refuses to start without it, so load it in every platform's image.
+      - name: Verify the API image loads the nocturne_alerts native library
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        run: |
+          set -euo pipefail
+          ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}"
+          probe="$RUNNER_TEMP/alerts-native-probe"
+          dotnet publish scripts/alerts-native-probe.cs -o "$probe"
+          find "$probe" -name '*nocturne_alerts*' -delete
+          for pair in "linux/amd64:linux-x64" "linux/arm64:linux-arm64"; do
+            platform="${pair%%:*}"
+            rid="${pair##*:}"
+            docker pull --quiet --platform "$platform" "$ref" >/dev/null
+            if ! docker run --rm --platform "$platform" --entrypoint dotnet \
+                -v "$probe:/probe:ro" \
+                -e NOCTURNE_ALERTS_NATIVE_DIR="/app/runtimes/${rid}/native" \
+                "$ref" /probe/alerts-native-probe.dll; then
+              echo "::error::$ref ($platform) does not load /app/runtimes/${rid}/native/libnocturne_alerts.so"
+              exit 1
+            fi
+          done
+
+  web-image:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Not dotnet-images' key: this job restores only the API's packages, so sharing an exact
+      # key would leave whichever job saved second without the packages only it needs.
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-publish-web-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-publish-
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -51,10 +205,6 @@ jobs:
         working-directory: src/Web
         run: pnpm install --frozen-lockfile
 
-      - name: Build bridge package
-        working-directory: src/Web/packages/bridge
-        run: pnpm run build
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -62,44 +212,21 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine version tag
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            VERSION="pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::7}"
-            DOTNET_TAGS="$VERSION"
-            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            DOTNET_TAGS="${VERSION}"
-            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:latest"
-          elif [[ "${{ github.ref }}" == refs/heads/master ]] || [[ "${{ github.ref }}" == refs/heads/main ]]; then
-            VERSION=latest
-            DOTNET_TAGS="$VERSION"
-            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
-          else
-            SAFE_REF=$(echo "${GITHUB_REF_NAME}" | tr '/_' '-' | tr -cd '[:alnum:].-')
-            VERSION="${SAFE_REF}-${GITHUB_SHA::7}"
-            DOTNET_TAGS="$VERSION"
-            DOCKER_TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${VERSION}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "dotnet_tags=$DOTNET_TAGS" >> $GITHUB_OUTPUT
-          echo "docker_tags=$DOCKER_TAGS" >> $GITHUB_OUTPUT
-
-      - name: Restore .NET dependencies
-        run: dotnet restore
+      - name: Determine image tags
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: .github/scripts/image-tags.sh
 
       # Generate API client, Zod schemas, and remote functions for the web build.
-      # IMPORTANT: Must run BEFORE dotnet publish (publish marks outputs as
-      # up-to-date, causing post-build generation targets to be skipped).
       - name: Generate API client for web build
         working-directory: src/API/Nocturne.API
         run: dotnet build -c Release
@@ -130,17 +257,11 @@ jobs:
             exit 1
           fi
 
-      # The scoped-DND rule classifier (and the optional rust/shadow alert engines)
-      # load the nocturne_alerts cdylib at runtime. The API csproj packs it only when
-      # crates/target/release contains it at publish time, so build it here or the
-      # image ships without it and every rule classifies as undirected.
+      # The web image bundles @nocturne/watercolour, whose wasm is built from crates/.
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-unknown-linux-gnu, wasm32-unknown-unknown
-
-      - name: Install aarch64 cross-linker
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -149,10 +270,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             crates/target
-          # Sources, not just the lockfile: actions/cache restores crates/target with mtimes
-          # newer than the checkout, and cargo's path-package fingerprint is mtime-based, so a
-          # lockfile-only key lets a source-only change reuse a stale cdylib and never re-save it.
-          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
 
       - name: Install wasm-bindgen-cli
         uses: taiki-e/install-action@v2
@@ -166,68 +284,64 @@ jobs:
         working-directory: src/Web
         run: pnpm --filter @nocturne/watercolour build:wasm
 
-      - name: Build nocturne_alerts native library
-        working-directory: crates
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: |
-          cargo build --release -p nocturne-alerts-ffi
-          cargo build --release -p nocturne-alerts-ffi --target aarch64-unknown-linux-gnu
-          test -f target/release/libnocturne_alerts.so
-          test -f target/aarch64-unknown-linux-gnu/release/libnocturne_alerts.so
-
-      - name: Build and push Nocturne.API container
-        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
-        working-directory: src/API/Nocturne.API
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-api \
-            "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}" \
-            "-p:ContainerGitCommit=${GITHUB_SHA}" \
-            "-p:ContainerBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-      - name: Build and push Nocturne.Services.Demo container
-        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
-        working-directory: src/Services/Nocturne.Services.Demo
-        run: |
-          dotnet publish \
-            -c Release \
-            -p:PublishProfile=DefaultContainer \
-            '-p:ContainerRuntimeIdentifiers="linux-x64;linux-arm64"' \
-            -p:ContainerRegistry=${{ env.REGISTRY }} \
-            -p:ContainerRepository=${{ env.IMAGE_REPOSITORY }}/nocturne-demo \
-            "-p:ContainerImageTags=${{ steps.version.outputs.dotnet_tags }}"
-
-      - name: Tag dotnet containers as latest
-        if: startsWith(github.ref, 'refs/tags/v') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
-        run: |
-          for image in nocturne-api nocturne-demo; do
-            docker buildx imagetools create \
-              --tag ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:latest \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.version.outputs.version }}
-          done
-
       - name: Build and push Nocturne.Web container
-        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
         run: |
-          IFS=',' read -ra TAGS <<< "${{ steps.version.outputs.docker_tags }}"
+          IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.web_tags }}"
           TAG_ARGS=""
           for t in "${TAGS[@]}"; do
             TAG_ARGS+=" --tag ${t}"
           done
+          # Every build reads main's layer cache; only main writes it, so a branch cannot
+          # displace the layers the next main build reuses.
+          CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
+          CACHE_ARGS="--cache-from type=registry,ref=${CACHE_REF}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            CACHE_ARGS+=" --cache-to type=registry,ref=${CACHE_REF},mode=max"
+          fi
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             ${TAG_ARGS} \
+            ${CACHE_ARGS} \
             --file Dockerfile.web \
             --push \
             .
 
+  # Runs unless the build was cancelled, so a PR's comment still says which image failed to build.
+  report:
+    needs: [dotnet-images, web-image]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine image tags
+        id: tags
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: .github/scripts/image-tags.sh
+
       - name: Verify published image manifests
-        if: github.event_name != 'pull_request' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
+        if: >-
+          needs.dotnet-images.result == 'success' && needs.web-image.result == 'success'
+          && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         run: |
           set -euo pipefail
           images=(
@@ -237,7 +351,7 @@ jobs:
           )
 
           for image in "${images[@]}"; do
-            ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.version.outputs.version }}"
+            ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}"
             echo "Verifying manifest: $ref"
             manifest=$(docker buildx imagetools inspect "$ref")
             for platform in "linux/amd64" "linux/arm64"; do
@@ -262,7 +376,7 @@ jobs:
           {
             echo "results<<EOF"
             for image in "${images[@]}"; do
-              ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.version.outputs.version }}"
+              ref="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/${image}:${{ steps.tags.outputs.version }}"
               if docker buildx imagetools inspect "$ref" >/dev/null 2>&1; then
                 echo "${image}|published|${ref}"
               else
@@ -278,9 +392,9 @@ jobs:
           {
             echo "### Container Image Tags"
             echo ""
-            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.version.outputs.version }}\`"
-            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.version.outputs.version }}\`"
-            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.version.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-api:${{ steps.tags.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-demo:${{ steps.tags.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:${{ steps.tags.outputs.version }}\`"
             echo ""
             if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.fork }}" == "true" ]]; then
               echo "> Publishing is skipped for fork PRs."
@@ -289,9 +403,9 @@ jobs:
 
       - name: Upsert PR comment with published images
         if: always() && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false)
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
-          VERSION_TAG: ${{ steps.version.outputs.version }}
+          VERSION_TAG: ${{ steps.tags.outputs.version }}
           REGISTRY: ${{ env.REGISTRY }}
           IMAGE_REPOSITORY: ${{ env.IMAGE_REPOSITORY }}
           IMAGE_RESULTS: ${{ steps.image_status.outputs.results }}
@@ -387,40 +501,41 @@ jobs:
               });
             }
 
-  publish-glucose-chart:
-    needs: [build-and-push]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@nightscout'
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        working-directory: src/Web
-      - name: Publish @nightscout/glucose-chart
-        working-directory: src/Web/packages/glucose-chart
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version=$(node -p "require('./package.json').version")
-          if npm view "@nightscout/glucose-chart@${version}" version > /dev/null 2>&1; then
-            echo "@nightscout/glucose-chart@${version} already published; skipping."
-          else
-            pnpm publish --access public --no-git-checks
-          fi
+  # Disabled until the workflow token can publish to the @nightscout GitHub Packages scope.
+  # publish-glucose-chart:
+  #   needs: [dotnet-images, web-image]
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   permissions:
+  #     contents: read
+  #     packages: write
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: pnpm/action-setup@v5
+  #       with:
+  #         version: ${{ env.PNPM_VERSION }}
+  #     - uses: actions/setup-node@v5
+  #       with:
+  #         node-version: ${{ env.NODE_VERSION }}
+  #         registry-url: 'https://npm.pkg.github.com'
+  #         scope: '@nightscout'
+  #     - name: Install dependencies
+  #       run: pnpm install --frozen-lockfile
+  #       working-directory: src/Web
+  #     - name: Publish @nightscout/glucose-chart
+  #       working-directory: src/Web/packages/glucose-chart
+  #       env:
+  #         NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #       run: |
+  #         version=$(node -p "require('./package.json').version")
+  #         if npm view "@nightscout/glucose-chart@${version}" version > /dev/null 2>&1; then
+  #           echo "@nightscout/glucose-chart@${version} already published; skipping."
+  #         else
+  #           pnpm publish --access public --no-git-checks
+  #         fi
 
   create-release:
-    needs: [build-and-push]
+    needs: [dotnet-images, web-image]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -428,7 +543,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # deploy/docker-compose/ is a tracked, committed bundle — regenerated by
       # scripts/publish-release.cs and committed ahead of tagging a release

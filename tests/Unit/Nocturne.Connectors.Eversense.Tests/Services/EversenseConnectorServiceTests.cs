@@ -247,6 +247,34 @@ public class EversenseConnectorServiceTests
     }
 
     [Fact]
+    public async Task SyncDataAsync_PatientListUnreachable_ReportsFailureWithoutCredentialWording()
+    {
+        // Arrange — the API call fails at the transport layer, not as a refused credential, so the
+        // error must not send the tenant to re-enter a working password.
+        var publisherMock = new Mock<IConnectorPublisher>();
+        publisherMock.Setup(p => p.IsAvailable).Returns(true);
+
+        var fixture = new ServiceFixture(
+            tokenToReturn: "valid-token",
+            httpResponses: new Dictionary<string, HttpResponseMessage>
+            {
+                [EversenseConstants.Endpoints.GetFollowingPatientList] =
+                    new HttpResponseMessage(HttpStatusCode.NotFound)
+            },
+            publisher: publisherMock.Object);
+
+        var request = new SyncRequest { DataTypes = [SyncDataType.Glucose] };
+
+        // Act
+        var result = await fixture.Service.SyncDataAsync(request, fixture.Config, CancellationToken.None);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().NotContain("password").And.NotContain("email");
+    }
+
+    [Fact]
     public async Task SyncDataAsync_MultiplePatientsWithoutConfiguredUsername_ReportsUnhealthyWithNames()
     {
         // Arrange

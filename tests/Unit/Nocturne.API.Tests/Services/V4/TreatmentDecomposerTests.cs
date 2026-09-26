@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.Treatments;
@@ -72,6 +73,7 @@ public class TreatmentDecomposerTests : IDisposable
             _activeProfileResolverMock.Object,
             _insulinRepoMock.Object,
             Mock.Of<IAuditContext>(),
+            Mock.Of<IDeduplicationService>(),
             NullLogger<TreatmentDecomposer>.Instance);
     }
 
@@ -838,6 +840,42 @@ public class TreatmentDecomposerTests : IDisposable
         result.CreatedRecords.Should().BeEmpty();
         result.UpdatedRecords.Should().BeEmpty();
         result.CorrelationId.Should().NotBeNull("a correlation ID is always generated");
+        result.SkippedUnsupported.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CountsATreatmentOfAnUnsupportedTypeAsSkipped()
+    {
+        var result = await _decomposer.DecomposeBatchAsync(
+            [
+                new Treatment { Id = "batch-unknown", EventType = "Unknown Event", Mills = 1700000000000 },
+                new Treatment { Id = "batch-bolus", EventType = "Correction Bolus", Mills = 1700000060000, Insulin = 1.5 },
+            ],
+            WriteOrigin.Backfill);
+
+        result.SkippedUnsupported.Should().Be(1);
+        result.CreatedRecords.OfType<V4Models.Bolus>().Should().ContainSingle();
+    }
+
+    /// <summary>
+    /// A single-treatment write reaches the repository one record at a time; a record the user
+    /// deleted is refused there and has to be counted, not dropped quietly.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_CountsARecordTheUserDeletedAsSkipped()
+    {
+        var treatment = new Treatment { Id = "deleted-bolus", EventType = "Correction Bolus", Mills = 1700000000000, Insulin = 2.0 };
+        await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+        var stored = _context.Boluses.Single(e => e.LegacyId == "deleted-bolus");
+        stored.DeletedAt = DateTime.UtcNow;
+        _context.Entry(stored).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live);
+
+        result.CreatedRecords.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
     }
 
     [Fact]
@@ -3121,7 +3159,7 @@ public class TreatmentDecomposerTests : IDisposable
 
         _tempBasalRepoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.TempBasal>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, WriteOrigin origin, CancellationToken _) => list.ToList());
+            .ReturnsAsync((IEnumerable<V4Models.TempBasal> list, WriteOrigin origin, CancellationToken _) => [.. list]);
 
         // Act
         var result = await _decomposer.DecomposeBatchAsync(

@@ -1,8 +1,9 @@
+import type { Pathname } from "$app/types";
 import type { DOCS_SECTION_IDS } from "$lib/analytics";
 
 export type DocsSectionId = (typeof DOCS_SECTION_IDS)[number];
 
-export type DocsNavItem = { href: string; label: string };
+export type DocsNavItem = { href: Pathname; label: string };
 
 export type DocsNavSection = {
     /** Stable id reported as the `section` property of a `Docs Nav` event. */

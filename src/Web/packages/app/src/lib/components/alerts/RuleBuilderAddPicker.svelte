@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import * as Popover from "$lib/components/ui/popover";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import {
     Plus,
     Brackets,
@@ -67,103 +67,67 @@
     moon: Moon,
     timer: Timer,
   };
-
-  const PICKER_BTN =
-    "flex h-auto w-full items-start justify-start gap-2 rounded px-2 py-1.5 text-left font-normal hover:bg-muted";
 </script>
 
-<Popover.Root>
-  <Popover.Trigger>
+<DropdownMenu.Root>
+  <DropdownMenu.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         {...props}
-        variant="outline"
+        variant="dashed"
         size="sm"
-        class="border-dashed text-muted-foreground"
       >
         <Plus class="h-4 w-4 mr-2" /> Add condition
       </Button>
     {/snippet}
-  </Popover.Trigger>
-  <Popover.Content class="w-80 p-1" align="start">
-    <div class="max-h-96 overflow-y-auto">
-      {#each FACT_GROUP_ORDER as group (group)}
-        {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
-        {#if facts.length > 0}
-          <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            {FACT_GROUP_LABELS[group]}
-          </div>
-          {#each facts as f (f.kind)}
-            {@const c = FACT_GROUP_COLOURS[f.group]}
-            {@const Glyph = ICONS[f.icon]}
-            <Popover.Close>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  type="button"
-                  variant="ghost"
-                  class={PICKER_BTN}
-                  onclick={() => onAddLeaf(f.kind)}
-                >
-                  <span
-                    class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded {c.bg} {c.fg}"
-                    aria-hidden="true"
-                  >
-                    <Glyph class="h-3.5 w-3.5" />
-                  </span>
-                  <span class="flex flex-col">
-                    <span class="text-sm font-medium">{f.label}</span>
-                    <span class="text-xs text-muted-foreground leading-tight">{f.description}</span>
-                  </span>
-                </Button>
-              {/snippet}
-            </Popover.Close>
-          {/each}
-        {/if}
-      {/each}
+  </DropdownMenu.Trigger>
+  <DropdownMenu.Content class="w-80 max-h-96" align="start">
+    {#each FACT_GROUP_ORDER as group (group)}
+      {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
+      {#if facts.length > 0}
+        <div class="px-2 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {FACT_GROUP_LABELS[group]}
+        </div>
+        {#each facts as f (f.kind)}
+          {@const c = FACT_GROUP_COLOURS[f.group]}
+          {@const Glyph = ICONS[f.icon]}
+          <DropdownMenu.Item class="items-start" onSelect={() => onAddLeaf(f.kind)}>
+            <span
+              class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded {c.bg} {c.fg}"
+              aria-hidden="true"
+            >
+              <Glyph class="h-3.5 w-3.5" />
+            </span>
+            <span class="flex flex-col">
+              <span class="text-sm font-medium">{f.label}</span>
+              <span class="text-xs text-muted-foreground leading-tight">{f.description}</span>
+            </span>
+          </DropdownMenu.Item>
+        {/each}
+      {/if}
+    {/each}
 
-      <div class="my-1 border-t"></div>
-      <div class="px-2 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        Group
-      </div>
-      <Popover.Close>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            type="button"
-            variant="ghost"
-            class={PICKER_BTN}
-            onclick={() => onAddGroup("and")}
-          >
-            <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
-              <Brackets class="h-3.5 w-3.5" />
-            </span>
-            <span class="flex flex-col">
-              <span class="text-sm font-medium">+ Group (AND)</span>
-              <span class="text-xs text-muted-foreground leading-tight">All sub-conditions must hold</span>
-            </span>
-          </Button>
-        {/snippet}
-      </Popover.Close>
-      <Popover.Close>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            type="button"
-            variant="ghost"
-            class={PICKER_BTN}
-            onclick={() => onAddGroup("or")}
-          >
-            <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
-              <Brackets class="h-3.5 w-3.5" />
-            </span>
-            <span class="flex flex-col">
-              <span class="text-sm font-medium">+ Group (OR)</span>
-              <span class="text-xs text-muted-foreground leading-tight">Any sub-condition is enough</span>
-            </span>
-          </Button>
-        {/snippet}
-      </Popover.Close>
+    <DropdownMenu.Separator />
+    <div class="px-2 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+      Group
     </div>
-  </Popover.Content>
-</Popover.Root>
+    <DropdownMenu.Item class="items-start" onSelect={() => onAddGroup("and")}>
+      <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+        <Brackets class="h-3.5 w-3.5" />
+      </span>
+      <span class="flex flex-col">
+        <span class="text-sm font-medium">+ Group (AND)</span>
+        <span class="text-xs text-muted-foreground leading-tight">All sub-conditions must hold</span>
+      </span>
+    </DropdownMenu.Item>
+    <DropdownMenu.Item class="items-start" onSelect={() => onAddGroup("or")}>
+      <span class="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded bg-muted text-muted-foreground">
+        <Brackets class="h-3.5 w-3.5" />
+      </span>
+      <span class="flex flex-col">
+        <span class="text-sm font-medium">+ Group (OR)</span>
+        <span class="text-xs text-muted-foreground leading-tight">Any sub-condition is enough</span>
+      </span>
+    </DropdownMenu.Item>
+  </DropdownMenu.Content>
+</DropdownMenu.Root>

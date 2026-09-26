@@ -1,6 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app
 // for information about these interfaces
-import { ApiClient, UserDisplayPreferences } from "$lib/api";
+import { ApiClient, RustValidationIssue, UserDisplayPreferences } from "$lib/api";
 import type { LastSignIn } from "$lib/components/auth/last-sign-in";
 
 
@@ -23,7 +23,7 @@ export interface AuthUser {
 	email?: string;
 	roles: string[];
 	permissions: string[];
-	expiresAt?: Date;
+	expiresAt?: string;
 	/** User's preferred language code (e.g., "en", "fr", "de") */
 	preferredLanguage?: string;
 	/** Per-user display preferences (units, time format, theme, chart style, etc.) */
@@ -41,6 +41,8 @@ declare global {
 			message: string;
 			details?: string;
 			errorId?: string;
+			/** The server's structured validation issues, when the rejection carried them. */
+			issues?: RustValidationIssue[];
 		}
 		type TenantStatus = TenantStatusResponse;
 		interface Locals {
@@ -74,6 +76,10 @@ declare global {
 			 */
 			effectivePermissions?: string[];
 			/**
+			 * Whether the current user may read only the last 24 hours of time-series data
+			 */
+			limitTo24Hours?: boolean;
+			/**
 			 * Whether the current user is a platform administrator
 			 */
 			isPlatformAdmin: boolean;
@@ -92,27 +98,26 @@ declare global {
 			guestExpiresAt?: string;
 		}
 
-		// Base page data interface for the main app
-		interface BasePageData {
-			loading: boolean;
+		// Fields any page's data may carry, all optional; each route's own load types the rest.
+		interface PageData {
+			loading?: boolean;
 			loadingMessage?: string;
 			error?: string;
-			serverSettings: ServerSettings | null;
-			entries: Entry[];
-			treatments: Treatment[];
-			deviceStatus: DeviceStatus[];
+			serverSettings?: ServerSettings | null;
+			entries?: Entry[];
+			treatments?: Treatment[];
+			deviceStatus?: DeviceStatus[];
 			initialData?: {
 				now: number;
 				history: number;
 				focusHours: number;
 			};
 			/** Resolved by the root layout from the hint cookie the API writes. */
-			lastSignIn: LastSignIn | null;
-		}
-
-		// Main PageData interface that allows additional properties for reports
-		interface PageData extends Partial<BasePageData> {
-			[key: string]: any;
+			lastSignIn?: LastSignIn | null;
+			/** The viewer's granted scopes, resolved by the root layout. */
+			effectivePermissions?: string[];
+			/** Whether the viewer may read only the last 24 hours, resolved by the root layout. */
+			limitTo24Hours?: boolean;
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.

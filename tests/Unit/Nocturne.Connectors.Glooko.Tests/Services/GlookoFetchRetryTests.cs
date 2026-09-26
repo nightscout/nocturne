@@ -32,7 +32,7 @@ public class GlookoFetchRetryTests
 
         (await act.Should().ThrowAsync<HttpRequestException>()).WithMessage("*500*");
         handler.Requests.Should().Be(3, "three attempts, not three retries on top of a first try");
-        delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>()), Times.Exactly(2));
+        delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public class GlookoFetchRetryTests
 
         await act.Should().ThrowAsync<GlookoDataForbiddenException>();
         handler.Requests.Should().Be(1, "the patient code is part of the URL, so retrying it unchanged would 403 again");
-        delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>()), Times.Never);
+        delays.Verify(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static GlookoSyncContext Context()
@@ -72,7 +72,7 @@ public class GlookoFetchRetryTests
         CountingHandler handler)
     {
         var delays = new Mock<IRetryDelayStrategy>();
-        delays.Setup(d => d.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        delays.Setup(d => d.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var service = new GlookoConnectorService(
             new HttpClient(handler),

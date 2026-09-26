@@ -658,6 +658,97 @@ public class V4ToLegacyProjectionServiceTests
         delivered.Should().BeEquivalentTo(new[] { bolus.Id, carb.Id, notes[0].Id });
     }
 
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_MillisecondWithMoreThanLimitRows_ComesBackInOnePage()
+    {
+        // A millisecond holding at least `limit` rows must not be re-served: the cursor is that
+        // millisecond, so a page cut inside it never advances. The page is extended to the end of
+        // the millisecond instead.
+        var after = Cursor.AddMinutes(1);
+        var notes = Enumerable.Range(1, 7)
+            .Select(i => (Entity: (object)new NoteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Text = $"note-{i}",
+            }, Modified: after.AddTicks(i)))
+            .ToList();
+        await AddModifiedAsync([.. notes]);
+
+        var first = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 2)).ToList();
+
+        first.Should().HaveCount(7);
+        first.Select(t => Guid.Parse(t.Id!)).Should().BeEquivalentTo(
+            notes.Select(n => ((NoteEntity)n.Entity).Id));
+
+        var cursor = first.Max(t => t.SrvModified ?? t.Mills);
+        var second = (await _service.GetProjectedTreatmentsModifiedSinceAsync(cursor, 2)).ToList();
+
+        second.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_TieGroupSplitByLimit_DeliveredOnceAcrossPages()
+    {
+        // Three rows share a millisecond; limit 2 would cut the group and, on the old strictly-greater
+        // query, re-serve its rows while the cursor stayed put.
+        var after = Cursor.AddMinutes(1);
+        var tieGroup = Enumerable.Range(1, 3)
+            .Select(i => Guid.CreateVersion7())
+            .ToList();
+        var later = Guid.CreateVersion7();
+        await AddModifiedAsync(
+            (new NoteEntity { Id = tieGroup[0], TenantId = TenantId, Timestamp = after, Text = "a" }, after.AddTicks(10)),
+            (new NoteEntity { Id = tieGroup[1], TenantId = TenantId, Timestamp = after, Text = "b" }, after.AddTicks(20)),
+            (new NoteEntity { Id = tieGroup[2], TenantId = TenantId, Timestamp = after, Text = "c" }, after.AddTicks(30)),
+            (new NoteEntity { Id = later, TenantId = TenantId, Timestamp = after, Text = "d" }, after.AddMinutes(1)));
+
+        var delivered = await WalkHistoryAsync(limit: 2);
+
+        delivered.Should().BeEquivalentTo(tieGroup.Append(later));
+        delivered.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_MergeDoesNotCutOneTablesTieGroupWhileAnotherFillsThePage()
+    {
+        // The merged page is cut to `limit`; BGChecks fill it, so the Note tie group in the same
+        // millisecond is left behind the cut. The extension must still deliver it, or the next
+        // request (cursor at that millisecond) skips it forever.
+        var after = Cursor.AddMinutes(1);
+        var notes = Enumerable.Range(1, 2)
+            .Select(i => new NoteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Text = $"note-{i}",
+            })
+            .ToList();
+        var bgChecks = Enumerable.Range(1, 3)
+            .Select(i => new BGCheckEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Glucose = 100 + i,
+            })
+            .ToList();
+        await AddModifiedAsync(
+            (notes[0], after.AddTicks(10)),
+            (notes[1], after.AddTicks(20)),
+            (bgChecks[0], after.AddTicks(1)),
+            (bgChecks[1], after.AddTicks(2)),
+            (bgChecks[2], after.AddTicks(3)));
+
+        var delivered = await WalkHistoryAsync(limit: 2);
+
+        delivered.Should().BeEquivalentTo(
+            notes.Select(n => n.Id).Concat(bgChecks.Select(b => b.Id)));
+        delivered.Should().OnlyHaveUniqueItems();
+    }
+
     /// <summary>
     /// Walks the history surface the way a v3 sync client does — advancing the cursor to
     /// <c>max(srvModified)</c> over each page — and returns every record id it was handed, counting

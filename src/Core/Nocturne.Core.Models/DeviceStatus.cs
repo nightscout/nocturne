@@ -1014,7 +1014,7 @@ public class OverrideStatus
     public string? Timestamp { get; set; }
 
     /// <summary>
-    /// Gets or sets the duration
+    /// Seconds left from <see cref="Timestamp"/>; absent when the override is indefinite. Override treatments use minutes.
     /// </summary>
     [JsonPropertyName("duration")]
     public double? Duration { get; set; }

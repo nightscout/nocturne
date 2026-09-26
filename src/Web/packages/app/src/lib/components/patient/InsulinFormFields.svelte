@@ -1,13 +1,11 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Textarea } from "$lib/components/ui/textarea";
   import * as Select from "$lib/components/ui/select";
-  import {
-    type InsulinCategory,
-    type InsulinFormulation,
-    type InsulinRole,
-  } from "$api";
+  import { type InsulinFormulation } from "$api";
   import {
     insulinCategoryLabels,
     insulinCategoryDescriptions,
@@ -74,7 +72,7 @@
     Object.entries(insulinCategoryLabels).map(([value, label]) => ({
       value,
       label,
-      description: insulinCategoryDescriptions[value as InsulinCategory] ?? "",
+      description: labelFor(insulinCategoryDescriptions, value) ?? "",
     })),
   );
 
@@ -100,11 +98,11 @@
       >
         <Select.Trigger id="insulin-category">
           {category
-            ? (insulinCategoryLabels[category as InsulinCategory] ?? category)
+            ? (labelFor(insulinCategoryLabels, category) ?? category)
             : "Select category"}
         </Select.Trigger>
         <Select.Content>
-          {#each insulinCategoryItems as cat}
+          {#each insulinCategoryItems as cat (cat.value)}
             <Select.Item value={cat.value} label={cat.label}>
               <div>
                 <div>{cat.label}</div>
@@ -130,7 +128,7 @@
               : "Select formulation"}
           </Select.Trigger>
           <Select.Content>
-            {#each formulations as f}
+            {#each formulations as f (f.id)}
               <Select.Item value={f.id ?? ""} label={f.name ?? ""}>
                 <div>
                   <div>{f.name}</div>
@@ -175,15 +173,15 @@
       <Label for="insulin-role">Role</Label>
       <Select.Root type="single" name="{namePrefix}role" bind:value={role}>
         <Select.Trigger id="insulin-role">
-          {insulinRoleLabels[role as InsulinRole] ?? role}
+          {labelFor(insulinRoleLabels, role) ?? role}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.entries(insulinRoleLabels) as [value, label]}
+          {#each Object.entries(insulinRoleLabels) as [value, label] (value)}
             <Select.Item {value} {label}>
               <div>
                 <div>{label}</div>
                 <div class="text-xs text-muted-foreground">
-                  {insulinRoleDescriptions[value as InsulinRole] ?? ""}
+                  {labelFor(insulinRoleDescriptions, value) ?? ""}
                 </div>
               </div>
             </Select.Item>
@@ -268,23 +266,19 @@
     <!-- Checkboxes -->
     <div class="flex items-center gap-4">
       <div class="flex items-center gap-2">
-        <input
+        <Checkbox
           id="insulin-current"
-          type="checkbox"
           name="{namePrefix}isCurrent"
           bind:checked={isCurrent}
-          class="h-4 w-4 rounded border-input"
         />
         <Label for="insulin-current">Currently in use</Label>
       </div>
 
       <div class="flex items-center gap-2">
-        <input
+        <Checkbox
           id="insulin-primary"
-          type="checkbox"
           name="{namePrefix}isPrimary"
           bind:checked={isPrimary}
-          class="h-4 w-4 rounded border-input"
         />
         <Label for="insulin-primary">Primary for this role</Label>
       </div>

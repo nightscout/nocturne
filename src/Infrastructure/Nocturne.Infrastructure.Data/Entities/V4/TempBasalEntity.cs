@@ -10,8 +10,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISourcedEntity, IDeviceAttributedEntity, ISystemTimestamped
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISourcedEntity, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("upstream_fingerprint")]
+    public string? UpstreamFingerprint { get; set; }
+
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
     /// </summary>

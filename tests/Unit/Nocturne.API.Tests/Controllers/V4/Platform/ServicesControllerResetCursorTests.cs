@@ -75,4 +75,28 @@ public class ServicesControllerResetCursorTests
         captured.To.Should().NotBeNull();
         captured.DataTypes.Should().BeEmpty("an empty data-type set means reset every supported type");
     }
+
+    [Fact]
+    public async Task ResetConnectorCursor_WhenASyncIsAlreadyRunning_Returns409Conflict()
+    {
+        var syncService = new Mock<IConnectorSyncService>();
+        syncService
+            .Setup(s => s.TriggerSyncAsync(It.IsAny<string>(), It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SyncResult
+            {
+                Success = false,
+                AlreadyRunning = true,
+                Message = "A sync for connector 'nightscout' is already running",
+            });
+
+        var controller = CreateController(syncService.Object);
+
+        var result = await controller.ResetConnectorCursor(
+            "nightscout", new ResetCursorRequest(), CancellationToken.None);
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(409);
+        problem.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Contain("already running");
+    }
 }

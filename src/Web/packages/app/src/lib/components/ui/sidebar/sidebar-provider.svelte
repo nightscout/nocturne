@@ -31,6 +31,11 @@
       onOpenChange(value);
 
       // This sets the cookie to keep the sidebar state.
+      // Extracted as a message, this Set-Cookie value makes wuchale wrap the
+      // enclosing `const sidebar = setSidebar(...)` in $derived, and $derived
+      // is lazy on the server: setContext would never run, leaving every
+      // descendant's useSidebar() undefined.
+      // @wc-ignore
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${open}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
   });

@@ -13,6 +13,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
   import { ArrowLeft, Play, Loader2 } from "lucide-svelte";
+  import { indexBy } from "$lib/utils/collections";
 
   // Form state - default URL matches CompatibilityProxy format
   let nightscoutUrl = $state("https://your-nightscout.herokuapp.com");
@@ -89,8 +90,8 @@
 
     // Apply filters to both responses
     try {
-      let nsJson = JSON.parse(nsResponse);
-      let ncJson = JSON.parse(ncResponse);
+      const nsJson: unknown = JSON.parse(nsResponse);
+      let ncJson: unknown = JSON.parse(ncResponse);
 
       // Match Nocturne entries to Nightscout's _id order (for arrays)
       if (Array.isArray(nsJson) && Array.isArray(ncJson)) {
@@ -134,8 +135,17 @@
     );
   });
 
+  function isRecord(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function idOf(value: unknown): string | number | undefined {
+    const id = isRecord(value) ? value._id : undefined;
+    return (typeof id === "string" || typeof id === "number") && id ? id : undefined;
+  }
+
   // Strip null values from Nocturne response only if the field doesn't have null in Nightscout
-  function stripExtraNulls(nocturneObj: any, nightscoutObj: any): any {
+  function stripExtraNulls(nocturneObj: unknown, nightscoutObj: unknown): unknown {
     if (Array.isArray(nocturneObj)) {
       // If both are arrays, process element by element
       if (Array.isArray(nightscoutObj)) {
@@ -146,10 +156,10 @@
       return nocturneObj.map((item) => stripExtraNulls(item, undefined));
     }
 
-    if (nocturneObj && typeof nocturneObj === "object") {
-      const cleaned: Record<string, any> = {};
+    if (isRecord(nocturneObj)) {
+      const cleaned: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(nocturneObj)) {
-        const nsValue = nightscoutObj?.[key];
+        const nsValue = isRecord(nightscoutObj) ? nightscoutObj[key] : undefined;
 
         // If the value is null/undefined, only keep it if Nightscout also has null
         if (value === null || value === undefined) {
@@ -169,54 +179,28 @@
     return nocturneObj;
   }
 
-  // Match and reorder Nocturne array entries to align with Nightscout's _id order
-  function matchEntriesById(nocturneArr: any[], nightscoutArr: any[]): any[] {
-    // Build a map of Nocturne entries by _id
-    const ncById = new Map<string, any>();
-    const ncWithoutId: any[] = [];
-
-    for (const item of nocturneArr) {
-      if (item && typeof item === "object" && item._id) {
-        ncById.set(item._id, item);
-      } else {
-        ncWithoutId.push(item);
-      }
-    }
-
-    // Reorder Nocturne entries to match Nightscout's _id order
-    const matched: any[] = [];
-    const usedIds = new Set<string>();
-
-    for (const nsItem of nightscoutArr) {
-      if (nsItem && typeof nsItem === "object" && nsItem._id) {
-        const ncItem = ncById.get(nsItem._id);
-        if (ncItem) {
-          matched.push(ncItem);
-          usedIds.add(nsItem._id);
-        }
-      }
-    }
-
-    // Add any unmatched Nocturne entries at the end
-    for (const [id, item] of ncById) {
-      if (!usedIds.has(id)) {
-        matched.push(item);
-      }
-    }
-
-    // Add entries without _id at the end
-    matched.push(...ncWithoutId);
-
-    return matched;
+  // Match and reorder Nocturne array entries to align with Nightscout's _id order;
+  // unmatched Nocturne entries follow, then those without an _id.
+  function matchEntriesById(nocturneArr: unknown[], nightscoutArr: unknown[]): unknown[] {
+    const ncById = indexBy(nocturneArr, idOf, (item) => item);
+    const matchedIds = nightscoutArr
+      .map(idOf)
+      .filter((id): id is string | number => id !== undefined && ncById.has(id));
+    const used = new Set(matchedIds);
+    return [
+      ...matchedIds.map((id) => ncById.get(id)),
+      ...[...ncById].filter(([id]) => !used.has(id)).map(([, item]) => item),
+      ...nocturneArr.filter((item) => idOf(item) === undefined),
+    ];
   }
 
   // Remove Nocturne-specific fields recursively
-  function removeNocturneFields(obj: any): any {
+  function removeNocturneFields(obj: unknown): unknown {
     if (Array.isArray(obj)) {
       return obj.map(removeNocturneFields);
     }
-    if (obj && typeof obj === "object") {
-      const cleaned: Record<string, any> = {};
+    if (isRecord(obj)) {
+      const cleaned: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(obj)) {
         if (!nocturneOnlyFields.includes(key)) {
           cleaned[key] = removeNocturneFields(value);
@@ -228,21 +212,16 @@
   }
 
   // Reorder Nocturne object keys to match Nightscout's key order
-  function reorderToMatch(nocturneObj: any, nightscoutObj: any): any {
+  function reorderToMatch(nocturneObj: unknown, nightscoutObj: unknown): unknown {
     if (Array.isArray(nocturneObj)) {
       if (Array.isArray(nightscoutObj)) {
-        // Build a map of Nightscout entries by _id for matching
-        const nsById = new Map<string, any>();
-        for (const item of nightscoutObj) {
-          if (item && typeof item === "object" && item._id) {
-            nsById.set(item._id, item);
-          }
-        }
+        const nsById = indexBy(nightscoutObj, idOf, (item) => item);
 
         // Match each Nocturne entry with its corresponding Nightscout entry by _id
         return nocturneObj.map((ncItem, index) => {
-          if (ncItem && typeof ncItem === "object" && ncItem._id) {
-            const nsItem = nsById.get(ncItem._id);
+          const id = idOf(ncItem);
+          if (id) {
+            const nsItem = nsById.get(id);
             if (nsItem) {
               return reorderToMatch(ncItem, nsItem);
             }
@@ -254,23 +233,16 @@
       return nocturneObj.map((item) => reorderToMatch(item, undefined));
     }
 
-    if (
-      nocturneObj &&
-      typeof nocturneObj === "object" &&
-      nightscoutObj &&
-      typeof nightscoutObj === "object"
-    ) {
+    if (isRecord(nocturneObj) && isRecord(nightscoutObj)) {
       const reordered: Record<string, unknown> = {};
-      const nocturneRecord = nocturneObj as Record<string, unknown>;
-      const nightscoutRecord = nightscoutObj as Record<string, unknown>;
-      const nsKeys = Object.keys(nightscoutRecord);
-      const ncKeys = Object.keys(nocturneRecord);
+      const nsKeys = Object.keys(nightscoutObj);
+      const ncKeys = Object.keys(nocturneObj);
 
       // First, add keys in Nightscout's order
       for (let i = 0; i < nsKeys.length; i++) {
         const key = nsKeys[i];
-        if (key in nocturneRecord) {
-          reordered[key] = reorderToMatch(nocturneRecord[key], nightscoutRecord[key]);
+        if (key in nocturneObj) {
+          reordered[key] = reorderToMatch(nocturneObj[key], nightscoutObj[key]);
         }
       }
 
@@ -278,7 +250,7 @@
       for (let i = 0; i < ncKeys.length; i++) {
         const key = ncKeys[i];
         if (!(key in reordered)) {
-          reordered[key] = nocturneRecord[key];
+          reordered[key] = nocturneObj[key];
         }
       }
 
@@ -439,7 +411,7 @@
               onCheckedChange={(checked: boolean) =>
                 (hashApiSecret = checked === true)}
             />
-            <Label for="hashApiSecret" class="font-normal text-sm">
+            <Label for="hashApiSecret" variant="option">
               Hash API secret (SHA1)
             </Label>
           </div>
@@ -473,7 +445,7 @@
               id="requestBody"
               bind:value={requestBody}
               class="font-mono h-24"
-              placeholder={"key:value"}
+              placeholder="key:value"
             />
           </div>
         {/if}
@@ -488,7 +460,7 @@
             onCheckedChange={(checked: boolean) =>
               (ignoreNocturneFields = checked === true)}
           />
-          <Label for="ignoreNocturneFields" class="font-normal">
+          <Label for="ignoreNocturneFields" variant="option">
             Ignore Nocturne-specific fields
             <span class="text-muted-foreground ml-1">
               ({nocturneOnlyFields.join(", ")})
@@ -502,7 +474,7 @@
             onCheckedChange={(checked: boolean) =>
               (hideNullValues = checked === true)}
           />
-          <Label for="hideNullValues" class="font-normal">
+          <Label for="hideNullValues" variant="option">
             Hide null values
           </Label>
         </div>
@@ -513,7 +485,7 @@
             onCheckedChange={(checked: boolean) =>
               (showSideBySide = checked === true)}
           />
-          <Label for="showSideBySide" class="font-normal">
+          <Label for="showSideBySide" variant="option">
             Show side-by-side view
           </Label>
         </div>
@@ -533,7 +505,7 @@
   </Card.Root>
 
   {#if error}
-    <Card.Root class="border-destructive">
+    <Card.Root variant="destructive">
       <Card.Content class="py-4">
         <p class="text-destructive">{error}</p>
       </Card.Content>
@@ -549,7 +521,7 @@
           <p class="text-sm text-muted-foreground mb-1">Nightscout Status</p>
           <p
             class="text-2xl font-bold {result.nightscoutStatusCode === 200
-              ? 'text-green-600'
+              ? 'text-success'
               : 'text-destructive'}"
           >
             {result.nightscoutStatusCode ?? "Error"}
@@ -567,7 +539,7 @@
           <p class="text-sm text-muted-foreground mb-1">Nocturne Status</p>
           <p
             class="text-2xl font-bold {result.nocturneStatusCode === 200
-              ? 'text-green-600'
+              ? 'text-success'
               : 'text-destructive'}"
           >
             {result.nocturneStatusCode ?? "Error"}
@@ -598,16 +570,12 @@
     </div>
 
     <!-- Match Status -->
-    <Card.Root
-      class={isIdentical
-        ? "border-green-500 bg-green-50 dark:bg-green-900/20"
-        : "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"}
-    >
+    <Card.Root variant={isIdentical ? "success" : "warning"}>
       <Card.Content class="py-4">
         <p
           class="font-semibold {isIdentical
-            ? 'text-green-700 dark:text-green-300'
-            : 'text-yellow-700 dark:text-yellow-300'}"
+            ? 'text-success'
+            : 'text-warning'}"
         >
           {isIdentical
             ? "✓ Responses are identical"
@@ -622,7 +590,7 @@
       <div class="grid grid-cols-1 @lg:grid-cols-2 gap-4">
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-red-600">
+            <Card.Title variant="destructive" class="text-base">
               Nightscout Response
             </Card.Title>
           </Card.Header>
@@ -633,9 +601,9 @@
               class="overflow-x-auto max-h-[600px] overflow-y-auto"
             >
               <pre
-                class="text-xs font-mono leading-tight">{#each sideBySideDiff.left as { line, type }}<span
+                class="text-xs font-mono leading-tight">{#each sideBySideDiff.left as { line, type }, i (i)}<span
                     class="block px-3 min-h-[1.25em] {type === 'removed'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                      ? 'bg-destructive/10 text-destructive'
                       : type === 'empty'
                         ? 'bg-muted/30'
                         : ''}">{line}</span>{/each}</pre>
@@ -644,7 +612,7 @@
         </Card.Root>
         <Card.Root>
           <Card.Header class="py-3">
-            <Card.Title class="text-base text-green-600">
+            <Card.Title variant="success" class="text-base">
               Nocturne Response
             </Card.Title>
           </Card.Header>
@@ -655,9 +623,9 @@
               class="overflow-x-auto max-h-[600px] overflow-y-auto"
             >
               <pre
-                class="text-xs font-mono leading-tight">{#each sideBySideDiff.right as { line, type }}<span
+                class="text-xs font-mono leading-tight">{#each sideBySideDiff.right as { line, type }, i (i)}<span
                     class="block px-3 min-h-[1.25em] {type === 'added'
-                      ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                      ? 'bg-success/10 text-success'
                       : type === 'empty'
                         ? 'bg-muted/30'
                         : ''}">{line}</span>{/each}</pre>
@@ -671,21 +639,19 @@
         <Card.Header class="py-3 flex-row justify-between items-center">
           <Card.Title class="text-base">Unified Diff</Card.Title>
           <span class="text-sm text-muted-foreground">
-            <span class="text-red-600">- Nightscout</span>
-            {" / "}
-            <span class="text-green-600">+ Nocturne</span>
+            <span class="text-destructive">- Nightscout</span> / <span class="text-success">+ Nocturne</span>
           </span>
         </Card.Header>
         <Card.Content class="p-0">
           <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
             <pre
-              class="text-xs font-mono leading-tight">{#each parsedDiff as { line, type }}<span
+              class="text-xs font-mono leading-tight">{#each parsedDiff as { line, type }, i (i)}<span
                   class="block px-3 {type === 'add'
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200'
+                    ? 'bg-success/10 text-success'
                     : type === 'remove'
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200'
+                      ? 'bg-destructive/10 text-destructive'
                       : type === 'header'
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                        ? 'bg-info/10 text-info'
                         : type === 'meta'
                           ? 'text-muted-foreground'
                           : ''}">{line}</span>{/each}</pre>

@@ -5,7 +5,7 @@ title: Configuration Guide
 <script>
   import Callout from '@nocturne/cms/components/Callout.svelte';
   import CodeBlock from '$lib/components/docs/CodeBlock.svelte';
-  import envExample from '$lib/release/docker-compose/.env.example?raw';
+  import envExample from '$lib/release/docker-compose/default.env.example?raw';
 </script>
 
 # Configuration Guide
@@ -35,11 +35,13 @@ so it always matches the current images:
 <CodeBlock code={envExample} maxHeight="440px" />
 
 <Callout type="info" title="This list stays current automatically">
+
   The block above is the real <code>.env.example</code> from the release bundle;
   there is no separate hand-maintained list to drift out of date. A few optional
   integrations (email alerts, extra OpenTelemetry tuning) read additional
   variables that are documented in their own guides rather than shipped in the
   example.
+
 </Callout>
 
 ### Required
@@ -58,10 +60,12 @@ These have no default and must be set before the first start:
   `POSTGRES_WEB_PASSWORD`.
 
 <Callout type="warning" title="Passwords are read only at first start">
+
   The PostgreSQL passwords are used once, when the database volume is first
   created, to provision the runtime roles. Changing them later does **not** re-key
   an existing database. Use a long random value for <code>INSTANCE_KEY</code> and
   each password; the install pages include a generator.
+
 </Callout>
 
 ### Database roles
@@ -102,6 +106,43 @@ nothing here is required for a working install.
 `NOCTURNE_API_IMAGE` and `NOCTURNE_WEB_IMAGE` default to the `:latest` tag on
 GHCR. Pin them to a specific version tag to control exactly when your instance
 updates.
+
+### The in-app support form
+
+The **Report a problem** form in Nocturne files your report as a **public**
+issue on GitHub. It works out of the box, with nothing to configure:
+
+- **Default (no GitHub token set):** your instance forwards the report to
+  `nocturne.run`, which files it on
+  [github.com/nightscout/nocturne](https://github.com/nightscout/nocturne).
+  Screenshots are limited to 4 images, 5 MB each and 10 MB in total. If the
+  report cannot be sent, the form offers a pre-filled GitHub link instead, and
+  you can paste your screenshots there yourself.
+- **Your own repository:** to file reports somewhere else, add these to the
+  `nocturne-api` service's environment. A GitHub token (a "personal access
+  token", or PAT) is a password for the GitHub API: keep it out of anything you
+  share.
+
+| Variable | What it does |
+|----------|--------------|
+| `GitHub__IssuesPat` | A token that can create issues, and write contents if screenshots are uploaded. Setting it stops the forwarding to `nocturne.run`. |
+| `GitHub__Owner`, `GitHub__Repo` | The repository reports go to. Both default to `nightscout` / `nocturne`, so set them whenever you set the token. |
+| `GitHub__AssetsBranch` | The branch screenshots are committed to (default `support-assets`). It must already exist. Set it empty to skip screenshot uploads. |
+
+Everything you leave switched on under **Diagnostic Info** in the form is
+published with the report, so check the preview before you send it.
+
+<Callout type="info" title="Accepting forwarded reports and contributions">
+
+  <code>GitHub__AcceptRelayedIssues=true</code> lets other instances forward
+  support reports to yours, and <code>GitHub__AcceptRelayedContributions=true</code>
+  does the same for translation and content contributions. Each one opens an
+  endpoint that anyone can reach anonymously, and it files work on your token
+  (<code>GitHub__IssuesPat</code> and <code>GitHub__ContributionsPat</code>
+  respectively). Leave both off unless you run a relay on purpose, as
+  <code>nocturne.run</code> does.
+
+</Callout>
 
 ## Beyond environment variables
 

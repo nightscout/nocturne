@@ -41,7 +41,15 @@ public static class TestDbContextFactory
     /// <c>MutationAuditInterceptor</c> for anything reading the soft-delete attribution flag.</param>
     public static SqliteTestDatabase CreateSqliteWithTenant(
         Guid tenantId, string tenantSlug = "test", params IInterceptor[] interceptors) =>
-        new(tenantId, tenantSlug, interceptors);
+        new(tenantId, tenantSlug, null, interceptors);
+
+    /// <param name="configure">Provider services the query under test needs replaced, e.g. a
+    /// translator SQLite lacks.</param>
+    public static SqliteTestDatabase CreateSqliteWithTenant(
+        Guid tenantId,
+        Action<DbContextOptionsBuilder<NocturneDbContext>> configure,
+        params IInterceptor[] interceptors) =>
+        new(tenantId, "test", configure, interceptors);
 }
 
 /// <summary>
@@ -51,19 +59,24 @@ public static class TestDbContextFactory
 /// </summary>
 public sealed class SqliteTestDatabase : IDisposable
 {
-    internal SqliteTestDatabase(Guid? tenantId, string? tenantSlug, params IInterceptor[] interceptors)
+    internal SqliteTestDatabase(
+        Guid? tenantId,
+        string? tenantSlug,
+        Action<DbContextOptionsBuilder<NocturneDbContext>>? configure = null,
+        params IInterceptor[] interceptors)
     {
         TenantId = tenantId ?? Guid.Empty;
 
         Connection = new SqliteConnection("DataSource=:memory:");
         Connection.Open();
 
-        Options = new DbContextOptionsBuilder<NocturneDbContext>()
+        var builder = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .AddInterceptors(interceptors)
-            .EnableSensitiveDataLogging()
-            .Options;
+            .EnableSensitiveDataLogging();
+        configure?.Invoke(builder);
+        Options = builder.Options;
 
         ContextFactory = new PooledContextFactory(this);
 
@@ -108,11 +121,14 @@ public sealed class SqliteTestDatabase : IDisposable
         return services;
     }
 
-    /// <summary>Adds a further tenant row, for tests that assert one tenant cannot reach another's.</summary>
-    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug)
+    /// <summary>
+    /// Adds a further tenant row, for tests that assert one tenant cannot reach another's or that
+    /// read the active tenants.
+    /// </summary>
+    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug, bool isActive = true)
     {
         using var db = CreateContext();
-        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug });
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, IsActive = isActive });
         db.SaveChanges();
         return this;
     }

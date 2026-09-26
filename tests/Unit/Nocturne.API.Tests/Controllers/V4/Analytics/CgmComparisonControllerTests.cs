@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V4.Analytics;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Analytics;
 using Nocturne.Core.Models.V4;
@@ -44,6 +45,13 @@ public class CgmComparisonControllerTests
                 Mgdl = r.Mgdl,
             }));
 
+    private static ProblemDetails ProblemOf(ActionResult<CgmComparisonResult> result, int statusCode)
+    {
+        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(statusCode);
+        return objectResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+    }
+
     private void VerifyNoRead() =>
         _glucose.Verify(g => g.GetAsync(
             It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
@@ -56,7 +64,7 @@ public class CgmComparisonControllerTests
     {
         var result = await _controller.Compare(DeviceA, DeviceB, default, default);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400);
         VerifyNoRead();
     }
 
@@ -65,28 +73,29 @@ public class CgmComparisonControllerTests
     {
         var result = await _controller.Compare(DeviceA, DeviceB, End, Start);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400);
         VerifyNoRead();
     }
 
     [Fact]
-    public async Task Compare_with_a_range_over_ninety_days_returns_bad_request()
+    public async Task Compare_with_a_range_over_the_analytics_cap_returns_bad_request()
     {
-        var result = await _controller.Compare(DeviceA, DeviceB, Start, Start.AddDays(90).AddSeconds(1));
+        var result = await _controller.Compare(
+            DeviceA, DeviceB, Start, Start.AddDays(V4ReadLimits.MaxAnalyticsSpanDays).AddSeconds(1));
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400).Detail.Should().Be($"Date range must not exceed {V4ReadLimits.MaxAnalyticsSpanDays} days.");
         VerifyNoRead();
     }
 
     [Fact]
-    public async Task Compare_accepts_a_range_of_exactly_ninety_days()
+    public async Task Compare_accepts_a_range_of_exactly_the_analytics_cap()
     {
         RegisterDevice(DeviceA, "Sensor A");
         RegisterDevice(DeviceB, "Sensor B");
         RegisterReadings(DeviceA, (0, 100));
         RegisterReadings(DeviceB, (1, 104));
 
-        var result = await _controller.Compare(DeviceA, DeviceB, Start, Start.AddDays(90));
+        var result = await _controller.Compare(DeviceA, DeviceB, Start, Start.AddDays(V4ReadLimits.MaxAnalyticsSpanDays));
 
         result.Result.Should().BeOfType<OkObjectResult>();
     }
@@ -96,7 +105,7 @@ public class CgmComparisonControllerTests
     {
         var result = await _controller.Compare(DeviceA, DeviceA, Start, End);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400).Detail.Should().Be("deviceAId and deviceBId must be different devices.");
         VerifyNoRead();
     }
 
@@ -110,7 +119,7 @@ public class CgmComparisonControllerTests
     {
         var result = await _controller.Compare(DeviceA, DeviceB, Start, End, tolerance);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400);
         VerifyNoRead();
     }
 
@@ -124,7 +133,7 @@ public class CgmComparisonControllerTests
 
         var result = await _controller.Compare(DeviceA, DeviceB, Start, End);
 
-        result.Result.Should().BeOfType<NotFoundObjectResult>();
+        ProblemOf(result, 404).Detail.Should().Be("One or both devices were not found.");
         VerifyNoRead();
     }
 
@@ -136,7 +145,7 @@ public class CgmComparisonControllerTests
 
         var result = await _controller.Compare(DeviceA, DeviceB, Start, End);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        ProblemOf(result, 400);
         VerifyNoRead();
     }
 

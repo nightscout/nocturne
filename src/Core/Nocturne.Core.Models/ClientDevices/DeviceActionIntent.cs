@@ -14,7 +14,11 @@ namespace Nocturne.Core.Models.ClientDevices;
 /// </remarks>
 public class DeviceActionIntent
 {
-    /// <summary>Lifecycle phase: <c>opened</c>, <c>resolved</c>, or <c>acknowledged</c>.</summary>
+    /// <summary>
+    /// Lifecycle phase: <c>opened</c>, <c>resolved</c>, <c>acknowledged</c>, or <c>snoozed</c>. Only
+    /// <c>opened</c> actuates; a <c>snoozed</c> excursion returns to <c>opened</c> when the snooze
+    /// lapses, so a device that withdrew on it actuates again.
+    /// </summary>
     public string Intent { get; set; } = "opened";
 
     /// <summary>The excursion this intent belongs to — the stable correlation/dedup key.</summary>
@@ -32,7 +36,10 @@ public class DeviceActionIntent
     /// <summary>Capabilities the rule requested. The device actuates the subset it actually has.</summary>
     public List<string> Capabilities { get; set; } = [];
 
-    /// <summary>Whether the excursion has been acknowledged (on any device) — the device should not re-alarm.</summary>
+    /// <summary>
+    /// Whether the excursion has been acknowledged for everyone, or muted by the device's owner. The
+    /// device should not re-alarm either way.
+    /// </summary>
     public bool Acknowledged { get; set; }
 
     /// <summary>When the excursion started.</summary>

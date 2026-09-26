@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from '@nocturne/ui/ui/button';
   import { Input } from '@nocturne/ui/ui/input';
   import { Textarea } from '@nocturne/ui/ui/textarea';
   import { Switch } from '@nocturne/ui/ui/switch';
@@ -18,8 +19,10 @@
 </script>
 
 <div class="border-b border-border/40">
-  <button
-    class="flex w-full items-center justify-between px-4 py-2 text-sm font-medium hover:bg-muted/50"
+  <Button
+    variant="ghost"
+    class="w-full justify-between"
+    aria-expanded={!collapsed}
     onclick={() => (collapsed = !collapsed)}
   >
     Metadata
@@ -28,11 +31,11 @@
     {:else}
       <ChevronUp class="h-4 w-4" />
     {/if}
-  </button>
+  </Button>
 
   {#if !collapsed}
     <div class="space-y-3 px-4 pb-4">
-      {#each fields as field}
+      {#each fields as field (field.key)}
         <div class="space-y-1">
           <Label for={field.key}>{field.label}{field.required ? ' *' : ''}</Label>
           {#if field.type === 'text'}
@@ -62,9 +65,10 @@
               onCheckedChange={(checked) => (metadata[field.key] = checked)}
             />
           {:else if field.type === 'tags'}
+            {@const tags = metadata[field.key]}
             <Input
               id={field.key}
-              value={Array.isArray(metadata[field.key]) ? metadata[field.key].join(', ') : ''}
+              value={Array.isArray(tags) ? tags.join(', ') : ''}
               placeholder="tag1, tag2, tag3"
               oninput={(e) => (metadata[field.key] = e.currentTarget.value.split(',').map((s) => s.trim()).filter(Boolean))}
             />

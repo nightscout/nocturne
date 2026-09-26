@@ -65,7 +65,9 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         return new MemberInviteController(
             _inviteService.Object,
             _tenantService.Object,
-            Mock.Of<ITenantRoleService>(),
+            Mock.Of<ITenantRoleService>(r => r.GetRolePermissionsAsync(
+                It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())
+                == Task.FromResult(new List<string>())),
             _tenantMemberService.Object,
             tenantAccessor.Object,
             _dbContext)
@@ -91,7 +93,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     {
         var roleId = Guid.CreateVersion7();
         var expected = new MemberInviteResult(
-            Guid.CreateVersion7(), "tok", "https://example.test/join?token=tok", DateTime.UtcNow.AddDays(7));
+            Guid.CreateVersion7(), "tok", "https://example.test/join?token=tok", DateTime.UtcNow.AddDays(7), "Chris");
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 _tenantId, _callerSubjectId, It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
@@ -114,7 +116,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
     public async Task CreateInvite_withMembersInviteButNotOwner_createsTheInvite()
     {
         var expected = new MemberInviteResult(
-            Guid.CreateVersion7(), "tok", "https://example.test/join?token=tok", DateTime.UtcNow.AddDays(7));
+            Guid.CreateVersion7(), "tok", "https://example.test/join?token=tok", DateTime.UtcNow.AddDays(7), "Chris");
         _inviteService
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
@@ -262,7 +264,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
-            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite, Scope.GlucoseRead);
 
@@ -290,7 +292,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(),
                 It.IsAny<bool>(), It.IsAny<string?>()))
-            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite);
         controller.HttpContext.Request.Scheme = "https";
@@ -321,7 +323,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
-            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite);
         controller.HttpContext.Items["AuthContext"] = new AuthContext
@@ -329,8 +331,8 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             IsAuthenticated = true,
             SubjectId = _callerSubjectId,
             TenantId = _tenantId,
-            LimitTo24Hours = callerClamped,
         };
+        controller.HttpContext.RequestServices = TestRequestServices.Build(callerClamped);
 
         var invite = ClinicianInvite(Guid.CreateVersion7());
         invite.LimitTo24Hours = requested;
@@ -380,7 +382,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
             .Setup(s => s.CreateInviteAsync(
                 It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<IEnumerable<string>>(), It.IsAny<List<Guid>>(),
                 It.IsAny<List<string>?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int?>(), It.IsAny<bool>(), It.IsAny<string?>()))
-            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow));
+            .ReturnsAsync(new MemberInviteResult(Guid.CreateVersion7(), "tok", "/join?token=tok", DateTime.UtcNow, "Chris"));
 
         var controller = BuildController(Scope.MembersInvite);
 
@@ -490,7 +492,9 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         isExpired,
         isRevoked,
         DateTime.UtcNow,
-        usedBy ?? []);
+        usedBy ?? [],
+        [],
+        [Scope.GlucoseRead]);
 
     /// <summary>
     /// The invitee's browser resolves the tenant by host, and the invite belongs to exactly one
@@ -530,7 +534,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var result = await controller.GetInviteInfo("tok", CancellationToken.None);
 
         var info = result.Should().BeOfType<OkObjectResult>().Which.Value
-            .Should().BeOfType<MemberInviteInfo>().Subject;
+            .Should().BeOfType<JoinInviteInfo>().Subject;
         info.Viewer.Should().NotBeNull();
         info.Viewer!.SubjectId.Should().Be(_callerSubjectId);
         info.Viewer.IsMember.Should().Be(alreadyMember);
@@ -551,7 +555,7 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var result = await controller.GetInviteInfo("tok", CancellationToken.None);
 
         result.Should().BeOfType<OkObjectResult>().Which.Value
-            .Should().BeOfType<MemberInviteInfo>().Which.Viewer.Should().BeNull();
+            .Should().BeOfType<JoinInviteInfo>().Which.Viewer.Should().BeNull();
         _tenantMemberService.VerifyNoOtherCalls();
     }
 
@@ -570,11 +574,58 @@ public sealed class MemberInviteControllerAuthorizationTests : IDisposable
         var result = await controller.GetInviteInfo("tok", CancellationToken.None);
 
         var info = result.Should().BeOfType<OkObjectResult>().Which.Value
-            .Should().BeOfType<MemberInviteInfo>().Subject;
+            .Should().BeOfType<JoinInviteInfo>().Subject;
         info.TenantName.Should().Be("Chris");
         info.CreatedByName.Should().Be("Chris");
-        info.DirectPermissions.Should().Equal(Scope.GlucoseRead);
+        info.Permissions.Should().Equal(Scope.GlucoseRead);
         info.ExpiresAt.Should().BeAfter(DateTime.UtcNow);
+        info.GrantsAccess.Should().BeTrue();
+        info.IsViewOnlyForRecordsAndAccess.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Anyone holding the link reaches this anonymously. The invite's label is the inviter's own
+    /// note, and the joiners are other people; the invitee needs neither.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_forAnAcceptableInvite_carriesNeitherTheLabelNorTheJoiners()
+    {
+        var joinedSubjectId = Guid.CreateVersion7();
+        var invite = Invite(usedBy: [new InviteUsageInfo(joinedSubjectId, "Prior Joiner", DateTime.UtcNow)])
+            with
+        { Label = "Private label" };
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(invite);
+
+        var controller = BuildController();
+        controller.HttpContext.Items["AuthContext"] = AuthContext.Unauthenticated();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        var body = JsonSerializer.Serialize(result.Should().BeOfType<OkObjectResult>().Which.Value);
+        body.Should().NotContain("Private label");
+        body.Should().NotContain("Prior Joiner");
+        body.Should().NotContain(joinedSubjectId.ToString());
+    }
+
+    /// <summary>
+    /// Every role on the invite was deleted and it carries no direct permission, so acceptance
+    /// grants nothing. The page must not describe it as a view-only invite.
+    /// </summary>
+    [Fact]
+    public async Task GetInviteInfo_whenTheInviteGrantsNothing_saysSo()
+    {
+        var invite = Invite() with { DirectPermissions = null, Permissions = [] };
+        _inviteService.Setup(s => s.GetInviteByTokenAsync("tok", _tenantId)).ReturnsAsync(invite);
+
+        var controller = BuildController();
+        controller.HttpContext.Items["AuthContext"] = AuthContext.Unauthenticated();
+
+        var result = await controller.GetInviteInfo("tok", CancellationToken.None);
+
+        var info = result.Should().BeOfType<OkObjectResult>().Which.Value
+            .Should().BeOfType<JoinInviteInfo>().Subject;
+        info.GrantsAccess.Should().BeFalse();
+        info.IsViewOnlyForRecordsAndAccess.Should().BeFalse();
     }
 
     /// <summary>

@@ -19,21 +19,22 @@
   import DemoDataSection from "$lib/components/connectors/DemoDataSection.svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
 
   const isPlatformAdmin = $derived(
-    (page.data as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false
+    page.data.isPlatformAdmin === true
   );
 
-  // Both tools rewrite tenant-wide data and the API answers 403 to anyone but an admin, so the
-  // card self-gates on the same permissions RequireAdmin resolves to. It matters more here than
-  // it did on Connectors & Apps: Data Quality is a page an ordinary member opens to set a sleep
-  // schedule, so offering them a Remove Demo Data button that only fails would be its own answer.
-  const effectivePermissions: string[] = $derived(
-    (page.data as { effectivePermissions?: string[] }).effectivePermissions ??
-      []
+  // The two tools answer to different gates: deduplication is RequireAdmin, so it resolves to
+  // the wildcard; deleting demo data is tenant.settings. Data Quality is a page an ordinary
+  // member opens to set a sleep schedule, so neither control is offered to someone the API
+  // would refuse.
+  const effectivePermissions = $derived(
+    page.data.effectivePermissions ?? []
   );
-  const canMaintainData = $derived(
-    effectivePermissions.includes("*") || effectivePermissions.includes("admin")
+  const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
+  const canManageData = $derived(
+    satisfiesScope(effectivePermissions, "tenant.settings")
   );
 
   let showDeduplicationDialog = $state(false);
@@ -41,7 +42,7 @@
   let showDemoDataDialog = $state(false);
 </script>
 
-{#if canMaintainData}
+{#if canDeduplicate || canManageData}
   <Card>
     <CardHeader>
       <CardTitle class="flex items-center gap-2">
@@ -53,62 +54,66 @@
       </CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
-      <div
-        data-testid="deduplicate-records"
-        class="flex items-start gap-4 p-4 rounded-lg border bg-card"
-      >
+      {#if canDeduplicate}
         <div
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
+          data-testid="deduplicate-records"
+          class="flex items-start gap-4 p-4 rounded-lg border bg-card"
         >
-          <Link2 class="h-5 w-5 text-primary" />
-        </div>
-        <div class="flex-1">
-          <h4 class="font-medium">Deduplicate Records</h4>
-          <p class="text-sm text-muted-foreground mt-1">
-            Link records from multiple data sources that represent the same
-            underlying event. This improves data quality when the same glucose
-            readings or treatments are uploaded from different apps.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            class="mt-3 gap-2"
-            onclick={() => (showDeduplicationDialog = true)}
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
           >
-            {#if isDeduplicating}
-              <Loader2 class="h-4 w-4 animate-spin" />
-              Deduplication Running...
-            {:else}
-              <Link2 class="h-4 w-4" />
-              Run Deduplication
-            {/if}
-          </Button>
+            <Link2 class="h-5 w-5 text-primary" />
+          </div>
+          <div class="flex-1">
+            <h4 class="font-medium">Deduplicate Records</h4>
+            <p class="text-sm text-muted-foreground mt-1">
+              Link records from multiple data sources that represent the same
+              underlying event. This improves data quality when the same glucose
+              readings or treatments are uploaded from different apps.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="mt-3"
+              onclick={() => (showDeduplicationDialog = true)}
+            >
+              {#if isDeduplicating}
+                <Loader2 class="h-4 w-4 animate-spin" />
+                Deduplication Running...
+              {:else}
+                <Link2 class="h-4 w-4" />
+                Run Deduplication
+              {/if}
+            </Button>
+          </div>
         </div>
-      </div>
+      {/if}
 
-      <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
-        <div
-          class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
-        >
-          <Sparkles class="h-5 w-5 text-primary" />
-        </div>
-        <div class="flex-1">
-          <h4 class="font-medium">Remove Demo Data</h4>
-          <p class="text-sm text-muted-foreground mt-1">
-            Delete the sample readings and treatments that were generated to
-            show you around. Your own data is not affected.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            class="mt-3 gap-2"
-            onclick={() => (showDemoDataDialog = true)}
+      {#if canManageData}
+        <div class="flex items-start gap-4 p-4 rounded-lg border bg-card">
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10"
           >
-            <Sparkles class="h-4 w-4" />
-            Remove Demo Data
-          </Button>
+            <Sparkles class="h-5 w-5 text-primary" />
+          </div>
+          <div class="flex-1">
+            <h4 class="font-medium">Remove Demo Data</h4>
+            <p class="text-sm text-muted-foreground mt-1">
+              Delete the sample readings and treatments that were generated to
+              show you around. Your own data is not affected.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              class="mt-3"
+              onclick={() => (showDemoDataDialog = true)}
+            >
+              <Sparkles class="h-4 w-4" />
+              Remove Demo Data
+            </Button>
+          </div>
         </div>
-      </div>
+      {/if}
 
       {#if isPlatformAdmin}
         <a

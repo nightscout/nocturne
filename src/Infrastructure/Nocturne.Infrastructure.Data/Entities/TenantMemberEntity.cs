@@ -18,9 +18,6 @@ public class TenantMemberEntity : ISystemTimestamped
     /// <summary>
     /// Identifier of the tenant
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 
@@ -92,12 +89,6 @@ public class TenantMemberEntity : ISystemTimestamped
     /// </summary>
     [Column("last_used_user_agent")]
     public string? LastUsedUserAgent { get; set; }
-
-    /// <summary>
-    /// When the membership was revoked, if applicable
-    /// </summary>
-    [Column("revoked_at")]
-    public DateTime? RevokedAt { get; set; }
 
     /// <summary>
     /// Navigation property to the tenant

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { defaultPayload, type ConditionNode } from "./types";
+import { defaultPayload, PumpModeState, type ConditionNode } from "./types";
 import { summarizeCondition } from "./summarizeCondition";
 import { LEAF_FACTS } from "./factCatalog";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -209,6 +209,22 @@ describe("summarizeCondition", () => {
 			do_not_disturb: { is_active: true, for_minutes: 30 },
 		};
 		expect(summarizeCondition(node)).toBe("Do Not Disturb on for 30m");
+	});
+
+	it("renders a pump mode from the wire enum member, not the raw value", () => {
+		const node: ConditionNode = {
+			type: "pump_state",
+			pump_state: { mode: PumpModeState.EaseOff, is_active: true },
+		};
+		expect(summarizeCondition(node)).toBe("Pump Easing Off");
+	});
+
+	it("renders a negated pump mode from the wire enum member", () => {
+		const node: ConditionNode = {
+			type: "pump_state",
+			pump_state: { mode: PumpModeState.Liberty, is_active: false },
+		};
+		expect(summarizeCondition(node)).toBe("Pump not in Liberty mode");
 	});
 
 	it("collapses a composite with a single child to that child", () => {

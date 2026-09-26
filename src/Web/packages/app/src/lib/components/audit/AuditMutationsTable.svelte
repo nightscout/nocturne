@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { MutationAuditDto } from "$lib/api/generated/nocturne-api-client";
   import type {
+    Column,
     ColumnDef,
     SortingState,
     ColumnFiltersState,
@@ -53,6 +54,20 @@
   // Expanded row
   let expandedId = $state<string | null>(null);
 
+  interface ActionFilterHeaderProps {
+    actionFilterOptions: { value: string; label: string }[];
+    selectedActions: string[];
+    toggleActionFilter: (action: string) => void;
+    clearActionFilter: () => void;
+  }
+
+  interface EntityTypeFilterHeaderProps {
+    uniqueEntityTypes: string[];
+    selectedEntityTypes: string[];
+    toggleEntityTypeFilter: (entityType: string) => void;
+    clearEntityTypeFilter: () => void;
+  }
+
   // Column filter states
   let selectedActions = $state<string[]>([]);
   let selectedEntityTypes = $state<string[]>([]);
@@ -86,9 +101,9 @@
     })
   );
 
-  function formatCompactDate(date: Date | undefined): string {
+  function formatCompactDate(date: string | undefined): string {
     if (!date) return "\u2014";
-    return compactDateFormatter.format(date instanceof Date ? date : new Date(date));
+    return compactDateFormatter.format(new Date(date));
   }
 
   function truncateId(id: string): string {
@@ -150,8 +165,7 @@
       if (typeof parsed === "object" && parsed !== null) {
         return Object.entries(parsed).map(([field, value]: [string, unknown]) => {
           if (typeof value === "object" && value !== null && "old" in value && "new" in value) {
-            const v = value as { old: unknown; new: unknown };
-            return { field, oldValue: String(v.old ?? ""), newValue: String(v.new ?? "") };
+            return { field, oldValue: String(value.old ?? ""), newValue: String(value.new ?? "") };
           }
           return { field, oldValue: "", newValue: String(value ?? "") };
         });
@@ -169,7 +183,7 @@
       id: "time",
       accessorFn: (row) => row.createdAt,
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Time" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Time" }),
       cell: ({ row }) => formatCompactDate(row.original.createdAt),
       sortingFn: (rowA, rowB) => {
         const a = rowA.original.createdAt ? new Date(rowA.original.createdAt).getTime() : 0;
@@ -182,7 +196,7 @@
       id: "subject",
       accessorFn: (row) => row.subjectName ?? row.subjectId ?? "system",
       header: ({ column }) =>
-        renderSnippet(sortableHeaderSnippet as any, { column, label: "Subject" }),
+        renderSnippet(sortableHeaderSnippet, { column, label: "Subject" }),
       cell: ({ row }) => {
         const r = row.original;
         return r.subjectName ?? truncateId(r.subjectId ?? "system");
@@ -193,14 +207,14 @@
       id: "action",
       accessorFn: (row) => row.action,
       header: () =>
-        renderSnippet(actionFilterHeaderSnippet as any, {
+        renderSnippet(actionFilterHeaderSnippet, {
           actionFilterOptions,
           selectedActions,
           toggleActionFilter,
           clearActionFilter,
         }),
       cell: ({ row }) =>
-        renderSnippet(actionBadgeSnippet as any, { action: row.original.action }),
+        renderSnippet(actionBadgeSnippet, { action: row.original.action }),
       filterFn: (row, _id, filterValue: string[]) => {
         if (!filterValue.length) return true;
         return filterValue.includes(row.original.action ?? "");
@@ -211,7 +225,7 @@
       id: "entityType",
       accessorFn: (row) => row.entityType,
       header: () =>
-        renderSnippet(entityTypeFilterHeaderSnippet as any, {
+        renderSnippet(entityTypeFilterHeaderSnippet, {
           uniqueEntityTypes,
           selectedEntityTypes,
           toggleEntityTypeFilter,
@@ -229,7 +243,7 @@
       accessorFn: (row) => row.entityId,
       header: "Entity ID",
       cell: ({ row }) =>
-        renderSnippet(entityIdSnippet as any, { entityId: row.original.entityId }),
+        renderSnippet(entityIdSnippet, { entityId: row.original.entityId }),
       enableSorting: false,
     },
     // Endpoint column
@@ -238,7 +252,7 @@
       accessorFn: (row) => row.endpoint,
       header: "Endpoint",
       cell: ({ row }) =>
-        renderSnippet(mutedTextSnippet as any, { text: row.original.endpoint }),
+        renderSnippet(mutedTextSnippet, { text: row.original.endpoint }),
       enableSorting: false,
     },
     // IP Address column
@@ -247,7 +261,7 @@
       accessorFn: (row) => row.ipAddress,
       header: "IP Address",
       cell: ({ row }) =>
-        renderSnippet(mutedTextSnippet as any, { text: row.original.ipAddress }),
+        renderSnippet(mutedTextSnippet, { text: row.original.ipAddress }),
       enableSorting: false,
     },
   ];
@@ -375,13 +389,13 @@
   column,
   label,
 }: {
-  column: any;
+  column: Column<MutationAuditDto, unknown>;
   label: string;
 })}
   <Button
     variant="ghost"
     size="sm"
-    class="-ml-3 h-8 data-[state=open]:bg-accent"
+    class="-ml-3"
     onclick={() => column.toggleSorting()}
   >
     {label}
@@ -401,7 +415,7 @@
   </Badge>
 {/snippet}
 
-{#snippet actionFilterHeaderSnippet({ actionFilterOptions, selectedActions, toggleActionFilter, clearActionFilter }: any)}
+{#snippet actionFilterHeaderSnippet({ actionFilterOptions, selectedActions, toggleActionFilter, clearActionFilter }: ActionFilterHeaderProps)}
   <ColumnFilterPopover
     label="Action"
     options={actionFilterOptions}
@@ -411,7 +425,7 @@
   />
 {/snippet}
 
-{#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: any)}
+{#snippet entityTypeFilterHeaderSnippet({ uniqueEntityTypes, selectedEntityTypes, toggleEntityTypeFilter, clearEntityTypeFilter }: EntityTypeFilterHeaderProps)}
   <ColumnFilterPopover
     label="Entity Type"
     options={uniqueEntityTypes.map((type: string) => ({
@@ -456,9 +470,9 @@
           <Table.Row>
             {#each headerGroup.headers as header (header.id)}
               <Table.Head
-                class="whitespace-nowrap"
+                class="whitespace-nowrap w-(--col-w)"
                 style={header.getSize()
-                  ? `width: ${header.getSize()}px`
+                  ? `--col-w: ${header.getSize()}px`
                   : undefined}
               >
                 {#if !header.isPlaceholder}
@@ -477,8 +491,8 @@
           <Table.Row
             class="cursor-pointer"
             onclick={(e: MouseEvent) => {
-              const target = e.target as HTMLElement;
-              if (target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
+              const target = e.target;
+              if (target instanceof Element && target.closest('button, input[type="checkbox"], [role="checkbox"]')) return;
               toggleExpanded(row.original.id);
             }}
           >
@@ -500,7 +514,7 @@
           </Table.Row>
           <!-- Expanded detail row -->
           {#if expandedId === row.original.id}
-            <Table.Row class="bg-muted/50 hover:bg-muted/50">
+            <Table.Row variant="detail">
               <Table.Cell colspan={columns.length + 1} class="p-4">
                 <div class="space-y-3 text-sm">
                   {#if row.original.reason}
@@ -546,7 +560,7 @@
                                 <span class="text-destructive line-through">{diff.oldValue}</span>
                                 <span class="text-muted-foreground">&rarr;</span>
                               {/if}
-                              <span class="text-green-600 dark:text-green-400">{diff.newValue}</span>
+                              <span class="text-success">{diff.newValue}</span>
                             </div>
                           {/each}
                         </div>
@@ -568,8 +582,9 @@
         {:else}
           <Table.Row>
             <Table.Cell
+              variant="muted"
               colspan={columns.length + 1}
-              class="h-24 text-center text-muted-foreground"
+              class="h-24 text-center"
             >
               No audit records found.
             </Table.Cell>

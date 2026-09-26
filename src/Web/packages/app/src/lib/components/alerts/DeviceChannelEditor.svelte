@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import * as Select from "$lib/components/ui/select";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
@@ -68,16 +69,15 @@
   }
 
   function toggleCapability(key: string, checked: boolean): void {
-    const current = new Set(selectedCapabilities);
-    if (checked) current.add(key);
-    else current.delete(key);
-    channel.metadata = { capabilities: [...current] };
+    channel.metadata = {
+      capabilities: [...toggled(new Set(selectedCapabilities), key, checked)],
+    };
   }
 </script>
 
 <div class="space-y-3">
   <div class="space-y-1.5">
-    <Label class="text-xs" for="device-kind-{index}">Device kind</Label>
+    <Label size="sm" for="device-kind-{index}">Device kind</Label>
     <Select.Root
       type="single"
       value={selectedKind}
@@ -85,7 +85,8 @@
     >
       <Select.Trigger
         id="device-kind-{index}"
-        class="h-8 w-48 text-sm"
+        size="sm"
+        class="w-48"
         data-testid="device-kind-trigger"
       >
         {selectedKind ? deviceKindLabel(selectedKind) : "Select a kind"}
@@ -103,7 +104,7 @@
 
   {#if selectedKind}
     <div class="space-y-2">
-      <Label class="text-xs">Capabilities</Label>
+      <Label size="sm">Capabilities</Label>
       {#if kindCapabilities.length === 0}
         <p class="text-xs text-muted-foreground">
           No capabilities are available for this kind.
@@ -121,14 +122,14 @@
               />
               <div class="grid gap-0.5 leading-none">
                 <Label
-                  class="text-sm font-normal"
+                  variant="option"
                   for="device-cap-{index}-{key}"
                 >
                   {cap.label}
                 </Label>
                 {#if cap.isHardware}
                   <span
-                    class="text-[11px] text-muted-foreground"
+                    class="text-xs text-muted-foreground"
                     data-testid="device-cap-hardware-note"
                   >
                     Device must allow this.

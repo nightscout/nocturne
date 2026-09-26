@@ -42,7 +42,7 @@
     <p class="text-sm text-muted-foreground">No entries yet. Click Add to create one.</p>
   {:else}
     <div class="space-y-2">
-      {#each entries as entry, i}
+      {#each entries as entry, i (entry)}
         <div class="flex items-center gap-2">
           <Input
             type="time"

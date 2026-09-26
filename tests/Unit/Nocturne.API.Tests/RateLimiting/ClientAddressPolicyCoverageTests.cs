@@ -28,6 +28,9 @@ public class ClientAddressPolicyCoverageTests
 
         var tableAndHostKeyed = ClientAddressPolicyNames()
             .Append(ServiceRegistrationExtensions.StatisticsComputeRateLimitPolicy)
+            // Keys on the hashed credential rather than the connection, which is what this test
+            // is protecting against; see ServiceRegistrationExtensions.TranslationDraftPartitionKey.
+            .Append(ServiceRegistrationExtensions.TranslationDraftsRateLimitPolicy)
             .ToList();
 
         applied.Except(tableAndHostKeyed).Should().BeEmpty(

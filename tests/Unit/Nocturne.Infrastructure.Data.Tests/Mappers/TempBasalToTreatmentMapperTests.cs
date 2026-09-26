@@ -242,6 +242,20 @@ public class TempBasalToTreatmentMapperTests
 
     #endregion
 
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_CarriesClientIdAlongsideDisplayFields()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.2);
+        tempBasal.AdditionalProperties = new() { ["id"] = "A1B2C3D4-0000-4000-8000-000000000001", ["other"] = "dropped" };
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.AdditionalProperties.Should().ContainKey("id").WhoseValue.Should().Be("A1B2C3D4-0000-4000-8000-000000000001");
+        result.AdditionalProperties.Should().ContainKey("basalOrigin");
+        result.AdditionalProperties.Should().NotContainKey("other");
+    }
+
     #region Helper Methods
 
     private static TempBasal CreateTempBasal(TempBasalOrigin origin, double rate)

@@ -54,6 +54,24 @@ public class TwiistConnectorServiceTests
     }
 
     [Fact]
+    public async Task SyncDataAsync_OverviewsUnreachable_ReportsFailureWithoutCredentialWording()
+    {
+        // The overviews call failed at the transport layer, not as a refused credential, so the
+        // error must not send the tenant to re-enter a working password.
+        var fixture = new ServiceFixture(responses: new()
+        {
+            [TwiistConstants.OverviewsPath] = new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().NotContain("password").And.NotContain("email");
+    }
+
+    [Fact]
     public async Task SyncDataAsync_MultipleFollowedPatients_ReportsUnhealthyWithNames()
     {
         var overviews = new List<TwiistOverview>

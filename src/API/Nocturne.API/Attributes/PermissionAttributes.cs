@@ -91,14 +91,14 @@ public class RequireAuthenticationAttribute : Attribute, IAuthorizationFilter
 }
 
 /// <summary>
-/// Attribute to require admin permissions. Matches <c>admin</c> or <c>*</c> (superuser).
+/// Attribute to require superuser permissions. Matches <c>*</c> only.
 /// </summary>
 /// <seealso cref="RequirePermissionAttribute"/>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public class RequireAdminAttribute : RequirePermissionAttribute
 {
     public RequireAdminAttribute()
-        : base(false, "admin", "*") { }
+        : base(false, "*") { }
 }
 
 /// <summary>

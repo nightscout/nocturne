@@ -6,6 +6,14 @@
   import { getReportsAnalysis } from "$api/reports.remote";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
+  import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
+  import {
+    CHART_TEXTURES,
+    patternClass,
+    type GlucoseRange,
+  } from "$lib/components/charts/print/chart-print-patterns";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { bg, bgLabel, formatShortDate } from "$lib/utils/formatting";
@@ -30,28 +38,26 @@
     const tir =
       reportsResource.current?.analysis?.timeInRange?.percentages;
 
-    const stats = [
-      { key: "Very Low", color: "var(--glucose-very-low)", value: tir?.veryLow ?? 0 },
-      { key: "Low", color: "var(--glucose-low)", value: tir?.low ?? 0 },
+    const range = (key: string, texture: GlucoseRange, value: number) => ({
+      key,
+      texture,
+      color: CHART_TEXTURES[texture].color,
+      value,
+      props: { class: patternClass(texture) },
+    });
+
+    return [
+      range("Very Low", "very-low", tir?.veryLow ?? 0),
+      range("Low", "low", tir?.low ?? 0),
+      ...(showTightRange
+        ? [
+            range("Tight Range", "tight-range", tir?.tightTarget ?? 0),
+            range("In Range", "in-range", (tir?.target ?? 0) - (tir?.tightTarget ?? 0)),
+          ]
+        : [range("In Range", "in-range", tir?.target ?? 0)]),
+      range("High", "high", tir?.high ?? 0),
+      range("Very High", "very-high", tir?.veryHigh ?? 0),
     ];
-
-    if (showTightRange) {
-      stats.push(
-        { key: "Tight Range", color: "var(--glucose-tight-range)", value: tir?.tightTarget ?? 0 },
-        { key: "In Range", color: "var(--glucose-in-range)", value: (tir?.target ?? 0) - (tir?.tightTarget ?? 0) },
-      );
-    } else {
-      stats.push(
-        { key: "In Range", color: "var(--glucose-in-range)", value: tir?.target ?? 0 },
-      );
-    }
-
-    stats.push(
-      { key: "High", color: "var(--glucose-high)", value: tir?.high ?? 0 },
-      { key: "Very High", color: "var(--glucose-very-high)", value: tir?.veryHigh ?? 0 },
-    );
-
-    return stats;
   });
 
   const tirPercentage = $derived(
@@ -92,16 +98,12 @@
 {#if reportsResource.current}
   {@const report = reportsResource.current}
   <div class="@container space-y-6 p-3 @md:p-6">
-    <Card.Root>
-      <Card.Header>
-        <Card.Title class="flex items-center gap-2">
-          Glucose Distribution
-        </Card.Title>
-        <Card.Description>
-          {dateRangeDisplay} • {overallStats.totalReadings} readings
-        </Card.Description>
-      </Card.Header>
-    </Card.Root>
+    <header class="print:hidden">
+      <h1 class="text-2xl font-bold">Glucose Distribution</h1>
+      <p class="mt-1 text-sm text-muted-foreground">
+        {dateRangeDisplay} • {overallStats.totalReadings} readings
+      </p>
+    </header>
 
     {#if !hasReadings}
       <Card.Root>
@@ -114,7 +116,16 @@
         </Card.Content>
       </Card.Root>
     {:else}
-      <div class="grid gap-6 @3xl:grid-cols-2">
+      <FigureStrip
+        figures={[
+          { label: "Mean", value: String(bg(overallStats.mean)), unit: bgLabel() },
+          { label: "Median", value: String(bg(overallStats.median)), unit: bgLabel() },
+          { label: "Std Dev", value: String(bg(overallStats.stdDev)), unit: bgLabel() },
+          { label: "Readings", value: String(overallStats.totalReadings) },
+        ]}
+      />
+
+      <div class="grid gap-6 @3xl:grid-cols-2 print:grid-cols-2">
         <Card.Root>
           <Card.Header>
             <div class="flex items-center justify-between">
@@ -141,7 +152,6 @@
                     innerRadius={-60}
                     cornerRadius={3}
                     padAngle={0.02}
-                    legend
                   >
                     {#snippet aboveMarks()}
                       <Text
@@ -161,6 +171,10 @@
                     {/snippet}
                   </PieChart>
                 </div>
+                <ChartKey
+                  class="pt-2"
+                  items={rangeStats.map((stat) => ({ texture: stat.texture, label: stat.key }))}
+                />
               {:else}
                 <div
                   class="flex h-[300px] items-center justify-center text-muted-foreground"
@@ -186,14 +200,11 @@
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                  {#each rangeStats as stat}
+                  {#each rangeStats as stat (stat.key)}
                     <Table.Row>
                       <Table.Cell>
                         <div class="flex items-center gap-2">
-                          <div
-                            class="h-3 w-3 rounded-full"
-                            style="background-color: {stat.color}"
-                          ></div>
+                          <TextureSwatch texture={stat.texture} />
                           {stat.key}
                         </div>
                       </Table.Cell>
@@ -217,26 +228,29 @@
           </Card.Description>
         </Card.Header>
         <Card.Content>
-          <HourlyGlucoseDistributionChart averagedStats={report.averagedStats} />
+          <HourlyGlucoseDistributionChart
+            averagedStats={report.averagedStats}
+            thresholds={report.hourlyBandThresholds}
+          />
         </Card.Content>
       </Card.Root>
 
-      <div class="grid gap-6 @2xl:grid-cols-2 @4xl:grid-cols-3">
+      <div class="grid gap-6 @2xl:grid-cols-2 @4xl:grid-cols-3 print:grid-cols-3 print:gap-3">
         <Card.Root>
           <Card.Header>
             <Card.Title class="text-lg">A1c Estimation</Card.Title>
             <Card.Description>Based on average glucose</Card.Description>
           </Card.Header>
           <Card.Content>
-            <div class="space-y-4">
-              <div class="flex justify-between">
-                <span class="text-muted-foreground">A1c (DCCT)</span>
-                <span class="text-2xl font-bold">
-                  {overallStats.a1cDCCT != null
-                    ? `${overallStats.a1cDCCT.toFixed(1)}%`
-                    : "No estimate"}
-                </span>
-              </div>
+            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-x-2">
+              <span class="text-muted-foreground">
+                {report.analysis?.gmi?.value != null ? "GMI (DCCT %)" : "Est. A1c (DCCT %)"}
+              </span>
+              <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
+                {overallStats.a1cDCCT != null
+                  ? `${overallStats.a1cDCCT.toFixed(1)}%`
+                  : "No estimate"}
+              </span>
             </div>
             <ReliabilityBadge reliability={report.analysis?.reliability} />
           </Card.Content>
@@ -248,18 +262,18 @@
             <Card.Description>GVI and PGS metrics</Card.Description>
           </Card.Header>
           <Card.Content>
-            <div class="space-y-4">
-              <div class="flex justify-between">
+            <div class="divide-y divide-border">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
                 <span class="text-muted-foreground">GVI</span>
-                <span class="text-2xl font-bold">
+                <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.gvi != null
                     ? overallStats.gvi.toFixed(2)
                     : "No estimate"}
                 </span>
               </div>
-              <div class="flex justify-between">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
                 <span class="text-muted-foreground">PGS</span>
-                <span class="text-2xl font-bold">
+                <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.pgs != null
                     ? overallStats.pgs.toFixed(1)
                     : "No estimate"}
@@ -275,18 +289,18 @@
             <Card.Description>Daily glucose changes</Card.Description>
           </Card.Header>
           <Card.Content>
-            <div class="space-y-4">
-              <div class="flex justify-between">
+            <div class="divide-y divide-border">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
                 <span class="text-muted-foreground">Mean Total Daily Change</span>
-                <span class="text-2xl font-bold">
+                <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.meanTotalDailyChange != null
                     ? `${bg(overallStats.meanTotalDailyChange)} ${bgLabel()}`
                     : "No estimate"}
                 </span>
               </div>
-              <div class="flex justify-between">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-2 py-2 first:pt-0 last:pb-0">
                 <span class="text-muted-foreground">Time in Fluctuation</span>
-                <span class="text-2xl font-bold">
+                <span class="text-lg font-semibold tabular-nums whitespace-nowrap">
                   {overallStats.timeInFluctuation != null
                     ? `${overallStats.timeInFluctuation.toFixed(1)}%`
                     : "No estimate"}
@@ -296,40 +310,6 @@
           </Card.Content>
         </Card.Root>
       </div>
-
-      <Card.Root>
-        <Card.Header>
-          <Card.Title class="text-lg">Overall Summary</Card.Title>
-        </Card.Header>
-        <Card.Content>
-          <div class="grid gap-4 grid-cols-2 @4xl:grid-cols-4">
-            <div class="text-center">
-              <div class="text-3xl font-bold">
-                {bg(overallStats.mean)}
-              </div>
-              <div class="text-sm text-muted-foreground">Mean ({bgLabel()})</div>
-            </div>
-            <div class="text-center">
-              <div class="text-3xl font-bold">
-                {bg(overallStats.median)}
-              </div>
-              <div class="text-sm text-muted-foreground">Median ({bgLabel()})</div>
-            </div>
-            <div class="text-center">
-              <div class="text-3xl font-bold">
-                {bg(overallStats.stdDev)}
-              </div>
-              <div class="text-sm text-muted-foreground">Std Dev ({bgLabel()})</div>
-            </div>
-            <div class="text-center">
-              <div class="text-3xl font-bold">
-                {overallStats.totalReadings}
-              </div>
-              <div class="text-sm text-muted-foreground">Readings</div>
-            </div>
-          </div>
-        </Card.Content>
-      </Card.Root>
     {/if}
   </div>
 {/if}

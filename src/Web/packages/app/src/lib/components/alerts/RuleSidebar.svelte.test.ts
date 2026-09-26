@@ -10,7 +10,11 @@ beforeEach(() => {
 	}
 });
 import { LeafTransitionLog, assignLeafIds } from "./leafEval";
-import type { AlertRuleResponse } from "$api-clients";
+import {
+	AlertConditionType,
+	AlertRuleSeverity,
+	type AlertRuleResponse,
+} from "$api-clients";
 import type { ConditionNode } from "./types";
 
 function leaf(uid: string): ConditionNode {
@@ -29,13 +33,13 @@ function makeRule(id: string, name: string, _condition: ConditionNode): AlertRul
 	return {
 		id,
 		name,
-		severity: "warning",
+		severity: AlertRuleSeverity.Warning,
 		isEnabled: true,
 		sortOrder: 0,
-		conditionType: "composite",
+		conditionType: AlertConditionType.Composite,
 		conditionParams: undefined,
 		channels: [],
-	} as unknown as AlertRuleResponse;
+	};
 }
 
 describe("RuleSidebar", () => {

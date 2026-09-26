@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
+	browserTimeZone,
 	defaultClientConfig,
 	defaultPayload,
 	nodeFromApi,
@@ -10,8 +11,10 @@ import {
 	parseChannelMetadata,
 	validateChannels,
 	type ChannelDef,
+	type ConditionNode,
 } from "./types";
-import { ChannelType } from "$api-clients";
+import { AlertConditionType, AlertRuleSeverity, ChannelType } from "$api-clients";
+import type { AlertRuleResponse } from "$api-clients";
 
 describe("defaultClientConfig", () => {
 	it("returns valid audio defaults", () => {
@@ -40,7 +43,8 @@ describe("defaultClientConfig", () => {
 
 		expect(config.snooze.defaultMinutes).toBe(15);
 		expect(config.snooze.options).toEqual([5, 15, 30, 60]);
-		expect(config.snooze.maxCount).toBe(5);
+		// Mirrors SmartSnoozeConfig.DefaultMaxCount / DefaultExtendMinutes on the backend.
+		expect(config.snooze.maxCount).toBe(3);
 		expect(config.snooze.smartSnooze).toBe(false);
 		expect(config.snooze.smartSnoozeExtendMinutes).toBe(10);
 	});
@@ -130,15 +134,15 @@ describe("parseRule", () => {
 		const state = parseRule({
 			name: "Low Alert",
 			description: "Alert when glucose is low",
-			severity: "warning",
-			conditionType: "threshold",
+			severity: AlertRuleSeverity.Warning,
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: {
 				direction: "below",
 				value: 70,
 			},
 			isEnabled: true,
 			sortOrder: 1,
-		} as never);
+		});
 
 		expect(state.name).toBe("Low Alert");
 		expect(state.condition?.type).toBe("composite");
@@ -151,7 +155,7 @@ describe("parseRule", () => {
 	it("leaves a composite-rooted rule untouched", () => {
 		const state = parseRule({
 			name: "Combo",
-			conditionType: "composite",
+			conditionType: AlertConditionType.Composite,
 			conditionParams: {
 				operator: "or",
 				conditions: [
@@ -159,11 +163,66 @@ describe("parseRule", () => {
 					{ type: "trend", trend: { bucket: "falling_fast" } },
 				],
 			},
-		} as never);
+		});
 
 		expect(state.condition?.type).toBe("composite");
 		expect(state.condition?.composite?.operator).toBe("or");
 		expect(state.condition?.composite?.conditions).toHaveLength(2);
+	});
+
+	it("fills snooze fields a stored rule omits with the backend's defaults", () => {
+		const state = parseRule({
+			name: "Low Alert",
+			conditionType: "threshold",
+			conditionParams: { direction: "below", value: 70 },
+			clientConfiguration: { snooze: { smartSnooze: true } },
+		} as never);
+
+		expect(state.clientConfig.snooze.smartSnooze).toBe(true);
+		expect(state.clientConfig.snooze.maxCount).toBe(3);
+		expect(state.clientConfig.snooze.smartSnoozeExtendMinutes).toBe(10);
+	});
+
+	it("stamps a distinct _uid on every node of a reloaded snooze group", () => {
+		const state = parseRule({
+			name: "Snooze",
+			conditionType: AlertConditionType.Threshold,
+			conditionParams: { direction: "below", value: 70 },
+			clientConfiguration: {
+				snooze: {
+					conditions: [
+						{
+							type: "composite",
+							composite: {
+								operator: "and",
+								conditions: [
+									{
+										type: "threshold",
+										threshold: { direction: "below", value: 70 },
+									},
+									{ type: "trend", trend: { bucket: "falling" } },
+								],
+							},
+						},
+					],
+				},
+			},
+		} as never);
+
+		const nodes: ConditionNode[] = [];
+		const walk = (node: ConditionNode) => {
+			nodes.push(node);
+			for (const child of node.composite?.conditions ?? []) walk(child);
+			if (node.not?.child) walk(node.not.child);
+			if (node.sustained?.child) walk(node.sustained.child);
+		};
+		for (const root of state.clientConfig.snooze.conditions) walk(root);
+
+		expect(nodes).toHaveLength(3);
+		expect(
+			nodes.every((n) => typeof n._uid === "string" && n._uid.length > 0)
+		).toBe(true);
+		expect(new Set(nodes.map((n) => n._uid)).size).toBe(nodes.length);
 	});
 
 	it("parses auto-resolve params from a full ConditionNode envelope", () => {
@@ -172,7 +231,7 @@ describe("parseRule", () => {
 		// kind's payload field).
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
@@ -184,7 +243,7 @@ describe("parseRule", () => {
 					],
 				},
 			},
-		} as never);
+		});
 
 		expect(state.autoResolveEnabled).toBe(true);
 		expect(state.autoResolveCondition?.type).toBe("composite");
@@ -193,14 +252,14 @@ describe("parseRule", () => {
 	it("wraps a leaf-rooted auto-resolve envelope in a single-child AND group", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			autoResolveEnabled: true,
 			autoResolveParams: {
 				type: "threshold",
 				threshold: { direction: "above", value: 80 },
 			},
-		} as never);
+		});
 
 		expect(state.autoResolveCondition?.type).toBe("composite");
 		expect(state.autoResolveCondition?.composite?.conditions[0].type).toBe(
@@ -211,26 +270,26 @@ describe("parseRule", () => {
 	it("parses the flat channel list and the allow-through-DND flag", () => {
 		const state = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			allowThroughDnd: true,
 			channels: [
 				{
 					id: "11111111-1111-1111-1111-111111111111",
-					channelType: "discord_dm",
+					channelType: ChannelType.DiscordDm,
 					destination: "https://discord/webhook/x",
 					destinationLabel: "Family channel",
 					sortOrder: 1,
 				},
 				{
 					id: "22222222-2222-2222-2222-222222222222",
-					channelType: "web_push",
+					channelType: ChannelType.WebPush,
 					destination: "",
-					destinationLabel: null,
+					destinationLabel: undefined,
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 
 		expect(state.allowThroughDnd).toBe(true);
 		expect(state.channels).toHaveLength(2);
@@ -243,9 +302,9 @@ describe("parseRule", () => {
 	it("falls back to a default channel list when the API returns none", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 
 		expect(state.channels).toHaveLength(1);
 		expect(state.channels[0].channelType).toBe("web_push");
@@ -255,10 +314,10 @@ describe("parseRule", () => {
 	it("uses defaults for missing client configuration", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			clientConfiguration: undefined,
-		} as never);
+		});
 
 		expect(state.clientConfig.audio.enabled).toBe(true);
 		expect(state.clientConfig.audio.sound).toBe("alarm-default");
@@ -302,7 +361,7 @@ describe("applyChannelDestination", () => {
 		state.channels = [webhookChannel({ hasSecret: true })];
 		applyChannelDestination(state.channels[0], "https://elsewhere.example.com/hook");
 		expect(
-			(buildBody(state).channels[0] as { secret?: string }).secret
+			buildBody(state).channels[0].secret
 		).toBe("");
 	});
 });
@@ -322,7 +381,7 @@ describe("buildBody webhook secret", () => {
 	}
 
 	function sentSecret(over: Partial<ChannelDef>) {
-		return (buildBody(webhookState(over)).channels[0] as { secret?: string }).secret;
+		return buildBody(webhookState(over)).channels[0].secret;
 	}
 
 	it("omits the secret when the channel already has one, so the save keeps it", () => {
@@ -346,19 +405,26 @@ describe("buildBody", () => {
 		expect(json).not.toContain("_uid");
 	});
 
+	it("sends a group-rooted rule's conditions without _uid fields", () => {
+		const state = parseRule(null);
+		state.condition = defaultPayload("composite");
+		state.condition.composite?.conditions.push(defaultPayload("iob"));
+		expect(JSON.stringify(buildBody(state).conditionParams)).not.toContain("_uid");
+	});
+
 	it("two semantically-identical states with different _uids produce the same JSON", () => {
 		// parseRule stamps fresh _uids on every call, so two invocations with the
 		// same input will have different internal identities.
 		const state1 = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 		const state2 = parseRule({
 			name: "Low Alert",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-		} as never);
+		});
 		expect(JSON.stringify(buildBody(state1))).toBe(JSON.stringify(buildBody(state2)));
 	});
 
@@ -367,9 +433,9 @@ describe("buildBody", () => {
 		// buildBody must flatten it back before sending.
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "above", value: 180 },
-		} as never);
+		});
 		const body = buildBody(state);
 		expect(body.conditionType).toBe("threshold");
 		expect(body.conditionParams).toEqual({ direction: "above", value: 180 });
@@ -391,12 +457,12 @@ describe("buildBody", () => {
 	it("strips _uid from channels", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
-				{ channelType: "web_push", destination: "", sortOrder: 0 },
+				{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 },
 			],
-		} as never);
+		});
 		const body = buildBody(state);
 		const json = JSON.stringify(body.channels);
 		expect(json).not.toContain("_uid");
@@ -405,17 +471,17 @@ describe("buildBody", () => {
 	it("serialises a device_action channel as {channelType, destination, metadata}", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
 				{
-					channelType: "device_action",
+					channelType: ChannelType.DeviceAction,
 					destination: "companion",
 					metadata: { capabilities: ["notify", "tray_flash"] },
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 		const body = buildBody(state);
 		const ch = body.channels[0];
 		expect(ch.channelType).toBe("device_action");
@@ -425,13 +491,57 @@ describe("buildBody", () => {
 		expect(ch.metadata).toEqual({ capabilities: ["notify", "tray_flash"] });
 	});
 
+	it("drops a nested group left with no conditions, and any wrapper around it", () => {
+		const state = parseRule(null);
+		state.condition = {
+			type: "composite",
+			composite: {
+				operator: "and",
+				conditions: [
+					defaultPayload("threshold"),
+					{ type: "composite", composite: { operator: "or", conditions: [] } },
+					{
+						type: "not",
+						not: { child: { type: "composite", composite: { operator: "and", conditions: [] } } },
+					},
+				],
+			},
+		};
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("threshold");
+		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+	});
+
+	it("keeps an empty root group so saving reports it", () => {
+		const state = parseRule(null);
+		state.condition = { type: "composite", composite: { operator: "and", conditions: [] } };
+		const body = buildBody(state);
+		expect(body.conditionType).toBe("composite");
+		expect(body.conditionParams).toEqual({ operator: "and", conditions: [] });
+	});
+
+	it("drops empty groups from auto-resolve and snooze conditions", () => {
+		const state = parseRule(null);
+		const empty: ConditionNode = { type: "composite", composite: { operator: "or", conditions: [] } };
+		state.autoResolveCondition = {
+			type: "composite",
+			composite: { operator: "and", conditions: [defaultPayload("iob"), empty] },
+		};
+		state.clientConfig.snooze.conditions = [empty, defaultPayload("trend")];
+		const body = buildBody(state);
+		expect(body.autoResolveParams).toEqual({ type: "iob", iob: { operator: ">=", value: 1 } });
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "trend", trend: { bucket: "falling" } },
+		]);
+	});
+
 	it("omits metadata for channels without it", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
-			channels: [{ channelType: "web_push", destination: "", sortOrder: 0 }],
-		} as never);
+			channels: [{ channelType: ChannelType.WebPush, destination: "", sortOrder: 0 }],
+		});
 		const body = buildBody(state);
 		expect(body.channels[0].metadata).toBeUndefined();
 	});
@@ -469,17 +579,17 @@ describe("parseChannelMetadata", () => {
 	it("round-trips a device_action channel through parseRule", () => {
 		const state = parseRule({
 			name: "Test",
-			conditionType: "threshold",
+			conditionType: AlertConditionType.Threshold,
 			conditionParams: { direction: "below", value: 70 },
 			channels: [
 				{
-					channelType: "device_action",
+					channelType: ChannelType.DeviceAction,
 					destination: "companion",
 					metadata: { capabilities: ["notify"] },
 					sortOrder: 0,
 				},
 			],
-		} as never);
+		});
 		const device = state.channels.find(
 			(c) => c.channelType === "device_action",
 		);
@@ -528,5 +638,106 @@ describe("validateChannels", () => {
 
 	it("accepts an empty channel list", () => {
 		expect(validateChannels([])).toBeNull();
+	});
+});
+
+describe("browserTimeZone", () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	const reporting = (timeZone: string) =>
+		vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+			...new Intl.DateTimeFormat().resolvedOptions(),
+			timeZone,
+		});
+
+	it("is the zone the browser reports", () => {
+		reporting("Europe/London");
+		expect(browserTimeZone()).toBe("Europe/London");
+	});
+
+	it("is undefined when the browser cannot tell, so the rule uses the tenant's zone", () => {
+		reporting("Etc/Unknown");
+		expect(browserTimeZone()).toBeUndefined();
+		expect(defaultPayload("time_of_day").time_of_day?.timezone).toBeUndefined();
+	});
+
+	it("is undefined for an id Intl rejects", () => {
+		reporting("Not/AZone");
+		expect(browserTimeZone()).toBeUndefined();
+	});
+});
+
+describe("reading a stored rule", () => {
+	const stored = (overrides: Partial<AlertRuleResponse>): AlertRuleResponse => ({
+		name: "Stored",
+		conditionType: AlertConditionType.Threshold,
+		conditionParams: { direction: "below", value: 70 },
+		...overrides,
+	});
+
+	it("writes the values the editor shows for fields the rule leaves out", () => {
+		const state = parseRule(
+			stored({
+				conditionType: AlertConditionType.Composite,
+				conditionParams: {
+					operator: "and",
+					conditions: [
+						{ type: "iob", iob: { value: 2 } },
+						{ type: "not", not: { child: { type: "threshold", threshold: { value: 70 } } } },
+						{ type: "time_of_day", time_of_day: { timezone: "Europe/London" } },
+					],
+				},
+			}),
+		);
+
+		expect(buildBody(state).conditionParams).toEqual({
+			operator: "and",
+			conditions: [
+				{ type: "iob", iob: { operator: ">=", value: 2 } },
+				{ type: "not", not: { child: { type: "threshold", threshold: { direction: "below", value: 70 } } } },
+				{ type: "time_of_day", time_of_day: { from: "00:00", to: "23:59", timezone: "Europe/London" } },
+			],
+		});
+	});
+
+	it("fills auto-resolve and snooze leaves too", () => {
+		const state = parseRule(
+			stored({
+				autoResolveEnabled: true,
+				autoResolveParams: { type: "staleness", staleness: { value: 20 } },
+				clientConfiguration: {
+					snooze: { smartSnooze: true, conditions: [{ type: "pump_suspended", pump_suspended: {} }] },
+				},
+			}),
+		);
+		const body = buildBody(state);
+
+		expect(body.autoResolveParams).toEqual({ type: "staleness", staleness: { operator: ">=", value: 20 } });
+		expect(body.clientConfiguration.snooze.conditions).toEqual([
+			{ type: "pump_suspended", pump_suspended: { is_active: false } },
+		]);
+	});
+
+	it("saves a group with no list or child without throwing, keeping a root one for the save to report", () => {
+		const state = parseRule(
+			stored({
+				conditionType: AlertConditionType.Composite,
+				conditionParams: {
+					operator: "and",
+					conditions: [
+						{ type: "threshold", threshold: { direction: "below", value: 70 } },
+						{ type: "composite", composite: { operator: "or" } },
+						{ type: "not", not: {} },
+						null,
+					],
+				},
+				autoResolveEnabled: true,
+				autoResolveParams: { type: "composite", composite: { operator: "and" } },
+			}),
+		);
+		const body = buildBody(state);
+
+		expect(body.conditionParams).toEqual({ direction: "below", value: 70 });
+		expect(body.autoResolveParams).toEqual({ type: "composite", composite: { operator: "and" } });
 	});
 });

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { BellRing } from "@lucide/svelte";
+  import { isoNow } from "$lib/utils/now";
   import { formatClock } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { toast } from "svelte-sonner";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { permissionGatedMutationError } from "$lib/forms";
@@ -45,14 +47,10 @@
   import { isDndActiveNow } from "$lib/components/alerts/dnd";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   // Every write on this page — rule toggle/delete/test-fire, acknowledge, and
   // clearing the manual mute — is gated on alerts.readwrite server-side.
   const canManageAlerts = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("alerts.readwrite"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite"),
   );
   const NEEDS_ALERTS_READWRITE =
     "Changing alerts requires the alerts.readwrite permission.";
@@ -140,7 +138,7 @@
       await acknowledge({}).updates(
         activeAlertsQuery.withOverride((current) =>
           (current ?? []).map((a) =>
-            a.acknowledgedAt ? a : { ...a, acknowledgedAt: new Date() },
+            a.acknowledgedAt ? a : { ...a, acknowledgedAt: isoNow() },
           ),
         ),
       );
@@ -152,11 +150,11 @@
   }
 
   function newRule(): void {
-    goto("/alerts/new");
+    goto(resolve("/alerts/new"));
   }
 
   function editRule(rule: AlertRuleResponse): void {
-    goto(`/alerts/${rule.id}`);
+    goto(resolve(`/alerts/${rule.id}`));
   }
 </script>
 
@@ -191,7 +189,7 @@
     {/snippet}
 
     {#snippet failed(error)}
-      <Card class="border-destructive">
+      <Card variant="destructive">
         <CardContent class="flex items-center gap-3">
           <AlertTriangle class="h-5 w-5 text-destructive" />
           <div>
@@ -251,10 +249,10 @@
         </CardContent>
       </Card>
       <a
-        href="/alerts/history"
+        href={resolve("/alerts/history")}
         class="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <Card class="transition-colors hover:bg-muted/40">
+        <Card interactive>
           <CardContent>
             <p class="text-xs uppercase tracking-wider text-muted-foreground">Fired this week</p>
             <p class="mt-1 text-2xl font-bold tabular-nums">
@@ -268,10 +266,10 @@
     <!-- Active alerts banner (kept as a persistent surface separate from the
          FiringToast which handles fresh-fire moments). -->
     {#if activeAlerts.length > 0}
-      <Card class="border-destructive/40 bg-destructive/5">
+      <Card variant="destructive">
         <CardHeader>
           <div class="flex flex-col gap-2 @sm:flex-row @sm:items-center @sm:justify-between">
-            <CardTitle class="flex min-w-0 items-center gap-2 text-destructive">
+            <CardTitle variant="destructive" class="flex min-w-0 items-center gap-2">
               <AlertTriangle class="h-5 w-5 shrink-0" />
               <span class="truncate">Active alerts ({activeAlerts.length})</span>
             </CardTitle>
@@ -313,6 +311,10 @@
               </div>
               {#if a.acknowledgedAt}
                 <Badge variant="secondary" class="shrink-0">Acknowledged</Badge>
+              {:else if a.snoozedUntil}
+                <Badge variant="outline" class="shrink-0">
+                  Snoozed until {formatClock(a.snoozedUntil)}
+                </Badge>
               {/if}
             </div>
           {/each}

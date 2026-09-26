@@ -210,10 +210,11 @@ public class NightscoutBackfillResumeTests
 
         result.Success.Should().BeTrue();
 
-        // The second data request is the resume crawl, bounded just below the mark.
+        // The second data request is the resume crawl, bounded at the mark: records sharing its
+        // millisecond may not all have published.
         var dataRequests = handler.RequestUrls.Where(u => u.Contains($"count={MaxCount}")).ToList();
         dataRequests.Should().HaveCount(2);
-        var expectedLte = new DateTimeOffset(mark).AddMilliseconds(-1).ToUnixTimeMilliseconds();
+        var expectedLte = new DateTimeOffset(mark).ToUnixTimeMilliseconds();
         dataRequests[1].Should().Contain($"find[date][$lte]={expectedLte}")
             .And.NotContain("$gte", "the resume crawl reaches for the source's beginning");
 

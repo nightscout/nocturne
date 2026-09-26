@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Middleware;
@@ -254,6 +255,73 @@ public class AuthAuditServiceTests : IDisposable
         var row = await LogAndReadAsync(AuthAuditEventType.Logout, _subjectId, caller: null);
 
         Assert.Null(row.TraceId);
+    }
+
+    [Fact]
+    public async Task Log_ThatFailsToWriteLeavesTheCallersNextSaveUntouched()
+    {
+        await using var dbContext = CreateContextThatRejectsAuditRows();
+        await CreateService(dbContext).LogAsync(AuthAuditEventType.Login, _subjectId, success: true);
+
+        var laterSubjectId = Guid.CreateVersion7();
+        dbContext.Subjects.Add(new SubjectEntity { Id = laterSubjectId, Name = "Later", IsActive = true });
+        await dbContext.SaveChangesAsync();
+
+        await using var reader = _db.CreateContext();
+        Assert.Empty(await reader.AuthAuditLog.ToListAsync());
+        Assert.True(await reader.Subjects.AnyAsync(s => s.Id == laterSubjectId));
+    }
+
+    [Fact]
+    public async Task Log_ThatFailsToWriteKeepsTheChangesTheCallerHadPending()
+    {
+        await using var dbContext = CreateContextThatRejectsAuditRows();
+        var pendingSubjectId = Guid.CreateVersion7();
+        dbContext.Subjects.Add(new SubjectEntity { Id = pendingSubjectId, Name = "Pending", IsActive = true });
+
+        await CreateService(dbContext).LogAsync(AuthAuditEventType.Login, _subjectId, success: true);
+        await dbContext.SaveChangesAsync();
+
+        await using var reader = _db.CreateContext();
+        Assert.Empty(await reader.AuthAuditLog.ToListAsync());
+        Assert.True(await reader.Subjects.AnyAsync(s => s.Id == pendingSubjectId));
+    }
+
+    /// <summary>
+    /// A context pinned to the test tenant on which any save carrying a new audit row throws
+    /// before it reaches the database. Failing the write here rather than through a constraint
+    /// keeps these tests independent of the audit table's foreign keys.
+    /// </summary>
+    private NocturneDbContext CreateContextThatRejectsAuditRows() =>
+        new(new DbContextOptionsBuilder<NocturneDbContext>(_db.Options)
+            .AddInterceptors(new AuditRowRejector())
+            .Options)
+        {
+            TenantId = _tenantId,
+        };
+
+    private static AuthAuditService CreateService(NocturneDbContext dbContext) =>
+        new(
+            dbContext,
+            new HttpContextAccessor { HttpContext = new DefaultHttpContext() },
+            new AuditContext(),
+            new Mock<ILogger<AuthAuditService>>().Object);
+
+    private sealed class AuditRowRejector : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context!.ChangeTracker.Entries<AuthAuditLogEntity>()
+                .Any(e => e.State == EntityState.Added))
+            {
+                throw new DbUpdateException("Audit storage is unavailable.");
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 
     /// <summary>

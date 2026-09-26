@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "name": "signal-loss-hysteresis-on-resume",
+  "description": "with hysteresis, a resumed reading moves the excursion into hysteresis rather than closing it; a relapse resumes it",
+  "rules": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "rule-1",
+      "condition_type": "signal_loss",
+      "condition_params": {
+        "timeout_minutes": 15
+      },
+      "confirmation_readings": 1,
+      "hysteresis_minutes": 30,
+      "auto_resolve_enabled": false
+    }
+  ],
+  "ticks": [
+    {
+      "at": "2026-01-05T12:20:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:00:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:00:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:21:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:21:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:21:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    },
+    {
+      "at": "2026-01-05T12:40:00Z",
+      "context": {
+        "latest_value": 100,
+        "latest_timestamp": "2026-01-05T12:21:00Z",
+        "trend_rate": 0,
+        "last_reading_at": "2026-01-05T12:21:00Z",
+        "has_ever_aps_cycled": false,
+        "has_ever_pump_snapshot": false,
+        "has_ever_uploader_snapshot": false,
+        "has_ever_aps_sensitivity": false,
+        "sleep_session_active": false
+      }
+    }
+  ]
+}

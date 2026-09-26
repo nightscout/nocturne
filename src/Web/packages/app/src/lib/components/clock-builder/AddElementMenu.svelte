@@ -33,17 +33,16 @@
   >
     <div class="space-y-3">
       <h4 class="font-medium">Add Element</h4>
-      {#each ELEMENT_GROUPS as group}
+      {#each ELEMENT_GROUPS as group (group.name)}
         <div>
           <p class="mb-1 text-xs font-medium text-muted-foreground">
             {group.name}
           </p>
           <div class="flex flex-wrap gap-1">
-            {#each group.types as type}
+            {#each group.types as type (type)}
               <Button
                 variant="outline"
-                size="sm"
-                class="h-7 text-xs"
+                size="xs"
                 onclick={() => onAddElement(type, position)}
               >
                 {ELEMENT_INFO[type].name}

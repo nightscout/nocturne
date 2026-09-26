@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { DeviceEvent } from "$lib/api";
   import { DeviceEventType } from "$lib/api";
   import { Label } from "$lib/components/ui/label";
@@ -44,11 +45,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Smartphone class="h-4 w-4 text-purple-500" />
+      <Smartphone class="h-4 w-4 text-entry-device-event" />
       Device Event
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -60,14 +61,14 @@
       type="single"
       value={deviceEvent.eventType ?? DeviceEventType.SiteChange}
       onValueChange={(v) => {
-        deviceEvent.eventType = v as DeviceEventType;
+        deviceEvent.eventType = enumValue(DeviceEventType, v) ?? deviceEvent.eventType;
       }}
     >
       <Select.Trigger id="device-event-type">
         {deviceEventTypeLabels[deviceEvent.eventType ?? DeviceEventType.SiteChange]}
       </Select.Trigger>
       <Select.Content>
-        {#each Object.values(DeviceEventType) as det}
+        {#each Object.values(DeviceEventType) as det (det)}
           <Select.Item value={det} label={deviceEventTypeLabels[det]} />
         {/each}
       </Select.Content>

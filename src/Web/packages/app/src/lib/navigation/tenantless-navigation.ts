@@ -38,7 +38,7 @@ export function filterTenantlessNav<T extends NavLike>(items: readonly T[]): T[]
     .map((item) => {
       if (!item.children) return item;
       const children = item.children.filter((c) => c.href && allowed.has(c.href));
-      return { ...item, children } as T;
+      return { ...item, children };
     })
     .filter((item) =>
       item.children ? item.children.length > 0 : !!item.href && allowed.has(item.href)

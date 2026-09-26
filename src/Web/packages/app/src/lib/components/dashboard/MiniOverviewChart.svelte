@@ -127,7 +127,7 @@
   >
     <span class="font-medium">Full Range Overview</span>
     {#if showReset}
-      <Button variant="ghost" size="sm" class="flex items-center gap-1 text-[10px] text-primary" onclick={resetSelection}>
+      <Button variant="link" size="xs" onclick={resetSelection}>
         <RotateCcw size={10} />
         Reset zoom
       </Button>
@@ -148,92 +148,89 @@
         {yDomain}
         {padding}
       >
-        {#snippet children()}
-          <Svg>
-            <ChartClipPath>
-              <!-- Glucose area fill -->
-              <Area
-                {data}
-                x={(d: GlucosePoint) => d.time}
-                y="sgv"
-                y0={() => yDomain[0]}
-                curve={curveMonotoneX}
-                fill="var(--glucose-in-range)"
-                class="opacity-20"
-              />
-
-              <!-- Glucose line -->
-              <Spline
-                {data}
-                x={(d: GlucosePoint) => d.time}
-                y="sgv"
-                curve={curveMonotoneX}
-                class="stroke-glucose-in-range stroke-1 fill-none"
-              />
-
-              <!-- Prediction line -->
-              {#if showPredictions && predictionData && predictionData.length > 0}
-                <Spline
-                  data={predictionData}
-                  x={(d: PredictionPoint) => d.time}
-                  y={(d: PredictionPoint) => d.value}
-                  curve={curveMonotoneX}
-                  class="stroke-primary/60 stroke-1 fill-none"
-                  stroke-dasharray="3,3"
-                />
-              {/if}
-            </ChartClipPath>
-            <!-- X axis -->
-            <Axis
-              placement="bottom"
-              ticks={4}
-              format={(v) => (v instanceof Date ? time(v) : String(v))}
-              tickLabelProps={{ class: "text-[9px] fill-muted-foreground" }}
+        <Svg>
+          <ChartClipPath>
+            <!-- Glucose area fill -->
+            <Area
+              {data}
+              x={(d: GlucosePoint) => d.time}
+              y="sgv"
+              y0={() => yDomain[0]}
+              curve={curveMonotoneX}
+              fill="var(--glucose-in-range)"
+              class="opacity-20"
             />
-          </Svg>
 
-          <!-- Brush context for selection -->
-          <BrushContext
-            axis="x"
-            x={selectedXDomain ?? fullXDomain}
-            onBrushEnd={handleBrush}
-            onChange={handleBrush}
-            classes={{
-              range: "bg-primary/20 border border-primary/40 rounded",
-              handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
-            }}
-          >
-            {#snippet children({ state: bc })}
-              <!-- One label for the selected range, centred over the brush.
+            <!-- Glucose line -->
+            <Spline
+              {data}
+              x={(d: GlucosePoint) => d.time}
+              y="sgv"
+              curve={curveMonotoneX}
+              class="stroke-glucose-in-range stroke-1 fill-none"
+            />
+
+            <!-- Prediction line -->
+            {#if showPredictions && predictionData && predictionData.length > 0}
+              <Spline
+                data={predictionData}
+                x={(d: PredictionPoint) => d.time}
+                y={(d: PredictionPoint) => d.value}
+                curve={curveMonotoneX}
+                class="stroke-primary/60 stroke-1 fill-none"
+                stroke-dasharray="3,3"
+              />
+            {/if}
+          </ChartClipPath>
+          <!-- X axis -->
+          <Axis
+            placement="bottom"
+            ticks={4}
+            format={(v) => (v instanceof Date ? time(v) : String(v))}
+            tickLabelProps={{ class: "text-2xs fill-muted-foreground" }}
+          />
+        </Svg>
+
+        <!-- Brush context for selection -->
+        <BrushContext
+          axis="x"
+          x={selectedXDomain ?? fullXDomain}
+          onBrushEnd={handleBrush}
+          onChange={handleBrush}
+          classes={{
+            range: "bg-primary/20 border border-primary/40 rounded",
+            handle: "bg-primary/60 hover:bg-primary/80 rounded-sm",
+          }}
+        >
+          {#snippet children({ state: bc })}
+            <!-- One label for the selected range, centred over the brush.
                    This snippet renders in a container anchored at the chart's
                    outer corner, while bc.range is measured from the plot's,
                    so add the padding back or the label lands a gutter to the
                    left and above the strip. Clamped to stay inside the strip
                    when the brush hugs an edge, as it does at "now". -->
-              {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
-                <div
-                  class="absolute text-[9px] font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20"
-                  style="left: clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
-                    bc.range.x +
-                    bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px)); top: {padding.top +
-                    bc.range.y -
-                    18}px; transform: translateX(-50%)"
-                >
-                  {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
-                    new Date(bc.x[1])
-                  )}
-                </div>
-              {/if}
-            {/snippet}
-          </BrushContext>
-        {/snippet}
+            {#if bc.active && bc.x?.[0] != null && bc.x?.[1] != null}
+              <div
+                class="absolute text-2xs font-medium text-primary bg-background/90 px-1 py-0.5 rounded shadow-sm border border-border whitespace-nowrap pointer-events-none z-20 left-(--label-left) top-(--label-top) -translate-x-1/2"
+                style:--label-left="clamp({RANGE_LABEL_HALF_WIDTH}px, {padding.left +
+                  bc.range.x +
+                  bc.range.width / 2}px, calc(100% - {RANGE_LABEL_HALF_WIDTH}px))"
+                style:--label-top="{padding.top + bc.range.y - 18}px"
+              >
+                {formatDateTime(new Date(bc.x[0]))} - {formatDateTime(
+                  new Date(bc.x[1])
+                )}
+              </div>
+            {/if}
+          {/snippet}
+        </BrushContext>
       </Chart>
     </div>
 
     <!-- Selection info -->
     {#if hasSelection && selectedXDomain}
       <div
-        class="flex items-center justify-center gap-2 px-3 py-1 text-[10px] text-muted-foreground border-t border-border"
+        class="flex items-center justify-center gap-2 px-3 py-1 text-2xs text-muted-foreground border-t border-border"
       >
         <span>Viewing:</span>
         <span class="font-medium text-foreground">
@@ -254,8 +251,8 @@
 
 <style>
   .mini-overview-chart {
-    border-top: 1px solid hsl(var(--border));
-    background: hsl(var(--muted) / 0.3);
+    border-top: 1px solid var(--border);
+    background: color-mix(in oklch, var(--muted) 30%, transparent);
     border-radius: 0 0 var(--radius) var(--radius);
   }
 </style>

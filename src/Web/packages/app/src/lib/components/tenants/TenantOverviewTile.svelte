@@ -27,20 +27,20 @@
     tenant.slug && baseDomain ? tenantUrl(tenant.slug, baseDomain) : null
   );
 
-  const alertBadgeClass = $derived.by(() => {
+  const alertBadgeVariant = $derived.by(() => {
     switch (tenant.highestActiveSeverity) {
       case AlertRuleSeverity.Critical:
-        return "bg-destructive text-destructive-foreground";
+        return "destructive" as const;
       case AlertRuleSeverity.Warning:
-        return "bg-amber-500/15 text-amber-700 dark:text-amber-400";
+        return "warning" as const;
       default:
-        return "bg-muted text-muted-foreground";
+        return "secondary" as const;
     }
   });
 </script>
 
 {#snippet tileContent()}
-  <Card.Root class="h-full transition-colors hover:bg-accent/50">
+  <Card.Root interactive class="h-full">
     <Card.Header class="pb-2">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
@@ -51,7 +51,8 @@
         </div>
         {#if tenant.activeAlertCount != null && tenant.activeAlertCount > 0}
           <Badge
-            class="shrink-0 gap-1 {alertBadgeClass}"
+            variant={alertBadgeVariant}
+            class="shrink-0"
             data-testid="alert-badge"
           >
             <Bell class="h-3 w-3" aria-hidden="true" />

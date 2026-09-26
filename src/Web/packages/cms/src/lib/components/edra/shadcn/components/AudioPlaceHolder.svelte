@@ -34,7 +34,7 @@
 			if (file) {
 				editor.chain().focus().setAudio(file).run();
 			}
-		} catch (e) {
+		} catch {
 			isUploading = true;
 			try {
 				const file = await editor.storage.fileDrop.localFileGetter(FileType.AUDIO);
@@ -56,9 +56,8 @@
 	contenteditable="false"
 	class={buttonVariants({
 		variant: 'secondary',
-		class: 'media-placeholder relative my-4! w-full justify-start p-6'
+		class: 'relative my-4! select-none w-full justify-start p-6'
 	})}
-	style="user-select: none;"
 	draggable={true}
 	onclick={() => {
 		open = true;
@@ -78,7 +77,7 @@
 		<Popover.Content
 			onCloseAutoFocus={(e) => e.preventDefault()}
 			contenteditable={false}
-			class="bg-popover w-96 rounded-lg p-0 transition-all duration-500"
+			class="w-96 p-0"
 			portalProps={{ disabled: true, to: undefined }}
 		>
 			<Tabs.Root value="local">

@@ -183,8 +183,9 @@ public class ConnectorClientGuardCoverageTests
 
         return [.. registrations.Keys.Cast<object>()
             .Select(k => k as string ?? (k as Type)?.Name)
-            .Where(name => !string.IsNullOrEmpty(name))
-            .Distinct()!];
+            .OfType<string>()
+            .Where(name => name.Length > 0)
+            .Distinct()];
     }
 
     /// <summary>

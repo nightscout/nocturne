@@ -2,14 +2,28 @@
   import { formatNumber } from "$lib/utils/formatting";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import { Sparkles, CheckCircle, AlertCircle, Loader2, Trash2 } from "lucide-svelte";
+  import {
+    Sparkles,
+    CheckCircle,
+    AlertCircle,
+    Loader2,
+    Trash2,
+  } from "lucide-svelte";
   import { deleteDemoData as deleteDemoDataRemote } from "$api/generated/services.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { page } from "$app/state";
 
-  let { open = $bindable(false), onDeleteComplete } = $props<{
+  interface Props {
     open: boolean;
     onDeleteComplete?: () => Promise<void>;
-  }>();
+  }
+
+  let { open = $bindable(false), onDeleteComplete }: Props = $props();
+
+  const canManage = $derived(
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+  );
 
   let isDeletingDemo = $state(false);
   let demoDeleteResult = $state<{
@@ -54,7 +68,7 @@
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
-        <Sparkles class="h-5 w-5 text-purple-500" />
+        <Sparkles class="h-5 w-5 text-demo" />
         Demo Data
       </Dialog.Title>
       <Dialog.Description>
@@ -65,29 +79,37 @@
     <div class="space-y-4 py-4">
       {#if demoDeleteResult}
         {#if demoDeleteResult.success}
-          <div class="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 p-4">
-            <div class="flex items-center gap-2 text-green-800 dark:text-green-200">
+          <div
+            class="rounded-lg border border-success/30 bg-success/10 p-4"
+          >
+            <div
+              class="flex items-center gap-2 text-success"
+            >
               <CheckCircle class="h-5 w-5" />
               <span class="font-medium">Demo data cleared successfully</span>
             </div>
-            <p class="text-sm text-green-700 dark:text-green-300 mt-1">
+            <p class="text-sm text-success mt-1">
               Deleted {formatNumber(demoDeleteResult.totalDeleted)} records
             </p>
           </div>
         {:else}
-          <div class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 p-4">
-            <div class="flex items-center gap-2 text-red-800 dark:text-red-200">
+          <div
+            class="rounded-lg border border-destructive/30 bg-destructive/10 p-4"
+          >
+            <div class="flex items-center gap-2 text-destructive">
               <AlertCircle class="h-5 w-5" />
               <span class="font-medium">Failed to delete demo data</span>
             </div>
-            <p class="text-sm text-red-700 dark:text-red-300 mt-1">
+            <p class="text-sm text-destructive mt-1">
               {demoDeleteResult.error}
             </p>
           </div>
         {/if}
       {:else}
-        <div class="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/20 p-4">
-          <p class="text-sm text-purple-800 dark:text-purple-200">
+        <div
+          class="rounded-lg border border-demo/30 bg-demo/5 p-4"
+        >
+          <p class="text-sm text-demo">
             <strong>This is demo data</strong>
             — synthetic glucose readings generated for testing and demonstration purposes.
           </p>
@@ -97,7 +119,9 @@
           <p class="text-sm text-muted-foreground">
             You can safely delete all demo data. It's very easy to regenerate:
           </p>
-          <ul class="text-sm text-muted-foreground list-disc list-inside space-y-1">
+          <ul
+            class="text-sm text-muted-foreground list-disc list-inside space-y-1"
+          >
             <li>Restart the demo service to regenerate data</li>
             <li>Only demo-generated data will be deleted</li>
             <li>Your real health data (if any) is not affected</li>
@@ -107,11 +131,13 @@
     </div>
 
     <Dialog.Footer>
-      <Button variant="outline" onclick={() => (open = false)}>
-        Close
-      </Button>
-      {#if !demoDeleteResult?.success}
-        <Button variant="destructive" onclick={deleteDemoData} disabled={isDeletingDemo} class="gap-2">
+      <Button variant="outline" onclick={() => (open = false)}>Close</Button>
+      {#if canManage && !demoDeleteResult?.success}
+        <Button
+          variant="destructive"
+          onclick={deleteDemoData}
+          disabled={isDeletingDemo}
+        >
           {#if isDeletingDemo}
             <Loader2 class="h-4 w-4 animate-spin" />
             Deleting...

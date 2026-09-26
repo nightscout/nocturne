@@ -35,7 +35,7 @@
       .toUpperCase();
   }
 
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "Unknown";
     const now = Date.now();
     const then = new Date(date).getTime();
@@ -101,7 +101,7 @@
         <div class="flex items-start gap-3">
           <Avatar.Root class="h-10 w-10 shrink-0">
             <Avatar.Image src={request.avatarUrl} alt={request.subjectName} />
-            <Avatar.Fallback class="bg-primary/10 text-primary text-sm">
+            <Avatar.Fallback variant="primary" class="text-sm">
               {getInitials(request.subjectName)}
             </Avatar.Fallback>
           </Avatar.Root>
@@ -153,8 +153,8 @@
         <!-- Actions -->
         <div class="flex gap-3">
           <Button
-            variant="outline"
-            class="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+            variant="outline-destructive"
+            class="flex-1"
             disabled={isBusy}
             onclick={() => handleDeny(request.id ?? "")}
           >

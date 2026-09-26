@@ -43,7 +43,7 @@
     />
     {#if !isStale}
       <div class="flex items-center gap-1 {deltaColorClass(direction)}">
-        <ArrowRight class="size-6" style="transform: rotate({angle}deg)" />
+        <ArrowRight class="size-6 rotate-(--trend-angle)" style="--trend-angle: {angle}deg" />
         <span class="text-xl font-medium">{displayDelta}</span>
       </div>
     {/if}

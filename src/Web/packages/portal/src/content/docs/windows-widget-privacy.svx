@@ -16,10 +16,12 @@ Foundation. Its source code is available at
 [github.com/nightscout/nocturne](https://github.com/nightscout/nocturne).
 
 <Callout type="info" title="The short version">
+
   The widget talks only to the Nocturne server you choose. Your diabetes data and
   your sign-in tokens stay on your PC and that server. The Nightscout Foundation
   does not receive, collect, store, or have any access to your data, and there is
   no analytics or tracking of any kind.
+
 </Callout>
 
 ## What the widget accesses

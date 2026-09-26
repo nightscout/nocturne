@@ -192,7 +192,7 @@
   {#if showDaysPresets}
     <!-- Quick Day Selection (right) -->
     <div class="flex flex-wrap gap-2">
-      {#each [1, 3, 7, 14, 30, 90] as daysOption}
+      {#each [1, 3, 7, 14, 30, 90] as daysOption (daysOption)}
         <Button
           variant={selectedDays === daysOption ? "default" : "outline"}
           size="sm"

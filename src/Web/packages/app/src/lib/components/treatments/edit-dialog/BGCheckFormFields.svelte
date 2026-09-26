@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { GlucoseType, GlucoseUnit } from "$lib/api";
+  import { GlucoseType, GlucoseUnit } from "$lib/api";
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
@@ -15,12 +15,12 @@
 
   let { form = $bindable() }: Props = $props();
 
-  const glucoseTypeOptions: GlucoseType[] = ["Finger", "Sensor"] as GlucoseType[];
+  const glucoseTypeOptions: GlucoseType[] = [GlucoseType.Finger, GlucoseType.Sensor];
 </script>
 
 <div class="space-y-2">
-  <Label for="glucose" class="flex items-center gap-1.5">
-    <Droplet class="h-3.5 w-3.5 text-red-500" />
+  <Label for="glucose">
+    <Droplet class="h-3.5 w-3.5 text-entry-bg-check" />
     Glucose
   </Label>
   <Input
@@ -39,14 +39,14 @@
       type="single"
       value={form.glucoseType ?? ""}
       onValueChange={(v) => {
-        form.glucoseType = (v as GlucoseType) || undefined;
+        form.glucoseType = Object.values(GlucoseType).find((t) => t === v);
       }}
     >
       <Select.Trigger>
         {form.glucoseType || "Select..."}
       </Select.Trigger>
       <Select.Content>
-        {#each glucoseTypeOptions as opt}
+        {#each glucoseTypeOptions as opt (opt)}
           <Select.Item value={opt}>{opt}</Select.Item>
         {/each}
       </Select.Content>
@@ -58,7 +58,7 @@
       type="single"
       value={form.units ?? ""}
       onValueChange={(v) => {
-        form.units = (v as GlucoseUnit) || undefined;
+        form.units = Object.values(GlucoseUnit).find((u) => u === v);
       }}
     >
       <Select.Trigger>

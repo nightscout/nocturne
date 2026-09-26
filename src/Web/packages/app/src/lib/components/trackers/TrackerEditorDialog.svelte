@@ -23,6 +23,28 @@
   const createRemote = trackersRemote.createDefinition;
   const updateRemote = trackersRemote.updateDefinition;
 
+  interface Props {
+    open?: boolean;
+    isNewDefinition: boolean;
+    editingDefinition: TrackerDefinitionDto | null;
+    formName?: string;
+    formDescription?: string;
+    formCategory?: TrackerCategory;
+    formIcon?: string;
+    formLifespanHours?: number | undefined;
+    formLowReservoirUnits?: number | undefined;
+    formLowReservoirUrgency?: NotificationUrgency;
+    formNotifications?: TrackerNotification[];
+    formIsFavorite?: boolean;
+    formDashboardVisibility?: DashboardVisibility;
+    formVisibility?: TrackerVisibility;
+    formMode?: TrackerMode;
+    formStartEventType?: string | undefined;
+    formCompletionEventType?: string | undefined;
+    categoryLabels: Record<TrackerCategory, string>;
+    loadData: () => Promise<void>;
+  }
+
   let {
     open = $bindable(false),
     isNewDefinition,
@@ -43,27 +65,7 @@
     formCompletionEventType = $bindable(undefined),
     categoryLabels,
     loadData,
-  } = $props<{
-    open?: boolean;
-    isNewDefinition: boolean;
-    editingDefinition: TrackerDefinitionDto | null;
-    formName?: string;
-    formDescription?: string;
-    formCategory?: TrackerCategory;
-    formIcon?: string;
-    formLifespanHours?: number | undefined;
-    formLowReservoirUnits?: number | undefined;
-    formLowReservoirUrgency?: NotificationUrgency;
-    formNotifications?: TrackerNotification[];
-    formIsFavorite?: boolean;
-    formDashboardVisibility?: DashboardVisibility;
-    formVisibility?: TrackerVisibility;
-    formMode?: TrackerMode;
-    formStartEventType?: string | undefined;
-    formCompletionEventType?: string | undefined;
-    categoryLabels: Record<TrackerCategory, string>;
-    loadData: () => Promise<void>;
-  }>();
+  }: Props = $props();
 
   const createForm = $derived(createRemote.for("create"));
   const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));
@@ -258,7 +260,7 @@
       : undefined}
   />
 
-  {#each notificationsToApiFormat(formNotifications) as threshold, i}
+  {#each notificationsToApiFormat(formNotifications) as threshold, i (i)}
     <input
       type="hidden"
       name="{prefix}notificationThresholds[{i}].urgency"
@@ -384,14 +386,14 @@
   </div>
 
   <div class="space-y-3 pt-2 border-t">
-    <Label class="text-sm font-medium">Event Integration (Nightscout)</Label>
+    <Label>Event Integration (Nightscout)</Label>
     <p class="text-xs text-muted-foreground -mt-1">
       Optionally create treatment events when this tracker starts or completes.
       This maintains compatibility with existing CAGE/SAGE pills.
     </p>
 
     <div class="space-y-2">
-      <Label for="startEventType" class="text-xs">Create event on start</Label>
+      <Label for="startEventType" size="sm">Create event on start</Label>
       <EventTypeCombobox
         bind:value={formStartEventType}
         onSelect={(type) => (formStartEventType = type)}
@@ -400,7 +402,7 @@
     </div>
 
     <div class="space-y-2">
-      <Label for="completionEventType" class="text-xs">
+      <Label for="completionEventType" size="sm">
         Create event on completion
       </Label>
       <EventTypeCombobox

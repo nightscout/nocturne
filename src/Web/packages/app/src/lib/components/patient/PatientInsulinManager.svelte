@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
@@ -133,7 +134,7 @@
   let insulinRole = $state<string | InsulinRole>(InsulinRole.Bolus);
   let insulinIsPrimary = $state(false);
 
-  let dialogFormulations = $derived(formulationsForCategory(insulinCategory as string));
+  let dialogFormulations = $derived(formulationsForCategory(insulinCategory));
 
   const activeForm = $derived(editing?.id ? insulinList.updateForm : insulinList.createForm);
   const dialogSaving = $derived(!!insulinList.createForm.pending || !!insulinList.updateForm.pending);
@@ -216,7 +217,7 @@
 
   {#if insulinList.items.length > 0}
     <div class="space-y-3">
-      {#each insulinList.items as insulin}
+      {#each insulinList.items as insulin (insulin.id)}
         <Card.Root>
           <Card.Header class="flex flex-row items-center gap-3 py-3">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -226,7 +227,7 @@
               <Card.Title class="text-sm font-medium">
                 {insulin.name || "Unknown Insulin"}
               </Card.Title>
-              <Card.Description class="text-xs">
+              <Card.Description size="sm">
                 {insulin.insulinCategory
                   ? (insulinCategoryLabels[insulin.insulinCategory] ?? insulin.insulinCategory)
                   : "Unknown Category"}
@@ -243,9 +244,9 @@
             </div>
             {#if insulin.id}
               <Button
-                variant="ghost"
+                variant="ghost-destructive"
                 size="icon"
-                class="shrink-0 text-muted-foreground hover:text-destructive"
+                class="shrink-0"
                 onclick={() => insulinList.remove(insulin.id!)}
               >
                 <Trash2 class="h-4 w-4" />
@@ -295,7 +296,7 @@
             <input type="hidden" name="formulationId" value={inlineFormulationId} />
           {/if}
 
-          {#each insulinList.createForm.fields.allIssues() ?? [] as issue}
+          {#each insulinList.createForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -325,7 +326,7 @@
     </p>
   {:else}
     <div class="space-y-3">
-      {#each insulinList.items as insulin}
+      {#each insulinList.items as insulin (insulin.id)}
         <div
           class="flex items-center justify-between rounded-lg border p-3"
         >
@@ -334,27 +335,23 @@
               <span class="font-medium text-sm">
                 {insulin.name ?? "Unnamed"}
               </span>
-              <Badge variant="secondary" class="text-xs">
-                {insulinCategoryLabels[(insulin.insulinCategory ?? "") as InsulinCategory] ??
+              <Badge variant="secondary">
+                {labelFor(insulinCategoryLabels, insulin.insulinCategory) ??
                   insulin.insulinCategory}
               </Badge>
               {#if insulin.role}
-                <Badge variant="outline" class="text-xs">
-                  {insulinRoleLabels[insulin.role as InsulinRole] ?? insulin.role}
+                <Badge variant="outline">
+                  {labelFor(insulinRoleLabels, insulin.role) ?? insulin.role}
                 </Badge>
               {/if}
               {#if insulin.isCurrent}
-                <Badge
-                  variant="default"
-                  class="text-xs bg-green-600 hover:bg-green-700"
-                >
+                <Badge variant="success">
                   Current
                 </Badge>
               {/if}
               {#if insulin.isPrimary}
                 <Badge
                   variant="default"
-                  class="text-xs"
                 >
                   Primary
                 </Badge>
@@ -455,7 +452,7 @@
             <input type="hidden" name="{namePrefix}formulationId" value={insulinFormulationId} />
           {/if}
 
-          {#each activeForm.fields.allIssues() ?? [] as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>

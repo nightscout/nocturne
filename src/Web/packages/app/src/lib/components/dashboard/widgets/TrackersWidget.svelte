@@ -11,14 +11,14 @@
   function getUrgencyColor(urgency: NotificationUrgency | undefined): string {
     switch (urgency) {
       case NotificationUrgency.Urgent:
-        return "bg-red-500/20 text-red-400 border-red-500/30";
+        return "bg-severity-urgent/20 text-severity-urgent border-severity-urgent/30";
       case NotificationUrgency.Hazard:
-        return "bg-orange-500/20 text-orange-400 border-orange-500/30";
+        return "bg-severity-hazard/20 text-severity-hazard border-severity-hazard/30";
       case NotificationUrgency.Warn:
-        return "bg-yellow-500/20 text-yellow-400 border-yellow-500/30";
+        return "bg-severity-warn/20 text-severity-warn border-severity-warn/30";
       case NotificationUrgency.Info:
       default:
-        return "bg-blue-500/20 text-blue-400 border-blue-500/30";
+        return "bg-severity-info/20 text-severity-info border-severity-info/30";
     }
   }
 
@@ -83,7 +83,7 @@
 <WidgetCard title="Trackers">
   {#if hasTrackers}
     <div class="space-y-1.5">
-      {#each trackerData as tracker}
+      {#each trackerData as tracker (tracker?.instance.id)}
         {#if tracker}
           <div
             class="flex items-center justify-between px-2 py-1 rounded border {getUrgencyColor(
@@ -93,7 +93,7 @@
             <span class="text-xs font-medium truncate max-w-[60%]">
               {tracker.definition.name}
             </span>
-            <Badge variant="outline" class="text-xs tabular-nums">
+            <Badge variant="outline" class="tabular-nums">
               {tracker.displayAge}
             </Badge>
           </div>

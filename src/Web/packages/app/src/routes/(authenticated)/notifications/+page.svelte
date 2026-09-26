@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Bell } from "@lucide/svelte";
+  import { resolve } from "$app/paths";
   import { startOfDay, toDayString } from "$lib/utils/date-range";
   import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
   import {
@@ -11,6 +12,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import { Item } from "$lib/components/ui/item";
   import {
     History,
     Clock,
@@ -81,7 +83,7 @@
   }
 
   // Format date
-  function formatDate(dateStr: Date | undefined): string {
+  function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return "";
     return formatDayTime(dateStr);
   }
@@ -104,11 +106,11 @@
   function getLevelClass(level: string): string {
     switch (level) {
       case "urgent":
-        return "text-red-500 bg-red-500/10 border-red-500/20";
+        return "text-severity-urgent bg-severity-urgent/10 border-severity-urgent/20";
       case "hazard":
-        return "text-orange-500 bg-orange-500/10 border-orange-500/20";
+        return "text-severity-hazard bg-severity-hazard/10 border-severity-hazard/20";
       case "warn":
-        return "text-yellow-500 bg-yellow-500/10 border-yellow-500/20";
+        return "text-severity-warn bg-severity-warn/10 border-severity-warn/20";
       default:
         return "text-muted-foreground bg-muted border-border";
     }
@@ -159,7 +161,10 @@
   // Collapsible state for history groups
   let expandedGroups = $state<Record<string, boolean>>({});
 
-  function ensureGroupsInitialized(keys: string[]) {
+  function ensureGroupsInitialized(
+    groups: Record<string, TrackerInstanceDto[]>
+  ): Record<string, TrackerInstanceDto[]> {
+    const keys = Object.keys(groups);
     untrack(() => {
       const alreadyInitialized = keys.some(
         (k) => expandedGroups[k] !== undefined
@@ -169,6 +174,7 @@
         expandedGroups[keys[i]] = i === 0;
       }
     });
+    return groups;
   }
 
   // Helper to toggle group
@@ -218,7 +224,7 @@
         <CardHeader class="flex flex-row items-center justify-between">
           <div>
             <CardTitle class="flex items-center gap-2">
-              <Timer class="h-5 w-5 text-orange-500" />
+              <Timer class="h-5 w-5 text-severity-hazard" />
               Tracker Alerts
             </CardTitle>
             <CardDescription>
@@ -227,17 +233,15 @@
           </div>
           <div class="flex items-center gap-2">
             {#if urgentCount > 0}
-              <Badge variant="destructive">{urgentCount} urgent</Badge>
+              <Badge variant="severity-urgent">{urgentCount} urgent</Badge>
             {/if}
             {#if hazardCount > 0}
-              <Badge class="bg-orange-500 text-white hover:bg-orange-600">
-                {hazardCount} hazard
-              </Badge>
+              <Badge variant="severity-hazard">{hazardCount} hazard</Badge>
             {/if}
             {#if warnCount > 0}
-              <Badge variant="secondary">{warnCount} warning</Badge>
+              <Badge variant="severity-warn">{warnCount} warning</Badge>
             {/if}
-            <a href="/settings/trackers">
+            <a href={resolve("/settings/trackers")}>
               <Button variant="outline" size="sm">
                 <Settings2 class="h-4 w-4 mr-2" />
                 Manage
@@ -324,8 +328,7 @@
             {/snippet}
 
             {@const historyInstances = (await historyQuery) ?? []}
-            {@const groupedHistory = groupHistoryByDate(historyInstances)}
-            {@const _ = ensureGroupsInitialized(Object.keys(groupedHistory))}
+            {@const groupedHistory = ensureGroupsInitialized(groupHistoryByDate(historyInstances))}
 
             {#if historyInstances.length === 0}
               <div class="text-center py-8 text-muted-foreground">
@@ -335,36 +338,38 @@
               </div>
             {:else}
               <div class="space-y-4">
-                {#each Object.entries(groupedHistory) as [date, instances]}
+                {#each Object.entries(groupedHistory) as [date, instances] (date)}
                 <Collapsible.Root
                   open={isExpanded(date)}
                   onOpenChange={() => toggleGroup(date)}
-                  class="border rounded-lg"
+                  variant="outline"
                 >
-                  <Collapsible.Trigger
-                    class="flex items-center justify-between w-full p-3 hover:bg-muted/50 rounded-t-lg"
-                  >
-                    <div class="flex items-center gap-2">
-                      <Clock class="h-4 w-4 text-muted-foreground" />
-                      <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
-                      <Badge variant="secondary" class="ml-2">
-                        {instances.length}
-                      </Badge>
-                    </div>
-                    <ChevronDown
-                      class={cn(
-                        "h-4 w-4 transition-transform",
-                        isExpanded(date) && "rotate-180"
-                      )}
-                    />
+                  <Collapsible.Trigger>
+                    {#snippet child({ props }: { props: Record<string, unknown> })}
+                      <Item variant="ghost" class="justify-between" {...props}>
+                        <div class="flex items-center gap-2">
+                          <Clock class="h-4 w-4 text-muted-foreground" />
+                          <span class="font-medium">{formatLongDate(startOfDay(date))}</span>
+                          <Badge variant="secondary" class="ml-2">
+                            {instances.length}
+                          </Badge>
+                        </div>
+                        <ChevronDown
+                          class={cn(
+                            "h-4 w-4 transition-transform",
+                            isExpanded(date) && "rotate-180"
+                          )}
+                        />
+                      </Item>
+                    {/snippet}
                   </Collapsible.Trigger>
                   <Collapsible.Content class="border-t p-3 space-y-2">
-                    {#each instances as instance}
+                    {#each instances as instance (instance.id)}
                       <div
                         class="flex items-center justify-between p-3 rounded-lg bg-muted/30"
                       >
                         <div class="flex items-center gap-3">
-                          <Check class="h-4 w-4 text-green-500" />
+                          <Check class="h-4 w-4 text-success" />
                           <div>
                             <div class="font-medium">
                               {instance.definitionName}

@@ -27,7 +27,6 @@
     glucoseData,
     glucoseScale,
     glucoseAxisScale,
-    glucoseTrackTop,
     highThreshold,
     lowThreshold,
     contextWidth,
@@ -82,14 +81,14 @@
   // distort it — a numeric r bypasses scaling. Half-pixel buckets are visually
   // indistinguishable and cap registrations at ~12.
   const stepBubbleBuckets = $derived.by(() => {
-    const buckets = new Map<number, typeof stepBubbles>();
+    const buckets: { r: number; items: typeof stepBubbles }[] = [];
     for (const bubble of stepBubbles) {
       const r = Math.round(bubble.radius * 2) / 2;
-      const items = buckets.get(r) ?? [];
-      items.push(bubble);
-      buckets.set(r, items);
+      const bucket = buckets.find((b) => b.r === r);
+      if (bucket) bucket.items.push(bubble);
+      else buckets.push({ r, items: [bubble] });
     }
-    return [...buckets.entries()].map(([r, items]) => ({ r, items }));
+    return buckets;
   });
 </script>
 
@@ -116,7 +115,9 @@
     x={(d) => d.time}
     y={(d) => glucoseScale(heartRateToGlucose(d.bpm))}
     class="fill-none"
-    style="stroke: var(--heart-rate); opacity: 0.3; stroke-width: 1.5px;"
+    stroke="var(--heart-rate)"
+    opacity={0.3}
+    strokeWidth={1.5}
     curve={curveMonotoneX}
   />
 </ChartClipPath>
@@ -133,7 +134,8 @@
       cy={(d) => glucoseScale(d.sgv)}
       r={bucket.r}
       class="stroke-none"
-      style="fill: var(--steps); opacity: 0.25;"
+      fill="var(--steps)"
+      opacity={0.25}
     />
   {/each}
 </ChartClipPath>

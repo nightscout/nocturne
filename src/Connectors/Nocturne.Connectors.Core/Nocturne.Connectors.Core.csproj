@@ -6,6 +6,9 @@
         <RootNamespace>Nocturne.Connectors.Core</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Connectors.Core.Tests"/>
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Constants\Nocturne.Core.Constants.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Contracts\Nocturne.Core.Contracts.csproj"/>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>

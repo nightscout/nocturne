@@ -5,6 +5,7 @@ import { getRequestEvent, query, form } from "$app/server";
 import { z } from "zod";
 import { error, invalid, redirect } from "@sveltejs/kit";
 import { deviceApprove } from "$api/generated/oAuths.generated.remote";
+import { describeSubmitError } from "$lib/forms/submit-error";
 
 // ============================================================================
 // Query Functions
@@ -106,7 +107,11 @@ export const approveDeviceForm = form(deviceApproveSchema, async (data, issue) =
     return { success: true };
   } catch (err) {
     console.error("Error approving device:", err);
-    invalid(issue.user_code("The device code has expired or is no longer valid"));
+    invalid(
+      issue.user_code(
+        describeSubmitError(err, "The device code has expired or is no longer valid")
+      )
+    );
   }
 });
 
@@ -119,7 +124,11 @@ export const denyDeviceForm = form(deviceApproveSchema, async (data, issue) => {
     return { denied: true };
   } catch (err) {
     console.error("Error denying device:", err);
-    invalid(issue.user_code("The device code has expired or is no longer valid"));
+    invalid(
+      issue.user_code(
+        describeSubmitError(err, "The device code has expired or is no longer valid")
+      )
+    );
   }
 });
 

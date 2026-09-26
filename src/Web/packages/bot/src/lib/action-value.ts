@@ -24,7 +24,7 @@
 const SEPARATOR = ":";
 const TENANT_KEY_CHARS = 8;
 
-const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PACKED_UUID = /^[A-Za-z0-9_-]{22}$/;
 
 const packUuid = (uuid: string) =>

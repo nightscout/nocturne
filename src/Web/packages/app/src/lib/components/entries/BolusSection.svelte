@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { enumValue } from "$lib/components/ui/enum-value";
   import type { Bolus } from "$lib/api";
   import { BolusType } from "$lib/api";
   import { Input } from "$lib/components/ui/input";
@@ -38,11 +39,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <Syringe class="h-4 w-4 text-blue-500" />
+      <Syringe class="h-4 w-4 text-entry-bolus" />
       Bolus
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -67,14 +68,14 @@
         type="single"
         value={bolus.bolusType ?? BolusType.Normal}
         onValueChange={(v) => {
-          bolus.bolusType = v as BolusType;
+          bolus.bolusType = enumValue(BolusType, v) ?? bolus.bolusType;
         }}
       >
         <Select.Trigger id="bolus-type">
           {bolusTypeLabels[bolus.bolusType ?? BolusType.Normal]}
         </Select.Trigger>
         <Select.Content>
-          {#each Object.values(BolusType) as bt}
+          {#each Object.values(BolusType) as bt (bt)}
             <Select.Item value={bt} label={bolusTypeLabels[bt]} />
           {/each}
         </Select.Content>
@@ -104,18 +105,19 @@
           readonly
           disabled
           value={calculatedRate > 0 ? calculatedRate.toFixed(3) : "-"}
-          class="bg-muted text-muted-foreground"
         />
       </div>
     </div>
   {/if}
 
   <Collapsible.Root bind:open={showAdvanced}>
-    <Collapsible.Trigger
-      class="flex items-center gap-1 px-2 h-7 text-xs text-muted-foreground hover:text-foreground transition-colors"
-    >
-      <ChevronDown class="h-3 w-3 transition-transform {showAdvanced ? 'rotate-180' : ''}" />
-      Advanced
+    <Collapsible.Trigger>
+      {#snippet child({ props }: { props: Record<string, unknown> })}
+        <Button {...props} variant="subtle" size="xs">
+          <ChevronDown class="h-3 w-3 transition-transform {showAdvanced ? 'rotate-180' : ''}" />
+          Advanced
+        </Button>
+      {/snippet}
     </Collapsible.Trigger>
     <Collapsible.Content>
       <div class="grid grid-cols-2 gap-3 pt-2">

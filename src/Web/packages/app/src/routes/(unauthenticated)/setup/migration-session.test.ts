@@ -17,11 +17,11 @@ import { startOrResumeMigration } from "./migration-session";
 const run = (overrides: Partial<MigrationJobInfo>): MigrationJobInfo => ({
   id: "11111111-1111-1111-1111-111111111111",
   mode: MigrationMode.Api,
-  createdAt: new Date("2026-01-04T00:00:00Z"),
+  createdAt: "2026-01-04T00:00:00Z",
   sourceDescription: "https://mynightscout.example",
   state: MigrationJobState.Completed,
-  startedAt: new Date("2026-01-04T00:00:00Z"),
-  completedAt: new Date("2026-01-04T00:00:10Z"),
+  startedAt: "2026-01-04T00:00:00Z",
+  completedAt: "2026-01-04T00:00:10Z",
   ...overrides,
 });
 
@@ -50,7 +50,7 @@ describe("startOrResumeMigration", () => {
   // completed run from the last time round. Treating that as this import's own leaves the wizard
   // reporting success over an empty database.
   it("starts an import when the only completed run is from an earlier session", async () => {
-    history = [run({ id: "old-job", createdAt: new Date("2025-11-02T00:00:00Z") })];
+    history = [run({ id: "old-job", createdAt: "2025-11-02T00:00:00Z" })];
     startSpy.mockResolvedValue(run({ id: "new-job" }));
 
     const jobId = await startOrResumeMigration("nightscout");

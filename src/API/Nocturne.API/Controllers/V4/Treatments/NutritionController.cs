@@ -443,7 +443,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
         if (!string.IsNullOrEmpty(request.DataSource) && !string.IsNullOrEmpty(request.SyncIdentifier))
             await GuardRecreationAsync(request.DataSource, request.SyncIdentifier, ct);
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        // No transaction (see GuardRecreationAsync): one on this context would hold only the links
+        // the scoped DeduplicationService writes here, and a later failure would roll them back.
 
         // Peek at an existing bolus with the same (DataSource, SyncIdentifier) BEFORE
         // the upsert. If one exists, its CorrelationId is authoritative and must be
@@ -474,8 +475,6 @@ public class NutritionController : ControllerBase, IWriteScopedController
         var createdCarb = await _carbIntakeRepo.CreateAsync(carbModel, WriteOrigin.Live, ct);
         var carbWasNew = (await _context.CarbIntakes.CountAsync(ct)) > carbBefore;
 
-        await tx.CommitAsync(ct);
-
         var response = new CreateMealResponse
         {
             CorrelationId = createdBolus.CorrelationId ?? createdCarb.CorrelationId ?? correlationId,
@@ -492,8 +491,8 @@ public class NutritionController : ControllerBase, IWriteScopedController
     /// Refuses the whole meal when either half's sync key is held by a record the user deleted.
     /// </summary>
     /// <remarks>
-    /// The transaction opened here is on this controller's context, while each repository writes on
-    /// its own, so the bolus write commits before the carb write is attempted. Asking both
+    /// Each repository writes on its own pooled context, so the bolus write commits before the carb
+    /// write is attempted and nothing can roll it back. Asking both
     /// repositories first is what keeps a key blocked on one half only from leaving a committed
     /// bolus behind the refusal.
     /// </remarks>

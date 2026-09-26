@@ -17,19 +17,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 9
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
@@ -67,19 +67,20 @@ jobs:
             exit 1
           fi
 
+      # A solution of just the unit test projects, built from the directory so a new one cannot
+      # be left out, and so nocturne.sln's Windows-only projects (Desktop, Widgets) never build.
+      # One solution means one restore, a parallel build, and the assemblies tested concurrently.
       - name: Test
         run: |
-          # Build per-project to avoid Windows-only projects (Desktop, Widgets)
-          for proj in tests/Unit/*/; do
-            csproj=$(find "$proj" -maxdepth 1 -name "*.csproj" | head -1)
-            [ -z "$csproj" ] && continue
-            dotnet test "$csproj" \
-              --filter "Category!=Integration&Category!=E2E" \
-              --logger "trx;LogFileName=unit.trx" \
-              -p:GenerateNSwagClient=false \
-              || exit 1
-          done
-      - uses: actions/upload-artifact@v4
+          set -euo pipefail
+          sln="$RUNNER_TEMP/unit/unit.slnx"
+          dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
+          dotnet sln "$sln" add tests/Unit/*/*.csproj
+          dotnet test "$sln" \
+            --filter "Category!=Integration&Category!=E2E" \
+            --logger "trx;LogFileName=unit.trx" \
+            -p:GenerateNSwagClient=false
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: unit-trx
@@ -94,12 +95,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0"
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
@@ -117,15 +118,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0"
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -136,15 +137,18 @@ jobs:
           # is mtime-based, so a lockfile-only key lets a source change reuse a stale build.
           key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      # --all-features compiles the uniffi surface Prelude ships; the default-feature clippy
+      # covers the cdylib the backend loads.
       - name: Rust tests, clippy, fmt
         working-directory: crates
         run: |
-          cargo test --workspace
+          cargo test --workspace --all-features
           cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
           cargo fmt --check
       - name: Build nocturne_alerts cdylib
         working-directory: crates
@@ -158,22 +162,32 @@ jobs:
             --logger "trx;LogFileName=alerts-ffi-parity.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1
-      # Engine-seam tests (IAlertEvaluationEngine): corpus parity for both the managed and
-      # rust-backed seam adapters, cross-engine timer continuity, shadow-mode divergence
-      # logging, and Alerts:Engine flag selection. The rust-backed theories require the
-      # cdylib built above; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
-      - name: Engine seam tests (managed + rust adapters, shadow, flag)
+      # Engine-seam tests (IAlertEvaluationEngine) plus every API test class holding a
+      # [NativeFact]/[NativeTheory], which the unit job skips for want of the cdylib. The
+      # classes are found by grep, each in a file named after it, so a new native test
+      # cannot be left out; NOCTURNE_ALERTS_REQUIRE_NATIVE turns silent skips into failures.
+      - name: Engine seam and native-backed API tests
         env:
           NOCTURNE_ALERTS_NATIVE_DIR: ${{ github.workspace }}/crates/target/release
           NOCTURNE_ALERTS_REQUIRE_NATIVE: "1"
           Alerts__Engine: rust
         run: |
+          set -euo pipefail
+          filter="FullyQualifiedName~Services.Alerts.Engines"
+          for file in $(grep -rlE '\[Native(Fact|Theory)' tests/Unit/Nocturne.API.Tests --include='*.cs'); do
+            class=$(basename "$file" .cs)
+            if ! grep -qE "class ${class}\b" "$file"; then
+              echo "::error file=$file::holds native tests but declares no class named $class"
+              exit 1
+            fi
+            filter="$filter|FullyQualifiedName~.${class}."
+          done
+          echo "Filter: $filter"
           dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
-            --filter "FullyQualifiedName~Services.Alerts.Engines" \
+            --filter "$filter" \
             --logger "trx;LogFileName=alerts-engine-seam.trx" \
-            -p:GenerateNSwagClient=false \
-            || exit 1
-      - uses: actions/upload-artifact@v4
+            -p:GenerateNSwagClient=false
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: alerts-ffi-parity-trx
@@ -182,15 +196,11 @@ jobs:
   # Database integration tests: bare-Postgres Testcontainers (no Aspire), so they
   # run reliably on GitHub-hosted runners where Docker is available. Other
   # integration projects stay deferred until their fixtures/references are fixed.
-  # Typechecks the Svelte library packages that have no build step and no generated API
-  # client, and runs the pure-node vitest suites, so this needs nothing but pnpm.
-  # @nocturne/app and @nocturne/portal are excluded because their checks depend on the
-  # NSwag/Zod codegen and belong with the .NET build.
-  #
-  # Only glucose-chart and coach are listed. @nocturne/ui and @nocturne/cms still run
-  # svelte-check-native, which silently discovers zero files on Linux (see the note on their
-  # `check` scripts) — and once pointed at a checker that does read their sources they report
-  # ~880 and ~838 errors respectively. That debt has to be triaged before either can be gated.
+  # Typechecks every Svelte package whose check needs no generated API client, and runs the
+  # pure-node vitest suites, so this needs nothing but pnpm.
+  # @nocturne/app and @nocturne/portal are checked in web-app-typecheck instead, because their
+  # checks depend on the NSwag/Zod codegen that the .NET build runs: the portal imports the
+  # app's appearance store, which imports the generated client's WidgetId enum.
   web-typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -198,23 +208,30 @@ jobs:
       run:
         working-directory: src/Web
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
         with:
           # src/Web's lockfile is v11 format, so pnpm 9 (what the unit job pins) cannot read it
           # with --frozen-lockfile. Same pin the image build uses in docker-publish.yml.
           version: "11.5.0"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
           cache: pnpm
           cache-dependency-path: src/Web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
-      - name: Typecheck library packages
+      - name: Typecheck Svelte packages
         run: |
-          pnpm --filter @nightscout/glucose-chart                --filter @nocturne/coach                run check
+          pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
       - name: Bot unit tests
         run: pnpm --filter @nocturne/bot run test
+      # Renders pages through the translation transform. The build cannot see
+      # what that transform does to code that only runs at render time, and the
+      # E2E suite that would is opt-in, so this is the only gate on it.
+      - name: App server-rendering tests
+        run: pnpm --filter @nocturne/app run test:render
+      - name: App production translation tests
+        run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       # The portal's `check` needs the generated client, but its vitest suites do not.
       - name: Portal unit tests
         run: pnpm --filter @nocturne/portal run test
@@ -225,16 +242,79 @@ jobs:
           pnpm --filter @nocturne/screenshots run check-refs
           pnpm --filter @nocturne/screenshots run check-embeds
 
+  # The API build's post-build targets write the client these checks read (NSwag, then the
+  # Zod schemas and remote functions, both through pnpm), so pnpm is installed first.
+  # The app's check builds @nocturne/bridge and @nocturne/bot itself (tools/ensure-check-deps.mjs).
+  web-app-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+      - name: Typecheck app
+        run: pnpm --filter @nocturne/app run check
+      - name: Typecheck portal
+        run: pnpm --filter @nocturne/portal run check
+
+  web-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # Every package's `lint:ci` fails on any error and caps its warnings at today's count
+      # (`--max-warnings` in its package.json). Caps only go down: lower one as warnings are
+      # fixed, never raise it. A package's unpaid rules are downgraded to warnings by the
+      # `debt({...})` block in its eslint.config.js, which records each rule's count; a package
+      # with no debt block (app) allows no warnings. An eslint-disable that no longer
+      # suppresses anything is an error everywhere.
+      # --no-bail runs every package and fails the step if any of them failed.
+      - name: Lint packages
+        run: pnpm --recursive --no-bail --workspace-concurrency=1 run lint:ci
+
   integration-db:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0"
       - name: Cache NuGet
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
@@ -245,7 +325,14 @@ jobs:
             --logger "trx;LogFileName=integration-db.trx" \
             -p:GenerateNSwagClient=false \
             || exit 1
-      - uses: actions/upload-artifact@v4
+      - name: Integration tests (API unit project, real Postgres)
+        run: |
+          dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
+            --filter "Category=Integration" \
+            --logger "trx;LogFileName=integration-api.trx" \
+            -p:GenerateNSwagClient=false \
+            || exit 1
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: integration-db-trx

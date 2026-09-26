@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Eye } from "lucide-svelte";
+  import { Banner } from "$lib/components/ui/banner";
 
   interface Props {
     expiresAt: string;
@@ -27,12 +28,10 @@
   });
 </script>
 
-<div
-  class="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
->
+<Banner variant="warning">
   <div class="flex items-center gap-2">
     <Eye class="h-4 w-4 shrink-0" />
     <span>Guest access &mdash; read only</span>
   </div>
   <span class="shrink-0 font-medium">{remaining}</span>
-</div>
+</Banner>

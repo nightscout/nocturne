@@ -49,7 +49,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         return id;
     }
 
-    private async Task<Guid> SeedProviderAsync(string name = "Keycloak")
+    private async Task<Guid> SeedProviderAsync(string name = "Keycloak", bool isEnabled = true)
     {
         var id = Guid.CreateVersion7();
         _db.OidcProviders.Add(new OidcProviderEntity
@@ -58,7 +58,7 @@ public class SubjectServiceOidcIdentityTests : IDisposable
             Name = name,
             IssuerUrl = "https://issuer.example",
             ClientId = "nocturne",
-            IsEnabled = true,
+            IsEnabled = isEnabled,
         });
         await _db.SaveChangesAsync();
         return id;
@@ -151,71 +151,6 @@ public class SubjectServiceOidcIdentityTests : IDisposable
         rows[0].SubjectId.Should().Be(subjectA);
     }
 
-    // -- TryRemoveOidcIdentityAsync ----------------------------------------------
-
-    private async Task SeedPasskeyAsync(Guid subjectId, byte tag = 0)
-    {
-        _db.PasskeyCredentials.Add(new PasskeyCredentialEntity
-        {
-            Id = Guid.CreateVersion7(),
-            SubjectId = subjectId,
-            CredentialId = new byte[] { tag, 1, 2, 3 },
-            PublicKey = new byte[] { 4, 5, 6 },
-            SignCount = 0,
-            Label = $"pk{tag}",
-            CreatedAt = DateTime.UtcNow,
-        });
-        await _db.SaveChangesAsync();
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task TryRemoveOidcIdentityAsync_WhenNotOwned_ReturnsNotFound()
-    {
-        var a = await SeedSubjectAsync("a");
-        var b = await SeedSubjectAsync("b");
-        var providerId = await SeedProviderAsync();
-        var idA = await SeedIdentityAsync(a, providerId, "ext-a");
-        await SeedIdentityAsync(b, providerId, "ext-b");
-        // Keep b with another primary factor so the last-factor guard isn't what's blocking.
-        await SeedPasskeyAsync(b);
-
-        var result = await _service.TryRemoveOidcIdentityAsync(b, idA);
-
-        result.Should().Be(FactorRemovalResult.NotFound);
-        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(2);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task TryRemoveOidcIdentityAsync_WhenLastPrimaryFactor_ReturnsLastPrimaryFactor_DoesNotDelete()
-    {
-        var subjectId = await SeedSubjectAsync();
-        var providerId = await SeedProviderAsync();
-        var idId = await SeedIdentityAsync(subjectId, providerId, "ext-1");
-
-        var result = await _service.TryRemoveOidcIdentityAsync(subjectId, idId);
-
-        result.Should().Be(FactorRemovalResult.LastPrimaryFactor);
-        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(1);
-    }
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task TryRemoveOidcIdentityAsync_WhenMultipleFactors_RemovesAndReturnsRemoved()
-    {
-        var subjectId = await SeedSubjectAsync();
-        var providerId = await SeedProviderAsync();
-        var idId = await SeedIdentityAsync(subjectId, providerId, "ext-1");
-        await SeedPasskeyAsync(subjectId);
-
-        var result = await _service.TryRemoveOidcIdentityAsync(subjectId, idId);
-
-        result.Should().Be(FactorRemovalResult.Removed);
-        (await _db.SubjectOidcIdentities.CountAsync()).Should().Be(0);
-        (await _db.PasskeyCredentials.CountAsync()).Should().Be(1);
-    }
-
     // -- CountPrimaryAuthFactorsAsync --------------------------------------------
 
     [Fact]
@@ -246,6 +181,20 @@ public class SubjectServiceOidcIdentityTests : IDisposable
 
         var count = await _service.CountPrimaryAuthFactorsAsync(subjectId);
         count.Should().Be(5);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task CountPrimaryAuthFactorsAsync_ExcludesIdentitiesOnDisabledProviders()
+    {
+        var subjectId = await SeedSubjectAsync();
+        var enabledProvider = await SeedProviderAsync("Enabled");
+        var disabledProvider = await SeedProviderAsync("Disabled", isEnabled: false);
+        await SeedIdentityAsync(subjectId, enabledProvider, "e1");
+        await SeedIdentityAsync(subjectId, disabledProvider, "d1");
+
+        var count = await _service.CountPrimaryAuthFactorsAsync(subjectId);
+        count.Should().Be(1);
     }
 
     [Fact]

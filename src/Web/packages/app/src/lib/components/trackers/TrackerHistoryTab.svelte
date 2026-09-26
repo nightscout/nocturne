@@ -10,17 +10,19 @@
   import { History } from "lucide-svelte";
   import { CompletionReason, type TrackerInstanceDto } from "$api";
 
+  interface Props {
+    historyInstances: TrackerInstanceDto[];
+    completionReasonLabels: Record<CompletionReason, string>;
+    formatAge: (hours: number) => string;
+    formatDate: (dateStr: Date | undefined | string) => string;
+  }
+
   let {
     historyInstances,
     completionReasonLabels,
     formatAge,
     formatDate,
-  } = $props<{
-    historyInstances: TrackerInstanceDto[];
-    completionReasonLabels: Record<CompletionReason, string>;
-    formatAge: (hours: number) => string;
-    formatDate: (dateStr: Date | undefined | string) => string;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="history">
@@ -37,7 +39,7 @@
         </div>
       {:else}
         <div class="space-y-2">
-          {#each historyInstances as instance}
+          {#each historyInstances as instance (instance.id)}
             <div
               class="flex items-center justify-between p-3 rounded-lg border"
             >

@@ -6,6 +6,7 @@ import { parseErrorBody } from "$lib/api/error-body";
 import {
   describeRemoteError,
   describeSubmitError,
+  errorIssues,
   errorMessage,
   GENERIC_SUBMIT_ERROR,
   MISSING_ITEM_ERROR,
@@ -91,6 +92,28 @@ describe("a thrown HttpError", () => {
     expect(thrown).not.toBeInstanceOf(Error);
     expect(thrown).not.toHaveProperty("message");
     expect(errorMessage(thrown)).toBe("We couldn't load your settings.");
+  });
+});
+
+describe("errorIssues", () => {
+  const issues = [
+    { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+  ];
+
+  it("reads a well-formed issue set off the body", () => {
+    expect(errorIssues({ status: 400, body: { issues } })).toEqual(issues);
+  });
+
+  it("drops a set holding anything that is not a validation issue", () => {
+    expect(
+      errorIssues({ status: 400, body: { issues: [{ reason: "x" }, "boom"] } })
+    ).toBeUndefined();
+  });
+
+  it("answers undefined without a body or a set", () => {
+    expect(errorIssues(new Error("offline"))).toBeUndefined();
+    expect(errorIssues({ status: 400, body: {} })).toBeUndefined();
+    expect(errorIssues({ status: 400, body: { issues: "boom" } })).toBeUndefined();
   });
 });
 
@@ -214,9 +237,7 @@ describe("the 403 arm", () => {
   it("prefers the sentence the server wrote to the status phrase beside it", async () => {
     const crossed = await crossThe403Arm(problemDetails(403, NEEDS_SCOPE));
 
-    expect((crossed as { body: { message: string } }).body.message).toBe(
-      NEEDS_SCOPE
-    );
+    expect(crossed).toHaveProperty("body.message", NEEDS_SCOPE);
   });
 });
 
@@ -270,6 +291,7 @@ describe("the two halves of RemoteErrorPolicy", () => {
         "Failed to execute remote function",
         "An unexpected server error occurred.",
         "A server side error occurred.",
+        `Request failed (${status})`,
       ]) {
         const synthesized = { status, body: { message } };
 
@@ -283,10 +305,21 @@ describe("the two halves of RemoteErrorPolicy", () => {
     }
   });
 
+  it("still carries a server sentence that only mentions a failed request", () => {
+    const worded = {
+      status: 400,
+      body: { message: "Request failed (400): the device code has expired." },
+    };
+
+    expect(describeSubmitError(worded, WRITE_FALLBACK)).toBe(
+      "Request failed (400): the device code has expired."
+    );
+  });
+
   /**
-   * Suppression matches four known strings, so what a server wrote about a
-   * rejected write — the reason retrying unchanged cannot fix — still reaches
-   * the person who has to change it.
+   * Suppression matches a closed set of client-written strings, so what a
+   * server wrote about a rejected write — the reason retrying unchanged cannot
+   * fix — still reaches the person who has to change it.
    */
   it("still carries a 4xx reason the server worded, flattened ModelState included", () => {
     const validation = {

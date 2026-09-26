@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using System.Collections.Concurrent;
 using SocketIOClient;
 
@@ -42,27 +40,26 @@ public class NightscoutConnectorBackgroundService
 
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
     /// <param name="budget">The process-wide budget.</param>
+    /// <param name="activeTenants">The active tenants every poller reads.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
+    /// <param name="metrics">Connector sync instruments.</param>
+    /// <param name="runGuard">Refuses a sync for a key another run already holds.</param>
     public NightscoutConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        ActiveTenantSnapshot activeTenants,
         ILogger<NightscoutConnectorBackgroundService> logger,
-        ConnectorPollerNudge? nudge = null
+        ConnectorPollerNudge? nudge = null,
+        ConnectorSyncMetrics? metrics = null,
+        TenantRunGuard? runGuard = null
     )
-        : base(serviceProvider, budget, logger, nudge) { }
+        : base(serviceProvider, budget, activeTenants, logger, nudge, metrics, runGuard) { }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
     {
-        using var scope = ServiceProvider.CreateScope();
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(cancellationToken);
-
-        var tenants = await context.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await ActiveTenants.GetAsync(cancellationToken);
 
         // Connect tenants concurrently: each tenant waits up to ConnectTimeout, and the poll cycle
         // does not continue until this returns, so connecting them in sequence would delay the first
@@ -125,9 +122,16 @@ public class NightscoutConnectorBackgroundService
         if (!config.Enabled || string.IsNullOrWhiteSpace(config.Url))
             return;
 
-        // Tenants may store a bare host with no scheme. Normalise through the same helper the sync
-        // path uses so a URL that polls fine does not fail here on Uri parsing.
-        if (ResolveListenerBaseUrl(config.Url, tenantSlug) is not { } socketUrl)
+        // A deployment may expose bounded REST reads through an adapter while the original
+        // Nightscout origin still provides Socket.IO. Keep Url as the polling source and use the
+        // optional real-time origin only for the listener. Existing configurations fall back to
+        // Url unchanged. Both values may be bare hosts, so normalise through the same helper the
+        // sync path uses rather than parsing them directly.
+        var realtimeUrl = string.IsNullOrWhiteSpace(config.RealtimeUrl)
+            ? config.Url
+            : config.RealtimeUrl;
+
+        if (ResolveListenerBaseUrl(realtimeUrl, tenantSlug) is not { } socketUrl)
             return;
 
         var client = new SocketIO(new Uri(socketUrl), new SocketIOOptions

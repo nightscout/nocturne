@@ -11,19 +11,19 @@
 
 {#if capabilities && !capabilities[feature]}
   <span
-    class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-muted text-muted-foreground"
+    class="px-1.5 py-0.5 text-2xs font-medium rounded bg-muted text-muted-foreground"
   >
     Not on this device
   </span>
 {:else if feature === "notifications" && capabilities && capabilities.notificationPermission === "denied"}
   <span
-    class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-red-500/10 text-red-500"
+    class="px-1.5 py-0.5 text-2xs font-medium rounded bg-destructive/10 text-destructive"
   >
     Blocked on this device
   </span>
 {:else if feature === "notifications" && capabilities && capabilities.notificationPermission === "default"}
   <span
-    class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400"
+    class="px-1.5 py-0.5 text-2xs font-medium rounded bg-warning/10 text-warning"
   >
     Needs Permission
   </span>

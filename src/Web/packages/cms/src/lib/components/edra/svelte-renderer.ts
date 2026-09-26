@@ -1,25 +1,21 @@
 import type { Editor, NodeViewProps } from '@tiptap/core';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, unmount, type Component } from 'svelte';
 
-interface RendererOptions<P extends Record<string, unknown>> {
+interface RendererOptions<P extends object> {
 	editor: Editor;
 	props: P;
 }
 
-type App = ReturnType<typeof mount>;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-class SvelteRenderer<R = unknown, P extends Record<string, any> = object> {
+class SvelteRenderer<R = unknown, P extends object = object> {
 	id: string;
-	component: App;
+	component: Component<{ props: P }>;
 	editor: Editor;
 	props: P;
 	element: HTMLElement;
 	ref: R | null = null;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	mnt: Record<any, any> | null = null;
+	mnt: ReturnType<typeof mount> | null = null;
 
-	constructor(component: App, { props, editor }: RendererOptions<P>) {
+	constructor(component: Component<{ props: P }>, { props, editor }: RendererOptions<P>) {
 		this.id = Math.floor(Math.random() * 0xffffffff).toString();
 		this.component = component;
 		this.props = props;
@@ -40,8 +36,7 @@ class SvelteRenderer<R = unknown, P extends Record<string, any> = object> {
 	}
 
 	render(): void {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		this.mnt = mount(this.component as any, {
+		this.mnt = mount(this.component, {
 			target: this.element,
 			props: {
 				props: this.props
@@ -66,8 +61,6 @@ class SvelteRenderer<R = unknown, P extends Record<string, any> = object> {
 	destroy(): void {
 		if (this.mnt) {
 			unmount(this.mnt);
-		} else {
-			unmount(this.component);
 		}
 	}
 }

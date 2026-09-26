@@ -26,20 +26,20 @@ jobs:
       sdk_version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "pnpm"
@@ -75,7 +75,7 @@ jobs:
         run: node sdk/filter-v4-spec.js src/Web/packages/app/src/lib/api/generated/openapi.json sdk/openapi-v4.json
 
       - name: Upload V4 OpenAPI spec
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: openapi-v4-spec
           path: sdk/openapi-v4.json
@@ -89,10 +89,10 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
@@ -111,7 +111,7 @@ jobs:
         run: sudo chown -R $USER:$USER sdk/csharp/out
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -140,10 +140,10 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
@@ -162,7 +162,7 @@ jobs:
         run: sudo chown -R $USER:$USER sdk/typescript/out
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -187,10 +187,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
@@ -214,7 +214,7 @@ jobs:
         run: cat sdk/kotlin/publish.gradle >> sdk/kotlin/out/build.gradle
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -259,16 +259,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -341,10 +341,10 @@ jobs:
       id-token: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
@@ -366,7 +366,7 @@ jobs:
         run: sed -i 's/^name = "nocturne_sdk"/name = "nocturne-py"/' sdk/python/out/pyproject.toml
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -390,10 +390,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/
@@ -415,7 +415,7 @@ jobs:
           chmod +x sdk/java/out/gradlew
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -490,10 +490,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download V4 spec
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: openapi-v4-spec
           path: sdk/

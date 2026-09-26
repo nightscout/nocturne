@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { error } from "@sveltejs/kit";
+import { page as pageState } from "$app/state";
 import type { DataSourceInfo } from "$api-clients";
 
 let deleteImpl: () => Promise<unknown>;
@@ -33,6 +34,42 @@ async function attemptDelete() {
 describe("DataSourceManageDialog", () => {
   beforeEach(() => {
     deleteImpl = () => Promise.resolve({ success: true, totalDeleted: 1 });
+    pageState.data = { effectivePermissions: ["tenant.settings"] };
+  });
+
+  it("hides the delete control from a member without tenant.settings", async () => {
+    pageState.data = { effectivePermissions: ["glucose.read"] };
+
+    render(DataSourceManageDialog, {
+      props: { open: true, selectedDataSource: dataSource },
+    });
+
+    await expect.element(page.getByText("Dexcom G7")).toBeVisible();
+    expect(
+      page.getByRole("button", { name: "Delete Data..." }).elements()
+    ).toHaveLength(0);
+  });
+
+  it("offers the delete control to a member holding tenant.settings", async () => {
+    render(DataSourceManageDialog, {
+      props: { open: true, selectedDataSource: dataSource },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Delete Data..." }))
+      .toBeVisible();
+  });
+
+  it("offers the delete control to an owner holding the wildcard scope", async () => {
+    pageState.data = { effectivePermissions: ["*"] };
+
+    render(DataSourceManageDialog, {
+      props: { open: true, selectedDataSource: dataSource },
+    });
+
+    await expect
+      .element(page.getByRole("button", { name: "Delete Data..." }))
+      .toBeVisible();
   });
 
   it("reports data that was already gone as nothing left to delete", async () => {

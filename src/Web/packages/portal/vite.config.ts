@@ -1,12 +1,27 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
-// WUCHALE-DISABLED: wuchale temporarily disabled
-// import { wuchale } from '@wuchale/vite-plugin';
+import { wuchale } from 'wuchale/vite';
 import lingo from 'vite-plugin-lingo';
 import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
-import { resolve } from 'node:path';
-import { cpSync, rmSync, existsSync, mkdirSync } from 'node:fs';
-import { defineConfig, type Plugin, type PluginOption } from 'vite';
+import { resolve, sep } from 'node:path';
+import { cpSync, rmSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { defineConfig, searchForWorkspaceRoot, type Plugin, type PluginOption } from 'vite';
+
+/**
+ * pnpm's global virtual store (`enableGlobalVirtualStore` in pnpm-workspace.yaml) links every
+ * package out of the user-wide store, outside the workspace, so the dev server must be allowed to
+ * serve from it or the client entry 403s and nothing hydrates. Found from where SvelteKit
+ * actually resolves; empty under a conventional node_modules layout.
+ */
+function pnpmStoreRoots(): string[] {
+  try {
+    const kit = realpathSync(resolve(__dirname, 'node_modules/@sveltejs/kit'));
+    const links = kit.lastIndexOf(`${sep}links${sep}`);
+    return links === -1 ? [] : [kit.slice(0, links)];
+  } catch {
+    return [];
+  }
+}
 
 function sharedLogos(): Plugin {
   return {
@@ -68,10 +83,13 @@ function releaseAssets(): Plugin {
         }
         const variantDest = resolve(dest, variant);
         mkdirSync(variantDest, { recursive: true });
-        for (const file of ['docker-compose.yaml', '.env.example']) {
+        // Copied under its release download name: Vite's dev server refuses to serve any
+        // `.env.*` file (server.fs.deny), so a `.env.example?raw` import 403s in the browser.
+        const files = { 'docker-compose.yaml': 'docker-compose.yaml', '.env.example': 'default.env.example' };
+        for (const [file, destName] of Object.entries(files)) {
           const src = resolve(srcDir, file);
           if (existsSync(src)) {
-            cpSync(src, resolve(variantDest, file));
+            cpSync(src, resolve(variantDest, destName));
           } else {
             this.warn(`release-assets: ${file} not found in deploy/${variant}; skipping`);
           }
@@ -104,6 +122,11 @@ export default defineConfig({
     sharedFonts(),
     releaseAssets(),
     tailwindcss(),
+    // The shared catalogue records references relative to packages/app, where translations:sync
+    // runs, and wuchale reads references relative to its config's directory. Loaded from here,
+    // no portal reference matched, so every portal string compiled to empty.
+    wuchale({ configPath: '../app/wuchale.config.js' }),
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- vite-plugin-lingo resolves vite 8's Plugin type; this package builds on vite 6
     lingo({
       route: '/_translations',
       localesDir: '../../locales',
@@ -116,8 +139,7 @@ export default defineConfig({
     port: parseInt(process.env.PORT || "5173", 10),
     strictPort: true,
     fs: {
-      allow: [resolve(__dirname, 'src/lib/release')],
-      strict: false, // pnpm symlinks into its content-addressable store
+      allow: [searchForWorkspaceRoot(process.cwd()), resolve(__dirname, 'src/lib/release'), ...pnpmStoreRoots()],
     },
   },
   ssr: {

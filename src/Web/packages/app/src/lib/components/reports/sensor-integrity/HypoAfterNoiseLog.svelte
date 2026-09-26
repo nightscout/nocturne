@@ -7,7 +7,7 @@
   import Moon from "lucide-svelte/icons/moon";
   import type { SensorIntegrityHypoEvent } from "$lib/api";
   import { bg, bgLabel, formatDateTimeCompact } from "$lib/utils/formatting";
-  import { confidenceLabel, confidenceChipClass } from "./format";
+  import ConfidenceBadge from "./ConfidenceBadge.svelte";
 
   interface Props {
     events: SensorIntegrityHypoEvent[];
@@ -49,13 +49,7 @@
         <Table.Row>
           <Table.Cell class="font-medium">{formatDateTimeCompact(cluster?.start)}</Table.Cell>
           <Table.Cell>
-            <span
-              class="rounded-full px-2 py-0.5 text-xs font-medium {confidenceChipClass(
-                cluster?.confidence
-              )}"
-            >
-              {confidenceLabel(cluster?.confidence)}
-            </span>
+            <ConfidenceBadge confidence={cluster?.confidence} />
           </Table.Cell>
           <Table.Cell class="text-right tabular-nums">
             {e.event?.nadirMgdl != null ? `${bg(e.event.nadirMgdl)} ${bgLabel()}` : "—"}

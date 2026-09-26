@@ -260,7 +260,7 @@
         role="status"
         aria-live="polite"
         aria-atomic="true"
-        class="flex items-center gap-2 rounded bg-green-50 p-3 text-sm text-green-900 dark:bg-green-950 dark:text-green-100"
+        class="flex items-center gap-2 rounded bg-success/10 p-3 text-sm text-success"
       >
         <CheckCircle class="h-4 w-4" />
         Device authorized successfully. Waiting for data...
@@ -287,12 +287,12 @@
 
         {#if !deviceInfo.isKnown}
           <div
-            class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20"
+            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
           >
             <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
             />
-            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+            <p class="text-sm text-warning">
               This application is not in the Nocturne known app directory. Only
               approve if you trust this application.
             </p>
@@ -365,7 +365,7 @@
           placeholder="XXXX-YY"
           maxlength={9}
           autocomplete="off"
-          class="text-center uppercase tracking-widest"
+          variant="code"
           bind:value={deviceCodeInput}
           disabled={deviceLookupLoading}
         />
@@ -401,7 +401,7 @@
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      class="flex items-center gap-2 rounded bg-green-50 p-3 text-sm text-green-900 dark:bg-green-950 dark:text-green-100"
+      class="flex items-center gap-2 rounded bg-success/10 p-3 text-sm text-success"
     >
       <CheckCircle class="h-4 w-4" />
       Connected! Data is flowing from xDrip+.

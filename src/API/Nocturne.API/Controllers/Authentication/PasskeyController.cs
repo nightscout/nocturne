@@ -37,7 +37,7 @@ namespace Nocturne.API.Controllers.Authentication;
 /// </list>
 ///
 /// On successful login or setup, the controller uses
-/// <see cref="SessionCookieExtensions.SetSessionCookies"/> to set session cookies.
+/// <see cref="SessionCookieExtensions.SetSessionCookies(HttpResponse, SessionTokenPair, OidcOptions)"/> to set session cookies.
 ///
 /// Passkey deletion is guarded by <see cref="ISubjectService.TryRemovePasskeyCredentialAsync"/> which
 /// enforces an atomic last-factor check inside a serializable transaction.
@@ -462,12 +462,6 @@ public class PasskeyController : ControllerBase
     /// the caller's ceremony was minted against, wins. Ids are UUID v7, which sort in creation order.
     /// Walking the candidates newest-first and taking the first with no membership is the same
     /// answer as the newest candidate satisfying all four conditions at once.
-    /// <para>
-    /// A membership that has been revoked does not count, here or in
-    /// <see cref="ITenantMemberService.GetTenantIdsForSubjectAsync"/>: the global
-    /// <c>RevokedAt == null</c> filter excludes it either way. A revoked member is a shell with no
-    /// remaining access, so enrolling onto it takes nothing over.
-    /// </para>
     /// </remarks>
     private async Task<Guid?> FindEnrollingSubjectIdAsync(Expression<Func<SubjectEntity, bool>> match)
     {
@@ -475,7 +469,7 @@ public class PasskeyController : ControllerBase
             .Where(match)
             .Where(s => !s.IsSystemSubject
                 && !_dbContext.PasskeyCredentials.Any(c => c.SubjectId == s.Id)
-                && !_dbContext.SubjectOidcIdentities.Any(o => o.SubjectId == s.Id))
+                && !_dbContext.WorkingOidcIdentities().Any(o => o.SubjectId == s.Id))
             .OrderByDescending(s => s.Id)
             .Select(s => s.Id)
             .ToListAsync();
@@ -652,23 +646,20 @@ public class PasskeyController : ControllerBase
             .Select(tm => tm.Subject)
             .FirstOrDefaultAsync(s => s != null && s.Username == request.Username);
 
-        if (subjectEntity == null)
-        {
-            // Don't reveal whether the username exists
-            return Problem(detail: "Invalid username or recovery code", statusCode: 400, title: "Bad Request");
-        }
-
-        var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subjectEntity.Id, request.Code);
+        // Unknown usernames go through the same verification; see IRecoveryCodeService.VerifyAndConsumeAsync.
+        var verified = await _recoveryCodeService.VerifyAndConsumeAsync(subjectEntity?.Id, request.Code);
         if (!verified)
         {
-            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectEntity.Id, success: false,
+            await _auditService.LogAsync(AuthAuditEventType.FailedAuth, subjectEntity?.Id, success: false,
                 ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
                 userAgent: Request.Headers.UserAgent.ToString(),
                 detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
             return Problem(detail: "Invalid username or recovery code", statusCode: 400, title: "Bad Request");
         }
 
-        await _auditService.LogAsync(AuthAuditEventType.Login, subjectEntity.Id, success: true,
+        var subjectId = subjectEntity!.Id;
+
+        await _auditService.LogAsync(AuthAuditEventType.Login, subjectId, success: true,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString(),
             userAgent: Request.Headers.UserAgent.ToString(),
             detailsJson: JsonSerializer.Serialize(new { method = "recovery_code" }));
@@ -676,7 +667,7 @@ public class PasskeyController : ControllerBase
         // Issue a restricted recovery session (short-lived)
         var subjectInfo = new SubjectInfo
         {
-            Id = subjectEntity.Id,
+            Id = subjectId,
             Name = subjectEntity.Name,
             Email = subjectEntity.Email,
         };
@@ -695,7 +686,7 @@ public class PasskeyController : ControllerBase
         return Ok(new RecoveryVerifyResponse
         {
             Success = true,
-            RemainingCodes = await _recoveryCodeService.GetRemainingCountAsync(subjectEntity.Id),
+            RemainingCodes = await _recoveryCodeService.GetRemainingCountAsync(subjectId),
         });
     }
 
@@ -810,12 +801,14 @@ public class PasskeyController : ControllerBase
 
         var remaining = await _recoveryCodeService.GetRemainingCountAsync(auth.SubjectId.Value);
         var hasCodes = await _recoveryCodeService.HasCodesAsync(auth.SubjectId.Value);
+        var codesReset = await _recoveryCodeService.WereCodesResetAsync(auth.SubjectId.Value);
 
         return Ok(new RecoveryStatusResponse
         {
             RemainingCodes = remaining,
             HasCodes = hasCodes,
             TotalCodes = 8,
+            CodesReset = codesReset,
         });
     }
 
@@ -865,7 +858,7 @@ public class PasskeyController : ControllerBase
             .Where(m => m.TenantId == tenantId)
             .AnyAsync(m =>
                 db.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                db.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId));
+                db.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId));
     }
 
     /// <summary>
@@ -1388,6 +1381,11 @@ public class RecoveryStatusResponse
     public int RemainingCodes { get; set; }
     public bool HasCodes { get; set; }
     public int TotalCodes { get; set; }
+
+    /// <summary>
+    /// True when the subject's codes were invalidated and none have been generated since.
+    /// </summary>
+    public bool CodesReset { get; set; }
 }
 
 /// <summary>

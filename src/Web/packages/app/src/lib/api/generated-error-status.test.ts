@@ -2,15 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { transformWithEsbuild } from "vite";
-import { error, isHttpError } from "@sveltejs/kit";
+import { error, isHttpError, isRedirect, redirect } from "@sveltejs/kit";
 import config from "../../../../../remote-codegen.config";
 import {
   describeSubmitError,
+  errorStatus,
   MISSING_ITEM_ERROR,
   RATE_LIMITED_ERROR,
 } from "../forms/submit-error";
 import { remoteErrorMessage } from "./remote-error";
-import { parseErrorBody } from "./error-body";
+import { parseErrorBody, parseIssues } from "./error-body";
 import { TotpSetupFailure, type ReferencingRulesResponse } from "$api-clients";
 import {
   describeTotpSetupError,
@@ -33,22 +34,23 @@ import {
  */
 async function crossTheBoundary(thrown: unknown): Promise<unknown> {
   const compiled = await transformWithEsbuild(
-    `(err, status, error, parseErrorBody) => { ${config.errorHandling.on500("get invite info")}; }`,
+    `(err, status, error, parseErrorBody, parseIssues) => { ${config.errorHandling.on500("get invite info")}; }`,
     "on500.ts",
     { loader: "ts" }
   );
   const source = compiled.code.trim().replace(/;$/, "");
 
   // The helpers are passed in because the real arm reaches them by import.
-  const flatten = new Function(`return ${source}`)() as (
+  const flatten: (
     err: unknown,
     status: unknown,
     error: typeof import("@sveltejs/kit").error,
-    parseErrorBody: typeof import("./error-body").parseErrorBody
-  ) => never;
+    parseErrorBody: typeof import("./error-body").parseErrorBody,
+    parseIssues: typeof import("./error-body").parseIssues
+  ) => never = new Function(`return ${source}`)();
 
   try {
-    flatten(thrown, (thrown as { status?: number })?.status, error, parseErrorBody);
+    flatten(thrown, errorStatus(thrown), error, parseErrorBody, parseIssues);
   } catch (crossed) {
     return crossed;
   }
@@ -118,7 +120,7 @@ describe("the status a generated remote function lets through", () => {
     const crossed = await crossTheBoundary(nswagApiException(429, RATE_LIMIT_BODY));
 
     expect(isHttpError(crossed)).toBe(true);
-    expect((crossed as { status: number }).status).toBe(429);
+    expect(errorStatus(crossed)).toBe(429);
   });
 
   it("keeps NSwag's boilerplate out of the message it carries", async () => {
@@ -236,7 +238,7 @@ describe("the status a generated remote function lets through", () => {
       )
     );
 
-    expect((crossed as { status: number }).status).toBe(409);
+    expect(errorStatus(crossed)).toBe(409);
     expect(describeSubmitError(crossed, "Couldn't save your changes.")).toBe(
       "Already redeemed."
     );
@@ -260,16 +262,68 @@ describe("the status a generated remote function lets through", () => {
       nswagApiException(503, "<html>503 Service Unavailable</html>")
     );
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
   });
 
   it("still flattens a status it does not forward", async () => {
     const crossed = await crossTheBoundary(nswagApiException(503, "unavailable"));
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
     expect(describeSubmitError(crossed, "Couldn't load the invite.")).toBe(
       "Couldn't load the invite."
     );
+  });
+});
+
+/**
+ * What a generated query answers a 401 with. The event carries only what the
+ * hooks leave on it, so the arm has to take the share-host decision from
+ * `locals` rather than reading the host again.
+ */
+async function queryAnswerTo401(isShareHost: boolean): Promise<unknown> {
+  const compiled = await transformWithEsbuild(
+    `(getRequestEvent, error, redirect) => { ${config.errorHandling.on401("query")}; }`,
+    "on401.ts",
+    { loader: "ts" }
+  );
+  const source = compiled.code.trim().replace(/;$/, "");
+
+  const answer: (
+    getRequestEvent: () => { locals: { isShareHost: boolean }; url: URL },
+    error: typeof import("@sveltejs/kit").error,
+    redirect: typeof import("@sveltejs/kit").redirect
+  ) => never = new Function(`return ${source}`)();
+
+  const event = {
+    locals: { isShareHost },
+    url: new URL("https://abc123.share.example.test/dashboard?range=24h"),
+  };
+
+  try {
+    answer(() => event, error, redirect);
+  } catch (thrown) {
+    return thrown;
+  }
+
+  throw new Error("the 401 arm returned without throwing");
+}
+
+describe("a generated query refused as unauthenticated", () => {
+  it("fails on a share host rather than sending the viewer to sign in", async () => {
+    const answer = await queryAnswerTo401(true);
+
+    expect(isHttpError(answer) && answer.status).toBe(401);
+    expect(answer).not.toHaveProperty("location");
+  });
+
+  it("sends an expired session to the login route", async () => {
+    const answer = await queryAnswerTo401(false);
+
+    expect(isRedirect(answer)).toBe(true);
+    expect(answer).toMatchObject({
+      status: 302,
+      location: "/auth/login?returnUrl=%2Fdashboard%3Frange%3D24h",
+    });
   });
 });
 
@@ -390,7 +444,126 @@ describe("an error body that is not RFC-7807", () => {
 
     const crossed = await crossTheBoundary(withoutStatus);
 
-    expect((crossed as { status: number }).status).toBe(500);
+    expect(errorStatus(crossed)).toBe(500);
+  });
+});
+
+/**
+ * The issues a rejected rule save carries, as the API roots them on the
+ * ProblemDetails: beside the flattened `errors` map the status arm already reads.
+ */
+const conditionIssues = [
+  { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+  {
+    scope: "condition",
+    path: "root",
+    reason: "minutes_not_positive",
+    field: "minutes",
+  },
+];
+
+/** The `body` of a crossed `HttpError`, or an empty object when it has none. */
+function crossedBody(err: unknown): Record<string, unknown> {
+  return isHttpError(err) && err.body && typeof err.body === "object"
+    ? (err.body as unknown as Record<string, unknown>)
+    : {};
+}
+
+describe("a rejected rule save that carries issues", () => {
+  it("forwards them on the 400 it throws", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: conditionIssues,
+    });
+
+    expect(isHttpError(crossed) && crossed.status).toBe(400);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("leaves the message the arm already derived unchanged", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: conditionIssues,
+    });
+
+    expect(crossedBody(crossed).message).toBe("conditions_empty");
+  });
+
+  it("forwards them on the 409 it throws", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        409,
+        "The rule's conditions cannot be saved.",
+        "Conflict"
+      ),
+      issues: conditionIssues,
+    });
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("forwards issues recovered from a body NSwag left unparsed", async () => {
+    // The issues exist only in the raw text on `response`; see `$lib/api/error-body`.
+    const crossed = await crossTheBoundary(
+      nswagApiException(
+        409,
+        JSON.stringify({
+          ...problemDetails(
+            409,
+            "The rule's conditions cannot be saved.",
+            "Conflict"
+          ),
+          issues: conditionIssues,
+        })
+      )
+    );
+
+    expect(isHttpError(crossed) && crossed.status).toBe(409);
+    expect(crossedBody(crossed).issues).toEqual(conditionIssues);
+  });
+
+  it("drops issues holding a malformed entry, keeping the derived message", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(
+        400,
+        "The rule's conditions cannot be saved.",
+        "Bad Request"
+      ),
+      errors: { "condition:root": ["conditions_empty"] },
+      issues: [{ reason: "conditions_empty" }, "boom"],
+    });
+
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
+    expect(crossedBody(crossed).message).toBe("conditions_empty");
+  });
+
+  it("omits issues when the body carried none", async () => {
+    const crossed = await crossTheBoundary(
+      problemDetails(400, "A message the server wrote.", "Bad Request")
+    );
+
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
+  });
+
+  it("never carries issues on a status it does not forward", async () => {
+    const crossed = await crossTheBoundary({
+      ...problemDetails(500, "Boom", "Internal Server Error"),
+      issues: conditionIssues,
+    });
+
+    expect(errorStatus(crossed)).toBe(500);
+    expect(crossedBody(crossed)).not.toHaveProperty("issues");
   });
 });
 
@@ -460,7 +633,7 @@ describe("every typed error body a remote operation declares", () => {
 
   it("declares a status, so the status arm can forward it", (ctx) => {
     if (!existsSync(fileURLToPath(SPEC_URL))) ctx.skip(SPEC_ABSENT);
-    const spec = JSON.parse(readFileSync(SPEC_URL, "utf8")) as Spec;
+    const spec: Spec = JSON.parse(readFileSync(SPEC_URL, "utf8"));
 
     const bodies = declaredErrorBodies(spec);
     expect(bodies.length).toBeGreaterThan(0);

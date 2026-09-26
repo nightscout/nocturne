@@ -39,7 +39,7 @@
     y={-14}
     dy="-0.355em"
     text-anchor="middle"
-    class="text-[8px] fill-insulin-bolus font-medium"
+    class="text-3xs fill-insulin-bolus font-medium"
   >
     {insulin.toFixed(1)}U
   </text>

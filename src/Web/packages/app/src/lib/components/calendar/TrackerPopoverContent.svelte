@@ -9,15 +9,7 @@
     TrackerCategory,
   } from "$api";
 
-  let {
-    event,
-    category,
-    startTime,
-    level,
-    formatTrackerAge,
-    openCompletionDialog,
-    def,
-  } = $props<{
+  interface Props {
     event: {
       instance: TrackerInstanceDto;
       eventType: "start" | "due" | "completed";
@@ -29,7 +21,17 @@
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
     def: TrackerDefinitionDto | undefined;
-  }>();
+  }
+
+  let {
+    event,
+    category,
+    startTime,
+    level,
+    formatTrackerAge,
+    openCompletionDialog,
+    def,
+  }: Props = $props();
 </script>
 
 <div class="space-y-2">
@@ -45,7 +47,7 @@
   <div class="text-xs space-y-1">
     {#if event.eventType === "start"}
       <div
-        class="flex items-center gap-1 text-green-600 dark:text-green-400"
+        class="flex items-center gap-1 text-success"
       >
         <Play class="h-3 w-3" />
         <span>
@@ -76,12 +78,12 @@
         class={cn(
           "flex items-center gap-1",
           level === "urgent"
-            ? "text-red-600 dark:text-red-400"
+            ? "text-severity-urgent"
             : level === "hazard"
-              ? "text-orange-600 dark:text-orange-400"
+              ? "text-severity-hazard"
               : level === "warn"
-                ? "text-yellow-600 dark:text-yellow-400"
-                : "text-blue-600 dark:text-blue-400"
+                ? "text-severity-warn"
+                : "text-severity-info"
         )}
       >
         <CalendarClock class="h-3 w-3" />
@@ -91,9 +93,9 @@
         Age: {formatTrackerAge(event.instance.ageHours)}
       </div>
       <Button
-        size="sm"
+        size="xs"
         variant="outline"
-        class="mt-2 w-full h-7 text-xs"
+        class="mt-2 w-full"
         onclick={() =>
           openCompletionDialog(
             event.instance,

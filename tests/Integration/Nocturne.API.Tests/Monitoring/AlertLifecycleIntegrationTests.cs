@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -152,6 +153,36 @@ public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task SnoozeInstance_IsReportedOnActiveAlerts()
+    {
+        var connStr = await GetPostgresConnectionStringAsync();
+        await using var conn = new NpgsqlConnection(connStr);
+        await conn.OpenAsync();
+
+        var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(conn, _tenantId);
+        var (excursionId, instanceId) = await AuthTestHelpers.SeedAlertExcursionAsync(conn, _tenantId, ruleId);
+
+        using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
+        var before = DateTime.UtcNow;
+
+        var snooze = await client.PostAsJsonAsync(
+            $"/api/v4/alerts/instances/{instanceId}/snooze",
+            new { minutes = 30 });
+        snooze.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var active = JsonSerializer.Deserialize<JsonElement>(
+            await client.GetStringAsync("/api/v4/alerts/active"));
+        var excursion = active.EnumerateArray().Single(e => e.GetProperty("id").GetGuid() == excursionId);
+
+        excursion.GetProperty("snoozedUntil").GetDateTime().Should()
+            .BeCloseTo(before.AddMinutes(30), TimeSpan.FromMinutes(1));
+        excursion.GetProperty("acknowledgedAt").ValueKind.Should().Be(JsonValueKind.Null);
+        var instance = excursion.GetProperty("activeInstances").EnumerateArray().Single();
+        instance.GetProperty("snoozedUntil").ValueKind.Should().Be(JsonValueKind.String);
+        instance.GetProperty("snoozeCount").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
     public async Task SnoozeInstance_MaxSnoozesExceeded_Returns409()
     {
         // Arrange
@@ -164,8 +195,7 @@ public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
 
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        // Snooze 5 times (the default max)
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < SmartSnoozeConfig.DefaultMaxCount; i++)
         {
             var snoozeResponse = await client.PostAsJsonAsync(
                 $"/api/v4/alerts/instances/{instanceId}/snooze",
@@ -174,7 +204,7 @@ public class AlertLifecycleIntegrationTests : AspireIntegrationTestBase
                 $"snooze attempt {i + 1} should succeed");
         }
 
-        // Act - 6th attempt should be rejected
+        // Act
         var response = await client.PostAsJsonAsync(
             $"/api/v4/alerts/instances/{instanceId}/snooze",
             new { minutes = 30 });

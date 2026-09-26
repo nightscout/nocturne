@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Item } from "$lib/components/ui/item";
   import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
   import { Artwork } from "@nocturne/watercolour";
   import { sproutArtwork } from "$lib/watercolour-icons";
@@ -97,19 +99,17 @@
 
     <!-- Heading -->
     <h1
-      class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-[36px] leading-tight"
+      class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight"
     >
       {#if path === "migration"}
         Your data is <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           home.
         </em>
       {:else}
         You're <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           in.
         </em>
@@ -128,7 +128,7 @@
     {/if}
 
     <!-- Lead paragraph -->
-    <p class="text-[17px] leading-relaxed text-muted-foreground max-w-130">
+    <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
       {#if path === "migration"}
         All your entries, treatments, and profiles are in Nocturne. Your
         existing uploaders keep working — you don't need to change them until
@@ -150,12 +150,11 @@
 
     <!-- Public access toggle -->
     <label class="flex items-start gap-3 cursor-pointer" class:opacity-50={isToggling}>
-      <input
-        type="checkbox"
+      <Checkbox
         checked={isPublic}
-        onclick={handlePublicToggle}
+        onCheckedChange={handlePublicToggle}
         disabled={isToggling}
-        class="mt-0.5 h-4 w-4 shrink-0 accent-(--onb-accent) cursor-pointer"
+        class="mt-0.5"
       />
       <div class="flex items-start gap-2">
         <Globe class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -169,15 +168,15 @@
 
   <!-- Right column -->
   <div class="flex flex-col gap-4">
-    <span class="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+    <span class="text-xs uppercase tracking-widest text-muted-foreground">
       A few next things
     </span>
 
     <div class="flex flex-col gap-3">
-      {#each nextSteps as step}
-        <button
-          class="group grid grid-cols-[auto_1fr_auto] gap-3 items-center p-3 rounded-xl border border-white/6 bg-white/3 transition-[border-color,background-color] duration-150 cursor-pointer hover:border-white/12 hover:bg-white/5"
-          type="button"
+      {#each nextSteps as step (step.title)}
+        <Item
+          variant="outline"
+          class="grid grid-cols-[auto_1fr_auto]"
           onclick={() => onNavigateWithCoach(step.coachUrl)}
         >
           <div
@@ -198,7 +197,7 @@
           >
             <ArrowRight class="h-4 w-4 text-muted-foreground" />
           </div>
-        </button>
+        </Item>
       {/each}
     </div>
   </div>

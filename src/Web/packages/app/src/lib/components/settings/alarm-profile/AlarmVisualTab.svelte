@@ -66,6 +66,7 @@
       <div class="space-y-2">
         <Label>Flash Color</Label>
         <div class="flex items-center gap-2">
+          <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
           <input
             type="color"
             bind:value={profile.visual.flashColor}

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Slider } from "$lib/components/ui/slider";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
@@ -105,10 +106,9 @@
           <Label>Alarm Sound</Label>
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             onclick={() =>
               (showCustomSoundUpload = !showCustomSoundUpload)}
-            class="h-7 text-xs"
           >
             <Upload class="h-3 w-3 mr-1" />
             {showCustomSoundUpload ? "Hide" : "Manage"} Custom Sounds
@@ -133,14 +133,14 @@
             <SelectContent>
               <SelectGroup>
                 <SelectLabel>Built-in Sounds</SelectLabel>
-                {#each BUILT_IN_SOUNDS as sound}
+                {#each BUILT_IN_SOUNDS as sound (sound.id)}
                   <SelectItem value={sound.id}>{sound.name}</SelectItem>
                 {/each}
               </SelectGroup>
               {#if allSounds.some((s) => s.isCustom)}
                 <SelectGroup>
                   <SelectLabel>Custom Sounds</SelectLabel>
-                  {#each allSounds.filter((s) => s.isCustom) as sound}
+                  {#each allSounds.filter((s) => s.isCustom) as sound (sound.id)}
                     <SelectItem value={sound.id}>
                       <span class="flex items-center gap-2">
                         <Music class="h-3 w-3" />
@@ -206,7 +206,7 @@
           class="grid gap-4 @sm:grid-cols-3 p-4 bg-muted/50 rounded-lg"
         >
           <div class="space-y-2">
-            <Label class="text-sm">Start Volume</Label>
+            <Label>Start Volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -219,7 +219,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Max Volume</Label>
+            <Label>Max Volume</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -232,7 +232,7 @@
             </div>
           </div>
           <div class="space-y-2">
-            <Label class="text-sm">Ramp Duration</Label>
+            <Label>Ramp Duration</Label>
             <div class="flex items-center gap-2">
               <Input
                 type="number"
@@ -249,12 +249,12 @@
           <Label>Volume</Label>
           <div class="flex items-center gap-4">
             <VolumeX class="h-4 w-4 text-muted-foreground" />
-            <input
-              type="range"
+            <Slider
+              type="single"
               bind:value={profile.audio.maxVolume}
-              min="0"
-              max="100"
-              class="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+              min={0}
+              max={100}
+              class="flex-1"
             />
             <Volume2 class="h-4 w-4 text-muted-foreground" />
             <span class="text-sm text-muted-foreground w-12">
@@ -301,7 +301,7 @@
             </span>
           </SelectTrigger>
           <SelectContent>
-            {#each vibrationPatterns as pattern}
+            {#each vibrationPatterns as pattern (pattern.value)}
               <SelectItem value={pattern.value}>
                 {pattern.label}
               </SelectItem>

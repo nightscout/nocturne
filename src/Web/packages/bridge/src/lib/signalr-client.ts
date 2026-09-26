@@ -154,55 +154,70 @@ class SignalRClient {
       await this.subscribeToStorageCollections();
     });
 
-    this.dataConnection.on("dataUpdate", (data: any) => {
+    this.dataConnection.on("dataUpdate", (data: unknown) => {
       logger.debug("Received dataUpdate from SignalR:", data);
       this.messageHandler.handleDataUpdate(data);
     });
 
-    this.dataConnection.on("announcement", (message: any) => {
+    this.dataConnection.on("announcement", (message: unknown) => {
       logger.debug("Received announcement from SignalR:", message);
       this.messageHandler.handleAnnouncement(message);
     });
 
-    this.dataConnection.on("notification", (notification: any) => {
+    this.dataConnection.on("notification", (notification: unknown) => {
       logger.debug("Received notification from SignalR:", notification);
       this.messageHandler.handleNotification(notification);
     });
 
-    this.dataConnection.on("statusUpdate", (status: any) => {
+    this.dataConnection.on("statusUpdate", (status: unknown) => {
       logger.debug("Received statusUpdate from SignalR:", status);
       this.messageHandler.handleStatusUpdate(status);
     });
 
-    this.dataConnection.on("create", (data: any) => {
+    this.dataConnection.on("create", (data: unknown) => {
       logger.debug("Received create from SignalR:", data);
       this.messageHandler.handleStorageCreate(data);
     });
 
-    this.dataConnection.on("update", (data: any) => {
+    this.dataConnection.on("update", (data: unknown) => {
       logger.debug("Received update from SignalR:", data);
       this.messageHandler.handleStorageUpdate(data);
     });
 
-    this.dataConnection.on("delete", (data: any) => {
+    this.dataConnection.on("delete", (data: unknown) => {
       logger.debug("Received delete from SignalR:", data);
       this.messageHandler.handleStorageDelete(data);
     });
 
-    // Handle in-app notification events
-    this.dataConnection.on("notificationCreated", (data: any) => {
-      logger.debug("Received notificationCreated from SignalR:", data);
-      this.messageHandler.handleNotificationCreated(data);
-    });
+    // Handle in-app notification events. The relayed copy names the recipient as a second
+    // argument because the payload itself has no user id.
+    this.dataConnection.on(
+      "notificationCreated",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationCreated from SignalR:", data);
+        this.messageHandler.handleNotificationCreated(data, subjectId);
+      },
+    );
 
-    this.dataConnection.on("notificationArchived", (data: any) => {
-      logger.debug("Received notificationArchived from SignalR:", data);
-      this.messageHandler.handleNotificationArchived(data);
-    });
+    this.dataConnection.on(
+      "notificationArchived",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationArchived from SignalR:", data);
+        this.messageHandler.handleNotificationArchived(data, subjectId);
+      },
+    );
 
-    this.dataConnection.on("notificationUpdated", (data: any) => {
-      logger.debug("Received notificationUpdated from SignalR:", data);
-      this.messageHandler.handleNotificationUpdated(data);
+    this.dataConnection.on(
+      "notificationUpdated",
+      (data: unknown, subjectId?: string) => {
+        logger.debug("Received notificationUpdated from SignalR:", data);
+        this.messageHandler.handleNotificationUpdated(data, subjectId);
+      },
+    );
+
+    this.dataConnection.on("trackerUpdate", (data: unknown) => {
+      logger.debug("Received trackerUpdate from SignalR:", data);
+      this.messageHandler.handleTrackerUpdate(data);
     });
   }
 
@@ -225,12 +240,12 @@ class SignalRClient {
       await this.subscribeToAlarmHub();
     });
 
-    this.alarmConnection.on("alarm", (alarm: any) => {
+    this.alarmConnection.on("alarm", (alarm: unknown) => {
       logger.debug("Received alarm from SignalR:", alarm);
       this.messageHandler.handleAlarm(alarm);
     });
 
-    this.alarmConnection.on("urgent_alarm", (alarm: any) => {
+    this.alarmConnection.on("urgent_alarm", (alarm: unknown) => {
       logger.debug("Received urgent_alarm from SignalR:", alarm);
       this.messageHandler.handleAlarm(alarm);
     });
@@ -259,12 +274,12 @@ class SignalRClient {
       await this.subscribeToConfigHub();
     });
 
-    this.configConnection.on("syncProgress", (data: any) => {
+    this.configConnection.on("syncProgress", (data: unknown) => {
       logger.debug("Received syncProgress from SignalR:", data);
       this.messageHandler.handleSyncProgress(data);
     });
 
-    this.configConnection.on("configChanged", (data: any) => {
+    this.configConnection.on("configChanged", (data: unknown) => {
       logger.debug("Received configChanged from SignalR:", data);
       this.messageHandler.handleConfigChanged(data);
     });

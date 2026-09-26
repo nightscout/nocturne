@@ -26,8 +26,7 @@
   import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";
   import { page } from "$app/state";
   import type { CreateIssueResponse, SupportDiagnosticsResponse as SupportDiagnostics } from "$api-clients";
-  import { copyToClipboard } from "$lib/utils";
-  import { toast } from "svelte-sonner";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   interface Props {
     open: boolean;
@@ -92,7 +91,7 @@
   let issueNumber = $state(0);
   let isDragging = $state(false);
   let fileInput = $state<HTMLInputElement | null>(null);
-  let previewCopied = $state(false);
+  const copy = createCopyFeedback();
 
   const config = $derived(templateConfigs[template] ?? templateConfigs.bug);
 
@@ -318,14 +317,7 @@
   }
 
   async function copyPreview() {
-    if (!(await copyToClipboard(generatePreviewMarkdown()))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    previewCopied = true;
-    setTimeout(() => {
-      previewCopied = false;
-    }, 2000);
+    await copy.copy(generatePreviewMarkdown());
   }
 
   async function openFallback() {
@@ -375,7 +367,7 @@
 
     {#if formState === "success"}
       <div class="flex flex-col items-center gap-4 py-8">
-        <CheckCircle class="h-12 w-12 text-green-500" />
+        <CheckCircle class="h-12 w-12 text-success" />
         <h3 class="text-lg font-semibold">Issue Submitted!</h3>
         {#if useOperatorSupport}
           <p class="text-sm text-muted-foreground text-center">
@@ -387,7 +379,7 @@
           </p>
           <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute GitHub issue URL -->
           <a href={issueUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" class="gap-2">
+            <Button variant="outline">
               <ExternalLink class="h-4 w-4" />
               View on GitHub
             </Button>
@@ -397,7 +389,7 @@
       </div>
     {:else if formState === "error"}
       <div class="flex flex-col items-center gap-4 py-8">
-        <AlertTriangle class="h-12 w-12 text-yellow-500" />
+        <AlertTriangle class="h-12 w-12 text-warning" />
         <h3 class="text-lg font-semibold">Couldn't Create Issue</h3>
         <p class="text-sm text-muted-foreground text-center">
           We've opened a pre-filled GitHub issue form in a new tab as a
@@ -432,7 +424,7 @@
           formState = "submitting";
           try {
             await submit();
-            const result = submitIssue.result as CreateIssueResponse | undefined;
+            const result: CreateIssueResponse | undefined = submitIssue.result;
             if (!result) {
               // A redirect (e.g. expired session -> login) resolves submit()
               // without a result; the navigation is already underway.
@@ -449,6 +441,7 @@
         })}
       >
         <!-- Submitted alongside the named fields; also serves as the browse picker -->
+        <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the drop zone -->
         <input
           bind:this={fileInput}
           type="file"
@@ -549,6 +542,7 @@
             <!-- Image Drop Zone -->
             <div class="space-y-2">
               <Label>Screenshots ({images.length}/4)</Label>
+              <!-- eslint-disable-next-line no-restricted-syntax -- file drop zone -->
               <button
                 type="button"
                 class="w-full border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer {isDragging
@@ -577,13 +571,16 @@
                         alt="Screenshot {i + 1}"
                         class="h-20 w-20 object-cover rounded-md border"
                       />
-                      <button
-                        type="button"
-                        class="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      <Button
+                        variant="destructive"
+                        size="icon-2xs"
+                        reveal
+                        class="absolute -top-2 -right-2"
                         onclick={() => removeImage(i)}
+                        aria-label="Remove screenshot {i + 1}"
                       >
-                        <X class="h-3 w-3" />
-                      </button>
+                        <X />
+                      </Button>
                     </div>
                   {/each}
                 </div>
@@ -594,7 +591,7 @@
 
             <!-- Debug Info Toggles -->
             <div class="space-y-3">
-              <Label class="text-sm font-medium">Diagnostic Info (included automatically)</Label>
+              <Label>Diagnostic Info (included automatically)</Label>
               <p class="text-xs text-muted-foreground">
                 Browser, screen size, route, and locale are always included. Toggle
                 additional info below:
@@ -608,7 +605,7 @@
               <div class="space-y-3">
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Tenant slug</Label>
+                    <Label>Tenant slug</Label>
                     <p class="text-xs text-muted-foreground">
                       Your instance identifier
                     </p>
@@ -618,7 +615,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">CGM source</Label>
+                    <Label>CGM source</Label>
                     <p class="text-xs text-muted-foreground">
                       Your connector type
                     </p>
@@ -628,7 +625,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Recent errors</Label>
+                    <Label>Recent errors</Label>
                     <p class="text-xs text-muted-foreground">
                       {recentFailureCount === 0
                         ? "No failed requests recorded this session"
@@ -640,7 +637,7 @@
 
                 <div class="flex items-center justify-between">
                   <div class="space-y-0.5">
-                    <Label class="text-sm">Settings</Label>
+                    <Label>Settings</Label>
                     <p class="text-xs text-muted-foreground">
                       {includeSettings && !collectedSettings
                         ? "Collecting…"
@@ -778,7 +775,7 @@
             </Button>
             <div class="flex-1"></div>
             <Button type="button" variant="outline" onclick={copyPreview}>
-              {#if previewCopied}
+              {#if copy.isCopied()}
                 <CheckCircle class="h-4 w-4 mr-2" />
                 Copied
               {:else}

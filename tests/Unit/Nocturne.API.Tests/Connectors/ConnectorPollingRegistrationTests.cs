@@ -1,14 +1,19 @@
 using System.Reflection;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Services.BackgroundServices;
+using Nocturne.API.Services.Notifications;
+using Nocturne.API.Tests.TestDoubles;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 
 namespace Nocturne.API.Tests.Connectors;
@@ -92,6 +97,7 @@ public class ConnectorPollingRegistrationTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(new ConnectorSyncBudget());
+        services.AddSingleton(ActiveTenantSnapshotTestDoubles.Unread());
         services.AddSingleton(nudge);
         using var provider = services.BuildServiceProvider();
 
@@ -102,6 +108,38 @@ public class ConnectorPollingRegistrationTests
 
             nudge.HasSubscribers(connectorName).Should().BeTrue(
                 "{0} must forward ConnectorPollerNudge to the base constructor", poller.Name);
+        }
+    }
+
+    /// <summary>
+    /// The snapshot saves a query and a connection per tick only while every poller and sweep reads
+    /// the one registered instance. Each is built the way the host builds it, over the snapshot
+    /// registration the host uses, and asked which snapshot it holds.
+    /// </summary>
+    [Fact]
+    public void EveryPollerAndSweep_ReadsTheOneRegisteredActiveTenantSnapshot()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApiCoreServices(new ConfigurationBuilder().Build());
+        services.AddSingleton(Mock.Of<IDbContextFactory<NocturneDbContext>>());
+        services.AddSingleton(new ConnectorSyncBudget());
+        using var provider = services.BuildServiceProvider();
+        var registered = provider.GetRequiredService<ActiveTenantSnapshot>();
+
+        Type[] sweeps =
+        [
+            typeof(DeduplicationReconciliationBackgroundService),
+            typeof(CompressionLowDetectionService),
+            typeof(NotificationResolutionService),
+        ];
+
+        foreach (var type in ScheduledPollers().Concat(sweeps))
+        {
+            using var instance = (IDisposable)ActivatorUtilities.CreateInstance(provider, type);
+
+            SnapshotHeldBy(instance).Should().BeSameAs(
+                registered, "{0} must read the registered ActiveTenantSnapshot", type.Name);
         }
     }
 
@@ -191,6 +229,20 @@ public class ConnectorPollingRegistrationTests
             .Select(descriptor => descriptor.ImplementationType!)];
     }
 
+    private static object? SnapshotHeldBy(object instance)
+    {
+        for (var type = instance.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type
+                .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                .SingleOrDefault(f => f.FieldType == typeof(ActiveTenantSnapshot));
+            if (field is not null)
+                return field.GetValue(instance);
+        }
+
+        return null;
+    }
+
     private static List<Type> HandWrittenPollers() =>
         [.. typeof(ConnectorBackgroundService<,>).Assembly.GetTypes()
             .Where(t => t is { IsAbstract: false, IsGenericTypeDefinition: false }
@@ -212,8 +264,8 @@ public class ConnectorPollingRegistrationTests
     private static List<string> InstalledConnectorNames() =>
         [.. ConnectorInstallers.Types()
             .Select(t => t.GetCustomAttribute<ConnectorRegistrationAttribute>(inherit: false)?.ConnectorName)
-            .Where(name => name is not null)
-            .Distinct()!];
+            .OfType<string>()
+            .Distinct()];
 
     [ConnectorRegistration("PollingTest", "polling-test", "POLLINGTEST", "PollingTest")]
     private sealed class PollingTestConfiguration : BaseConnectorConfiguration
@@ -271,6 +323,7 @@ public class ConnectorPollingRegistrationTests
         : ConnectorBackgroundService<RecordingConnectorService, PollingTestConfiguration>(
             serviceProvider,
             new ConnectorSyncBudget(),
+            ActiveTenantSnapshotTestDoubles.Unread(),
             NullLogger<ConnectorBackgroundService<RecordingConnectorService, PollingTestConfiguration>>.Instance)
     {
         public Task<SyncResult> SyncAsync(

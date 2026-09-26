@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
@@ -24,7 +25,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(`/auth/login?returnUrl=${returnUrl}`, { replaceState: true });
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 
@@ -136,12 +137,12 @@
       <Card.Content class="space-y-4">
         {#if !clientInfo.isKnown}
           <div
-            class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20"
+            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
           >
             <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
             />
-            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+            <p class="text-sm text-warning">
               This application is not in the Nocturne known app directory. Only
               approve if you trust this application.
             </p>
@@ -153,7 +154,7 @@
             <a
               href={clientInfo.homepage}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="inline-flex items-center gap-1 hover:text-foreground"
             >
               {clientInfo.homepage}
@@ -170,21 +171,21 @@
           <!-- New permissions section -->
           <div>
             <div class="mb-3 flex items-center gap-2">
-              <ShieldPlus class="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <ShieldPlus class="h-4 w-4 text-warning" />
               <p class="text-sm font-medium text-foreground">
                 New permissions requested
               </p>
             </div>
             <div
-              class="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-900/20"
+              class="rounded-md border border-warning/30 bg-warning/10 p-3"
             >
               <ul class="space-y-2">
-                {#each newScopes as s}
+                {#each newScopes as s, i (i)}
                   <li class="flex items-start gap-3 text-sm">
                     <ShieldAlert
-                      class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400"
+                      class="mt-0.5 h-4 w-4 shrink-0 text-warning"
                     />
-                    <span class="text-amber-900 dark:text-amber-100">
+                    <span class="text-warning">
                       {getOAuthScopeDescription(s)}
                     </span>
                   </li>
@@ -203,7 +204,7 @@
                 </p>
               </div>
               <ul class="space-y-2">
-                {#each previouslyApprovedScopes as s}
+                {#each previouslyApprovedScopes as s, i (i)}
                   <li class="flex items-start gap-3 text-sm">
                     <Check
                       class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
@@ -223,7 +224,7 @@
               This application is requesting permission to:
             </p>
             <ul class="space-y-2">
-              {#each scopes as s}
+              {#each scopes as s, i (i)}
                 <li class="flex items-start gap-3 text-sm">
                   <Check class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span class="text-muted-foreground">
@@ -268,7 +269,7 @@
               />
               <Label
                 for="limit-24-hours"
-                class="text-sm font-medium cursor-pointer"
+                class="cursor-pointer"
               >
                 Only share data from the last 24 hours
               </Label>
@@ -286,7 +287,7 @@
 
         <Separator />
 
-        {#each formIssues as issue}
+        {#each formIssues as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >

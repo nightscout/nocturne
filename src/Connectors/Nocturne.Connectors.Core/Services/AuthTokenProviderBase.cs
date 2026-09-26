@@ -58,10 +58,10 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected virtual int TokenLifetimeBufferMinutes => 5;
 
     /// <summary>
-    ///     The connector name used as the cache key prefix.
-    ///     Concrete providers must supply this.
+    ///     The connector name used as the cache key prefix, taken from the configuration type's own
+    ///     registration so a provider cannot key its tokens under a name no other component knows.
     /// </summary>
-    protected abstract string ConnectorName { get; }
+    protected virtual string ConnectorName => ConnectorRegistrationAttribute.NameFor(typeof(TConfig));
 
     /// <inheritdoc />
     public bool IsTokenExpired
@@ -142,7 +142,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
             _logger.LogWarning("Failed to acquire token for {ProviderName}", GetType().Name);
             return null;
         }
-        catch (Exception ex)
+        // A withdrawn run is not a failed sign-in, so its cancellation travels instead of becoming a null token.
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogError(ex, "Error acquiring token for {ProviderName}", GetType().Name);
             return null;
@@ -169,7 +170,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
             var result = await AcquireTokenAsync(config, cancellationToken);
             return !string.IsNullOrEmpty(result.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             _logger.LogWarning(ex, "Credential verification failed for {ProviderName}", GetType().Name);
             return false;

@@ -36,10 +36,18 @@ export default {
     apiTypes: '$api',
   },
   nswagClientPath: './generated/nocturne-api-client',
+  // Matches nswag.json: the client has no date reviver, so a date-time is the ISO
+  // text the API sent, and is typed that way.
+  dateTimeType: 'string',
+  // Every generated schema `satisfies z.ZodType<Api.X>` (utils/generateZodSchemas).
+  typedSchemas: true,
   errorHandling: {
     // `parseErrorBody` recovers the reason from an error body NSwag left unparsed;
-    // both the 403 and 500 arms read it. See `$lib/api/error-body`.
-    imports: [`import { parseErrorBody } from '$lib/api/error-body';`],
+    // both the 403 and 500 arms read it. `parseIssues` validates the structured
+    // issues the 400/409 arm forwards. See `$lib/api/error-body`.
+    imports: [
+      `import { parseErrorBody, parseIssues } from '$lib/api/error-body';`,
+    ],
 
     // The default redirects queries to /auth/login on 401. For a public share
     // host ({token}.share.{baseDomain}) the viewer is anonymous by design and has
@@ -47,14 +55,12 @@ export default {
     // may not have shared, each 401ing — so the default bounces them to login
     // ("flash of dashboard, then redirect"). On a share host, surface 401 as a
     // normal error instead so unshared categories just fail their widget rather
-    // than navigating away. Host detection mirrors $lib/share-host's isShareHost
-    // (inlined — generated code can't import it). Commands/forms already throw
-    // error(401) and never redirected.
+    // than navigating away. Commands/forms already throw error(401) and never
+    // redirected.
     on401: (kind: string) =>
       kind === 'query'
-        ? `const { request, url } = getRequestEvent();\n` +
-          `    const shareHost = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? '';\n` +
-          `    if (/^[^.]+\\.share\\./i.test(shareHost)) throw error(401, 'Unauthorized');\n` +
+        ? `const { locals, url } = getRequestEvent();\n` +
+          `    if (locals.isShareHost) throw error(401, 'Unauthorized');\n` +
           '    throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`)'
         : `throw error(401, 'Unauthorized')`,
 
@@ -101,9 +107,10 @@ export default {
       `    const errors = e?.errors ?? b?.errors;\n` +
       `    const flat = errors ? Object.entries(errors).map(([, v]: [string, any]) => Array.isArray(v) ? v.join(', ') : v).join('; ') : undefined;\n` +
       `    const message = flat ?? ${reason('e', 'b')};\n` +
+      `    const issues = parseIssues(e?.issues) ?? b?.issues;\n` +
       `    if (status === 429) throw error(429, 'Too many requests');\n` +
       `    if (status === 404) throw error(404, 'Not found');\n` +
-      `    if (status === 400 || status === 409) throw error(status, message ?? 'Request rejected');\n` +
+      `    if (status === 400 || status === 409) throw error(status, issues ? { message: message ?? 'Request rejected', issues } : message ?? 'Request rejected');\n` +
       `    throw error(500, message ?? 'Failed to ${functionName}')`,
   },
 };

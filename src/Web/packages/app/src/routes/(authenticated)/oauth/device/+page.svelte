@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
@@ -28,7 +29,7 @@
   $effect(() => {
     if (!page.data.isAuthenticated) {
       const returnUrl = encodeURIComponent(page.url.pathname + page.url.search);
-      goto(`/auth/login?returnUrl=${returnUrl}`, { replaceState: true });
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`), { replaceState: true });
     }
   });
 
@@ -70,13 +71,12 @@
   ]);
 
   const scopes = $derived(
-    deviceInfo ? (deviceInfo.scopes as string[]).filter(Boolean) : []
+    deviceInfo ? deviceInfo.scopes.filter(Boolean) : []
   );
   const hasFullAccess = $derived(scopes.includes("*"));
   const appName = $derived(
     deviceInfo
-      ? (deviceInfo.displayName as string | null) ??
-          (deviceInfo.clientId as string)
+      ? deviceInfo.displayName ?? deviceInfo.clientId
       : ""
   );
 </script>
@@ -91,9 +91,9 @@
       <!-- State 3: Success -->
       <Card.Header class="space-y-1 text-center">
         <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/10"
         >
-          <Check class="h-6 w-6 text-green-600 dark:text-green-400" />
+          <Check class="h-6 w-6 text-success" />
         </div>
         <Card.Title class="text-2xl font-bold">
           Device Authorized
@@ -157,12 +157,12 @@
       <Card.Content class="space-y-4">
         {#if !deviceInfo.isKnown}
           <div
-            class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20"
+            class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3"
           >
             <AlertTriangle
-              class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400"
+              class="mt-0.5 h-4 w-4 shrink-0 text-warning"
             />
-            <p class="text-sm text-yellow-800 dark:text-yellow-200">
+            <p class="text-sm text-warning">
               This application is not in the Nocturne known app directory. Only
               approve if you trust this application.
             </p>
@@ -176,7 +176,7 @@
             This application is requesting permission to:
           </p>
           <ul class="space-y-2">
-            {#each scopes as scope}
+            {#each scopes as scope, i (i)}
               {@const sensitive = isSensitiveDeviceScope(scope)}
               <li class="flex items-start gap-3 text-sm">
                 {#if sensitive}
@@ -218,7 +218,7 @@
 
         <Separator />
 
-        {#each allIssues as issue}
+        {#each allIssues as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >
@@ -284,7 +284,7 @@
       </Card.Header>
 
       <Card.Content class="space-y-4">
-        {#each lookupDeviceForm.fields.allIssues() ?? [] as issue}
+        {#each lookupDeviceForm.fields.allIssues() ?? [] as issue, i (i)}
           <div
             class="flex items-start gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-3"
           >
@@ -305,7 +305,7 @@
             placeholder="XXXX-YYYY"
             maxlength={9}
             autocomplete="off"
-            class="text-center text-lg tracking-widest uppercase"
+            variant="code"
             bind:value={codeInput}
             disabled={!!lookupDeviceForm.pending}
           />

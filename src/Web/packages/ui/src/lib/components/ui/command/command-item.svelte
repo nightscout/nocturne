@@ -1,3 +1,31 @@
+<script lang="ts" module>
+  import { tv, type VariantProps } from "tailwind-variants";
+
+  export const commandItemVariants = tv({
+    base: "aria-selected:bg-accent aria-selected:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground outline-hidden relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    variants: {
+      variant: {
+        default: "",
+        // Creates the value that was searched for, e.g. Create "Apple".
+        create: "text-primary",
+        // Leaves the value unset or skips choosing one, e.g. None.
+        muted: "text-muted-foreground",
+      },
+      // Nested under the item above it, as DropdownMenu.Item's inset.
+      inset: {
+        true: "pl-8",
+        false: "",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      inset: false,
+    },
+  });
+
+  export type CommandItemVariant = VariantProps<typeof commandItemVariants>["variant"];
+</script>
+
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
   import { cn } from "../../../utils";
@@ -5,16 +33,15 @@
   let {
     ref = $bindable(null),
     class: className,
+    variant = "default",
+    inset = false,
     ...restProps
-  }: CommandPrimitive.ItemProps = $props();
+  }: CommandPrimitive.ItemProps & { variant?: CommandItemVariant; inset?: boolean } = $props();
 </script>
 
 <CommandPrimitive.Item
   bind:ref
   data-slot="command-item"
-  class={cn(
-    "aria-selected:bg-accent aria-selected:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground outline-hidden relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-    className
-  )}
+  class={cn(commandItemVariants({ variant, inset }), className)}
   {...restProps}
 />

@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
+  import { distinct } from "$lib/utils/collections";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import type { Bolus, CarbIntake } from "$lib/api";
+  import { BolusKind, type Bolus, type CarbIntake } from "$lib/api";
   import type { EntryRecord } from "$lib/constants/entry-categories";
+  import { cn } from "$lib/utils";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
   import * as Select from "$lib/components/ui/select";
@@ -39,6 +43,7 @@
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { apsSnapshotToPrediction } from "$lib/utils/aps-snapshot-to-prediction";
   import { isDayString, startOfDay, toDayString } from "$lib/utils/date-range";
+  import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
 
   // Get date from URL search params. The default is the local calendar day —
   // taking it from `toISOString()` names yesterday for anyone east of UTC.
@@ -47,6 +52,8 @@
     const fromUrl = page.url.searchParams.get("date");
     return isDayString(fromUrl) ? fromUrl : today;
   });
+
+  setReportPrintMeta(() => ({ period: { from: dateParam, to: dateParam } }));
 
   // Create resource with automatic layout registration
   const dayDataResource = contextResource(
@@ -59,10 +66,10 @@
   // Short aliases for deeply-nested backend data
   // Note: analysis, insulinDelivery, and treatmentSummary are currently null
   // until the statistics client is migrated to use summary/retrospective clients
-  const analysis = $derived(dayData?.analysis as any);
+  const analysis = $derived(dayData?.analysis);
   const basicStats = $derived(analysis?.basicStats);
-  const delivery = $derived(dayData?.insulinDelivery as any);
-  const summary = $derived(dayData?.treatmentSummary as any);
+  const delivery = $derived(dayData?.insulinDelivery);
+  const summary = $derived(dayData?.treatmentSummary);
 
   // Parse current date from URL. Read as a local day, not as UTC midnight, which
   // renders as the previous day for anyone west of UTC.
@@ -75,9 +82,8 @@
 
   // Date navigation
   function goToDayOffset(days: number) {
-    const target = new Date(currentDate);
-    target.setDate(target.getDate() + days);
-    goto(`/reports/day-in-review?date=${toDayString(target)}`, {
+    const target = timeDay.offset(currentDate, days);
+    goto(resolve(`/reports/day-in-review?date=${toDayString(target)}`), {
       invalidateAll: true,
       replaceState: true,
     });
@@ -87,7 +93,7 @@
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      goto("/calendar");
+      goto(resolve("/calendar"));
     }
   }
 
@@ -109,11 +115,7 @@
 
   // Get unique event types for filter dropdown
   const uniqueEventTypes = $derived.by(() => {
-    const types = new Set<string>();
-    for (const row of treatmentRows) {
-      types.add(getRowLabel(row));
-    }
-    return Array.from(types).sort();
+    return distinct(treatmentRows.map(getRowLabel)).sort();
   });
 
   // Filtered and sorted treatments
@@ -152,12 +154,14 @@
     return result;
   });
 
-  // Insulin delivery values for the donut chart (fallback chain is meaningful)
-  const scheduledBasal = $derived(
-    delivery?.scheduledBasal ?? summary?.totals?.insulin?.scheduledBasal ?? 0
-  );
-  const additionalBasal = $derived(
-    delivery?.additionalBasal ?? summary?.totals?.insulin?.additionalBasal ?? 0
+  // Insulin delivery values for the donut chart. All come from the delivery stats, which
+  // already folds algorithm micro-boluses into additional basal, so the donut draws only
+  // manual boluses to keep its arcs equal to the total it prints.
+  const scheduledBasal = $derived(delivery?.scheduledBasal ?? 0);
+  const additionalBasal = $derived(delivery?.additionalBasal ?? 0);
+  const totalInsulin = $derived(delivery?.totalInsulin ?? 0);
+  const manualBoluses = $derived(
+    (dayData?.boluses ?? []).filter((b) => b.kind !== BolusKind.Algorithm)
   );
 
   // === Treatment Edit Dialog ===
@@ -169,7 +173,7 @@
     const record: EntryRecord = { kind: "bolus", data: bolus };
     const correlated: EntryRecord[] = [];
     if (bolus.correlationId) {
-      const linkedCarb = (dayData?.carbIntakes ?? [] as CarbIntake[]).find(
+      const linkedCarb = (dayData?.carbIntakes ?? []).find(
         (c: CarbIntake) => c.correlationId === bolus.correlationId
       );
       if (linkedCarb) correlated.push({ kind: "carbs", data: linkedCarb });
@@ -186,7 +190,7 @@
       editDialogRecord = { kind: "carbs", data: row };
       const correlated: EntryRecord[] = [];
       if (row.correlationId) {
-        const linkedBolus = (dayData?.boluses ?? [] as Bolus[]).find(
+        const linkedBolus = (dayData?.boluses ?? []).find(
           (b: Bolus) => b.correlationId === row.correlationId
         );
         if (linkedBolus) correlated.push({ kind: "bolus", data: linkedBolus });
@@ -246,10 +250,11 @@
 
 {#snippet sortableHeader(column: "time" | "type" | "carbs" | "insulin", label: string, alignRight = false)}
   <Table.Head class={alignRight ? "text-right" : ""}>
+    <span class="hidden print:inline">{label}</span>
     <Button
       variant="ghost"
       size="sm"
-      class={alignRight ? "-mr-3" : "-ml-3"}
+      class={[alignRight ? "-mr-3" : "-ml-3", "print:hidden"]}
       onclick={() => toggleSort(column)}
     >
       {label}
@@ -268,58 +273,51 @@
 
 {#if dayDataResource.current}
 <div class="@container space-y-6 p-3 @md:p-6">
-  <!-- Header with Navigation -->
-  <Card.Root class="print:hidden">
-    <Card.Content class="p-4">
-      <div
-        class="flex flex-col gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
+  <div
+    class="flex flex-col gap-3 print:hidden @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
+  >
+    <Button
+      variant="ghost"
+      size="sm"
+      class="self-start @2xl:self-auto"
+      onclick={goBackToPreviousView}
+    >
+      <ArrowLeft class="h-4 w-4 mr-2" />
+      Back to Previous View
+    </Button>
+
+    <div class="flex items-center justify-center gap-2">
+      <Button
+        variant="outline"
+        size="icon"
+        class="shrink-0"
+        onclick={() => goToDayOffset(-1)}
       >
-        <Button
-          variant="ghost"
-          size="sm"
-          class="self-start @2xl:self-auto"
-          onclick={goBackToPreviousView}
-        >
-          <ArrowLeft class="h-4 w-4 mr-2" />
-          Back to Previous View
-        </Button>
-
-        <div class="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            class="shrink-0"
-            onclick={() => goToDayOffset(-1)}
-          >
-            <ChevronLeft class="h-4 w-4" />
-          </Button>
-          <div
-            class="flex min-w-0 items-center justify-center gap-2 px-1 @2xl:min-w-[220px]"
-          >
-            <Calendar class="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span class="truncate text-base font-medium @2xl:text-lg">
-              {dateDisplay}
-            </span>
-          </div>
-          <Button
-            variant="outline"
-            size="icon"
-            class="shrink-0"
-            onclick={() => goToDayOffset(1)}
-          >
-            <ChevronRight class="h-4 w-4" />
-          </Button>
-        </div>
-
-        <div class="hidden @2xl:block @2xl:w-[100px]"><!-- Spacer for alignment --></div>
+        <ChevronLeft class="h-4 w-4" />
+      </Button>
+      <div
+        class="flex min-w-0 items-center justify-center gap-2 px-1 @2xl:min-w-[220px]"
+      >
+        <Calendar class="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span class="truncate text-base font-medium @2xl:text-lg">
+          {dateDisplay}
+        </span>
       </div>
-    </Card.Content>
-  </Card.Root>
+      <Button
+        variant="outline"
+        size="icon"
+        class="shrink-0"
+        onclick={() => goToDayOffset(1)}
+      >
+        <ChevronRight class="h-4 w-4" />
+      </Button>
+    </div>
 
-  <!-- Summary Stats -->
-  <div class="grid @4xl:grid-cols-3 gap-6">
-    <!-- Glucose Overview -->
-    <Card.Root class="@4xl:col-span-2">
+    <div class="hidden @2xl:block @2xl:w-[100px]"><!-- Spacer for alignment --></div>
+  </div>
+
+  <div class="grid @4xl:grid-cols-3 print:grid-cols-3 gap-6">
+      <Card.Root class="@4xl:col-span-2 print:col-span-2">
       <Card.Content class="p-4 space-y-4">
         <TIRStackedChart
           percentages={analysis?.timeInRange?.percentages}
@@ -371,31 +369,37 @@
             </div>
           </div>
         </div>
-        <ReliabilityBadge reliability={analysis?.reliability} />
+        <ReliabilityBadge reliability={analysis?.reliability} class="print:hidden" />
       </Card.Content>
     </Card.Root>
 
-    <!-- Treatment Summary -->
-    <Card.Root>
+      <Card.Root>
       <Card.Content class="p-4 flex flex-col items-center gap-4">
         <InsulinDonutChart
-          boluses={dayData?.boluses ?? []}
+          boluses={manualBoluses}
           {scheduledBasal}
           {additionalBasal}
+          {totalInsulin}
           carbIntakes={dayData?.carbIntakes ?? []}
           onBolusClick={openBolusDialog}
         />
         <div class="grid grid-cols-2 gap-x-6 gap-y-2 text-sm w-full">
           <div>
             <div class="text-muted-foreground">Total Carbs</div>
-            <div class="font-bold tabular-nums">
+            <div class="font-medium tabular-nums">
               {(summary?.totals?.food?.carbs ?? 0).toFixed(0)}g
             </div>
           </div>
           <div>
-            <div class="text-muted-foreground">Boluses</div>
+            <div class="text-muted-foreground">Manual boluses</div>
             <div class="font-medium tabular-nums">
-              {delivery?.bolusCount ?? dayData?.boluses?.filter((b: Bolus) => (b.insulin ?? 0) > 0).length ?? 0}
+              {delivery?.bolusCount ?? 0}
+            </div>
+          </div>
+          <div>
+            <div class="text-muted-foreground">Automatic boluses</div>
+            <div class="font-medium tabular-nums">
+              {delivery?.microBolusCount ?? 0}
             </div>
           </div>
         </div>
@@ -403,7 +407,6 @@
     </Card.Root>
   </div>
 
-  <!-- Main Glucose Chart with Treatment Markers -->
   <GlucoseChartCard
     dateRange={{
       from:
@@ -427,20 +430,19 @@
     externalPredictionData={selectedPredictionData}
   />
 
-  <!-- Historical Prediction Scrubber + APS State -->
+  <!-- Both follow the scrubber, which paper cannot move. -->
   {#if hasApsSnapshots}
-    <div class="print:hidden">
+    <div class="space-y-6 print:hidden">
       <RetrospectiveTimeScrubber
         date={currentDate}
         bind:currentTime={scrubberTime}
         onTimeChange={handleScrubberTimeChange}
         stepMinutes={5}
       />
+      <ApsStateCard snapshot={selectedSnapshot} />
     </div>
-    <ApsStateCard snapshot={selectedSnapshot} />
   {/if}
 
-  <!-- Treatments Timeline with Filter/Sort -->
   <Card.Root>
     <Card.Header class="pb-2">
       <div class="flex flex-wrap items-center justify-between gap-4">
@@ -465,7 +467,7 @@
             </Select.Trigger>
             <Select.Content>
               <Select.Item value="">All Types</Select.Item>
-              {#each uniqueEventTypes as eventType}
+              {#each uniqueEventTypes as eventType (eventType)}
                 <Select.Item value={eventType}>{eventType}</Select.Item>
               {/each}
             </Select.Content>
@@ -479,6 +481,9 @@
         </div>
       </div>
       <Card.Description class="print:hidden">Click on a treatment to edit it</Card.Description>
+      {#if filterEventType}
+        <p class="hidden text-sm text-muted-foreground print:block">Showing {filterEventType} only</p>
+      {/if}
     </Card.Header>
     <Card.Content>
       {#if filteredTreatments.length > 0}
@@ -490,31 +495,27 @@
               {@render sortableHeader("type", "Type")}
               {@render sortableHeader("carbs", "Carbs", true)}
               {@render sortableHeader("insulin", "Insulin", true)}
-              <Table.Head>Notes</Table.Head>
               <Table.Head class="w-[50px] print:hidden"></Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {#each filteredTreatments as row}
+            {#each filteredTreatments as row (`${row.rowType}-${row.id}`)}
               {@const style = getRowTypeStyle(row.rowType)}
               <Table.Row
-                class="cursor-pointer hover:bg-muted/50 transition-colors"
+                class="cursor-pointer"
                 onclick={() => handleTreatmentClick(row)}
               >
                 <Table.Cell class="font-medium">
                   {row.mills ? time(row.mills) : "—"}
                 </Table.Cell>
                 <Table.Cell>
-                  <Badge
-                    variant="outline"
-                    class="{style.colorClass} {style.bgClass} {style.borderClass}"
-                  >
+                  <Badge variant={style.badge}>
                     {getRowLabel(row)}
                   </Badge>
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   {#if row.rowType === "carbIntake" && (row.carbs ?? 0) > 0}
-                    <span class={getRowTypeStyle("carbIntake").colorClass}>
+                    <span class={cn(getRowTypeStyle("carbIntake").colorClass, "print:text-foreground")}>
                       {row.carbs}g
                     </span>
                   {:else}
@@ -523,20 +524,15 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">
                   {#if row.rowType === "bolus" && (row.insulin ?? 0) > 0}
-                    <span class={getRowTypeStyle("bolus").colorClass}>
+                    <span class={cn(getRowTypeStyle("bolus").colorClass, "print:text-foreground")}>
                       {(row.insulin ?? 0).toFixed(2)}U
                     </span>
                   {:else}
                     —
                   {/if}
                 </Table.Cell>
-                <Table.Cell
-                  class="text-muted-foreground truncate max-w-[200px]"
-                >
-                  —
-                </Table.Cell>
                 <Table.Cell class="print:hidden">
-                  <Button variant="ghost" size="icon" class="h-8 w-8">
+                  <Button variant="ghost" size="icon-sm" aria-label="Edit treatment">
                     <Edit class="h-4 w-4" />
                   </Button>
                 </Table.Cell>

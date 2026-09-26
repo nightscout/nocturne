@@ -37,6 +37,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     public const string SoftDeleteFilterKey = "soft_delete";
 
     /// <summary>
+    /// The most rows of one entity type a single save will stamp with the same
+    /// <see cref="ISystemTimestamped.SysUpdatedAt"/> millisecond. A bulk import of one type wider
+    /// than this spreads onto successive milliseconds, so one tie group can never drag a
+    /// <see cref="HistoryPage"/> page past roughly twice its limit.
+    /// </summary>
+    public const int SystemTimestampGroupSize = 1000;
+
+    /// <summary>
     /// Initializes a new instance of the NocturneDbContext class
     /// </summary>
     /// <param name="options">The options for this context</param>
@@ -109,6 +117,16 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// applies when <c>app.is_share</c> is 'true'.
     /// </summary>
     public bool ShareFullHistory { get; set; }
+
+    /// <summary>
+    /// True when the request is clamped to the last 24 hours of time-series data, from
+    /// <c>ICategoryReadContext.IsHistoryClamped</c>. Known post-auth, so it is stamped on the
+    /// factory-created context and on the scoped context by <c>MemberScopeMiddleware</c>; carried
+    /// to the <c>app.history_clamped</c> GUC. A context that never sets it is not clamped: unlike
+    /// the share clamp this one is fail-open, so owners and background work are never narrowed by
+    /// a missed stamp.
+    /// </summary>
+    public bool HistoryClamped { get; set; }
 
     public DbSet<FoodEntity> Foods { get; set; }
 
@@ -248,6 +266,12 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     /// </summary>
     public DbSet<TimezoneTimelineEntity> TimezoneTimeline { get; set; }
 
+    /// <summary>
+    /// Device-clock offset evidence gathered by connectors — stored separately from
+    /// <see cref="TimezoneTimeline"/> so derived knowledge never clobbers a user assertion.
+    /// </summary>
+    public DbSet<DeviceClockObservationEntity> DeviceClockObservations { get; set; }
+
     public DbSet<CalibrationEntity> Calibrations { get; set; }
 
     public DbSet<BolusEntity> Boluses { get; set; }
@@ -322,6 +346,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<AlertExcursionEntity> AlertExcursions { get; set; }
 
+    public DbSet<AlertExcursionMuteEntity> AlertExcursionMutes { get; set; }
+
     public DbSet<AlertInstanceEntity> AlertInstances { get; set; }
 
     public DbSet<AlertDeliveryEntity> AlertDeliveries { get; set; }
@@ -359,6 +385,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<CoachMarkStateEntity> CoachMarkStates { get; set; }
 
+    public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
+
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
 
     public DbSet<TenantAuditConfigEntity> TenantAuditConfig { get; set; }
@@ -392,13 +420,6 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                     Security.TotpSecretProtection.CreateProtector(ApplicationServices)));
 
         ConfigureTenantFilters(modelBuilder);
-
-        // Tenant membership is "active" only while not revoked. Enforcing this once here
-        // keeps every membership query (auth gates, setup detection, admin listings) from
-        // having to repeat `RevokedAt == null`. The matching partial unique index
-        // (ix_tenant_members_tenant_subject, filtered on revoked_at IS NULL) lets a revoked
-        // membership coexist with a fresh active one, so re-adds remain valid.
-        modelBuilder.Entity<TenantMemberEntity>().HasQueryFilter(tm => tm.RevokedAt == null);
 
         ConfigureTenantCascadeDeletes(modelBuilder);
 
@@ -457,7 +478,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     ];
 
     /// <summary>
-    /// V4 record tables keyed on <see cref="IV4TimeSeriesEntity.Timestamp"/>.
+    /// V4 record tables keyed on <see cref="IObservationTimestamped.Timestamp"/>.
     /// </summary>
     internal static readonly Type[] V4TimeSeriesRecordEntities =
     [
@@ -552,6 +573,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         [
             typeof(AlertCustomSoundEntity),
             typeof(AlertDeliveryEntity),
+            typeof(AlertExcursionMuteEntity),
             typeof(AlertInviteEntity),
             typeof(AlertRuleChannelEntity),
             typeof(AlertRuleEntity),
@@ -676,6 +698,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .HasDatabaseName($"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id")
                 .IsUnique()
                 .HasFilter("legacy_id IS NOT NULL AND deleted_at IS NULL");
+        }
+
+        // GetBlockingLegacyIdsAsync also wants the user tombstones, which the unique index above
+        // leaves out, so without this the lookup scans every row the tenant owns: 719 ms and 187k
+        // buffers to find 200 ids on the largest production tenant. With it, the planner answers
+        // the OR in WhereBlocksRecreation with a BitmapOr over the two partial indexes. Tombstones
+        // only, not every soft-deleted row, because that is the arm the OR asks for; on production
+        // that is 1.5% of sensor_glucose and at most 15% of any table. Named, because an unnamed HasIndex on the same
+        // columns would reconfigure the unique index instead of adding this one.
+        foreach (var entity in V4LegacyIdRecordEntities.Select(t => modelBuilder.Entity(t)))
+        {
+            var name = $"ix_{entity.Metadata.GetTableName()}_tenant_legacy_id_user_deleted";
+            entity.HasIndex([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)], name)
+                .HasDatabaseName(name)
+                .HasFilter("legacy_id IS NOT NULL AND deleted_by_user");
         }
 
         foreach (var entity in V4CorrelationIndexedEntities.Select(t => modelBuilder.Entity(t)))
@@ -1400,6 +1437,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_connector_configurations_connector_name_tenant")
             .IsUnique();
 
+        // The index above is case-sensitive, so it only means "one row per connector per tenant"
+        // while the column holds one spelling of each name. Enforced here rather than trusted to
+        // the writers: a writer that predates the rule — an instance still serving during a rolling
+        // deploy, or an operator's own SQL — would otherwise insert a row that satisfies the index
+        // and that no lookup can ever find again.
+        modelBuilder
+            .Entity<ConnectorConfigurationEntity>()
+            .ToTable(t => t.HasCheckConstraint(
+                "ck_connector_configurations_connector_name_lower",
+                "connector_name = lower(connector_name)"));
+
         modelBuilder.Entity<PlatformSettingsEntity>()
             .HasIndex(ps => ps.Category)
             .HasDatabaseName("ix_platform_settings_category")
@@ -1635,6 +1683,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TimezoneTimelineEntity>()
             .HasIndex(e => new { e.TenantId, e.EffectiveFrom })
             .HasDatabaseName("ix_timezone_timeline_tenant_effective_from")
+            .IsUnique();
+
+        // DeviceClockObservations: an observation is keyed by what was observed and when — the same
+        // evidence re-gathered on a later sync must upsert into the same row, not accumulate.
+        modelBuilder.Entity<DeviceClockObservationEntity>()
+            .HasIndex(e => new { e.TenantId, e.Connector, e.Source, e.ObservedAt })
+            .HasDatabaseName("ix_device_clock_observations_tenant_connector_source_observed")
             .IsUnique();
 
         modelBuilder
@@ -2290,14 +2345,13 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.SubjectId })
             .HasDatabaseName("ix_tenant_members_tenant_subject")
-            .IsUnique()
-            .HasFilter("revoked_at IS NULL");
+            .IsUnique();
 
         modelBuilder.Entity<TenantMemberEntity>()
             .HasIndex(e => new { e.TenantId, e.Username })
             .HasDatabaseName("ix_tenant_members_tenant_username")
             .IsUnique()
-            .HasFilter("username IS NOT NULL AND revoked_at IS NULL");
+            .HasFilter("username IS NOT NULL");
 
         modelBuilder.Entity<TenantRoleEntity>(entity =>
         {
@@ -2331,9 +2385,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.ToTable("client_devices");
             entity.Property(e => e.Capabilities).HasColumnType("text[]");
 
-            // Revoke-cascade: removing the OAuth grant removes the device. The FK is nullable and
-            // unpopulated until the device-management flow resolves the grant, so existing rows are
-            // unaffected.
+            // Fires only on a hard grant delete; a revoke stages removal via ClientDeviceGrantCascade.
             entity.HasOne<OAuthGrantEntity>()
                 .WithMany()
                 .HasForeignKey(e => e.GrantId)
@@ -2377,6 +2429,24 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 .WithMany()
                 .HasForeignKey(e => e.AlertRuleId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlertExcursionMuteEntity>(entity =>
+        {
+            entity.HasOne(e => e.AlertExcursion)
+                .WithMany()
+                .HasForeignKey(e => e.AlertExcursionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Subject)
+                .WithMany()
+                .HasForeignKey(e => e.SubjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => new { e.TenantId, e.SubjectId, e.AlertExcursionId })
+                .IsUnique()
+                .HasDatabaseName("ix_alert_excursion_mutes_tenant_subject_excursion");
+            entity.HasIndex(e => e.AlertExcursionId);
         });
 
         modelBuilder.Entity<AlertInstanceEntity>(entity =>
@@ -2487,6 +2557,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasIndex(e => new { e.SubjectId, e.MarkKey })
             .IsUnique();
 
+        // TranslationDraftEntity: the logical key is unique via a functional
+        // index created with raw SQL in the migration (see AddTranslationDrafts);
+        // only the lookup index is declared here. Both lead with TenantId
+        // because a subject is a global membership scope and can hold drafts in
+        // more than one tenant.
+        modelBuilder
+            .Entity<TranslationDraftEntity>()
+            .HasIndex(e => new { e.TenantId, e.SubjectId, e.Locale });
+
     }
 
     /// <summary>
@@ -2559,6 +2638,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         var utcNow = DateTime.UtcNow;
         // Column types are a relational concept: asking the InMemory provider for one throws.
         var isRelational = Database.IsRelational();
+        var stampedUpdated = new Dictionary<Type, int>();
 
         foreach (var entry in ChangeTracker.Entries())
         {
@@ -2566,6 +2646,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
             EnforceTenantOwnership(entry, isAdded);
             StripNulCharacters(entry, isAdded, isRelational);
+            ApplyUpstreamFingerprint(entry);
 
             // Update timestamps are stamped on insert and on real modifications only. An
             // unchanged tracked row is left alone rather than rewritten on every save, and a row
@@ -2580,7 +2661,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             }
             if (stampUpdated && entry.Entity is ISystemTimestamped)
             {
-                Stamp(entry, nameof(ISystemTimestamped.SysUpdatedAt), utcNow);
+                var entityType = entry.Metadata.ClrType;
+                var index = stampedUpdated.GetValueOrDefault(entityType);
+                stampedUpdated[entityType] = index + 1;
+
+                Stamp(
+                    entry,
+                    nameof(ISystemTimestamped.SysUpdatedAt),
+                    utcNow.AddMilliseconds(index / SystemTimestampGroupSize));
             }
 
             // Auth/identity tables use the created_at / updated_at convention instead.
@@ -2598,6 +2686,21 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
     }
 
     /// <summary>
+    /// Writes the fingerprint <see cref="UpstreamFingerprintScope"/> names for a tracked row. It goes
+    /// through the change tracker, so a row the write otherwise left unchanged still gets it.
+    /// </summary>
+    private static void ApplyUpstreamFingerprint(EntityEntry entry)
+    {
+        if (entry.State is EntityState.Deleted or EntityState.Detached
+            || entry.Entity is not IUpstreamFingerprinted { LegacyId: { } legacyId } row
+            || !UpstreamFingerprintScope.TryGet(row.DataSource, legacyId, out var fingerprint)
+            || row.UpstreamFingerprint == fingerprint)
+            return;
+
+        entry.Property(nameof(IUpstreamFingerprinted.UpstreamFingerprint)).CurrentValue = fingerprint;
+    }
+
+    /// <summary>
     /// Writes a timestamp through the change tracker, which is how a modified row's stamp reaches
     /// the UPDATE now that <see cref="DetectChangesOnceForSave"/> has turned auto-detection off.
     /// Only the modify path needs it: an added row is inserted from its CLR values whatever the
@@ -2608,14 +2711,17 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     /// <summary>
     /// True if the entry has a modified property other than the update-timestamp bookkeeping
-    /// columns managed by <see cref="UpdateTimestamps"/>.
+    /// columns managed by <see cref="UpdateTimestamps"/>. An upstream fingerprint is bookkeeping
+    /// too: v3 history clients page on the update stamp, and a fingerprint-only write must not send
+    /// them every row again.
     /// </summary>
     private static bool HasNonTimestampModification(EntityEntry entry)
         => entry.State == EntityState.Modified
             && entry.Properties.Any(p =>
                 p.IsModified
                 && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
-                && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt));
+                && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
+                && p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint));
 
     /// <summary>
     /// Enforces tenant ownership on a tracked entity: stamps the resolved tenant on new
