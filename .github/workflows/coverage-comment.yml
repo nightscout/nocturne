@@ -1,0 +1,81 @@
+name: Coverage comment
+
+# Posts the coverage report the Tests workflow built as one sticky comment on the pull request.
+#
+# A pull request from a fork runs Tests with a read-only token, so that run can only upload the
+# report. This workflow runs afterwards in the base repository with a write token, and so never
+# checks out or runs anything from the pull request: it downloads the report artifact, treats it
+# as text, and posts it only on the pull request whose head is the commit Tests ran on.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: Download the report
+        id: download
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: coverage-report
+          path: coverage-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update the comment
+        if: steps.download.outcome == 'success'
+        uses: actions/github-script@v8
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const fs = require("fs");
+            const marker = "<!-- nocturne-coverage -->";
+            const { owner, repo } = context.repo;
+
+            const prNumber = Number(fs.readFileSync("coverage-report/pr-number", "utf8").trim());
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed("coverage-report/pr-number is not a pull request number");
+              return;
+            }
+
+            // The artifact comes from a run that may have executed a fork's code, so its pull
+            // request number is only trusted when that pull request's head is the commit the run
+            // tested.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            if (pr.head.sha !== process.env.HEAD_SHA) {
+              core.setFailed(`PR #${prNumber} head is ${pr.head.sha}, not the tested ${process.env.HEAD_SHA}`);
+              return;
+            }
+
+            let body = fs.readFileSync("coverage-report/coverage.md", "utf8");
+            if (!body.startsWith(marker)) body = `${marker}\n${body}`;
+            // GitHub rejects comments over 65,536 characters.
+            if (body.length > 60000) body = body.slice(0, 60000) + "\n\n_Report truncated._\n";
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+            const existing = comments.find(
+              (c) => c.user?.type === "Bot" && c.body?.startsWith(marker),
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            }

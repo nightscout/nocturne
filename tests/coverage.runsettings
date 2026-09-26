@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Coverage for the PR coverage report (.github/scripts/coverage-report.mjs):
+     dotnet test --settings tests/coverage.runsettings --collect "XPlat Code Coverage" -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Include>[Nocturne.*]*</Include>
+          <!-- Test assemblies, and code nobody writes by hand: EF migrations and model snapshots,
+               source generators' output. -->
+          <Exclude>[Nocturne.*.Tests]*,[Nocturne.Tests.*]*,[Nocturne.*.Performance.Tests]*</Exclude>
+          <ExcludeByFile>**/Migrations/*.cs,**/obj/**/*.cs,**/*.g.cs,**/*.Designer.cs</ExcludeByFile>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+          <DeterministicReport>false</DeterministicReport>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,7 +14,68 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Which parts of the tree the change touches, so a docs-only pull request skips the heavy jobs.
+  # A skipped job reports as skipped, which satisfies a required check; `tests-passed` at the end is
+  # the one check to require. Pushes to main and manual runs test everything.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      dotnet: ${{ steps.filter.outputs.dotnet == 'true' || github.event_name != 'pull_request' }}
+      web: ${{ steps.filter.outputs.web == 'true' || github.event_name != 'pull_request' }}
+      e2e: ${{ steps.filter.outputs.e2e == 'true' || github.event_name != 'pull_request' }}
+      migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
+      crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/tests.yml'
+              - '.github/scripts/**'
+              - 'Directory.Packages.props'
+              - 'global.json'
+            dotnet:
+              - *shared
+              - 'src/**/*.cs'
+              - 'src/**/*.csproj'
+              - 'src/**/*.json'
+              - 'tests/**'
+              - 'nocturne.sln'
+              - 'docs/postgres/**'
+              - 'crates/**'
+            web:
+              - *shared
+              - 'src/Web/**'
+              - 'src/API/**'
+            e2e:
+              - *shared
+              - 'src/**'
+              - 'e2e/**'
+              - 'Dockerfile.web'
+              - 'docs/postgres/**'
+            migrations:
+              - *shared
+              - 'src/Infrastructure/**'
+              - 'src/API/**'
+              - 'src/Core/**'
+              - 'e2e/**'
+              - 'docs/postgres/**'
+            crates:
+              - *shared
+              - 'crates/**'
+              - 'src/API/**'
+              - 'tests/Parity/**'
+              - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
+
   unit:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -56,17 +118,6 @@ jobs:
           fi
           [ -z "$absent$dangling" ]
 
-      # Entering Nocturne.E2E.Tests starts the whole Aspire stack, so it must stay uncollected
-      # unless RunE2E is set; a csproj edit that re-arms it would wedge every unfiltered run.
-      - name: E2E suite stays opt-in
-        run: |
-          collected=$(dotnet msbuild tests/E2E/Nocturne.E2E.Tests/Nocturne.E2E.Tests.csproj \
-            -getProperty:IsTestProject -p:GenerateNSwagClient=false)
-          if [ "$collected" != "false" ]; then
-            echo "IsTestProject is '$collected', expected 'false' without -p:RunE2E=true"
-            exit 1
-          fi
-
       # A solution of just the unit test projects, built from the directory so a new one cannot
       # be left out, and so nocturne.sln's Windows-only projects (Desktop, Widgets) never build.
       # One solution means one restore, a parallel build, and the assemblies tested concurrently.
@@ -77,9 +128,19 @@ jobs:
           dotnet new sln -n unit -o "$RUNNER_TEMP/unit" --format slnx
           dotnet sln "$sln" add tests/Unit/*/*.csproj
           dotnet test "$sln" \
-            --filter "Category!=Integration&Category!=E2E" \
+            --filter "Category!=Integration" \
             --logger "trx;LogFileName=unit.trx" \
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --results-directory TestResults/unit \
             -p:GenerateNSwagClient=false
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-dotnet-unit
+          path: TestResults/unit/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
@@ -92,6 +153,8 @@ jobs:
   # corpus deliberately — this job fails if the committed corpus no longer matches what
   # the engine produces.
   alert-corpus-check:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -115,6 +178,8 @@ jobs:
   # turns silent skips (native lib not found) into a hard failure so the parity
   # theories can never quietly stop running here.
   alerts-ffi-parity:
+    needs: changes
+    if: needs.changes.outputs.crates == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -193,15 +258,14 @@ jobs:
           name: alerts-ffi-parity-trx
           path: "**/*.trx"
 
-  # Database integration tests: bare-Postgres Testcontainers (no Aspire), so they
-  # run reliably on GitHub-hosted runners where Docker is available. Other
-  # integration projects stay deferred until their fixtures/references are fixed.
   # Typechecks every Svelte package whose check needs no generated API client, and runs the
   # pure-node vitest suites, so this needs nothing but pnpm.
   # @nocturne/app and @nocturne/portal are checked in web-app-typecheck instead, because their
   # checks depend on the NSwag/Zod codegen that the .NET build runs: the portal imports the
   # app's appearance store, which imports the generated client's WidgetId enum.
   web-typecheck:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -224,7 +288,11 @@ jobs:
         run: |
           pnpm --filter @nightscout/glucose-chart --filter @nocturne/coach --filter @nocturne/ui --filter @nocturne/cms --filter @nocturne/desktop run check
       - name: Bot unit tests
-        run: pnpm --filter @nocturne/bot run test
+        run: pnpm --filter @nocturne/bot exec vitest run --coverage
+      - name: Bridge unit tests
+        run: pnpm --filter @nocturne/bridge exec vitest run --coverage
+      - name: CMS unit tests
+        run: pnpm --filter @nocturne/cms exec vitest run --coverage
       # Renders pages through the translation transform. The build cannot see
       # what that transform does to code that only runs at render time, and the
       # E2E suite that would is opt-in, so this is the only gate on it.
@@ -234,18 +302,29 @@ jobs:
         run: pnpm --filter @nocturne/app exec vitest --config vitest.config.ts --run tools/ehba1c-translations.test.js
       # The portal's `check` needs the generated client, but its vitest suites do not.
       - name: Portal unit tests
-        run: pnpm --filter @nocturne/portal run test
+        run: |
+          pnpm --filter @nocturne/portal exec svelte-kit sync
+          pnpm --filter @nocturne/portal exec vitest run --coverage
       - name: Documentation screenshots
         run: |
           pnpm --filter @nocturne/screenshots run check
           pnpm --filter @nocturne/screenshots run validate
           pnpm --filter @nocturne/screenshots run check-refs
           pnpm --filter @nocturne/screenshots run check-embeds
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-web-packages
+          path: src/Web/packages/*/coverage/cobertura-coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
 
   # The API build's post-build targets write the client these checks read (NSwag, then the
   # Zod schemas and remote functions, both through pnpm), so pnpm is installed first.
   # The app's check builds @nocturne/bridge and @nocturne/bot itself (tools/ensure-check-deps.mjs).
   web-app-typecheck:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -279,6 +358,8 @@ jobs:
         run: pnpm --filter @nocturne/portal run check
 
   web-lint:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -306,6 +387,8 @@ jobs:
         run: pnpm --recursive --no-bail --workspace-concurrency=1 run lint:ci
 
   integration-db:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -318,26 +401,367 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
-      - name: Integration tests (Infrastructure.Data — RLS + DataProtection)
+      # One PostgreSQL container per test process (tests/Shared SharedPostgres), migrated once
+      # and cloned per fixture; each project runs as its own process, in parallel.
+      - name: Integration tests (Infrastructure.Data, Connectors, API Postgres tests)
         run: |
-          dotnet test tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
-            --filter "Category!=E2E" \
+          set -euo pipefail
+          sln="$RUNNER_TEMP/integration/integration.slnx"
+          dotnet new sln -n integration -o "$RUNNER_TEMP/integration" --format slnx
+          dotnet sln "$sln" add \
+            tests/Integration/Nocturne.Infrastructure.Data.Tests/Nocturne.Infrastructure.Data.Tests.csproj \
+            tests/Integration/Nocturne.Connectors.Tests/Nocturne.Connectors.Tests.csproj
+          dotnet test "$sln" \
             --logger "trx;LogFileName=integration-db.trx" \
-            -p:GenerateNSwagClient=false \
-            || exit 1
-      - name: Integration tests (API unit project, real Postgres)
-        run: |
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --results-directory TestResults/integration \
+            -p:GenerateNSwagClient=false
           dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
             --filter "Category=Integration" \
             --logger "trx;LogFileName=integration-api.trx" \
-            -p:GenerateNSwagClient=false \
-            || exit 1
+            --settings tests/coverage.runsettings \
+            --collect "XPlat Code Coverage" \
+            --results-directory TestResults/integration \
+            -p:GenerateNSwagClient=false
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-dotnet-integration
+          path: TestResults/integration/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: integration-db-trx
           path: "**/*.trx"
 
-  # E2E tests deferred: Aspire.Hosting.Testing hangs on GitHub Actions runners —
-  # DCP resource orchestration never completes. Tests pass locally. Revisit when
-  # Aspire CI support matures or move to a self-hosted runner.
+  # The app's node unit suite and its browser component suite (vitest browser mode, headless
+  # chromium). Both import the generated API client, so the API build runs first.
+  web-app-tests:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: src/Web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: src/Web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: Generate API client
+        working-directory: src/API/Nocturne.API
+        run: dotnet build -c Release
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(pnpm --filter @nocturne/app exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      # Only the headless shell: the suite always runs headless, and the shell is a fraction of
+      # the full browser. The system libraries it needs are not cached, so they install each run.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install headless chromium
+        run: pnpm --filter @nocturne/app exec playwright install --with-deps --only-shell chromium
+      - name: App unit tests
+        working-directory: src/Web/packages/app
+        run: |
+          pnpm exec svelte-kit sync
+          pnpm exec vitest --config vitest.config.ts --run --coverage
+      - name: App browser component tests
+        if: ${{ !cancelled() }}
+        working-directory: src/Web/packages/app
+        run: pnpm exec vitest --config vitest.browser.config.ts --run --coverage
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: coverage-web-app
+          path: src/Web/packages/app/coverage/*/cobertura-coverage.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # tests/Integration/Nocturne.API.Tests: the API in-process on a real port against its own
+  # database on the shared Postgres container, plus the Nightscout parity and migration suites
+  # (their own Nightscout, MongoDB and mock containers).
+  integration-api:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+      - name: API integration, parity and migration tests
+        run: |
+          dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
+            --logger "trx;LogFileName=integration-api.trx" \
+            --results-directory TestResults/integration-api \
+            -p:GenerateNSwagClient=false
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: integration-api-trx
+          path: "**/*.trx"
+
+  # The e2e suite (e2e/): the production images built on this runner, never pulled, started with
+  # docker compose, then the vitest API specs and the Playwright web specs.
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: |
+            src/Web/pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-e2e-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-e2e-${{ runner.os }}-
+      - name: Install web dependencies (API client codegen)
+        working-directory: src/Web
+        run: pnpm install --frozen-lockfile
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: pnpm install --frozen-lockfile
+      # A docker-container builder, so the web image build can read and write the Actions cache.
+      - uses: docker/setup-buildx-action@v3
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      - name: Build the API and web images
+        working-directory: e2e
+        env:
+          E2E_BUILDX_CACHE: type=gha,scope=e2e-web
+        run: node scripts/stack.ts build
+      - name: Playwright version
+        id: playwright
+        working-directory: e2e
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Install headless chromium
+        working-directory: e2e
+        run: pnpm exec playwright install --with-deps --only-shell chromium
+      - name: Run the e2e suite
+        working-directory: e2e
+        env:
+          E2E_SKIP_BUILD: "1"
+        run: pnpm e2e
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/docker-compose-logs.txt
+            e2e/playwright-report/
+            e2e/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The latest release (:latest) writes a realistic database, then the API built from this commit
+  # starts on it: migrations apply and every row reads back (e2e/scripts/migration-upgrade.ts).
+  migration-upgrade:
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - uses: pnpm/action-setup@v5
+        with:
+          version: "11.5.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Cache NuGet
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-e2e-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+          restore-keys: nuget-e2e-${{ runner.os }}-
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: pnpm install --frozen-lockfile
+      - name: Upgrade from the latest release
+        working-directory: e2e
+        run: pnpm e2e:upgrade
+      - uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: migration-upgrade-logs
+          path: e2e/docker-compose-logs.txt
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Merges the coverage every job above uploaded, writes the summary, and applies the patch
+  # coverage gate. The pull request comment is posted by coverage-comment.yml, which runs with
+  # a write token on workflow_run and never checks out the pull request's code.
+  coverage:
+    needs: [changes, unit, integration-db, web-typecheck, web-app-tests]
+    if: ${{ !cancelled() && (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    env:
+      COVERAGE_PATCH_THRESHOLD: ${{ vars.COVERAGE_PATCH_THRESHOLD || '60' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: coverage-*
+          path: coverage-input
+      - name: Merge the .NET reports
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          reports=(coverage-input/coverage-dotnet-*/**/coverage.cobertura.xml)
+          if [ ${#reports[@]} -eq 0 ]; then
+            echo "No .NET coverage in this run."
+            exit 0
+          fi
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.4.18
+          reportgenerator \
+            "-reports:$(IFS=';'; echo "${reports[*]}")" \
+            -targetdir:coverage-merged \
+            -reporttypes:"Cobertura;HtmlSummary" \
+            -sourcedirs:"$GITHUB_WORKSPACE"
+      - name: Main's baseline
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --workflow tests.yml --branch main --event push --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --name coverage-baseline --dir baseline || echo "No baseline in run $run_id"
+          fi
+      - name: Report
+        id: report
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          args=(--reports 'coverage-merged/Cobertura.xml,coverage-input/coverage-web-*/**/cobertura-coverage.xml'
+                --threshold "$COVERAGE_PATCH_THRESHOLD"
+                --out-markdown coverage.md --out-json coverage-summary.json)
+          [ -f baseline/coverage-summary.json ] && args+=(--baseline baseline/coverage-summary.json)
+          [ -n "$BASE_SHA" ] && args+=(--base "$BASE_SHA")
+          status=0
+          node .github/scripts/coverage-report.mjs "${args[@]}" > /dev/null || status=$?
+          cat coverage.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      - name: Package the report for the pull request comment
+        if: github.event_name == 'pull_request'
+        run: |
+          mkdir -p coverage-report
+          cp coverage.md coverage-summary.json coverage-report/
+          echo "${{ github.event.pull_request.number }}" > coverage-report/pr-number
+          echo "${{ github.event.pull_request.head.sha }}" > coverage-report/head-sha
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'pull_request'
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 7
+      - uses: actions/upload-artifact@v6
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: coverage-baseline
+          path: coverage-summary.json
+          retention-days: 90
+      - uses: actions/upload-artifact@v6
+        with:
+          name: coverage-html
+          path: coverage-merged/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Patch coverage gate
+        if: steps.report.outputs.status != '0'
+        run: |
+          echo "::error::Patch coverage is below the ${COVERAGE_PATCH_THRESHOLD}% gate (see the job summary)."
+          exit 1
+
+  # The single check to require on the branch: green when every job it needs passed or was
+  # skipped for want of relevant changes.
+  tests-passed:
+    needs:
+      - changes
+      - unit
+      - alert-corpus-check
+      - alerts-ffi-parity
+      - web-typecheck
+      - web-app-typecheck
+      - web-lint
+      - web-app-tests
+      - integration-db
+      - integration-api
+      - e2e
+      - migration-upgrade
+      - coverage
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Every needed job passed or was skipped
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "$RESULTS"
+          if echo "$RESULTS" | grep -Eq '"(failure|cancelled)"'; then
+            exit 1
+          fi
