@@ -201,12 +201,12 @@ internal sealed class AlertAcknowledgementService(
             throw new InvalidOperationException(
                 "An acknowledgement without alerts.readwrite needs a subject to mute for.");
 
-        var permissions = await memberService.GetEffectivePermissionsAsync(subjectId, tenantId, ct);
-        if (permissions is null)
+        var membership = await memberService.GetMemberAccessAsync(subjectId, tenantId, ct);
+        if (membership is null)
             return false;
 
         var membershipScopes = MemberScopeResolver.Resolve(
-            permissions, AuthType.SessionCookie, new HashSet<string>());
+            membership.EffectivePermissions, AuthType.SessionCookie, new HashSet<string>());
         return Scope.Satisfies(membershipScopes, Scope.AlertsReadWrite);
     }
 

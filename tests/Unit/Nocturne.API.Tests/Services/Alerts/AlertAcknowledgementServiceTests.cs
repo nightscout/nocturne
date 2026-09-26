@@ -213,8 +213,8 @@ public class AlertAcknowledgementServiceTests
         Guid subjectId, IEnumerable<string> membership, params string[] credentialScopes)
     {
         _members
-            .Setup(m => m.GetEffectivePermissionsAsync(subjectId, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(membership.ToHashSet());
+            .Setup(m => m.GetMemberAccessAsync(subjectId, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new TenantMemberAccess(membership.ToHashSet(), LimitTo24Hours: false));
         return new AlertAcknowledgementAuthority(subjectId, credentialScopes.ToHashSet());
     }
 
@@ -365,8 +365,8 @@ public class AlertAcknowledgementServiceTests
         var (excursionId, _) = await SeedActiveExcursionAsync();
         var subject = Guid.NewGuid();
         _members
-            .Setup(m => m.GetEffectivePermissionsAsync(subject, _tenantId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlySet<string>?)null);
+            .Setup(m => m.GetMemberAccessAsync(subject, _tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TenantMemberAccess?)null);
 
         var outcome = await _service.AcknowledgeExcursionAsync(
             _tenantId, excursionId, "user:someone",

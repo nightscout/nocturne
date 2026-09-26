@@ -100,7 +100,8 @@ public class HomeAssistantHubTests
         var service = Decides(excursionId, AlertAcknowledgementOutcome.Muted);
         var (hub, context) = CreateHub(service.Object, Guid.NewGuid(), Scope.AlertsReadWrite);
         HubAuthorizationState.Grant(context, new HubAuthorization(
-            Tenant, new HashSet<string> { Scope.DeviceNotify }, HubCredentialKind.Subject, admittedSubject));
+            Tenant, new HashSet<string> { Scope.DeviceNotify }, HubCredentialKind.Subject, admittedSubject,
+            HistoryClamped: false));
 
         await hub.Acknowledge(excursionId, "Kitchen");
 
