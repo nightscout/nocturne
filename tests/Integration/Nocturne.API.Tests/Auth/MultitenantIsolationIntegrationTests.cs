@@ -297,7 +297,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var nocToken = createBody.GetProperty("token").GetString()!;
 
         // Act - use the noc_ token on tenant B's subdomain
-        using var clientB = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var clientB = Fixture.CreateHttpClient("nocturne-api", "http");
         clientB.DefaultRequestHeaders.Host = $"{_slugB}.{_baseDomain}";
         clientB.DefaultRequestHeaders.Add("Authorization", $"Bearer {nocToken}");
 
@@ -344,7 +344,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     public async Task UnknownSubdomain_Returns404()
     {
         // Arrange
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"nonexistent.{_baseDomain}";
 
         // Act
@@ -394,7 +394,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     public async Task ApexDomain_MultipleTenants_Returns404()
     {
         // Arrange - both tenants are active (set up in InitializeAsync)
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = _baseDomain;
 
         // Act
@@ -423,7 +423,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         try
         {
             // Act - request without subdomain (apex domain)
-            using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+            using var client = Fixture.CreateHttpClient("nocturne-api", "http");
             client.DefaultRequestHeaders.Host = _baseDomain;
 
             var response = await client.GetAsync("/api/v1/status");

@@ -446,7 +446,7 @@ public static class AuthTestHelpers
         AspireIntegrationTestFixture fixture,
         string accessToken)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;
     }
@@ -459,7 +459,7 @@ public static class AuthTestHelpers
         string accessToken,
         string apiSecret = "test-secret-for-integration-tests")
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Add("api-secret", apiSecret);
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;
@@ -514,7 +514,7 @@ public static class AuthTestHelpers
         string slug,
         string baseDomain)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         return client;
     }
@@ -530,7 +530,7 @@ public static class AuthTestHelpers
         string accessToken,
         string apiSecret = "test-secret-for-integration-tests")
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         client.DefaultRequestHeaders.Add("api-secret", apiSecret);
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
@@ -550,7 +550,7 @@ public static class AuthTestHelpers
         string baseDomain,
         string accessToken)
     {
-        var client = fixture.CreateHttpClient("nocturne-api", "api");
+        var client = fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         return client;

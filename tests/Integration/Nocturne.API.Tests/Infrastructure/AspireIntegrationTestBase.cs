@@ -71,7 +71,7 @@ public abstract class AspireIntegrationTestBase : IAsyncLifetime
     /// </summary>
     protected HttpClient CreateAuthenticatedClient()
     {
-        var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi, "api");
+        var client = Fixture.CreateHttpClient(ServiceNames.NocturneApi, "http");
         client.DefaultRequestHeaders.Add("api-secret", TestApiSecret);
         return client;
     }

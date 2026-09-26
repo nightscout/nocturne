@@ -70,7 +70,7 @@ public class AspireIntegrationTestFixture : IAsyncLifetime
 
         await WaitForResourceHealthyAsync(ServiceNames.NocturneApi, TimeSpan.FromSeconds(60));
 
-        _apiClient = _app.CreateHttpClient(ServiceNames.NocturneApi, "api");
+        _apiClient = _app.CreateHttpClient(ServiceNames.NocturneApi, "http");
 
         _postgresConnectionString = await _app.GetConnectionStringAsync(ServiceNames.PostgreSql);
     }

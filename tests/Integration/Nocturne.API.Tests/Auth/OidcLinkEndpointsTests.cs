@@ -192,7 +192,7 @@ public class OidcLinkEndpointsTests : AspireIntegrationTestBase
     /// </summary>
     private HttpClient CreateAccessTokenClient()
     {
-        var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Add("api-secret", TestApiSecret);
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {TestAccessToken}");
         return client;
