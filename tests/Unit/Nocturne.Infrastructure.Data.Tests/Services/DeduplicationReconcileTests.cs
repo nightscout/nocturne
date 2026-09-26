@@ -876,6 +876,52 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task ReconcileNewLinksAsync_ASplitTidepoolDoseRestampedPastTheCursor_JoinsTheOtherSourcesCopy()
+    {
+        // G1 = {NS1, TP1}, G2 = {NS2}, TP2 alone and past the cursor.
+        var now = DateTime.UtcNow;
+        var t = now.AddHours(-2);
+        var ns1 = await AddBolus(t, "nightscout", 2);
+        var ns2 = await AddBolus(t.AddSeconds(20), "nightscout", 2);
+        var tp1 = await AddBolus(t, "tidepool-connector", 2);
+        var tp2 = await AddBolus(t.AddSeconds(20), "tidepool-connector", 2);
+        var first = AddPrimaryLink(RecordType.Bolus, ns1, ToMills(t), "nightscout");
+        AddPrimaryLink(RecordType.Bolus, ns2, ToMills(t.AddSeconds(20)), "nightscout");
+        AddLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector", first, isPrimary: false);
+        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t.AddSeconds(20)), "tidepool-connector");
+        await _context.SaveChangesAsync();
+        await RestampOnePastTheCursor(tp2, now);
+
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+
+        result.GroupsMerged.Should().Be(1);
+        var links = await _context.LinkedRecords.Where(l => l.RecordType == "bolus").ToListAsync();
+        Guid GroupOf(Guid recordId) => links.Single(l => l.RecordId == recordId).CanonicalId;
+        GroupOf(tp2).Should().Be(GroupOf(ns2), "a group already holding Tidepool refuses a second Tidepool dose");
+        GroupOf(tp1).Should().Be(GroupOf(ns1));
+        links.Count(l => l.IsPrimary).Should().Be(2, "two doses were given, each recorded by both sources");
+    }
+
+    [Fact]
+    public async Task ReconcileNewLinksAsync_ASplitTidepoolDoseRestampedPastTheCursor_StaysApartFromItsTwin()
+    {
+        var now = DateTime.UtcNow;
+        var t = now.AddHours(-2);
+        var tp1 = await AddBolus(t, "tidepool-connector", 2);
+        var tp2 = await AddBolus(t, "tidepool-connector", 2);
+        AddPrimaryLink(RecordType.Bolus, tp1, ToMills(t), "tidepool-connector");
+        AddPrimaryLink(RecordType.Bolus, tp2, ToMills(t), "tidepool-connector");
+        await _context.SaveChangesAsync();
+        await RestampOnePastTheCursor(tp2, now);
+
+        var result = await _service.ReconcileNewLinksAsync(5000, 10, CancellationToken.None);
+
+        result.GroupsMerged.Should().Be(0);
+        (await _context.LinkedRecords.CountAsync(l => l.RecordType == "bolus" && l.IsPrimary)).Should().Be(2,
+            "two Tidepool boluses of one size at one second are two doses");
+    }
+
+    [Fact]
     public async Task ReconcileNewLinksAsync_IgnoresLinksBeforeCursor()
     {
         var now = DateTime.UtcNow;
@@ -1404,6 +1450,24 @@ public class DeduplicationReconcileTests : IDisposable
         };
 
     /// <summary>
+    /// Inserts a <see cref="BolusEntity"/> for the test tenant and returns its id.
+    /// </summary>
+    private async Task<Guid> AddBolus(DateTime timestamp, string dataSource, double insulin)
+    {
+        var id = Guid.CreateVersion7();
+        _context.Boluses.Add(new BolusEntity
+        {
+            Id = id,
+            TenantId = TestTenantId,
+            Insulin = insulin,
+            Timestamp = timestamp,
+            DataSource = dataSource
+        });
+        await _context.SaveChangesAsync();
+        return id;
+    }
+
+    /// <summary>
     /// Inserts a <see cref="CarbIntakeEntity"/> for the test tenant and returns its id.
     /// </summary>
     private async Task<Guid> AddCarb(DateTime timestamp, string dataSource, double carbs, DateTime? deletedAt = null)
@@ -1451,6 +1515,21 @@ public class DeduplicationReconcileTests : IDisposable
             IsPrimary = isPrimary,
             SysCreatedAt = DateTime.UtcNow
         });
+
+    /// <summary>
+    /// Puts every link behind the reconcile cursor except <paramref name="recordId"/>'s, which is
+    /// stamped past it and old enough for the commit lag.
+    /// </summary>
+    private async Task RestampOnePastTheCursor(Guid recordId, DateTime now)
+    {
+        await SetAllLinkSysCreatedAt(now.AddHours(-1));
+        await _service.SetCursorAsync(new ReconcileCursor(now.AddMinutes(-30), Guid.Empty), CancellationToken.None);
+
+        var restamped = await _context.LinkedRecords.SingleAsync(l => l.RecordId == recordId);
+        restamped.SysCreatedAt = now.AddMinutes(-3);
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+    }
 
     /// <summary>
     /// Overrides <see cref="LinkedRecordEntity.SysCreatedAt"/> on all of the tenant's links.
