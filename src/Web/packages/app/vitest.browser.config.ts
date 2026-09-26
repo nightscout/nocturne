@@ -28,7 +28,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text-summary", "json-summary", "cobertura"],
       reportsDirectory: "coverage/browser",
-      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "**/node_modules/**", "**/.svelte-kit/**"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/node_modules/**", "**/.svelte-kit/**"],
     },
     browser: {
       enabled: true,

@@ -107,7 +107,8 @@ function toRepoPath(filename, sources, reportPath) {
     const rel = marker.slice(at + 1);
     if (existsSync(join(repo, rel))) return rel;
   }
-  process.stderr.write(`coverage-report: ${reportPath}: cannot place ${filename}\n`);
+  // Typically a gitignored file (the generated API client) the checkout lacks; skipped.
+  if (process.env.RUNNER_DEBUG === "1") console.log(`::debug::coverage-report: ${reportPath}: cannot place ${filename}`);
   return null;
 }
 

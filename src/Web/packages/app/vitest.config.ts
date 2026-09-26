@@ -25,7 +25,7 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary", "cobertura"],
       reportsDirectory: "coverage/unit",
       include: ["src/**/*.{ts,js,svelte}"],
-      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "**/*.d.ts"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.svelte", "src/**/test-stubs/**", "src/lib/api/generated/**", "src/**/*.generated.*", "**/*.d.ts"],
     },
     alias: {
       $lib: fileURLToPath(new URL("./src/lib", import.meta.url)),
