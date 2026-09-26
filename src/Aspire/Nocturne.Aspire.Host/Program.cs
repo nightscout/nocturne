@@ -169,6 +169,20 @@ class Program
                     {
                         initVolume.Source = "./init";
                     }
+
+                    // Let self-hosters redirect the Postgres data directory to a
+                    // host path of their choosing without hand-editing compose.
+                    // Left unset, both variables resolve to today's defaults —
+                    // the named volume declared below — so existing installs
+                    // and a fresh install with no extra config are unaffected.
+                    var dataVolume = service.Volumes.FirstOrDefault(v =>
+                        v.Target == "/var/lib/postgresql/data"
+                    );
+                    if (dataVolume != null)
+                    {
+                        dataVolume.Type = "${POSTGRES_DATA_MOUNT_TYPE:-volume}";
+                        dataVolume.Source = "${POSTGRES_DATA_PATH:-nocturne-postgres-data}";
+                    }
                 }
             );
 

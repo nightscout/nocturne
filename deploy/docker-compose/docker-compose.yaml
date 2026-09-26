@@ -13,9 +13,9 @@ services:
     expose:
     - "5432"
     volumes:
-    - type: "volume"
+    - type: "${POSTGRES_DATA_MOUNT_TYPE:-volume}"
       target: "/var/lib/postgresql/data"
-      source: "nocturne-postgres-data"
+      source: "${POSTGRES_DATA_PATH:-nocturne-postgres-data}"
       read_only: false
     networks:
     - "aspire"
