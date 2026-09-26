@@ -255,17 +255,17 @@ jobs:
       - name: Build and push Nocturne.Web container
         run: |
           IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.web_tags }}"
-          TAG_ARGS=""
+          TAG_ARGS=()
           for t in "${TAGS[@]}"; do
-            TAG_ARGS+=" --tag ${t}"
+            TAG_ARGS+=(--tag "${t}")
           done
           # Every publish reads and refreshes the shared layer cache.
           CACHE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_REPOSITORY }}/nocturne-web:buildcache"
-          CACHE_ARGS="--cache-from type=registry,ref=${CACHE_REF} --cache-to type=registry,ref=${CACHE_REF},mode=max"
+          CACHE_ARGS=(--cache-from "type=registry,ref=${CACHE_REF}" --cache-to "type=registry,ref=${CACHE_REF},mode=max")
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            ${TAG_ARGS} \
-            ${CACHE_ARGS} \
+            "${TAG_ARGS[@]}" \
+            "${CACHE_ARGS[@]}" \
             --file Dockerfile.web \
             --push \
             .

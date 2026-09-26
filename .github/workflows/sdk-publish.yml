@@ -62,13 +62,15 @@ jobs:
 
       - name: Determine SDK version
         id: version
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version_override }}
         run: |
-          if [[ -n "${{ inputs.version_override }}" ]]; then
-            echo "version=${{ inputs.version_override }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          if [[ -n "$VERSION_OVERRIDE" ]]; then
+            echo "version=$VERSION_OVERRIDE" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+            echo "version=0.0.0-dev.${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Filter spec to SDK endpoints (V4 + OAuth)
@@ -108,7 +110,7 @@ jobs:
             --additional-properties=packageVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
-        run: sudo chown -R $USER:$USER sdk/csharp/out
+        run: sudo chown -R "$USER:$USER" sdk/csharp/out
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -159,7 +161,7 @@ jobs:
             --additional-properties=npmVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
-        run: sudo chown -R $USER:$USER sdk/typescript/out
+        run: sudo chown -R "$USER:$USER" sdk/typescript/out
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -207,7 +209,7 @@ jobs:
 
       - name: Fix file permissions
         run: |
-          sudo chown -R $USER:$USER sdk/kotlin/out
+          sudo chown -R "$USER:$USER" sdk/kotlin/out
           chmod +x sdk/kotlin/out/gradlew
 
       - name: Apply publish overlay
@@ -234,12 +236,12 @@ jobs:
         run: |
           cd ~/.m2/repository
           # Generate MD5 and SHA1 checksums required by Maven Central
-          find org/nightscoutfoundation/nocturne -type f ! -name '*.md5' ! -name '*.sha1' ! -name 'maven-metadata-local.xml' ! -name '_remote.repositories' | while read f; do
+          find org/nightscoutfoundation/nocturne -type f ! -name '*.md5' ! -name '*.sha1' ! -name 'maven-metadata-local.xml' ! -name '_remote.repositories' | while read -r f; do
             md5sum "$f" | awk '{print $1}' > "$f.md5"
             sha1sum "$f" | awk '{print $1}' > "$f.sha1"
           done
-          zip -r $GITHUB_WORKSPACE/kotlin-bundle.zip org/nightscoutfoundation/nocturne/ -x '*/maven-metadata-local.xml' '*/_remote.repositories'
-          cd $GITHUB_WORKSPACE
+          zip -r "$GITHUB_WORKSPACE"/kotlin-bundle.zip org/nightscoutfoundation/nocturne/ -x '*/maven-metadata-local.xml' '*/_remote.repositories'
+          cd "$GITHUB_WORKSPACE"
           UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -u "$MAVEN_USERNAME:$MAVEN_PASSWORD" \
             -F "bundle=@kotlin-bundle.zip" \
@@ -324,7 +326,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet && echo "No changes" || git commit -m "Update SDK to v${SDK_VERSION}"
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Update SDK to v${SDK_VERSION}"
+          fi
           git tag -f "${SDK_VERSION}"
           git push origin main
           git push origin "${SDK_VERSION}"
@@ -360,7 +366,7 @@ jobs:
             --additional-properties=packageVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
-        run: sudo chown -R $USER:$USER sdk/python/out
+        run: sudo chown -R "$USER:$USER" sdk/python/out
 
       - name: Fix package name
         run: sed -i 's/^name = "nocturne_sdk"/name = "nocturne-py"/' sdk/python/out/pyproject.toml
@@ -411,7 +417,7 @@ jobs:
 
       - name: Fix file permissions
         run: |
-          sudo chown -R $USER:$USER sdk/java/out
+          sudo chown -R "$USER:$USER" sdk/java/out
           chmod +x sdk/java/out/gradlew
 
       - name: Setup Java
@@ -447,7 +453,7 @@ jobs:
           done
           find src/main/java -name '*.java' > /tmp/floor-files.txt
           javac -nowarn -proc:none -d /tmp/floor-classes \
-            -cp "$(ls /tmp/floor/*.jar | paste -sd:)" @/tmp/floor-files.txt
+            -cp "$(printf '%s\n' /tmp/floor/*.jar | paste -sd:)" @/tmp/floor-files.txt
           echo "Generated sources compile against the OkHttp 3.12.13 / gson 2.8.6 floor"
 
       - name: Setup Gradle
@@ -465,12 +471,12 @@ jobs:
         run: |
           cd ~/.m2/repository
           # Generate MD5 and SHA1 checksums required by Maven Central
-          find org/nightscoutfoundation/nocturne-java -type f ! -name '*.md5' ! -name '*.sha1' ! -name 'maven-metadata-local.xml' ! -name '_remote.repositories' | while read f; do
+          find org/nightscoutfoundation/nocturne-java -type f ! -name '*.md5' ! -name '*.sha1' ! -name 'maven-metadata-local.xml' ! -name '_remote.repositories' | while read -r f; do
             md5sum "$f" | awk '{print $1}' > "$f.md5"
             sha1sum "$f" | awk '{print $1}' > "$f.sha1"
           done
-          zip -r $GITHUB_WORKSPACE/java-bundle.zip org/nightscoutfoundation/nocturne-java/ -x '*/maven-metadata-local.xml' '*/_remote.repositories'
-          cd $GITHUB_WORKSPACE
+          zip -r "$GITHUB_WORKSPACE"/java-bundle.zip org/nightscoutfoundation/nocturne-java/ -x '*/maven-metadata-local.xml' '*/_remote.repositories'
+          cd "$GITHUB_WORKSPACE"
           UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -u "$MAVEN_USERNAME:$MAVEN_PASSWORD" \
             -F "bundle=@java-bundle.zip" \
@@ -509,7 +515,7 @@ jobs:
             --additional-properties=packageVersion=${{ needs.generate-spec.outputs.sdk_version }}
 
       - name: Fix file permissions
-        run: sudo chown -R $USER:$USER sdk/rust/out
+        run: sudo chown -R "$USER:$USER" sdk/rust/out
 
       - name: Fix crate metadata
         run: |
