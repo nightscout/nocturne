@@ -620,9 +620,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Merges the coverage every job above uploaded, writes the summary, and applies the patch
-  # coverage gate. The pull request comment is posted by coverage-comment.yml, which runs with
-  # a write token on workflow_run and never checks out the pull request's code.
+  # Merges the coverage every job above uploaded, writes the summary, posts it as the pull
+  # request's sticky comment, and applies the patch coverage gate. A fork's pull request runs with
+  # a read-only token, so its comment is posted by coverage-comment.yml from the uploaded report.
   coverage:
     needs: [changes, unit, integration-db, web-static, web-app-tests]
     if: ${{ !cancelled() && (needs.changes.outputs.dotnet == 'true' || needs.changes.outputs.web == 'true') }}
@@ -631,6 +631,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: write
     env:
       COVERAGE_PATCH_THRESHOLD: ${{ vars.COVERAGE_PATCH_THRESHOLD || '60' }}
     steps:
@@ -712,6 +713,16 @@ jobs:
           path: coverage-merged/
           if-no-files-found: ignore
           retention-days: 7
+      - name: Post the coverage comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        with:
+          script: |
+            const post = require("./.github/scripts/coverage-comment.cjs");
+            const body = require("fs").readFileSync("coverage.md", "utf8");
+            await post({ github, context, prNumber: Number(process.env.PR_NUMBER), body });
       - name: Patch coverage gate
         if: steps.report.outputs.status != '0'
         run: |

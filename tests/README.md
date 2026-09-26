@@ -129,11 +129,12 @@ and from the web vitest suites (`--coverage`, the v8 provider). The `coverage` j
 .NET reports with ReportGenerator and runs `.github/scripts/coverage-report.mjs`, which writes
 line and branch coverage per area (API, Infrastructure, Core, Connectors, Services, app, bot,
 portal, bridge, cms), the change against the last baseline main uploaded, and the coverage of the
-lines the pull request adds. The report goes to the job summary and, through
-`coverage-comment.yml`, to one comment on the pull request that is updated on every push. That
-workflow runs on `workflow_run` with a write token, so it works for pull requests from forks; it
-never checks out the pull request and only comments where the pull request's head is the tested
-commit.
+lines the pull request adds. The report goes to the job summary and to one comment on the pull
+request that is updated on every push. The `coverage` job posts it for a pull request from this
+repository. A fork's pull request runs with a read-only token, so `coverage-comment.yml` posts it
+instead, on `workflow_run` with a write token; it never checks out the pull request and only
+comments where the pull request's head is the tested commit. Generated code (the API client,
+EF migrations) is excluded from coverage.
 
 The gate: the job fails when patch coverage is below `COVERAGE_PATCH_THRESHOLD` (a repository
 variable, default 60%). Nothing else about coverage fails a build.
