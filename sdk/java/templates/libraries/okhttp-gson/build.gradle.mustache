@@ -136,9 +136,6 @@ dependencies {
     {{#withAWSV4Signature}}
     implementation 'software.amazon.awssdk:auth:2.20.157'
     {{/withAWSV4Signature}}
-    {{#hasOAuthMethods}}
-    implementation group: 'org.apache.oltu.oauth2', name: 'org.apache.oltu.oauth2.client', version: '1.0.2'
-    {{/hasOAuthMethods}}
     {{#joda}}
     implementation 'joda-time:joda-time:2.9.9'
     {{/joda}}
