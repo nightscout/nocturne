@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Coverage for the PR coverage report (.github/scripts/coverage-report.mjs):
-     dotnet test --settings tests/coverage.runsettings --collect "XPlat Code Coverage" -->
+<!-- Coverage for the PR coverage report (.github/scripts/coverage-report.mjs). Pass it to
+     dotnet test with the settings option, collecting "XPlat Code Coverage"; tests/README.md has
+     the full command. -->
 <RunSettings>
   <DataCollectionRunSettings>
     <DataCollectors>

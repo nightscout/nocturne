@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
@@ -15,8 +16,9 @@ export default defineConfig({
       "src/**/*.render.test.ts",
     ],
     environment: "node",
-    // Half the cores: the suite is import-bound, and more workers mostly add memory.
-    maxWorkers: "50%",
+    // Half the cores, between two and four: measured on 10 cores, four workers finish in 23 s,
+    // five take no less and add memory, two take 33 s.
+    maxWorkers: Math.max(2, Math.min(4, Math.floor(availableParallelism() / 2))),
     // Off unless asked for (`--coverage`); CI collects it for the PR coverage report.
     coverage: {
       provider: "v8",
