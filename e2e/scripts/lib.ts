@@ -183,13 +183,22 @@ async function ensureImage(name: keyof Images, ref: string, build: (ref: string)
 /**
  * Builds whichever image is missing for the current inputs and points the stable `:e2e` tags at
  * the result. With nothing changed this costs a few `git` calls and two `docker image inspect`s.
+ *
+ * The client build and the RID-specific API publish share the API's obj and restore state, so the
+ * client comes first; the API publish and the web image build then run side by side.
  */
 export async function ensureImages(opts: { force?: boolean; only?: keyof Images } = {}): Promise<Images> {
   const apiHash = inputsHash(API_INPUTS);
-  if (opts.only !== "web") await ensureImage("api", `nocturne-api:e2e-${apiHash}`, buildApi, !!opts.force);
-  if (opts.only !== "api") {
+  const api = () => ensureImage("api", `nocturne-api:e2e-${apiHash}`, buildApi, !!opts.force);
+  if (opts.only === "api") {
+    await api();
+  } else {
     const webHash = inputsHash(WEB_INPUTS, await ensureClient(apiHash));
-    await ensureImage("web", `nocturne-web:e2e-${webHash}`, buildWeb, !!opts.force);
+    const web = ensureImage("web", `nocturne-web:e2e-${webHash}`, buildWeb, !!opts.force);
+    // Settled, not raced: a failure still waits for the other build rather than orphaning it.
+    const results = await Promise.allSettled([opts.only === "web" ? undefined : api(), web]);
+    const failed = results.find((r) => r.status === "rejected");
+    if (failed) throw failed.reason;
   }
   return { api: "nocturne-api:e2e", web: "nocturne-web:e2e" };
 }
