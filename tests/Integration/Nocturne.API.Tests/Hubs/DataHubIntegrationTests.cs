@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Utilities;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -44,7 +45,7 @@ public class DataHubIntegrationTests : ApiIntegrationTestBase
         var authData = new
         {
             client = "test-client",
-            secret = "test-secret-for-integration-tests",
+            secret = HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey),
             history = 24,
         };
 

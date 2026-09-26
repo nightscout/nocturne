@@ -63,7 +63,7 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         await client.PostAsJsonAsync("/api/v1/devicestatus", deviceStatus);
 
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/devicestatus?count=10");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -88,7 +88,7 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         var id = created![0].Id;
 
         // Act - use find query to locate by created_at since there is no GET by ID endpoint
-        var response = await ApiClient.GetAsync($"/api/v1/devicestatus?count=50");
+        var response = await AuthenticatedClient.GetAsync($"/api/v1/devicestatus?count=50");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -124,7 +124,7 @@ public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify it no longer appears in the list
-        var listResponse = await ApiClient.GetAsync("/api/v1/devicestatus?count=50");
+        var listResponse = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=50");
         var content = await listResponse.Content.ReadAsStringAsync();
         var entries = JsonSerializer.Deserialize<DeviceStatus[]>(content);
 

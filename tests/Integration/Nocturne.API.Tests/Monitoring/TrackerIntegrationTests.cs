@@ -179,7 +179,7 @@ public class TrackerIntegrationTests : ApiIntegrationTestBase
 
         var completePayload = new
         {
-            reason = "Manual",
+            reason = "Completed",
             completionNotes = "Pen used up"
         };
 
@@ -223,7 +223,8 @@ public class TrackerIntegrationTests : ApiIntegrationTestBase
         var to = DateTimeOffset.UtcNow.AddDays(60).ToString("o");
 
         // Act
-        var response = await client.GetAsync($"/api/v4/trackers/instances/upcoming?from={from}&to={to}");
+        var response = await client.GetAsync(
+            $"/api/v4/trackers/instances/upcoming?from={Uri.EscapeDataString(from)}&to={Uri.EscapeDataString(to)}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

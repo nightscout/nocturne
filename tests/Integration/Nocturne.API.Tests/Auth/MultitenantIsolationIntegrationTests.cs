@@ -52,7 +52,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         (_subjectAId, _accessTokenA) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, "Tenant A User");
 
         // Create tenant B
-        _tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, "tenant-b", "Tenant B");
+        _tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "tenant-b", "Tenant B");
         (_subjectBId, _accessTokenB) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantBId, "Tenant B User");
 
         // Get the tenant A slug from DB
@@ -243,7 +243,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Cross-Tenant Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -288,7 +288,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/auth/direct-grants", new
         {
             label = "cross-tenant-test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -329,7 +329,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
         var authorizeUrl = $"/api/oauth/authorize?response_type=code&client_id={clientId}" +
-                           $"&redirect_uri=http://localhost:9999/callback&scope=entries.read" +
+                           $"&redirect_uri=http://localhost:9999/callback&scope=glucose.read" +
                            $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
         var response = await noRedirectClient.GetAsync(authorizeUrl);

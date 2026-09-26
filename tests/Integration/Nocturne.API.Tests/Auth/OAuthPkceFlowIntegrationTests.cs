@@ -77,13 +77,10 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
 
         // Act - GET /api/oauth/authorize with no auth (use a no-redirect client)
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var unauthClient = new HttpClient(handler)
-        {
-            BaseAddress = ApiClient.BaseAddress
-        };
+        using var unauthClient = Fixture.CreateHttpClient(handler);
 
         var query = $"?client_id={clientId}&redirect_uri={Uri.EscapeDataString("http://localhost:9999/callback")}" +
-                    $"&response_type=code&scope={Uri.EscapeDataString("entries.read treatments.read")}" +
+                    $"&response_type=code&scope={Uri.EscapeDataString("glucose.read treatments.read")}" +
                     $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
         var response = await unauthClient.GetAsync($"/api/oauth/authorize{query}");
@@ -102,16 +99,13 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient);
 
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var noRedirectClient = new HttpClient(handler)
-        {
-            BaseAddress = ApiClient.BaseAddress
-        };
+        using var noRedirectClient = new HttpClient(handler) { BaseAddress = authClient.BaseAddress };
         foreach (var header in authClient.DefaultRequestHeaders)
             noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
         // Act - GET /api/oauth/authorize WITHOUT code_challenge
         var query = $"?client_id={clientId}&redirect_uri={Uri.EscapeDataString("http://localhost:9999/callback")}" +
-                    $"&response_type=code&scope={Uri.EscapeDataString("entries.read treatments.read")}";
+                    $"&response_type=code&scope={Uri.EscapeDataString("glucose.read treatments.read")}";
 
         var response = await noRedirectClient.GetAsync($"/api/oauth/authorize{query}");
 
@@ -131,10 +125,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
 
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var noRedirectClient = new HttpClient(handler)
-        {
-            BaseAddress = ApiClient.BaseAddress
-        };
+        using var noRedirectClient = new HttpClient(handler) { BaseAddress = authClient.BaseAddress };
         foreach (var header in authClient.DefaultRequestHeaders)
             noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
@@ -160,17 +151,14 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
 
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var noRedirectClient = new HttpClient(handler)
-        {
-            BaseAddress = ApiClient.BaseAddress
-        };
+        using var noRedirectClient = new HttpClient(handler) { BaseAddress = authClient.BaseAddress };
         foreach (var header in authClient.DefaultRequestHeaders)
             noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
         // Act - GET /api/oauth/authorize with nonexistent client_id
         var query = $"?client_id=nonexistent-client-{Guid.NewGuid():N}" +
                     $"&redirect_uri={Uri.EscapeDataString("http://localhost:9999/callback")}" +
-                    $"&response_type=code&scope={Uri.EscapeDataString("entries.read treatments.read")}" +
+                    $"&response_type=code&scope={Uri.EscapeDataString("glucose.read treatments.read")}" +
                     $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
         var response = await noRedirectClient.GetAsync($"/api/oauth/authorize{query}");
@@ -191,17 +179,14 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
 
         var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var noRedirectClient = new HttpClient(handler)
-        {
-            BaseAddress = ApiClient.BaseAddress
-        };
+        using var noRedirectClient = new HttpClient(handler) { BaseAddress = authClient.BaseAddress };
         foreach (var header in authClient.DefaultRequestHeaders)
             noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
 
         // Act - GET /api/oauth/authorize with wrong redirect_uri
         var query = $"?client_id={clientId}" +
                     $"&redirect_uri={Uri.EscapeDataString("http://evil.example.com/callback")}" +
-                    $"&response_type=code&scope={Uri.EscapeDataString("entries.read treatments.read")}" +
+                    $"&response_type=code&scope={Uri.EscapeDataString("glucose.read treatments.read")}" +
                     $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
         var response = await noRedirectClient.GetAsync($"/api/oauth/authorize{query}");
@@ -255,7 +240,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         {
             ["client_id"] = clientId,
             ["redirect_uri"] = "http://localhost:9999/callback",
-            ["scope"] = "entries.read treatments.read",
+            ["scope"] = "glucose.read treatments.read",
             ["code_challenge"] = codeChallenge,
             ["approved"] = "true"
         });
@@ -323,7 +308,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
                 INSERT INTO oauth_authorization_codes
                     (id, tenant_id, client_entity_id, subject_id, code_hash, scopes, redirect_uri, code_challenge, expires_at, created_at, limit_to_24_hours)
                 VALUES
-                    (@id, @tenantId, @clientEntityId, @subjectId, @codeHash, '["entries.read","treatments.read"]'::jsonb, @redirectUri, @codeChallenge, @expiresAt, @createdAt, false);
+                    (@id, @tenantId, @clientEntityId, @subjectId, @codeHash, ARRAY['glucose.read','treatments.read'], @redirectUri, @codeChallenge, @expiresAt, @createdAt, false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("tenantId", _tenantId);
@@ -403,7 +388,7 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
         {
             ["client_id"] = clientId,
             ["redirect_uri"] = "http://localhost:9999/callback",
-            ["scope"] = "entries.read treatments.read",
+            ["scope"] = "glucose.read treatments.read",
             ["code_challenge"] = codeChallenge,
             ["approved"] = "true"
         });
@@ -459,8 +444,8 @@ public class OAuthPkceFlowIntegrationTests : ApiIntegrationTestBase
     {
         // Arrange - complete a PKCE flow with read-only scope
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
-        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient, scope: "entries.read");
-        var result = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId, scope: "entries.read");
+        var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(authClient, scope: "glucose.read");
+        var result = await AuthTestHelpers.ExecutePkceFlowAsync(authClient, clientId, scope: "glucose.read");
 
         // Act - try to write an entry with a read-only token
         using var bearerClient = AuthTestHelpers.CreateBearerClient(Fixture, result.AccessToken);

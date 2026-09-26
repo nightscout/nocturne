@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Constants;
 using Xunit;
 using Xunit.Abstractions;
@@ -15,7 +16,7 @@ namespace Nocturne.API.Tests.Integration.Infrastructure;
 [Parity]
 public abstract class ApiIntegrationTestBase : IAsyncLifetime
 {
-    protected const string TestApiSecret = "test-secret-for-integration-tests";
+    protected const string TestApiSecret = ApiIntegrationTestFixture.ApiSecret;
 
     protected readonly ApiIntegrationTestFixture Fixture;
     protected readonly ITestOutputHelper Output;
@@ -25,6 +26,15 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
     /// Pre-configured HttpClient for the Nocturne API
     /// </summary>
     protected HttpClient ApiClient => Fixture.ApiClient;
+
+    private HttpClient? _authenticatedClient;
+
+    /// <summary>
+    /// A client authenticated as the seeded tenant's owner through <see cref="TestApiSecret"/>, for
+    /// tests of data endpoints rather than of authentication: the tenant grants anonymous callers
+    /// nothing.
+    /// </summary>
+    protected HttpClient AuthenticatedClient => _authenticatedClient ??= CreateAuthenticatedClient();
 
     protected ApiIntegrationTestBase(
         ApiIntegrationTestFixture fixture,
@@ -55,6 +65,7 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
             await connection.DisposeAsync();
         }
         HubConnections.Clear();
+        _authenticatedClient?.Dispose();
     }
 
     /// <summary>
@@ -87,7 +98,7 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         var connection = new HubConnectionBuilder()
             .WithUrl(
                 new Uri(baseAddress, $"hubs/{ServiceNames.DataHub}"),
-                options => { }
+                options => options.Headers["X-Forwarded-Host"] = Fixture.TenantHost
             )
             .ConfigureLogging(logging =>
             {
@@ -111,7 +122,7 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         var connection = new HubConnectionBuilder()
             .WithUrl(
                 new Uri(baseAddress, $"hubs/alarms"),
-                options => { }
+                options => options.Headers["X-Forwarded-Host"] = Fixture.TenantHost
             )
             .ConfigureLogging(logging =>
             {
@@ -135,7 +146,7 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         var connection = new HubConnectionBuilder()
             .WithUrl(
                 new Uri(baseAddress, $"hubs/{ServiceNames.NotificationHub}"),
-                options => { }
+                options => options.Headers["X-Forwarded-Host"] = Fixture.TenantHost
             )
             .ConfigureLogging(logging =>
             {
@@ -155,7 +166,9 @@ public abstract class ApiIntegrationTestBase : IAsyncLifetime
         var authData = new
         {
             client = "test-client",
-            secret = TestApiSecret,
+            // The bridge's in-band credential: the instance key's digest, as HubTokenAuthorizer
+            // compares it.
+            secret = HashUtils.Sha256Hex(ApiIntegrationTestFixture.InstanceKey),
             history = 24,
         };
 

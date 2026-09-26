@@ -52,7 +52,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
         // Arrange
         using var client = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        var payload = new { label = "test-token", scopes = new[] { "entries.read", "treatments.read" } };
+        var payload = new { label = "test-token", scopes = new[] { "glucose.read", "treatments.read" } };
 
         // Act
         var response = await client.PostAsJsonAsync("/api/auth/direct-grants", payload);
@@ -73,7 +73,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
     public async Task CreateDirectGrant_Unauthenticated_Returns401()
     {
         // Arrange
-        var payload = new { label = "unauth-token", scopes = new[] { "entries.read" } };
+        var payload = new { label = "unauth-token", scopes = new[] { "glucose.read" } };
 
         // Act — use the raw ApiClient with no auth headers
         var response = await ApiClient.PostAsJsonAsync("/api/auth/direct-grants", payload);
@@ -103,7 +103,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
         // Arrange — create a direct grant token with read scope
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        var payload = new { label = "auth-test-token", scopes = new[] { "entries.read" } };
+        var payload = new { label = "auth-test-token", scopes = new[] { "glucose.read" } };
         var createResponse = await authClient.PostAsJsonAsync("/api/auth/direct-grants", payload);
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -125,10 +125,10 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
     [Fact]
     public async Task DirectGrantToken_ScopeEnforcement()
     {
-        // Arrange — create a direct grant token with entries.read only
+        // Arrange — create a direct grant token with glucose.read only
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        var payload = new { label = "read-only-token", scopes = new[] { "entries.read" } };
+        var payload = new { label = "read-only-token", scopes = new[] { "glucose.read" } };
         var createResponse = await authClient.PostAsJsonAsync("/api/auth/direct-grants", payload);
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -164,7 +164,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
         // Arrange — create a direct grant token and verify it works
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        var payload = new { label = "revoke-test-token", scopes = new[] { "entries.read" } };
+        var payload = new { label = "revoke-test-token", scopes = new[] { "glucose.read" } };
         var createResponse = await authClient.PostAsJsonAsync("/api/auth/direct-grants", payload);
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -196,7 +196,7 @@ public class DirectGrantIntegrationTests : ApiIntegrationTestBase
         // Arrange — create a direct grant
         using var authClient = AuthTestHelpers.CreateAuthenticatedSubjectClient(Fixture, _accessToken);
 
-        var payload = new { label = "list-test-token", scopes = new[] { "entries.read" } };
+        var payload = new { label = "list-test-token", scopes = new[] { "glucose.read" } };
         var createResponse = await authClient.PostAsJsonAsync("/api/auth/direct-grants", payload);
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 

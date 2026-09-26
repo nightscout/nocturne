@@ -175,7 +175,7 @@ public class EntriesIntegrationTests : ApiIntegrationTestBase
     public async Task GetEntries_EmptyDatabase_ShouldReturnEmptyArray()
     {
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/entries?count=10");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/entries?count=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -225,7 +225,7 @@ public class EntriesIntegrationTests : ApiIntegrationTestBase
     public async Task GetCurrentEntry_EmptyDatabase_ShouldReturnSuccessfully()
     {
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/entries/current");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/entries/current");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

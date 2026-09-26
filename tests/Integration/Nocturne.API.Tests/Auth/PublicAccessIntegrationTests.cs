@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Core.Models.Authorization;
 using Npgsql;
 using Xunit;
 using Xunit.Abstractions;
@@ -145,8 +146,7 @@ public class PublicAccessIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
 
         var publicMemberId = await AuthTestHelpers.GetPublicMemberIdAsync(conn, _tenantId);
-        var roles = await AuthTestHelpers.GetRoleIdsByNameAsync(conn, "readable");
-        var readableRoleId = roles["readable"];
+        var readableRoleId = await AuthTestHelpers.GetTenantRoleIdAsync(conn, _tenantId, RoleSeeds.Viewer);
 
         return (publicMemberId, readableRoleId);
     }

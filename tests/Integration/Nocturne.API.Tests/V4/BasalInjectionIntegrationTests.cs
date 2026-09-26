@@ -204,7 +204,7 @@ public class BasalInjectionIntegrationTests : ApiIntegrationTestBase
         await conn.OpenAsync();
 
         var tenantBSlug = $"tenant-b-{Guid.NewGuid():N}".Substring(0, 24);
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, tenantBSlug, "Basal Tenant B");
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Basal Tenant B");
         var (_, accessTokenB) = await AuthTestHelpers
             .SeedAuthenticatedSubjectAsync(conn, tenantBId, $"BasalInj B {Guid.NewGuid():N}");
 

@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 
 /// <summary>
 /// Integration tests for the OIDC account linking endpoints (list + unlink).
-/// Tests the GET /api/v4/oidc/link/identities and DELETE /api/v4/oidc/link/identities/{id}
+/// Tests the GET /api/auth/oidc/link/identities and DELETE /api/auth/oidc/link/identities/{id}
 /// endpoints against a real API with real PostgreSQL.
 ///
 /// Does NOT test link initiation or callback (those require a real IdP; unit tests cover them).
@@ -52,7 +52,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     public async Task GetLinkedIdentities_Unauthenticated_Returns401()
     {
         // Act - use raw ApiClient (no auth header, no access token)
-        var response = await ApiClient.GetAsync("/api/v4/oidc/link/identities");
+        var response = await ApiClient.GetAsync("/api/auth/oidc/link/identities");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -61,13 +61,15 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     [Fact]
     public async Task GetLinkedIdentities_Authenticated_ReturnsEmptyList()
     {
-        // Arrange - create a subject with access token (no OIDC identities)
+        // Arrange - create a subject with access token (no OIDC identities). The passkey keeps
+        // the tenant out of recovery mode, which a member with no sign-in factor puts it in.
         var subjectId = await SeedSubjectWithAccessTokenAsync();
+        await SeedPasskeyAsync(subjectId);
 
         using var client = CreateAccessTokenClient();
 
         // Act
-        var response = await client.GetAsync("/api/v4/oidc/link/identities");
+        var response = await client.GetAsync("/api/auth/oidc/link/identities");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -91,7 +93,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         using var client = CreateAccessTokenClient();
 
         // Act
-        var response = await client.GetAsync("/api/v4/oidc/link/identities");
+        var response = await client.GetAsync("/api/auth/oidc/link/identities");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -117,7 +119,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     {
         // Act - use raw ApiClient (no auth)
         var response = await ApiClient.DeleteAsync(
-            $"/api/v4/oidc/link/identities/{Guid.CreateVersion7()}");
+            $"/api/auth/oidc/link/identities/{Guid.CreateVersion7()}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
@@ -127,12 +129,12 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
     public async Task UnlinkIdentity_NotFound_Returns404()
     {
         // Arrange
-        await SeedSubjectWithAccessTokenAsync();
+        await SeedPasskeyAsync(await SeedSubjectWithAccessTokenAsync());
         using var client = CreateAccessTokenClient();
 
         // Act - delete a nonexistent identity
         var response = await client.DeleteAsync(
-            $"/api/v4/oidc/link/identities/{Guid.CreateVersion7()}");
+            $"/api/auth/oidc/link/identities/{Guid.CreateVersion7()}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -151,7 +153,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 
         // Act
         var response = await client.DeleteAsync(
-            $"/api/v4/oidc/link/identities/{identityId}");
+            $"/api/auth/oidc/link/identities/{identityId}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -176,7 +178,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 
         // Act
         var response = await client.DeleteAsync(
-            $"/api/v4/oidc/link/identities/{identityId}");
+            $"/api/auth/oidc/link/identities/{identityId}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -207,10 +209,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM tenants LIMIT 1;";
-        var result = await cmd.ExecuteScalarAsync();
-        return (Guid)result!;
+        return await AuthTestHelpers.GetTenantIdAsync(conn);
     }
 
     /// <summary>
@@ -252,7 +251,7 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         {
             cmd.CommandText = """
                 INSERT INTO tenant_members (id, tenant_id, subject_id, direct_permissions, sys_created_at, sys_updated_at, limit_to_24_hours)
-                VALUES (@id, @tenantId, @subjectId, ARRAY['*'], now(), now(), false);
+                VALUES (@id, @tenantId, @subjectId, '["*"]'::jsonb, now(), now(), false);
                 """;
             cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("tenantId", _tenantId);
@@ -281,12 +280,11 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
         await using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = """
-                INSERT INTO subject_roles (id, subject_id, role_id, sys_created_at, sys_updated_at)
-                SELECT @id, @subjectId, r.id, now(), now()
+                INSERT INTO subject_roles (subject_id, role_id)
+                SELECT @subjectId, r.id
                 FROM roles r WHERE r.name = 'admin'
                 LIMIT 1;
                 """;
-            cmd.Parameters.AddWithValue("id", Guid.CreateVersion7());
             cmd.Parameters.AddWithValue("subjectId", subjectId);
             await cmd.ExecuteNonQueryAsync();
         }
@@ -364,12 +362,12 @@ public class OidcLinkEndpointsTests : ApiIntegrationTestBase
 
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, created_at)
-            VALUES (@id, @subjectId, @credentialId, @publicKey, 0, now());
+            INSERT INTO passkey_credentials (id, subject_id, credential_id, public_key, sign_count, transports, created_at)
+            VALUES (@id, @subjectId, @credentialId, @publicKey, 0, '{}', now());
             """;
         cmd.Parameters.AddWithValue("id", passkeyId);
         cmd.Parameters.AddWithValue("subjectId", subjectId);
-        cmd.Parameters.AddWithValue("credentialId", Encoding.UTF8.GetBytes("test-credential-id"));
+        cmd.Parameters.AddWithValue("credentialId", Encoding.UTF8.GetBytes($"test-credential-{passkeyId:N}"));
         cmd.Parameters.AddWithValue("publicKey", Encoding.UTF8.GetBytes("test-public-key"));
         await cmd.ExecuteNonQueryAsync();
 
