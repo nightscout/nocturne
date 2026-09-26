@@ -159,6 +159,9 @@ public interface IStateSpanRepository
 
     /// <summary>
     /// Returns state spans grouped by category for multiple categories within an optional time range.
+    /// Open spans that started before <paramref name="from"/> are limited per category. An exclusive
+    /// category returns its newest span from before <paramref name="from"/> only if that span is open,
+    /// per state for PumpMode. Other categories return at most 10.
     /// </summary>
     /// <param name="categories">The set of <see cref="StateSpanCategory"/> values to query.</param>
     /// <param name="from">Optional start of the time range (inclusive).</param>

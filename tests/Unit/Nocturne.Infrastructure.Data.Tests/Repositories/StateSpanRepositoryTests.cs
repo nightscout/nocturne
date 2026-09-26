@@ -1,7 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
@@ -25,6 +25,7 @@ public class StateSpanRepositoryTests : IDisposable
     private readonly NocturneDbContext _context;
     private readonly Mock<IDeduplicationService> _mockDedup;
     private readonly StateSpanRepository _repository;
+    private readonly Mock<ILogger<StateSpanRepository>> _logger = new();
     private readonly SaveCounter _saves = new();
 
     /// <summary>
@@ -51,8 +52,9 @@ public class StateSpanRepositoryTests : IDisposable
         _context = _db.CreateContext();
         _context.AuditContext = _auditContext;
         _mockDedup = new Mock<IDeduplicationService>();
+        _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new StateSpanRepository(
-            _context, _mockDedup.Object, _auditContext, NullLogger<StateSpanRepository>.Instance);
+            _context, _mockDedup.Object, _auditContext, _logger.Object);
     }
 
     private sealed class StubAuditContext : IAuditContext
@@ -628,6 +630,125 @@ public class StateSpanRepositoryTests : IDisposable
             StateSpanCategory.Exercise, state: null, at: end, CancellationToken.None);
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetByCategories_OpenSpansBeforeTheWindow_ExclusiveCategoriesCarryInOnlyTheOneInEffect()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 1; i <= 50; i++)
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.Override, "Custom", from.AddHours(-i), end: null));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.Override, "Custom", from.AddHours(1), end: null));
+        foreach (var (state, days) in new[]
+                 { ("Automatic", 30), ("Automatic", 20), ("Suspended", 40), ("Suspended", 2) })
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.PumpMode, state, from.AddDays(-days), end: null));
+        foreach (var (state, days) in new[] { ("Default", 5), ("Weekend", 3) })
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.Profile, state, from.AddDays(-days), end: null));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetByCategories(
+            [StateSpanCategory.Override, StateSpanCategory.PumpMode, StateSpanCategory.Profile],
+            from, from.AddDays(1));
+
+        result[StateSpanCategory.Override].Select(s => s.StartTimestamp)
+            .Should().BeEquivalentTo([from.AddHours(1), from.AddHours(-1)]);
+        result[StateSpanCategory.PumpMode].Select(s => (s.State, s.StartTimestamp))
+            .Should().BeEquivalentTo([("Automatic", from.AddDays(-20)), ("Suspended", from.AddDays(-2))]);
+        result[StateSpanCategory.Profile].Select(s => (s.State, s.StartTimestamp))
+            .Should().BeEquivalentTo([("Weekend", from.AddDays(-3))]);
+    }
+
+    [Fact]
+    public async Task GetByCategories_OpenSpanBehindANewerClosedSpan_IsNotCarriedIn()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.PumpMode, "Suspended", from.AddDays(-40), end: null));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.PumpMode, "Suspended", from.AddDays(-2), from.AddHours(1)));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.PumpMode, "Automatic", from.AddDays(-30), end: null));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.Profile, "Default", from.AddDays(-5), end: null));
+        _context.StateSpans.Add(SpanEntity(
+            TestTenantId, StateSpanCategory.Profile, "Weekend", from.AddDays(-3), from.AddDays(-2)));
+        await _context.SaveChangesAsync();
+
+        var result = await _repository.GetByCategories(
+            [StateSpanCategory.PumpMode, StateSpanCategory.Profile], from, from.AddDays(1));
+
+        result[StateSpanCategory.PumpMode].Select(s => (s.State, s.StartTimestamp))
+            .Should().BeEquivalentTo([("Suspended", from.AddDays(-2)), ("Automatic", from.AddDays(-30))]);
+        result[StateSpanCategory.Profile].Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetByCategories_OpenSpansBeforeTheWindowWithTheSameStart_CarryInTheHigherId()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var (state, id) in new[] { ("Higher", 2), ("Lower", 1) })
+        {
+            var span = SpanEntity(TestTenantId, StateSpanCategory.Profile, state, from.AddDays(-1), end: null);
+            span.Id = Guid.Parse($"00000000-0000-0000-0000-{id:D12}");
+            _context.StateSpans.Add(span);
+        }
+        await _context.SaveChangesAsync();
+
+        var profiles = (await _repository.GetByCategories(
+            [StateSpanCategory.Profile], from, from.AddDays(1)))[StateSpanCategory.Profile];
+
+        profiles.Select(s => s.State).Should().Equal("Higher");
+    }
+
+    [Fact]
+    public async Task GetByCategories_OpenOverridesFromSeveralSourcesBeforeTheWindow_CarryInOnlyTheNewest()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        foreach (var (source, state, days) in new[]
+                 {
+                     ("Loop", "Exercise", 10),
+                     ("loop://iPhone", "Exercise", 10),
+                     ("Loop (via remote command)", "Pre-Meal", 1),
+                 })
+        {
+            var span = SpanEntity(TestTenantId, StateSpanCategory.Override, state, from.AddDays(-days), end: null);
+            span.Source = source;
+            _context.StateSpans.Add(span);
+        }
+        await _context.SaveChangesAsync();
+
+        var overrides = (await _repository.GetByCategories(
+            [StateSpanCategory.Override], from, from.AddDays(1)))[StateSpanCategory.Override];
+
+        overrides.Select(s => (s.Source, s.State)).Should().Equal(("Loop (via remote command)", "Pre-Meal"));
+    }
+
+    [Fact]
+    public async Task GetByCategories_OpenSpansBeforeTheWindow_OverlappingCategoriesCarryInUpToTheCap()
+    {
+        var from = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+        for (var i = 1; i <= 15; i++)
+            _context.StateSpans.Add(SpanEntity(
+                TestTenantId, StateSpanCategory.Exercise, "Active", from.AddHours(-i), end: null));
+        await _context.SaveChangesAsync();
+
+        var exercise = (await _repository.GetByCategories(
+            [StateSpanCategory.Exercise], from, from.AddDays(1)))[StateSpanCategory.Exercise];
+
+        exercise.Select(s => s.StartTimestamp)
+            .Should().BeEquivalentTo(Enumerable.Range(1, 10).Select(i => from.AddHours(-i)));
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     // --- Soft-delete re-creation guard ---

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -38,6 +39,21 @@ public class StateSpanRepository : IStateSpanRepository
     /// </summary>
     private static readonly List<string> ActivityCategories =
         ActivityStateSpanMapper.ActivityCategories.Select(c => c.ToString()).ToList();
+
+    /// <summary>
+    /// Open spans per non-exclusive category that <see cref="GetByCategories"/> returns from
+    /// before its window.
+    /// </summary>
+    private const int OpenCarryInLimit = 10;
+
+    /// <summary>
+    /// Exclusive categories whose open spans exclude each other only within a partition.
+    /// </summary>
+    private static readonly Dictionary<string, Expression<Func<StateSpanEntity, string?>>>
+        CarryInPartitions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [nameof(StateSpanCategory.PumpMode)] = s => s.State,
+        };
 
     /// <summary>
     /// Initializes a new instance of the StateSpanRepository class
@@ -519,7 +535,8 @@ public class StateSpanRepository : IStateSpanRepository
     }
 
     /// <summary>
-    /// Get state spans for multiple categories in a single query (batch fetch)
+    /// Get state spans for multiple categories. With <paramref name="from"/> set, runs one query
+    /// for the window and one per category for spans that started before it.
     /// </summary>
     /// <param name="categories">The collection of categories to filter by.</param>
     /// <param name="from">Optional start date filter.</param>
@@ -537,15 +554,67 @@ public class StateSpanRepository : IStateSpanRepository
 
         var query = _context.StateSpans.AsNoTracking().Where(s => categoryStrings.Contains(s.Category));
 
-        if (from.HasValue)
-            query = query.Where(s => s.EndTimestamp == null || s.EndTimestamp >= from.Value);
-
         if (to.HasValue)
             query = query.Where(s => s.StartTimestamp <= to.Value);
 
-        var entities = await query
-            .OrderByDescending(s => s.StartTimestamp)
-            .ToListAsync(cancellationToken);
+        List<StateSpanEntity> entities;
+        if (from.HasValue)
+        {
+            entities = await query
+                .Where(s => s.EndTimestamp >= from.Value
+                            || (s.EndTimestamp == null && s.StartTimestamp >= from.Value))
+                .ToListAsync(cancellationToken);
+
+            // A store with never-closed spans can hold any number of open spans from before
+            // the window.
+            foreach (var category in categoryStrings)
+            {
+                var before = query.Where(s => s.Category == category && s.StartTimestamp < from.Value);
+
+                // An exclusive span older than a newer closed one is not in effect, even if open.
+                if (CarryInPartitions.TryGetValue(category, out var partition))
+                {
+                    var newest = await before
+                        .GroupBy(partition)
+                        .Select(g => g
+                            .OrderByDescending(s => s.StartTimestamp)
+                            .ThenByDescending(s => s.Id)
+                            .First())
+                        .ToListAsync(cancellationToken);
+                    entities.AddRange(newest.Where(s => s.EndTimestamp == null));
+                }
+                else if (ExclusiveCategories.Contains(category))
+                {
+                    var newest = await NewestFirst(before).FirstOrDefaultAsync(cancellationToken);
+                    if (newest is { EndTimestamp: null })
+                        entities.Add(newest);
+                }
+                else
+                {
+                    var open = await NewestFirst(before.Where(s => s.EndTimestamp == null))
+                        .Take(OpenCarryInLimit + 1)
+                        .ToListAsync(cancellationToken);
+
+                    if (open.Count > OpenCarryInLimit)
+                    {
+                        open.RemoveAt(OpenCarryInLimit);
+                        _logger.LogDebug(
+                            "More than {Limit} open {Category} spans started before {From}; returning only the newest",
+                            OpenCarryInLimit, category, from.Value);
+                    }
+
+                    entities.AddRange(open);
+                }
+            }
+
+            entities = entities.OrderByDescending(s => s.StartTimestamp).ToList();
+        }
+        else
+        {
+            entities = await query
+                .OrderByDescending(s => s.StartTimestamp)
+                .ToListAsync(cancellationToken);
+        }
 
         // Group results by category
         var result = categories.ToDictionary(c => c, c => new List<StateSpan>());
@@ -563,6 +632,9 @@ public class StateSpanRepository : IStateSpanRepository
 
         return result;
     }
+
+    private static IQueryable<StateSpanEntity> NewestFirst(IQueryable<StateSpanEntity> spans) =>
+        spans.OrderByDescending(s => s.StartTimestamp).ThenByDescending(s => s.Id);
 
     #region Activity Compatibility Methods
 
