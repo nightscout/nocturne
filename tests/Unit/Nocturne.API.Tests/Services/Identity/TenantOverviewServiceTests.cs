@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -24,155 +25,6 @@ public class TenantOverviewServiceTests
     /// <summary>Token scopes equivalent to a session/full-access token.</summary>
     private static readonly IReadOnlySet<string> FullTokenScopes =
         new HashSet<string> { Scope.FullAccess };
-
-    // ---- threshold resolution ----
-
-    [Fact]
-    public void ResolveThresholds_noRules_returnsDefaults()
-    {
-        TenantOverviewService.ResolveThresholds(Defaults, []).Should().Be(Defaults);
-    }
-
-    [Fact]
-    public void ResolveThresholds_overridesEachBucketFromRules()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 60, AlertRuleSeverity.Critical),
-            ("below", 90, AlertRuleSeverity.Warning),
-            ("above", 170, AlertRuleSeverity.Warning),
-            ("above", 250, AlertRuleSeverity.Critical),
-        ]);
-
-        resolved.Should().Be(new TenantOverviewThresholds(60, 90, 170, 250));
-    }
-
-    [Fact]
-    public void ResolveThresholds_infoSeverityFillsTheNonUrgentBuckets()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 85, AlertRuleSeverity.Info),
-            ("above", 190, AlertRuleSeverity.Info),
-        ]);
-
-        resolved.Should().Be(new TenantOverviewThresholds(55, 85, 190, 260));
-    }
-
-    [Fact]
-    public void ResolveThresholds_multipleRulesInABucket_mostConservativeWins()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            // below: highest value is most conservative
-            ("below", 70, AlertRuleSeverity.Warning),
-            ("below", 85, AlertRuleSeverity.Warning),
-            // above: lowest value is most conservative
-            ("above", 200, AlertRuleSeverity.Warning),
-            ("above", 170, AlertRuleSeverity.Warning),
-        ]);
-
-        resolved.Low.Should().Be(85);
-        resolved.High.Should().Be(170);
-    }
-
-    [Fact]
-    public void ResolveThresholds_clampsUrgentBoundsToOrdering()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 90, AlertRuleSeverity.Critical),  // urgent-low above default low (80)
-            ("above", 150, AlertRuleSeverity.Critical), // urgent-high below default high (180)
-        ]);
-
-        resolved.UrgentLow.Should().BeLessThanOrEqualTo(resolved.Low);
-        resolved.UrgentHigh.Should().BeGreaterThanOrEqualTo(resolved.High);
-        resolved.UrgentLow.Should().Be(80);
-        resolved.UrgentHigh.Should().Be(180);
-    }
-
-    [Fact]
-    public void ResolveThresholds_invertedBand_lowIsClampedToHigh()
-    {
-        // A Warning "below 200" with default High=180 would put Low above High.
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-            [("below", 200, AlertRuleSeverity.Warning)]);
-
-        resolved.Low.Should().Be(180);
-        resolved.High.Should().Be(180);
-        resolved.UrgentLow.Should().BeLessThanOrEqualTo(resolved.Low);
-
-        // A reading of 190 must not classify Low.
-        TenantOverviewService.Classify(190, Now.AddMinutes(-1), null, resolved, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.High);
-    }
-
-    [Fact]
-    public void ResolveThresholds_directionCasingIsIgnored()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-            [("Below", 70, AlertRuleSeverity.Critical)]);
-
-        resolved.UrgentLow.Should().Be(70);
-    }
-
-    // ---- classification ----
-
-    private static readonly DateTime Now = new(2026, 07, 04, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(25);
-
-    private static GlucoseStatus ClassifyValue(double mgdl) =>
-        TenantOverviewService.Classify(mgdl, Now.AddMinutes(-5), Now.AddMinutes(-5), Defaults, StaleAfter, Now);
-
-    [Theory]
-    [InlineData(54, GlucoseStatus.UrgentLow)]
-    [InlineData(55, GlucoseStatus.Low)]        // boundary: not urgent
-    [InlineData(79, GlucoseStatus.Low)]
-    [InlineData(80, GlucoseStatus.InRange)]    // boundary: in range
-    [InlineData(120, GlucoseStatus.InRange)]
-    [InlineData(180, GlucoseStatus.InRange)]   // boundary: in range
-    [InlineData(181, GlucoseStatus.High)]
-    [InlineData(260, GlucoseStatus.High)]      // boundary: not urgent
-    [InlineData(261, GlucoseStatus.UrgentHigh)]
-    public void Classify_valueAgainstThresholds(double mgdl, GlucoseStatus expected)
-    {
-        ClassifyValue(mgdl).Should().Be(expected);
-    }
-
-    [Fact]
-    public void Classify_readingOlderThanStaleWindow_isStale()
-    {
-        TenantOverviewService.Classify(120, Now.AddMinutes(-26), null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Stale);
-    }
-
-    [Fact]
-    public void Classify_readingAtExactlyTheStaleWindow_isNotStale()
-    {
-        TenantOverviewService.Classify(120, Now - StaleAfter, null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.InRange);
-    }
-
-    [Fact]
-    public void Classify_noReadingAndNoLastReadingAt_isUnknown()
-    {
-        TenantOverviewService.Classify(null, null, null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Unknown);
-    }
-
-    [Fact]
-    public void Classify_noReadingButStaleLastReadingAt_isStale()
-    {
-        TenantOverviewService.Classify(null, null, Now.AddHours(-2), Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Stale);
-    }
-
-    [Fact]
-    public void Classify_noReadingWithFreshLastReadingAt_isUnknown()
-    {
-        TenantOverviewService.Classify(null, null, Now.AddMinutes(-1), Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Unknown);
-    }
 
     // ---- membership filtering ----
 
@@ -609,7 +461,8 @@ public class TenantOverviewServiceTests
         var service = new TenantOverviewService(
             new InMemoryContextFactory(options),
             provider.GetRequiredService<IServiceScopeFactory>(),
-            new ConfigurationBuilder().Build(),
+            new GlucoseStatusClassifier(
+                new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
         return (service, clampSeen);
     }
@@ -736,7 +589,8 @@ public class TenantOverviewServiceTests
         return new TenantOverviewService(
             new InMemoryContextFactory(options),
             provider.GetRequiredService<IServiceScopeFactory>(),
-            new ConfigurationBuilder().Build(),
+            new GlucoseStatusClassifier(
+                new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
     }
 

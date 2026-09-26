@@ -1,12 +1,13 @@
 <script lang="ts">
   import * as Tooltip from "./tooltip";
   import { Skeleton } from "./skeleton";
+  import type { GlucoseTileVariant } from "../../glucose";
 
   interface Props {
     /** Glucose value to display (already formatted for units) */
     displayValue: string | number;
-    /** Raw glucose value in mg/dL for color calculation */
-    rawBgMgdl: number;
+    /** Fill from the server's classification; see `glucoseTileVariant` */
+    variant?: GlucoseTileVariant;
     /** Whether the data is still loading (no data received yet) */
     isLoading?: boolean;
     /** Whether the data is stale (old) */
@@ -29,7 +30,7 @@
 
   let {
     displayValue,
-    rawBgMgdl,
+    variant = "neutral",
     isLoading = false,
     isStale = false,
     isDisconnected = false,
@@ -58,15 +59,16 @@
     previousValue = value;
   });
 
-  // Get background color based on BG value (only when not stale)
-  const getBGColor = (bg: number, stale: boolean) => {
-    if (stale) return "bg-muted text-muted-foreground";
-    if (bg < 70) return "bg-destructive text-destructive-foreground";
-    if (bg < 80) return "bg-yellow-500 text-black";
-    if (bg > 250) return "bg-destructive text-destructive-foreground";
-    if (bg > 180) return "bg-orange-500 text-black";
-    return "bg-green-500 text-white";
+  const variantClasses: Record<GlucoseTileVariant, string> = {
+    "very-low": "bg-glucose-very-low text-glucose-very-low-foreground",
+    low: "bg-glucose-low text-glucose-low-foreground",
+    "in-range": "bg-glucose-in-range text-glucose-in-range-foreground",
+    high: "bg-glucose-high text-glucose-high-foreground",
+    "very-high": "bg-glucose-very-high text-glucose-very-high-foreground",
+    neutral: "bg-muted text-muted-foreground",
   };
+
+  const fillClasses = $derived(variantClasses[isStale ? "neutral" : variant]);
 
   // Get border style based on connection status
   const getBorderStyle = (disconnected: boolean, stale: boolean) => {
@@ -105,10 +107,10 @@
   {:else}
     <!-- Actual value display -->
     <div
-      class="font-bold rounded-lg {sizeClasses} {getBGColor(
-        rawBgMgdl,
+      class="font-bold rounded-lg {sizeClasses} {fillClasses} {getBorderStyle(
+        isDisconnected,
         isStale
-      )} {getBorderStyle(isDisconnected, isStale)} {isPulsing
+      )} {isPulsing
         ? 'pulse-once'
         : ''}"
     >

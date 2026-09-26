@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models.Widget;
 
@@ -44,4 +45,11 @@ public class V4GlucoseReading
     /// </summary>
     [JsonPropertyName("noise")]
     public int? Noise { get; set; }
+
+    /// <summary>
+    /// Gets or sets the server's classification of this reading against the tenant's thresholds.
+    /// Set on the current reading only; null on history.
+    /// </summary>
+    [JsonPropertyName("status")]
+    public GlucoseStatus? Status { get; set; }
 }

@@ -596,6 +596,7 @@ mod tests {
             delta_mgdl: None,
             direction: Some("FortyFiveUp".to_string()),
             mills: 0,
+            status: None,
         };
         let t = tooltip_text(Some(&bg));
         assert!(t.starts_with("5.5 mmol/L"));
@@ -638,7 +639,7 @@ mod tests {
     // ── flash generation: (set, generation) must change atomically ───────────────────────
 
     fn reading(sgv_mgdl: f64) -> CurrentBg {
-        CurrentBg { sgv_mgdl, delta_mgdl: None, direction: None, mills: 0 }
+        CurrentBg { sgv_mgdl, delta_mgdl: None, direction: None, mills: 0, status: None }
     }
 
     #[test]

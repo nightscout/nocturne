@@ -5,8 +5,10 @@ import {
   glucoseStatusStyles,
   glucoseStatusSortOrder,
   getGlucoseStatusClass,
+  getGlucoseTileVariant,
   sortTenantsByUrgency,
 } from "./glucose-status";
+import { glucoseTileVariant } from "@nocturne/ui/glucose";
 
 describe("glucoseStatusStyles", () => {
   it("maps every GlucoseStatus value", () => {
@@ -105,5 +107,38 @@ describe("sortTenantsByUrgency", () => {
     const copy = [...input];
     sortTenantsByUrgency(input);
     expect(input).toEqual(copy);
+  });
+});
+
+describe("getGlucoseTileVariant", () => {
+  it.each([
+    [GlucoseStatus.UrgentLow, "very-low"],
+    [GlucoseStatus.Low, "low"],
+    [GlucoseStatus.InRange, "in-range"],
+    [GlucoseStatus.High, "high"],
+    [GlucoseStatus.UrgentHigh, "very-high"],
+    [GlucoseStatus.Stale, "neutral"],
+    [GlucoseStatus.Unknown, "neutral"],
+  ])("maps %s to %s", (status, variant) => {
+    expect(getGlucoseTileVariant(status)).toBe(variant);
+  });
+
+  it("is neutral for a missing status or one this build does not know", () => {
+    expect(getGlucoseTileVariant(undefined)).toBe("neutral");
+    expect(getGlucoseTileVariant("SomethingNew" as GlucoseStatus)).toBe(
+      "neutral"
+    );
+  });
+});
+
+describe("glucoseTileVariant", () => {
+  it("maps a status string from a surface with no generated client", () => {
+    expect(glucoseTileVariant("High")).toBe("high");
+  });
+
+  it("is neutral for an unknown string, including an Object prototype key", () => {
+    expect(glucoseTileVariant("SomethingNew")).toBe("neutral");
+    expect(glucoseTileVariant("toString")).toBe("neutral");
+    expect(glucoseTileVariant(null)).toBe("neutral");
   });
 });

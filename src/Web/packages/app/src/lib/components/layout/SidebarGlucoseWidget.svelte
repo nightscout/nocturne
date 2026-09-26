@@ -17,6 +17,8 @@
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "lucide-svelte/icons/arrow-right";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
+  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -49,6 +51,9 @@
   // Collapsed state needs basic BG info
   const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
+  const tileVariant = $derived(
+    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore?.currentEntry?.mills))
+  );
   const now = $derived(realtimeStore?.now ?? Date.now());
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
@@ -84,7 +89,7 @@
     <div class="flex items-center justify-center gap-2">
       <GlucoseValueIndicator
         displayValue={displayBG}
-        rawBgMgdl={rawCurrentBG}
+        variant={tileVariant}
         {isLoading}
         {isStale}
         {isDisconnected}
@@ -134,7 +139,7 @@
 <div class="hidden group-data-[collapsible=icon]:flex flex-col items-center gap-0.5">
   <GlucoseValueIndicator
     displayValue={displayBG}
-    rawBgMgdl={rawCurrentBG}
+    variant={tileVariant}
     {isLoading}
     {isStale}
     {isDisconnected}

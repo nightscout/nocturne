@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import { refreshSummaryOnNewReading } from "$lib/stores/current-glucose-status.svelte";
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
@@ -59,6 +60,7 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
+  refreshSummaryOnNewReading(() => realtimeStore.currentEntry?.mills);
   createAuthStore(); // Initialize auth store in context
 
   // Suppress the auth interceptor's login redirect for guest and public

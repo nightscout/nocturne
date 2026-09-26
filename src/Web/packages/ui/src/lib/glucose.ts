@@ -197,3 +197,44 @@ export function deltaColorClass(direction: string | null | undefined): string {
       return "text-muted-foreground";
   }
 }
+
+/**
+ * The server's `GlucoseStatus` values. Mirrored here because the design system cannot import
+ * the generated client; the web app's `glucose-status.ts` fails `check` if they drift.
+ */
+export type GlucoseStatusName =
+  | "Unknown"
+  | "Stale"
+  | "UrgentLow"
+  | "Low"
+  | "InRange"
+  | "High"
+  | "UrgentHigh";
+
+/** Fill of the current-reading tile. */
+export type GlucoseTileVariant =
+  | "very-low"
+  | "low"
+  | "in-range"
+  | "high"
+  | "very-high"
+  | "neutral";
+
+export const glucoseStatusTileVariant: Record<GlucoseStatusName, GlucoseTileVariant> = {
+  UrgentLow: "very-low",
+  Low: "low",
+  InRange: "in-range",
+  High: "high",
+  UrgentHigh: "very-high",
+  Stale: "neutral",
+  Unknown: "neutral",
+};
+
+/**
+ * Tile fill for a server status. A status this build does not know (server deployed ahead
+ * of the client) or none at all is neutral, never a colour derived from the value.
+ */
+export function glucoseTileVariant(status: string | null | undefined): GlucoseTileVariant {
+  const known: Partial<Record<string, GlucoseTileVariant>> = glucoseStatusTileVariant;
+  return (status && Object.hasOwn(known, status) && known[status]) || "neutral";
+}

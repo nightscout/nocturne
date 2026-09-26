@@ -25,6 +25,8 @@
   } from "$lib/utils/formatting";
   import { Clock } from "lucide-svelte";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
+  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -44,6 +46,9 @@
   const rawCurrentBG = $derived(realtimeStore.currentBG);
   const rawBgDelta = $derived(realtimeStore.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
+  const tileVariant = $derived(
+    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
+  );
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -132,7 +137,7 @@
     <div class="flex shrink-0 items-center gap-3">
       <GlucoseValueIndicator
         displayValue={displayCurrentBG}
-        rawBgMgdl={rawCurrentBG}
+        variant={tileVariant}
         {isLoading}
         {isStale}
         {isDisconnected}
