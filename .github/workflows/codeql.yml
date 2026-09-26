@@ -3,9 +3,6 @@ name: "CodeQL Advanced"
 on:
   push:
     branches: [ "main" ]
-    paths-ignore:
-      # Compiled translation outputs — not source code
-      - "src/Web/locales/**"
   pull_request:
     branches: [ "main" ]
   schedule:
@@ -15,17 +12,62 @@ concurrency:
   group: codeql-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
-  analyze:
-    name: Analyze (${{ matrix.language }})
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
-    # Skip bot-authored pushes (e.g. the translation-sync commit) even if
-    # paths-ignore didn't catch it (e.g. a sync commit that also touches
-    # other files).
+  # A pull request analyses only the languages whose files it touches. Pushes to main and the
+  # weekly schedule analyse everything: main pushes also refresh the overlay base database that
+  # pull requests' incremental analysis starts from.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.actor != 'github-actions[bot]'
     permissions:
+      pull-requests: read
+    outputs:
+      csharp: ${{ steps.filter.outputs.csharp == 'true' || github.event_name != 'pull_request' }}
+      javascript-typescript: ${{ steps.filter.outputs.javascript-typescript == 'true' || github.event_name != 'pull_request' }}
+      actions: ${{ steps.filter.outputs.actions == 'true' || github.event_name != 'pull_request' }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/codeql.yml'
+            csharp:
+              - *shared
+              - '**/*.cs'
+              - '**/*.csproj'
+              - '**/*.props'
+              - '**/*.targets'
+              - '**/*.razor'
+              - '**/*.cshtml'
+              - '**/Directory.*'
+              - 'global.json'
+              - '**/nuget.config'
+              - '**/NuGet.config'
+              - '**/*.sln*'
+            javascript-typescript:
+              - *shared
+              - 'src/Web/**'
+              - 'e2e/**'
+              - '**/*.{js,ts,mjs,cjs,mts,cts,jsx,tsx}'
+              - '**/package.json'
+              - '**/pnpm-lock.yaml'
+              - '**/pnpm-workspace.yaml'
+            actions:
+              - '.github/**'
+
+  # The matrix job always runs so every "Analyze (<language>)" check reports; an unchanged language
+  # skips its steps and the check passes.
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: changes
+    runs-on: ubuntu-latest
+    permissions:
       security-events: write
-      packages: read
       actions: read
       contents: read
       pull-requests: read
@@ -42,49 +84,19 @@ jobs:
           build-mode: none
 
     steps:
-    # The C# analysis runs 10-15 minutes, so a pull request that touches no C# skips it. Pushes to
-    # main and the weekly schedule always analyse everything, so nothing goes unscanned for long.
-    - name: Decide whether to analyse
-      id: scope
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        if [ "${{ github.event_name }}" != "pull_request" ] || [ "${{ matrix.language }}" != "csharp" ]; then
-          echo "analyse=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-        files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
-        if grep -qE '\.(cs|csproj|props|targets|razor|cshtml)$|^global\.json$|^\.github/workflows/codeql\.yml$' <<< "$files"; then
-          echo "analyse=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "No C# changes; skipping the C# analysis."
-          echo "analyse=false" >> "$GITHUB_OUTPUT"
-        fi
-
     - name: Checkout repository
-      if: steps.scope.outputs.analyse == 'true'
+      if: needs.changes.outputs[matrix.language] == 'true'
       uses: actions/checkout@v5
 
     - name: Initialize CodeQL
-      if: steps.scope.outputs.analyse == 'true'
-      uses: github/codeql-action/init@v4
+      if: needs.changes.outputs[matrix.language] == 'true'
+      uses: github/codeql-action/init@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v4.38.2
       with:
         languages: ${{ matrix.language }}
         build-mode: ${{ matrix.build-mode }}
 
-    - name: Run manual build steps
-      if: matrix.build-mode == 'manual'
-      shell: bash
-      run: |
-        echo 'If you are using a "manual" build mode for one or more of the' \
-          'languages you are analyzing, replace this with the commands to build' \
-          'your code, for example:'
-        echo '  make bootstrap'
-        echo '  make release'
-        exit 1
-
     - name: Perform CodeQL Analysis
-      if: steps.scope.outputs.analyse == 'true'
-      uses: github/codeql-action/analyze@v4
+      if: needs.changes.outputs[matrix.language] == 'true'
+      uses: github/codeql-action/analyze@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v4.38.2
       with:
-        category: "/language:${{matrix.language}}"
+        category: "/language:${{ matrix.language }}"
