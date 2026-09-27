@@ -112,6 +112,20 @@ public class TempBasalToTreatmentMapperTests
         result.AdditionalProperties!["basalOrigin"].Should().Be("Algorithm");
     }
 
+    [Theory]
+    [Trait("Category", "Unit")]
+    [InlineData(TempBasalOrigin.Algorithm, true)]
+    [InlineData(TempBasalOrigin.Manual, false)]
+    [InlineData(TempBasalOrigin.Scheduled, null)]
+    [InlineData(TempBasalOrigin.Suspended, null)]
+    [InlineData(TempBasalOrigin.Inferred, null)]
+    public void ToTreatment_SetsAutomaticOnlyForAlgorithmOrManual(TempBasalOrigin origin, bool? expected)
+    {
+        var result = TempBasalToTreatmentMapper.ToTreatment(CreateTempBasal(origin, 1.0));
+
+        result.Automatic.Should().Be(expected);
+    }
+
     [Fact]
     [Trait("Category", "Unit")]
     public void ToTreatment_CarriesScheduledRateInAdditionalProperties()

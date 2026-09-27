@@ -168,6 +168,35 @@ public class TreatmentServiceTests
         _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory]
+    [InlineData("{\"automatic\":false}", V4Models.TempBasalOrigin.Manual)]
+    [InlineData("{\"reason\":\"suspend\"}", V4Models.TempBasalOrigin.Suspended)]
+    public async Task PatchTreatmentAsync_TempBasalOriginFollowsPatchedField(
+        string patch, V4Models.TempBasalOrigin expected)
+    {
+        var stored = Nocturne.Infrastructure.Data.Mappers.TempBasalToTreatmentMapper.ToTreatment(new V4Models.TempBasal
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimestamp = new DateTime(2026, 9, 20, 12, 0, 0, DateTimeKind.Utc),
+            EndTimestamp = new DateTime(2026, 9, 20, 12, 30, 0, DateTimeKind.Utc),
+            Rate = 0.4,
+            Origin = V4Models.TempBasalOrigin.Algorithm,
+            App = "loop://Test Phone",
+        });
+        _mockStore.Setup(x => x.GetByIdAsync("tb1", It.IsAny<CancellationToken>())).ReturnsAsync(stored);
+        Treatment? decomposed = null;
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Treatment, WriteOrigin, CancellationToken>((t, _, _) => decomposed = t)
+            .ReturnsAsync(new DecompositionResult());
+
+        await _treatmentService.PatchTreatmentAsync(
+            "tb1", JsonSerializer.Deserialize<JsonElement>(patch), CancellationToken.None);
+
+        decomposed.Should().NotBeNull();
+        Nocturne.API.Services.V4.TreatmentDecomposer.MapToTempBasal(decomposed!, correlationId: null)
+            .Origin.Should().Be(expected);
+    }
+
     [Fact]
     public async Task PatchTreatmentAsync_WhenNotFound_ReturnsNull()
     {

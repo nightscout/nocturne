@@ -818,9 +818,30 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
             CorrelationId = correlationId,
             Rate = treatment.Absolute ?? treatment.Rate ?? 0,
             ScheduledRate = null, // Not available from legacy treatments
-            Origin = V4Models.TempBasalOrigin.Manual, // v1/v3 treatments default to Manual
+            Origin = MapTempBasalOrigin(treatment),
             PumpRecordId = treatment.PumpId?.ToString(),
         };
+    }
+
+    private static V4Models.TempBasalOrigin MapTempBasalOrigin(Treatment treatment)
+    {
+        if (string.Equals(treatment.Reason, "suspend", StringComparison.OrdinalIgnoreCase))
+            return V4Models.TempBasalOrigin.Suspended;
+
+        if (treatment.Automatic is { } automatic)
+            return automatic ? V4Models.TempBasalOrigin.Algorithm : V4Models.TempBasalOrigin.Manual;
+
+        // Below reason and automatic: an edit echoes the stored basalOrigin
+        // back next to the field it changes
+        if (treatment.AdditionalProperties is { } props
+            && TryGetString(props, "basalOrigin", out var stored)
+            && Enum.TryParse<V4Models.TempBasalOrigin>(stored, ignoreCase: true, out var origin)
+            && Enum.IsDefined(origin))
+            return origin;
+
+        return IsLoopUpload(treatment)
+            ? V4Models.TempBasalOrigin.Algorithm // Loop 2.x omits the flag, which Loop reads as automatic
+            : V4Models.TempBasalOrigin.Manual;
     }
 
     internal static V4Models.Bolus MapToBolus(Treatment treatment, Guid? correlationId)
@@ -1031,6 +1052,9 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return string.Equals(appString, "AAPS", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsLoopUpload(Treatment treatment) =>
+        treatment.EnteredBy?.StartsWith("loop://", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>
     /// Extracts AAPS v4 insulin configuration from the <c>icfg</c> JSON field in

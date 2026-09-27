@@ -38,10 +38,17 @@ public static class TempBasalToTreatmentMapper
             EnteredBy = tempBasal.App,
             UtcOffset = tempBasal.UtcOffset,
             DataSource = tempBasal.DataSource,
+            Automatic = tempBasal.Origin switch
+            {
+                TempBasalOrigin.Algorithm => true,
+                TempBasalOrigin.Manual => false,
+                _ => null,
+            },
             AdditionalProperties = TreatmentClientId.ToTreatment(tempBasal.AdditionalProperties),
         };
 
-        // Carry origin, scheduled rate, and device in AdditionalProperties for debug/display
+        // TreatmentDecomposer reads basalOrigin back when an edit re-decomposes;
+        // the rest is for display
         treatment.AdditionalProperties ??= new Dictionary<string, object>();
         treatment.AdditionalProperties["basalOrigin"] = tempBasal.Origin.ToString();
         if (tempBasal.ScheduledRate.HasValue)
