@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.V4;
@@ -136,44 +137,133 @@ public abstract class DecomposerBase
     }
 
     /// <summary>
-    /// One table of a group a legacy record decomposes into, for <see cref="AdoptOwnIdsAsync"/>.
+    /// One table a legacy record decomposes into, for <see cref="PointAtStoredRecordsAsync"/>.
+    /// <see cref="Resolve"/> is null for a table whose uuid-shaped legacy ids never go upstream as
+    /// their prefix.
     /// </summary>
-    protected readonly record struct AdoptionTable(
+    protected readonly record struct KeyedTable(
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IReadOnlySet<string>>> Held,
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<UuidLegacyId>>>? Resolve,
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
         Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation);
 
-    protected static AdoptionTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository)
+    protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, bool resolvesUuidLegacyIds)
         where TRecord : class, IV4Record
-        => new(async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct), repository.AdoptLegacyIdsByCorrelationAsync);
+        => new(
+            repository.GetHeldLegacyIdsAsync,
+            resolvesUuidLegacyIds ? repository.ResolveUuidLegacyIdsAsync : null,
+            async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct),
+            repository.AdoptLegacyIdsByCorrelationAsync);
 
     /// <summary>
-    /// Lets the stored record that <paramref name="ids"/> name by their own uuid
-    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>) take that id as its legacy
-    /// id, in whichever of <paramref name="tables"/> holds it, then gives the same id to the records
-    /// sharing its correlation id in every table: the group the legacy record decomposed into, which
-    /// the legacy-id upserts that follow must all match.
+    /// Points each incoming document at the stored record it came from, before the legacy-id
+    /// upserts run, by rewriting its id to that record's legacy id or giving a record with none the
+    /// id it is named by. A copy of a record Nightscout write-back sent upstream then updates the
+    /// record in place, or finds the user's deletion, instead of being stored a second time.
     /// </summary>
-    protected static async Task AdoptOwnIdsAsync(
-        IReadOnlyCollection<string> ids, IReadOnlyList<AdoptionTable> tables, CancellationToken ct)
+    /// <remarks>
+    /// <para>
+    /// The document's <see cref="ProcessableDocumentBase.UpstreamIdentifier"/> is tried first: it is
+    /// where write-back puts the record's own key, which survives every Nightscout version (see the
+    /// Nightscout connector's <c>UpstreamIdentityJson</c>). It is taken only when it names a stored
+    /// record, as a legacy id a live row or the user's deletion holds, or as a record's own uuid.
+    /// Otherwise it is some other client's identifier, and the document stays under its <c>_id</c>,
+    /// the key every earlier pull stored it by.
+    /// </para>
+    /// <para>
+    /// The <c>_id</c> comes second, for a copy that lost its identifier or was written back before
+    /// one was sent: a 24-hex id that is the prefix of a stored uuid-shaped legacy id is rewritten
+    /// to that legacy id, and one that names a record's own uuid is adopted by that record.
+    /// </para>
+    /// </remarks>
+    protected static async Task PointAtStoredRecordsAsync<TDocument>(
+        IEnumerable<TDocument> documents, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+        where TDocument : ProcessableDocumentBase
     {
-        if (ids.Count == 0)
+        var pending = documents.ToList();
+
+        var identified = pending.Where(d => d.UpstreamIdentifier is { Length: > 0 } i && i != d.Id).ToList();
+        if (identified.Count > 0)
+        {
+            var identifiers = identified.Select(d => d.UpstreamIdentifier!).ToHashSet(StringComparer.Ordinal);
+            var held = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var table in tables)
+                held.UnionWith(await table.Held(identifiers, ct));
+            var adopted = await AdoptOwnIdsAsync(
+                identifiers.Where(i => !held.Contains(i) && MongoObjectId.TryGetOwnIdRange(i, out _, out _)).ToHashSet(StringComparer.Ordinal),
+                tables, ct);
+
+            foreach (var document in identified)
+            {
+                if (!held.Contains(document.UpstreamIdentifier!) && !adopted.Contains(document.UpstreamIdentifier!))
+                    continue;
+                document.Id = document.UpstreamIdentifier;
+                pending.Remove(document);
+            }
+        }
+
+        var named = pending.Where(d => MongoObjectId.TryGetOwnIdRange(d.Id, out _, out _)).ToList();
+        if (named.Count == 0)
             return;
+
+        var prefixes = named.Select(d => d.Id!).Where(MongoObjectId.IsGuidPrefixShaped).ToHashSet(StringComparer.Ordinal);
+        var legacyIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (prefixes.Count > 0)
+        {
+            foreach (var table in tables)
+            {
+                if (table.Resolve is null)
+                    continue;
+                foreach (var resolved in await table.Resolve(prefixes, ct))
+                    legacyIds.TryAdd(resolved.WireId, resolved.LegacyId);
+            }
+        }
+
+        var own = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var document in named)
+        {
+            if (legacyIds.TryGetValue(document.Id!, out var legacyId))
+                document.Id = legacyId;
+            else
+                own.Add(document.Id!);
+        }
+
+        await AdoptOwnIdsAsync(own, tables, ct);
+    }
+
+    /// <summary>
+    /// Lets the stored record each of <paramref name="ids"/> names by its own uuid
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>) take that id as its legacy
+    /// id, in whichever table holds it, then gives the same id to the records sharing its
+    /// correlation id in every table: the group the legacy record decomposed into, which the
+    /// legacy-id upserts that follow must all match.
+    /// </summary>
+    /// <returns>The ids a stored record took.</returns>
+    private static async Task<IReadOnlySet<string>> AdoptOwnIdsAsync(
+        IReadOnlyCollection<string> ids, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+    {
+        var adopted = new HashSet<string>(StringComparer.Ordinal);
+        if (ids.Count == 0)
+            return adopted;
 
         var legacyIdByCorrelation = new Dictionary<Guid, string>();
         foreach (var table in tables)
         {
             foreach (var anchor in await table.AdoptOwnIds(ids, ct))
             {
+                adopted.Add(anchor.LegacyId!);
                 if (anchor.CorrelationId is { } correlationId && correlationId != Guid.Empty)
                     legacyIdByCorrelation.TryAdd(correlationId, anchor.LegacyId!);
             }
         }
 
-        if (legacyIdByCorrelation.Count == 0)
-            return;
+        if (legacyIdByCorrelation.Count > 0)
+        {
+            foreach (var table in tables)
+                await table.AdoptByCorrelation(legacyIdByCorrelation, ct);
+        }
 
-        foreach (var table in tables)
-            await table.AdoptByCorrelation(legacyIdByCorrelation, ct);
+        return adopted;
     }
 
     /// <summary>

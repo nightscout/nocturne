@@ -371,7 +371,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     {
         NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope([treatment]);
-        await AdoptOwnIdsAsync([treatment], ct);
+        await PointAtStoredTreatmentsAsync([treatment], ct);
 
         var result = new V4Models.DecompositionResult
         {
@@ -461,23 +461,22 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <summary>
-    /// Lets a stored treatment with no legacy id take the id an incoming treatment names it by: its
-    /// record's uuid or that uuid's 24-hex prefix, the id Nightscout write-back sends a v4-native
-    /// treatment upstream under. The records it decomposed into follow through their shared
-    /// correlation id (<see cref="DecomposerBase.AdoptOwnIdsAsync"/>), so the legacy-id upserts
-    /// match the whole treatment: a copy the connector pulls back updates it in place, and one the
-    /// user deleted stays deleted.
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the treatment tables, so a
+    /// v4-native treatment's copy lands on the records it decomposed into (a meal's bolus and carbs
+    /// follow through their shared correlation id). A treatment's uuid-shaped legacy id goes
+    /// upstream in its <c>identifier</c> verbatim, so no table resolves one from its prefix.
     /// </summary>
-    private Task AdoptOwnIdsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
-        => AdoptOwnIdsAsync(
-            treatments.Select(t => t.Id)
-                .Where(id => MongoObjectId.TryGetOwnIdRange(id, out _, out _))
-                .Select(id => id!)
-                .ToHashSet(StringComparer.Ordinal),
+    private Task PointAtStoredTreatmentsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            treatments,
             [
-                Table(_bolusRepository), Table(_carbIntakeRepository), Table(_bgCheckRepository),
-                Table(_noteRepository), Table(_deviceEventRepository), Table(_bolusCalculationRepository),
-                Table(_tempBasalRepository),
+                Table(_bolusRepository, resolvesUuidLegacyIds: false),
+                Table(_carbIntakeRepository, resolvesUuidLegacyIds: false),
+                Table(_bgCheckRepository, resolvesUuidLegacyIds: false),
+                Table(_noteRepository, resolvesUuidLegacyIds: false),
+                Table(_deviceEventRepository, resolvesUuidLegacyIds: false),
+                Table(_bolusCalculationRepository, resolvesUuidLegacyIds: false),
+                Table(_tempBasalRepository, resolvesUuidLegacyIds: false),
             ],
             ct);
 
@@ -1200,7 +1199,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope(treatments);
-        await AdoptOwnIdsAsync(treatments, ct);
+        await PointAtStoredTreatmentsAsync(treatments, ct);
 
         var result = new V4Models.DecompositionResult();
 

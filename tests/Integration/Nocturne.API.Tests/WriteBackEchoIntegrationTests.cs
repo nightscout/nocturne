@@ -2,8 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Nocturne.API.Tests.Integration.Infrastructure;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
+using Nocturne.Infrastructure.Data;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -238,6 +243,106 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
         await EchoBolusAsync(id, form, slot);
 
         (await LiveBolusesAsync(slot)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Nightscout 15.0.7+ gives a written-back copy a <c>_id</c> of its own, so the Nightscout
+    /// connector hands it on with the key write-back sent as its
+    /// <see cref="ProcessableDocumentBase.UpstreamIdentifier"/>. These publish such copies through
+    /// the in-process connector publisher, the path the connector's pulls take.
+    /// </summary>
+    private async Task PublishAsync(Func<IConnectorPublisher, Task<bool>> publish)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
+        (await publish(scope.ServiceProvider.GetRequiredService<IConnectorPublisher>())).Should().BeTrue();
+    }
+
+    private const string ConnectorSource = "nightscout-connector";
+
+    private static Entry PulledReading(string device, long date, int sgv, string? identifier) => new()
+    {
+        Id = MongoObjectId.NewObjectId(),
+        UpstreamIdentifier = identifier,
+        Type = "sgv",
+        Sgv = sgv,
+        Mills = date,
+        Device = device,
+        DataSource = ConnectorSource,
+    };
+
+    [Theory]
+    [InlineData("legacy-{0}")]
+    [InlineData("0198C2A4-1F3B-7C2D-9E55-{0}")]
+    public async Task APulledCopyUnderAMintedId_UpdatesTheReadingItsIdentifierNames(string legacyIdFormat)
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var legacyId = string.Format(legacyIdFormat, Guid.NewGuid().ToString("N")[..12]);
+        var date = DateTimeOffset.UtcNow.AddMinutes(-70).ToUnixTimeMilliseconds();
+        await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", new[] { Reading(device, date, sgv: 111, legacyId) });
+        var id = (await LiveSensorReadingsAsync(device)).Single().Id;
+
+        await PublishAsync(p => p.Glucose.PublishEntriesAsync([PulledReading(device, date, 114, legacyId)], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 114d));
+    }
+
+    [Fact]
+    public async Task APulledCopyUnderAMintedIdOfAReadingTheUserDeleted_StaysDeleted()
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var date = DateTimeOffset.UtcNow.AddMinutes(-75).ToUnixTimeMilliseconds();
+        var id = await CreateUnkeyedReadingAsync(device, date);
+        (await AuthenticatedClient.DeleteAsync($"/api/v4/glucose/sensor/{id}")).IsSuccessStatusCode.Should().BeTrue();
+
+        await PublishAsync(p => p.Glucose.PublishEntriesAsync([PulledReading(device, date, 114, id.ToString())], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveSensorReadingsAsync(device)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task APulledReadingWhoseIdentifierNamesNoStoredRecord_IsStoredUnderItsId()
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var date = DateTimeOffset.UtcNow.AddMinutes(-80).ToUnixTimeMilliseconds();
+        var pulled = PulledReading(device, date, 120, Guid.NewGuid().ToString());
+
+        await PublishAsync(p => p.Glucose.PublishEntriesAsync([pulled], ConnectorSource, WriteOrigin.Live));
+
+        var stored = await AuthenticatedClient.GetFromJsonAsync<JsonElement>(
+            $"/api/v4/glucose/sensor?limit=10&device={Uri.EscapeDataString(device)}");
+        stored.GetProperty("data").EnumerateArray().Select(r => r.GetProperty("legacyId").GetString())
+            .Should().Equal(pulled.Id);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APulledTreatmentUnderAMintedId_LandsOnTheV4NativeTreatmentItsIdentifierNames(bool deletedByUser)
+    {
+        var slot = UniqueSlot();
+        var id = await CreateV4BolusAsync(slot);
+        if (deletedByUser)
+            (await AuthenticatedClient.DeleteAsync($"/api/v4/insulin/boluses/{id}")).IsSuccessStatusCode.Should().BeTrue();
+        var pulled = new Treatment
+        {
+            Id = MongoObjectId.NewObjectId(),
+            UpstreamIdentifier = id.ToString(),
+            EventType = "Correction Bolus",
+            Insulin = 3.0,
+            CreatedAt = slot.AddMinutes(6).ToString("O"),
+            DataSource = ConnectorSource,
+        };
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([pulled], ConnectorSource, WriteOrigin.Live));
+
+        var live = await LiveBolusesAsync(slot);
+        if (deletedByUser)
+            live.Should().BeEmpty();
+        else
+            live.Should().Equal((id, 3d));
     }
 }
 

@@ -70,7 +70,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     public async Task<V4Models.DecompositionResult> DecomposeAsync(DeviceStatus ds, string? source, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeMills(ds);
-        await ResolveWireIdsAsync([ds], ct);
+        await PointAtStoredStatusesAsync([ds], ct);
 
         var legacyId = ds.Id;
         var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
@@ -777,7 +777,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
         var overrideSpans = new List<(StateSpan Span, Guid CorrelationId)>();
-        await ResolveWireIdsAsync(statuses, ct);
+        await PointAtStoredStatusesAsync(statuses, ct);
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
         await using (_deviceService.DeferLastSeen(ct))
@@ -895,46 +895,23 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     }
 
     /// <summary>
-    /// Points each incoming status at the stored status its id names on the wire, so the legacy-id
-    /// upserts match the whole group: a status that Nightscout write-back sent upstream and the
-    /// connector pulls back updates in place, and one the user deleted stays deleted. A 24-hex id
-    /// that is the prefix of a stored uuid-shaped legacy id is rewritten to that legacy id
-    /// (<see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>). Otherwise a stored
-    /// status with no legacy id takes the id: its anchor snapshot's, as <see cref="StoredKey"/> puts
-    /// it on the wire (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>), and the
-    /// anchor's siblings follow through their shared correlation id.
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
     /// </summary>
     /// <remarks>
-    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>,
-    /// so the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
     /// </remarks>
-    private async Task ResolveWireIdsAsync(IReadOnlyCollection<DeviceStatus> statuses, CancellationToken ct)
-    {
-        var named = statuses.Where(s => MongoObjectId.TryGetOwnIdRange(s.Id, out _, out _)).ToList();
-        if (named.Count == 0)
-            return;
-
-        var prefixes = named.Select(s => s.Id!).Where(MongoObjectId.IsGuidPrefixShaped).ToHashSet(StringComparer.Ordinal);
-        var legacyIds = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (prefixes.Count > 0)
-        {
-            foreach (var resolved in (await _apsRepo.ResolveUuidLegacyIdsAsync(prefixes, ct))
-                         .Concat(await _pumpRepo.ResolveUuidLegacyIdsAsync(prefixes, ct))
-                         .Concat(await _uploaderRepo.ResolveUuidLegacyIdsAsync(prefixes, ct)))
-                legacyIds.TryAdd(resolved.WireId, resolved.LegacyId);
-        }
-
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var status in named)
-        {
-            if (legacyIds.TryGetValue(status.Id!, out var legacyId))
-                status.Id = legacyId;
-            else
-                ids.Add(status.Id!);
-        }
-
-        await AdoptOwnIdsAsync(ids, [Table(_apsRepo), Table(_pumpRepo), Table(_uploaderRepo)], ct);
-    }
+    private Task PointAtStoredStatusesAsync(IEnumerable<DeviceStatus> statuses, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, resolvesUuidLegacyIds: true),
+                Table(_pumpRepo, resolvesUuidLegacyIds: true),
+                Table(_uploaderRepo, resolvesUuidLegacyIds: true),
+            ],
+            ct);
 
     /// <summary>
     /// The correlation id each re-sent status's stored group already carries, preferring the APS,

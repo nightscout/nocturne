@@ -60,7 +60,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             CorrelationId = Guid.CreateVersion7()
         };
 
-        await ResolveWireIdsAsync([entry], ct);
+        await PointEntriesAtStoredRecordsAsync([entry], ct);
 
         var entryType = entry.Type?.ToLowerInvariant();
 
@@ -154,7 +154,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (entries.Count == 0)
             return new DecompositionResult();
 
-        await ResolveWireIdsAsync(entries, ct);
+        await PointEntriesAtStoredRecordsAsync(entries, ct);
 
         var result = new DecompositionResult();
 
@@ -209,57 +209,26 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     }
 
     /// <summary>
-    /// Points each incoming entry at the stored reading its id names on the wire, so the legacy-id
-    /// upsert matches it: a reading that Nightscout write-back sent upstream and the connector pulls
-    /// back updates in place, and one the user deleted stays deleted. A 24-hex id that is the prefix
-    /// of a stored uuid-shaped legacy id is rewritten to that legacy id
-    /// (<see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>); otherwise a stored
-    /// reading with no legacy id takes the id it is named by
-    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>).
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
+    /// table that type is stored in.
     /// </summary>
-    private async Task ResolveWireIdsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    private async Task PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
     {
         foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
         {
             switch (byType.Key)
             {
                 case "sgv":
-                    await ResolveWireIdsAsync(_sensorGlucoseRepository, byType, ct);
+                    await PointAtStoredRecordsAsync(byType, [Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
                     break;
                 case "mbg":
-                    await ResolveWireIdsAsync(_meterGlucoseRepository, byType, ct);
+                    await PointAtStoredRecordsAsync(byType, [Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
                     break;
                 case "cal":
-                    await ResolveWireIdsAsync(_calibrationRepository, byType, ct);
+                    await PointAtStoredRecordsAsync(byType, [Table(_calibrationRepository, resolvesUuidLegacyIds: true)], ct);
                     break;
             }
         }
-    }
-
-    private static async Task ResolveWireIdsAsync<TRecord>(
-        ILegacyKeyedRepository<TRecord> repository, IEnumerable<Entry> entries, CancellationToken ct)
-        where TRecord : class, IV4Record
-    {
-        var named = entries.Where(e => MongoObjectId.TryGetOwnIdRange(e.Id, out _, out _)).ToList();
-        if (named.Count == 0)
-            return;
-
-        var prefixes = named.Select(e => e.Id!).Where(MongoObjectId.IsGuidPrefixShaped).ToList();
-        var legacyIds = prefixes.Count == 0
-            ? new Dictionary<string, string>()
-            : (await repository.ResolveUuidLegacyIdsAsync(prefixes, ct))
-                .ToDictionary(r => r.WireId, r => r.LegacyId, StringComparer.Ordinal);
-        var own = new List<string>();
-        foreach (var entry in named)
-        {
-            if (legacyIds.TryGetValue(entry.Id!, out var legacyId))
-                entry.Id = legacyId;
-            else
-                own.Add(entry.Id!);
-        }
-
-        if (own.Count > 0)
-            await repository.AdoptOwnIdsAsync(own, ct);
     }
 
     /// <inheritdoc />

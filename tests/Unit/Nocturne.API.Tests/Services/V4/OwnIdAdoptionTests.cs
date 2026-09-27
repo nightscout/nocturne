@@ -47,6 +47,10 @@ public class OwnIdAdoptionTests : IDisposable
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
                 _calls.Add($"{name}.adopt({string.Join(",", ids.Order())})"))
             .ReturnsAsync([]);
+        repo.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                _calls.Add($"{name}.held({string.Join(",", ids.Order())})"))
+            .ReturnsAsync(new HashSet<string>());
         repo.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
                 _calls.Add($"{name}.resolve({string.Join(",", ids.Order())})"))
@@ -256,4 +260,52 @@ public class OwnIdAdoptionTests : IDisposable
         _calls.Should().NotContain(c => c.Contains(".adopt("));
         _calls.Should().Contain($"pump.get({UuidShapedLegacyId})");
     }
+
+    /// <summary>
+    /// Nightscout 15.0.7 and later give a written-back copy a <c>_id</c> of their own, so the
+    /// record is recognised by the <c>identifier</c> write-back sent: a legacy id a stored row holds,
+    /// or a keyless record's own uuid. Any other identifier belongs to another client, and the copy
+    /// stays under its <c>_id</c>, which is how every earlier pull stored it.
+    /// </summary>
+    [Fact]
+    public async Task EntryBatch_MatchesAPulledCopyByItsIdentifierBeforeItsId()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        sg.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
+        sg.Setup(r => r.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Contains(Uuid) ? [new SensorGlucose { LegacyId = Uuid }] : []);
+        List<SensorGlucose>? written = null;
+        sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        [
+            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
+            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = Uuid, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 121 },
+            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d2", UpstreamIdentifier = "trio-7c2d", Type = "sgv", Mills = 1_700_000_600_000, Sgv = 122 },
+        ], WriteOrigin.Live);
+
+        written!.Select(r => r.LegacyId).Should().Equal("dexcom_7f3c2a91", Uuid, "66f0a1b2c3d4e0f6a7b8c9d2");
+    }
+
+    [Fact]
+    public async Task DeviceStatus_MatchesAPulledCopyByAnIdentifierTheUsersDeletionHolds()
+    {
+        var (decomposer, _, _, uploader) = DeviceStatusDecomposer();
+        uploader.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "loop_status_42" });
+        var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
+        status.UpstreamIdentifier = "loop_status_42";
+
+        await decomposer.DecomposeAsync(status, source: null, WriteOrigin.Live);
+
+        status.Id.Should().Be("loop_status_42");
+        _calls.Should().NotContain(c => c.Contains(".adopt(") || c.Contains(".resolve("));
+    }
 }
+

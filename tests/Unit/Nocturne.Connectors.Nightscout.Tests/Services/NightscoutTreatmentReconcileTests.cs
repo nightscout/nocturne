@@ -99,7 +99,7 @@ public class NightscoutTreatmentReconcileTests
 
         await harness.SyncAsync();
 
-        harness.Lookups.Should().Equal($"find[id]={TrioKept}");
+        harness.Lookups.Should().Equal($"find[id]={TrioKept}", $"find[identifier]={TrioKept}");
         harness.Deleted.Should().BeEmpty();
     }
 
@@ -311,6 +311,37 @@ public class NightscoutTreatmentReconcileTests
         harness.Lookups.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Nocturne stores a treatment it wrote back under its own key, and Nightscout 15.0.7+ returns
+    /// the copy under a <c>_id</c> it minted, with that key as <c>identifier</c>. The read therefore
+    /// counts the identifier, and the lookup falls back to it, or the treatment would be deleted as
+    /// gone from the source.
+    /// </summary>
+    [Fact]
+    public async Task A_treatment_nocturne_wrote_back_is_recognised_by_its_identifier()
+    {
+        const string ownKey = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        const string missingKey = "0198c2a4-1f3b-7c2d-9e55-000000000000";
+        var harness = new Harness
+        {
+            Upstream =
+            [
+                WrittenBack(MongoIdA, ownKey, Now.AddMinutes(-30)),
+                Trio(MongoIdB, TrioKept, Now.AddMinutes(-20)),
+            ],
+            Stored = [ownKey, TrioKept, missingKey],
+            AlsoUpstreamByIdentifier = [missingKey],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Deleted.Should().BeEmpty();
+        harness.Lookups.Should().ContainInOrder($"find[id]={missingKey}", $"find[identifier]={missingKey}");
+    }
+
+    private static string WrittenBack(string mongoId, string identifier, DateTimeOffset at) =>
+        $$"""{"_id":"{{mongoId}}","identifier":"{{identifier}}","enteredBy":"nocturne","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
+
     private static string Trio(string mongoId, string trioId, DateTimeOffset at) =>
         $$"""{"_id":"{{mongoId}}","id":"{{trioId}}","enteredBy":"Trio","eventType":"Carb Correction","carbs":20,"created_at":"{{at.UtcDateTime:o}}"}""";
 
@@ -334,6 +365,7 @@ public class NightscoutTreatmentReconcileTests
         public DateTimeOffset LatestStored { get; init; } = Now.AddMinutes(-10);
         public List<string> Upstream { get; init; } = [];
         public HashSet<string> AlsoUpstream { get; init; } = [];
+        public HashSet<string> AlsoUpstreamByIdentifier { get; init; } = [];
         public HashSet<string> Stored { get; init; } = [];
         public bool ReadFails { get; init; }
         public bool LookupFails { get; init; }
@@ -368,7 +400,7 @@ public class NightscoutTreatmentReconcileTests
             if (!url.Contains("/api/v1/treatments.json", StringComparison.Ordinal))
                 return Task.FromResult(Json([]));
 
-            var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id)\]=(.+)$");
+            var lookup = System.Text.RegularExpressions.Regex.Match(url, @"find\[(_id|id|identifier)\]=(.+)$");
             if (lookup.Success)
             {
                 var (field, id) = (lookup.Groups[1].Value, lookup.Groups[2].Value);
@@ -377,8 +409,9 @@ public class NightscoutTreatmentReconcileTests
                 if (LookupFails)
                     return Task.FromResult(Failure());
 
-                var found = !LookupFindsNothing && (AlsoUpstream.Contains(id) || Upstream.Any(doc =>
-                    doc.Contains(field == "_id" ? $"\"_id\":\"{id}\"" : $"\"id\":\"{id}\"", StringComparison.Ordinal)));
+                var found = !LookupFindsNothing
+                    && ((field == "identifier" ? AlsoUpstreamByIdentifier : AlsoUpstream).Contains(id)
+                        || Upstream.Any(doc => doc.Contains($"\"{field}\":\"{id}\"", StringComparison.Ordinal)));
                 return Task.FromResult(Json(found ? [Upstream.FirstOrDefault() ?? "{}"] : []));
             }
 

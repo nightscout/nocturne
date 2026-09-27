@@ -29,6 +29,7 @@ public static class TempBasalToTreatmentMapper
             Id = MongoObjectId.IsObjectId(tempBasal.LegacyId)
                 ? tempBasal.LegacyId
                 : tempBasal.Id.ToString(),
+            LegacyId = tempBasal.LegacyId,
             Mills = tempBasal.StartMills,
             SrvCreated = new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),

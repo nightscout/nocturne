@@ -32,6 +32,15 @@ public class Treatment : ProcessableDocumentBase
     public override string? Id { get; set; }
 
     /// <summary>
+    /// The legacy id the stored record is keyed by: the <c>_id</c>, <c>syncIdentifier</c> or
+    /// content-derived id it was uploaded under. <see cref="Id"/> carries the id the record is served
+    /// by, so this is the only place an upstream instance's own id for the record survives. Never on
+    /// the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? LegacyId { get; set; }
+
+    /// <summary>
     /// Gets the V3 API identifier - alias for Id for Nightscout V3 compatibility.
     /// Nightscout V3 API returns both _id and identifier fields with the same value.
     /// </summary>
