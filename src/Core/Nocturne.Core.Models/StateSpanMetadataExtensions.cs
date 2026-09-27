@@ -80,7 +80,7 @@ public static class StateSpanMetadataExtensions
     /// <summary>
     /// Devicestatus <c>multiplier</c> or treatment <c>insulinNeedsScaleFactor</c>. Loop omits it at 100%.
     /// </summary>
-    private static decimal OverrideScaleFactor(this IDictionary<string, object> metadata) =>
+    public static decimal OverrideScaleFactor(this IDictionary<string, object> metadata) =>
         metadata.TryReadDecimal("multiplier") ?? metadata.TryReadDecimal("insulinNeedsScaleFactor") ?? 1m;
 
     private static bool AreTreatmentAndDeviceStatus(
