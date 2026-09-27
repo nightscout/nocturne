@@ -54,9 +54,9 @@
   async function confirmDelete() {
     const entry = pendingDelete;
     pendingDelete = null;
-    if (!entry?.id) return;
+    if (!entry?._id) return;
     try {
-      await bw.deleteBodyWeight(entry.id);
+      await bw.deleteBodyWeight(entry._id);
       await weightsQuery.refresh();
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to delete entry");
@@ -86,7 +86,7 @@
         <p class="text-muted-foreground text-sm">No entries yet.</p>
       {:else}
         <ul class="divide-border divide-y">
-          {#each entries as entry (entry.id)}
+          {#each entries as entry (entry._id)}
             <li class="flex items-center justify-between gap-3 py-2">
               <div class="flex items-center gap-2">
                 <Weight class="text-muted-foreground size-4 shrink-0" />

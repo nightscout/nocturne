@@ -256,13 +256,14 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
                     );
                     if (existing != null)
                     {
+                        var existingIdentifier = MongoObjectId.Coerce(existing.Id);
                         return Ok(
                             new
                             {
                                 status = 200,
-                                identifier = existing.Id,
+                                identifier = existingIdentifier,
                                 isDeduplication = true,
-                                deduplicatedIdentifier = existing.Id,
+                                deduplicatedIdentifier = existingIdentifier,
                             }
                         );
                     }
@@ -312,8 +313,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     }
 
     /// <summary>
-    /// Update a device status record by ID with V3 format.
-    /// Deletes old V4 records, decomposes the updated DeviceStatus, and projects back.
+    /// Replace a device status record by ID with V3 format, rewriting its stored V4 snapshots in
+    /// place and projecting the result back.
     /// </summary>
     /// <param name="id">Device status ID to update</param>
     /// <param name="request">Updated device status data</param>
@@ -369,23 +370,21 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             return CreateV3ErrorResponse(400, "ID mismatch");
         }
 
-        deviceStatus.Id = id;
-        ProcessDeviceStatusForCreation(deviceStatus);
+        if (string.IsNullOrEmpty(deviceStatus.CreatedAt))
+        {
+            deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        }
 
-        // Verify the record exists in V4 before updating
+        // The path's wire form may only resolve to the stored id, which is what the stored
+        // snapshots are found by.
         var existing = await _projection.GetByIdAsync(id, cancellationToken);
-        if (existing == null)
+        if (existing?.Id is not { } storedId
+            || await _decomposer.ReplaceAsync(storedId, deviceStatus, WriteOrigin.Live, cancellationToken) is null)
         {
             return CreateV3ErrorResponse(404, "Device status not found");
         }
 
-        // Delete old V4 records by legacy ID, then decompose the updated DeviceStatus
-        await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-        // Direct v3 update has no connector data source; a live update broadcasts.
-        await _decomposer.DecomposeAsync(deviceStatus, source: null, WriteOrigin.Live, cancellationToken);
-
-        // Project the V4 snapshots back to DeviceStatus shape for the response
-        var updated = await _projection.GetByIdAsync(id, cancellationToken) ?? deviceStatus;
+        var updated = await _projection.GetByIdAsync(deviceStatus.Id!, cancellationToken) ?? deviceStatus;
 
         // Broadcast via WriteSideEffectsService (cache invalidation + SignalR)
         await _sideEffects.OnUpdatedAsync(
@@ -431,13 +430,10 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown"
         );
 
-        // Get the projected record before deleting (for broadcast)
+        // The path's wire form may only resolve to the stored id; the projection is also the broadcast.
         var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
-
-        // Delete V4 snapshot records by legacy ID
-        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-
-        if (deleted == 0 && deviceStatusToDelete == null)
+        if (deviceStatusToDelete?.Id is not { } storedId
+            || await _decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) == 0)
         {
             return CreateV3ErrorResponse(
                 404,
@@ -509,10 +505,9 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
     /// <param name="deviceStatus">Device status to process</param>
     private void ProcessDeviceStatusForCreation(DeviceStatus deviceStatus)
     {
-        // Generate identifier if not present (legacy behavior)
         if (string.IsNullOrEmpty(deviceStatus.Id))
         {
-            deviceStatus.Id = GenerateIdentifier(deviceStatus);
+            deviceStatus.Id = MongoObjectId.NewObjectId();
         }
 
         // Ensure DeviceStatus has required properties for V3 compatibility
@@ -520,41 +515,6 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         {
             deviceStatus.CreatedAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
         }
-    }
-
-    /// <summary>
-    /// Generate identifier for device status following legacy API v3 logic
-    /// Uses created_at and device fields for deduplication fallback
-    /// </summary>
-    /// <param name="deviceStatus">Device status record</param>
-    /// <returns>Generated identifier</returns>
-    private string GenerateIdentifier(DeviceStatus deviceStatus)
-    {
-        // Legacy API v3 uses created_at + device for devicestatus deduplication
-        var identifierParts = new List<string>();
-
-        if (!string.IsNullOrEmpty(deviceStatus.CreatedAt))
-        {
-            identifierParts.Add(deviceStatus.CreatedAt);
-        }
-
-        if (!string.IsNullOrEmpty(deviceStatus.Device))
-        {
-            identifierParts.Add(deviceStatus.Device);
-        }
-
-        // Add timestamp for uniqueness
-        identifierParts.Add(DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
-
-        // If we have identifying parts, create a hash-based identifier
-        if (identifierParts.Any())
-        {
-            var combined = string.Join("-", identifierParts);
-            return $"devicestatus-{combined.GetHashCode():X}";
-        }
-
-        // Fallback to GUID for unique identification
-        return Guid.CreateVersion7().ToString();
     }
 
     /// <summary>
@@ -671,7 +631,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
         return JsonSerializer.Serialize(conditions);
     }
 
-    private object MapToV3Dto(DeviceStatus status)
+    internal static object MapToV3Dto(DeviceStatus status)
     {
         // Build dictionary with only non-null optional fields to match Nightscout behavior
         var dto = new Dictionary<string, object?>

@@ -1,6 +1,6 @@
 // Real-time data store using Svelte 5 Runes and WebSocket integration
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
-import { entryIdentity, unseenEntries } from "./entry-identity";
+import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
 import { untilNow } from "$lib/utils/now";
 import { toDate } from "$lib/utils/formatting";
@@ -64,9 +64,9 @@ const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | 
 
 /**
  * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
- * shape the store uses. `_id` is set to the reading's GUID — the value the API's realtime
- * broadcast also uses for `Entry._id` — so REST-backfilled and live-pushed copies of a reading
- * dedupe on `_id`.
+ * shape the store uses. `_id` is the reading's uuid, which is not the ObjectId-form `_id` the
+ * realtime broadcast carries, so REST-backfilled and live-pushed copies pair up through
+ * {@link isSameEntry}.
  */
 export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   // `trend` is dropped: SensorGlucose names it (GlucoseTrend) where Entry holds
@@ -634,7 +634,7 @@ export class RealtimeStore {
     const { colName, doc } = event;
 
     if (colName === "entries" && this.isEntry(doc)) {
-      const index = this.entries.findIndex((entry) => entry._id === doc._id);
+      const index = this.entries.findIndex((entry) => isSameEntry(entry, doc));
       if (index !== -1) {
         this.entries = [
           ...this.entries.slice(0, index),
@@ -654,7 +654,7 @@ export class RealtimeStore {
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
-      this.entries = this.entries.filter((entry) => entry._id !== doc._id);
+      this.entries = this.entries.filter((entry) => !isSameEntry(entry, doc));
     }
   }
 

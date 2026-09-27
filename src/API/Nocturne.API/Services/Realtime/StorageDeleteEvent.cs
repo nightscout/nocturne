@@ -16,11 +16,12 @@ namespace Nocturne.API.Services.Realtime;
 /// contract rather than a naming convention and are spelled out here instead of being left to the
 /// payload serializer's naming policy.
 /// <para>
-/// A client only ever holds the identifier its create event delivered, and the models disagree on
-/// what that is — <see cref="Nocturne.Core.Models.Treatment"/> coerces its id to a Mongo ObjectId on
-/// the wire, <see cref="Nocturne.Core.Models.Entry"/> and <see cref="Nocturne.Core.Models.DeviceStatus"/>
-/// emit the uuid. <see cref="OnWire"/> reads the identifier back out of the serialized document so the
-/// two stay in step for any model rather than restating each model's choice at the call site.
+/// A client only ever holds the identifier its create event delivered, and that is whatever the
+/// model's serializer puts on the wire — <see cref="Nocturne.Core.Models.Treatment"/>,
+/// <see cref="Nocturne.Core.Models.Entry"/> and <see cref="Nocturne.Core.Models.DeviceStatus"/> coerce
+/// their id to a Mongo ObjectId, not the stored uuid or legacy id. <see cref="OnWire"/> reads the
+/// identifier back out of the serialized document so the two stay in step for any model rather than
+/// restating each model's choice at the call site.
 /// </para>
 /// </remarks>
 /// <param name="ColName">The collection the record belonged to.</param>

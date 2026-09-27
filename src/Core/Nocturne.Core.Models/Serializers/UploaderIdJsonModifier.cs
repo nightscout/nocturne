@@ -9,11 +9,11 @@ namespace Nocturne.Core.Models.Serializers;
 /// </summary>
 /// <remarks>
 /// A document overrides <see cref="ProcessableDocumentBase.Id"/> under <c>[JsonPropertyName("_id")]</c>.
-/// System.Text.Json still lists the abstract base declaration as a second property named <c>Id</c>,
-/// whose setter reaches the override. Under case-insensitive matching an uploader's <c>id</c> binds
-/// to it, and being written after <c>_id</c> it replaces the identity. Removing that property sends
-/// <c>id</c> to the extension data, where <see cref="TreatmentClientId"/> reads it as the plain field
-/// it is.
+/// System.Text.Json still lists the abstract base declaration as a second property named <c>Id</c>.
+/// It is <c>[JsonIgnore]</c>d so it is never written beside <c>_id</c>, but an ignored property
+/// keeps its name: under case-insensitive matching it swallows an uploader's <c>id</c>, which is
+/// then lost. Removing it sends <c>id</c> to the extension data, where <see cref="TreatmentClientId"/>
+/// reads it as the plain field it is.
 /// </remarks>
 public static class UploaderIdJsonModifier
 {

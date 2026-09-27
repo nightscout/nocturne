@@ -48,6 +48,10 @@ public abstract class DecomposerBase
     /// siblings orphans that row outright.
     /// </para>
     /// </remarks>
+    /// <param name="findStored">
+    /// Resolves the stored record in place of the lookup by <paramref name="legacyId"/>, for a caller
+    /// that already knows it, including a stored record with no legacy id at all.
+    /// </param>
     /// <returns>
     /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
     /// when the write was refused because the record's identity is already held
@@ -62,10 +66,13 @@ public abstract class DecomposerBase
         WriteOrigin origin,
         CancellationToken ct,
         Func<TRecord?, Task>? beforeWrite = null,
-        bool preserveStoredCorrelationId = false)
+        bool preserveStoredCorrelationId = false,
+        Func<Task<TRecord?>>? findStored = null)
         where TRecord : class, IV4Record
     {
-        var existing = legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
+        var existing = findStored is not null
+            ? await findStored()
+            : legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
 
         if (beforeWrite is not null)
             await beforeWrite(existing);

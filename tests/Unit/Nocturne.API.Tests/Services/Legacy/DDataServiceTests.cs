@@ -299,6 +299,49 @@ public class DDataServiceTests
         Assert.Null(result.LastProfileFromSwitch);
     }
 
+    /// <summary>
+    /// The copies <c>preserveOriginalTreatments</c> works on are JSON clones, and the serialized
+    /// form carries a uuid id only as its 24-hex wire prefix. The copies must keep the full stored
+    /// id, or nothing downstream can match them back to their records.
+    /// </summary>
+    [Fact]
+    public void ProcessTreatments_PreservingOriginals_CopiesKeepTheStoredIdAndLeaveOriginalsUntouched()
+    {
+        var profileId = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        var tempBasalId = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e60";
+        var tempTargetId = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e61";
+        var tempTarget = new Treatment
+        {
+            Id = tempTargetId,
+            EventType = "Temporary Target",
+            Mills = 3000,
+            Duration = 30,
+            Units = "mmol",
+            TargetTop = 8,
+            TargetBottom = 6,
+        };
+        var treatments = new List<Treatment>
+        {
+            new() { Id = profileId, EventType = "Profile Switch", Mills = 1000, Duration = 0, Profile = "Day" },
+            new() { Id = tempBasalId, EventType = "Temp Basal", Mills = 2000, Duration = 30, Absolute = 0.4 },
+            tempTarget,
+        };
+
+        var result = _ddataService.ProcessTreatments(treatments, true);
+
+        Assert.Equal(profileId, Assert.Single(result.ProfileTreatments).Id);
+        Assert.Equal(tempBasalId, Assert.Single(result.TempBasalTreatments).Id);
+        var convertedTarget = Assert.Single(result.TempTargetTreatments);
+        Assert.Equal(tempTargetId, convertedTarget.Id);
+        Assert.Equal("mg/dl", convertedTarget.Units);
+
+        Assert.All(
+            result.ProfileTreatments.Concat(result.TempBasalTreatments).Concat(result.TempTargetTreatments),
+            copy => Assert.DoesNotContain(treatments, original => ReferenceEquals(original, copy)));
+        Assert.Equal("mmol", tempTarget.Units);
+        Assert.Equal(8, tempTarget.TargetTop);
+    }
+
     [Fact]
     public void IdMergePreferNew_ShouldPreferNewDataWhenCollisionFound()
     {

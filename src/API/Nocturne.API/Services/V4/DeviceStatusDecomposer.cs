@@ -73,19 +73,60 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
         var legacyId = ds.Id;
         var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
-        var result = new V4Models.DecompositionResult
+        var correlationId = legacyId is not null && storedCorrelationIds.TryGetValue(legacyId, out var stored)
+            ? stored
+            : Guid.CreateVersion7();
+        return await DecomposeCoreAsync(ds, source, correlationId, group: null, origin, ct);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The group is found by its stored id and rewritten row by row, so a status stored without a
+    /// legacy id (connector statuses keyed on their sync key, V4-native snapshots) is updated in place
+    /// instead of being inserted a second time. Such a group takes the ObjectId its anchor already has
+    /// on the wire as its legacy id, which keeps the status's identifier stable even when the update
+    /// adds or drops the anchoring snapshot. The removals are system-attributed so they do not hold
+    /// the legacy id against a later update that brings the section back.
+    /// </remarks>
+    public async Task<V4Models.DecompositionResult?> ReplaceAsync(
+        string storedId, DeviceStatus ds, WriteOrigin origin, CancellationToken ct = default)
+    {
+        if (await LoadStoredGroupAsync(storedId, ct) is not { } group)
+            return null;
+
+        NormalizeMills(ds);
+        ds.Id = group.LegacyId;
+
+        using (SystemAttributedBatchWrites(_auditContext))
         {
-            CorrelationId = legacyId is not null && storedCorrelationIds.TryGetValue(legacyId, out var stored)
-                ? stored
-                : Guid.CreateVersion7()
-        };
+            if (group.Aps is { } aps && ds.OpenAps == null && ds.Loop == null)
+                await _apsRepo.DeleteAsync(aps.Id, origin, ct);
+            if (group.Pump is { } pump && ds.Pump == null)
+                await _pumpRepo.DeleteAsync(pump.Id, origin, ct);
+            if (group.Uploader is { } uploader && ds.Uploader == null && !ds.UploaderBattery.HasValue)
+                await _uploaderRepo.DeleteAsync(uploader.Id, origin, ct);
+            await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+
+            if (ds.Override is not { Active: true })
+                await DeleteOverrideAsync(group, ct);
+        }
+
+        return await DecomposeCoreAsync(ds, source: null, group.CorrelationId, group, origin, ct);
+    }
+
+    private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
+        DeviceStatus ds, string? source, Guid correlationId, StoredGroup? group,
+        WriteOrigin origin, CancellationToken ct)
+    {
+        var legacyId = ds.Id;
+        var result = new V4Models.DecompositionResult { CorrelationId = correlationId };
         var statusMills = ResolveStatusMills(ds);
 
         Guid? pumpDeviceId = null;
 
         if (ds.Pump != null)
         {
-            pumpDeviceId = await DecomposePumpAsync(ds, legacyId, source, statusMills, result, origin, ct);
+            pumpDeviceId = await DecomposePumpAsync(ds, legacyId, source, statusMills, group, result, origin, ct);
         }
 
         if (ds.Cgm != null)
@@ -97,17 +138,18 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         if (MapToApsSnapshot(ds, legacyId, source, result.CorrelationId) is { } apsModel)
         {
             apsAttempted = true;
-            await UpsertApsSnapshotAsync(legacyId, apsModel, pumpDeviceId, statusMills, result, origin, ct);
+            await UpsertApsSnapshotAsync(legacyId, apsModel, pumpDeviceId, statusMills, group, result, origin, ct);
         }
 
         if (ds.Uploader != null || ds.UploaderBattery.HasValue)
         {
-            await DecomposeUploaderAsync(ds, legacyId, source, statusMills, result, origin, ct);
+            await DecomposeUploaderAsync(ds, legacyId, source, statusMills, group, result, origin, ct);
         }
 
         if (ds.Override is { Active: true })
         {
-            await DecomposeOverrideAsync(ds, legacyId, result, origin, ct);
+            var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.IV4Record>();
+            await DecomposeOverrideAsync(ds, legacyId ?? GroupKey(written), result, origin, ct);
         }
 
         var snapshotAttempted = ds.Pump != null || apsAttempted || ds.Uploader != null || ds.UploaderBattery.HasValue;
@@ -139,9 +181,11 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     private async Task UpsertApsSnapshotAsync(
         string? legacyId, V4Models.ApsSnapshot model, Guid? pumpDeviceId, long statusMills,
-        V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        StoredGroup? group, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         model.DeviceId = pumpDeviceId;
+        if (group is not null)
+            (model.DataSource, model.SyncIdentifier) = (group.Aps?.DataSource, group.Aps?.SyncIdentifier);
 
         await UpsertByLegacyIdAsync(
             _apsRepo, legacyId, model, result, origin, ct,
@@ -150,7 +194,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 model.PatientDeviceId =
                     await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, statusMills, ct)
                     ?? existing?.PatientDeviceId;
-            });
+            },
+            findStored: group is null ? null : () => Task.FromResult(group.Aps));
     }
 
     #endregion
@@ -187,10 +232,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     }
 
     private async Task<Guid?> DecomposePumpAsync(
-        DeviceStatus ds, string? legacyId, string? source, long statusMills,
+        DeviceStatus ds, string? legacyId, string? source, long statusMills, StoredGroup? group,
         V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var model = await BuildPumpSnapshotAsync(ds, legacyId, source, statusMills, result.CorrelationId, ct);
+        if (group is not null)
+            (model.DataSource, model.SyncIdentifier) = (group.Pump?.DataSource, group.Pump?.SyncIdentifier);
 
         var upserted = await UpsertByLegacyIdAsync(
             _pumpRepo, legacyId, model, result, origin, ct,
@@ -199,7 +246,8 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
                 model.PatientDeviceId =
                     await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, statusMills, ct)
                     ?? existing?.PatientDeviceId;
-            });
+            },
+            findStored: group is null ? null : () => Task.FromResult(group.Pump));
 
         // No stored snapshot to transition from when the write was refused.
         if (upserted is ({ } persisted, _))
@@ -483,12 +531,16 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     }
 
     private async Task DecomposeUploaderAsync(
-        DeviceStatus ds, string? legacyId, string? source, long statusMills,
+        DeviceStatus ds, string? legacyId, string? source, long statusMills, StoredGroup? group,
         V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         var model = await BuildUploaderSnapshotAsync(ds, legacyId, source, statusMills, result.CorrelationId, ct);
+        if (group is not null)
+            (model.DataSource, model.SyncIdentifier) = (group.Uploader?.DataSource, group.Uploader?.SyncIdentifier);
 
-        await UpsertByLegacyIdAsync(_uploaderRepo, legacyId, model, result, origin, ct);
+        await UpsertByLegacyIdAsync(
+            _uploaderRepo, legacyId, model, result, origin, ct,
+            findStored: group is null ? null : () => Task.FromResult(group.Uploader));
     }
 
     #endregion
@@ -596,6 +648,118 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
     #endregion
 
+    #region Replacement
+
+    /// <summary>
+    /// The live snapshots of one stored device status, and the legacy id and correlation id a
+    /// replacement writes them under. A replacement keeps each snapshot's stored sync identity, so a
+    /// connector's later re-sync still matches the row rather than inserting beside it.
+    /// </summary>
+    private sealed record StoredGroup(
+        string LegacyId,
+        Guid CorrelationId,
+        DateTime Timestamp,
+        V4Models.ApsSnapshot? Aps,
+        V4Models.PumpSnapshot? Pump,
+        V4Models.UploaderSnapshot? Uploader);
+
+    /// <summary>
+    /// Resolves <paramref name="storedId"/>, the id a projected status carries (its legacy id, else its
+    /// anchor's uuid), to the snapshots stored for it. A sibling is found under the anchor's legacy id
+    /// first, so a group whose correlation ids have forked still converges on one row per table.
+    /// </summary>
+    private async Task<StoredGroup?> LoadStoredGroupAsync(string storedId, CancellationToken ct)
+    {
+        V4Models.IV4Record? anchor = await _apsRepo.GetByLegacyIdAsync(storedId, ct)
+            ?? (V4Models.IV4Record?)await _pumpRepo.GetByLegacyIdAsync(storedId, ct)
+            ?? await _uploaderRepo.GetByLegacyIdAsync(storedId, ct);
+        if (anchor is null && Guid.TryParse(storedId, out var uuid))
+        {
+            anchor = await _apsRepo.GetByIdAsync(uuid, ct)
+                ?? (V4Models.IV4Record?)await _pumpRepo.GetByIdAsync(uuid, ct)
+                ?? await _uploaderRepo.GetByIdAsync(uuid, ct);
+        }
+
+        if (anchor is null)
+            return null;
+
+        var correlationId = anchor.CorrelationId is { } stored && stored != Guid.Empty
+            ? stored
+            : Guid.CreateVersion7();
+
+        return new StoredGroup(
+            StoredKey(anchor),
+            correlationId,
+            anchor.Timestamp,
+            anchor as V4Models.ApsSnapshot
+                ?? await FindSiblingAsync(_apsRepo, _apsRepo.GetByCorrelationIdsAsync, anchor, ct),
+            anchor as V4Models.PumpSnapshot
+                ?? await FindSiblingAsync(_pumpRepo, _pumpRepo.GetByCorrelationIdsAsync, anchor, ct),
+            anchor as V4Models.UploaderSnapshot
+                ?? await FindSiblingAsync(_uploaderRepo, _uploaderRepo.GetByCorrelationIdsAsync, anchor, ct));
+    }
+
+    private static async Task<TRecord?> FindSiblingAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository,
+        Func<IEnumerable<Guid>, CancellationToken, Task<IEnumerable<TRecord>>> byCorrelationIds,
+        V4Models.IV4Record anchor,
+        CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record
+    {
+        if (anchor.LegacyId is { } legacyId && await repository.GetByLegacyIdAsync(legacyId, ct) is { } byLegacyId)
+            return byLegacyId;
+
+        return anchor.CorrelationId is { } correlationId && correlationId != Guid.Empty
+            ? (await byCorrelationIds([correlationId], ct)).FirstOrDefault()
+            : null;
+    }
+
+    /// <summary>
+    /// The id a stored status is addressed by: its anchoring snapshot's legacy id, else the ObjectId
+    /// that snapshot's uuid gives on the wire. The anchor is the one the projection picks.
+    /// </summary>
+    private static string StoredKey(V4Models.IV4Record anchor) => anchor.LegacyId ?? MongoObjectId.FromGuid(anchor.Id);
+
+    /// <summary>
+    /// The <see cref="StoredKey"/> of the status whose snapshots were just written, so an override
+    /// uploaded with a status that has no id is still stored under the key a replace or delete finds.
+    /// <see langword="null"/> when no snapshot was written.
+    /// </summary>
+    private static string? GroupKey(IEnumerable<V4Models.IV4Record> written)
+    {
+        var records = written.ToList();
+        var anchor = records.OfType<V4Models.ApsSnapshot>().FirstOrDefault()
+            ?? (V4Models.IV4Record?)records.OfType<V4Models.PumpSnapshot>().FirstOrDefault()
+            ?? records.OfType<V4Models.UploaderSnapshot>().FirstOrDefault();
+        return anchor is null ? null : StoredKey(anchor);
+    }
+
+    /// <summary>
+    /// Removes the override span stored under the group's key. Overrides uploaded with an id-less
+    /// status before they were keyed carry none, so the projection matches them by time alone and
+    /// nothing here can reach them.
+    /// </summary>
+    private async Task<int> DeleteOverrideAsync(StoredGroup group, CancellationToken ct)
+    {
+        var spans = await _stateSpanService.GetStateSpansAsync(
+            category: StateSpanCategory.Override,
+            from: group.Timestamp.AddMinutes(-1),
+            to: group.Timestamp.AddMinutes(1),
+            count: int.MaxValue,
+            cancellationToken: ct);
+
+        var deleted = 0;
+        foreach (var span in spans.Where(s => s.OriginalId == group.LegacyId && s.Id is not null))
+        {
+            if (await _stateSpanService.DeleteStateSpanAsync(span.Id!, ct))
+                deleted++;
+        }
+
+        return deleted;
+    }
+
+    #endregion
+
     #region Batch Decomposition
 
     /// <inheritdoc />
@@ -611,7 +775,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var pumpList = new List<V4Models.PumpSnapshot>();
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
-        var overrideSpans = new List<StateSpan>();
+        var overrideSpans = new List<(StateSpan Span, Guid CorrelationId)>();
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
         await using (_deviceService.DeferLastSeen(ct))
@@ -659,7 +823,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
                 if (ds.Override is { Active: true })
                 {
-                    overrideSpans.Add(BuildOverrideSpan(ds, legacyId));
+                    overrideSpans.Add((BuildOverrideSpan(ds, legacyId), correlationId));
                 }
 
                 if (BuildExtras(ds, correlationId) is { } extrasModel)
@@ -694,8 +858,12 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         // Upsert override state spans individually — IStateSpanService only exposes
         // single-item UpsertStateSpanAsync; BulkUpsertAsync lives on IStateSpanRepository
         // (returns count, not the upserted entities) and overrides are rare in practice.
-        foreach (var span in overrideSpans)
+        var writtenSnapshots = result.CreatedRecords.Concat(result.UpdatedRecords)
+            .OfType<V4Models.IV4Record>()
+            .ToLookup(r => r.CorrelationId);
+        foreach (var (span, correlationId) in overrideSpans)
         {
+            span.OriginalId ??= GroupKey(writtenSnapshots[correlationId]);
             var upserted = await _stateSpanService.UpsertStateSpanAsync(span, ct);
             result.CreatedRecords.Add(upserted);
         }
@@ -998,34 +1166,50 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     #endregion
 
     /// <inheritdoc />
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
+    public Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
+        => DeleteStoredAsync(legacyId, origin, ct);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Rows carrying the group's legacy id are deleted under it, which reaches every row of a forked
+    /// group; the rest (a status stored without one) by id. Deletes take the caller's attribution, so a
+    /// user's delete leaves tombstones that refuse a re-upload.
+    /// </remarks>
+    public async Task<int> DeleteStoredAsync(string storedId, WriteOrigin origin, CancellationToken ct = default)
     {
+        if (await LoadStoredGroupAsync(storedId, ct) is not { } group)
+            return 0;
+
         var deleted = 0;
-
-        // Look up correlation ID from any snapshot with this legacy ID before deleting
-        var apsSnapshot = await _apsRepo.GetByLegacyIdAsync(legacyId, ct);
-        var correlationId = apsSnapshot?.CorrelationId;
-        if (correlationId == null)
+        if (group.Aps?.LegacyId == group.LegacyId || group.Pump?.LegacyId == group.LegacyId
+            || group.Uploader?.LegacyId == group.LegacyId)
         {
-            var pumpSnapshot = await _pumpRepo.GetByLegacyIdAsync(legacyId, ct);
-            correlationId = pumpSnapshot?.CorrelationId;
-        }
-        if (correlationId == null)
-        {
-            var uploaderSnapshot = await _uploaderRepo.GetByLegacyIdAsync(legacyId, ct);
-            correlationId = uploaderSnapshot?.CorrelationId;
+            deleted += await _apsRepo.DeleteByLegacyIdAsync(group.LegacyId, origin, ct);
+            deleted += await _pumpRepo.DeleteByLegacyIdAsync(group.LegacyId, origin, ct);
+            deleted += await _uploaderRepo.DeleteByLegacyIdAsync(group.LegacyId, origin, ct);
         }
 
-        deleted += await _apsRepo.DeleteByLegacyIdAsync(legacyId, origin, ct);
-        deleted += await _pumpRepo.DeleteByLegacyIdAsync(legacyId, origin, ct);
-        deleted += await _uploaderRepo.DeleteByLegacyIdAsync(legacyId, origin, ct);
-
-        if (correlationId.HasValue)
-            deleted += await _extrasRepo.DeleteByCorrelationIdAsync(correlationId.Value, ct);
+        deleted += await DeleteUnkeyedAsync(_apsRepo, group.Aps, group.LegacyId, origin, ct);
+        deleted += await DeleteUnkeyedAsync(_pumpRepo, group.Pump, group.LegacyId, origin, ct);
+        deleted += await DeleteUnkeyedAsync(_uploaderRepo, group.Uploader, group.LegacyId, origin, ct);
+        deleted += await _extrasRepo.DeleteByCorrelationIdAsync(group.CorrelationId, ct);
+        deleted += await DeleteOverrideAsync(group, ct);
 
         if (deleted > 0)
-            Logger.LogDebug("Deleted {Count} v4 snapshot records for legacy device status {LegacyId}", deleted, legacyId);
+            Logger.LogDebug("Deleted {Count} v4 records for device status {StoredId}", deleted, storedId);
 
         return deleted;
+    }
+
+    private static async Task<int> DeleteUnkeyedAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository, TRecord? member, string legacyId,
+        WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record
+    {
+        if (member is null || member.LegacyId == legacyId)
+            return 0;
+
+        await repository.DeleteAsync(member.Id, origin, ct);
+        return 1;
     }
 }
