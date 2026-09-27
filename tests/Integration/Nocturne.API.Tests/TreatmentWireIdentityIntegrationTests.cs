@@ -103,6 +103,25 @@ public class TreatmentWireIdentityIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task V3Create_ReturnsTheIdentifierGetSearchPatchAndDeleteAccept()
+    {
+        var upload = LoopBolus(0.55, minutesAgo: 40);
+        var syncIdentifier = (string)upload["syncIdentifier"];
+
+        var created = await AuthenticatedClient.PostAsJsonAsync("/api/v3/treatments", upload);
+        created.StatusCode.Should().Be(HttpStatusCode.Created);
+        var identifier = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("identifier").GetString();
+
+        identifier.Should().Be(await RestIdAsync(syncIdentifier));
+        (await AuthenticatedClient.GetAsync($"/api/v3/treatments/{identifier}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await AuthenticatedClient.PatchAsync(
+            $"/api/v3/treatments/{identifier}", JsonContent.Create(new { insulin = 0.6 }))).IsSuccessStatusCode.Should().BeTrue();
+        (await RestIdAsync(syncIdentifier)).Should().Be(identifier);
+        (await AuthenticatedClient.DeleteAsync($"/api/v3/treatments/{identifier}")).IsSuccessStatusCode.Should().BeTrue();
+        (await RestIdAsync(syncIdentifier)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task ReUpload_OfATreatmentTheUserDeleted_IsNotCreatedOrBroadcast()
     {
         await ListenAsync();

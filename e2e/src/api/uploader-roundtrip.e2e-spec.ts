@@ -137,18 +137,14 @@ describe("uploader round-trip", () => {
   it("pages v3 treatment history by the lastModified cursor until drained", async () => {
     const base = Date.now() - 3 * 60 * MINUTE;
     const carbs = [10, 11, 12, 13, 14];
+    const posted: string[] = [];
     for (const [i, grams] of carbs.entries()) {
-      const res = await tenant.api.request("POST", "/api/v3/treatments", {
+      const res = await tenant.api.request<V3Created>("POST", "/api/v3/treatments", {
         eventType: "Carb Correction", carbs: grams, date: base + i * MINUTE, app: "AAPS", device: "AAPS-e2e", utcOffset: 0, isValid: true,
       });
       expect(res.status).toBe(201);
+      posted.push(res.body.identifier);
     }
-    // workaround: #1807 - the identifiers the POSTs returned are not the ones history serves, so the
-    // expected set is read back from search instead.
-    const posted = (await v3<Treatment>(tenant, "/api/v3/treatments?limit=100"))
-      .filter((t) => t.eventType === "Carb Correction" && carbs.includes(t.carbs!))
-      .map((t) => t.identifier ?? t._id);
-    expect(posted).toHaveLength(carbs.length);
 
     const seen: string[] = [];
     let cursor = 0;
@@ -241,12 +237,9 @@ describe("a treatment the user deleted", () => {
       eventType: "Correction Bolus", insulin: 0.85, date: Math.floor((Date.now() - 70 * MINUTE) / 1000) * 1000,
       app: "AAPS", device: "AAPS-e2e", utcOffset: 0, isValid: true, type: "NORMAL",
     };
-    expect((await tenant.api.request("POST", "/api/v3/treatments", upload)).status).toBe(201);
-    // workaround: #1807 - the identifier the POST returned is not accepted, so the record is found
-    // through search and deleted by the identifier search serves.
-    const stored = (await v3<Treatment>(tenant, "/api/v3/treatments?limit=50")).find((t) => t.insulin === 0.85);
-    expect(stored).toBeDefined();
-    expect((await tenant.api.delete(`/api/v3/treatments/${stored!.identifier}`)).status).toBeLessThan(300);
+    const created = await tenant.api.request<V3Created>("POST", "/api/v3/treatments", upload);
+    expect(created.status).toBe(201);
+    expect((await tenant.api.delete(`/api/v3/treatments/${created.body.identifier}`)).status).toBeLessThan(300);
 
     await tenant.api.request("POST", "/api/v3/treatments", upload);
     const search = await v3<Treatment>(tenant, "/api/v3/treatments?limit=50");
@@ -262,8 +255,7 @@ describe("a v3 treatment addressed by the identifier its POST returned", () => {
     tenant = await seedTenant();
   });
 
-  // Bug #1807: GET, search and history serve a different identifier. Flip to `it` once fixed.
-  it.fails("can be read and deleted by that identifier", async () => {
+  it("can be read and deleted by that identifier", async () => {
     const created = await tenant.api.request<V3Created>("POST", "/api/v3/treatments", {
       eventType: "Correction Bolus", insulin: 0.95, date: Math.floor((Date.now() - 20 * MINUTE) / 1000) * 1000,
       app: "AAPS", device: "AAPS-e2e", utcOffset: 0, isValid: true, type: "NORMAL",
