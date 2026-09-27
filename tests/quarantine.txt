@@ -118,7 +118,4 @@ Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSkip_R
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.DeleteTreatment_ShouldRemoveTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.GetTreatmentById_ShouldReturnSpecificTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.PutTreatment_ShouldUpdateExistingTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)

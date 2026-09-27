@@ -196,12 +196,13 @@ public class TreatmentService : ITreatmentService
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var result = await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var patched = TreatmentReadService.AsServed(existing, result) ?? existing;
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnUpdatedAsync(existing, cancellationToken);
+        await _events.OnUpdatedAsync(patched, cancellationToken);
 
-        return existing;
+        return patched;
     }
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)

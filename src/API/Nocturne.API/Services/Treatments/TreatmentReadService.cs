@@ -180,13 +180,8 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                var tempBasal = result.CreatedRecords
-                    .OfType<Core.Models.V4.TempBasal>()
-                    .FirstOrDefault();
-                if (tempBasal != null)
-                    results.Add(TempBasalToTreatmentMapper.ToTreatment(tempBasal));
-                else
-                    results.Add(treatment);
+                if (AsServed(treatment, result) is { } served)
+                    results.Add(served);
             }
             catch (OperationCanceledException)
             {
@@ -205,6 +200,40 @@ public class TreatmentReadService : ITreatmentStore
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
         return new BulkWrite<Treatment>(results, skippedDeleted);
+    }
+
+    /// <summary>
+    /// <paramref name="treatment"/> as the V1 and V3 reads serve it once decomposed into
+    /// <paramref name="result"/>: under the id <see cref="GetByLegacyIdAsync"/> resolves its legacy
+    /// id to, in the same record precedence. Null when every record it decomposes into was refused
+    /// because the user deleted it, as the treatment was then not written.
+    /// </summary>
+    /// <remarks>
+    /// A treatment written only as state spans (profile switch, override, temporary target) is not
+    /// served as a treatment, so it keeps its legacy id.
+    /// </remarks>
+    internal static Treatment? AsServed(Treatment treatment, DecompositionResult result)
+    {
+        List<object> written = [.. result.CreatedRecords, .. result.UpdatedRecords];
+        if (written.Count == 0)
+            return result.SkippedDeleted > 0 ? null : treatment;
+
+        var servedAs = written.OfType<Bolus>().FirstOrDefault() as IV4Record
+            ?? written.OfType<CarbIntake>().FirstOrDefault() as IV4Record
+            ?? written.OfType<BGCheck>().FirstOrDefault() as IV4Record
+            ?? written.OfType<DeviceEvent>().FirstOrDefault() as IV4Record
+            ?? written.OfType<BolusCalculation>().FirstOrDefault() as IV4Record
+            ?? written.OfType<Note>().FirstOrDefault();
+
+        if (servedAs is not null)
+        {
+            treatment.Id = servedAs.Id.ToString();
+            return treatment;
+        }
+
+        return written.OfType<TempBasal>().FirstOrDefault() is { } tempBasal
+            ? TempBasalToTreatmentMapper.ToTreatment(tempBasal)
+            : treatment;
     }
 
     /// <inheritdoc />
@@ -557,10 +586,6 @@ public class TreatmentReadService : ITreatmentStore
         if (bgCheck != null)
             return await FindProjectedTreatmentAsync(bgCheck.Mills, bgCheck.Id.ToString(), ct);
 
-        var noteRecord = await _noteRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (noteRecord != null)
-            return await FindProjectedTreatmentAsync(noteRecord.Mills, noteRecord.Id.ToString(), ct);
-
         var deviceEvent = await _deviceEventRepo.GetByLegacyIdAsync(legacyId, ct);
         if (deviceEvent != null)
             return await FindProjectedTreatmentAsync(deviceEvent.Mills, deviceEvent.Id.ToString(), ct);
@@ -568,6 +593,11 @@ public class TreatmentReadService : ITreatmentStore
         var bolusCalc = await _bolusCalcRepo.GetByLegacyIdAsync(legacyId, ct);
         if (bolusCalc != null)
             return await FindProjectedTreatmentAsync(bolusCalc.Mills, bolusCalc.Id.ToString(), ct);
+
+        // Last: any treatment carrying notes also writes a note under its legacy id.
+        var noteRecord = await _noteRepo.GetByLegacyIdAsync(legacyId, ct);
+        if (noteRecord != null)
+            return await FindProjectedTreatmentAsync(noteRecord.Mills, noteRecord.Id.ToString(), ct);
 
         var tempBasal = await _tempBasalRepo.GetByLegacyIdAsync(legacyId, ct);
         if (tempBasal != null)

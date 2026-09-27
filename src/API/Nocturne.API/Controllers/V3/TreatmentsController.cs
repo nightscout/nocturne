@@ -235,6 +235,22 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             );
 
             var createdTreatment = created.FirstOrDefault();
+            if (createdTreatment == null && created.SkippedDeleted > 0)
+            {
+                // The user deleted this record, so the upload is settled rather than failed: answering
+                // as a deduplication stops the uploader from retrying it.
+                var refusedIdentifier = MongoObjectId.Coerce(processedTreatment.Id);
+                return Ok(
+                    new
+                    {
+                        status = 200,
+                        identifier = refusedIdentifier,
+                        isDeduplication = true,
+                        deduplicatedIdentifier = refusedIdentifier,
+                    }
+                );
+            }
+
             if (createdTreatment == null)
             {
                 return CreateV3ErrorResponse(

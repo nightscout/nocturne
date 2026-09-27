@@ -140,6 +140,24 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_WithLegacyId_PrefersTheDeviceEventOverTheNoteItsNotesWrote()
+    {
+        const string legacyId = "abc123";
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime;
+        var deviceEvent = new DeviceEvent { Id = Guid.NewGuid(), Timestamp = timestamp, LegacyId = legacyId };
+        var note = new Note { Id = Guid.NewGuid(), Timestamp = timestamp, LegacyId = legacyId };
+        _deviceEventRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
+        _noteRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(note);
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new() { Id = note.Id.ToString(), Mills = 1000 }, new() { Id = deviceEvent.Id.ToString(), Mills = 1000 }]);
+
+        var result = await _service.GetByIdAsync(legacyId);
+
+        result!.Id.Should().Be(deviceEvent.Id.ToString());
+    }
+
+    [Fact]
     public async Task GetByIdAsync_NotFound_ReturnsNull()
     {
         _bolusRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Bolus?)null);
@@ -213,6 +231,133 @@ public class TreatmentReadServiceTests
         // A genuine per-record failure is still isolated: the bad record is dropped,
         // the good one is kept.
         result.Should().ContainSingle().Which.Id.Should().Be("t2");
+    }
+
+    private async Task<BulkWrite<Treatment>> CreateWithAsync(Treatment treatment, DecompositionResult result)
+    {
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+        return await _service.CreateAsync([treatment]);
+    }
+
+    private static DecompositionResult Wrote(IEnumerable<object> created, IEnumerable<object>? updated = null)
+    {
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.AddRange(created);
+        result.UpdatedRecords.AddRange(updated ?? []);
+        return result;
+    }
+
+    /// <summary>
+    /// The record whose uuid names the created treatment is the one <c>GetByLegacyIdAsync</c> resolves
+    /// the upload's legacy id to, so the create names the treatment as a later read does.
+    /// </summary>
+    public static TheoryData<string, object[], int> ServedRecords()
+    {
+        var bolus = new Bolus { Id = Guid.NewGuid() };
+        var carbs = new CarbIntake { Id = Guid.NewGuid() };
+        var bgCheck = new BGCheck { Id = Guid.NewGuid() };
+        var note = new Note { Id = Guid.NewGuid() };
+        var deviceEvent = new DeviceEvent { Id = Guid.NewGuid() };
+        var calculation = new BolusCalculation { Id = Guid.NewGuid() };
+
+        return new()
+        {
+            { "note", [note], 0 },
+            { "bolus with a note", [note, bolus], 1 },
+            { "meal", [carbs, bolus], 1 },
+            { "carbs", [carbs], 0 },
+            { "bg check with a note", [note, bgCheck], 1 },
+            { "device event with a note", [note, deviceEvent], 1 },
+            { "bolus wizard", [calculation, bolus], 1 },
+            { "bolus wizard without a dose", [note, calculation], 1 },
+        };
+    }
+
+    [Theory]
+    [MemberData(nameof(ServedRecords))]
+    public async Task CreateAsync_NamesTheTreatmentByTheRecordTheReadServesItAs(
+        string shape, object[] written, int servedIndex)
+    {
+        var treatment = new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Note" };
+
+        var result = await CreateWithAsync(treatment, Wrote(written));
+
+        result.Should().ContainSingle().Which.Id
+            .Should().Be(((IV4Record)written[servedIndex]).Id.ToString(), shape);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NamesAResentTreatmentByTheRecordItUpdated()
+    {
+        var note = new Note { Id = Guid.NewGuid() };
+
+        var result = await CreateWithAsync(
+            new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Note" }, Wrote([], [note]));
+
+        result.Should().ContainSingle().Which.Id.Should().Be(note.Id.ToString());
+    }
+
+    [Fact]
+    public async Task CreateAsync_ProjectsATempBasalAsTheReadServesIt()
+    {
+        var tempBasal = new TempBasal
+        {
+            Id = Guid.NewGuid(),
+            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime,
+            Rate = 0.4,
+        };
+
+        var result = await CreateWithAsync(
+            new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Temp Basal" }, Wrote([tempBasal]));
+
+        var served = result.Should().ContainSingle().Subject;
+        served.Id.Should().Be(tempBasal.Id.ToString());
+        served.Rate.Should().Be(0.4);
+    }
+
+    [Fact]
+    public async Task CreateAsync_KeepsTheLegacyIdOfATreatmentStoredOnlyAsAStateSpan()
+    {
+        var result = await CreateWithAsync(
+            new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Temporary Override" },
+            Wrote([new StateSpan()]));
+
+        result.Should().ContainSingle().Which.Id.Should().Be("legacy-1");
+    }
+
+    [Fact]
+    public async Task CreateAsync_LeavesOutATreatmentRefusedByTheUsersDelete()
+    {
+        var refused = new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Correction Bolus" };
+        var written = new Treatment { Id = "legacy-2", Mills = 2000, EventType = "Note" };
+        var note = new Note { Id = Guid.NewGuid() };
+        _decomposer
+            .Setup(d => d.DecomposeAsync(refused, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(written, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Wrote([note]));
+
+        var result = await _service.CreateAsync([refused, written]);
+
+        result.Should().ContainSingle().Which.Id.Should().Be(note.Id.ToString());
+        result.SkippedDeleted.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateAsync_KeepsATreatmentPartlyRefusedByTheUsersDelete()
+    {
+        var carbs = new CarbIntake { Id = Guid.NewGuid() };
+        var partial = Wrote([carbs]);
+        partial.SkippedDeleted = 1;
+
+        var result = await CreateWithAsync(
+            new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Meal Bolus" }, partial);
+
+        result.Should().ContainSingle().Which.Id.Should().Be(carbs.Id.ToString());
+        result.SkippedDeleted.Should().Be(1);
     }
 
     [Fact]

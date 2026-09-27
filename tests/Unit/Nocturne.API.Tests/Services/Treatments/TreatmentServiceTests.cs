@@ -169,6 +169,28 @@ public class TreatmentServiceTests
     }
 
     [Fact]
+    public async Task PatchTreatmentAsync_BroadcastsAndReturnsTheIdTheReadServes()
+    {
+        var note = new V4Models.Note { Id = Guid.NewGuid() };
+        var existing = new Treatment { Id = note.Id.ToString(), Mills = 1000, EventType = "Note", Notes = "old" };
+        var wireId = MongoObjectId.FromGuid(note.Id);
+        _mockStore.Setup(x => x.GetByIdAsync(wireId, It.IsAny<CancellationToken>())).ReturnsAsync(existing);
+        _mockStore.Setup(x => x.ResolveCanonicalIdAsync(wireId, It.IsAny<CancellationToken>())).ReturnsAsync("legacy-1");
+        var result = new DecompositionResult();
+        result.UpdatedRecords.Add(note);
+        _mockDecomposer
+            .Setup(x => x.DecomposeAsync(It.Is<Treatment>(t => t.Id == "legacy-1"), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+        var patched = await _treatmentService.PatchTreatmentAsync(
+            wireId, JsonSerializer.Deserialize<JsonElement>("{\"notes\":\"updated\"}"), CancellationToken.None);
+
+        patched!.Id.Should().Be(note.Id.ToString());
+        _mockEvents.Verify(x => x.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Id == note.Id.ToString() && t.Notes == "updated"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task PatchTreatmentAsync_WhenNotFound_ReturnsNull()
     {
         _mockStore.Setup(x => x.GetByIdAsync("x", It.IsAny<CancellationToken>())).ReturnsAsync((Treatment?)null);
