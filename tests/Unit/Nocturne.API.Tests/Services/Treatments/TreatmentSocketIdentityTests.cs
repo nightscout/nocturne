@@ -11,6 +11,11 @@ using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.Realtime;
 using Nocturne.API.Services.Treatments;
 using Nocturne.API.Services.V4;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Nightscout.Configurations;
+using Nocturne.Connectors.Nightscout.Services.WriteBack;
+using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -44,6 +49,7 @@ public class TreatmentSocketIdentityTests : IDisposable
     private readonly TreatmentService _service;
     private readonly JsonHubProtocolOptions _protocol = new();
     private readonly List<(string Method, object Payload)> _sent = [];
+    private readonly UpstreamCapture _upstream = new();
 
     public TreatmentSocketIdentityTests()
     {
@@ -131,7 +137,21 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         _service = new TreatmentService(
             store, decomposer, Mock.Of<ITreatmentCache>(),
-            new SignalRTreatmentEventSink(broadcast, NullLogger<SignalRTreatmentEventSink>.Instance),
+            new CompositeDataEventSink<Treatment>(
+            [
+                new SignalRTreatmentEventSink(broadcast, NullLogger<SignalRTreatmentEventSink>.Instance),
+                new NightscoutTreatmentWriteBackSink(
+                    new HttpClient(_upstream),
+                    Mock.Of<IConnectorConfigurationLoader<NightscoutConnectorConfiguration>>(l =>
+                        l.LoadForTenantAsync(It.IsAny<CancellationToken>()) == Task.FromResult(new NightscoutConnectorConfiguration
+                        {
+                            Url = "https://nightscout.example.com",
+                            ApiSecret = "synthetic-secret",
+                            WriteBackEnabled = true,
+                        })),
+                    new NightscoutCircuitBreaker(),
+                    NullLogger<NightscoutTreatmentWriteBackSink>.Instance),
+            ]),
             Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);
     }
 
@@ -224,6 +244,38 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         Events("update").Select(Id).Should().Equal(restId, restId);
         Events("delete").Should().ContainSingle().Which.GetProperty("identifier").GetString().Should().Be(restId);
+    }
+
+    /// <summary>
+    /// The Nightscout connector pulls a written-back treatment in again under the <c>_id</c> it was
+    /// written back with; that id must name the stored record, or the pull stores it a second time.
+    /// </summary>
+    [Theory]
+    [InlineData(Note)]
+    [InlineData(LoopBolus)]
+    [InlineData(ObjectIdCarbs)]
+    public async Task PullBack_OfAWrittenBackTreatment_UpdatesTheStoredOne(string upload)
+    {
+        await _service.CreateTreatmentsAsync([Upload(upload)]);
+        var restId = await RestIdAsync();
+
+        var echoed = _upstream.Bodies.Should().ContainSingle().Subject;
+        var pulled = JsonSerializer.Deserialize<List<Treatment>>(echoed)!;
+        pulled.ForEach(t => t.DataSource = DataSources.NightscoutConnector);
+        await _service.CreateTreatmentsAsync(pulled);
+
+        (await RestIdAsync()).Should().Be(restId);
+    }
+
+    private sealed class UpstreamCapture : HttpMessageHandler
+    {
+        public List<string> Bodies { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Bodies.Add(await request.Content!.ReadAsStringAsync(ct));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
     }
 
     [Fact]

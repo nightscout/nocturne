@@ -214,6 +214,7 @@ public class TreatmentReadService : ITreatmentStore
     /// </remarks>
     internal static Treatment? AsServed(Treatment treatment, DecompositionResult result)
     {
+        treatment.LegacyId = treatment.Id;
         List<object> written = [.. result.CreatedRecords, .. result.UpdatedRecords];
         if (written.Count == 0)
             return result.SkippedDeleted > 0 ? null : treatment;
@@ -228,6 +229,7 @@ public class TreatmentReadService : ITreatmentStore
         if (servedAs is not null)
         {
             treatment.Id = servedAs.Id.ToString();
+            treatment.LegacyId = servedAs.LegacyId;
             return treatment;
         }
 

@@ -40,6 +40,15 @@ public class Treatment : ProcessableDocumentBase
     public string? Identifier => Id;
 
     /// <summary>
+    /// The legacy id the stored record is keyed by: the <c>_id</c>, <c>syncIdentifier</c> or
+    /// content-derived id it was uploaded under. <see cref="Id"/> carries the id the record is served
+    /// by, so this is the only place an upstream instance's own id for the record survives. Never on
+    /// the wire.
+    /// </summary>
+    [JsonIgnore]
+    public string? LegacyId { get; set; }
+
+    /// <summary>
     /// Gets the server-modified timestamp for V3 compatibility.
     /// Falls back to Mills, which already resolves every other timestamp this document
     /// carries. See <see cref="V3Timestamps"/> for why it may never serialize as null.
