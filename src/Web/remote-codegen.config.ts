@@ -8,13 +8,8 @@
  * which is why `detail` is read first. Without a typed schema NSwag throws an
  * ApiException whose `message` is its own boilerplate and whose body is left
  * unparsed, so that message is the last resort. `body.message` belongs to an
- * `HttpError` — the only other thing these catches can see, thrown by an
- * invalidated query's refresh — and is read first because a handler wrote it.
- *
- * That refresh runs inside the command's own `try`, so a write that succeeded
- * and a refresh that was then refused reject the caller with a reason belonging
- * to the read, not to the write: the arms cannot tell the two apart, and no
- * ordering here can.
+ * `HttpError` and is read first because a handler wrote it. An invalidated
+ * query's refresh never reaches these arms: it is emitted after the catch.
  *
  * `body` names a local holding `parseErrorBody(err)` — the RFC-7807 fields
  * recovered from a body NSwag left unparsed (`$lib/api/error-body`). They sit

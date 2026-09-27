@@ -1,0 +1,332 @@
+diff --git a/dist/generators/remote-functions.js b/dist/generators/remote-functions.js
+index db1104caadfbba73f245ca6409e5e1e51c171bb4..ac04ecca87c7678af4d411b29f95be197f042043 100644
+--- a/dist/generators/remote-functions.js
++++ b/dist/generators/remote-functions.js
+@@ -248,9 +248,29 @@ function generateRefreshCalls(op, functionName, invalidation) {
+     const thunks = refreshThunks(op, targets);
+     if (thunks.length === 0)
+         return '';
+-    return `\n    await refreshInvalidated('${functionName}', [
+-      ${thunks.join(',\n      ')}
+-    ]);`;
++    return `\n  await refreshInvalidated('${functionName}', [
++    ${thunks.join(',\n    ')}
++  ]);`;
++}
++/**
++ * How a mutation's success path straddles its `try`.
++ *
++ * The refreshes follow the catch rather than sitting inside the try, so a
++ * refresh that throws can never reach the status arms and be reported as the
++ * write having failed. `result` is hoisted only when refreshes push the return
++ * out of the try.
++ */
++function successPath(refreshCalls, isVoid) {
++    const value = isVoid ? '{ success: true }' : 'result';
++    if (!refreshCalls) {
++        return { hoist: '', bind: 'const result = ', inTry: `\n    return ${value};`, afterTry: '' };
++    }
++    return {
++        hoist: isVoid ? '' : '  let result;\n',
++        bind: 'result = ',
++        inTry: '',
++        afterTry: `${refreshCalls}\n  return ${value};`,
++    };
+ }
+ function generateCatchBlock(config, clientProperty, methodName, functionName, kind) {
+     const humanName = functionName.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+@@ -313,27 +333,26 @@ function generateMutationFunction(op, functionName, clientProperty, methodName,
+     const comment = op.summary ? `/** ${op.summary} */\n` : '';
+     const catchBlock = generateCatchBlock(config, clientProperty, methodName, functionName, wrapperName);
+     const clientAccess = generateClientAccess(config);
++    const path = successPath(refreshCalls, op.isVoidResponse);
+     // Handle void responses (204 No Content)
+     const apiCall = op.isVoidResponse
+-        ? `    await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+-    return { success: true };`
+-        : `    const result = await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+-    return result;`;
++        ? `    await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${path.inTry}`
++        : `    ${path.bind}await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${path.inTry}`;
+     if (schemaArg) {
+         // form() receives FormData (all strings) — wrap with formCoerce() to convert types.
+         const schemaArgStr = wrapperName === 'form' ? formSchemaArg(schemaArg, config) : schemaArg;
+         return `${comment}export const ${functionName} = ${wrapperName}(${schemaArgStr}, async (${paramList}) => {
+ ${clientAccess}
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+     }
+     return `${comment}export const ${functionName} = ${wrapperName}(async () => {
+ ${clientAccess}
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ /**
+@@ -357,6 +376,7 @@ function generateFileUploadFunction(op, functionName, clientProperty, methodName
+     const comment = op.summary ? `/** ${op.summary} */\n` : '';
+     const catchBlock = generateCatchBlock(config, clientProperty, methodName, functionName, wrapperName);
+     const fieldName = op.fileFieldName ?? 'file';
++    const path = successPath(refreshCalls, op.isVoidResponse);
+     const apiCall = op.isVoidResponse
+         ? `    const formData = new FormData();
+     formData.append('${fieldName}', file, file.name);
+@@ -371,8 +391,7 @@ function generateFileUploadFunction(op, functionName, clientProperty, methodName
+       err.status = response.status;
+       try { err.response = await response.text(); } catch {}
+       throw err;
+-    }${refreshCalls}
+-    return { success: true };`
++    }${path.inTry}`
+         : `    const formData = new FormData();
+     formData.append('${fieldName}', file, file.name);
+     const url = apiClient.baseUrl + '${op.path}';
+@@ -387,8 +406,7 @@ function generateFileUploadFunction(op, functionName, clientProperty, methodName
+       try { err.response = await response.text(); } catch {}
+       throw err;
+     }
+-    const result = await response.json();${refreshCalls}
+-    return result;`;
++    ${path.bind}await response.json();${path.inTry}`;
+     return `${comment}export const ${functionName} = ${wrapperName}('unchecked', async (data: { ${fieldName}?: File }) => {
+   const apiClient = ${config.clientAccess};
+   const submitted = data.${fieldName};
+@@ -396,9 +414,9 @@ function generateFileUploadFunction(op, functionName, clientProperty, methodName
+   // A submitted file arrives as SvelteKit's lazy proxy, which multipart encoders
+   // reject; read it into a real File before attaching it.
+   const file = new File([await submitted.arrayBuffer()], submitted.name, { type: submitted.type });
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ /**
+@@ -420,11 +438,10 @@ function generateUrlEncodedFunction(op, functionName, clientProperty, methodName
+ ${paramSetters}`
+         : `    const body = new URLSearchParams();`;
+     const method = op.method.toUpperCase();
++    const path = successPath(refreshCalls, op.isVoidResponse);
+     const responseHandling = op.isVoidResponse
+-        ? `${refreshCalls}
+-    return { success: true };`
+-        : `const result = await response.json();${refreshCalls}
+-    return result;`;
++        ? path.inTry
++        : `\n    ${path.bind}await response.json();${path.inTry}`;
+     const fetchBlock = `${bodyBlock}
+     const event = getRequestEvent();
+     const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' };
+@@ -442,8 +459,7 @@ ${paramSetters}`
+       err.status = response.status;
+       try { err.response = await response.text(); } catch {}
+       throw err;
+-    }
+-    ${responseHandling}`;
++    }${responseHandling}`;
+     // Build Zod schema for form validation if properties exist
+     if (properties.length > 0) {
+         const zodFields = properties.map(p => {
+@@ -456,16 +472,16 @@ ${paramSetters}`
+         const schemaArgStr = wrapperName === 'form' ? formSchemaArg(schemaArg, config) : schemaArg;
+         return `${comment}export const ${functionName} = ${wrapperName}(${schemaArgStr}, async (request) => {
+   const apiClient = ${config.clientAccess};
+-  try {
++${path.hoist}  try {
+ ${fetchBlock}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+     }
+     return `${comment}export const ${functionName} = ${wrapperName}(async () => {
+   const apiClient = ${config.clientAccess};
+-  try {
++${path.hoist}  try {
+ ${fetchBlock}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ /**
+diff --git a/src/generators/remote-functions.ts b/src/generators/remote-functions.ts
+index 7a7d190bdb7352d1c5cb8130c8b22913b7939d29..6b0f4ee67fa28bda8f6414d906c5d7b2b48ac244 100644
+--- a/src/generators/remote-functions.ts
++++ b/src/generators/remote-functions.ts
+@@ -301,9 +301,41 @@ function generateRefreshCalls(
+   const thunks = refreshThunks(op, targets);
+   if (thunks.length === 0) return '';
+ 
+-  return `\n    await refreshInvalidated('${functionName}', [
+-      ${thunks.join(',\n      ')}
+-    ]);`;
++  return `\n  await refreshInvalidated('${functionName}', [
++    ${thunks.join(',\n    ')}
++  ]);`;
++}
++
++/**
++ * How a mutation's success path straddles its `try`.
++ *
++ * The refreshes follow the catch rather than sitting inside the try, so a
++ * refresh that throws can never reach the status arms and be reported as the
++ * write having failed. `result` is hoisted only when refreshes push the return
++ * out of the try.
++ */
++function successPath(refreshCalls: string, isVoid: boolean | undefined): SuccessPath {
++  const value = isVoid ? '{ success: true }' : 'result';
++  if (!refreshCalls) {
++    return { hoist: '', bind: 'const result = ', inTry: `\n    return ${value};`, afterTry: '' };
++  }
++  return {
++    hoist: isVoid ? '' : '  let result;\n',
++    bind: 'result = ',
++    inTry: '',
++    afterTry: `${refreshCalls}\n  return ${value};`,
++  };
++}
++
++interface SuccessPath {
++  /** Precedes the `try`. */
++  hoist: string;
++  /** Prefixes the expression whose value the mutation returns. */
++  bind: string;
++  /** Closes the try body. */
++  inTry: string;
++  /** Follows the catch block. */
++  afterTry: string;
+ }
+ 
+ function generateCatchBlock(
+@@ -402,30 +434,29 @@ function generateMutationFunction(
+   const comment = op.summary ? `/** ${op.summary} */\n` : '';
+   const catchBlock = generateCatchBlock(config, clientProperty, methodName, functionName, wrapperName);
+   const clientAccess = generateClientAccess(config);
++  const path = successPath(refreshCalls, op.isVoidResponse);
+ 
+   // Handle void responses (204 No Content)
+   const apiCall = op.isVoidResponse
+-    ? `    await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+-    return { success: true };`
+-    : `    const result = await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${refreshCalls}
+-    return result;`;
++    ? `    await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${path.inTry}`
++    : `    ${path.bind}await apiClient.${clientProperty}.${methodName}(${apiCallArgs});${path.inTry}`;
+ 
+   if (schemaArg) {
+     // form() receives FormData (all strings) — wrap with formCoerce() to convert types.
+     const schemaArgStr = wrapperName === 'form' ? formSchemaArg(schemaArg, config) : schemaArg;
+     return `${comment}export const ${functionName} = ${wrapperName}(${schemaArgStr}, async (${paramList}) => {
+ ${clientAccess}
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+   }
+ 
+   return `${comment}export const ${functionName} = ${wrapperName}(async () => {
+ ${clientAccess}
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ 
+@@ -457,6 +488,7 @@ function generateFileUploadFunction(
+   const comment = op.summary ? `/** ${op.summary} */\n` : '';
+   const catchBlock = generateCatchBlock(config, clientProperty, methodName, functionName, wrapperName);
+   const fieldName = op.fileFieldName ?? 'file';
++  const path = successPath(refreshCalls, op.isVoidResponse);
+ 
+   const apiCall = op.isVoidResponse
+     ? `    const formData = new FormData();
+@@ -472,8 +504,7 @@ function generateFileUploadFunction(
+       err.status = response.status;
+       try { err.response = await response.text(); } catch {}
+       throw err;
+-    }${refreshCalls}
+-    return { success: true };`
++    }${path.inTry}`
+     : `    const formData = new FormData();
+     formData.append('${fieldName}', file, file.name);
+     const url = apiClient.baseUrl + '${op.path}';
+@@ -488,8 +519,7 @@ function generateFileUploadFunction(
+       try { err.response = await response.text(); } catch {}
+       throw err;
+     }
+-    const result = await response.json();${refreshCalls}
+-    return result;`;
++    ${path.bind}await response.json();${path.inTry}`;
+ 
+   return `${comment}export const ${functionName} = ${wrapperName}('unchecked', async (data: { ${fieldName}?: File }) => {
+   const apiClient = ${config.clientAccess};
+@@ -498,9 +528,9 @@ function generateFileUploadFunction(
+   // A submitted file arrives as SvelteKit's lazy proxy, which multipart encoders
+   // reject; read it into a real File before attaching it.
+   const file = new File([await submitted.arrayBuffer()], submitted.name, { type: submitted.type });
+-  try {
++${path.hoist}  try {
+ ${apiCall}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ 
+@@ -536,11 +566,10 @@ ${paramSetters}`
+ 
+   const method = op.method.toUpperCase();
+ 
++  const path = successPath(refreshCalls, op.isVoidResponse);
+   const responseHandling = op.isVoidResponse
+-    ? `${refreshCalls}
+-    return { success: true };`
+-    : `const result = await response.json();${refreshCalls}
+-    return result;`;
++    ? path.inTry
++    : `\n    ${path.bind}await response.json();${path.inTry}`;
+ 
+   const fetchBlock = `${bodyBlock}
+     const event = getRequestEvent();
+@@ -559,8 +588,7 @@ ${paramSetters}`
+       err.status = response.status;
+       try { err.response = await response.text(); } catch {}
+       throw err;
+-    }
+-    ${responseHandling}`;
++    }${responseHandling}`;
+ 
+   // Build Zod schema for form validation if properties exist
+   if (properties.length > 0) {
+@@ -575,17 +603,17 @@ ${paramSetters}`
+ 
+     return `${comment}export const ${functionName} = ${wrapperName}(${schemaArgStr}, async (request) => {
+   const apiClient = ${config.clientAccess};
+-  try {
++${path.hoist}  try {
+ ${fetchBlock}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+   }
+ 
+   return `${comment}export const ${functionName} = ${wrapperName}(async () => {
+   const apiClient = ${config.clientAccess};
+-  try {
++${path.hoist}  try {
+ ${fetchBlock}
+-${catchBlock}
++${catchBlock}${path.afterTry}
+ });`;
+ }
+ 
