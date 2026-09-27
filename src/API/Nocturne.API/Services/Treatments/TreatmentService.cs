@@ -197,7 +197,7 @@ public class TreatmentService : ITreatmentService
 
         // Re-decompose (idempotent upsert via LegacyId matching)
         var result = await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
-        var patched = TreatmentReadService.AsServed(existing, result) ?? existing;
+        var patched = TreatmentReadService.AsServed(existing, result).Served;
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(patched, cancellationToken);

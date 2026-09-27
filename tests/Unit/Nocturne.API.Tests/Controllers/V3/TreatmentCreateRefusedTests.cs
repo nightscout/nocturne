@@ -57,6 +57,23 @@ public class TreatmentCreateRefusedTests
     }
 
     [Fact]
+    public async Task Create_RefusedByTheUsersDelete_NamesTheDeletedRecordAsItWasServed()
+    {
+        const string deletedRecord = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        var controller = CreateController(new BulkWrite<Treatment>([], skippedDeleted: 1)
+        {
+            Settled = [new Treatment { Id = deletedRecord, EventType = "Correction Bolus" }],
+        });
+
+        var response = await controller.CreateTreatment(
+            new Treatment { Id = SyncIdentifier, EventType = "Correction Bolus", Insulin = 0.65 });
+
+        var body = JsonSerializer.SerializeToElement(response.Result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("identifier").GetString().Should().Be(MongoObjectId.Coerce(deletedRecord));
+        body.GetProperty("deduplicatedIdentifier").GetString().Should().Be(MongoObjectId.Coerce(deletedRecord));
+    }
+
+    [Fact]
     public async Task Create_ThatWroteNothingForAnotherReason_StillFails()
     {
         var controller = CreateController(new BulkWrite<Treatment>([], skippedDeleted: 0));

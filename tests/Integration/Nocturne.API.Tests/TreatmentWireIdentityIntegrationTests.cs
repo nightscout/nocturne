@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
 /// A treatment carries one <c>_id</c> on the create response, the realtime events and the v1 read, and
-/// a re-upload the user's delete refused is neither answered as created nor broadcast.
+/// a re-upload the user's delete refused is answered under the deleted record's id but neither stored nor broadcast.
 /// </summary>
 [Trait("Category", "Integration")]
 public class TreatmentWireIdentityIntegrationTests : ApiIntegrationTestBase
@@ -61,9 +61,9 @@ public class TreatmentWireIdentityIntegrationTests : ApiIntegrationTestBase
         ["syncIdentifier"] = Guid.NewGuid().ToString(),
     };
 
-    private async Task<JsonElement[]> PostAsync(object upload)
+    private async Task<JsonElement[]> PostAsync(params object[] uploads)
     {
-        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[] { upload });
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", uploads);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<JsonElement[]>())!;
     }
@@ -122,6 +122,28 @@ public class TreatmentWireIdentityIntegrationTests : ApiIntegrationTestBase
     }
 
     [Fact]
+    public async Task MixedBatch_AnswersEveryTreatmentInOrderAndBroadcastsOnlyTheWrittenOne()
+    {
+        await ListenAsync();
+        var deleted = LoopBolus(0.35, minutesAgo: 60);
+        var deletedSync = (string)deleted["syncIdentifier"];
+        await PostAsync(deleted);
+        await WaitForAsync("create", deletedSync);
+        var deletedId = await RestIdAsync(deletedSync);
+        (await AuthenticatedClient.DeleteAsync($"/api/v1/treatments/{deletedId}")).IsSuccessStatusCode.Should().BeTrue();
+
+        var fresh = LoopBolus(0.15, minutesAgo: 10);
+        var freshSync = (string)fresh["syncIdentifier"];
+        var reply = await PostAsync(deleted, fresh);
+
+        var freshId = await RestIdAsync(freshSync);
+        reply.Select(t => t.GetProperty("_id").GetString()).Should().Equal(deletedId, freshId);
+        await WaitForAsync("create", freshSync);
+        Events("create", deletedSync).Should().ContainSingle("the re-sent treatment the user deleted is not created again");
+        (await RestIdAsync(deletedSync)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task ReUpload_OfATreatmentTheUserDeleted_IsNotCreatedOrBroadcast()
     {
         await ListenAsync();
@@ -133,11 +155,14 @@ public class TreatmentWireIdentityIntegrationTests : ApiIntegrationTestBase
         var restId = await RestIdAsync(syncIdentifier);
         (await AuthenticatedClient.DeleteAsync($"/api/v1/treatments/{restId}")).IsSuccessStatusCode.Should().BeTrue();
 
-        (await PostAsync(upload)).Should().BeEmpty();
+        (await PostAsync(upload)).Should().ContainSingle(
+                "Loop pairs the reply with its request by position and fails a batch whose counts differ")
+            .Which.GetProperty("_id").GetString().Should().Be(restId);
         var v3 = await AuthenticatedClient.PostAsJsonAsync("/api/v3/treatments", upload);
         v3.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await v3.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("isDeduplication").GetBoolean()
-            .Should().BeTrue();
+        var dedup = await v3.Content.ReadFromJsonAsync<JsonElement>();
+        dedup.GetProperty("isDeduplication").GetBoolean().Should().BeTrue();
+        dedup.GetProperty("identifier").GetString().Should().Be(restId);
 
         // Writes are broadcast before their request returns, so once a later write has arrived, a
         // create for either re-upload would have too.

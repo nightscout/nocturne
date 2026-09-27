@@ -31,21 +31,8 @@ internal static class UpstreamIdentityJson
     {
         foreach (var property in info.Properties)
         {
-            if (property.CustomConverter is not ObjectIdJsonConverter)
-                continue;
-
-            if (info.Type != typeof(Treatment))
-            {
+            if (property.CustomConverter is ObjectIdJsonConverter)
                 property.CustomConverter = Converter;
-                continue;
-            }
-
-            // A treatment is served by its record's uuid but carries its legacy id apart, so that id
-            // goes out verbatim whatever its shape, a uuid syncIdentifier included.
-            var served = property.Get!;
-            property.CustomConverter = null;
-            property.Get = treatment => ((Treatment)treatment).LegacyId
-                ?? UpstreamIdConverter.OwnId(served(treatment) as string);
         }
     }
 
@@ -56,9 +43,6 @@ internal static class UpstreamIdentityJson
 
         // HandleNull is false, so the serializer writes a null id itself and never calls this with one.
         public override void Write(Utf8JsonWriter writer, string? value, JsonSerializerOptions options)
-            => writer.WriteStringValue(OwnId(value));
-
-        public static string? OwnId(string? value)
-            => Guid.TryParse(value, out var uuid) ? MongoObjectId.FromGuid(uuid) : value;
+            => writer.WriteStringValue(Guid.TryParse(value, out var uuid) ? MongoObjectId.FromGuid(uuid) : value);
     }
 }

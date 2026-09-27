@@ -171,7 +171,8 @@ public class TreatmentReadService : ITreatmentStore
     public async Task<BulkWrite<Treatment>> CreateAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        var results = new List<Treatment>();
+        var written = new List<Treatment>();
+        var settled = new List<Treatment>();
         var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
@@ -180,8 +181,10 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                if (AsServed(treatment, result) is { } served)
-                    results.Add(served);
+                var (served, refused) = AsServed(treatment, result);
+                settled.Add(served);
+                if (!refused)
+                    written.Add(served);
             }
             catch (OperationCanceledException)
             {
@@ -199,43 +202,51 @@ public class TreatmentReadService : ITreatmentStore
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted);
+        return new BulkWrite<Treatment>(written, skippedDeleted) { Settled = settled };
     }
 
     /// <summary>
+    /// The record precedence of <see cref="GetByLegacyIdAsync"/>: which of the records one treatment
+    /// decomposes into names it on the wire.
+    /// </summary>
+    private static readonly Type[] ServedPrecedence =
+        [typeof(Bolus), typeof(CarbIntake), typeof(BGCheck), typeof(DeviceEvent), typeof(BolusCalculation), typeof(Note)];
+
+    /// <summary>
     /// <paramref name="treatment"/> as the V1 and V3 reads serve it once decomposed into
-    /// <paramref name="result"/>: under the id <see cref="GetByLegacyIdAsync"/> resolves its legacy
-    /// id to, in the same record precedence. Null when every record it decomposes into was refused
-    /// because the user deleted it, as the treatment was then not written.
+    /// <paramref name="result"/>: a copy under the id <see cref="GetByLegacyIdAsync"/> resolves its
+    /// legacy id to, carrying that legacy id apart. <c>Refused</c> when every record it decomposes
+    /// into was refused because the user deleted it; the copy is then named by the deleted record, as
+    /// it was served before the delete.
     /// </summary>
     /// <remarks>
     /// A treatment written only as state spans (profile switch, override, temporary target) is not
     /// served as a treatment, so it keeps its legacy id.
     /// </remarks>
-    internal static Treatment? AsServed(Treatment treatment, DecompositionResult result)
+    internal static (Treatment Served, bool Refused) AsServed(Treatment treatment, DecompositionResult result)
     {
-        treatment.LegacyId = treatment.Id;
         List<object> written = [.. result.CreatedRecords, .. result.UpdatedRecords];
-        if (written.Count == 0)
-            return result.SkippedDeleted > 0 ? null : treatment;
+        var refused = written.Count == 0 && result.SkippedDeleted > 0;
 
-        var servedAs = written.OfType<Bolus>().FirstOrDefault() as IV4Record
-            ?? written.OfType<CarbIntake>().FirstOrDefault() as IV4Record
-            ?? written.OfType<BGCheck>().FirstOrDefault() as IV4Record
-            ?? written.OfType<DeviceEvent>().FirstOrDefault() as IV4Record
-            ?? written.OfType<BolusCalculation>().FirstOrDefault() as IV4Record
-            ?? written.OfType<Note>().FirstOrDefault();
+        if (written.OfType<TempBasal>().FirstOrDefault() is { } tempBasal
+            && !written.Any(r => ServedPrecedence.Contains(r.GetType())))
+            return (TempBasalToTreatmentMapper.ToTreatment(tempBasal), false);
 
-        if (servedAs is not null)
-        {
-            treatment.Id = servedAs.Id.ToString();
-            treatment.LegacyId = servedAs.LegacyId;
-            return treatment;
-        }
+        IEnumerable<(Type Type, Guid Id, string? LegacyId)> candidates = refused
+            ? result.RefusedRecords.Select(r => (r.RecordType, r.HeldBy, treatment.Id))
+            : written.OfType<IV4Record>().Select(r => (r.GetType(), r.Id, r.LegacyId));
 
-        return written.OfType<TempBasal>().FirstOrDefault() is { } tempBasal
-            ? TempBasalToTreatmentMapper.ToTreatment(tempBasal)
-            : treatment;
+        var servedAs = candidates
+            .Where(c => ServedPrecedence.Contains(c.Type))
+            .OrderBy(c => Array.IndexOf(ServedPrecedence, c.Type))
+            .Select(c => ((Guid Id, string? LegacyId)?)(c.Id, c.LegacyId))
+            .FirstOrDefault();
+
+        var served = servedAs is { } named
+            ? treatment.WithId(named.Id.ToString())
+            : treatment.WithId(treatment.Id);
+        served.LegacyId = servedAs?.LegacyId ?? treatment.Id;
+        return (served, refused);
     }
 
     /// <inheritdoc />

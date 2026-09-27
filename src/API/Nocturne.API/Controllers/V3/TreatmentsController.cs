@@ -239,7 +239,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
             {
                 // The user deleted this record, so the upload is settled rather than failed: answering
                 // as a deduplication stops the uploader from retrying it.
-                var refusedIdentifier = MongoObjectId.Coerce(processedTreatment.Id);
+                var refusedIdentifier = MongoObjectId.Coerce(created.Settled.FirstOrDefault()?.Id ?? processedTreatment.Id);
                 return Ok(
                     new
                     {
@@ -332,7 +332,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 cancellationToken
             );
 
-            var createdArray = createdTreatments.ToArray();
+            var createdArray = createdTreatments.Settled.ToArray();
             _logger.LogDebug(
                 "Successfully created {Count} V3 treatments via bulk operation",
                 createdArray.Length

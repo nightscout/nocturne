@@ -41,29 +41,4 @@ public class UpstreamIdentityJsonTests
         status!.Id.Should().BeNull();
         status.Device.Should().Be("loop");
     }
-
-    private const string RecordUuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
-
-    [Theory]
-    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e")]
-    [InlineData("syn-3a7c0e9f1b2d4c6e8a0b2d4f6a8c0e2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e")]
-    [InlineData("4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f")]
-    public void A_treatment_is_written_under_its_legacy_id_verbatim(string legacyId)
-    {
-        var json = JsonSerializer.SerializeToElement(
-            new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Note" }, UpstreamIdentityJson.Options);
-
-        json.GetProperty("_id").GetString().Should().Be(legacyId);
-        json.GetProperty("identifier").GetString().Should().Be(legacyId);
-        json.TryGetProperty("legacyId", out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public void A_treatment_without_a_legacy_id_is_written_under_its_record_id_prefix()
-    {
-        var json = JsonSerializer.SerializeToElement(
-            new Treatment { Id = RecordUuid, EventType = "Note" }, UpstreamIdentityJson.Options);
-
-        json.GetProperty("_id").GetString().Should().Be(MongoObjectId.FromGuid(Guid.Parse(RecordUuid)));
-    }
 }

@@ -263,7 +263,7 @@ public class TreatmentsController : ControllerBase
                 processedTreatments,
                 cancellationToken
             );
-            var resultArray = createdTreatments.ToArray();
+            var resultArray = createdTreatments.Settled.ToArray();
 
             _logger.LogDebug("Successfully created {Count} treatments", resultArray.Length);
 

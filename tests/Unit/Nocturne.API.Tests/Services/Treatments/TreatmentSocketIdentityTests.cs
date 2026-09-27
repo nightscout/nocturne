@@ -247,20 +247,35 @@ public class TreatmentSocketIdentityTests : IDisposable
     }
 
     /// <summary>
-    /// The Nightscout connector pulls a written-back treatment in again under the <c>_id</c> it was
-    /// written back with; that id must name the stored record, or the pull stores it a second time.
+    /// The write-back keys a treatment by its legacy id, as before the served id changed, not by the
+    /// id the reads serve it under.
     /// </summary>
     [Theory]
     [InlineData(Note)]
     [InlineData(LoopBolus)]
     [InlineData(ObjectIdCarbs)]
-    public async Task PullBack_OfAWrittenBackTreatment_UpdatesTheStoredOne(string upload)
+    public async Task WriteBack_SendsTheLegacyIdCoerced(string upload)
     {
-        await _service.CreateTreatmentsAsync([Upload(upload)]);
+        var submitted = Upload(upload);
+        await _service.CreateTreatmentsAsync([submitted]);
         var restId = await RestIdAsync();
 
-        var echoed = _upstream.Bodies.Should().ContainSingle().Subject;
-        var pulled = JsonSerializer.Deserialize<List<Treatment>>(echoed)!;
+        var sent = JsonSerializer.Deserialize<JsonElement>(_upstream.Bodies.Should().ContainSingle().Subject)[0];
+
+        sent.GetProperty("_id").GetString().Should().Be(MongoObjectId.Coerce(submitted.Id)).And.NotBe(restId);
+    }
+
+    /// <summary>
+    /// A treatment uploaded under its own ObjectId goes upstream under it, so the connector's pull of
+    /// the copy updates the stored treatment instead of storing a second one.
+    /// </summary>
+    [Fact]
+    public async Task PullBack_OfATreatmentUploadedUnderAnObjectId_UpdatesTheStoredOne()
+    {
+        await _service.CreateTreatmentsAsync([Upload(ObjectIdCarbs)]);
+        var restId = await RestIdAsync();
+
+        var pulled = JsonSerializer.Deserialize<List<Treatment>>(_upstream.Bodies.Should().ContainSingle().Subject)!;
         pulled.ForEach(t => t.DataSource = DataSources.NightscoutConnector);
         await _service.CreateTreatmentsAsync(pulled);
 
@@ -282,12 +297,15 @@ public class TreatmentSocketIdentityTests : IDisposable
     public async Task ReUpload_OfATreatmentTheUserDeleted_BroadcastsNoCreate()
     {
         await _service.CreateTreatmentsAsync([Upload(LoopBolus)]);
-        (await _service.DeleteTreatmentAsync(await RestIdAsync())).Should().BeTrue();
+        var restId = await RestIdAsync();
+        (await _service.DeleteTreatmentAsync(restId)).Should().BeTrue();
 
         var reUpload = await _service.CreateTreatmentsAsync([Upload(LoopBolus)]);
 
         reUpload.Should().BeEmpty();
         reUpload.SkippedDeleted.Should().Be(1);
+        JsonSerializer.SerializeToElement(reUpload.Settled.Should().ContainSingle().Subject)
+            .GetProperty("_id").GetString().Should().Be(restId, "the reply still names the deleted treatment as it was served");
         (await _service.GetTreatmentsAsync(count: 10)).Should().BeEmpty();
         Events("create").Should().ContainSingle("only the first upload was written");
     }

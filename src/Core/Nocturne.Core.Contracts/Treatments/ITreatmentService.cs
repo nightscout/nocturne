@@ -103,7 +103,8 @@ public interface ITreatmentService
     /// <returns>
     /// The written treatments under the id the reads serve them by, carrying how many of their records
     /// were not written because the user had deleted them. A treatment none of whose records was
-    /// written is left out and broadcasts nothing.
+    /// written is left out and broadcasts nothing; <see cref="BulkWrite{TRecord}.Settled"/> still
+    /// answers it.
     /// </returns>
     Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments,

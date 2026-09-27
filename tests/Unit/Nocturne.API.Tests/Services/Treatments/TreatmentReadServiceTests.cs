@@ -333,9 +333,12 @@ public class TreatmentReadServiceTests
         var refused = new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Correction Bolus" };
         var written = new Treatment { Id = "legacy-2", Mills = 2000, EventType = "Note" };
         var note = new Note { Id = Guid.NewGuid() };
+        var deletedBolus = Guid.NewGuid();
+        var refusal = new DecompositionResult { SkippedDeleted = 1 };
+        refusal.RefusedRecords.Add(new RefusedRecord(typeof(Bolus), deletedBolus));
         _decomposer
             .Setup(d => d.DecomposeAsync(refused, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+            .ReturnsAsync(refusal);
         _decomposer
             .Setup(d => d.DecomposeAsync(written, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Wrote([note]));
@@ -344,6 +347,24 @@ public class TreatmentReadServiceTests
 
         result.Should().ContainSingle().Which.Id.Should().Be(note.Id.ToString());
         result.SkippedDeleted.Should().Be(1);
+        result.Settled.Select(t => t.Id).Should().Equal(
+            [deletedBolus.ToString(), note.Id.ToString()],
+            "a refused treatment keeps its place in the reply, named as the deleted record was served");
+    }
+
+    [Fact]
+    public async Task CreateAsync_LeavesTheSubmittedTreatmentUntouched()
+    {
+        var treatment = new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Note" };
+        var note = new Note { Id = Guid.NewGuid(), LegacyId = "legacy-1" };
+
+        var result = await CreateWithAsync(treatment, Wrote([note]));
+
+        treatment.Id.Should().Be("legacy-1");
+        treatment.LegacyId.Should().BeNull();
+        var served = result.Should().ContainSingle().Subject;
+        served.Should().NotBeSameAs(treatment);
+        served.LegacyId.Should().Be("legacy-1");
     }
 
     [Fact]
