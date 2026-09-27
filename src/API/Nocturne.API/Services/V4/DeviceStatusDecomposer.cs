@@ -70,6 +70,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     public async Task<V4Models.DecompositionResult> DecomposeAsync(DeviceStatus ds, string? source, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeMills(ds);
+        await AdoptOwnIdsAsync([ds], ct);
 
         var legacyId = ds.Id;
         var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
@@ -612,6 +613,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
         var overrideSpans = new List<StateSpan>();
+        await AdoptOwnIdsAsync(statuses, ct);
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
         await using (_deviceService.DeferLastSeen(ct))
@@ -722,6 +724,48 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Lets a stored status with no legacy id take the id an incoming status names it by: its
+    /// anchor snapshot's id, as the projection puts it on the wire
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>), then gives the anchor's
+    /// siblings the same id through their shared correlation id. The legacy-id upserts then match the
+    /// whole group: a status that Nightscout write-back sent upstream and the connector pulls back
+    /// updates in place, and one the user deleted stays deleted.
+    /// </summary>
+    /// <remarks>
+    /// An override span stored with such a status carries no key and nothing links it to the status
+    /// but time, so it takes no id here.
+    /// </remarks>
+    private async Task AdoptOwnIdsAsync(IEnumerable<DeviceStatus> statuses, CancellationToken ct)
+    {
+        var ids = statuses
+            .Select(s => s.Id)
+            .Where(id => MongoObjectId.TryGetOwnIdRange(id, out _, out _))
+            .Select(id => id!)
+            .ToHashSet(StringComparer.Ordinal);
+        if (ids.Count == 0)
+            return;
+
+        var anchors = new List<V4Models.IV4Record>();
+        anchors.AddRange(await _apsRepo.AdoptOwnIdsAsync(ids, ct));
+        anchors.AddRange(await _pumpRepo.AdoptOwnIdsAsync(ids, ct));
+        anchors.AddRange(await _uploaderRepo.AdoptOwnIdsAsync(ids, ct));
+
+        var legacyIdByCorrelation = new Dictionary<Guid, string>();
+        foreach (var anchor in anchors)
+        {
+            if (anchor.CorrelationId is { } correlationId && correlationId != Guid.Empty)
+                legacyIdByCorrelation.TryAdd(correlationId, anchor.LegacyId!);
+        }
+
+        if (legacyIdByCorrelation.Count == 0)
+            return;
+
+        await _apsRepo.AdoptLegacyIdsByCorrelationAsync(legacyIdByCorrelation, ct);
+        await _pumpRepo.AdoptLegacyIdsByCorrelationAsync(legacyIdByCorrelation, ct);
+        await _uploaderRepo.AdoptLegacyIdsByCorrelationAsync(legacyIdByCorrelation, ct);
     }
 
     /// <summary>

@@ -220,6 +220,10 @@ public class DeviceStatusController : ControllerBase
                 {
                     deviceStatus.Device = string.Empty;
                 }
+                if (string.IsNullOrEmpty(deviceStatus.Id))
+                {
+                    deviceStatus.Id = MongoObjectId.NewObjectId();
+                }
             }
 
             // Decompose each device status directly into V4 snapshot tables

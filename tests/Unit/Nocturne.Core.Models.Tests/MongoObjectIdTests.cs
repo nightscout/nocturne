@@ -129,4 +129,65 @@ public class MongoObjectIdTests
         json.GetProperty("_id").GetString().Should().Be(expected);
         json.GetProperty("identifier").GetString().Should().Be(expected);
     }
+
+    [Fact]
+    public void TryGetOwnIdRange_ACanonicalUuidNamesOnlyThatUuid()
+    {
+        var id = Guid.Parse("0192abcd-ef01-7123-8456-789abcdef012");
+
+        MongoObjectId.TryGetOwnIdRange(id.ToString(), out var low, out var high).Should().BeTrue();
+
+        low.Should().Be(id);
+        high.Should().Be(id);
+    }
+
+    [Fact]
+    public void TryGetOwnIdRange_TheUuidPrefixNamesTheRangeHoldingTheUuid()
+    {
+        var id = Guid.Parse("0192abcd-ef01-7123-8456-789abcdef012");
+
+        MongoObjectId.TryGetOwnIdRange(MongoObjectId.FromGuid(id), out var low, out var high).Should().BeTrue();
+
+        low.Should().Be(Guid.Parse("0192abcd-ef01-7123-8456-789a00000000"));
+        high.Should().Be(Guid.Parse("0192abcd-ef01-7123-8456-789affffffff"));
+        (id >= low && id <= high).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("dexcom_7f3c2a91")]
+    [InlineData("0192ABCD-EF01-7123-8456-789ABCDEF012")]
+    [InlineData("0192abcdef0171238456789abcdef012")]
+    [InlineData("{0192abcd-ef01-7123-8456-789abcdef012}")]
+    [InlineData("507f1f77bcf80cd799439011")]
+    public void TryGetOwnIdRange_NamesNothingForAnIdNocturneNeverPutsOnTheWire(string? id)
+    {
+        MongoObjectId.TryGetOwnIdRange(id, out _, out _).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("0192abcdef0171238456789a", true)]
+    [InlineData("0192abcdef0141238456789a", true)]
+    [InlineData("0192abcdef0101238456789a", false)]
+    [InlineData("0192abcdef0191238456789a", false)]
+    [InlineData("0192abcdef0171230456789a", false)]
+    [InlineData("0192abcdef017123c456789a", false)]
+    [InlineData("0192ABCDEF0171238456789A", false)]
+    public void IsGuidPrefixShaped_ChecksTheVersionAndVariantPositions(string id, bool expected)
+    {
+        MongoObjectId.IsGuidPrefixShaped(id).Should().Be(expected);
+    }
+
+    [Fact]
+    public void NewObjectId_IsAnObjectIdThatNamesNoStoredUuid()
+    {
+        var id = MongoObjectId.NewObjectId();
+
+        MongoObjectId.IsObjectId(id).Should().BeTrue();
+        MongoObjectId.IsGuidPrefixShaped(id).Should().BeFalse();
+        MongoObjectId.TryGetOwnIdRange(id, out _, out _).Should().BeFalse();
+        MongoObjectId.NewObjectId().Should().NotBe(id);
+    }
 }
+

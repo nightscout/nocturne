@@ -1,3 +1,4 @@
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
 
@@ -119,6 +120,31 @@ public interface ILegacyKeyedRepository<TRecord>
     /// </summary>
     Task<IReadOnlySet<string>> GetHeldLegacyIdsAsync(
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gives each stored record that has no legacy id, live or deleted, the id among
+    /// <paramref name="ids"/> that names it by <see cref="MongoObjectId.TryGetOwnIdRange"/>, as its
+    /// legacy id.
+    /// </summary>
+    /// <remarks>
+    /// Such a record goes out on the wire, and to an upstream Nightscout through write-back, under
+    /// its own uuid or that uuid's 24-hex prefix. Every ingest path matches a returning record by
+    /// legacy id alone, so without this the copy a pull brings back is stored a second time, and the
+    /// copy of a record the user deleted is stored again. Once adopted, the legacy id updates the live
+    /// record in place and the user's deletion holds it off. An id a live record already carries as
+    /// its legacy id is left alone: that record is the match.
+    /// </remarks>
+    /// <returns>The records that took an id, carrying it.</returns>
+    Task<IEnumerable<TRecord>> AdoptOwnIdsAsync(IReadOnlyCollection<string> ids, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gives each stored record that has no legacy id, live or deleted, and carries one of the
+    /// correlation ids in <paramref name="legacyIdByCorrelation"/>, the legacy id that correlation id
+    /// maps to: the siblings of a group whose anchor took its id through <see cref="AdoptOwnIdsAsync"/>.
+    /// </summary>
+    /// <returns>How many records took an id.</returns>
+    Task<int> AdoptLegacyIdsByCorrelationAsync(
+        IReadOnlyDictionary<Guid, string> legacyIdByCorrelation, CancellationToken ct = default);
 
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);

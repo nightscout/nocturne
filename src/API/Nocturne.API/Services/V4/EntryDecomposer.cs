@@ -60,6 +60,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             CorrelationId = Guid.CreateVersion7()
         };
 
+        await AdoptOwnIdsAsync([entry], ct);
+
         var entryType = entry.Type?.ToLowerInvariant();
 
         switch (entryType)
@@ -152,6 +154,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (entries.Count == 0)
             return new DecompositionResult();
 
+        await AdoptOwnIdsAsync(entries, ct);
+
         var result = new DecompositionResult();
 
         var sgvList = new List<SensorGlucose>();
@@ -202,6 +206,26 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Lets a stored reading with no legacy id take the id an incoming entry names it by
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>), so the legacy-id upsert
+    /// matches it: a reading that Nightscout write-back sent upstream and the connector pulls back
+    /// updates in place, and one the user deleted stays deleted.
+    /// </summary>
+    private async Task AdoptOwnIdsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    {
+        var idsByType = entries
+            .Where(e => MongoObjectId.TryGetOwnIdRange(e.Id, out _, out _))
+            .ToLookup(e => e.Type?.ToLowerInvariant(), e => e.Id!);
+
+        if (idsByType.Contains("sgv"))
+            await _sensorGlucoseRepository.AdoptOwnIdsAsync(idsByType["sgv"].ToList(), ct);
+        if (idsByType.Contains("mbg"))
+            await _meterGlucoseRepository.AdoptOwnIdsAsync(idsByType["mbg"].ToList(), ct);
+        if (idsByType.Contains("cal"))
+            await _calibrationRepository.AdoptOwnIdsAsync(idsByType["cal"].ToList(), ct);
     }
 
     /// <inheritdoc />

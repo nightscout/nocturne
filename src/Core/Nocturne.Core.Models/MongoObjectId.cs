@@ -38,6 +38,20 @@ public static class MongoObjectId
     public static string FromGuid(Guid id) => id.ToString("N").Substring(0, 24);
 
     /// <summary>
+    /// A fresh ObjectId for a record uploaded without an id. Stored as its legacy id, it is the id
+    /// every surface puts on the wire verbatim, so later lookups and write-back resolve it directly.
+    /// </summary>
+    /// <remarks>
+    /// The UUID v7 version nibble is zeroed so the id fails <see cref="IsGuidPrefixShaped"/>: it names
+    /// no stored uuid, so the uuid range lookup that shape gates would only ever miss.
+    /// </remarks>
+    public static string NewObjectId() => string.Create(24, Guid.CreateVersion7(), static (chars, guid) =>
+    {
+        FromGuid(guid).AsSpan().CopyTo(chars);
+        chars[12] = '0';
+    });
+
+    /// <summary>
     /// Coerces any identifier into a 24-hex ObjectId for the wire:
     /// an existing ObjectId passes through, a UUID becomes its 24-hex prefix, and anything else
     /// (e.g. a synthetic or non-UUID legacy id) is hashed deterministically to 24 hex.
@@ -61,6 +75,16 @@ public static class MongoObjectId
     }
 
     /// <summary>
+    /// Whether an ObjectId has the shape <see cref="FromGuid"/> produces: a UUID's version nibble at
+    /// index 12 and its RFC 4122 variant at index 16. A cheap filter ahead of a uuid range lookup;
+    /// most real ObjectIds fail it, since those positions are a per-process random value.
+    /// </summary>
+    public static bool IsGuidPrefixShaped(string? objectId)
+        => IsObjectId(objectId)
+           && objectId![12] is >= '1' and <= '8'
+           && objectId[16] is '8' or '9' or 'a' or 'b';
+
+    /// <summary>
     /// Turns a 24-hex ObjectId derived from a UUID back into the uuid range that contains the
     /// source record: <c>[objectId + "00000000", objectId + "ffffffff"]</c>. Postgres orders
     /// <c>uuid</c> byte-wise (= hex-prefix order), so a range query selects the source UUID.
@@ -76,5 +100,27 @@ public static class MongoObjectId
         low = Guid.ParseExact(objectId + "00000000", "N");
         high = Guid.ParseExact(objectId + "ffffffff", "N");
         return true;
+    }
+
+    /// <summary>
+    /// The uuid range a record's own id can be named by on the wire, where the record carries no
+    /// legacy id: its uuid in canonical form (a single-uuid range), or the 24-hex prefix
+    /// <see cref="FromGuid"/> derives from it. False for any other id, including an ObjectId without
+    /// the <see cref="IsGuidPrefixShaped"/> shape and a uuid in any non-canonical spelling, since
+    /// neither is a form Nocturne puts on the wire.
+    /// </summary>
+    public static bool TryGetOwnIdRange(string? id, out Guid low, out Guid high)
+    {
+        if (Guid.TryParse(id, out var uuid) && id == uuid.ToString())
+        {
+            low = high = uuid;
+            return true;
+        }
+
+        if (IsGuidPrefixShaped(id))
+            return TryGetGuidPrefixRange(id, out low, out high);
+
+        low = high = default;
+        return false;
     }
 }

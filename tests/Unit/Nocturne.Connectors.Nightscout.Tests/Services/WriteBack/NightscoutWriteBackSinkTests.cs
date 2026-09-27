@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -534,5 +535,46 @@ public class NightscoutWriteBackSinkTests
         await sut.OnUpdatedAsync(new Entry { Id = "9", Sgv = 99, DataSource = "nocturne" });
 
         loader.Verify(l => l.LoadForTenantAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// The upstream instance stores a record under the <c>_id</c> it is sent, and the connector's
+    /// next pull matches that id against the stored legacy id, or, for a record with none, against
+    /// its own uuid. The id therefore goes out exactly as the record carries it, whatever its shape:
+    /// a uuid-shaped legacy id reshaped on the way out would come back naming no record.
+    /// </summary>
+    [Theory]
+    [InlineData("dexcom_7f3c2a91")]
+    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
+    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F")]
+    public async Task EntryWriteBack_SendsTheIdTheRecordCarries(string id)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = CreateSink(handler);
+        var entry = new Entry { Id = id, Sgv = 120, DataSource = "nocturne" };
+
+        await sut.OnCreatedAsync(new[] { entry });
+        await sut.OnUpdatedAsync(entry);
+
+        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString().Should().Be(id);
+        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]).GetProperty("_id").GetString().Should().Be(id);
+    }
+
+    [Theory]
+    [InlineData("loop_status_42")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
+    public async Task DeviceStatusWriteBack_SendsTheIdTheRecordCarries(string id)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = new NightscoutDeviceStatusWriteBackSink(
+            new HttpClient(handler),
+            CreateLoader(_config).Object,
+            Breaker,
+            NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);
+
+        await sut.OnCreatedAsync(new[] { new DeviceStatus { Id = id, Device = "loop" } });
+
+        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString().Should().Be(id);
     }
 }

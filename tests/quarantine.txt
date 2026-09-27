@@ -16,7 +16,6 @@ Nocturne.API.Tests.Integration.Auth.TokenRevocationIntegrationTests.Introspect_V
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.DeleteDeviceStatusById_ShouldRemoveEntry | devicestatus reads return nothing after a POST, so there is no id to delete
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatusById_ShouldReturnMatchingEntry | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatus_ShouldReturnCreatedEntries | devicestatus reads return nothing after a POST
-Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.PostDeviceStatus_ShouldCreateAndReturnEntry | POST /api/v1/devicestatus response has no _id
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.DeleteEntry_ShouldRemoveEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntries_WithSkip_ShouldOffsetResults | GET /api/v1/entries ignores skip, so pages overlap (Nightscout behaviour to confirm)
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntryById_ShouldReturnSpecificEntry | POST /api/v1/entries answers 201; Nightscout 200
