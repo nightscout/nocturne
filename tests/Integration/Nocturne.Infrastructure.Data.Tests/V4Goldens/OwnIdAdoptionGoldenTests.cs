@@ -169,4 +169,102 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
         (await pump.GetByIdAsync(unrelated.Id, CancellationToken.None))!.LegacyId.Should().BeNull();
         (await pump.AdoptLegacyIdsByCorrelationAsync(new Dictionary<Guid, string>(), CancellationToken.None)).Should().Be(0);
     }
+
+    /// <summary>
+    /// Write-back sends a uuid-shaped legacy id upstream as its 24-hex prefix, in whatever spelling
+    /// the uploader gave it. The pull-back resolves that prefix to the legacy id, live or deleted,
+    /// through the partial expression index, and the legacy-id upsert then updates the record, or
+    /// is withheld by the user's deletion.
+    /// </summary>
+    [Theory]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
+    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F")]
+    [InlineData("{0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f}")]
+    [InlineData("0198c2a41f3b7c2d9e556a1b2c3d4e5f")]
+    public async Task AUuidShapedLegacyId_IsResolvedFromItsPrefix_AndItsEchoUpdatesTheRecord(string legacyId)
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var stored = await repo.CreateAsync(Reading(legacyId), WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(Reading("dexcom_0198c2a41f3b7c2d9e556a1b", minute: 5), WriteOrigin.Live, CancellationToken.None);
+        const string prefix = "0198c2a41f3b7c2d9e556a1b";
+
+        var resolved = (await repo.ResolveUuidLegacyIdsAsync([prefix, "0198c2a41f3b7c2d9e55ffff", "dexcom_x"], CancellationToken.None)).ToList();
+        var written = await repo.BulkUpsertAsync([Echo(resolved.Single().LegacyId)], WriteOrigin.Live, CancellationToken.None);
+
+        resolved.Should().Equal(new UuidLegacyId(prefix, legacyId));
+        written.Updated.Should().ContainSingle().Which.Id.Should().Be(stored.Id);
+    }
+
+    [Fact]
+    public async Task AUuidShapedLegacyIdTheUserDeleted_IsStillResolved_SoItsEchoStaysDeleted()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var legacyId = Guid.CreateVersion7().ToString();
+        var stored = await repo.CreateAsync(Reading(legacyId), WriteOrigin.Live, CancellationToken.None);
+        await DeleteByUserAsync(tenant, stored.Id);
+        var prefix = MongoObjectId.FromGuid(Guid.Parse(legacyId));
+
+        var resolved = (await repo.ResolveUuidLegacyIdsAsync([prefix], CancellationToken.None)).ToList();
+        var written = await repo.BulkUpsertAsync([Echo(resolved.Single().LegacyId)], WriteOrigin.Live, CancellationToken.None);
+
+        written.Should().BeEmpty();
+        written.SkippedDeleted.Should().Be(1);
+        (await ReadingsAsync(tenant)).Should().Equal((stored.Id, legacyId, true));
+    }
+
+    [Fact]
+    public async Task ResolvingIsTenantScoped_AndSkipsIdsThatAreNotUuidPrefixes()
+    {
+        var owner = Guid.NewGuid();
+        var legacyId = Guid.CreateVersion7().ToString();
+        using (var scope = await fx.BeginTenantScopeAsync(owner))
+            await scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
+                .CreateAsync(Reading(legacyId), WriteOrigin.Live, CancellationToken.None);
+
+        using var other = await fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = other.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+
+        (await repo.ResolveUuidLegacyIdsAsync([MongoObjectId.FromGuid(Guid.Parse(legacyId))], CancellationToken.None))
+            .Should().BeEmpty();
+        (await repo.ResolveUuidLegacyIdsAsync([legacyId, MongoObjectId.NewObjectId()], CancellationToken.None))
+            .Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A v4-native treatment is written back under its record's uuid prefix. Its pull-back adopts
+    /// the id on the record it names and on the records sharing that record's correlation id (a
+    /// meal's bolus and carbs), live or deleted, across the treatment tables.
+    /// </summary>
+    [Fact]
+    public async Task ATreatmentsRecords_TakeTheWireIdAcrossTables_LiveOrDeleted()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var boluses = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+        var carbs = scope.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
+        var correlationId = Guid.CreateVersion7();
+        var bolus = await boluses.CreateAsync(
+            new Bolus { Timestamp = T0, Insulin = 2.5, CorrelationId = correlationId }, WriteOrigin.Live, CancellationToken.None);
+        var carb = await carbs.CreateAsync(
+            new CarbIntake { Timestamp = T0, Carbs = 40, CorrelationId = correlationId }, WriteOrigin.Live, CancellationToken.None);
+        await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE carb_intakes SET deleted_at = now(), deleted_by_user = true WHERE id = {carb.Id}"));
+        var wireId = MongoObjectId.FromGuid(bolus.Id);
+
+        var adopted = (await boluses.AdoptOwnIdsAsync([wireId], CancellationToken.None)).Single();
+        var siblings = await carbs.AdoptLegacyIdsByCorrelationAsync(
+            new Dictionary<Guid, string> { [adopted.CorrelationId!.Value] = wireId }, CancellationToken.None);
+        var carbEcho = await carbs.BulkUpsertAsync(
+            [new CarbIntake { Timestamp = T0, Carbs = 40, LegacyId = wireId }], WriteOrigin.Live, CancellationToken.None);
+
+        adopted.LegacyId.Should().Be(wireId);
+        siblings.Should().Be(1);
+        (await boluses.GetByLegacyIdAsync(wireId, CancellationToken.None))!.Id.Should().Be(bolus.Id);
+        carbEcho.SkippedDeleted.Should().Be(1, "the carbs the user deleted hold the adopted id");
+    }
 }
+

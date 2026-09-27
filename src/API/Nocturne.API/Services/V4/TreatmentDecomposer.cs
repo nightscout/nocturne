@@ -371,6 +371,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     {
         NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope([treatment]);
+        await AdoptOwnIdsAsync([treatment], ct);
 
         var result = new V4Models.DecompositionResult
         {
@@ -458,6 +459,27 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return result;
     }
+
+    /// <summary>
+    /// Lets a stored treatment with no legacy id take the id an incoming treatment names it by: its
+    /// record's uuid or that uuid's 24-hex prefix, the id Nightscout write-back sends a v4-native
+    /// treatment upstream under. The records it decomposed into follow through their shared
+    /// correlation id (<see cref="DecomposerBase.AdoptOwnIdsAsync"/>), so the legacy-id upserts
+    /// match the whole treatment: a copy the connector pulls back updates it in place, and one the
+    /// user deleted stays deleted.
+    /// </summary>
+    private Task AdoptOwnIdsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
+        => AdoptOwnIdsAsync(
+            treatments.Select(t => t.Id)
+                .Where(id => MongoObjectId.TryGetOwnIdRange(id, out _, out _))
+                .Select(id => id!)
+                .ToHashSet(StringComparer.Ordinal),
+            [
+                Table(_bolusRepository), Table(_carbIntakeRepository), Table(_bgCheckRepository),
+                Table(_noteRepository), Table(_deviceEventRepository), Table(_bolusCalculationRepository),
+                Table(_tempBasalRepository),
+            ],
+            ct);
 
     #region Decomposition Methods
 
@@ -1178,6 +1200,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope(treatments);
+        await AdoptOwnIdsAsync(treatments, ct);
 
         var result = new V4Models.DecompositionResult();
 

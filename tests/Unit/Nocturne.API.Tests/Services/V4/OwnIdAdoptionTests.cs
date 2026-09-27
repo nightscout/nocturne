@@ -16,11 +16,12 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.V4;
 
 /// <summary>
-/// A stored record with no legacy id goes out on the wire, and to an upstream Nightscout through
-/// write-back, under its own uuid or that uuid's 24-hex prefix. Both decomposers let such a record
-/// take that id as its legacy id before their legacy-id upserts run, so the copy coming back matches
-/// it instead of landing beside it. The repository side is covered against Postgres by
-/// <c>OwnIdAdoptionIntegrationTests</c>.
+/// Nightscout write-back sends a record upstream under a 24-hex id: its legacy id's prefix when that
+/// legacy id is a uuid, its own uuid's prefix when it has no legacy id (older write-backs sent the
+/// raw uuid). Before their legacy-id upserts run, both decomposers rewrite a pulled-back prefix to
+/// the uuid-shaped legacy id it stands for, and otherwise let a record with no legacy id take the id
+/// it is named by, so the copy coming back matches the record instead of landing beside it. The
+/// repository side is covered against Postgres by <c>OwnIdAdoptionGoldenTests</c>.
 /// </summary>
 [Trait("Category", "Unit")]
 public class OwnIdAdoptionTests : IDisposable
@@ -45,6 +46,10 @@ public class OwnIdAdoptionTests : IDisposable
         repo.Setup(r => r.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
                 _calls.Add($"{name}.adopt({string.Join(",", ids.Order())})"))
+            .ReturnsAsync([]);
+        repo.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                _calls.Add($"{name}.resolve({string.Join(",", ids.Order())})"))
             .ReturnsAsync([]);
         repo.Setup(r => r.AdoptLegacyIdsByCorrelationAsync(It.IsAny<IReadOnlyDictionary<Guid, string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyDictionary<Guid, string> map, CancellationToken _) =>
@@ -93,7 +98,7 @@ public class OwnIdAdoptionTests : IDisposable
         ], WriteOrigin.Live);
 
         _calls.Should().Equal(
-            $"sg.adopt({Uuid})", $"mg.adopt({UuidPrefix})",
+            $"sg.adopt({Uuid})", $"mg.resolve({UuidPrefix})", $"mg.adopt({UuidPrefix})",
             "sg.upsert", "mg.upsert", "cal.upsert");
     }
 
@@ -107,7 +112,7 @@ public class OwnIdAdoptionTests : IDisposable
         await EntryDecomposer(sg, mg, cal).DecomposeAsync(
             new Entry { Id = UuidPrefix, Type = "cal", Mills = 1_700_000_000_000, Slope = 850 }, WriteOrigin.Live);
 
-        _calls.Should().Equal($"cal.adopt({UuidPrefix})", $"cal.get({UuidPrefix})");
+        _calls.Should().Equal($"cal.resolve({UuidPrefix})", $"cal.adopt({UuidPrefix})", $"cal.get({UuidPrefix})");
     }
 
     [Fact]
@@ -179,7 +184,8 @@ public class OwnIdAdoptionTests : IDisposable
 
         await decomposer.DecomposeAsync(Status(UuidPrefix), source: null, WriteOrigin.Live);
 
-        _calls.Take(4).Should().Equal(
+        _calls.Take(7).Should().Equal(
+            $"aps.resolve({UuidPrefix})", $"pump.resolve({UuidPrefix})", $"uploader.resolve({UuidPrefix})",
             $"aps.adopt({UuidPrefix})", $"pump.adopt({UuidPrefix})", $"uploader.adopt({UuidPrefix})",
             "aps.correlations");
     }
@@ -191,6 +197,63 @@ public class OwnIdAdoptionTests : IDisposable
 
         await decomposer.DecomposeAsync(Status("loop_status_42"), source: null, WriteOrigin.Live);
 
-        _calls.Should().NotContain(c => c.Contains("adopt"));
+        _calls.Should().NotContain(c => c.Contains("adopt") || c.Contains("resolve"));
+    }
+
+    private const string UuidShapedLegacyId = "0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F";
+
+    [Fact]
+    public async Task EntryBatch_UpsertsAPrefixUnderTheUuidLegacyIdItStandsFor()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        sg.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+        List<SensorGlucose>? written = null;
+        sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        const string otherPrefix = "0198c2a41f3b7c2d9e55ffff";
+
+        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+        [
+            new Entry { Id = UuidPrefix, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
+            new Entry { Id = otherPrefix, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
+        ], WriteOrigin.Live);
+
+        written!.Select(r => r.LegacyId).Should().Equal(UuidShapedLegacyId, otherPrefix);
+        sg.Verify(r => r.AdoptOwnIdsAsync(
+            It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(new[] { otherPrefix })), It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task EntrySingle_LooksTheReadingUpUnderTheUuidLegacyIdAPrefixStandsFor()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        mg.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+
+        await EntryDecomposer(sg, mg, cal).DecomposeAsync(
+            new Entry { Id = UuidPrefix, Type = "mbg", Mills = 1_700_000_000_000, Mbg = 140 }, WriteOrigin.Live);
+
+        _calls.Should().Equal($"mg.get({UuidShapedLegacyId})");
+    }
+
+    [Fact]
+    public async Task DeviceStatus_DecomposesAPrefixUnderTheUuidLegacyIdItStandsFor()
+    {
+        var (decomposer, _, pump, _) = DeviceStatusDecomposer();
+        pump.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+        var status = Status(UuidPrefix);
+
+        await decomposer.DecomposeAsync(status, source: null, WriteOrigin.Live);
+
+        status.Id.Should().Be(UuidShapedLegacyId);
+        _calls.Should().NotContain(c => c.Contains(".adopt("));
+        _calls.Should().Contain($"pump.get({UuidShapedLegacyId})");
     }
 }

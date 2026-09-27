@@ -152,6 +152,58 @@ public class NightscoutWriteBackSinkTests
     }
 
     /// <summary>
+    /// The upstream instance stores the record under the <c>_id</c> it is sent, and the connector's
+    /// next pull matches that id against the stored legacy id. A legacy id therefore goes out
+    /// verbatim, whatever its shape; only a record with none, whose id is its uuid, takes the 24-hex
+    /// prefix ingest resolves back to it. The internal uuid never leaves, under any key.
+    /// </summary>
+    [Theory]
+    [InlineData("dexcom_7f3c2a91", "dexcom_7f3c2a91")]
+    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e", "5f1a2b3c4d5e6f7a8b9c0d1e")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task WriteBack_SendsTheRecordUnderTheIdItWasPulledWith(string recordId, string wireId)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = CreateSink(handler);
+        var entry = new Entry { Id = recordId, Sgv = 120, DataSource = "nocturne" };
+
+        await sut.OnCreatedAsync(new[] { entry });
+        await sut.OnUpdatedAsync(entry);
+
+        var posted = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0];
+        var put = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]);
+        foreach (var body in new[] { posted, put })
+            IdKeys(body).Should().BeEquivalentTo(new Dictionary<string, string?>
+            {
+                ["_id"] = wireId,
+                ["identifier"] = wireId,
+            });
+    }
+
+    [Theory]
+    [InlineData("loop_status_42", "loop_status_42")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task DeviceStatusWriteBack_SendsTheRecordUnderTheIdItWasPulledWith(string recordId, string wireId)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = new NightscoutDeviceStatusWriteBackSink(
+            new HttpClient(handler),
+            CreateLoader(_config).Object,
+            Breaker,
+            NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);
+
+        await sut.OnCreatedAsync(new[] { new DeviceStatus { Id = recordId, Device = "loop" } });
+
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0])
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wireId });
+    }
+
+    private static Dictionary<string, string?> IdKeys(JsonElement body)
+        => body.EnumerateObject()
+            .Where(p => p.Name is "_id" or "id" or "Id" or "identifier")
+            .ToDictionary(p => p.Name, p => p.Value.GetString());
+
+    /// <summary>
     /// The update path has its own skip check, separate from the create path's
     /// collection filter. Without it, editing a connector-pulled entry in Nocturne
     /// PUTs it back to the legacy instance, which re-pulls it on the next cycle —
@@ -539,16 +591,19 @@ public class NightscoutWriteBackSinkTests
 
     /// <summary>
     /// The upstream instance stores a record under the <c>_id</c> it is sent, and the connector's
-    /// next pull matches that id against the stored legacy id, or, for a record with none, against
-    /// its own uuid. The id therefore goes out exactly as the record carries it, whatever its shape:
-    /// a uuid-shaped legacy id reshaped on the way out would come back naming no record.
+    /// next pull has to find the record again from that id alone. So the id goes out either as the
+    /// record carries it, which ingest matches as the legacy id, or, for any uuid (a record's own id
+    /// or a uuid-shaped legacy id, in any spelling), as exactly the 24-hex prefix ingest resolves back
+    /// to it through <c>ResolveUuidLegacyIdsAsync</c> or <c>AdoptOwnIdsAsync</c>. Nothing else ever
+    /// goes out.
     /// </summary>
     [Theory]
-    [InlineData("dexcom_7f3c2a91")]
-    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e")]
-    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
-    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F")]
-    public async Task EntryWriteBack_SendsTheIdTheRecordCarries(string id)
+    [InlineData("dexcom_7f3c2a91", "dexcom_7f3c2a91")]
+    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e", "5f1a2b3c4d5e6f7a8b9c0d1e")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F", "0198c2a41f3b7c2d9e556a1b")]
+    [InlineData("{0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f}", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task EntryWriteBack_SendsAnIdTheConnectorResolvesBackToTheRecord(string id, string wireId)
     {
         var handler = new RecordingHttpMessageHandler();
         var sut = CreateSink(handler);
@@ -557,14 +612,23 @@ public class NightscoutWriteBackSinkTests
         await sut.OnCreatedAsync(new[] { entry });
         await sut.OnUpdatedAsync(entry);
 
-        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString().Should().Be(id);
-        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]).GetProperty("_id").GetString().Should().Be(id);
+        var sent = new[]
+        {
+            JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString(),
+            JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]).GetProperty("_id").GetString(),
+        };
+        sent.Should().AllBe(wireId);
+        if (Guid.TryParse(id, out var uuid))
+        {
+            sent[0].Should().Be(MongoObjectId.FromGuid(uuid));
+            MongoObjectId.IsGuidPrefixShaped(sent[0]).Should().BeTrue();
+        }
     }
 
     [Theory]
-    [InlineData("loop_status_42")]
-    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
-    public async Task DeviceStatusWriteBack_SendsTheIdTheRecordCarries(string id)
+    [InlineData("loop_status_42", "loop_status_42")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task DeviceStatusWriteBack_SendsAnIdTheConnectorResolvesBackToTheRecord(string id, string wireId)
     {
         var handler = new RecordingHttpMessageHandler();
         var sut = new NightscoutDeviceStatusWriteBackSink(
@@ -575,6 +639,6 @@ public class NightscoutWriteBackSinkTests
 
         await sut.OnCreatedAsync(new[] { new DeviceStatus { Id = id, Device = "loop" } });
 
-        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString().Should().Be(id);
+        JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0].GetProperty("_id").GetString().Should().Be(wireId);
     }
 }

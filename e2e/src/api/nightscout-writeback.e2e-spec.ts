@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "../helpers/env.ts";
 import { seedTenant, type Tenant } from "../helpers/tenant.ts";
+import { NIGHTSCOUT_API_SECRET_HEADER } from "../../mocks/vendors/nightscout.ts";
 
 // A tenant whose Nightscout connector writes back to the instance it pulls from
 // (e2e/mocks/vendors/nightscout-writeback.ts keeps what it is sent and serves it back). Every
@@ -29,6 +30,11 @@ interface ApsSnapshot {
   id: string;
 }
 
+interface Bolus {
+  id: string;
+  insulin: number;
+}
+
 interface V1DeviceStatus {
   _id: string;
   device: string;
@@ -37,6 +43,11 @@ interface V1DeviceStatus {
 interface SyncResult {
   success: boolean;
   errors: string[];
+}
+
+/** The 24-hex prefix a uuid goes upstream under (MongoObjectId.FromGuid). */
+function uuidPrefix(uuid: string): string {
+  return uuid.replace(/[^0-9a-fA-F]/g, "").toLowerCase().slice(0, 24);
 }
 
 async function writtenBack(path: string): Promise<Record<string, unknown>[]> {
@@ -94,7 +105,7 @@ describe("Nightscout connector write-back round trip", () => {
     const reading = await createReading(device, 30);
 
     const sent = (await writtenBack("/api/v1/entries")).filter((e) => e.device === device);
-    expect(sent.map((e) => e._id)).toEqual([reading.id]);
+    expect(sent.map((e) => e._id)).toEqual([uuidPrefix(reading.id)]);
 
     const result = await sync();
     expect(result.success).toBe(true);
@@ -106,7 +117,7 @@ describe("Nightscout connector write-back round trip", () => {
   it("keeps a reading the user deleted deleted when its written-back copy comes back", async () => {
     const device = `e2e-writeback-deleted-${run}`;
     const reading = await createReading(device, 25);
-    expect((await writtenBack("/api/v1/entries")).some((e) => e._id === reading.id)).toBe(true);
+    expect((await writtenBack("/api/v1/entries")).some((e) => e._id === uuidPrefix(reading.id))).toBe(true);
     expect((await tenant.api.delete(`/api/v4/glucose/sensor/${reading.id}`)).status).toBeLessThan(300);
 
     expect((await sync()).success).toBe(true);
@@ -136,5 +147,60 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await sync()).success).toBe(true);
 
     expect((await apsSnapshots(device)).data).toEqual([]);
+  });
+
+  it("pulls a reading whose legacy id is a uuid back onto that reading", async () => {
+    const device = `e2e-writeback-uuid-${run}`;
+    const legacyId = crypto.randomUUID().toUpperCase();
+    const date = Date.now() - 10 * MINUTE;
+    await tenant.api.ok("POST", "/api/v1/entries", [
+      { _id: legacyId, type: "sgv", sgv: 131, date, dateString: new Date(date).toISOString(), device },
+    ]);
+
+    const sent = (await writtenBack("/api/v1/entries")).filter((e) => e.device === device);
+    expect(sent.map((e) => e._id)).toEqual([uuidPrefix(legacyId)]);
+
+    expect((await sync()).success).toBe(true);
+
+    expect((await readings(device)).data).toHaveLength(1);
+  });
+
+  // A v4-native treatment has no legacy id and goes upstream under its record's uuid prefix. The
+  // treatment write-back payload is PR #1818's; until it lands, the spec puts that copy upstream
+  // itself, exactly as write-back would, so the pull-back side is exercised on its own.
+  async function createBolusWrittenBack(minutesAgo: number): Promise<{ bolus: Bolus; at: string }> {
+    const at = new Date(Date.now() - minutesAgo * MINUTE).toISOString();
+    const created = await tenant.api.post<Bolus>("/api/v4/insulin/boluses", { timestamp: at, insulin: 2.5 });
+    expect(created.status).toBe(201);
+    const upstream = await fetch(`${VENDOR}/api/v1/treatments`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "api-secret": NIGHTSCOUT_API_SECRET_HEADER },
+      body: JSON.stringify([{ _id: uuidPrefix(created.body.id), eventType: "Correction Bolus", insulin: 2.5, created_at: at }]),
+    });
+    expect(upstream.status).toBe(200);
+    return { bolus: created.body, at };
+  }
+
+  const bolusesAround = (at: string) => {
+    const from = encodeURIComponent(new Date(Date.parse(at) - MINUTE).toISOString());
+    const to = encodeURIComponent(new Date(Date.parse(at) + MINUTE).toISOString());
+    return tenant.api.ok<Page<Bolus>>("GET", `/api/v4/insulin/boluses?limit=50&from=${from}&to=${to}`);
+  };
+
+  it("pulls a v4-native treatment written back under its uuid prefix onto that treatment", async () => {
+    const { bolus, at } = await createBolusWrittenBack(40);
+
+    expect((await sync()).success).toBe(true);
+
+    expect((await bolusesAround(at)).data.map((b) => b.id)).toEqual([bolus.id]);
+  });
+
+  it("keeps a v4-native treatment the user deleted deleted when its written-back copy comes back", async () => {
+    const { bolus, at } = await createBolusWrittenBack(45);
+    expect((await tenant.api.delete(`/api/v4/insulin/boluses/${bolus.id}`)).status).toBeLessThan(300);
+
+    expect((await sync()).success).toBe(true);
+
+    expect((await bolusesAround(at)).data).toEqual([]);
   });
 });

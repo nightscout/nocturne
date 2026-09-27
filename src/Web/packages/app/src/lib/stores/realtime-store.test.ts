@@ -28,17 +28,19 @@ vi.mock("svelte-sonner", () => ({
   }),
 }));
 
-import { RealtimeStore } from "./realtime-store.svelte";
+import { RealtimeStore, sensorGlucoseToEntry } from "./realtime-store.svelte";
 import type {
   StorageEvent,
   SyncProgressEvent,
   TrackerUpdateEvent,
 } from "$lib/websocket/types";
-import type { TrackerInstanceDto } from "$lib/api";
+import type { SensorGlucose, TrackerInstanceDto } from "$lib/api";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
   handleCreate(event: StorageEvent): void;
+  handleUpdate(event: StorageEvent): void;
+  handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
   websocketClient: {
     eventHandlers: {
@@ -292,6 +294,47 @@ describe("RealtimeStore entry create batching", () => {
       "existing",
     ]);
 
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore events for a REST-backfilled reading", () => {
+  // The store keys a backfilled reading on its uuid; the socket names the
+  // same reading by its ObjectId form, as the legacy REST surface does.
+  const backfilled = () =>
+    sensorGlucoseToEntry({
+      id: "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f",
+      mgdl: 120,
+      mills: 1_000,
+    } as SensorGlucose);
+  const socketDoc = {
+    _id: "0198c2a41f3b7c2d9e556a1b",
+    type: "sgv",
+    sgv: 120,
+    mills: 1_000,
+  };
+
+  it("removes the reading on delete", () => {
+    const store = makeStore();
+    store.entries = [backfilled(), { _id: "other", type: "sgv", sgv: 90, mills: 2_000 }];
+
+    store.handleDelete({ colName: "entries", doc: socketDoc });
+
+    expect(store.entries.map((entry) => entry._id)).toEqual(["other"]);
+    store.destroy();
+  });
+
+  it("replaces the reading on update", () => {
+    const store = makeStore();
+    store.entries = [backfilled()];
+
+    store.handleUpdate({
+      colName: "entries",
+      doc: { ...socketDoc, direction: "Flat" },
+    });
+
+    expect(store.entries).toHaveLength(1);
+    expect(store.entries[0]).toMatchObject({ _id: "0198c2a41f3b7c2d9e556a1b", direction: "Flat" });
     store.destroy();
   });
 });

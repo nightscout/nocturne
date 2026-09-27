@@ -312,6 +312,42 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return (await AdoptAsync(ctx, claims, ct)).Count;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync" />
+    /// <remarks>Raw ADO rather than <c>SqlQueryRaw</c>, which would read the regex quantifiers in
+    /// <see cref="UuidLegacyIdPrefix.Predicate"/> as parameter placeholders.</remarks>
+    public async Task<IEnumerable<UuidLegacyId>> ResolveUuidLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var prefixes = ids.Where(MongoObjectId.IsGuidPrefixShaped).Distinct(StringComparer.Ordinal).ToArray();
+        if (prefixes.Length == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var table = ctx.Model.FindEntityType(typeof(TEntity))!.GetTableName();
+        await ctx.Database.OpenConnectionAsync(ct);
+        await using var command = ctx.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"""
+            SELECT DISTINCT legacy_id FROM {table}
+            WHERE tenant_id = @tenant
+              AND {UuidLegacyIdPrefix.Predicate}
+              AND {UuidLegacyIdPrefix.Key} = ANY(@prefixes)
+            """;
+        command.Parameters.Add(new Npgsql.NpgsqlParameter("tenant", ctx.TenantId));
+        command.Parameters.Add(new Npgsql.NpgsqlParameter("prefixes", prefixes));
+
+        var wanted = prefixes.ToHashSet(StringComparer.Ordinal);
+        var resolved = new List<UuidLegacyId>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var legacyId = reader.GetString(0);
+            if (Guid.TryParse(legacyId, out var uuid) && wanted.Contains(MongoObjectId.FromGuid(uuid)))
+                resolved.Add(new UuidLegacyId(MongoObjectId.FromGuid(uuid), legacyId));
+        }
+
+        return resolved;
+    }
+
     /// <summary>Bounds the OR chain <see cref="IdInAnyRange"/> builds for one query.</summary>
     private const int OwnIdRangesPerQuery = 200;
 

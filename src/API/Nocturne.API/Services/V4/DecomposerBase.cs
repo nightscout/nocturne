@@ -48,6 +48,10 @@ public abstract class DecomposerBase
     /// siblings orphans that row outright.
     /// </para>
     /// </remarks>
+    /// <param name="findStored">
+    /// Resolves the stored record in place of the lookup by <paramref name="legacyId"/>, for a caller
+    /// that already knows it, including a stored record with no legacy id at all.
+    /// </param>
     /// <returns>
     /// The persisted record and whether it was inserted rather than updated, or <see langword="null"/>
     /// when the write was refused because the record's identity is already held
@@ -62,10 +66,13 @@ public abstract class DecomposerBase
         WriteOrigin origin,
         CancellationToken ct,
         Func<TRecord?, Task>? beforeWrite = null,
-        bool preserveStoredCorrelationId = false)
+        bool preserveStoredCorrelationId = false,
+        Func<Task<TRecord?>>? findStored = null)
         where TRecord : class, IV4Record
     {
-        var existing = legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
+        var existing = findStored is not null
+            ? await findStored()
+            : legacyId is null ? null : await repository.GetByLegacyIdAsync(legacyId, ct);
 
         if (beforeWrite is not null)
             await beforeWrite(existing);
@@ -126,6 +133,47 @@ public abstract class DecomposerBase
     {
         model.PatientDeviceId ??= existing?.PatientDeviceId;
         return stamper.StampAsync([model], categories, model.DataSource, ct);
+    }
+
+    /// <summary>
+    /// One table of a group a legacy record decomposes into, for <see cref="AdoptOwnIdsAsync"/>.
+    /// </summary>
+    protected readonly record struct AdoptionTable(
+        Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
+        Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation);
+
+    protected static AdoptionTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository)
+        where TRecord : class, IV4Record
+        => new(async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct), repository.AdoptLegacyIdsByCorrelationAsync);
+
+    /// <summary>
+    /// Lets the stored record that <paramref name="ids"/> name by their own uuid
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>) take that id as its legacy
+    /// id, in whichever of <paramref name="tables"/> holds it, then gives the same id to the records
+    /// sharing its correlation id in every table: the group the legacy record decomposed into, which
+    /// the legacy-id upserts that follow must all match.
+    /// </summary>
+    protected static async Task AdoptOwnIdsAsync(
+        IReadOnlyCollection<string> ids, IReadOnlyList<AdoptionTable> tables, CancellationToken ct)
+    {
+        if (ids.Count == 0)
+            return;
+
+        var legacyIdByCorrelation = new Dictionary<Guid, string>();
+        foreach (var table in tables)
+        {
+            foreach (var anchor in await table.AdoptOwnIds(ids, ct))
+            {
+                if (anchor.CorrelationId is { } correlationId && correlationId != Guid.Empty)
+                    legacyIdByCorrelation.TryAdd(correlationId, anchor.LegacyId!);
+            }
+        }
+
+        if (legacyIdByCorrelation.Count == 0)
+            return;
+
+        foreach (var table in tables)
+            await table.AdoptByCorrelation(legacyIdByCorrelation, ct);
     }
 
     /// <summary>

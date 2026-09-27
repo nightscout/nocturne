@@ -59,6 +59,12 @@ public sealed record LegacyUpsert<TRecord>(TRecord Record, bool Created);
 public sealed record LegacyCorrelation(string LegacyId, Guid CorrelationId);
 
 /// <summary>
+/// A uuid-shaped legacy id and the 24-hex prefix it goes out on the wire under, from
+/// <see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>.
+/// </summary>
+public sealed record UuidLegacyId(string WireId, string LegacyId);
+
+/// <summary>
 /// A V4 repository addressable by the legacy MongoDB <c>_id</c> its records were decomposed from.
 /// This is the surface the decomposers upsert through, so their create-or-update body can live in
 /// one generic place (<c>DecomposerBase.UpsertByLegacyIdAsync</c> per record,
@@ -145,6 +151,20 @@ public interface ILegacyKeyedRepository<TRecord>
     /// <returns>How many records took an id.</returns>
     Task<int> AdoptLegacyIdsByCorrelationAsync(
         IReadOnlyDictionary<Guid, string> legacyIdByCorrelation, CancellationToken ct = default);
+
+    /// <summary>
+    /// The stored legacy ids, live or deleted, that are uuids whose 24-hex prefix
+    /// (<see cref="MongoObjectId.FromGuid"/>) is one of <paramref name="ids"/>, each paired with that
+    /// prefix.
+    /// </summary>
+    /// <remarks>
+    /// Write-back sends a uuid-shaped legacy id upstream as that prefix, the only id form an AAPS
+    /// client reading the upstream instance accepts, so the copy a pull brings back names the record
+    /// by the prefix rather than by its legacy id. A caller rewrites the incoming id to the legacy id
+    /// before its legacy-id upsert, which then matches the record, or finds the user's deletion.
+    /// </remarks>
+    Task<IEnumerable<UuidLegacyId>> ResolveUuidLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default);
 
     /// <returns>Number of records deleted.</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);

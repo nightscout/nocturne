@@ -239,7 +239,7 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             // Process the entry
-            var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
+            var processedEntry = WithIdentifier(_documentProcessingService.ProcessEntry(entry));
             var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
                 cancellationToken: cancellationToken
@@ -320,7 +320,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Process all entries
             var processedEntries = entries
-                .Select(entry => _documentProcessingService.ProcessEntry(entry))
+                .Select(entry => WithIdentifier(_documentProcessingService.ProcessEntry(entry)))
                 .ToList();
 
             // Save to database
@@ -661,4 +661,15 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     #endregion
+
+    /// <summary>
+    /// Gives an entry uploaded without an identifier a fresh ObjectId, stored as its legacy id, so
+    /// the create response, the socket event and later lookups all carry the same id.
+    /// </summary>
+    private static Entry WithIdentifier(Entry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Id))
+            entry.Id = MongoObjectId.NewObjectId();
+        return entry;
+    }
 }

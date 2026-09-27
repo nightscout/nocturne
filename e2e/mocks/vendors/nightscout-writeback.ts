@@ -1,6 +1,6 @@
 // A legacy Nightscout that keeps what it is sent, for a tenant whose Nightscout connector both
-// writes back and pulls: entries and device statuses POSTed or PUT to it are served back on the
-// next read, as a real instance would.
+// writes back and pulls: entries, device statuses and treatments POSTed or PUT to it are served back
+// on the next read, as a real instance would.
 //
 // Records are stored under the `_id` they arrive with, as Nightscout's upsert keeps a string
 // `_id`; one arriving without an id gets a fresh ObjectId, as MongoDB would give it. State lives
@@ -14,6 +14,7 @@ type Doc = Record<string, unknown> & { _id: string };
 
 const entries = new Map<string, Doc>();
 const deviceStatuses = new Map<string, Doc>();
+const treatments = new Map<string, Doc>();
 let minted = 0;
 
 function newObjectId(): string {
@@ -47,12 +48,15 @@ function readEntries(query: Record<string, string>, type?: string): Doc[] {
     .slice(0, count(query));
 }
 
-function readDeviceStatuses(query: Record<string, string>): Doc[] {
+function readByCreatedAt(from: Map<string, Doc>, query: Record<string, string>): Doc[] {
   const gte = query["find[created_at][$gte]"];
   const lte = query["find[created_at][$lte]"];
+  const id = query["find[_id]"];
+  const clientId = query["find[id]"];
   const at = (d: Doc) => String(d.created_at ?? "");
-  return [...deviceStatuses.values()]
+  return [...from.values()]
     .filter((d) => (gte === undefined || at(d) >= gte) && (lte === undefined || at(d) <= lte))
+    .filter((d) => (id === undefined || d._id === id) && (clientId === undefined || d.id === clientId))
     .sort((a, b) => (at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0))
     .slice(0, count(query));
 }
@@ -74,13 +78,16 @@ export const nightscoutWriteBack: Vendor = {
         return write ? ok(store(entries, request.body)) : { status: 405, body: "" };
       case "/api/v1/devicestatus":
         return write ? ok(store(deviceStatuses, request.body)) : { status: 405, body: "" };
+      case "/api/v1/treatments":
+        return write ? ok(store(treatments, request.body)) : { status: 405, body: "" };
       case "/api/v1/entries.json":
         return ok(readEntries(request.query));
       case "/api/v1/entries/sgv.json":
         return ok(readEntries(request.query, "sgv"));
       case "/api/v1/devicestatus.json":
-        return ok(readDeviceStatuses(request.query));
+        return ok(readByCreatedAt(deviceStatuses, request.query));
       case "/api/v1/treatments.json":
+        return ok(readByCreatedAt(treatments, request.query));
       case "/api/v1/food.json":
       case "/api/v1/activity.json":
       case "/api/v1/profile.json":

@@ -264,4 +264,55 @@ public class EntryDecomposerBatchTests : IDisposable
 
         result.CreatedRecords.Should().HaveCount(1);
     }
+
+    /// <summary>
+    /// A Nightscout write-back round trip: the connector pulls back what write-back sent. A record
+    /// without a legacy id comes back under its uuid's 24-hex prefix, which the stored record takes
+    /// as its legacy id before the bulk upsert, so the copy updates it instead of landing beside it.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_UpsertsThePullBackOfAWrittenBackRecordThatHasNoLegacyIdOntoIt()
+    {
+        var unkeyedWireId = MongoObjectId.FromGuid(Guid.Parse("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f"));
+        List<SensorGlucose>? written = null;
+        _sgRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        var entries = new List<Entry>
+        {
+            new() { Id = unkeyedWireId, Type = "sgv", Mills = 1700000000000, Sgv = 120.0 },
+            new() { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1700000001000, Sgv = 130.0 },
+        };
+
+        await _decomposer.DecomposeBatchAsync(entries, WriteOrigin.Live);
+
+        _sgRepoMock.Verify(x => x.AdoptOwnIdsAsync(
+            It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(new[] { unkeyedWireId })),
+            It.IsAny<CancellationToken>()), Times.Once);
+        written!.Select(r => r.LegacyId).Should().Equal(unkeyedWireId, "dexcom_7f3c2a91");
+    }
+
+    /// <summary>
+    /// An id the server minted for an id-less upload names no stored uuid, so it costs no lookup.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_SkipsTheEchoLookupForAServerMintedId()
+    {
+        _sgRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync(
+            [new Entry { Id = MongoObjectId.NewObjectId(), Type = "sgv", Mills = 1700000000000, Sgv = 120.0 }],
+            WriteOrigin.Live);
+
+        _sgRepoMock.Verify(
+            x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+        _sgRepoMock.Verify(
+            x => x.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }

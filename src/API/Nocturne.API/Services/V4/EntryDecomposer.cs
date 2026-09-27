@@ -60,7 +60,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             CorrelationId = Guid.CreateVersion7()
         };
 
-        await AdoptOwnIdsAsync([entry], ct);
+        await ResolveWireIdsAsync([entry], ct);
 
         var entryType = entry.Type?.ToLowerInvariant();
 
@@ -154,7 +154,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (entries.Count == 0)
             return new DecompositionResult();
 
-        await AdoptOwnIdsAsync(entries, ct);
+        await ResolveWireIdsAsync(entries, ct);
 
         var result = new DecompositionResult();
 
@@ -209,23 +209,57 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     }
 
     /// <summary>
-    /// Lets a stored reading with no legacy id take the id an incoming entry names it by
-    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>), so the legacy-id upsert
-    /// matches it: a reading that Nightscout write-back sent upstream and the connector pulls back
-    /// updates in place, and one the user deleted stays deleted.
+    /// Points each incoming entry at the stored reading its id names on the wire, so the legacy-id
+    /// upsert matches it: a reading that Nightscout write-back sent upstream and the connector pulls
+    /// back updates in place, and one the user deleted stays deleted. A 24-hex id that is the prefix
+    /// of a stored uuid-shaped legacy id is rewritten to that legacy id
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>); otherwise a stored
+    /// reading with no legacy id takes the id it is named by
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync"/>).
     /// </summary>
-    private async Task AdoptOwnIdsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    private async Task ResolveWireIdsAsync(IEnumerable<Entry> entries, CancellationToken ct)
     {
-        var idsByType = entries
-            .Where(e => MongoObjectId.TryGetOwnIdRange(e.Id, out _, out _))
-            .ToLookup(e => e.Type?.ToLowerInvariant(), e => e.Id!);
+        foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
+        {
+            switch (byType.Key)
+            {
+                case "sgv":
+                    await ResolveWireIdsAsync(_sensorGlucoseRepository, byType, ct);
+                    break;
+                case "mbg":
+                    await ResolveWireIdsAsync(_meterGlucoseRepository, byType, ct);
+                    break;
+                case "cal":
+                    await ResolveWireIdsAsync(_calibrationRepository, byType, ct);
+                    break;
+            }
+        }
+    }
 
-        if (idsByType.Contains("sgv"))
-            await _sensorGlucoseRepository.AdoptOwnIdsAsync(idsByType["sgv"].ToList(), ct);
-        if (idsByType.Contains("mbg"))
-            await _meterGlucoseRepository.AdoptOwnIdsAsync(idsByType["mbg"].ToList(), ct);
-        if (idsByType.Contains("cal"))
-            await _calibrationRepository.AdoptOwnIdsAsync(idsByType["cal"].ToList(), ct);
+    private static async Task ResolveWireIdsAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository, IEnumerable<Entry> entries, CancellationToken ct)
+        where TRecord : class, IV4Record
+    {
+        var named = entries.Where(e => MongoObjectId.TryGetOwnIdRange(e.Id, out _, out _)).ToList();
+        if (named.Count == 0)
+            return;
+
+        var prefixes = named.Select(e => e.Id!).Where(MongoObjectId.IsGuidPrefixShaped).ToList();
+        var legacyIds = prefixes.Count == 0
+            ? new Dictionary<string, string>()
+            : (await repository.ResolveUuidLegacyIdsAsync(prefixes, ct))
+                .ToDictionary(r => r.WireId, r => r.LegacyId, StringComparer.Ordinal);
+        var own = new List<string>();
+        foreach (var entry in named)
+        {
+            if (legacyIds.TryGetValue(entry.Id!, out var legacyId))
+                entry.Id = legacyId;
+            else
+                own.Add(entry.Id!);
+        }
+
+        if (own.Count > 0)
+            await repository.AdoptOwnIdsAsync(own, ct);
     }
 
     /// <inheritdoc />

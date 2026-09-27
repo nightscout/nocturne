@@ -2,8 +2,10 @@
   StatusCode: 201,
   ContentType: application/json; charset=utf-8,
   Body: {
+    identifier: {Scrubbed},
     srvModified: {Scrubbed},
     srvCreated: {Scrubbed},
+    _id: {Scrubbed},
     date: {Scrubbed},
     mills: {Scrubbed},
     dateString: {Scrubbed},
