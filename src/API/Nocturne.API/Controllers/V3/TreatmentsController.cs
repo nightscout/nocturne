@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Treatments;
@@ -225,8 +226,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
                 }
             }
 
-            // Process the treatment
-            var processedTreatment = _documentProcessingService.ProcessTreatment(treatment);
+            var processedTreatment = WithIdentifier(_documentProcessingService.ProcessTreatment(treatment));
 
             // Route through TreatmentService which handles StateSpan creation for temp basals
             var created = await _treatmentService.CreateTreatmentsAsync(
@@ -307,7 +307,7 @@ public class TreatmentsController : BaseV3Controller<Treatment>
 
             // Process all treatments
             var processedTreatments = treatments
-                .Select(treatment => _documentProcessingService.ProcessTreatment(treatment))
+                .Select(treatment => WithIdentifier(_documentProcessingService.ProcessTreatment(treatment)))
                 .ToList();
 
             // Save to database
@@ -539,6 +539,21 @@ public class TreatmentsController : BaseV3Controller<Treatment>
     }
 
     #region Helper Methods
+
+    /// <summary>
+    /// Gives a treatment uploaded without an identifier an ObjectId, stored as its legacy id, so the
+    /// create response, the socket event and later GET, search, history, PUT, PATCH and DELETE all
+    /// carry the same id. Like Nightscout's own v3 identifier it is derived from the event, here from
+    /// <see cref="TreatmentDecomposer.IdentityKey"/>, so a re-upload of the same event lands on the
+    /// stored record or its tombstone; an event with no such identity gets a fresh one.
+    /// </summary>
+    internal static Treatment WithIdentifier(Treatment treatment)
+    {
+        if (string.IsNullOrEmpty(treatment.Id))
+            treatment.Id = MongoObjectId.Coerce(TreatmentDecomposer.IdentityKey(treatment))
+                ?? MongoObjectId.NewObjectId();
+        return treatment;
+    }
 
     private new string? ConvertV3FilterToV1Find(JsonElement? filter)
     {

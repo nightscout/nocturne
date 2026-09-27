@@ -129,19 +129,22 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// </summary>
     private static void NormalizeIdentity(Treatment treatment)
     {
-        if (!string.IsNullOrEmpty(treatment.Id))
-            return;
+        if (string.IsNullOrEmpty(treatment.Id) && IdentityKey(treatment) is { } key)
+            treatment.Id = key;
+    }
 
+    /// <summary>
+    /// The identity <see cref="NormalizeIdentity"/> gives a treatment that names no <c>_id</c>: its
+    /// <c>syncIdentifier</c>, else <see cref="ComputeSyntheticId"/>, else null.
+    /// </summary>
+    internal static string? IdentityKey(Treatment treatment)
+    {
         if (!string.IsNullOrEmpty(treatment.SyncIdentifier))
-        {
-            treatment.Id = treatment.SyncIdentifier;
-            return;
-        }
+            return treatment.SyncIdentifier;
 
-        if (treatment.Mills > 0 && !string.IsNullOrEmpty(treatment.EventType))
-        {
-            treatment.Id = ComputeSyntheticId(treatment);
-        }
+        return treatment.Mills > 0 && !string.IsNullOrEmpty(treatment.EventType)
+            ? ComputeSyntheticId(treatment)
+            : null;
     }
 
     /// <summary>

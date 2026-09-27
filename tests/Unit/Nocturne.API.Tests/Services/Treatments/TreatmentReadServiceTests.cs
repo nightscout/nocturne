@@ -139,6 +139,86 @@ public class TreatmentReadServiceTests
         result.Should().NotBeNull();
     }
 
+    /// <summary>
+    /// A record stored under an ObjectId legacy id projects under that id, so a lookup by it, or by
+    /// the record's uuid, picks the projected treatment carrying it.
+    /// </summary>
+    [Theory]
+    [InlineData("bolus")]
+    [InlineData("carb")]
+    [InlineData("bgCheck")]
+    [InlineData("note")]
+    [InlineData("deviceEvent")]
+    [InlineData("bolusCalc")]
+    public async Task GetByIdAsync_ObjectIdLegacyId_ResolvesTheTreatmentProjectedUnderIt(string kind)
+    {
+        const string legacyId = "65f0c0ffee00000000001807";
+        var id = Guid.CreateVersion7();
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime;
+        switch (kind)
+        {
+            case "bolus":
+                var bolus = new Bolus { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _bolusRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
+                _bolusRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(bolus);
+                break;
+            case "carb":
+                var carb = new CarbIntake { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+                _carbIntakeRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+                break;
+            case "bgCheck":
+                var bgCheck = new BGCheck { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _bgCheckRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(bgCheck);
+                _bgCheckRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(bgCheck);
+                break;
+            case "note":
+                var note = new Note { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _noteRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(note);
+                _noteRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(note);
+                break;
+            case "deviceEvent":
+                var deviceEvent = new DeviceEvent { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _deviceEventRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
+                _deviceEventRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
+                break;
+            case "bolusCalc":
+                var bolusCalc = new BolusCalculation { Id = id, Timestamp = timestamp, LegacyId = legacyId };
+                _bolusCalcRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(bolusCalc);
+                _bolusCalcRepo.Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(bolusCalc);
+                break;
+        }
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment>
+            {
+                new() { Id = Guid.CreateVersion7().ToString(), Mills = 1000 },
+                new() { Id = legacyId, Mills = 1000, Notes = kind },
+            });
+
+        (await _service.GetByIdAsync(legacyId))!.Notes.Should().Be(kind);
+        (await _service.GetByIdAsync(id.ToString()))!.Notes.Should().Be(kind);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_CarbPairedIntoAMeal_ResolvesTheMealUnderTheBolusLegacyId()
+    {
+        const string legacyId = "65f0c0ffee00000000001808";
+        var correlationId = Guid.CreateVersion7();
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime;
+        var carb = new CarbIntake { Id = Guid.CreateVersion7(), Timestamp = timestamp, LegacyId = legacyId, CorrelationId = correlationId };
+        var bolus = new Bolus { Id = Guid.CreateVersion7(), Timestamp = timestamp, LegacyId = legacyId, CorrelationId = correlationId };
+        _carbIntakeRepo.Setup(r => r.GetByIdAsync(carb.Id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        _bolusRepo.Setup(r => r.GetByCorrelationIdAsync(correlationId, It.IsAny<CancellationToken>())).ReturnsAsync(new List<Bolus> { bolus });
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Treatment> { new() { Id = legacyId, Mills = 1000, EventType = "Meal Bolus" } });
+
+        (await _service.GetByIdAsync(carb.Id.ToString()))!.EventType.Should().Be("Meal Bolus");
+        (await _service.GetByIdAsync(legacyId))!.EventType.Should().Be("Meal Bolus");
+    }
+
     [Fact]
     public async Task GetByIdAsync_NotFound_ReturnsNull()
     {

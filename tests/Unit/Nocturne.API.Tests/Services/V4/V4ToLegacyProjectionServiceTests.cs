@@ -550,7 +550,61 @@ public class V4ToLegacyProjectionServiceTests
         var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
 
         result.Should().ContainSingle();
-        result[0].Id.Should().Be(legacyOriginated.Id.ToString());
+        result[0].Id.Should().Be("65f0c0ffee0000000000cafe");
+    }
+
+    /// <summary>
+    /// Only an ObjectId legacy id is the identifier the uploader was handed. A synthetic or
+    /// syncIdentifier legacy id is an upsert key, so the record projects under its own uuid.
+    /// </summary>
+    [Theory]
+    [InlineData("syn-0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab")]
+    [InlineData("0b6a3f1e-2c4d-4e5f-8a9b-1c2d3e4f5a6b")]
+    [InlineData(null)]
+    public async Task GetProjectedTreatmentsModifiedSince_NonObjectIdLegacyId_ProjectsTheRecordUuid(string? legacyId)
+    {
+        var note = new NoteEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            Timestamp = Cursor,
+            Text = "keyed",
+            LegacyId = legacyId,
+        };
+        await AddModifiedAsync((note, Cursor.AddMinutes(1)));
+
+        var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
+
+        result.Should().ContainSingle().Which.Id.Should().Be(note.Id.ToString());
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_MealBolus_ProjectsTheBolusObjectIdLegacyId()
+    {
+        var correlationId = Guid.CreateVersion7();
+        var bolus = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            Timestamp = Cursor,
+            Insulin = 3.0,
+            CorrelationId = correlationId,
+            LegacyId = "65f0c0ffee0000000000beef",
+        };
+        var carb = new CarbIntakeEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            Timestamp = Cursor,
+            Carbs = 30.0,
+            CorrelationId = correlationId,
+            LegacyId = "65f0c0ffee0000000000beef",
+        };
+        await AddModifiedAsync((bolus, Cursor.AddMinutes(1)), (carb, Cursor.AddMinutes(1)));
+
+        var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
+
+        result.Should().ContainSingle().Which.Id.Should().Be("65f0c0ffee0000000000beef");
     }
 
     [Fact]

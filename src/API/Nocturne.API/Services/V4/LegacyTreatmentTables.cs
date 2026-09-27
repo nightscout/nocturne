@@ -259,6 +259,14 @@ internal static class LegacyTreatmentTables
     internal static int OrderOf(ILegacyTreatmentTable table) => Order[table];
 
     /// <summary>
+    /// The id a record projects under: its stored ObjectId <c>LegacyId</c>, the identifier its
+    /// uploader was handed, else its uuid. <see cref="TempBasalToTreatmentMapper.ToTreatment"/>
+    /// follows the same rule.
+    /// </summary>
+    internal static string ProjectedId(IV4Record record) =>
+        MongoObjectId.IsObjectId(record.LegacyId) ? record.LegacyId! : record.Id.ToString();
+
+    /// <summary>
     /// Turns a page of rows into legacy treatments: a bolus and a carb intake sharing a correlation
     /// become one Meal Bolus, and everything else projects through its own table. Pairing only ever
     /// sees the rows it is handed, so a page must be selected before it is assembled — see
@@ -351,7 +359,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectMealBolus(Bolus bolus, CarbIntake carb, List<TreatmentFood> foods) =>
         new()
         {
-            Id = bolus.Id.ToString(),
+            Id = ProjectedId(bolus),
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             EventType = TreatmentTypes.MealBolus,
             Mills = bolus.Mills,
@@ -373,7 +381,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectCorrectionBolus(Bolus bolus) =>
         new()
         {
-            Id = bolus.Id.ToString(),
+            Id = ProjectedId(bolus),
             AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             EventType = TreatmentTypes.CorrectionBolus,
             Mills = bolus.Mills,
@@ -393,7 +401,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectCarbCorrection(CarbIntake carb, List<TreatmentFood> foods) =>
         new()
         {
-            Id = carb.Id.ToString(),
+            Id = ProjectedId(carb),
             AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             EventType = TreatmentTypes.CarbCorrection,
             Mills = carb.Mills,
@@ -440,7 +448,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectBgCheck(BGCheck bgCheck) =>
         new()
         {
-            Id = bgCheck.Id.ToString(),
+            Id = ProjectedId(bgCheck),
             AdditionalProperties = TreatmentClientId.ToTreatment(bgCheck.AdditionalProperties),
             EventType = TreatmentTypes.BgCheck,
             Mills = bgCheck.Mills,
@@ -458,7 +466,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectNote(Note note) =>
         new()
         {
-            Id = note.Id.ToString(),
+            Id = ProjectedId(note),
             AdditionalProperties = TreatmentClientId.ToTreatment(note.AdditionalProperties),
             EventType = note.EventType ?? "Note",
             Mills = note.Mills,
@@ -475,7 +483,7 @@ internal static class LegacyTreatmentTables
         DeviceEventTypeToString.TryGetValue(deviceEvent.EventType, out var eventTypeString);
         return new Treatment
         {
-            Id = deviceEvent.Id.ToString(),
+            Id = ProjectedId(deviceEvent),
             AdditionalProperties = TreatmentClientId.ToTreatment(deviceEvent.AdditionalProperties),
             EventType = eventTypeString ?? deviceEvent.EventType.ToString(),
             Mills = deviceEvent.Mills,
@@ -490,7 +498,7 @@ internal static class LegacyTreatmentTables
     private static Treatment ProjectBolusCalculation(BolusCalculation bc) =>
         new()
         {
-            Id = bc.Id.ToString(),
+            Id = ProjectedId(bc),
             AdditionalProperties = TreatmentClientId.ToTreatment(bc.AdditionalProperties),
             EventType = "Bolus Wizard",
             Mills = bc.Mills,

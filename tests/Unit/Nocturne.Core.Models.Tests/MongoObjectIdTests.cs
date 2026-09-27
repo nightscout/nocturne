@@ -129,4 +129,52 @@ public class MongoObjectIdTests
         json.GetProperty("_id").GetString().Should().Be(expected);
         json.GetProperty("identifier").GetString().Should().Be(expected);
     }
+    /// <summary>
+    /// The shape filter ahead of a uuid range lookup: an id <see cref="MongoObjectId.FromGuid"/>
+    /// produced always passes, and it rejects ids whose version or variant position a UUID could not
+    /// hold, as well as anything that is not an ObjectId at all.
+    /// </summary>
+    [Theory]
+    [InlineData("0198c2a41f3b7c2d9e556a1b", true)] // v7 uuid prefix, variant 9
+    [InlineData("0192abcdef0171238456789a", true)] // v7, variant 8
+    [InlineData("0192abcdef014123b456789a", true)] // v4, variant b
+    [InlineData("0192abcdef010123a456789a", false)] // version nibble 0
+    [InlineData("0192abcdef019123a456789a", false)] // version nibble 9
+    [InlineData("0192abcdef0171237456789a", false)] // variant 7 (NCS)
+    [InlineData("0192abcdef017123c456789a", false)] // variant c (Microsoft)
+    [InlineData("0192ABCDEF0171238456789A", false)] // uppercase is not an ObjectId
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsGuidPrefixShaped_AcceptsOnlyTheUuidPrefixShape(string? value, bool expected)
+    {
+        MongoObjectId.IsGuidPrefixShaped(value).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsGuidPrefixShaped_HoldsForEveryFromGuidResult()
+    {
+        for (var i = 0; i < 64; i++)
+        {
+            MongoObjectId.IsGuidPrefixShaped(MongoObjectId.FromGuid(Guid.CreateVersion7())).Should().BeTrue();
+            MongoObjectId.IsGuidPrefixShaped(MongoObjectId.FromGuid(Guid.NewGuid())).Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public void NewObjectId_IsAFreshObjectIdTheWirePassesThrough()
+    {
+        var ids = Enumerable.Range(0, 64).Select(_ => MongoObjectId.NewObjectId()).ToList();
+
+        ids.Should().OnlyContain(id => MongoObjectId.IsObjectId(id));
+        ids.Should().OnlyHaveUniqueItems();
+        ids.Should().OnlyContain(id => MongoObjectId.Coerce(id) == id);
+    }
+
+    [Fact]
+    public void NewObjectId_IsNotGuidPrefixShaped()
+    {
+        for (var i = 0; i < 64; i++)
+            MongoObjectId.IsGuidPrefixShaped(MongoObjectId.NewObjectId()).Should().BeFalse();
+    }
 }

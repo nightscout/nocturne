@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -259,8 +260,8 @@ public class TreatmentReadService : ITreatmentStore
             }
         }
 
-        // Projected treatments for V4 rows carry the raw record UUID as their id (the 24-hex
-        // ObjectId form only exists on the wire), so the filtered bulk-delete path and direct
+        // A projected treatment with no ObjectId LegacyId carries the raw record UUID as its id
+        // (see LegacyTreatmentTables.ProjectedId), so the filtered bulk-delete path and direct
         // by-UUID deletes arrive here with a Guid string. Resolve it across the repos, preferring
         // the stored LegacyId so correlated siblings (e.g. a meal bolus's carb) go together.
         if (deleted == 0 && Guid.TryParse(id, out var recordId)
@@ -327,13 +328,11 @@ public class TreatmentReadService : ITreatmentStore
 
     private async Task<Treatment?> GetByGuidAsync(Guid id, CancellationToken ct)
     {
-        var idStr = id.ToString();
-
         // Search across all V4 repos by ID, project at that timestamp with a
         // reasonable limit, and find the projected treatment that contains this ID.
         var bolus = await _bolusRepo.GetByIdAsync(id, ct);
         if (bolus != null)
-            return await FindProjectedTreatmentAsync(bolus.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(bolus, ct);
 
         var carbIntake = await _carbIntakeRepo.GetByIdAsync(id, ct);
         if (carbIntake != null)
@@ -344,27 +343,27 @@ public class TreatmentReadService : ITreatmentStore
                 var pairedBoluses = await _bolusRepo.GetByCorrelationIdAsync(carbIntake.CorrelationId.Value, ct);
                 var pairedBolus = pairedBoluses.FirstOrDefault();
                 if (pairedBolus != null)
-                    return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
+                    return await FindProjectedTreatmentAsync(pairedBolus, ct);
             }
             // Unpaired carb correction: the projected Treatment.Id is the CarbIntake's ID
-            return await FindProjectedTreatmentAsync(carbIntake.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(carbIntake, ct);
         }
 
         var bgCheck = await _bgCheckRepo.GetByIdAsync(id, ct);
         if (bgCheck != null)
-            return await FindProjectedTreatmentAsync(bgCheck.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(bgCheck, ct);
 
         var note = await _noteRepo.GetByIdAsync(id, ct);
         if (note != null)
-            return await FindProjectedTreatmentAsync(note.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(note, ct);
 
         var deviceEvent = await _deviceEventRepo.GetByIdAsync(id, ct);
         if (deviceEvent != null)
-            return await FindProjectedTreatmentAsync(deviceEvent.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(deviceEvent, ct);
 
         var bolusCalc = await _bolusCalcRepo.GetByIdAsync(id, ct);
         if (bolusCalc != null)
-            return await FindProjectedTreatmentAsync(bolusCalc.Mills, idStr, ct);
+            return await FindProjectedTreatmentAsync(bolusCalc, ct);
 
         var tempBasal = await _tempBasalRepo.GetByIdAsync(id, ct);
         if (tempBasal != null)
@@ -538,7 +537,7 @@ public class TreatmentReadService : ITreatmentStore
     {
         var bolus = await _bolusRepo.GetByLegacyIdAsync(legacyId, ct);
         if (bolus != null)
-            return await FindProjectedTreatmentAsync(bolus.Mills, bolus.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(bolus, ct);
 
         var carbIntake = await _carbIntakeRepo.GetByLegacyIdAsync(legacyId, ct);
         if (carbIntake != null)
@@ -548,26 +547,26 @@ public class TreatmentReadService : ITreatmentStore
                 var pairedBoluses = await _bolusRepo.GetByCorrelationIdAsync(carbIntake.CorrelationId.Value, ct);
                 var pairedBolus = pairedBoluses.FirstOrDefault();
                 if (pairedBolus != null)
-                    return await FindProjectedTreatmentAsync(pairedBolus.Mills, pairedBolus.Id.ToString(), ct);
+                    return await FindProjectedTreatmentAsync(pairedBolus, ct);
             }
-            return await FindProjectedTreatmentAsync(carbIntake.Mills, carbIntake.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(carbIntake, ct);
         }
 
         var bgCheck = await _bgCheckRepo.GetByLegacyIdAsync(legacyId, ct);
         if (bgCheck != null)
-            return await FindProjectedTreatmentAsync(bgCheck.Mills, bgCheck.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(bgCheck, ct);
 
         var noteRecord = await _noteRepo.GetByLegacyIdAsync(legacyId, ct);
         if (noteRecord != null)
-            return await FindProjectedTreatmentAsync(noteRecord.Mills, noteRecord.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(noteRecord, ct);
 
         var deviceEvent = await _deviceEventRepo.GetByLegacyIdAsync(legacyId, ct);
         if (deviceEvent != null)
-            return await FindProjectedTreatmentAsync(deviceEvent.Mills, deviceEvent.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(deviceEvent, ct);
 
         var bolusCalc = await _bolusCalcRepo.GetByLegacyIdAsync(legacyId, ct);
         if (bolusCalc != null)
-            return await FindProjectedTreatmentAsync(bolusCalc.Mills, bolusCalc.Id.ToString(), ct);
+            return await FindProjectedTreatmentAsync(bolusCalc, ct);
 
         var tempBasal = await _tempBasalRepo.GetByLegacyIdAsync(legacyId, ct);
         if (tempBasal != null)
@@ -576,11 +575,11 @@ public class TreatmentReadService : ITreatmentStore
         return null;
     }
 
-    private async Task<Treatment?> FindProjectedTreatmentAsync(
-        long mills, string treatmentId, CancellationToken ct)
+    private async Task<Treatment?> FindProjectedTreatmentAsync(IV4Record record, CancellationToken ct)
     {
         var projected = await _projection.GetProjectedTreatmentsAsync(
-            mills, mills, 100, nativeOnly: false, ct: ct);
+            record.Mills, record.Mills, 100, nativeOnly: false, ct: ct);
+        var treatmentId = LegacyTreatmentTables.ProjectedId(record);
         return projected.FirstOrDefault(t => t.Id == treatmentId);
     }
 
