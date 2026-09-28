@@ -25747,7 +25747,7 @@ msgstr "Googleでサインイン"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "Google ヘルスケア"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
@@ -26187,7 +26187,7 @@ msgstr "再接続せずに、以下のインポート開始日と選択内容を
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "Google ヘルスデータ"
+msgstr "Google Health データ"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"

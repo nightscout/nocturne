@@ -25747,7 +25747,7 @@ msgstr "Accedi con Google"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "Google Salute"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
@@ -26187,7 +26187,7 @@ msgstr "Modifica la data di inizio dell'importazione e la selezione di seguito s
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "Dati di Google Salute"
+msgstr "Dati di Google Health"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"

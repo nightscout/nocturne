@@ -25747,7 +25747,7 @@ msgstr "Войти через Google"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "Google Здоровье"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
@@ -26167,15 +26167,15 @@ msgstr "Зашифрованная конфигурация Google Cloud сох�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
-msgstr "Google Здоровье подключено. Просмотрите доступные данные ниже, затем сохраните выбор, чтобы начать импорт."
+msgstr "Google Health подключено. Просмотрите доступные данные ниже, затем сохраните выбор, чтобы начать импорт."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Imports are paused because no data types are selected."
-msgstr "Google Здоровье подключено. Импорт приостановлен, поскольку не выбраны типы данных."
+msgstr "Google Health подключено. Импорт приостановлен, поскольку не выбраны типы данных."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
-msgstr "Google Здоровье подключено. Автоматическая синхронизация выполняется примерно каждые 15 минут."
+msgstr "Google Health подключено. Автоматическая синхронизация выполняется примерно каждые 15 минут."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Sync now"
@@ -26187,7 +26187,7 @@ msgstr "Измените дату начала импорта и выбор ни
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "Данные Google о здоровье"
+msgstr "Данные Google Health"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"

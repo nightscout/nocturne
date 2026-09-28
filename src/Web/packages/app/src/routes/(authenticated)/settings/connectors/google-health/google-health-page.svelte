@@ -26,6 +26,7 @@
   } from "$lib/components/ui/card";
   import {
     describeGoogleHealthError,
+    isGoogleHealthAlreadyRunningError,
     type GoogleHealthOperation,
   } from "$lib/connectors/google-health-error";
   import { lastSeen } from "$lib/utils/formatting";
@@ -229,6 +230,20 @@
             : "Google Health import completed.";
       }
     } catch (error) {
+      if (operation === "sync" && isGoogleHealthAlreadyRunningError(error)) {
+        // A scheduled run may have acquired the shared tenant slot between the button press and
+        // the queue request. Treat the 409 as coordination, not as a failed import, then refresh
+        // the same server-owned progress model that the normal polling loop uses.
+        message = "";
+        try {
+          await refresh(false);
+          notice =
+            "The import is running in the background. You can leave this page and return later.";
+        } catch {
+          notice = "Import status is temporarily unavailable. Retrying.";
+        }
+        return;
+      }
       const failedOperation = operation;
       // Keep the original sync failure if reloading the saved settings also fails.
       try {
@@ -289,7 +304,7 @@
       return "Updating Nocturne health records";
     return "Preparing the import";
   }
-onMount(() => {
+  onMount(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     async function pollStatus() {
@@ -299,14 +314,16 @@ onMount(() => {
           const next = await getGoogleHealth().run();
           if (disposed) return;
           status = next;
-          if (notice === "Import status is temporarily unavailable. Retrying.") notice = "";
+          if (notice === "Import status is temporarily unavailable. Retrying.")
+            notice = "";
           if (wasSyncing && !next.isSyncing) {
             notice = next.errorCode ? "" : "Google Health import completed.";
           }
         }
       } catch {
         // Polling failures intentionally use the generic notice; raw remote errors are not actionable here.
-        if (!disposed) notice = "Import status is temporarily unavailable. Retrying.";
+        if (!disposed)
+          notice = "Import status is temporarily unavailable. Retrying.";
       } finally {
         if (!disposed) timer = setTimeout(pollStatus, 2000);
       }
@@ -427,11 +444,7 @@ onMount(() => {
           >
             <label class="block text-sm font-medium">
               Google client ID
-              <Input
-                class="mt-1 w-full"
-                required
-                bind:value={clientId}
-              />
+              <Input class="mt-1 w-full" required bind:value={clientId} />
             </label>
             <label class="block text-sm font-medium">
               Client secret
@@ -502,11 +515,7 @@ onMount(() => {
             >
               <label class="block text-sm font-medium">
                 Google client ID
-                <Input
-                  class="mt-1 w-full"
-                  required
-                  bind:value={clientId}
-                />
+                <Input class="mt-1 w-full" required bind:value={clientId} />
               </label>
               <label class="block text-sm font-medium">
                 Client secret
@@ -594,7 +603,8 @@ onMount(() => {
           onsubmit={(event) => {
             event.preventDefault();
             const sync =
-              event.submitter instanceof HTMLButtonElement && event.submitter.value === "sync";
+              event.submitter instanceof HTMLButtonElement &&
+              event.submitter.value === "sync";
             void run(() => saveChanges(sync));
           }}
         >
@@ -620,7 +630,8 @@ onMount(() => {
                 <details
                   class="overflow-hidden rounded-lg border"
                   data-testid={`google-health-category-${group.category}`}
-                  open={expandedGroups[group.category] ?? group.hasSelectableItem}
+                  open={expandedGroups[group.category] ??
+                    group.hasSelectableItem}
                   ontoggle={(event) => {
                     expandedGroups[group.category] = event.currentTarget.open;
                   }}
@@ -657,7 +668,9 @@ onMount(() => {
                                   if (!dataType) return;
                                   selected = checked
                                     ? [...selected, dataType]
-                                    : selected.filter((value) => value !== dataType);
+                                    : selected.filter(
+                                        (value) => value !== dataType
+                                      );
                                 }}
                                 disabled={busy ||
                                   status.isSyncing ||
@@ -778,14 +791,15 @@ onMount(() => {
       <CardHeader>
         <CardTitle>Import recovery</CardTitle>
         <CardDescription>
-          If a historical import stops or needs to be repeated, reset the Google Health connector
-          from a chosen date. The reset re-reads the range and keeps the normal duplicate protection.
+          If a historical import stops or needs to be repeated, reset the Google
+          Health connector from a chosen date. The reset re-reads the range and
+          keeps the normal duplicate protection.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-3">
         <p class="text-sm text-muted-foreground">
-          The reset runs in the background. Platform administrators can monitor or cancel it from
-          the connector reset page.
+          The reset runs in the background. Platform administrators can monitor
+          or cancel it from the connector reset page.
         </p>
         <a
           class="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium underline-offset-4 hover:underline"

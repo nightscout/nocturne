@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { describeGoogleHealthError } from "./google-health-error";
+import {
+  describeGoogleHealthError,
+  isGoogleHealthAlreadyRunningError,
+} from "./google-health-error";
 
 const known = { reconnect_required: "Reconnect to Google." };
 
@@ -25,6 +28,21 @@ describe("Google Health diagnostics", () => {
     expect(message).toContain("Reconnect to Google.");
     expect(message).toContain("sync/reconnect_required");
     expect(message).toContain("HTTP 400");
+  });
+
+  it("treats a connector-slot conflict as coordination rather than a provider failure", () => {
+    const error = {
+      status: 409,
+      body: {
+        message: "A sync for connector 'googlehealth' is already running",
+      },
+    };
+    expect(isGoogleHealthAlreadyRunningError(error)).toBe(true);
+    const message = describeGoogleHealthError(error, "sync", known);
+    expect(message).toContain("No data was changed");
+    expect(message).toContain("sync/already_running");
+    expect(message).toContain("HTTP 409");
+    expect(message).not.toContain("googlehealth");
   });
 
   it.each([

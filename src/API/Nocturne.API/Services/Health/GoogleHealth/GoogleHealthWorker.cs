@@ -75,6 +75,17 @@ public sealed class GoogleHealthWorker(
             return;
         }
 
+        if (result.AlreadyRunning)
+        {
+            // The scheduler may already be importing this tenant. This is expected coordination,
+            // not a Google failure; the run that owns the slot will publish the eventual health
+            // state. In particular, do not replace a healthy state with a stale conflict string.
+            logger.LogInformation(
+                "Google Health worker sync for tenant {TenantId} ({Slug}) was not started because another run is already active",
+                id, slug);
+            return;
+        }
+
         logger.LogError(
             "Google Health worker sync failed for tenant {TenantId} ({Slug}) with result message: {Message}. Errors: {Errors}",
             id, slug, result.Message, string.Join("; ", result.Errors));

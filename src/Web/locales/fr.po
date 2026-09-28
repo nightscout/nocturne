@@ -25750,11 +25750,11 @@ msgstr "Connectez-vous avec Google"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "Google Santé"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
-msgstr "Google Santé a besoin d'attention. Ouvrez le connecteur pour plus de détails et les options de récupération."
+msgstr "Google Health a besoin d'attention. Ouvrez le connecteur pour plus de détails et les options de récupération."
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Reconnect to resume importing"
@@ -25985,7 +25985,7 @@ msgstr "L'importation s'exécute en arrière-plan. Vous pouvez quitter cette pag
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health import completed."
-msgstr "Importation Google Health terminée."
+msgstr "Importation Google Health terminée."
 
 #. 0: item.errorCode
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -26068,7 +26068,7 @@ msgstr "La session Nocturne manquait après la redirection Google. Connectez-vou
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health · Connectors & Apps"
-msgstr "Google Santé · Connecteurs et applications"
+msgstr "Google Health · Connecteurs et applications"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Server connector for health and fitness data"
@@ -26089,7 +26089,7 @@ msgstr "Importation exécutée en arrière-plan"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health import progress"
-msgstr "Progression de l'importation de Google Health"
+msgstr "Progression de l'importation de Google Health"
 
 #. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -26170,15 +26170,15 @@ msgstr "La configuration Google Cloud chiffrée est enregistrée."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
-msgstr "Google Santé est connecté. Passez en revue les données disponibles ci-dessous, puis enregistrez votre sélection pour commencer l'importation."
+msgstr "Google Health est connecté. Passez en revue les données disponibles ci-dessous, puis enregistrez votre sélection pour commencer l'importation."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Imports are paused because no data types are selected."
-msgstr "Google Santé est connecté. Les importations sont suspendues car aucun type de données n'est sélectionné."
+msgstr "Google Health est connecté. Les importations sont suspendues car aucun type de données n'est sélectionné."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
-msgstr "Google Santé est connecté. La synchronisation automatique s'exécute environ toutes les 15 minutes."
+msgstr "Google Health est connecté. La synchronisation automatique s'exécute environ toutes les 15 minutes."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Sync now"
@@ -26190,7 +26190,7 @@ msgstr "Modifiez la date de début de l'importation et la sélection ci-dessous 
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "Données Google Santé"
+msgstr "Données Google Health"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"
@@ -26301,7 +26301,7 @@ msgstr "Documentation de configuration de Google"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported Google Health data?"
-msgstr "Supprimer les données Google Health importées ?"
+msgstr "Supprimer les données Google Health importées ?"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported data"

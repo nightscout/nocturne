@@ -73,11 +73,7 @@ describe("Google Health production translations", () => {
           await readFile(new URL("../../../locales/en.po", import.meta.url))
         )
       )
-        .filter(
-          (entry) =>
-            entry.msgid &&
-            isGoogleHealthEntry(entry)
-        )
+        .filter((entry) => entry.msgid && isGoogleHealthEntry(entry))
         .map((entry) => [entry.msgid, placeholders(entry.msgid)])
     );
     const configPath = join(root, "wuchale.config.js");
@@ -159,6 +155,25 @@ describe("Google Health production translations", () => {
             expectedPlaceholders.get(entry.msgid)
       );
       expect(mismatches).toEqual([]);
+    }
+  );
+
+  it.each(supportedLocales)(
+    "keeps the Google Health product name untranslated in %s",
+    async (locale) => {
+      const catalog = po.parse(
+        await readFile(
+          new URL(`../../../locales/${locale}.po`, import.meta.url)
+        )
+      );
+      const translatedBrand = entries(catalog).filter(
+        (entry) =>
+          entry.msgid &&
+          /Google Health/.test(entry.msgid) &&
+          isGoogleHealthEntry(entry) &&
+          !String(entry.msgstr?.[0] ?? "").includes("Google Health")
+      );
+      expect(translatedBrand).toEqual([]);
     }
   );
 });

@@ -107,6 +107,19 @@ stages, not record-count completion or estimated time remaining. Errors expose a
 technical code and, where applicable, HTTP status. Use those with the API-server
 log; do not share credentials or health data.
 
+Manual and scheduled imports share the connector's tenant-wide run guard. If a
+scheduled run already owns that slot, **Sync now** reports the request as
+already running and continues polling the server status instead of presenting a
+provider failure. A second import is never started just to satisfy the button
+press.
+
+The heart-rate actogram is a presentation view, not the source of truth. The
+report query averages readings into one UTC-minute point in PostgreSQL before
+serializing the response. Raw heart-rate rows remain available to the health
+history and day-level views, so this optimisation reduces browser payload and
+chart work without discarding measurements. This directly addresses the high
+volume report case tracked in [Nightscout issue #1359](https://github.com/nightscout/nocturne/issues/1359).
+
 ## Verification limits
 
 Automated tests cover authorization, filters, pagination, native writes,

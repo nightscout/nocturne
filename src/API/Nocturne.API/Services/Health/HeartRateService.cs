@@ -57,6 +57,48 @@ public class HeartRateService(
         CancellationToken cancellationToken = default
     ) => GetByDateRangeAsync(from, to, count, skip, cancellationToken);
 
+    public async Task<IEnumerable<HeartRate>> GetHeartRateMinuteAveragesByDateRangeAsync(
+        DateTime from,
+        DateTime to,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Group in PostgreSQL so a dense wearable stream does not cross the API boundary as
+        // hundreds of thousands of points. The source table remains untouched and the normal
+        // tenant/soft-delete filters on EntitySet still apply.
+        var buckets = await EntitySet
+            .AsNoTracking()
+            .Where(row => row.Timestamp >= from && row.Timestamp < to)
+            .GroupBy(row => new
+            {
+                row.Timestamp.Year,
+                row.Timestamp.Month,
+                row.Timestamp.Day,
+                row.Timestamp.Hour,
+                row.Timestamp.Minute,
+            })
+            .Select(group => new
+            {
+                FirstTimestamp = group.Min(row => row.Timestamp),
+                AverageBpm = group.Average(row => (double)row.Bpm),
+            })
+            .OrderBy(bucket => bucket.FirstTimestamp)
+            .ToListAsync(cancellationToken);
+
+        return buckets.Select(bucket => new HeartRate
+        {
+            Timestamp = new DateTime(
+                bucket.FirstTimestamp.Year,
+                bucket.FirstTimestamp.Month,
+                bucket.FirstTimestamp.Day,
+                bucket.FirstTimestamp.Hour,
+                bucket.FirstTimestamp.Minute,
+                0,
+                DateTimeKind.Utc),
+            Bpm = (int)Math.Round(bucket.AverageBpm, MidpointRounding.AwayFromZero),
+        });
+    }
+
     public Task<HeartRate?> GetHeartRateByIdAsync(
         string id,
         CancellationToken cancellationToken = default

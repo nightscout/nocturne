@@ -25747,7 +25747,7 @@ msgstr "Google로 로그인"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "구글 헬스"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
@@ -26032,7 +26032,7 @@ msgstr "{0} 읽기"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Reading Google Health data"
-msgstr "Google 건강 데이터 읽기"
+msgstr "Google Health 데이터 읽기"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Validating the downloaded data"
@@ -26167,15 +26167,15 @@ msgstr "암호화된 Google Cloud 구성이 저장됩니다."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
-msgstr "Google 헬스가 연결되었습니다. 아래에서 사용 가능한 데이터를 검토한 후 선택 사항을 저장하여 가져오기를 시작하세요."
+msgstr "Google Health가 연결되었습니다. 아래에서 사용 가능한 데이터를 검토한 후 선택 사항을 저장하여 가져오기를 시작하세요."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Imports are paused because no data types are selected."
-msgstr "Google 헬스가 연결되었습니다. 선택된 데이터 유형이 없기 때문에 가져오기가 일시중지되었습니다."
+msgstr "Google Health가 연결되었습니다. 선택된 데이터 유형이 없기 때문에 가져오기가 일시중지되었습니다."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
-msgstr "Google 헬스가 연결되었습니다. 자동 동기화는 약 15분마다 실행됩니다."
+msgstr "Google Health가 연결되었습니다. 자동 동기화는 약 15분마다 실행됩니다."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Sync now"
@@ -26187,7 +26187,7 @@ msgstr "다시 연결하지 않고 아래에서 가져오기 시작 날짜와 �
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "Google 건강 데이터"
+msgstr "Google Health 데이터"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"
@@ -26298,7 +26298,7 @@ msgstr "Google 설정 문서"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported Google Health data?"
-msgstr "가져온 Google 건강 데이터를 삭제하시겠습니까?"
+msgstr "가져온 Google Health 데이터를 삭제하시겠습니까?"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported data"
@@ -26310,7 +26310,7 @@ msgstr "Google Health를 통해 가져온 측정값은 Nocturne에서 삭제됩�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported Google Health data"
-msgstr "가져온 Google 건강 데이터 삭제"
+msgstr "가져온 Google Health 데이터 삭제"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Connectors & Apps"

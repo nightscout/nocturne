@@ -25747,11 +25747,11 @@ msgstr "使用 Google 登录"
 #: src/lib/components/connectors/ServerConnectorsCard.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health"
-msgstr "谷歌健康"
+msgstr "Google Health"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Google Health needs attention. Open the connector for details and recovery options."
-msgstr "谷歌健康需要关注。打开连接器了解详细信息和恢复选项。"
+msgstr "Google Health需要关注。打开连接器了解详细信息和恢复选项。"
 
 #: src/lib/components/connectors/GoogleHealthSourceRow.svelte
 msgid "Reconnect to resume importing"
@@ -26065,7 +26065,7 @@ msgstr "Google 重定向后，Nocturne 会话丢失。在同一浏览器中登�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health · Connectors & Apps"
-msgstr "Google 健康 · 连接器和应用程序"
+msgstr "Google Health · 连接器和应用程序"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Server connector for health and fitness data"
@@ -26167,15 +26167,15 @@ msgstr "加密的 Google Cloud 配置已保存。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
-msgstr "Google 健康已连接。查看下面的可用数据，然后保存您的选择以开始导入。"
+msgstr "Google Health已连接。查看下面的可用数据，然后保存您的选择以开始导入。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Imports are paused because no data types are selected."
-msgstr "Google 健康已连接。由于未选择任何数据类型，导入已暂停。"
+msgstr "Google Health已连接。由于未选择任何数据类型，导入已暂停。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
-msgstr "Google 健康已连接。自动同步大约每 15 分钟运行一次。"
+msgstr "Google Health已连接。自动同步大约每 15 分钟运行一次。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "<0/>Sync now"
@@ -26187,7 +26187,7 @@ msgstr "更改下面的导入开始日期和选择，无需重新连接。仅在
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health data"
-msgstr "谷歌健康数据"
+msgstr "Google Health数据"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Detected data types and how Nocturne can use them"

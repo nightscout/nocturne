@@ -389,6 +389,11 @@ public static class GoogleHealthErrorCode
     public static (string? Code, string[] DataTypes) Decode(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return (null, []);
+        // ConnectorSyncService uses the same tenant-wide slot for scheduled and manual runs. A
+        // manual request can therefore report this coordination result without Google failing or
+        // any data being lost. Do not surface a stale slot message as a persistent health error.
+        if (value.Contains("already running", StringComparison.OrdinalIgnoreCase))
+            return (null, []);
         var separator = value.IndexOf(':');
         if (separator < 0) return (value, []);
         return (value[..separator], value[(separator + 1)..]
