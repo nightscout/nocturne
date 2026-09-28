@@ -65,8 +65,6 @@ export const DEFAULT_PALETTE: Record<string, PaletteId> = {
   'chat-bubble': 'water',
   'phone': 'slate',
   'hub-dawn-ridges': 'dusk',
-  'hub-lighthouse': 'water',
-  'hub-lakeside-cabin': 'moonlight',
   'lucide-database': 'slate',
   'lucide-server': 'slate',
   'lucide-cpu': 'slate',

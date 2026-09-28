@@ -38,9 +38,7 @@ export type ArtworkId =
   | 'exclamation-mark'
   | 'chat-bubble'
   | 'phone'
-  | 'hub-dawn-ridges'
-  | 'hub-lighthouse'
-  | 'hub-lakeside-cabin';
+  | 'hub-dawn-ridges';
 
 export type PaletteId = 'moonlight' | 'water' | 'dusk' | 'ember' | 'moss' | 'slate';
 
@@ -179,8 +177,6 @@ export const ARTWORK_IDS: readonly ArtworkId[] = [
   'chat-bubble',
   'phone',
   'hub-dawn-ridges',
-  'hub-lighthouse',
-  'hub-lakeside-cabin',
 ];
 
 export const PALETTE_IDS: readonly PaletteId[] = ['moonlight', 'water', 'dusk', 'ember', 'moss', 'slate'];
@@ -247,8 +243,6 @@ export const ARTWORK_ASPECT: Readonly<Record<ArtworkId, number>> = {
   'chat-bubble': 1,
   'phone': 1,
   'hub-dawn-ridges': 3,
-  'hub-lighthouse': 3,
-  'hub-lakeside-cabin': 3,
 };
 
 export function artworkAspect(id: ArtworkId): number {

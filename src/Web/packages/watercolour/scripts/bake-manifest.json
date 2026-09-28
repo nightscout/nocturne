@@ -399,30 +399,6 @@
       "linearProgress": true
     },
     {
-      "id": "hub-lighthouse",
-      "palette": "water",
-      "surfaces": [
-        "light",
-        "dark"
-      ],
-      "stripWidth": 255,
-      "stripHeight": 85,
-      "stripFrames": 7,
-      "linearProgress": true
-    },
-    {
-      "id": "hub-lakeside-cabin",
-      "palette": "moonlight",
-      "surfaces": [
-        "light",
-        "dark"
-      ],
-      "stripWidth": 255,
-      "stripHeight": 85,
-      "stripFrames": 7,
-      "linearProgress": true
-    },
-    {
       "id": "lucide:database",
       "palette": "slate",
       "surfaces": [

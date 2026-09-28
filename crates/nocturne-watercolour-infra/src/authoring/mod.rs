@@ -135,8 +135,6 @@ impl ArtworkCatalogue {
         "chat-bubble",
         "phone",
         "hub-dawn-ridges",
-        "hub-lighthouse",
-        "hub-lakeside-cabin",
     ];
 
     pub fn ids() -> &'static [&'static str] {
@@ -271,8 +269,6 @@ impl ArtworkCatalogue {
             "chat-bubble" => icons_places::chat_bubble(&style, palette),
             "phone" => icons_places::phone(&style, palette),
             "hub-dawn-ridges" => hub::dawn_ridges(&style, palette),
-            "hub-lighthouse" => hub::lighthouse(&style, palette),
-            "hub-lakeside-cabin" => hub::lakeside_cabin(&style, palette),
             _ => return None,
         };
         Some(scene)
