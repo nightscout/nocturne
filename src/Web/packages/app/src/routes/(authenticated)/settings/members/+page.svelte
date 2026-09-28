@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { page } from "$app/state";
   import { satisfiesScope } from "$lib/authorization/scopes";
   import { describeSubmitError } from "$lib/forms";
@@ -7,7 +8,6 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import Users from "@lucide/svelte/icons/users";
-  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Link from "@lucide/svelte/icons/link";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
@@ -225,10 +225,7 @@
   {/if}
 
   {#if successMessage}
-    <div class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3">
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-      <p class="text-sm text-success">{successMessage}</p>
-    </div>
+    <SuccessBanner>{successMessage}</SuccessBanner>
   {/if}
 
   <!-- Public access -->
@@ -319,10 +316,6 @@
         {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
-            onCreated={() => {
-              successMessage = "Invite link created. Share it with the new member.";
-              clearMessages();
-            }}
             onCancel={() => (showCreateInvite = false)}
           />
         {:else}

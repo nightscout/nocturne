@@ -21,6 +21,7 @@
   import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
   import { canManageConnectors } from "$lib/authorization/connector-management";
   import { describeSubmitError } from "$lib/forms/submit-error";
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import {
     Card,
     CardContent,
@@ -374,33 +375,15 @@
       </div>
 
       <!-- Save Message -->
-      {#if saveMessage}
-        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
+      {#if saveMessage?.type === "error"}
+        <Card variant="destructive">
           <CardContent class="flex items-center gap-3 py-3">
-            {#if saveMessage.type === "error"}
-              <AlertCircle class="h-5 w-5 text-destructive" />
-            {:else}
-              <div
-                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
-              >
-                <svg
-                  class="h-3 w-3 text-success-foreground"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="3"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-            {/if}
+            <AlertCircle class="h-5 w-5 text-destructive" />
             <p class="text-sm">{saveMessage.text}</p>
           </CardContent>
         </Card>
+      {:else if saveMessage}
+        <SuccessBanner>{saveMessage.text}</SuccessBanner>
       {/if}
 
       <!-- Enable/Disable Toggle -->

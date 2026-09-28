@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -21,13 +22,11 @@
 
   interface Props {
     roles: TenantRoleDto[];
-    onCreated: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
-    onCreated,
     onCancel,
   }: Props = $props();
 
@@ -93,7 +92,6 @@
         createdInviteUrl = result.inviteUrl.startsWith("http")
           ? result.inviteUrl
           : `${window.location.origin}${result.inviteUrl}`;
-        onCreated(createdInviteUrl);
       }
     } catch (e) {
       errorMessage = describeSubmitError(e, "Failed to create invite. Please try again.");
@@ -137,16 +135,7 @@
   <Card.Content class="@container">
     {#if createdInviteUrl}
       <div class="space-y-4">
-        <div
-          class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-        >
-          <Check
-            class="mt-0.5 h-4 w-4 shrink-0 text-success"
-          />
-          <p class="text-sm text-success">
-            Invite link created. Share it with the new member.
-          </p>
-        </div>
+        <SuccessBanner>Invite link created. Share it with the new member.</SuccessBanner>
 
         <div class="flex gap-2" {@attach coachmark({
           key: "setup-invite.copy-link",
