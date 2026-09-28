@@ -27,10 +27,18 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// is its legacy id or, with none, its uuid. The pull-back resolves <c>identifier</c> first and
 /// <c>_id</c> after (<c>DecomposerBase.PointAtStoredRecordsAsync</c>).
 /// </para>
+/// <para>
+/// Two exceptions. A treatment whose key is itself an ObjectId goes out under that key as
+/// <c>_id</c> with no <c>identifier</c>: the upsert then matches the copy on its ObjectId, which the
+/// <c>{_id: identifier}</c> arm of its identifier match never does, since that arm compares a
+/// string. An entry whose id is not an ObjectId goes out with no <c>_id</c>, since any <c>_id</c>
+/// other than the stored reading's breaks the entries upsert.
+/// </para>
 /// </remarks>
 internal static class UpstreamIdentityJson
 {
     private const string IdentifierName = "identifier";
+    private const string IdName = "_id";
 
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
     {
@@ -57,10 +65,30 @@ internal static class UpstreamIdentityJson
 
         var identifier = IdentifierProperty(info);
         identifier.CustomConverter = null;
-        identifier.Get = document => document is Treatment { LegacyId: { } legacyId }
-            ? legacyId
-            : ((ProcessableDocumentBase)document).Id;
+        identifier.Get = KeyOf;
+
+        var id = info.Properties.FirstOrDefault(p => p.Name == IdName);
+        if (id?.Get is not { } served)
+            return;
+
+        if (typeof(Treatment).IsAssignableFrom(info.Type))
+        {
+            // An ObjectId key keeps its _id upstream, and an identifier would stop the upsert matching
+            // on it: a copy written without one (as before identifiers were sent) would be duplicated.
+            identifier.ShouldSerialize = (document, _) => !MongoObjectId.IsObjectId(KeyOf(document));
+            id.Get = document => KeyOf(document) is { } key && MongoObjectId.IsObjectId(key) ? key : served(document);
+        }
+        else if (typeof(Entry).IsAssignableFrom(info.Type))
+        {
+            // Entries upsert by sysTime and type with $set: an _id that differs from the stored
+            // reading's is an immutable-field error that aborts the whole ordered batch.
+            id.ShouldSerialize = (document, _) => MongoObjectId.IsObjectId(((Entry)document).Id);
+        }
     }
+
+    private static string? KeyOf(object document) => document is Treatment { LegacyId: { } legacyId }
+        ? legacyId
+        : ((ProcessableDocumentBase)document).Id;
 
     private static void ReadIdentifier(JsonTypeInfo info)
     {

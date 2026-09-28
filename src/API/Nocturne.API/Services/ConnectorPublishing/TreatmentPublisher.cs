@@ -83,7 +83,9 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     /// <remarks>
     /// Every row written carries the fingerprint of the treatment it came from
     /// (<see cref="UpstreamFingerprintScope"/>), which <see cref="PublishRecentTreatmentsAsync"/>
-    /// compares against. Rows stored under a treatment's client id are moved onto its id first
+    /// compares against. The fingerprints are keyed by the id each treatment will be stored under
+    /// (<see cref="ITreatmentDecomposer.ResolveStoredIdentitiesAsync"/>), and write-back echoes are
+    /// dropped there. Rows stored under a treatment's client id are moved onto its id first
     /// (<see cref="ITreatmentDecomposer.RekeyClientIdRecordsAsync"/>), so the write lands on them.
     /// </remarks>
     public async Task<bool> PublishTreatmentsAsync(
@@ -94,6 +96,11 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         try
         {
             var list = treatments.ToList();
+            var echoes = new HashSet<Treatment>(ReferenceEqualityComparer.Instance);
+            using (PushSystemAudit())
+                echoes.UnionWith(await _treatmentDecomposer.ResolveStoredIdentitiesAsync(list, cancellationToken));
+            list.RemoveAll(echoes.Contains);
+
             var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
             foreach (var treatment in list)
             {

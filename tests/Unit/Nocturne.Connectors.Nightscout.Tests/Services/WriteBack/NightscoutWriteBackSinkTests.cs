@@ -538,18 +538,19 @@ public class NightscoutWriteBackSinkTests
     }
 
     /// <summary>
-    /// Nightscout 15.0.7 and later replace a <c>_id</c> that is not a 24-hex ObjectId with one they
-    /// mint (devicestatus refuses it), and a treatment upsert carrying an <c>identifier</c> drops the
-    /// <c>_id</c> altogether; every version keeps <c>identifier</c> as sent. So <c>_id</c> goes out as
-    /// the ObjectId Nocturne's reads serve, and <c>identifier</c> carries the record's own key
-    /// verbatim, whatever its shape, for the pull-back to find the record by.
+    /// Nightscout 15.0.7 and later upsert an entry by sysTime and type with <c>$set</c>, so any
+    /// <c>_id</c> other than the stored reading's is an immutable-field error that aborts the batch.
+    /// An entry whose id is not an ObjectId, the id Nightscout keeps, therefore goes out with no
+    /// <c>_id</c>; every entry carries its own key verbatim as <c>identifier</c>, for the pull-back
+    /// to find the record by.
     /// </summary>
     [Theory]
-    [InlineData("dexcom_7f3c2a91")]
-    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e")]
-    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
-    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F")]
-    public async Task EntryWriteBack_SendsAnObjectIdAndTheRecordsOwnKeyAsItsIdentifier(string id)
+    [InlineData("dexcom_7f3c2a91", false)]
+    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e", true)]
+    [InlineData("5F1A2B3C4D5E6F7A8B9C0D1E", false)]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", false)]
+    [InlineData("0198C2A4-1F3B-7C2D-9E55-6A1B2C3D4E5F", false)]
+    public async Task EntryWriteBack_SendsAnIdOnlyForAnObjectIdAndTheRecordsOwnKeyAsItsIdentifier(string id, bool sendsId)
     {
         var handler = new RecordingHttpMessageHandler();
         var sut = CreateSink(handler);
@@ -558,15 +559,13 @@ public class NightscoutWriteBackSinkTests
         await sut.OnCreatedAsync(new[] { entry });
         await sut.OnUpdatedAsync(entry);
 
+        var expected = new Dictionary<string, string?> { ["identifier"] = id };
+        if (sendsId)
+            expected["_id"] = id;
         var posted = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0];
         var put = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]);
         foreach (var body in new[] { posted, put })
-            IdKeys(body).Should().BeEquivalentTo(new Dictionary<string, string?>
-            {
-                ["_id"] = MongoObjectId.Coerce(id),
-                ["identifier"] = id,
-            });
-        MongoObjectId.IsObjectId(posted.GetProperty("_id").GetString()).Should().BeTrue();
+            IdKeys(body).Should().BeEquivalentTo(expected);
     }
 
     [Theory]
@@ -595,7 +594,8 @@ public class NightscoutWriteBackSinkTests
     /// <summary>
     /// A treatment is served by its record's uuid and carries its legacy id apart; the legacy id is
     /// the key its pull-back is matched by, and a v4-native treatment with none is matched by that
-    /// uuid instead.
+    /// uuid instead. An ObjectId legacy id is covered by
+    /// <see cref="TreatmentWriteBack_SendsAnObjectIdLegacyIdAsItsIdWithNoIdentifier"/>.
     /// </summary>
     [Theory]
     [InlineData("syn-3a7c0e9f1b2d4c6e", "syn-3a7c0e9f1b2d4c6e")]
@@ -618,6 +618,35 @@ public class NightscoutWriteBackSinkTests
                 ["_id"] = MongoObjectId.FromGuid(Guid.Parse(RecordUuid)),
                 ["identifier"] = identifier,
             });
+    }
+
+    /// <summary>
+    /// A treatment upsert that carries an <c>identifier</c> matches <c>identifier</c> or a string
+    /// <c>_id</c> equal to it, never an ObjectId <c>_id</c>, so the copy written back before
+    /// identifiers were sent (under its ObjectId, with none) would get a second copy on its next
+    /// edit. A treatment whose key is an ObjectId goes out under it as <c>_id</c> alone, which the
+    /// upsert matches, and which the pull-back then finds by legacy id.
+    /// </summary>
+    [Fact]
+    public async Task TreatmentWriteBack_SendsAnObjectIdLegacyIdAsItsIdWithNoIdentifier()
+    {
+        const string legacyId = "65a1b2c3d4e5f60718293a4b";
+        var handler = new RecordingHttpMessageHandler();
+        var sut = new NightscoutTreatmentWriteBackSink(
+            new HttpClient(handler),
+            CreateLoader(_config).Object,
+            Breaker,
+            NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
+        var served = new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" };
+        var uploaded = new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" };
+
+        await sut.OnCreatedAsync(new[] { uploaded });
+        await sut.OnUpdatedAsync(served);
+
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0])
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId });
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]))
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId });
     }
 
     private const string RecordUuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";

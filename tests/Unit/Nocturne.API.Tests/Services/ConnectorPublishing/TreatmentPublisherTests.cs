@@ -124,6 +124,42 @@ public class TreatmentPublisherTests
         );
     }
 
+    /// <summary>
+    /// The fingerprint scope and the write are keyed by the id each treatment is stored under, which
+    /// the decomposer resolves first, and a write-back echo is not handed on at all.
+    /// </summary>
+    [Fact]
+    public async Task PublishTreatmentsAsync_ResolvesStoredIdentitiesFirst_AndDropsEchoes()
+    {
+        var echo = new Treatment { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "loop-1", DataSource = "nightscout-connector" };
+        var moved = new Treatment { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = "aaps-2", DataSource = "nightscout-connector" };
+        var calls = new List<string>();
+        _mockDecomposer
+            .Setup(d => d.ResolveStoredIdentitiesAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback(() =>
+            {
+                calls.Add("resolve");
+                echo.Id = echo.UpstreamIdentifier;
+                moved.Id = moved.UpstreamIdentifier;
+            })
+            .ReturnsAsync([echo]);
+        _mockDecomposer
+            .Setup(d => d.RekeyClientIdRecordsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("rekey"))
+            .ReturnsAsync(0);
+        List<Treatment>? written = null;
+        _mockTreatmentService
+            .Setup(s => s.CreateTreatmentsAsync(It.IsAny<IEnumerable<Treatment>>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<Treatment> t, CancellationToken _) => written = [.. t])
+            .ReturnsAsync((IEnumerable<Treatment> t, CancellationToken _) => new BulkWrite<Treatment>(t.ToList(), 0));
+
+        var result = await _publisher.PublishTreatmentsAsync([echo, moved], "nightscout-connector", WriteOrigin.Live);
+
+        result.Should().BeTrue();
+        calls.Should().Equal("resolve", "rekey");
+        written.Should().ContainSingle().Which.Id.Should().Be("aaps-2");
+    }
+
     [Fact]
     public async Task PublishTreatmentsAsync_ReturnsFalse_OnException()
     {

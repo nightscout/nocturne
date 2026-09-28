@@ -128,6 +128,14 @@ public interface ILegacyKeyedRepository<TRecord>
         IReadOnlyCollection<string> legacyIds, CancellationToken ct = default);
 
     /// <summary>
+    /// The ids among <paramref name="legacyIds"/> held, as <see cref="GetHeldLegacyIdsAsync"/> holds
+    /// them, by a record whose <see cref="IV4Record.DataSource"/> is not <paramref name="source"/>. A
+    /// live record governs over the user's deletion of the same id.
+    /// </summary>
+    Task<IEnumerable<string>> GetLegacyIdsHeldOutsideSourceAsync(
+        IReadOnlyCollection<string> legacyIds, string source, CancellationToken ct = default);
+
+    /// <summary>
     /// Gives each stored record that has no legacy id, live or deleted, the id among
     /// <paramref name="ids"/> that names it by <see cref="MongoObjectId.TryGetOwnIdRange"/>, as its
     /// legacy id.

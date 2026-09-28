@@ -1,4 +1,5 @@
 using Nocturne.API.Services.Audit;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
@@ -145,7 +146,8 @@ public abstract class DecomposerBase
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IReadOnlySet<string>>> Held,
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<UuidLegacyId>>>? Resolve,
         Func<IReadOnlyCollection<string>, CancellationToken, Task<IEnumerable<IV4Record>>> AdoptOwnIds,
-        Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation);
+        Func<IReadOnlyDictionary<Guid, string>, CancellationToken, Task<int>> AdoptByCorrelation,
+        Func<IReadOnlyCollection<string>, string, CancellationToken, Task<IEnumerable<string>>> HeldOutsideSource);
 
     protected static KeyedTable Table<TRecord>(ILegacyKeyedRepository<TRecord> repository, bool resolvesUuidLegacyIds)
         where TRecord : class, IV4Record
@@ -153,7 +155,8 @@ public abstract class DecomposerBase
             repository.GetHeldLegacyIdsAsync,
             resolvesUuidLegacyIds ? repository.ResolveUuidLegacyIdsAsync : null,
             async (ids, ct) => await repository.AdoptOwnIdsAsync(ids, ct),
-            repository.AdoptLegacyIdsByCorrelationAsync);
+            repository.AdoptLegacyIdsByCorrelationAsync,
+            repository.GetLegacyIdsHeldOutsideSourceAsync);
 
     /// <summary>
     /// Points each incoming document at the stored record it came from, before the legacy-id
@@ -175,9 +178,54 @@ public abstract class DecomposerBase
     /// one was sent: a 24-hex id that is the prefix of a stored uuid-shaped legacy id is rewritten
     /// to that legacy id, and one that names a record's own uuid is adopted by that record.
     /// </para>
+    /// <para>
+    /// A document the Nightscout connector pulled that then names a record stored from any other
+    /// source is that record's write-back echo: write-back sends every record not stored from the
+    /// connector upstream, and the connector owns only what it stored itself. The caller writes
+    /// nothing for an echo. Updating the record would re-attribute it to the connector, and
+    /// write-back skips connector records, so a later edit in Nocturne would stay local and the
+    /// next pull would restore the upstream copy over it. The identity pointing gave it is all it
+    /// keeps.
+    /// </para>
     /// </remarks>
-    protected static async Task PointAtStoredRecordsAsync<TDocument>(
-        IEnumerable<TDocument> documents, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+    /// <param name="pulledFromNightscout">Whether a document came from the Nightscout connector.</param>
+    /// <returns>The echoes among <paramref name="documents"/>.</returns>
+    protected static async Task<IReadOnlySet<TDocument>> PointAtStoredRecordsAsync<TDocument>(
+        IEnumerable<TDocument> documents,
+        IReadOnlyList<KeyedTable> tables,
+        Func<TDocument, bool> pulledFromNightscout,
+        CancellationToken ct)
+        where TDocument : ProcessableDocumentBase
+    {
+        var all = documents.ToList();
+        await RewriteToStoredIdsAsync(all, tables, ct);
+        return await EchoesAsync(all.Where(pulledFromNightscout).ToList(), tables, ct);
+    }
+
+    private static async Task<IReadOnlySet<TDocument>> EchoesAsync<TDocument>(
+        List<TDocument> pulled, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
+        where TDocument : ProcessableDocumentBase
+    {
+        var echoes = new HashSet<TDocument>(ReferenceEqualityComparer.Instance);
+        var ids = pulled.Select(d => d.Id).OfType<string>().Where(id => id.Length > 0).ToHashSet(StringComparer.Ordinal);
+        if (ids.Count == 0)
+            return echoes;
+
+        var foreign = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var table in tables)
+            foreign.UnionWith(await table.HeldOutsideSource(ids, DataSources.NightscoutConnector, ct));
+
+        foreach (var document in pulled)
+        {
+            if (document.Id is { } id && foreign.Contains(id))
+                echoes.Add(document);
+        }
+
+        return echoes;
+    }
+
+    private static async Task RewriteToStoredIdsAsync<TDocument>(
+        List<TDocument> documents, IReadOnlyList<KeyedTable> tables, CancellationToken ct)
         where TDocument : ProcessableDocumentBase
     {
         var pending = documents.ToList();

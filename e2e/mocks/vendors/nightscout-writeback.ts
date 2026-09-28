@@ -2,12 +2,18 @@
 // writes back and pulls: entries, device statuses and treatments POSTed or PUT to it are served back
 // on the next read.
 //
-// Ids are normalised as cgm-remote-monitor 15.0.7 and later do (REQ-SYNC-072, UUID_HANDLING on):
+// Ids are normalised as cgm-remote-monitor 15.0.7 and later do (REQ-SYNC-072, UUID_HANDLING on),
+// and it reports itself as 15.0.8:
 // - a `_id` that is not a 24-hex ObjectId moves to `identifier` when that is empty and is dropped,
 //   so the record gets a fresh ObjectId (entries and treatments); devicestatus refuses it with 400;
-// - a treatment carrying an `identifier` is upserted by it and its `_id` is dropped, so a new one
-//   gets a fresh ObjectId and an existing one keeps its own;
-// - an entry is upserted by date and type, keeping the stored record's `_id`;
+//   a 24-hex `_id` is kept, as an ObjectId;
+// - a treatment carrying an `identifier` is upserted by `$or: [{identifier}, {_id: identifier}]`
+//   and its `_id` is dropped, so a new one gets a fresh ObjectId and an existing one keeps its own.
+//   The `_id` arm compares a string, so it never matches a document stored under an ObjectId;
+// - a treatment with no `identifier` is replaced by its `_id`, else by created_at and eventType;
+// - an entry is upserted by date and type with `$set: doc`, in one ordered bulk write: a `_id`
+//   other than the stored reading's is an immutable-field error that stores nothing from that
+//   document on and fails the request;
 // - `identifier` is always kept as sent.
 // State lives for the life of the mocks container and is shared by every tenant pointed here, so a
 // spec keeps its records apart by device name or time.
@@ -55,21 +61,33 @@ function upsert(into: Map<string, Doc>, doc: Record<string, unknown>, existing: 
   return stored;
 }
 
-function storeEntries(body: string): Doc[] {
-  return parseDocs(body).map((raw) => {
+function storeEntries(body: string): VendorReply {
+  const stored: Doc[] = [];
+  for (const raw of parseDocs(body)) {
     const doc = normaliseId(raw);
     const existing = [...entries.values()].find((e) => Number(e.date) === Number(doc.date) && e.type === doc.type);
-    return upsert(entries, doc, existing);
-  });
+    if (existing && typeof doc._id === "string" && doc._id !== existing._id) {
+      return {
+        status: 500,
+        body: { status: 500, message: "Performing an update on the path '_id' would modify the immutable field '_id'" },
+      };
+    }
+    stored.push(upsert(entries, { ...existing, ...doc }, existing));
+  }
+  return ok(stored);
 }
+
+/** The string-literal arm of the identifier `$or`, which an ObjectId `_id` never equals. */
+const stringIdIs = (t: Doc, value: string) => !OBJECT_ID.test(t._id) && t._id === value;
 
 function storeTreatments(body: string): Doc[] {
   return parseDocs(body).map((raw) => {
     const doc = normaliseId(raw);
     let existing: Doc | undefined;
-    if (typeof doc.identifier === "string" && doc.identifier.length > 0) {
+    const identifier = doc.identifier;
+    if (typeof identifier === "string" && identifier.length > 0) {
       delete doc._id;
-      existing = [...treatments.values()].find((t) => t.identifier === doc.identifier);
+      existing = [...treatments.values()].find((t) => t.identifier === identifier || stringIdIs(t, identifier));
     } else if (typeof doc._id === "string") {
       existing = treatments.get(doc._id);
     } else {
@@ -121,7 +139,7 @@ const ok = (body: unknown): VendorReply => ({ status: 200, body });
 export const nightscoutWriteBack: Vendor = {
   handle(request: VendorRequest): VendorReply {
     if (request.path === "/api/v1/status.json") {
-      return ok({ status: "ok", name: "nightscout", version: "15.0.2", apiEnabled: true, serverTimeEpoch: Date.now() });
+      return ok({ status: "ok", name: "nightscout", version: "15.0.8", apiEnabled: true, serverTimeEpoch: Date.now() });
     }
     if (request.headers["api-secret"]?.toLowerCase() !== NIGHTSCOUT_API_SECRET_HEADER) {
       return { status: 401, body: { status: 401, message: "Unauthorized" } };
@@ -130,7 +148,7 @@ export const nightscoutWriteBack: Vendor = {
     const write = request.method === "POST" || request.method === "PUT";
     switch (request.path) {
       case "/api/v1/entries":
-        return write ? ok(storeEntries(request.body)) : { status: 405, body: "" };
+        return write ? storeEntries(request.body) : { status: 405, body: "" };
       case "/api/v1/devicestatus":
         return write ? storeDeviceStatuses(request.body) : { status: 405, body: "" };
       case "/api/v1/treatments":

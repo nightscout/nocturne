@@ -371,12 +371,14 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     {
         NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope([treatment]);
-        await PointAtStoredTreatmentsAsync([treatment], ct);
+        var echo = (await PointAtStoredTreatmentsAsync([treatment], ct)).Count > 0;
 
         var result = new V4Models.DecompositionResult
         {
             CorrelationId = Guid.CreateVersion7()
         };
+        if (echo)
+            return result;
 
         var c = ClassifyTreatment(treatment);
         if (c.ProducesNothing)
@@ -466,7 +468,8 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// follow through their shared correlation id). A treatment's uuid-shaped legacy id goes
     /// upstream in its <c>identifier</c> verbatim, so no table resolves one from its prefix.
     /// </summary>
-    private Task PointAtStoredTreatmentsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private Task<IReadOnlySet<Treatment>> PointAtStoredTreatmentsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
         => PointAtStoredRecordsAsync(
             treatments,
             [
@@ -478,7 +481,13 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
                 Table(_bolusCalculationRepository, resolvesUuidLegacyIds: false),
                 Table(_tempBasalRepository, resolvesUuidLegacyIds: false),
             ],
+            t => t.DataSource == Nocturne.Core.Constants.DataSources.NightscoutConnector,
             ct);
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+        => await PointAtStoredTreatmentsAsync(treatments, ct);
 
     #region Decomposition Methods
 
@@ -1199,7 +1208,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope(treatments);
-        await PointAtStoredTreatmentsAsync(treatments, ct);
+        var echoes = await PointAtStoredTreatmentsAsync(treatments, ct);
 
         var result = new V4Models.DecompositionResult();
 
@@ -1225,7 +1234,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var treatment in treatments)
+        foreach (var treatment in treatments.Where(t => !echoes.Contains(t)))
         {
             NormalizeIdentity(treatment);
 
@@ -1610,11 +1619,17 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
     /// uploader restated. A treatment the user deleted stays deleted.
+    /// <para>
+    /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
+    /// re-keyed is not the <c>_id</c> it came back with, so each is first pointed at the record it
+    /// names (<see cref="PointAtStoredTreatmentsAsync"/>). A write-back echo is never selected.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        var identified = treatments.Where(t => t.Id is { Length: > 0 }).ToList();
+        var echoes = await PointAtStoredTreatmentsAsync(treatments, ct);
+        var identified = treatments.Where(t => t.Id is { Length: > 0 } && !echoes.Contains(t)).ToList();
         if (identified.Count == 0)
             return [];
 
