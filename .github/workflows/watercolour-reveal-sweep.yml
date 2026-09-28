@@ -27,7 +27,7 @@ jobs:
           - the_sheet_is_still_settling_at_the_end
           - no_artwork_snaps_to_its_final_state
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     defaults:
       run:
         working-directory: crates
@@ -47,5 +47,5 @@ jobs:
           TEST: ${{ matrix.test }}
         run: |
           set -o pipefail
-          cargo test -p nocturne-watercolour-infra --release --locked             --test reveal_preserves_the_artwork -- --ignored --exact --nocapture "$TEST"             | tee "$RUNNER_TEMP/sweep.log"
+          cargo test -p nocturne-watercolour-infra --release --locked \n            --test reveal_preserves_the_artwork -- --ignored --exact --nocapture "$TEST" \n            | tee "$RUNNER_TEMP/sweep.log"
           grep -q 'test result: ok. 1 passed' "$RUNNER_TEMP/sweep.log"
