@@ -125,8 +125,18 @@ public class TenantSettingsController : ControllerBase
 
 public record SetPublicDocsRequest(bool Enabled);
 
-public record SetPatientRelationshipRequest(
-    [property: JsonRequired, EnumDataType(typeof(PatientRelationship))] PatientRelationship Relationship,
-    [property: MaxLength(256)] string? PatientName = null);
+/// <remarks>
+/// Nominal rather than positional: MVC refuses validation attributes on a positional record's
+/// properties, and NSwag reads them only from properties.
+/// </remarks>
+public record SetPatientRelationshipRequest
+{
+    [JsonRequired]
+    [EnumDataType(typeof(PatientRelationship))]
+    public PatientRelationship Relationship { get; init; }
+
+    [MaxLength(256)]
+    public string? PatientName { get; init; }
+}
 
 public record PatientRelationshipDto(PatientRelationship? Relationship, string? PatientName);
