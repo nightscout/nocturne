@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AlertCircle, Clock } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Clock from "@lucide/svelte/icons/clock";
   import { Button } from "$lib/components/ui/button";
   import { bg } from "$lib/utils/formatting";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";

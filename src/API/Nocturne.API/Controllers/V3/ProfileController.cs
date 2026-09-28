@@ -7,6 +7,7 @@ using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.API.Controllers.V3;
 
@@ -101,15 +102,15 @@ public class ProfileController : BaseV3Controller<Profile>
     /// <summary>
     /// Get profiles modified since a given timestamp (for AAPS incremental sync).
     /// </summary>
-    /// <param name="lastModified">Unix timestamp in milliseconds. Only profiles newer than this time are returned.</param>
+    /// <param name="lastModified">Unix timestamp in milliseconds. Only profiles modified after this time are returned.</param>
     /// <param name="limit">Maximum number of profiles to return (1-100, default 10).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>V3 collection of <see cref="Profile"/> records newer than the given timestamp.</returns>
+    /// <returns>V3 collection of <see cref="Profile"/> records modified since the given timestamp.</returns>
     /// <remarks>
     /// AAPS calls this on every incremental profile sync after the first load; without this
     /// route its profile cursor never advances and it re-requests (and errors) every cycle.
     /// </remarks>
-    /// <response code="200">Profiles newer than the given timestamp.</response>
+    /// <response code="200">Profiles modified since the given timestamp.</response>
     /// <response code="500">Internal server error.</response>
     [HttpGet("history/{lastModified:long}")]
     [NightscoutEndpoint("/api/v3/profile/history/{lastModified}")]
@@ -131,28 +132,18 @@ public class ProfileController : BaseV3Controller<Profile>
 
         limit = Math.Min(Math.Max(limit, 1), 100);
 
-        // The projection returns the newest `limit` profiles. A record newer than the
-        // cursor but older than this window is a superseded profile version; AAPS only
-        // activates the newest store in the page, so skipping it loses nothing.
-        var profiles = await _projectionService.GetProfilesAsync(
-            count: limit,
-            skip: 0,
-            ct: cancellationToken
-        );
-
         // Ascending order: AAPS activates the LAST element of the page.
-        var newerProfiles = profiles
-            .Where(p => p.Mills > lastModified)
-            .OrderBy(p => p.Mills)
-            .ToList();
+        var page = await _projectionService.GetProfilesModifiedSinceAsync(
+            lastModified,
+            limit,
+            cancellationToken
+        );
 
         // Echo the request cursor on an empty page so conditional clients always see
         // a parseable cursor ETag.
-        SetHistoryCursorHeaders(
-            newerProfiles.Count > 0 ? newerProfiles.Max(p => p.Mills) : lastModified
-        );
+        SetHistoryCursorHeaders(page.CursorMills ?? lastModified);
 
-        return CreateV3SuccessResponse(newerProfiles);
+        return CreateV3SuccessResponse(page.Records);
     }
 
     /// <summary>
@@ -403,11 +394,10 @@ public class ProfileController : BaseV3Controller<Profile>
         var identifierParts = new List<string>();
 
         if (
-            !string.IsNullOrEmpty(profile.CreatedAt)
-            && DateTime.TryParse(profile.CreatedAt, out var parsedDate)
+            UploaderTimestamp.TryParse(profile.CreatedAt, out var parsedDate)
         )
         {
-            identifierParts.Add(parsedDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
+            identifierParts.Add(parsedDate.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
         }
 
         // Add profile name if available for better identification
@@ -444,7 +434,7 @@ public class ProfileController : BaseV3Controller<Profile>
                 {
                     var profile = JsonSerializer.Deserialize<Profile>(
                         element.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        UploaderIdJsonModifier.CaseInsensitiveReadOptions
                     );
                     if (profile != null)
                     {
@@ -456,7 +446,7 @@ public class ProfileController : BaseV3Controller<Profile>
             {
                 var profile = JsonSerializer.Deserialize<Profile>(
                     jsonElement.GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    UploaderIdJsonModifier.CaseInsensitiveReadOptions
                 );
                 if (profile != null)
                 {

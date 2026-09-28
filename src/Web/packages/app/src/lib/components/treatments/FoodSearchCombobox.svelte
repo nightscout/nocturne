@@ -2,7 +2,11 @@
   import * as Command from "$lib/components/ui/command";
   import { Badge } from "$lib/components/ui/badge";
   import { Label } from "$lib/components/ui/label";
-  import { Check, Plus, Star, Clock, FileText } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Star from "@lucide/svelte/icons/star";
+  import Clock from "@lucide/svelte/icons/clock";
+  import FileText from "@lucide/svelte/icons/file-text";
   import { cn } from "$lib/utils";
   import type { Food } from "$lib/api";
 

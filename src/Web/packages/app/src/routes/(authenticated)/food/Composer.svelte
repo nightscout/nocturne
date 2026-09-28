@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { distinct } from "$lib/utils/collections";
 	import type { Food } from '$api';
-	import { Plus, X, ChevronRight } from 'lucide-svelte';
+	import Plus from '@lucide/svelte/icons/plus';
+	import X from '@lucide/svelte/icons/x';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import GiIcon from './GiIcon.svelte';
 	import GiLabel from './GiLabel.svelte';
 	import { getFoodState } from './food-context.js';

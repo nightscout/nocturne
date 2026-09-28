@@ -104,8 +104,8 @@ public class MigrationDataWatermarkTests
         await using var provider = MigrationJobHarness.BuildProvider(handler);
         var owner = MigrationJobHarness.NewTenant();
 
-        await MigrationJobHarness.RunAsync(provider, onCreated: null, ["entries"], owner);
-        await MigrationJobHarness.RunAsync(provider, onCreated: null, ["entries"], owner);
+        await MigrationJobHarness.RunAsync(provider, onCreated: null, ["entries"], owner: owner);
+        await MigrationJobHarness.RunAsync(provider, onCreated: null, ["entries"], owner: owner);
 
         (await SourceAsync(provider)).LastMigratedDataTimestamp
             .Should().Be(newest.UtcDateTime);

@@ -84,6 +84,7 @@ public class CareLinkAuthTokenProvider(
             }
         }
 
+        var refreshTokenRefused = false;
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {
             var refresh = await TryRefreshTokenAsync(
@@ -105,6 +106,7 @@ public class CareLinkAuthTokenProvider(
                 return (null, DateTime.MinValue, null);
             }
 
+            refreshTokenRefused = refresh.TokenRefused;
             _logger.LogWarning("Refresh token rejected, falling back to credential login");
         }
 
@@ -114,6 +116,8 @@ public class CareLinkAuthTokenProvider(
             _logger.LogError(
                 "Cannot authenticate: refresh token is invalid/expired and no password is configured. " +
                 "Please provide a valid password or a new refresh token.");
+            if (refreshTokenRefused)
+                RecordSignInRefused();
             return (null, DateTime.MinValue, null);
         }
 
@@ -176,8 +180,13 @@ public class CareLinkAuthTokenProvider(
         Unavailable,
     }
 
+    /// <param name="TokenRefused">
+    /// The token endpoint answered 400 or 403, Auth0's refusal of a revoked or expired refresh token. A
+    /// <see cref="RefreshOutcome.Rejected"/> from an unreadable success body says nothing about the token.
+    /// </param>
     private sealed record RefreshResult(
-        RefreshOutcome Outcome, string? Token, DateTime ExpiresAt, string? NewRefreshToken);
+        RefreshOutcome Outcome, string? Token, DateTime ExpiresAt, string? NewRefreshToken,
+        bool TokenRefused = false);
 
     /// <summary>
     /// Redeems the refresh token, retrying a transient token-endpoint failure on the same loop and
@@ -236,7 +245,8 @@ public class CareLinkAuthTokenProvider(
             _logger.LogWarning("Token refresh returned {StatusCode}: {Body}", response.StatusCode, body);
 
             var outcome = response.IsRetryableError() ? RefreshOutcome.Transient : RefreshOutcome.Rejected;
-            return new RefreshResult(outcome, null, DateTime.MinValue, null);
+            var tokenRefused = response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden;
+            return new RefreshResult(outcome, null, DateTime.MinValue, null, tokenRefused);
         }
 
         try

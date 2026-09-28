@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
-  import { Plus } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
   import {
     ELEMENT_GROUPS,
     ELEMENT_INFO,

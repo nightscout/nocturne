@@ -66,34 +66,27 @@ public class ProfileDeletionService : IProfileDeletionService
         await using var ctx = await _contextFactory.CreateAsync(ct);
         var scope = $"profile_name={profileName}";
 
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        var deleted = await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-
-            var count =
-                await ctx.AuditedSoftDeleteInTransactionAsync(
+        var deleted = await ctx.ExecuteInTransactionAsync(
+            async token =>
+                await ctx.AuditedSoftDeleteAsync(
                     ctx.BasalSchedules.Where(e => e.ProfileName == profileName),
-                    _auditContext, scope, ct)
-                + await ctx.AuditedSoftDeleteInTransactionAsync(
+                    _auditContext, scope, token)
+                + await ctx.AuditedSoftDeleteAsync(
                     ctx.CarbRatioSchedules.Where(e => e.ProfileName == profileName),
-                    _auditContext, scope, ct)
-                + await ctx.AuditedSoftDeleteInTransactionAsync(
+                    _auditContext, scope, token)
+                + await ctx.AuditedSoftDeleteAsync(
                     ctx.SensitivitySchedules.Where(e => e.ProfileName == profileName),
-                    _auditContext, scope, ct)
-                + await ctx.AuditedSoftDeleteInTransactionAsync(
+                    _auditContext, scope, token)
+                + await ctx.AuditedSoftDeleteAsync(
                     ctx.TargetRangeSchedules.Where(e => e.ProfileName == profileName),
-                    _auditContext, scope, ct)
+                    _auditContext, scope, token)
                 // Last: the projection keys on therapy settings, so while this row survives the
                 // profile still resolves. A roll-back therefore cannot leave a name whose schedules
                 // are gone but which every legacy consumer still reads as present.
-                + await ctx.AuditedSoftDeleteInTransactionAsync(
+                + await ctx.AuditedSoftDeleteAsync(
                     ctx.TherapySettings.Where(e => e.ProfileName == profileName),
-                    _auditContext, scope, ct);
-
-            await tx.CommitAsync(ct);
-            return count;
-        });
+                    _auditContext, scope, token),
+            ct: ct);
 
         _logger.LogInformation(
             "Deleted therapy profile {ProfileName}: {Count} records across five tables",

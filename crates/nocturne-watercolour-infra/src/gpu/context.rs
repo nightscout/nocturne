@@ -136,6 +136,12 @@ impl GpuContext {
         self.inner.info.backend
     }
 
+    /// A software rasteriser (llvmpipe, lavapipe, WARP, SwiftShader): what a
+    /// GPU-less CI runner offers in place of a device.
+    pub fn is_software(&self) -> bool {
+        self.inner.info.device_type == wgpu::DeviceType::Cpu
+    }
+
     /// Set once the driver or browser reports the device lost; every later
     /// submission is silently dropped, so hosts should stop and fall back.
     pub fn is_lost(&self) -> bool {

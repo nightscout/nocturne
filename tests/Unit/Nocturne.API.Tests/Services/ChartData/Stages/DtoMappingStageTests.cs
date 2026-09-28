@@ -252,6 +252,41 @@ public class DtoMappingStageTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_StepSeries_LeavesOutEmptyCountsAndPossibleRunningTotals()
+    {
+        StepCount Step(long offsetMs, int metric, int source) => new()
+        {
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(StartTime + offsetMs).UtcDateTime,
+            Metric = metric,
+            Source = source,
+        };
+
+        _mockTreatmentFoodService
+            .Setup(s => s.GetByCarbIntakeIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+
+        var context = new ChartDataContext
+        {
+            StartTime = StartTime,
+            EndTime = EndTime,
+            StateSpans = new Dictionary<StateSpanCategory, IEnumerable<StateSpan>>(),
+            StepCountList =
+            [
+                Step(4_000, 500, 1),
+                Step(1_000, 300, 0),
+                Step(2_000, 9_000, StepCount.PossibleRunningTotalFlag),
+                Step(3_000, 0, 0),
+            ],
+        };
+
+        var result = await _stage.ExecuteAsync(context, CancellationToken.None);
+
+        result.StepSeries.Select(p => (p.Time, p.Steps)).Should().Equal(
+            (StartTime + 1_000, 300),
+            (StartTime + 4_000, 500));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WithEmptyData_ReturnsEmptyCollections()
     {
         // Arrange

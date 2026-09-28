@@ -11,7 +11,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Separator } from "$lib/components/ui/separator";
-  import { ListChecks, Plus, ArrowLeft, X } from "lucide-svelte";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
+  import Plus from "@lucide/svelte/icons/plus";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import X from "@lucide/svelte/icons/x";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
   interface PackingItem {

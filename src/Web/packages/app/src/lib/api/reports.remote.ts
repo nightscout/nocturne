@@ -8,6 +8,7 @@ import { DiabetesPopulation, ClusterConfidence } from "$lib/api";
 import { fetchAllGlucose } from "./glucose-pagination";
 import { DateRangeSchema, resolveReportRange } from "./report-range";
 import { readable } from "$lib/server/patient-timezone";
+import { compare } from "$api/generated/cgmComparisons.generated.remote";
 
 export type { DateRangeInput } from "./report-range";
 
@@ -215,17 +216,15 @@ export const getCgmComparison = query(
     toleranceMinutes: z.number().optional(),
   }),
   async (input) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
     const { startDate, endDate } = await resolveReportRange(input);
 
-    return apiClient.cgmComparison.compare(
-      input.deviceAId,
-      input.deviceBId,
+    return compare({
+      deviceAId: input.deviceAId,
+      deviceBId: input.deviceBId,
       startDate,
       endDate,
-      input.toleranceMinutes
-    );
+      toleranceMinutes: input.toleranceMinutes,
+    });
   }
 );
 

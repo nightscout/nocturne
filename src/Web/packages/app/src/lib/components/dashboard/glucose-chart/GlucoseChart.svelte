@@ -35,6 +35,7 @@
   import BgCheckMarkers from "./markers/BgCheckMarkers.svelte";
   import ChartHighlight from "./tracks/ChartHighlight.svelte";
   import ChartTooltip from "./ChartTooltip.svelte";
+  import { openDayInReview } from "./day-in-review";
 
   // Dialogs
   import { EntryEditDialog } from "$lib/components/entries";
@@ -225,7 +226,7 @@
     <ChartHighlight />
   {/snippet}
   {#snippet overlays()}
-    <ChartTooltip {tooltipExtras} />
+    <ChartTooltip {tooltipExtras} onTimeClick={openDayInReview} />
   {/snippet}
 </GlucoseChartShell>
 

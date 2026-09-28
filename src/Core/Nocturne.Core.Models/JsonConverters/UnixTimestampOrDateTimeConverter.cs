@@ -28,22 +28,7 @@ public class UnixTimestampOrDateTimeConverter : JsonConverter<DateTime?>
 
             case JsonTokenType.String:
                 // Handle ISO datetime string
-                var dateString = reader.GetString();
-                if (string.IsNullOrEmpty(dateString))
-                    return null;
-
-                if (
-                    DateTime.TryParse(
-                        dateString,
-                        null,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out var parsedDate
-                    )
-                )
-                {
-                    return DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc);
-                }
-                return null;
+                return UploaderTimestamp.ParseUtcDateTime(reader.GetString());
 
             case JsonTokenType.Null:
                 return null;

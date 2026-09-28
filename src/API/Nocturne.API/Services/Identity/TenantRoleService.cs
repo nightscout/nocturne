@@ -64,7 +64,6 @@ public partial class TenantRoleService(
         List<string> permissions,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
         var entity = new TenantRoleEntity
         {
             Id = Guid.CreateVersion7(),
@@ -74,7 +73,6 @@ public partial class TenantRoleService(
             Description = description,
             Permissions = permissions,
             IsSystem = false,
-            SysUpdatedAt = now,
         };
 
         context.TenantRoles.Add(entity);
@@ -199,8 +197,6 @@ public partial class TenantRoleService(
             .Select(r => r.Slug)
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
-
         foreach (var (slug, permissions) in RoleSeeds.Permissions)
         {
             if (existingSlugs.Contains(slug))
@@ -216,7 +212,6 @@ public partial class TenantRoleService(
                 Description = null,
                 Permissions = new List<string>(permissions),
                 IsSystem = true,
-                SysUpdatedAt = now,
             });
         }
 

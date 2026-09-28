@@ -1,3 +1,4 @@
+using System.Globalization;
 using Ganss.Xss;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
@@ -155,7 +156,7 @@ public class DocumentProcessingService : IDocumentProcessingService
             )
             {
                 // CreatedAt has timezone information - process it to preserve timezone offset
-                if (DateTimeOffset.TryParse(document.CreatedAt, out var parsedDate))
+                if (UploaderTimestamp.TryParse(document.CreatedAt, out var parsedDate))
                 {
                     // Convert to UTC and set the ISO string
                     var utcDate = parsedDate.ToUniversalTime();
@@ -194,8 +195,17 @@ public class DocumentProcessingService : IDocumentProcessingService
             // Priority 3: Process any other CreatedAt values (including UTC timestamps)
             else if (hasExplicitCreatedAt)
             {
-                // Try to parse the timestamp as DateTimeOffset to handle timezone info
-                if (DateTimeOffset.TryParse(document.CreatedAt, out var parsedDate))
+                if (
+                    IsZoneless(document.CreatedAt)
+                    && UploaderTimestamp.TryParse(document.CreatedAt, out var zonelessDate)
+                )
+                {
+                    document.CreatedAt = zonelessDate.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+                    document.Mills = zonelessDate.ToUnixTimeMilliseconds();
+                    // The timestamp string carried no zone; honor a client-supplied offset, else assume UTC.
+                    document.UtcOffset ??= 0;
+                }
+                else if (UploaderTimestamp.TryParse(document.CreatedAt, out var parsedDate))
                 {
                     // Convert to UTC and set the ISO string
                     var utcDate = parsedDate.ToUniversalTime();
@@ -213,15 +223,6 @@ public class DocumentProcessingService : IDocumentProcessingService
                         document.CreatedAt,
                         document.UtcOffset
                     );
-                }
-                else if (DateTime.TryParse(document.CreatedAt, out var utcDateTime))
-                {
-                    // If it's already UTC or no timezone info, ensure it's properly formatted
-                    var dateTimeOffset = new DateTimeOffset(utcDateTime, TimeSpan.Zero);
-                    document.CreatedAt = dateTimeOffset.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
-                    document.Mills = dateTimeOffset.ToUnixTimeMilliseconds();
-                    // The timestamp string carried no zone; honor a client-supplied offset, else assume UTC.
-                    document.UtcOffset ??= 0;
                 }
                 else
                 {
@@ -266,6 +267,15 @@ public class DocumentProcessingService : IDocumentProcessingService
             document.UtcOffset = 0;
         }
     }
+
+    private static bool IsZoneless(string? timestamp) =>
+        DateTime.TryParse(
+            timestamp,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.RoundtripKind,
+            out var parsed
+        )
+        && parsed.Kind == DateTimeKind.Unspecified;
 
     /// <inheritdoc />
     public Entry ProcessEntry(Entry entry)

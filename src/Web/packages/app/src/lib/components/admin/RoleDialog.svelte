@@ -6,7 +6,7 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Badge } from "$lib/components/ui/badge";
-  import { Loader2 } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import type { TenantRoleDto } from "$api";
 
   const permissionCategories = [

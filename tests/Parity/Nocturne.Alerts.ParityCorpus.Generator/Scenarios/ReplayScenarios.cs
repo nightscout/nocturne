@@ -207,7 +207,7 @@ public static class ReplayScenarios
 
         yield return Replay(
             "replay-leaf-log",
-            "every leaf is logged at its first observation and each flip, evaluated alone even where the composite short-circuits",
+            "every leaf is logged at its first observation and each flip, each evaluated alone",
             [Rule(1, "composite", """
                 {"operator": "and", "conditions": [
                     {"type": "threshold", "threshold": {"direction": "below", "value": 70}},

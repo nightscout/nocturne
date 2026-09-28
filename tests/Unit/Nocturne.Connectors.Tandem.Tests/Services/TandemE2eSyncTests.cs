@@ -681,6 +681,8 @@ public class TandemE2eSyncTests
 
         public Task<bool> PublishEntriesAsync(IEnumerable<Entry> entries, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
+        public Task<int?> PublishRecentEntriesAsync(IEnumerable<Entry> entries, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
         public Task<bool> PublishSensorGlucoseAsync(IEnumerable<SensorGlucose> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(SensorGlucoses, records);
         public Task<DateTime?> GetLatestEntryTimestampAsync(string source, CancellationToken ct = default) =>
@@ -704,6 +706,8 @@ public class TandemE2eSyncTests
             Task.FromResult(true);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
+        public Task<DateTime?> GetLatestTreatmentTimestampAsync(SyncDataType type, string source, CancellationToken ct = default) =>
+            Task.FromResult(latestTreatment);
 
         public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
@@ -716,6 +720,8 @@ public class TandemE2eSyncTests
 
         public Task<bool> PublishDeviceStatusAsync(IEnumerable<DeviceStatus> deviceStatuses, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(DeviceStatuses, deviceStatuses);
+        public Task<int?> PublishRecentDeviceStatusAsync(IEnumerable<DeviceStatus> deviceStatuses, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
         public Task<bool> PublishDeviceEventsAsync(IEnumerable<DeviceEvent> records, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(DeviceEvents, records);
         public Task<DateTime?> GetLatestDeviceStatusTimestampAsync(string source, CancellationToken ct = default) =>
@@ -746,6 +752,8 @@ public class TandemE2eSyncTests
         public Task<bool> PublishHeartRatesAsync(IEnumerable<HeartRate> records, string source, CancellationToken ct = default) =>
             Task.FromResult(true);
         public Task<DateTime?> GetLatestActivityTimestampAsync(string source, CancellationToken ct = default) =>
+            Task.FromResult<DateTime?>(null);
+        public Task<DateTime?> GetLatestStateSpanTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);
         public Task<DateTime?> GetBackfillLowWaterMarkAsync(string source, string collection, CancellationToken ct = default) =>
             Task.FromResult<DateTime?>(null);

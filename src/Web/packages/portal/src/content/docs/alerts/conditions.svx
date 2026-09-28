@@ -1,0 +1,316 @@
+---
+title: Conditions
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# Conditions
+
+A condition is one thing a rule checks. This page lists every condition in the
+rule editor, in the order the add menu shows them, with what it watches, its
+settings, and when you would reach for it.
+
+Two things apply to all of them.
+
+**No data means "not true".** If a condition needs something Nocturne has
+never received, such as insulin on board from a site with no pump connected, it
+is simply never true. It does not raise an error and it does not alert. A rule
+built on data you do not have stays silent, so check the data is there before
+relying on the rule. The few exceptions are called out below.
+
+**Values are compared exactly as written.** "Below 70" means 69 counts and 70
+does not. "At least 2" means 2 counts.
+
+<Callout type="info" title="Not medical advice">
+
+  The example values on this page show how each setting behaves. They are not
+  recommendations. Work out your own with your diabetes care team.
+
+</Callout>
+
+## Glucose
+
+### Glucose
+
+The latest CGM reading compared with a value: below it (`<`) or above it (`>`).
+
+- **Settings:** below or above, and a glucose value in your units.
+- **Use it for:** the core low and high alerts.
+- **Good to know:** "below" and "above" are strict. A rule for "below 70" does
+  not fire on a reading of exactly 70. Between readings, the last reading is
+  what the rule sees.
+
+### Glucose bucket
+
+The latest reading falls into one of the ranges you tick: very low, low, tight
+range, in range, high, very high.
+
+- **Settings:** one or more ranges.
+- **Use it for:** rules that should follow your target range, so changing your
+  targets changes the alert too.
+- **Good to know:** the ranges come from your target range settings. With the
+  standard targets they are: very low under 54 mg/dL (3.0 mmol/L), low from 54
+  up to 70 (3.0 to 3.9), tight range 70 to 140 (3.9 to 7.8), in range above 140
+  up to 180 (7.8 to 10.0), high above 180 up to 250 (10.0 to 13.9), and very
+  high above 250 (13.9).
+
+<Callout type="warning" title="In range does not include tight range">
+
+  Each reading falls in exactly one range, so "in range" only covers the part of
+  your target range above the tight range: 141 to 180 mg/dL with the standard
+  targets. To mean "anywhere in my target range", tick both **tight range** and
+  **in range**.
+
+</Callout>
+
+### Predicted glucose
+
+Your loop's forecast of where glucose is heading. The condition is true if
+**any** forecast point within the next so many minutes matches.
+
+- **Settings:** a comparison (at least, more than, at most or less than), a glucose value, and how many minutes
+  ahead to look.
+- **Use it for:** "warn me if my loop thinks I will be under 70 within the next
+  30 minutes", before the low arrives.
+- **Good to know:** forecasts come from loop apps that upload them, such as
+  AAPS and Trio (the oref algorithm). With no forecast the condition is never
+  true. A forecast is a guess, and it changes with every loop cycle.
+
+### Rate of change
+
+How fast glucose is moving, in mg/dL (or mmol/L) per minute, as reported by
+your CGM with each reading.
+
+- **Settings:** rising or falling, and a rate. The condition is true when
+  glucose is moving at least that fast in that direction.
+- **Use it for:** catching a fast fall early, usually combined with a glucose
+  value (see [Combining conditions](/docs/alerts/combining)).
+- **Good to know:** a fall of 2 mg/dL a minute is 0.11 mmol/L a minute, and
+  over 15 minutes adds up to 30 mg/dL (1.7 mmol/L). If your CGM or uploader
+  does not send a rate with its readings, this condition is never true.
+
+### Trend
+
+The trend arrow, as a rough direction: rising fast, rising, flat, falling,
+falling fast.
+
+- **Settings:** one direction.
+- **Use it for:** rules that read like the arrow on your CGM app.
+- **Good to know:** the direction is worked out from the rate of change. Rising
+  fast is 3 mg/dL a minute or more; rising is 1 up to 3; flat is from falling 1
+  to rising 1 (a fall of exactly 1 counts as flat); falling is more than 1 up to
+  3 (a fall of exactly 3 counts as falling); falling fast is more than 3. Use
+  **Rate of change** when you want a precise number.
+
+### Sensor stale
+
+How long since the last CGM reading arrived.
+
+- **Settings:** at least (≥) or more than (>), and a number of minutes.
+- **Use it for:** the same job as **Signal loss** below; use whichever reads
+  more naturally to you.
+- **Good to know:** this is checked every 30 seconds, not only when a reading
+  arrives, because the whole point is that none is arriving. On a site that has
+  never had a reading, it is never true.
+
+## Insulin
+
+### IOB
+
+Insulin on board: how much insulin your pump or loop reports is still working,
+in units.
+
+- **Settings:** a comparison and a number of units.
+- **Use it for:** "a low is coming and there is still a lot of insulin working",
+  combined with a glucose or forecast condition.
+
+### Temp basal
+
+A temporary basal rate that is running now.
+
+- **Settings:** whether to check the rate itself (units per hour) or the rate as
+  a percentage of your scheduled basal, a comparison and a value.
+- **Use it for:** noticing a loop that has been running a very high temp basal.
+- **Good to know:** when no temp basal is running, the condition is not true.
+
+### Sensitivity
+
+The autosens ratio from AAPS or Trio: how much more or less sensitive to
+insulin the loop thinks you are right now. 1 is normal; under 1 means more
+sensitive (the loop is giving less insulin), over 1 means less sensitive.
+
+- **Settings:** a comparison and a ratio.
+- **Good to know:** only AAPS and Trio report it.
+
+### Time since last bolus
+
+Minutes since the last bolus Nocturne has on record.
+
+- **Settings:** a comparison and a number of minutes.
+- **Use it for:** a missed-bolus reminder, together with **Time of day**.
+- **Good to know:** unlike most conditions, "no bolus ever recorded" counts as
+  a very long time, so "more than 300 minutes" is true on a site with no
+  boluses at all.
+
+## Carbs
+
+### COB
+
+Carbs on board: how many grams your loop reports are still being absorbed.
+
+- **Settings:** a comparison and grams.
+
+### Time since last carb
+
+Minutes since the last carb entry. It works like **Time since last bolus**,
+including counting "no carbs ever recorded" as a very long time.
+
+## Device
+
+### Reservoir
+
+The insulin left in the pump, in units.
+
+- **Settings:** a comparison and units.
+- **Good to know:** some pumps, such as Omnipod, only report "50+" until the
+  reservoir drops under 50 units. Nocturne treats "50+" as "at least 50", so it
+  can satisfy "more than 20" but never "at most 10".
+
+### Site age
+
+Hours since the last infusion site (cannula) change.
+
+- **Settings:** a comparison and hours. 72 hours is three days.
+- **Use it for:** a site change reminder, usually as an Info rule.
+
+### Sensor age
+
+Days since the current CGM sensor was started.
+
+- **Settings:** a comparison and days.
+
+### Tracker age
+
+Time since a tracker you have set up started, or until one is due.
+
+- **Settings:** which tracker, a comparison and minutes.
+- **Good to know:** for a tracker that counts down to a scheduled event, the
+  time is negative before the event, so "at least minus 30 minutes" is true from
+  30 minutes before it is due onwards. A tracker that is not running has no
+  age, and the condition is not true.
+
+### Pump battery and Phone battery
+
+The battery level of the pump, or of the phone that uploads your data, in
+percent.
+
+- **Settings:** a comparison and a percentage.
+- **Good to know:** not true until the pump or phone has reported a battery
+  level at least once.
+
+### Loop has stopped
+
+Minutes since your loop last ran a cycle.
+
+- **Settings:** a comparison and minutes.
+- **Use it for:** knowing your loop has gone quiet, which often means it has
+  lost the pump or the CGM.
+- **Good to know:** on a site where a loop has never reported, it is never true.
+
+### Loop not enacting
+
+Minutes since your loop last actually changed what the pump is doing, rather
+than just running. A loop that is running but not enacting has usually lost
+contact with the pump.
+
+### Signal loss
+
+No CGM reading for a number of minutes.
+
+- **Settings:** minutes.
+- **Use it for:** every setup that relies on alerts. When readings stop, every
+  other glucose rule goes quiet with them, and this is the rule that tells you.
+- **Good to know:** checked every 30 seconds. It clears when the next reading
+  arrives. A site that has never had a reading does not raise it.
+
+<AlertSimulator scenario="sensor-gap" rules={["signal-loss"]} />
+
+## Behaviour
+
+### Pump suspended
+
+Whether insulin delivery is suspended.
+
+- **Settings:** whether it is, or is not, and optionally "for at least" a number
+  of minutes.
+- **Use it for:** a pump left suspended after a shower or a site change.
+- **Good to know:** not true until the pump has reported its state at least
+  once.
+
+### Override active
+
+Whether an override (a temporary change of targets or settings in your loop)
+is running, and optionally for how long.
+
+### Do Not Disturb
+
+Whether Do Not Disturb is on right now, and optionally for how long. Useful for
+a rule that tells a carer when Do Not Disturb has been left on.
+
+### Pump mode
+
+The mode your pump or loop reports: Automatic, Limited, Manual, Boost, Ease off,
+Sleep, Exercise, Liberty, Suspended or Off.
+
+- **Settings:** a mode, whether it is or is not the current mode, and optionally
+  how long.
+- **Good to know:** "is not Automatic" is also true when the pump reports no
+  mode at all.
+
+## State spans
+
+### State active
+
+Whether a recorded state is running: pump connectivity, override, profile,
+exercise, illness, travel, data exclusion or temporary target, optionally a
+particular value, and optionally for how long.
+
+### Sleep session
+
+Whether a recorded sleep session is in progress.
+
+## Time
+
+### Time of day
+
+The current time falls inside a window.
+
+- **Settings:** from and to, in 24-hour time, and the time zone.
+- **Use it for:** rules that only apply overnight, or only during school hours.
+- **Good to know:** the window includes its start and stops just before its
+  end: 22:00 to 06:00 includes 22:00 and 05:59, not 06:00. A window that
+  crosses midnight works as you would expect. The editor fills in your
+  browser's time zone; you can switch it to the time zone on your patient
+  record instead.
+
+### Day of week
+
+Today is one of the days you pick, in your time zone.
+
+## Alerts
+
+### Other rule state
+
+Whether another of your rules is firing, unacknowledged or acknowledged, and
+optionally for how long.
+
+- **Use it for:** escalation. For example, a rule "Low has been unacknowledged
+  for 15 minutes" with a channel that messages a second person. See
+  [Example rules](/docs/alerts/recipes#tell-someone-else-if-nobody-responds).
+- **Good to know:** "unacknowledged" means firing and not yet acknowledged.
+  Snoozing an alert does not acknowledge it, so a snoozed alert still counts as
+  unacknowledged. If the other rule is switched off or deleted, this rule is not
+  checked at all until it is back.

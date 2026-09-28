@@ -3,7 +3,9 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { FormError } from "$lib/forms";
-  import { Fingerprint, Loader2, Check } from "lucide-svelte";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
   import { Artwork } from "@nocturne/watercolour";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   import {

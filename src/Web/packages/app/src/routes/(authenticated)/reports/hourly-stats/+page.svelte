@@ -3,7 +3,9 @@
   import * as Table from "$lib/components/ui/table";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { ArrowRight, CircleDashed, Info } from "lucide-svelte";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import CircleDashed from "@lucide/svelte/icons/circle-dashed";
+  import Info from "@lucide/svelte/icons/info";
   import { getHourlyPatterns } from "$api/reports.remote";
   import {
     HourlyClockBasis,

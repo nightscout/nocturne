@@ -47,13 +47,6 @@ export interface ServerSettings {
   };
 }
 
-export interface ClientThresholds {
-  high: number;
-  targetTop: number;
-  targetBottom: number;
-  low: number;
-}
-
 /**
  * Settings for dynamic browser title and favicon based on glucose values
  */
@@ -106,7 +99,6 @@ export interface ClientSettings {
   heartbeat: number;
   baseURL: string;
   authDefaultRoles: string;
-  thresholds: ClientThresholds;
   demoMode: DemoModeSettings;
   titleFavicon: TitleFaviconSettings;
 }

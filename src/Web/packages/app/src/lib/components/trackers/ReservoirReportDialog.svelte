@@ -5,7 +5,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";
-  import { Droplet } from "lucide-svelte";
+  import Droplet from "@lucide/svelte/icons/droplet";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { create as createReservoirReport } from "$api/generated/reservoirReports.generated.remote";

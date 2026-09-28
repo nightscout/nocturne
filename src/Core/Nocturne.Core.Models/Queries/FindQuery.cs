@@ -106,6 +106,35 @@ public sealed class FindQuery
     }
 
     /// <summary>
+    /// <c>true</c> when the query's top level (outside any <c>$and</c>/<c>$or</c> group) carries a
+    /// condition on <paramref name="field"/> or one of its sub-paths — the same test as legacy
+    /// Nightscout's truthiness check on <c>query[field]</c>. Field names are case-sensitive, as in
+    /// MongoDB.
+    /// </summary>
+    public bool HasTopLevelCondition(string field)
+    {
+        return EnumerateTopLevel(_root).Any(c =>
+            c.Path.Equals(field, StringComparison.Ordinal)
+            || c.Path.StartsWith(field + ".", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Conditions outside every logical group. A JSON field operand object
+    /// (<c>{"created_at":{"$gte":…}}</c>) parses to a non-logical group and is descended into.
+    /// </summary>
+    private static IEnumerable<Condition> EnumerateTopLevel(Group group)
+    {
+        foreach (var child in group.Children)
+        {
+            if (child is Condition cond)
+                yield return cond;
+            else if (child is Group { IsLogical: false } nested)
+                foreach (var inner in EnumerateTopLevel(nested))
+                    yield return inner;
+        }
+    }
+
+    /// <summary>
     /// Parses a find query from either wire form. A null/empty/unparseable input yields
     /// <see cref="Empty"/> (no filtering), matching the legacy server's lenient behavior.
     /// </summary>
@@ -164,7 +193,7 @@ public sealed class FindQuery
 
     #region Condition tree
 
-    private sealed record Group(bool IsAnd, List<object> Children);
+    private sealed record Group(bool IsAnd, List<object> Children, bool IsLogical = false);
 
     /// <summary>
     /// A single field condition. <see cref="StringValue"/> carries the querystring-form operand;
@@ -231,7 +260,7 @@ public sealed class FindQuery
             {
                 if (!clauses.TryGetValue(groupKey, out var clause))
                 {
-                    clause = new Group(IsAnd: true, []);
+                    clause = new Group(IsAnd: true, [], IsLogical: true);
                     clauses[groupKey] = clause;
                     if (groupKey.StartsWith("or:", StringComparison.Ordinal))
                     {
@@ -257,7 +286,7 @@ public sealed class FindQuery
 
     private static Group AddChildGroup(Group parent, bool isAnd)
     {
-        var child = new Group(isAnd, []);
+        var child = new Group(isAnd, [], IsLogical: true);
         parent.Children.Add(child);
         return child;
     }
@@ -331,7 +360,7 @@ public sealed class FindQuery
                 case "$or":
                     if (property.Value.ValueKind == JsonValueKind.Array)
                     {
-                        var logical = new Group(IsAnd: property.Name == "$and", []);
+                        var logical = new Group(IsAnd: property.Name == "$and", [], IsLogical: true);
                         foreach (var item in property.Value.EnumerateArray()
                                      .Where(i => i.ValueKind == JsonValueKind.Object))
                             logical.Children.Add(ParseJsonObject(item, path: null, depth + 1));

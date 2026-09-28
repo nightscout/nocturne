@@ -4,15 +4,13 @@
   import { Button } from "$lib/components/ui/button";
   import * as InputGroup from "$lib/components/ui/input-group";
   import { Label } from "$lib/components/ui/label";
-  import {
-    Loader2,
-    ExternalLink,
-    Fingerprint,
-    User,
-    KeyRound,
-    Smartphone,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import User from "@lucide/svelte/icons/user";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import { FormError, FormField, useSubmission } from "$lib/forms";
   import { WebAuthnAbortService } from "@simplewebauthn/browser";

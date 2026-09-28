@@ -13,15 +13,13 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
-  import {
-    AlertCircle,
-    ChevronRight,
-    Loader2,
-    Smartphone,
-    Cloud,
-    Plug,
-  } from "lucide-svelte";
-  import Apple from "lucide-svelte/icons/apple";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Cloud from "@lucide/svelte/icons/cloud";
+  import Plug from "@lucide/svelte/icons/plug";
+  import Apple from "@lucide/svelte/icons/apple";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
 
   interface Props {

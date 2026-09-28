@@ -38,14 +38,14 @@ internal readonly record struct LegacyTreatmentRange(
 );
 
 /// <summary>
-/// One record fetched for projection, carrying the table that owns it and the <c>SysUpdatedAt</c> of
-/// the row it came from — the latter on the modified-since path only; the time-range path does not
-/// surface <see cref="Treatment.SrvModified"/>.
+/// One record fetched for projection, carrying the table that owns it and the <c>SysCreatedAt</c> and
+/// <c>SysUpdatedAt</c> of the row it came from.
 /// </summary>
 internal readonly record struct FetchedRecord(
     ILegacyTreatmentTable Table,
     object Record,
-    DateTime? Modified
+    DateTime Created,
+    DateTime Modified
 );
 
 /// <summary>Food breakdown rows for the carb intakes of one projected page, keyed by carb intake.</summary>
@@ -137,7 +137,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         if (range.NativeOnly)
             records = records.Where(r => legacyId(r) is null);
 
-        return records.Select(r => new FetchedRecord(this, r, null)).ToList();
+        return records.Select(r => new FetchedRecord(this, r, CreatedAt(r), ModifiedAt(r))).ToList();
     }
 
     /// <inheritdoc />
@@ -159,8 +159,18 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             RecordType,
             ct);
 
-        return entities.Select(e => new FetchedRecord(this, toRecord(e), e.SysUpdatedAt)).ToList();
+        return entities
+            .Select(e => (Record: toRecord(e), e.SysUpdatedAt))
+            .Select(x => new FetchedRecord(this, x.Record, CreatedAt(x.Record), x.SysUpdatedAt))
+            .ToList();
     }
+
+    // TempBasal is the one projected type that is not an IV4Record.
+    private static DateTime CreatedAt(TRecord record) =>
+        record is TempBasal tempBasal ? tempBasal.CreatedAt : ((IV4Record)record).CreatedAt;
+
+    private static DateTime ModifiedAt(TRecord record) =>
+        record is TempBasal tempBasal ? tempBasal.ModifiedAt : ((IV4Record)record).ModifiedAt;
 
     /// <inheritdoc />
     public Treatment Project(object record, CarbFoodIndex foods) => project((TRecord)record, foods);
@@ -264,7 +274,7 @@ internal static class LegacyTreatmentTables
             if (paired.Contains(row.Record))
                 continue;
 
-            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Modified));
+            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Created, row.Modified));
         }
 
         return treatments;
@@ -311,13 +321,14 @@ internal static class LegacyTreatmentTables
             // meal on the next request without ever advancing.
             treatments.Add(Stamp(
                 ProjectMealBolus(bolus.Record, carb.Record, foods.For(carb.Record.Id)),
+                Oldest(bolus.Record.CreatedAt, carb.Record.CreatedAt),
                 Newest(bolus.Modified, carb.Modified)));
         }
 
         return paired;
     }
 
-    private static ILookup<Guid, (T Record, DateTime? Modified)> Correlated<T>(
+    private static ILookup<Guid, (T Record, DateTime Modified)> Correlated<T>(
         IReadOnlyList<FetchedRecord> records
     )
         where T : class, IV4Record =>
@@ -326,15 +337,14 @@ internal static class LegacyTreatmentTables
             .Where(r => r.Record?.CorrelationId is not null)
             .ToLookup(r => r.Record!.CorrelationId!.Value, r => (r.Record!, r.Modified));
 
-    private static DateTime? Newest(DateTime? left, DateTime? right) =>
-        left > right ? left : right ?? left;
+    private static DateTime Newest(DateTime left, DateTime right) => left > right ? left : right;
 
-    private static Treatment Stamp(Treatment treatment, DateTime? modifiedAt)
+    private static DateTime Oldest(DateTime left, DateTime right) => left < right ? left : right;
+
+    private static Treatment Stamp(Treatment treatment, DateTime createdAt, DateTime modifiedAt)
     {
-        if (modifiedAt.HasValue)
-            treatment.SrvModified = new DateTimeOffset(modifiedAt.Value, TimeSpan.Zero)
-                .ToUnixTimeMilliseconds();
-
+        treatment.SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        treatment.SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
         return treatment;
     }
 

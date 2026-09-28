@@ -10,18 +10,16 @@
     stopPreview,
     type BrowserAlarmCapabilities,
   } from "$lib/audio/alarm-sounds";
-  import {
-    Volume2,
-    Bell,
-    Vibrate,
-    Smartphone,
-    Shield,
-    Check,
-    X,
-    AlertTriangle,
-    Play,
-    Square,
-  } from "lucide-svelte";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import Bell from "@lucide/svelte/icons/bell";
+  import Vibrate from "@lucide/svelte/icons/vibrate";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Check from "@lucide/svelte/icons/check";
+  import X from "@lucide/svelte/icons/x";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Play from "@lucide/svelte/icons/play";
+  import Square from "@lucide/svelte/icons/square";
 
   let capabilities = $state<BrowserAlarmCapabilities | null>(null);
   let requestingPermission = $state(false);

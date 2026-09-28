@@ -9,7 +9,11 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Plus, Timer, Check, Trash2, Droplet } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Timer from "@lucide/svelte/icons/timer";
+  import Check from "@lucide/svelte/icons/check";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Droplet from "@lucide/svelte/icons/droplet";
   import { cn } from "$lib/utils";
   import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
@@ -44,7 +48,7 @@
 </script>
 
 <Tabs.Content value="active">
-  <Card>
+  <Card data-testid="active-trackers">
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
         <CardTitle>Active Trackers</CardTitle>
@@ -134,6 +138,7 @@
                   variant="outline"
                   size="sm"
                   onclick={() => openCompleteDialog(instance.id!)}
+                  data-testid="tracker-complete"
                 >
                   <Check class="h-4 w-4 mr-1" />
                   Complete

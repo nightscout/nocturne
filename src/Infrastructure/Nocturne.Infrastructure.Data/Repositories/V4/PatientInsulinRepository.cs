@@ -127,10 +127,10 @@ public class PatientInsulinRepository : IPatientInsulinRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<PatientInsulin>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
+    public async Task<BulkRestoreResult<PatientInsulin>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return (await ctx.RestoreDeletedAsync<PatientInsulinEntity>(ids, ct)).Select(PatientInsulinMapper.ToDomainModel);
+        return (await ctx.RestoreDeletedAsync<PatientInsulinEntity>(ids, nameof(PatientInsulin), ct)).Map(PatientInsulinMapper.ToDomainModel);
     }
 
     /// <inheritdoc />

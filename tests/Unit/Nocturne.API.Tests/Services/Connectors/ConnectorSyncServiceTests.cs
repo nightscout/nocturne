@@ -116,6 +116,31 @@ public class ConnectorSyncServiceTests
             Times.Once);
     }
 
+    /// <summary>
+    /// The cursor-reset fan-outs and the timezone re-sync build their own requests, so the service
+    /// refuses a window covering no time too rather than letting a connector report it a success.
+    /// </summary>
+    [Fact]
+    public async Task TriggerSyncAsync_WhenFromIsNotBeforeTo_FailsWithoutRunningTheExecutor()
+    {
+        var executor = CreateMockExecutor("test");
+        var sut = CreateService(BuildProvider(executor));
+        var to = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = await sut.TriggerSyncAsync(
+            "test", new SyncRequest { From = to.AddDays(1), To = to }, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("'from'");
+        Mock.Get(executor).Verify(
+            x => x.ExecuteSyncAsync(
+                It.IsAny<IServiceProvider>(),
+                It.IsAny<SyncRequest>(),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<ISyncProgressReporter?>()),
+            Times.Never);
+    }
+
     [Fact]
     public async Task TriggerSyncAsync_WhenTheExecutorIsCancelled_PropagatesTheCancellation()
     {

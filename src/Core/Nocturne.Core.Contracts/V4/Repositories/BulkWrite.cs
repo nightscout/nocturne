@@ -22,6 +22,12 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     /// </summary>
     public int SkippedDeleted { get; } = skippedDeleted;
 
+    /// <summary>
+    /// The written records that updated a stored row in place rather than inserting one; every other
+    /// written record was inserted. The same instances the collection enumerates.
+    /// </summary>
+    public IReadOnlyList<TRecord> Updated { get; init; } = [];
+
     public int Count => written.Count;
 
     public TRecord this[int index] => written[index];

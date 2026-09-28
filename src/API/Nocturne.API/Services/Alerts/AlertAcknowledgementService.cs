@@ -185,13 +185,14 @@ internal sealed class AlertAcknowledgementService(
         return AlertAcknowledgementOutcome.Acknowledged;
     }
 
-    /// <summary>
-    /// Whether <paramref name="caller"/> holds <see cref="Scope.AlertsReadWrite"/>, on the
+    /// <inheritdoc/>
+    /// <remarks>
+    /// True when <paramref name="caller"/> holds <see cref="Scope.AlertsReadWrite"/>, on the
     /// credential or, failing that, on the membership behind it. The membership is resolved as an
     /// interactive login would be, because a device grant is deliberately narrower than its
     /// member and must not demote an owner's acknowledgement to a mute.
-    /// </summary>
-    private async Task<bool> AcknowledgesForEveryoneAsync(
+    /// </remarks>
+    public async Task<bool> AcknowledgesForEveryoneAsync(
         Guid tenantId, AlertAcknowledgementAuthority caller, CancellationToken ct)
     {
         if (Scope.Satisfies(caller.GrantedScopes, Scope.AlertsReadWrite))

@@ -23,7 +23,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
 public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepositoryBase<TModel, TEntity>
     where TModel : class, IV4Record
-    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISyncDedupable
+    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISystemTimestamped, ISyncDedupable
 {
     /// <inheritdoc />
     protected SyncUpsertRepositoryBase(
@@ -77,7 +77,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
             if (existing != null)
             {
-                ApplyUpdate(existing, model);
+                ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
@@ -88,6 +88,13 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         return await InsertAsync(ctx, entity, origin, ct);
     }
+
+    /// <summary>
+    /// Writes a create onto the stored row its sync key matched, on both the single and the batch
+    /// path. The caller never read that row, so a type holding server-resolved state the write
+    /// cannot express overrides this to keep it; the default is <see cref="V4RepositoryBase{TModel,TEntity}.ApplyUpdate"/>.
+    /// </summary>
+    protected virtual void ApplySyncUpsert(TEntity existing, TModel model) => ApplyUpdate(existing, model);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
     public async Task<bool> IsRecreationBlockedAsync(
@@ -171,7 +178,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
                     continue;
                 }
 
-                ApplyUpdate(existing, ToDomain(entity));
+                ApplySyncUpsert(existing, ToDomain(entity));
                 updatedEntities.Add(existing);
                 // Capture material changes now, before SaveChanges clears the modified flags.
                 if (HasMaterialChange(ctx, existing))

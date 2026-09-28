@@ -3,7 +3,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { time } from "$lib/utils/formatting";
-  import { UtensilsCrossed } from "lucide-svelte";
+  import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
 
   const realtimeStore = getRealtimeStore();
 

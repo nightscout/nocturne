@@ -10,7 +10,9 @@
 //! same way, and returns a pointer the caller releases with
 //! [`nocturne_alerts_free_string`] exactly once.
 
-#[cfg(panic = "abort")]
+// wasm32 has no unwinding, so a panic there traps and the browser host sees a
+// thrown `RuntimeError` instead of the error envelope.
+#[cfg(all(panic = "abort", not(target_family = "wasm")))]
 compile_error!("the FFI boundary catches panics, which needs panic = \"unwind\"");
 
 mod c_abi;
@@ -21,6 +23,9 @@ mod validate_envelope;
 
 #[cfg(feature = "uniffi")]
 mod uniffi_api;
+
+#[cfg(feature = "wasm")]
+pub mod wasm_api;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("nocturne_alerts");

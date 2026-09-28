@@ -2,20 +2,18 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Copy,
-    Check,
-    ExternalLink,
-    Smartphone,
-    Cloud,
-    Monitor,
-  } from "lucide-svelte";
-  import Apple from "lucide-svelte/icons/apple";
-  import TabletSmartphone from "lucide-svelte/icons/tablet-smartphone";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Cloud from "@lucide/svelte/icons/cloud";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Apple from "@lucide/svelte/icons/apple";
+  import TabletSmartphone from "@lucide/svelte/icons/tablet-smartphone";
   import XdripQuickConnect from "$lib/components/XdripQuickConnect.svelte";
   import PreludeQuickConnect from "$lib/components/PreludeQuickConnect.svelte";
   import type { UploaderApp } from "$lib/api/generated/nocturne-api-client";
-  import { KeyRound } from "lucide-svelte";
+  import KeyRound from "@lucide/svelte/icons/key-round";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import {
     getUploaderName,

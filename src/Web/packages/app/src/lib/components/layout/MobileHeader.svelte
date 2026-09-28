@@ -11,6 +11,8 @@
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
+  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -28,6 +30,9 @@
   // itself below @md — so it carries the same stale/disconnected states.
   const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
+  const tileVariant = $derived(
+    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore?.currentEntry?.mills))
+  );
   const now = $derived(realtimeStore?.now ?? Date.now());
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
@@ -86,7 +91,7 @@
     <div class="flex items-center gap-2">
       <GlucoseValueIndicator
         displayValue={displayCurrentBG}
-        rawBgMgdl={rawCurrentBG}
+        variant={tileVariant}
         {isLoading}
         {isStale}
         {isDisconnected}

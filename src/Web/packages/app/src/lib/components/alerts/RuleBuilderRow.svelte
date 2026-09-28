@@ -2,35 +2,33 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import {
-    X,
-    Ban,
-    Brackets,
-    Timer,
-    MoreHorizontal,
-    Trash2,
-    Droplet,
-    TrendingUp,
-    Syringe,
-    Apple,
-    Clock,
-    AlertTriangle,
-    Battery,
-    BatteryLow,
-    Smartphone,
-    Fuel,
-    RotateCcw,
-    WifiOff,
-    PauseCircle,
-    Wand2,
-    ChartLine,
-    Activity,
-    Bell,
-    BellOff,
-    CalendarClock,
-    CalendarDays,
-    Moon,
-  } from "lucide-svelte";
+  import X from "@lucide/svelte/icons/x";
+  import Ban from "@lucide/svelte/icons/ban";
+  import Brackets from "@lucide/svelte/icons/brackets";
+  import Timer from "@lucide/svelte/icons/timer";
+  import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Battery from "@lucide/svelte/icons/battery";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Fuel from "@lucide/svelte/icons/fuel";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
+  import PauseCircle from "@lucide/svelte/icons/circle-pause";
+  import Wand2 from "@lucide/svelte/icons/wand-sparkles";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import Moon from "@lucide/svelte/icons/moon";
   import type { ConditionNode } from "./types";
   import { isTrendBucket, type TrendBucket } from "./types";
   import { Direction } from "$lib/api";
@@ -47,7 +45,7 @@
     wrapChild,
   } from "./ruleTree";
   import { drag } from "./dragState.svelte";
-  import { GripVertical } from "lucide-svelte";
+  import GripVertical from "@lucide/svelte/icons/grip-vertical";
 
   interface AvailableRule {
     id: string;
@@ -205,6 +203,7 @@
   <!-- Nested group: indented IFTTT block with eyebrow + actions row above -->
   <div
     role="group"
+    data-testid="alert-condition-group"
     class="rounded-md border bg-background p-2 space-y-2 transition-colors"
     class:opacity-50={isDragSource}
     class:ring-2={isOverGroup}
@@ -275,6 +274,7 @@
   <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
   <div
     role="listitem"
+    data-testid="alert-condition-row"
     class="group/row flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
     class:opacity-50={isDragSource}
     draggable="true"
@@ -317,6 +317,7 @@
         min="1"
         size="xs"
         class="w-16 text-right tabular-nums"
+        data-testid="alert-sustained-minutes"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
@@ -351,12 +352,13 @@
             size="icon-xs"
             class="shrink-0"
             aria-label="Row actions"
+            data-testid="alert-row-actions"
           >
             <MoreHorizontal class="h-4 w-4" />
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
+      <DropdownMenu.Content align="end" data-testid="alert-row-actions-menu">
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "and")}>
           <Brackets class="h-4 w-4 mr-2" /> Wrap in AND group
         </DropdownMenu.Item>

@@ -1,0 +1,8 @@
+<!-- Dev build trim, passed via CustomAfterMicrosoftCommonTargets. -->
+<Project>
+  <Target Name="DevDropOpenApiXmlGenerator" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'Microsoft.AspNetCore.OpenApi.SourceGenerators'" />
+    </ItemGroup>
+  </Target>
+</Project>

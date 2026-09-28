@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Filters;
 using Nocturne.API.Models.Requests.V4;
@@ -506,7 +507,7 @@ public class BolusControllerTests
             Exception = exception,
         };
 
-        new RecreationBlockedFilter(EchoingProblemDetailsFactory()).OnException(context);
+        new RecreationBlockedFilter(EchoingProblemDetailsFactory(), Options.Create(new JsonOptions())).OnException(context);
 
         context.ExceptionHandled.Should().BeTrue();
         return context.Result.Should().BeOfType<ObjectResult>().Subject;

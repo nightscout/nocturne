@@ -20,6 +20,9 @@ uniffi = ["dep:uniffi"]
 # Enables the in-crate `uniffi-bindgen` binary used to generate the Kotlin
 # bindings (see README "Kotlin (UniFFI)").
 bindgen = ["uniffi", "uniffi/cli"]
+# Browser surface (wasm32-unknown-unknown) for the docs portal's alert
+# simulator; see README "Browser (WebAssembly)".
+wasm = ["dep:wasm-bindgen"]
 
 [[bin]]
 name = "uniffi-bindgen"
@@ -35,6 +38,7 @@ uuid = { version = "1", features = ["serde"] }
 # Pinned exactly: the generated Kotlin bindings and the compiled library must
 # come from the same uniffi version (the bindings checksum the API at load).
 uniffi = { version = "=0.31.1", optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 
 [lints]
 workspace = true

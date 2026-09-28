@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
 
   interface Props {
     position: "top" | "bottom";

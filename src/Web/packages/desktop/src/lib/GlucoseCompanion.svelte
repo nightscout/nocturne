@@ -12,7 +12,9 @@
   import { Input } from "@nocturne/ui/ui/input";
   import { Label } from "@nocturne/ui/ui/label";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
-  import { Activity, CheckCircle2, Loader2 } from "@lucide/svelte";
+  import Activity from "@lucide/svelte/icons/activity";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { commandErrorMessage } from "$lib/command-error";
 
   // Matches the camelCase DeviceFlowInfo returned by the `companion_link_start` Rust command.

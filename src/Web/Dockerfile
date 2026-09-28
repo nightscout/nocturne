@@ -10,6 +10,7 @@ WORKDIR /app
 
 # Install dependencies (layer cached when lockfile unchanged)
 COPY src/Web/pnpm-workspace.yaml src/Web/package.json src/Web/pnpm-lock.yaml ./
+COPY src/Web/patches patches/
 COPY src/Web/packages/app/package.json packages/app/
 COPY src/Web/packages/bridge/package.json packages/bridge/
 COPY src/Web/packages/bot/package.json packages/bot/
@@ -40,13 +41,17 @@ ENV BODY_SIZE_LIMIT=44M
 COPY --from=build /app/pnpm-workspace.yaml ./
 COPY --from=build /app/package.json ./
 COPY --from=build /app/pnpm-lock.yaml ./
+COPY --from=build /app/patches patches/
 COPY --from=build /app/packages/app/build packages/app/build
 COPY --from=build /app/packages/app/server.js packages/app/
+COPY --from=build /app/packages/app/server-origin-warning.js packages/app/
 COPY --from=build /app/packages/app/package.json packages/app/
 COPY --from=build /app/packages/bridge packages/bridge
 COPY --from=build /app/packages/bot/package.json packages/bot/
 COPY --from=build /app/packages/portal/package.json packages/portal/
 RUN pnpm install --frozen-lockfile --prod
+# Fail the build, not the container start, when server.js imports a module that was not copied.
+RUN cd packages/app && node -e "import('./server-origin-warning.js')"
 
 EXPOSE 3000
 ENV PORT=3000

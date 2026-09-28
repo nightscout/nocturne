@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildAppNavigation, type NavViewer } from "./app-navigation";
+import {
+  buildAppNavigation,
+  readOnlyNav,
+  type NavItem,
+  type NavViewer,
+} from "./app-navigation.svelte";
 
 const MEMBER: NavViewer = {
   user: { subjectId: "s1" },
@@ -93,5 +98,41 @@ describe("buildAppNavigation", () => {
     expect(titles({ ...REPORTING_SHARE, tenantCount: 2 })).not.toContain(
       "Tenants"
     );
+  });
+});
+
+describe("readOnlyNav", () => {
+  /** The member navigation with every title replaced, as another locale would render it. */
+  function retitled(title: (item: NavItem) => string): NavItem[] {
+    return buildAppNavigation(MEMBER).map((item) => ({ ...item, title: title(item) }));
+  }
+
+  const ids = (items: NavItem[] | null) => items?.map((item) => item.id);
+
+  const RETITLINGS: [string, (item: NavItem) => string][] = [
+    ["a translated title", (item) => `Traduit ${item.id}`],
+    [
+      "a title another entry uses in English",
+      (item) => (item.id === "dashboard" ? "Settings" : "Dashboard"),
+    ],
+    ["an empty title", () => ""],
+  ];
+
+  it.each(RETITLINGS)("keeps a guest's entries under %s", (_, title) => {
+    expect(ids(readOnlyNav(retitled(title), GUEST))).toEqual([
+      "dashboard",
+      "calendar",
+      "time-spans",
+      "reports",
+      "clock",
+    ]);
+  });
+
+  it.each(RETITLINGS)("keeps a public share's entries under %s", (_, title) => {
+    expect(ids(readOnlyNav(retitled(title), GLUCOSE_ONLY_SHARE))).toEqual(["dashboard"]);
+    expect(ids(readOnlyNav(retitled(title), REPORTING_SHARE))).toEqual([
+      "dashboard",
+      "reports",
+    ]);
   });
 });

@@ -6,7 +6,9 @@
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
-  import { Syringe, X, AlertTriangle } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import X from "@lucide/svelte/icons/x";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import * as patientRemote from "$api/generated/patientRecords.generated.remote";
   import { insulinCategoryLabels } from "$lib/components/patient/labels";
 

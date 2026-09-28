@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Search, Check, Clock } from "@lucide/svelte";
+  import Search from "@lucide/svelte/icons/search";
+  import Check from "@lucide/svelte/icons/check";
+  import Clock from "@lucide/svelte/icons/clock";
 
   import { CONNECTORS, type Connector } from "$lib/data/connectors";
 

@@ -13,10 +13,10 @@ namespace Nocturne.API.Tests.Integration.SignalR;
 /// Tests real-time communication and legacy compatibility
 /// </summary>
 [Parity]
-public class SignalRWebSocketIntegrationTests : AspireIntegrationTestBase
+public class SignalRWebSocketIntegrationTests : ApiIntegrationTestBase
 {
     public SignalRWebSocketIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

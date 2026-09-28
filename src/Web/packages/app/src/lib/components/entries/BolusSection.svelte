@@ -7,7 +7,9 @@
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Syringe, X, ChevronDown } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import X from "@lucide/svelte/icons/x";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
     bolus: Partial<Bolus>;

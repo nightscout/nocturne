@@ -18,6 +18,8 @@
     getConnectorCapabilities,
     getConnectorDataSummary,
   } from "$lib/api/generated/services.generated.remote";
+  import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
@@ -34,7 +36,9 @@
   import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
-  import { AlertCircle, ExternalLink } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Lock from "@lucide/svelte/icons/lock";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
@@ -82,11 +86,25 @@
   let manuallySelectedId = $state<string | undefined>(undefined);
   const activeId = $derived(manuallySelectedId ?? connectorId);
 
+  // Asked here rather than read from the layout: the setup wizard signs the owner in without a
+  // navigation, so the layout's grant is the anonymous one until the next page load.
+  const permissionsQuery = getMyPermissions();
+  const canManage = $derived(
+    canManageConnectors(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
+
   // --- Reactive queries ---
   const servicesOverviewQuery = getServicesOverview();
   const schemaQuery = $derived(activeId ? getConnectorSchema(activeId) : null);
-  const configQuery = $derived(activeId ? getConnectorConfiguration(activeId) : null);
-  const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
+  const configQuery = $derived(
+    activeId && canManage ? getConnectorConfiguration(activeId) : null
+  );
+  const effectiveConfigQuery = $derived(
+    activeId && canManage ? getConnectorEffectiveConfig(activeId) : null
+  );
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
   retainQuery(() => schemaQuery);
@@ -94,7 +112,8 @@
   retainQuery(() => effectiveConfigQuery);
   retainQuery(() => dataSummaryQuery);
   retainQuery(() => capabilitiesQuery);
-  const statusQuery = getAllConnectorStatus();
+  const statusQuery = $derived(canManage ? getAllConnectorStatus() : null);
+  retainQuery(() => statusQuery);
 
   // --- Derived data from queries ---
   const servicesOverview = $derived(servicesOverviewQuery.current ?? null);
@@ -119,7 +138,7 @@
   const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
 
   const connectorStatus = $derived.by(() => {
-    const statuses = statusQuery.current;
+    const statuses = statusQuery?.current;
     if (!statuses || !activeId) return null;
     return statuses.find(
       (s) => s.connectorName?.toLowerCase() === activeId!.toLowerCase()
@@ -161,7 +180,7 @@
   const isLoading = $derived.by(() => {
     if (step === "selection") return servicesOverviewQuery.loading;
     // In configure mode, we need overview + schema at minimum
-    if (servicesOverviewQuery.loading) return true;
+    if (servicesOverviewQuery.loading || permissionsQuery.loading) return true;
     if (activeId && (schemaQuery?.loading ?? true)) return true;
     return false;
   });
@@ -347,9 +366,11 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
-          {isActive ? "Active" : "Inactive"}
-        </Badge>
+        {#if canManage}
+          <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
+            {isActive ? "Active" : "Inactive"}
+          </Badge>
+        {/if}
       </div>
 
       <!-- Save Message -->
@@ -383,7 +404,7 @@
       {/if}
 
       <!-- Enable/Disable Toggle -->
-      {#if showToggle}
+      {#if showToggle && canManage}
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
@@ -402,12 +423,22 @@
       {/if}
 
       <!-- CareLink browser-based sign-in -->
-      {#if isCareLink}
+      {#if isCareLink && canManage}
         <CareLinkConnectPanel onConnected={onCareLinkConnected} />
       {/if}
 
       <!-- Configuration Form -->
-      {#if hasRuntimeConfig}
+      {#if !canManage}
+        <Card data-testid="connector-read-only">
+          <CardContent class="flex items-center gap-3 py-4">
+            <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />
+            <p class="text-sm text-muted-foreground">
+              Only members who can manage this site's settings can configure or
+              enable this connector.
+            </p>
+          </CardContent>
+        </Card>
+      {:else if hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration

@@ -152,21 +152,20 @@ fn body_mae(a: &Image, b: &Image) -> f32 {
         / n
 }
 
-/// The one that matters. `Large` detail and a 256 px edge, because the bug
-/// this guards showed up as a shape change of several percent and a smaller
-/// grid hides it in reconstruction.
-#[test]
-fn every_artwork_survives_its_own_reveal() {
+/// The one that matters. A 256 px edge, and the full sweep runs at `Large`
+/// detail, because the bug this guards showed up as a shape change of several
+/// percent and a smaller grid hides it in reconstruction.
+fn assert_each_survives_its_own_reveal(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut worst: Vec<(String, f32, f32)> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let drawn = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -175,7 +174,7 @@ fn every_artwork_survives_its_own_reveal() {
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
             None,
         )
@@ -208,11 +207,10 @@ fn every_artwork_survives_its_own_reveal() {
 
 /// The dark ground renders through a different compositing mode, so it gets
 /// its own pass over the ids most likely to lose a silhouette there.
-#[test]
-fn artworks_survive_their_reveal_on_a_dark_ground() {
+fn assert_each_survives_its_reveal_on_a_dark_ground(ids: &[&str]) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let drawn = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
@@ -305,20 +303,20 @@ fn covered_area(image: &Image) -> f32 {
 /// Measured in the viewer's time, not the simulation's: a quarter of the way
 /// through the paint phase's wall clock, no more than
 /// [`MAX_AREA_AT_PACE`] of the finished artwork may be on the paper.
-#[test]
-fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
+///
+/// The full sweep gates at `Large`, the tier a hero renders at. `Small` draws
+/// fewer marks and so paces more easily; gating there would pass artworks
+/// that arrive all at once everywhere anyone actually sees them.
+fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut slow: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            // The tier a hero renders at. `Small` draws fewer marks and so
-            // paces more easily; gating there would pass artworks that arrive
-            // all at once everywhere anyone actually sees them.
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -530,22 +528,21 @@ fn wet_until(scene: nocturne_watercolour_core::domain::Scene) -> f32 {
 /// at the end, because that is when pigment leaves suspension and sets into
 /// the paper. An artwork that is bone dry two thirds of the way through spends
 /// its last second holding a finished picture.
-#[test]
-fn the_sheet_is_still_settling_at_the_end() {
+fn assert_each_sheet_is_still_settling_at_the_end(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
         let share = wet_until(scene);
-        let known = KNOWN_EARLY_DRY.iter().find(|(k, _)| *k == *id);
+        let known = KNOWN_EARLY_DRY.iter().find(|(k, _)| *k == id);
         println!(
             "{id:<24} wet until {share:.2} of its ticks{}",
             if known.is_some() {
@@ -596,17 +593,16 @@ const MAX_SNAP_RATIO: f32 = 3.0;
 ///
 /// Measured in the viewer's time, as the viewer sees it: the change between
 /// the last two frames against the median change across the reveal.
-#[test]
-fn no_artwork_snaps_to_its_final_state() {
+fn assert_none_snaps_to_its_final_state(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -647,4 +643,75 @@ fn no_artwork_snaps_to_its_final_state() {
         }
     }
     assert!(failed.is_empty(), "{}", failed.join("\n  "));
+}
+
+/// The artwork the default run checks at [`REPRESENTATIVE_DETAIL`], in
+/// seconds, so the gates cannot rot between full sweeps: the one this file was
+/// written for.
+const REPRESENTATIVE: &[&str] = &["alarm-bell"];
+const REPRESENTATIVE_DETAIL: DetailLevel = DetailLevel::Medium;
+/// An entry of [`KNOWN_EARLY_DRY`], so the default run takes the ratchet path
+/// as well. Only the settle check gets it: a wide scene is the slowest thing
+/// in the catalogue to render.
+const REPRESENTATIVE_EARLY_DRY: &str = "moonlit-shoreline";
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_artwork_survives_its_own_reveal() {
+    assert_each_survives_its_own_reveal(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn representative_artworks_survive_their_own_reveal() {
+    assert_each_survives_its_own_reveal(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id; run with cargo test --release -- --ignored"]
+fn artworks_survive_their_reveal_on_a_dark_ground() {
+    assert_each_survives_its_reveal_on_a_dark_ground(ArtworkCatalogue::ids());
+}
+
+#[test]
+fn representative_artworks_survive_their_reveal_on_a_dark_ground() {
+    assert_each_survives_its_reveal_on_a_dark_ground(REPRESENTATIVE);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
+    assert_each_is_still_arriving_a_quarter_of_the_way_in(
+        ArtworkCatalogue::ids(),
+        DetailLevel::Large,
+    );
+}
+
+#[test]
+fn representative_artworks_are_still_arriving_a_quarter_of_the_way_in() {
+    assert_each_is_still_arriving_a_quarter_of_the_way_in(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn the_sheet_is_still_settling_at_the_end() {
+    assert_each_sheet_is_still_settling_at_the_end(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn representative_sheets_are_still_settling_at_the_end() {
+    assert_each_sheet_is_still_settling_at_the_end(
+        &[REPRESENTATIVE[0], REPRESENTATIVE_EARLY_DRY],
+        REPRESENTATIVE_DETAIL,
+    );
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn no_artwork_snaps_to_its_final_state() {
+    assert_none_snaps_to_its_final_state(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn no_representative_artwork_snaps_to_its_final_state() {
+    assert_none_snaps_to_its_final_state(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
 }

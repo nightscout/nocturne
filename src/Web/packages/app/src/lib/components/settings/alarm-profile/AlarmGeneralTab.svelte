@@ -9,7 +9,7 @@
     SelectItem,
     SelectTrigger,
   } from "$lib/components/ui/select";
-  import { Timer } from "lucide-svelte";
+  import Timer from "@lucide/svelte/icons/timer";
   import type {
     AlarmProfileConfiguration,
     AlarmTriggerType,

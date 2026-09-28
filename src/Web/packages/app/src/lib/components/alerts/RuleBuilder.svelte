@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Brackets } from "lucide-svelte";
+  import Brackets from "@lucide/svelte/icons/brackets";
   import type { ConditionNode } from "./types";
   import OperatorToggle from "./OperatorToggle.svelte";
   import RuleBuilderRow from "./RuleBuilderRow.svelte";

@@ -7,7 +7,8 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { Syringe, AlertTriangle } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import { insulinCategoryLabels } from "$lib/components/patient/labels";
 
   interface Props {

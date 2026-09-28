@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
-  import { Check, Loader2, ArrowRight } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import {
     describeSubmitError,
     FormError,

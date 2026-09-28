@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Phone, Mail, AlertCircle } from "lucide-svelte";
+  import Phone from "@lucide/svelte/icons/phone";
+  import Mail from "@lucide/svelte/icons/mail";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import { Button } from "$lib/components/ui/button";
   import type {
     AlarmProfileConfiguration,

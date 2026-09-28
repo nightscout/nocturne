@@ -183,4 +183,28 @@ public class ChatIdentityPendingLinkServiceTests : IDisposable
         var deleted = await _service.CleanupExpiredAsync(default);
         deleted.Should().Be(0);
     }
+
+    [Fact]
+    public async Task TryConsumeAsync_returns_the_row_when_the_delete_landed_but_its_commit_reported_failure()
+    {
+        var token = await _service.CreateAsync(Platform, UserA, null, "connect-slash", default);
+        var fault = new FirstTransactionFault(TransactionFault.AfterCommit);
+        var retrying = new ChatIdentityPendingLinkService(
+            new RetryingFactory(TransactionFaultOptions.RetryingSqlite(_db.Connection, fault)),
+            Mock.Of<ILogger<ChatIdentityPendingLinkService>>());
+
+        var consumed = await retrying.TryConsumeAsync(token, default);
+
+        fault.Fired.Should().BeTrue();
+        using var db = _factory.CreateDbContext();
+        (await db.ChatIdentityPendingLinks.AnyAsync(p => p.Token == token)).Should().BeFalse();
+        consumed.Should().NotBeNull();
+        consumed!.Token.Should().Be(token);
+    }
+
+    private sealed class RetryingFactory(DbContextOptions<NocturneDbContext> options)
+        : IDbContextFactory<NocturneDbContext>
+    {
+        public NocturneDbContext CreateDbContext() => new(options);
+    }
 }

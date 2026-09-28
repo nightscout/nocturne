@@ -126,7 +126,7 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         Seed(db => db.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId,
-            DataSource = RigA, StartTimestamp = DateTime.UtcNow, Rate = 0.5, Origin = "pump",
+            DataSource = RigA, Timestamp = DateTime.UtcNow, Rate = 0.5, Origin = "pump",
         }));
 
         var sources = await DiscoverAsync();

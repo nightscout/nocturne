@@ -2,7 +2,9 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { Pin, PinOff, X } from "@lucide/svelte";
+  import Pin from "@lucide/svelte/icons/pin";
+  import PinOff from "@lucide/svelte/icons/pin-off";
+  import X from "@lucide/svelte/icons/x";
   import { Slider } from "@nocturne/ui/ui/slider";
   import { preferences } from "$lib/preferences.svelte";
 

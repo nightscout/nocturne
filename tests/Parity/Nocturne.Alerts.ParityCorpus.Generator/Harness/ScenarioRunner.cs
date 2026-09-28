@@ -115,8 +115,8 @@ public sealed class ScenarioRunner
             return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
         }
 
-        // Replay-parity leaf log: force-evaluate every leaf in isolation (no
-        // short-circuit), using the rule-root context exactly as AlertReplayService does.
+        // Replay-parity leaf log: force-evaluate every leaf in isolation,
+        // using the rule-root context exactly as AlertReplayService does.
         // Leaves are stateless so this contributes no timer ops.
         var node = BuildFullNode(wire, scenarioRule.ConditionParams);
         var leafValues = await forceRunner.EvaluateAllLeavesAsync(node, rootContext, registry, ct);

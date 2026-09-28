@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 using Nocturne.Core.Contracts.V4;
@@ -6,6 +7,10 @@ namespace Nocturne.Connectors.Core.Interfaces;
 
 public interface ITreatmentPublisher
 {
+    /// <remarks>
+    /// Rows <paramref name="source"/> stored under a treatment's client id (<see cref="TreatmentClientId"/>)
+    /// are moved onto the treatment's own id before the write, unless that id is already stored.
+    /// </remarks>
     Task<bool> PublishTreatmentsAsync(
         IEnumerable<Treatment> treatments,
         string source,
@@ -42,6 +47,18 @@ public interface ITreatmentPublisher
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
     Task<DateTime?> GetLatestTreatmentTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The newest record <paramref name="source"/> has stored of the one treatment type
+    /// <paramref name="type"/> lands as, or <c>null</c> when it has stored none. Unlike
+    /// <see cref="GetLatestTreatmentTimestampAsync(string, CancellationToken)"/>, which answers
+    /// for every treatment type at once, a sibling type's newer record cannot stand in for it.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="type"/> is not a treatment type.</exception>
+    Task<DateTime?> GetLatestTreatmentTimestampAsync(
+        SyncDataType type,
         string source,
         CancellationToken cancellationToken = default);
 

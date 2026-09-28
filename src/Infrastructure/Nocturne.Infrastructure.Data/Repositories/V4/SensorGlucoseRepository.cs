@@ -213,10 +213,10 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public override async Task<BulkWrite<SensorGlucose>> BulkCreateAsync(
-        IEnumerable<SensorGlucose> recordsParam, WriteOrigin origin, CancellationToken ct = default)
+    protected override async Task<BulkWrite<SensorGlucose>> BulkWriteAsync(
+        List<SensorGlucose> records, WriteOrigin origin, bool updateByLegacyId, CancellationToken ct)
     {
-        var written = await base.BulkCreateAsync(recordsParam, origin, ct);
+        var written = await base.BulkWriteAsync(records, origin, updateByLegacyId, ct);
         await AdvanceTenantLastReadingAsync([.. written], ct);
         return written;
     }

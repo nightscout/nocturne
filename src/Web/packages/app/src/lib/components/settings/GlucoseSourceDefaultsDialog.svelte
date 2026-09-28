@@ -8,7 +8,9 @@
     SelectItem,
     SelectTrigger,
   } from "$lib/components/ui/select";
-  import { GripVertical, Plus, Trash2 } from "lucide-svelte";
+  import GripVertical from "@lucide/svelte/icons/grip-vertical";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { GlucoseProcessing, type GlucoseProcessingSourceDefault } from "$api";
 
   interface Props {

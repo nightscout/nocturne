@@ -42,6 +42,13 @@ public class DeviceActionIntent
     /// </summary>
     public bool Acknowledged { get; set; }
 
+    /// <summary>
+    /// What the device owner's acknowledge press does: <c>true</c> acknowledges for everyone,
+    /// <c>false</c> mutes for the owner only. Set on the active-intents snapshot, which is per owner;
+    /// null on the live push, which is broadcast to the whole tenant.
+    /// </summary>
+    public bool? AcknowledgesForEveryone { get; set; }
+
     /// <summary>When the excursion started.</summary>
     public DateTime StartedAt { get; set; }
 

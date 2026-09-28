@@ -382,6 +382,12 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         => _activityService.GetLatestTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
+    public Task<DateTime?> GetLatestStateSpanTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default)
+        => _stateSpanService.GetLatestNonActivityTimestampAsync(source, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<DateTime?> GetBackfillLowWaterMarkAsync(
         string source,
         string collection,

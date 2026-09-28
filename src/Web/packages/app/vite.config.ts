@@ -65,6 +65,10 @@ export default defineConfig(({ mode }) => {
       // client graph mid-navigation on first dashboard load. Pre-bundle it (and
       // its transitive @layerstack/* utilities come with it) at server start.
       include: ["sveltekit-search-params", "layerchart"],
+      // Icons are imported one file each (@lucide/svelte/icons/*), so every icon a
+      // page first renders would be a new dep and force the same re-optimize and
+      // reload. Served unbundled, each is one small module.
+      exclude: ["@lucide/svelte"],
     },
     plugins: [
       tailwindcss(),

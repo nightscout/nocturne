@@ -1,7 +1,8 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { ArrowLeft, KeyRound } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import KeyRound from "@lucide/svelte/icons/key-round";
   import { Artwork } from "@nocturne/watercolour";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { getAuthState } from "../auth.remote";

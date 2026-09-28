@@ -1,0 +1,95 @@
+---
+title: Testing rules
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# Testing rules
+
+There are two separate questions to ask of a rule, and a different way to answer
+each:
+
+- **Does the condition fire when I want it to, and stay quiet when I do not?**
+  Replay your own past readings through it.
+- **Does the alert actually reach me?** Send a real test alert with **Fire
+  saved rule** (see [Building a rule](/docs/alerts/building-rules#testing-a-rule)).
+
+This page is about the first.
+
+## Replay in the app
+
+Replay runs your rules against readings you have already had and shows when
+each would have fired. Nothing is sent to anyone.
+
+There are two ways in:
+
+- From a rule's editor, press **Replay against history**. This replays the rule
+  as it is in the editor, including changes you have not saved yet, alongside
+  your other rules. Pick a time from **Historic firings** to open the day it
+  really fired.
+- From **Alerts > Simulator**, which replays all your switched-on rules over a
+  day you choose.
+
+<Screenshot id="alerts-simulator" />
+
+The graph shows your readings over the window, with a play control underneath
+that steps through it and a tick for every alert. Below that is the list of
+alerts the replay found, with the time each would have fired. Beside the graph
+are your rules, each with a switch to leave it out of the replay; open one to
+see when each of its conditions was true.
+
+### What Replay can and cannot tell you
+
+Replay checks your rules every 5 minutes through the day, using the readings
+and other data Nocturne had at each moment. That makes it good at answering
+"would this rule have fired?", with some limits:
+
+- **It cannot replay what people did.** Snoozes and acknowledgements are not
+  replayed, so a replay shows every time a rule would have fired, not what
+  would have been sent after someone snoozed it.
+- **Do Not Disturb:** times you switched Do Not Disturb on by hand are replayed,
+  and fires during them are marked as silenced. Your recurring quiet-hours
+  schedule is not, because Nocturne does not keep a history of changes to it.
+- **Gaps in readings** are filled with the last reading, checked every 5
+  minutes. Around a gap, a rule with a "for at least" setting can fire sooner in
+  a replay than it did at the time. See
+  [When readings stop](/docs/alerts/sustained#when-readings-stop).
+- A single replay covers at most two days.
+
+## Playground
+
+Nocturne's own alert engine and Replay, running in your browser on made-up
+days. Pick a day, edit the rules or add example ones, and press play. The
+lights beside each condition show which were true at the playhead. Carbs and
+insulin on board appear on the graph when a rule uses them.
+
+<AlertSimulator
+  scenario="overnight-low"
+  scenarios={["overnight-low", "brief-dip", "fast-fall", "sensor-gap", "meal-high", "missed-bolus", "treated-low"]}
+  rules={["sustained-low", "low-untreated"]}
+  editable
+/>
+
+Some things to try:
+
+- On **Brief dip**, change "Low for 15 minutes" to 5 minutes.
+- On **Treated low**, compare "Low, unless carbs are on board" with plain "Low".
+- On **Missed bolus**, add "High with no insulin on board".
+- On **Sensor gap**, add "Signal loss".
+
+A change a real save would refuse, such as "for at least" 0 minutes, is flagged
+here too, because the playground uses the same check as the rule editor. The
+playground offers the conditions that need only glucose, carbs, insulin and the
+clock; the app has many more (see [Conditions](/docs/alerts/conditions)).
+
+<Callout type="info" title="Made-up readings, not advice">
+
+  The example days are invented to show one behaviour each, and the rules are
+  illustrations, not settings to copy. Test your real rules with Replay on your
+  own readings, and agree your thresholds with your care team.
+
+</Callout>

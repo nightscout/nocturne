@@ -4,14 +4,12 @@
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
-  import {
-    Calendar,
-    ChevronDown,
-    ChevronRight,
-    Loader2,
-    Utensils,
-    X,
-  } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import X from "@lucide/svelte/icons/x";
   import type { MealEvent, TreatmentFood, SuggestedMealMatch } from "$lib/api";
   import SortableColumnHeader from "./SortableColumnHeader.svelte";
   import MealSuggestionRow from "./MealSuggestionRow.svelte";

@@ -12,7 +12,9 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
-  import { ArrowLeft, Play, Loader2 } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Play from "@lucide/svelte/icons/play";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { indexBy } from "$lib/utils/collections";
 
   // Form state - default URL matches CompatibilityProxy format

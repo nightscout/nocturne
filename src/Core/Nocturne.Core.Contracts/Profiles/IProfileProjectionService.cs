@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Core.Contracts.Profiles;
 
@@ -37,6 +38,17 @@ public interface IProfileProjectionService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Projected profiles from V4 therapy settings.</returns>
     Task<IEnumerable<Profile>> GetProfilesAsync(int count = 10, int skip = 0, CancellationToken ct = default);
+
+    /// <summary>
+    /// Profiles whose <c>srvModified</c> — the newest write stamp among the therapy settings and the
+    /// schedules they are assembled from — falls after <paramref name="cursorMills"/>, oldest first,
+    /// for the v3 <c>history/{lastModified}</c> endpoint.
+    /// </summary>
+    /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
+    /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default);
 
     /// <summary>
     /// Count the total number of distinct profile records.

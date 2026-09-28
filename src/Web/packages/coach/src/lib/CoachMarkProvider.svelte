@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { CoachMarkAdapter, SequenceConfig } from "./types.js";
+  import type { CoachMarkAdapter, CoachRouter, SequenceConfig } from "./types.js";
   import { createCoachMarkContext } from "./context.svelte.js";
   import { setCoachMarkContextRef } from "./coachmark.svelte.js";
+  import { HistorySentinel } from "./history-sentinel.js";
   import Popover from "./popover/Popover.svelte";
   import { onMount } from "svelte";
 
@@ -11,14 +12,15 @@
     sequences = {},
     settleDelay = 500,
     seenDwellMs = 2000,
-    onBeforeNavigate,
+    router,
     children,
   }: {
     adapter: CoachMarkAdapter;
     sequences?: SequenceConfig;
     settleDelay?: number;
     seenDwellMs?: number;
-    onBeforeNavigate?: (callback: () => void) => void;
+    /** Without one, the history entry an overlay holds can cancel, or strand under, a navigation. */
+    router?: CoachRouter;
     children: Snippet;
   } = $props();
 
@@ -26,32 +28,21 @@
   const ctx = createCoachMarkContext(adapter, sequences, settleDelay, seenDwellMs);
   setCoachMarkContextRef(ctx);
 
-  // Shared mutable flag so Popover can read AND reset after consuming.
-  // Not $state — Popover reads it imperatively in effect cleanup, not reactively.
-  const navigationFlag = { navigating: false };
+  // The back button dismisses quietly, so no follow-on sequence appears.
+  const sentinel = new HistorySentinel(() => {
+    const key = ctx.activeKey;
+    if (key) ctx.dismiss(key, { quiet: true });
+  });
 
-  // Let the consuming app wire in its router's beforeNavigate hook.
-  // The callback sets a flag so Popover uses replaceState instead of
-  // history.back() when cleaning up the sentinel entry during navigation.
-  // beforeNavigate must be called at init time.
   // svelte-ignore state_referenced_locally
-  if (onBeforeNavigate) {
-    onBeforeNavigate(() => {
-      navigationFlag.navigating = true;
-    });
-  }
+  if (router) sentinel.bindRouter(router);
 
   onMount(() => {
-    // Refresh recovery: if the page was refreshed while a coach mark was
-    // visible, the sentinel history entry is now the current entry. Pop it
-    // before any coach marks activate.
-    if (history.state?.__coachMark) {
-      history.back();
-    }
-
+    const disconnect = sentinel.connect();
     ctx.initialize();
+    return disconnect;
   });
 </script>
 
 {@render children()}
-<Popover {navigationFlag} />
+<Popover {sentinel} />

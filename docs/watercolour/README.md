@@ -82,6 +82,8 @@ pnpm --filter @nocturne/watercolour-showcase dev
 cargo test -p nocturne-watercolour-core
 cargo test -p nocturne-watercolour-infra
 cargo test -p nocturne-watercolour-wasm
+# The full reveal sweep, ignored by default (about an hour)
+cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_artwork -- --ignored
 
 # Web, from src/Web/
 pnpm --filter @nocturne/watercolour check
@@ -127,10 +129,10 @@ In plain language, what this library does not yet do well:
 - **The wasm module needs `wasm-opt` on the build machine** (`npm install -g
   binaryen`): with it the module is 652,953 B / 274,570 B gzip; without it the
   build script skips the pass and ships 966,642 B / 339,648 B gzip.
-- **The infra GPU tests must run in `--release`**: `reveal_preserves_the_artwork`
-  aborts with a native exit code partway through in debug builds on the
-  reference machine (the CPU-simulation tests are not feasible unoptimised) and
-  passes in release.
+- **The catalogue-wide reveal sweeps are `#[ignore]`d**: the full
+  `reveal_preserves_the_artwork` run takes about an hour in `--release` and is
+  not feasible unoptimised, so the default run checks one artwork and the sweep
+  runs with `--release -- --ignored` (see `verification.md`).
 
 ## The idea in one paragraph
 

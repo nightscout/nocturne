@@ -6,15 +6,13 @@
   import * as Card from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Shield,
-    ShieldAlert,
-    AlertTriangle,
-    Check,
-    X,
-    Smartphone,
-    Loader2,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Check from "@lucide/svelte/icons/check";
+  import X from "@lucide/svelte/icons/x";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import {
     lookupDeviceForm,
     approveDeviceForm,

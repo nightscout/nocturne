@@ -36,6 +36,12 @@ public static class GlucoseConstants
     public const double VeryHighMgdl = 250;
 
     /// <summary>
+    /// Exclusive ceiling in mg/dL for a value to count as a glucose reading in the statistics:
+    /// above anything a CGM reports as a number, so a larger value is a sentinel or a unit error.
+    /// </summary>
+    public const double MaxPlausibleMgdl = 600;
+
+    /// <summary>
     /// Tile fill per glucose status as <c>RRGGBB</c>, for the native surfaces that paint a reading
     /// directly — the desktop tray tile and the taskbar sparkline — instead of resolving the web
     /// theme's status tokens.

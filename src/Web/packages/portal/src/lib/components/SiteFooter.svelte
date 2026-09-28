@@ -1,6 +1,6 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
-    import { Github } from "@lucide/svelte";
+    import Github from "@nocturne/app/components/icons/GithubIcon.svelte";
     import LanguageSelector from "./LanguageSelector.svelte";
     import { track } from "$lib/analytics";
 </script>

@@ -25,16 +25,29 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
     {
+        if (await RefusesAsync(context.HttpContext))
+        {
+            context.Result = new ForbidResult();
+        }
+    }
+
+    /// <summary>
+    /// Whether this filter refuses the request's caller. <c>GET /api/v4/me/permissions</c> reports
+    /// it so the web can withhold the controls these endpoints would refuse, since the demo
+    /// member holds the scopes that would otherwise offer them.
+    /// </summary>
+    public static async Task<bool> RefusesAsync(HttpContext httpContext)
+    {
         // EffectiveSubjectId rather than SubjectId: a guest session carries the data owner in
         // ActingAsSubjectId and leaves SubjectId null, so keying on SubjectId alone would let an
         // authenticated credential whose subject is the demo account past the gate unexamined.
-        if (context.HttpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
-            return;
+        if (httpContext.GetAuthContext() is not { EffectiveSubjectId: { } subjectId })
+            return false;
 
-        var factory = context.HttpContext.RequestServices
+        var factory = httpContext.RequestServices
             .GetRequiredService<IDbContextFactory<NocturneDbContext>>();
 
-        await using var db = await factory.CreateDbContextAsync(context.HttpContext.RequestAborted);
+        await using var db = await factory.CreateDbContextAsync(httpContext.RequestAborted);
 
         // Nullable projection so a missing row is distinguishable from false, and refuse it:
         // an access token is a self-contained JWT with no revocation check, so a subject
@@ -44,11 +57,8 @@ public sealed class DenyDemoSubjectAttribute : Attribute, IAsyncAuthorizationFil
             .AsNoTracking()
             .Where(s => s.Id == subjectId)
             .Select(s => (bool?)s.IsDemoSubject)
-            .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
+            .FirstOrDefaultAsync(httpContext.RequestAborted);
 
-        if (isDemoSubject is null or true)
-        {
-            context.Result = new ForbidResult();
-        }
+        return isDemoSubject is null or true;
     }
 }

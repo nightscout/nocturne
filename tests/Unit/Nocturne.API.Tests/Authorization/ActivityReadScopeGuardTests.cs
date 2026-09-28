@@ -169,7 +169,7 @@ public class ActivityReadScopeGuardTests
         var controller = new CountController(
             Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), Mock.Of<IApsSnapshotRepository>(),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
-            activityService.Object, NullLogger<CountController>.Instance)
+            activityService.Object, TimeProvider.System, NullLogger<CountController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

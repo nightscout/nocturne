@@ -118,8 +118,8 @@ public class CompositeRecursionTests
     [Fact]
     public async Task Brackets_LeftFalseTime_PredictedFalse_ReturnsFalse()
     {
-        // Use a non-overlapping window so time=false at FixedNow (23:00 UTC). Left-side AND
-        // short-circuits to false; predicted=false => both sides false.
+        // Use a non-overlapping window so time=false at FixedNow (23:00 UTC), so the left-side
+        // AND is false; predicted=false => both sides false.
         var tree = new CompositeCondition("or", new List<ConditionNode>
         {
             new("composite", Composite: new CompositeCondition("and", new List<ConditionNode>
@@ -138,6 +138,30 @@ public class CompositeRecursionTests
             predictions: new[] { new PredictedGlucosePoint(15, 150m) });
 
         (await _composite.EvaluateAsync(json, ctx, CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SustainedBehindFalseAndSibling_StartsAndClearsItsTimer()
+    {
+        // 23:00 UTC is outside [06:00, 22:00), so the AND's first child is false throughout.
+        var tree = new CompositeCondition("and", new List<ConditionNode>
+        {
+            new("time_of_day", TimeOfDay: new TimeOfDayCondition("06:00", "22:00", "UTC")),
+            new("sustained", Sustained: new SustainedCondition(
+                Minutes: 10,
+                Child: new ConditionNode("threshold", Threshold: new ThresholdCondition("below", 70)))),
+        });
+        var json = JsonSerializer.Serialize(tree, SnakeCaseOptions);
+
+        (await _composite.EvaluateAsync(json, MakeContext(latestValue: 60m), CancellationToken.None))
+            .Should().BeFalse();
+        (await _timerStore.GetFirstTrueAsync(_ruleId, "[1].sustained", CancellationToken.None))
+            .Should().Be(FixedNow);
+
+        (await _composite.EvaluateAsync(json, MakeContext(latestValue: 100m), CancellationToken.None))
+            .Should().BeFalse();
+        (await _timerStore.GetFirstTrueAsync(_ruleId, "[1].sustained", CancellationToken.None))
+            .Should().BeNull();
     }
 
     private static string SerializeBracketTree()

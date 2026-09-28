@@ -17,11 +17,11 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing device event records in the database. A DeduplicationService participant on
-/// top of the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only
+/// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
 /// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
 /// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
 /// </summary>
-public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
+public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
     private readonly IDeduplicationService _deduplicationService;
     private readonly IDeviceEventReactor? _reactor;

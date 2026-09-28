@@ -1,13 +1,11 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    HelpCircle,
-    Smartphone,
-    KeyRound,
-    Globe,
-    ArrowLeft,
-  } from "lucide-svelte";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Globe from "@lucide/svelte/icons/globe";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import { Artwork } from "@nocturne/watercolour";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   // Quote the sign-in controls by name — this is the page a locked-out person

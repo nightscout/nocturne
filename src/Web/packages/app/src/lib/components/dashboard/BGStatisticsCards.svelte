@@ -5,14 +5,12 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import {
-    BatteryCharging,
-    BatteryFull,
-    BatteryLow,
-    BatteryMedium,
-    BatteryWarning,
-    Zap,
-  } from "lucide-svelte";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
+  import Zap from "@lucide/svelte/icons/zap";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";

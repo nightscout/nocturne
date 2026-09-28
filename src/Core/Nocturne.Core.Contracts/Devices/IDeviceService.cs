@@ -29,4 +29,12 @@ public interface IDeviceService
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The matching patient device <see cref="Guid"/>, or <c>null</c> if no match.</returns>
     Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default);
+
+    /// <summary>
+    /// Holds the seen-window widenings <see cref="ResolveAsync"/> makes until the returned scope is
+    /// disposed, then writes each device's widest first and last seen once. For a batch of records,
+    /// each of which would otherwise widen its device's window again.
+    /// </summary>
+    /// <param name="ct">Cancellation token for the writes made on dispose.</param>
+    IAsyncDisposable DeferLastSeen(CancellationToken ct = default);
 }

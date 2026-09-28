@@ -7,7 +7,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
   import { Separator } from "$lib/components/ui/separator";
-  import { Link } from "lucide-svelte";
+  import Link from "@lucide/svelte/icons/link";
   import {
     formatDateTimeCompact,
     formatInsulinDisplay,

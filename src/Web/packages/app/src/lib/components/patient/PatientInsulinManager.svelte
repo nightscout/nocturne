@@ -6,14 +6,12 @@
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import {
-    Syringe,
-    Plus,
-    Pencil,
-    Trash2,
-    Save,
-    Loader2,
-  } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Save from "@lucide/svelte/icons/save";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import {
     type PatientInsulin,
     type InsulinFormulation,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import type { HourlyInsulinDeliveryPoint } from "$lib/api";
-  import { Syringe } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
   import {
     patternClass,
     type TextureKey,

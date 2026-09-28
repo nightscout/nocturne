@@ -530,7 +530,7 @@ public class TreatmentSummary
     public int CarbEntryCount { get; set; }
 
     /// <summary>
-    /// Carbohydrate to insulin ratio (grams of carbs per unit of insulin)
+    /// Grams of carbs per unit of bolus insulin
     /// </summary>
     public double CarbToInsulinRatio { get; set; }
 
@@ -593,7 +593,8 @@ public class FoodTotals
 }
 
 /// <summary>
-/// Insulin totals
+/// Insulin totals of a <see cref="TreatmentSummary"/>. It summarises bolus records only;
+/// basal delivery is reported by <see cref="InsulinDeliveryStatistics"/>.
 /// </summary>
 public class InsulinTotals
 {
@@ -601,21 +602,6 @@ public class InsulinTotals
     /// Total bolus insulin in units
     /// </summary>
     public double Bolus { get; set; }
-
-    /// <summary>
-    /// Total basal insulin in units (scheduled + additional)
-    /// </summary>
-    public double Basal { get; set; }
-
-    /// <summary>
-    /// Scheduled (profile) basal insulin in units
-    /// </summary>
-    public double ScheduledBasal { get; set; }
-
-    /// <summary>
-    /// Additional basal insulin above scheduled rate (TBR - scheduled)
-    /// </summary>
-    public double AdditionalBasal { get; set; }
 }
 
 /// <summary>
@@ -624,29 +610,9 @@ public class InsulinTotals
 public class OverallAverages
 {
     /// <summary>
-    /// Average total daily insulin
-    /// </summary>
-    public double AvgTotalDaily { get; set; }
-
-    /// <summary>
     /// Average daily bolus insulin
     /// </summary>
     public double AvgBolus { get; set; }
-
-    /// <summary>
-    /// Average daily basal insulin
-    /// </summary>
-    public double AvgBasal { get; set; }
-
-    /// <summary>
-    /// Percentage of total insulin that is bolus
-    /// </summary>
-    public double BolusPercentage { get; set; }
-
-    /// <summary>
-    /// Percentage of total insulin that is basal
-    /// </summary>
-    public double BasalPercentage { get; set; }
 
     /// <summary>
     /// Average daily carbohydrates
@@ -1457,6 +1423,11 @@ public enum TargetStatus
 
     /// <summary>Target not met</summary>
     NotMet,
+
+    /// <summary>
+    /// The metric could not be computed from the data, so the target is neither met nor missed
+    /// </summary>
+    NotAssessed,
 }
 
 /// <summary>
@@ -1467,8 +1438,8 @@ public class TargetAssessment
     /// <summary>Name of the metric</summary>
     public string MetricName { get; set; } = string.Empty;
 
-    /// <summary>Current value</summary>
-    public double CurrentValue { get; set; }
+    /// <summary>Current value, or null when <see cref="Status"/> is <see cref="TargetStatus.NotAssessed"/></summary>
+    public double? CurrentValue { get; set; }
 
     /// <summary>Target value</summary>
     public double TargetValue { get; set; }
@@ -1479,11 +1450,11 @@ public class TargetAssessment
     /// <summary>Status of target achievement</summary>
     public TargetStatus Status { get; set; }
 
-    /// <summary>Difference from target</summary>
-    public double DifferenceFromTarget { get; set; }
+    /// <summary>Difference from target, or null when not assessed</summary>
+    public double? DifferenceFromTarget { get; set; }
 
-    /// <summary>Percentage progress toward target</summary>
-    public double ProgressPercentage { get; set; }
+    /// <summary>Percentage progress toward target, or null when not assessed</summary>
+    public double? ProgressPercentage { get; set; }
 }
 
 /// <summary>
@@ -1530,8 +1501,14 @@ public class ClinicalTargetAssessment
     /// <summary>Number of targets met</summary>
     public int TargetsMet { get; set; }
 
-    /// <summary>Total number of targets assessed</summary>
+    /// <summary>Total number of targets, assessed or not</summary>
     public int TotalTargets { get; set; }
+
+    /// <summary>
+    /// Number of targets whose metric could be computed; the rest are
+    /// <see cref="TargetStatus.NotAssessed"/>
+    /// </summary>
+    public int TargetsAssessed { get; set; }
 
     /// <summary>Overall assessment category</summary>
     public ClinicalAssessmentLevel OverallAssessment { get; set; }
@@ -1828,9 +1805,10 @@ public class InsulinDeliveryStatistics
     public double BolusesPerDay { get; set; }
 
     /// <summary>
-    /// Number of days in the analysis period
+    /// Whole days in the requested window, rounded to nearest, at least one; the per-day
+    /// averages over the window divide by it. Not the number of days that hold data.
     /// </summary>
-    public int DayCount { get; set; }
+    public int WindowDays { get; set; }
 
     /// <summary>
     /// Start date of the analysis period (ISO format)
@@ -1946,9 +1924,10 @@ public class DailyBasalBolusRatioResponse
     public double AverageTdd { get; set; }
 
     /// <summary>
-    /// Number of days with data
+    /// Distinct local days this response attributes delivered insulin to; its averages divide
+    /// by it. Not the length of the requested window.
     /// </summary>
-    public int DayCount { get; set; }
+    public int DaysWithData { get; set; }
 }
 
 /// <summary>
@@ -2075,9 +2054,10 @@ public class BasalAnalysisResponse
     public List<HourlyBasalPercentileData> HourlyPercentiles { get; set; } = new();
 
     /// <summary>
-    /// Number of days in the analysis period
+    /// Whole days in the requested window, rounded to nearest, at least one; the per-day
+    /// averages over the window divide by it. Not the number of days that hold data.
     /// </summary>
-    public int DayCount { get; set; }
+    public int WindowDays { get; set; }
 
     /// <summary>
     /// Start date of the analysis period
@@ -2145,9 +2125,10 @@ public class HourlyInsulinDeliveryResponse
     public List<HourlyInsulinDeliveryPoint> Hours { get; set; } = new();
 
     /// <summary>
-    /// Number of distinct days with delivery data the averages are taken over
+    /// Distinct local days this response attributes delivered insulin to. Not the length of the
+    /// requested window.
     /// </summary>
-    public int DayCount { get; set; }
+    public int DaysWithData { get; set; }
 
     /// <summary>
     /// Start date of the analysis period

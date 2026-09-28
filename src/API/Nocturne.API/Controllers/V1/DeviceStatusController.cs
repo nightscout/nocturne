@@ -220,6 +220,10 @@ public class DeviceStatusController : ControllerBase
                 {
                     deviceStatus.Device = string.Empty;
                 }
+                if (string.IsNullOrEmpty(deviceStatus.Id))
+                {
+                    deviceStatus.Id = MongoObjectId.NewObjectId();
+                }
             }
 
             // Decompose each device status directly into V4 snapshot tables
@@ -305,13 +309,11 @@ public class DeviceStatusController : ControllerBase
                 return BadRequest("Device status ID is required");
             }
 
-            // Get the projected record before deleting (for broadcast)
+            // The path's wire form may only resolve to the stored id; the projection is also the broadcast.
             var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
 
-            // Delete V4 snapshot records by legacy ID
-            var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-
-            if (deleted > 0 || deviceStatusToDelete != null)
+            if (deviceStatusToDelete?.Id is { } storedId
+                && await _decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) > 0)
             {
                 await _sideEffects.OnDeletedAsync(
                     CollectionName,
@@ -401,7 +403,7 @@ public class DeviceStatusController : ControllerBase
             {
                 if (!string.IsNullOrEmpty(record.Id))
                 {
-                    var count = await _decomposer.DeleteByLegacyIdAsync(record.Id, WriteOrigin.Live, cancellationToken);
+                    var count = await _decomposer.DeleteStoredAsync(record.Id, WriteOrigin.Live, cancellationToken);
                     if (count > 0)
                         deletedCount++;
                 }

@@ -3,7 +3,8 @@
     import { resolve } from "$app/paths";
     import type { Pathname } from "$app/types";
     import { Button } from "@nocturne/ui/ui/button";
-    import { Menu, X } from "@lucide/svelte";
+    import Menu from "@lucide/svelte/icons/menu";
+    import X from "@lucide/svelte/icons/x";
     import {
         DEMO_ENABLED,
     } from "$lib/config";

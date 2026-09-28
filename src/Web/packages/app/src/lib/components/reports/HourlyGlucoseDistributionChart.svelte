@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AreaChart } from "layerchart";
   import { timeFormat } from "$lib/stores/appearance-store.svelte";
-  import { BarChart2 } from "lucide-svelte";
+  import BarChart2 from "@lucide/svelte/icons/chart-no-axes-column";
   import type { AveragedStats, GlycemicThresholds } from "$lib/api";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { hourlyBandSeries } from "./hourly-bands";

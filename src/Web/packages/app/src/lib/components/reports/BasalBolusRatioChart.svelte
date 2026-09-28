@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import { PieChart } from "lucide-svelte";
+  import PieChart from "@lucide/svelte/icons/chart-pie";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
 

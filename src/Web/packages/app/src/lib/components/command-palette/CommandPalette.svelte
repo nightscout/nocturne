@@ -27,7 +27,7 @@
     recordRecent,
   } from "./command-palette-store.svelte";
   import CommandPaletteVitals from "./CommandPaletteVitals.svelte";
-  import { Star } from "lucide-svelte";
+  import Star from "@lucide/svelte/icons/star";
   import { Button } from "$lib/components/ui/button";
 
   interface Props {

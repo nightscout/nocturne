@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>
@@ -311,6 +312,159 @@ public class EntryReadService : IEntryStore
         var mgCount = await _mgRepo.CountAsync(from, to, ct);
         var calCount = await _calRepo.CountAsync(from, to, ct);
         return sgCount + mgCount + calCount;
+    }
+
+    /// <summary>
+    /// Width, in canonical buckets, of the widest gap between two page readings that still share one
+    /// window read in <see cref="CanonicalIdsAsync"/>.
+    /// </summary>
+    private const int MaxWindowBucketGap = 12;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each glucose type pages through its own <see cref="HistoryPage"/>, and the merge cuts on raw
+    /// stamps before anything is withheld, for the reason given at
+    /// <see cref="V4.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
+    /// then decides the cursor, not the delivered rows. A full page that withholds every row is
+    /// followed by the next rather than returned: AAPS keeps its cursor on an empty page, so it
+    /// would request the same withheld rows forever.
+    /// </remarks>
+    public async Task<ModifiedSincePage<Entry>> GetModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default)
+    {
+        var (source, excludeDemo) = ResolveDemoFilter();
+        long? pageCursor = null;
+        var cursor = cursorMills;
+
+        while (true)
+        {
+            // Sequential to avoid DbContext thread-safety issues with scoped lifetime
+            var fetched = new List<IV4Record>();
+            fetched.AddRange(await _sgRepo.GetModifiedSinceAsync(cursor, limit, ct));
+            fetched.AddRange(await _mgRepo.GetModifiedSinceAsync(cursor, limit, ct));
+            fetched.AddRange(await _calRepo.GetModifiedSinceAsync(cursor, limit, ct));
+
+            var page = CutHistoryPage(fetched, limit);
+            if (page.Count == 0)
+                return new ModifiedSincePage<Entry>([], pageCursor);
+
+            pageCursor = HistoryPage.ToMilliseconds(page[^1].ModifiedAt);
+
+            var delivered = await VisibleHistoryEntriesAsync(page, source, excludeDemo, ct);
+            if (delivered.Count > 0 || page.Count < limit)
+                return new ModifiedSincePage<Entry>(delivered, pageCursor);
+
+            cursor = pageCursor.Value;
+        }
+    }
+
+    /// <summary>
+    /// The oldest <paramref name="limit"/> rows across the glucose types, extended to the end of the
+    /// last row's millisecond. Every type's own page ends on a millisecond boundary at or after the
+    /// cut, so the rows already fetched complete it.
+    /// </summary>
+    private static List<IV4Record> CutHistoryPage(IReadOnlyList<IV4Record> fetched, int limit)
+    {
+        var ordered = fetched
+            .OrderBy(r => r.ModifiedAt)
+            .ThenBy(HistoryTypeOrder)
+            .ThenBy(r => r.Id)
+            .ToList();
+
+        if (ordered.Count <= limit)
+            return ordered;
+
+        var lastMills = HistoryPage.ToMilliseconds(ordered[limit - 1].ModifiedAt);
+        return ordered
+            .TakeWhile((r, i) => i < limit || HistoryPage.ToMilliseconds(r.ModifiedAt) == lastMills)
+            .ToList();
+    }
+
+    private static int HistoryTypeOrder(IV4Record record) => record switch
+    {
+        SensorGlucose => 0,
+        MeterGlucose => 1,
+        _ => 2,
+    };
+
+    /// <summary>
+    /// Projects the page rows a regular entries read would return, in page order: demo filtering as
+    /// <see cref="ResolveDemoFilter"/> sets it, and only the canonical stream's sgv readings.
+    /// </summary>
+    private async Task<List<Entry>> VisibleHistoryEntriesAsync(
+        IReadOnlyList<IV4Record> page, string? source, bool excludeDemo, CancellationToken ct)
+    {
+        var visible = page
+            .Where(r => source is not null ? r.DataSource == source : !excludeDemo || !DataSources.IsEphemeral(r.DataSource))
+            .ToList();
+
+        var canonical = await CanonicalIdsAsync(visible.OfType<SensorGlucose>().ToList(), source, excludeDemo, ct);
+
+        return visible
+            .Where(r => r is not SensorGlucose sg || canonical.Contains(sg.Id))
+            .Select(r => r switch
+            {
+                SensorGlucose sg => EntryProjection.FromSensorGlucose(sg),
+                MeterGlucose mg => EntryProjection.FromMeterGlucose(mg),
+                _ => EntryProjection.FromCalibration((Calibration)r),
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Ids of the <paramref name="readings"/> that win canonical selection. A bucket's winner depends
+    /// on every stream that reported into it, and a modified-since page holds only the rows written
+    /// after the cursor — a late backfill from a second CGM arrives without the winner's readings
+    /// beside it — so selection runs over every stored reading in the buckets the page touches.
+    /// </summary>
+    private async Task<HashSet<Guid>> CanonicalIdsAsync(
+        IReadOnlyList<SensorGlucose> readings, string? source, bool excludeDemo, CancellationToken ct)
+    {
+        if (readings.Count == 0)
+            return [];
+
+        var window = new Dictionary<Guid, SensorGlucose>();
+        foreach (var (from, to) in CanonicalBucketRuns(readings))
+        {
+            var stored = await _sgRepo.GetAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
+            foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
+                window.TryAdd(reading.Id, reading);
+        }
+
+        foreach (var reading in readings)
+            window[reading.Id] = reading;
+
+        var canonical = await _canonicalGlucose.SelectAsync(window.Values.ToList(), ct);
+        return canonical.Select(r => r.Id).ToHashSet();
+    }
+
+    /// <summary>
+    /// The canonical buckets holding <paramref name="readings"/>, as time ranges, joining buckets
+    /// no more than <see cref="MaxWindowBucketGap"/> apart so a contiguous page costs one read.
+    /// </summary>
+    private static List<(DateTime From, DateTime To)> CanonicalBucketRuns(IReadOnlyList<SensorGlucose> readings)
+    {
+        var size = CanonicalGlucoseStream.BucketSize.Ticks;
+        var buckets = readings.Select(r => r.Timestamp.Ticks / size).Distinct().Order().ToList();
+
+        DateTime At(long bucket) => new(bucket * size, DateTimeKind.Utc);
+
+        var runs = new List<(DateTime, DateTime)>();
+        var start = buckets[0];
+        var end = start;
+        foreach (var bucket in buckets.Skip(1))
+        {
+            if (bucket - end > MaxWindowBucketGap)
+            {
+                runs.Add((At(start), At(end + 1)));
+                start = bucket;
+            }
+
+            end = bucket;
+        }
+
+        runs.Add((At(start), At(end + 1)));
+        return runs;
     }
 
     #region Private — Query helpers
@@ -647,9 +801,9 @@ public class EntryReadService : IEntryStore
 
         // DateString takes priority over Find-based time range. Both cannot be combined because
         // the V4 repos accept a single from/to window; DateString wins when both are present.
-        if (query.DateString is not null && DateTime.TryParse(query.DateString, out var parsedDate))
+        if (UploaderTimestamp.TryParse(query.DateString, out var parsedDate))
         {
-            from = parsedDate.ToUniversalTime();
+            from = parsedDate.UtcDateTime;
             to = from.Value.AddDays(1);
         }
 

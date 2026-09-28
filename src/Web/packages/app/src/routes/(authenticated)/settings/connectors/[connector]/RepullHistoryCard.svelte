@@ -20,7 +20,10 @@
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { AlertTriangle, CheckCircle, History, Loader2 } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import History from "@lucide/svelte/icons/history";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
 

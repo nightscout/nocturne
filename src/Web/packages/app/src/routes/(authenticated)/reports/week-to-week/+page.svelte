@@ -2,7 +2,9 @@
   import { LineChart } from "layerchart";
   import { parseDate } from "@internationalized/date";
   import { Button } from "$lib/components/ui/button";
-  import { ChevronLeft, ChevronRight, Calendar } from "lucide-svelte";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Calendar from "@lucide/svelte/icons/calendar";
   import { getWeekdayAverages } from "$api/reports.remote";
   import type { DayOfWeek } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";

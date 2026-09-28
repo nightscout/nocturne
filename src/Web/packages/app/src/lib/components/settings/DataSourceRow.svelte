@@ -3,13 +3,11 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Item, type ItemVariant } from "$lib/components/ui/item";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import {
-    CheckCircle,
-    Clock,
-    AlertCircle,
-    Loader2,
-    WifiOff,
-  } from "lucide-svelte";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { formatSyncMessage } from "$lib/utils/sync-messages";

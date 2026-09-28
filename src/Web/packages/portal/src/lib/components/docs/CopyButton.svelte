@@ -1,5 +1,7 @@
 <script lang="ts">
-    import { Copy, Check, X } from "@lucide/svelte";
+    import Copy from "@lucide/svelte/icons/copy";
+    import Check from "@lucide/svelte/icons/check";
+    import X from "@lucide/svelte/icons/x";
     import { Button } from "@nocturne/ui/ui/button";
     import { copyToClipboard } from "@nocturne/ui/utils";
     import { track } from "$lib/analytics";

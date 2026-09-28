@@ -201,13 +201,12 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
         List<FetchedRecord> page,
         IReadOnlyList<(FetchedRecord Row, int Order)> ordered)
     {
-        var lastMills = HistoryPage.ToMilliseconds(page[^1].Modified!.Value);
+        var lastMills = HistoryPage.ToMilliseconds(page[^1].Modified);
         var seen = page.Select(RecordId).ToHashSet();
 
         foreach (var (row, _) in ordered)
         {
-            if (row.Modified is { } modified
-                && HistoryPage.ToMilliseconds(modified) == lastMills
+            if (HistoryPage.ToMilliseconds(row.Modified) == lastMills
                 && seen.Add(RecordId(row)))
             {
                 page.Add(row);

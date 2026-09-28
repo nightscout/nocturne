@@ -2,7 +2,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
-  import { Syringe } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
   import {
     bg,
     bgLabel,

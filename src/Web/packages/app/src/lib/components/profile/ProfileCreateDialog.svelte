@@ -7,7 +7,7 @@
   import { BG_UNITS, DEFAULT_PROFILE_ICON } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
-  import { Plus } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
 
   interface Props {
     open: boolean;

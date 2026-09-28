@@ -1,4 +1,4 @@
-import { BasalDeliveryOrigin } from "$lib/api";
+import { BasalDeliveryOrigin } from "$api-clients";
 
 /**
  * Whether a basal point departs from the schedule, which the chart paints in the

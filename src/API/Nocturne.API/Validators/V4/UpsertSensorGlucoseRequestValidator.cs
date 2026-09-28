@@ -10,6 +10,7 @@ namespace Nocturne.API.Validators.V4;
 /// <list type="bullet">
 /// <item><description>Timestamp must be a valid non-default <see cref="DateTimeOffset"/>.</description></item>
 /// <item><description>Device, App, DataSource capped at 500 characters.</description></item>
+/// <item><description>SyncIdentifier capped at 256 characters, the column's width, and requires DataSource.</description></item>
 /// <item><description>Mgdl must be between 0 and 10,000 (mg/dL range guard).</description></item>
 /// <item><description>Direction, when provided, must be a valid <see cref="Core.Models.V4.GlucoseDirection"/> enum value.</description></item>
 /// </list>
@@ -28,6 +29,11 @@ public class UpsertSensorGlucoseRequestValidator : AbstractValidator<UpsertSenso
         RuleFor(x => x.Device).MaximumLength(500).When(x => x.Device is not null);
         RuleFor(x => x.App).MaximumLength(500).When(x => x.App is not null);
         RuleFor(x => x.DataSource).MaximumLength(500).When(x => x.DataSource is not null);
+        RuleFor(x => x.SyncIdentifier).MaximumLength(256).When(x => x.SyncIdentifier is not null);
+        RuleFor(x => x.DataSource)
+            .NotEmpty()
+            .When(x => !string.IsNullOrEmpty(x.SyncIdentifier))
+            .WithMessage("DataSource is required when SyncIdentifier is supplied.");
         RuleFor(x => x.Mgdl).InclusiveBetween(0, 10000).WithMessage("Mgdl must be between 0 and 10000");
         RuleFor(x => x.Direction).IsInEnum().When(x => x.Direction is not null);
         RuleFor(x => x.GlucoseProcessing)

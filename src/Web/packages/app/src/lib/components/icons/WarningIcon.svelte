@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AlertCircle from "lucide-svelte/icons/alert-circle";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

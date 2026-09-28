@@ -663,6 +663,53 @@ public class OAuthTokenServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExchangeAuthorizationCodeAsync_StoresTheRefreshTokenWithACurrentIssuedAt()
+    {
+        const string testCode = "issued-at-code";
+        const string testCodeHash = "issued-at-code-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(testCode)).Returns(testCodeHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedAuthorizationCodeAsync(db, testCodeHash);
+        await SeedGrantAsync(db);
+        var before = DateTime.UtcNow;
+
+        var result = await CreateService(db).ExchangeAuthorizationCodeAsync(
+            testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
+
+        Assert.True(result.Success);
+        using var verifyDb = CreateDbContext();
+        var issued = await verifyDb.OAuthRefreshTokens.AsNoTracking().SingleAsync(t => t.TokenHash == TestRefreshTokenHash);
+        Assert.True(issued.IssuedAt >= before, "issued_at is server-assigned on insert");
+    }
+
+    [Fact]
+    public async Task RefreshAccessTokenAsync_StoresTheRotatedTokenWithACurrentIssuedAt()
+    {
+        const string oldToken = "issued-at-old-token";
+        const string oldTokenHash = "issued-at-old-token-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(oldToken)).Returns(oldTokenHash);
+        _mockJwtService.Setup(j => j.GenerateRefreshToken()).Returns(TestNewRefreshToken);
+        _mockJwtService.Setup(j => j.HashRefreshToken(TestNewRefreshToken)).Returns(TestNewRefreshTokenHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db);
+        await SeedRefreshTokenAsync(db, oldTokenHash, grantId: grantId);
+        var before = DateTime.UtcNow;
+
+        var result = await CreateService(db).RefreshAccessTokenAsync(oldToken, TestClientId);
+
+        Assert.True(result.Success);
+        using var verifyDb = CreateDbContext();
+        var rotated = await verifyDb.OAuthRefreshTokens.AsNoTracking().SingleAsync(t => t.TokenHash == TestNewRefreshTokenHash);
+        Assert.True(rotated.IssuedAt >= before, "issued_at is server-assigned on insert");
+    }
+
+    [Fact]
     public async Task RefreshAccessTokenAsync_ExpiredToken_ReturnsError()
     {
         // Arrange

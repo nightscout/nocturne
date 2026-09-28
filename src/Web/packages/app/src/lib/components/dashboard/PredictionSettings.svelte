@@ -7,7 +7,8 @@
     SelectTrigger,
   } from "$lib/components/ui/select";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { AlertCircle, RefreshCw } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { Button } from "$lib/components/ui/button";
   import {
     predictionMinutes,

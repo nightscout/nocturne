@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Check } from "@lucide/svelte";
+    import Check from "@lucide/svelte/icons/check";
     import { REPORTS } from "$lib/data/reports";
 
     // Palette shared by every preview: the app's glucose range colours plus a neutral ink ramp.

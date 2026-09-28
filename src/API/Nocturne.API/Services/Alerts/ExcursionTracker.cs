@@ -51,9 +51,29 @@ public class ExcursionTracker : IExcursionTracker
 
     internal IExcursionDecider Decider { get; }
 
-    /// <inheritdoc/>
-    public async Task<ExcursionTransition> ProcessEvaluationAsync(
+    /// <summary>
+    /// <see cref="IExcursionTracker.ProcessEvaluationAsync"/> with no rule to check the decision
+    /// against: a seam for tests and the parity corpus, which drive the tracker without a snapshot.
+    /// </summary>
+    internal Task<ExcursionTransition> ProcessEvaluationAsync(
         Guid alertRuleId,
+        bool conditionMet,
+        Func<CancellationToken, Task<bool>>? autoResolveMet,
+        CancellationToken ct) =>
+        ProcessEvaluationAsync(alertRuleId, null, conditionMet, autoResolveMet, ct);
+
+    /// <inheritdoc/>
+    /// <remarks>The check is made under the rule's transition lock (<see cref="ExcursionTransitionWriter"/>).</remarks>
+    public Task<ExcursionTransition> ProcessEvaluationAsync(
+        AlertRuleSnapshot rule,
+        bool conditionMet,
+        Func<CancellationToken, Task<bool>>? autoResolveMet,
+        CancellationToken ct) =>
+        ProcessEvaluationAsync(rule.Id, AlertRuleConditions.Of(rule), conditionMet, autoResolveMet, ct);
+
+    private async Task<ExcursionTransition> ProcessEvaluationAsync(
+        Guid alertRuleId,
+        AlertRuleConditions? decidedAgainst,
         bool conditionMet,
         Func<CancellationToken, Task<bool>>? autoResolveMet,
         CancellationToken ct)
@@ -73,7 +93,7 @@ public class ExcursionTracker : IExcursionTracker
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var resolveMet = AwaitsRearm(state) && autoResolveMet is not null && await autoResolveMet(ct);
         var decision = Decider.Process(alertRuleId, state, TrackerConfig.Of(rule), conditionMet, resolveMet, now);
-        return await PersistAsync(alertRuleId, state, decision, now, ct);
+        return await PersistAsync(alertRuleId, state, decision, decidedAgainst, now, ct);
     }
 
     /// <inheritdoc/>
@@ -88,12 +108,30 @@ public class ExcursionTracker : IExcursionTracker
         var state = await _repository.GetTrackerStateAsync(alertRuleId, ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var decision = Decider.CloseElapsedHysteresis(alertRuleId, state, TrackerConfig.Of(rule), now);
-        return await PersistAsync(alertRuleId, state, decision, now, ct);
+        return await PersistAsync(alertRuleId, state, decision, null, now, ct);
     }
 
     /// <inheritdoc/>
-    public async Task<ExcursionTransition> ForceCloseAsync(
+    public Task<ExcursionTransition> ForceCloseAsync(
         Guid alertRuleId,
+        ExcursionCloseReason reason,
+        CancellationToken ct) =>
+        ForceCloseAsync(alertRuleId, null, reason, ct);
+
+    /// <summary>
+    /// <see cref="IExcursionTracker.ForceCloseAsync"/> for a close an evaluation of
+    /// <paramref name="rule"/> decided: it is dropped if the rule no longer reads as
+    /// <paramref name="rule"/> when it is written (<see cref="ExcursionTransitionWriter"/>).
+    /// </summary>
+    public Task<ExcursionTransition> ForceCloseAsync(
+        AlertRuleSnapshot rule,
+        ExcursionCloseReason reason,
+        CancellationToken ct) =>
+        ForceCloseAsync(rule.Id, AlertRuleConditions.Of(rule), reason, ct);
+
+    private async Task<ExcursionTransition> ForceCloseAsync(
+        Guid alertRuleId,
+        AlertRuleConditions? decidedAgainst,
         ExcursionCloseReason reason,
         CancellationToken ct)
     {
@@ -102,7 +140,7 @@ public class ExcursionTracker : IExcursionTracker
         var state = await _repository.GetTrackerStateAsync(alertRuleId, ct);
         var now = _timeProvider.GetUtcNow().UtcDateTime;
         var decision = Decider.ForceClose(alertRuleId, state, reason, now);
-        return await PersistAsync(alertRuleId, state, decision, now, ct);
+        return await PersistAsync(alertRuleId, state, decision, decidedAgainst, now, ct);
     }
 
     /// <inheritdoc/>
@@ -120,7 +158,12 @@ public class ExcursionTracker : IExcursionTracker
             : null;
 
     private async Task<ExcursionTransition> PersistAsync(
-        Guid alertRuleId, AlertTrackerState? state, TrackerDecision decision, DateTime now, CancellationToken ct)
+        Guid alertRuleId,
+        AlertTrackerState? state,
+        TrackerDecision decision,
+        AlertRuleConditions? decidedAgainst,
+        DateTime now,
+        CancellationToken ct)
     {
         if (state is not null && !TrackerPostState.IsKnown(state.State))
         {
@@ -129,7 +172,7 @@ public class ExcursionTracker : IExcursionTracker
                 alertRuleId, state.State, TrackerPostState.Of(state)!.State);
         }
         var (transition, _) = await ExcursionTransitionWriter.ApplyAsync(
-            _repository, _logger, alertRuleId, state, decision, now, ct);
+            _repository, _logger, alertRuleId, state, decision, decidedAgainst, now, ct);
         return transition;
     }
 }

@@ -9,7 +9,8 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
-  import { Moon, CalendarRange } from "lucide-svelte";
+  import Moon from "@lucide/svelte/icons/moon";
+  import CalendarRange from "@lucide/svelte/icons/calendar-range";
   import {
     Actogram,
     buildDayRange,

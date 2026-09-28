@@ -6,13 +6,11 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
-  import {
-    Check,
-    ChevronDown,
-    ChevronUp,
-    Copy,
-    Loader2,
-  } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
   import { coachmark } from "@nocturne/coach";

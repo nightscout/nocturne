@@ -9,7 +9,8 @@
   import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch } from "@tauri-apps/plugin-process";
   import { Button } from "@nocturne/ui/ui/button";
-  import { Download, Loader2 } from "@lucide/svelte";
+  import Download from "@lucide/svelte/icons/download";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
 
   let { children } = $props();
 

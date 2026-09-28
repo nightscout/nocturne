@@ -3,7 +3,7 @@
   import { Input } from '@nocturne/ui/ui/input';
   import { Label } from '@nocturne/ui/ui/label';
   import { Switch } from '@nocturne/ui/ui/switch';
-  import { X } from '@lucide/svelte';
+  import X from '@lucide/svelte/icons/x';
   import type { Editor } from '@tiptap/core';
   import { parseComponentProps } from './extensions/svelte-component.ts';
 

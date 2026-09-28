@@ -95,7 +95,7 @@ public class DeviceAttributionBackstampTests : IDisposable
         {
             Id = id,
             TenantId = TestTenantId,
-            StartTimestamp = startTimestamp,
+            Timestamp = startTimestamp,
             Rate = 0.8,
             Origin = nameof(TempBasalOrigin.Algorithm),
             PatientDeviceId = patientDeviceId,

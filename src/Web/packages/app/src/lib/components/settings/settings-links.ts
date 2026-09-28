@@ -1,20 +1,18 @@
-import type { ComponentType } from "svelte";
-import {
-  Building2,
-  HeartHandshake,
-  HeartPulse,
-  KeyRound,
-  ListChecks,
-  Palette,
-  Plug,
-  Shield,
-  ShieldCheck,
-  Syringe,
-  Timer,
-  User,
-  UserPlus,
-  Users,
-} from "lucide-svelte";
+import type { Component } from "svelte";
+import Building2 from "@lucide/svelte/icons/building-2";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+import KeyRound from "@lucide/svelte/icons/key-round";
+import ListChecks from "@lucide/svelte/icons/list-checks";
+import Palette from "@lucide/svelte/icons/palette";
+import Plug from "@lucide/svelte/icons/plug";
+import Shield from "@lucide/svelte/icons/shield";
+import ShieldCheck from "@lucide/svelte/icons/shield-check";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Timer from "@lucide/svelte/icons/timer";
+import User from "@lucide/svelte/icons/user";
+import UserPlus from "@lucide/svelte/icons/user-plus";
+import Users from "@lucide/svelte/icons/users";
 
 /**
  * One destination on the settings index, and anywhere else that links to a
@@ -24,7 +22,7 @@ export type SettingsLink = {
   title: string;
   description: string;
   href: string;
-  icon: ComponentType;
+  icon: Component;
 };
 
 /**

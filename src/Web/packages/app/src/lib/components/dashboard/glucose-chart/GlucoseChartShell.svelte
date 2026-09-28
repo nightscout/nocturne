@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { Chart, Svg, Axis, BrushContext } from "layerchart";
   import { scaleTime } from "d3-scale";
-  import type { ChartDataEngine } from "./engine/chart-data-engine.svelte";
+  import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
   import type { PointInspection } from "./engine/point-inspection.svelte";
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";
@@ -143,6 +143,14 @@
 
       {#if chartHeight > 0}
         {@render overlays?.(ctx)}
+      {/if}
+
+      {#if engine.chartDataError}
+        <div class="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+          <p role="alert" class="text-center text-sm text-destructive">
+            {engine.chartDataError}
+          </p>
+        </div>
       {/if}
 
       {#if onSelectionChange}

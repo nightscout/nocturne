@@ -5,6 +5,8 @@ using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Containers;
 using DotNet.Testcontainers.Networks;
+using MongoDB.Bson;
+using MongoDB.Driver;
 
 namespace Nocturne.API.Tests.Integration.Infrastructure;
 
@@ -108,6 +110,8 @@ public class NightscoutContainer : IAsyncDisposable
         // Nightscout returns tab-separated text by default; we need JSON for parity tests
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
 
+        await WaitUntilLoadedAsync(cancellationToken);
+
         // Fetch JWT token for V3 API authentication
         await FetchJwtTokenAsync(cancellationToken);
     }
@@ -119,6 +123,32 @@ public class NightscoutContainer : IAsyncDisposable
     /// 2. Get the access token from the created subject
     /// 3. Request a JWT using the access token
     /// </summary>
+    /// <summary>
+    /// Waits for Nightscout's <c>runtimeState</c> to reach <c>loaded</c>. It answers status as
+    /// soon as it listens, while still <c>booted</c>, and until its first data load it serves
+    /// empty in-memory data (summary, properties) and reports the earlier state in every status.
+    /// </summary>
+    private async Task WaitUntilLoadedAsync(CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow.AddMinutes(2);
+        string? state = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await _httpClient!.GetAsync("/api/v1/status.json", cancellationToken);
+            if (response.IsSuccessStatusCode)
+            {
+                using var status = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+                state = status.RootElement.TryGetProperty("runtimeState", out var s) ? s.GetString() : null;
+                if (state == "loaded")
+                    return;
+            }
+
+            await Task.Delay(250, cancellationToken);
+        }
+
+        throw new TimeoutException($"Nightscout did not reach runtimeState 'loaded' (last seen: {state ?? "none"}).");
+    }
+
     private async Task FetchJwtTokenAsync(CancellationToken cancellationToken)
     {
         try
@@ -257,6 +287,12 @@ public class NightscoutContainer : IAsyncDisposable
                 // Ignore cleanup errors
             }
         }
+
+        // Activity has no v3 API, and v1 reads it straight from MongoDB with no cache in between,
+        // so it is emptied there.
+        var database = new MongoClient(MongoConnectionString).GetDatabase("nightscout");
+        await database.GetCollection<BsonDocument>("activity")
+            .DeleteManyAsync(FilterDefinition<BsonDocument>.Empty, cancellationToken);
 
         // Small delay to ensure deletions are fully processed
         await Task.Delay(50, cancellationToken);

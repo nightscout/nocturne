@@ -1,17 +1,16 @@
 <script lang="ts">
   import { cn } from "./utils/formatting.js";
-  import {
-    AlertTriangle,
-    Activity,
-    Wifi,
-    MapPin,
-    Droplets,
-    Battery,
-    Syringe,
-    Utensils,
-  } from "@lucide/svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Wifi from "@lucide/svelte/icons/wifi";
+  import MapPin from "@lucide/svelte/icons/map-pin";
+  import Droplets from "@lucide/svelte/icons/droplets";
+  import Battery from "@lucide/svelte/icons/battery";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
   import { SystemEventType } from "./enums.js";
-  import { Clock, ChevronDown } from "@lucide/svelte";
+  import Clock from "@lucide/svelte/icons/clock";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import type { Snippet } from "svelte";
   import LegendButton from "./controls/LegendButton.svelte";
 

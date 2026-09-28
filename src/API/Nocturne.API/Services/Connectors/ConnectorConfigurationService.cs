@@ -169,7 +169,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 ConnectorName = canonicalName,
                 ConfigurationJson = configJson,
                 SecretsJson = "{}",
-                LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
             _context.ConnectorConfigurations.Add(entity);
@@ -234,7 +233,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 ConnectorName = canonicalName,
                 ConfigurationJson = "{}",
                 SecretsJson = secretsJson,
-                LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
             _context.ConnectorConfigurations.Add(entity);
@@ -455,7 +453,6 @@ public class ConnectorConfigurationService : IConnectorConfigurationService
                 ConnectorName = canonicalName,
                 ConfigurationJson = configWithEnabled,
                 SecretsJson = "{}",
-                LastModified = DateTimeOffset.UtcNow,
                 ModifiedBy = modifiedBy
             };
             _context.ConnectorConfigurations.Add(entity);

@@ -26,13 +26,11 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
-  import {
-    ArrowUpDown,
-    ArrowUp,
-    ArrowDown,
-    ChevronUp,
-    ChevronDown,
-  } from "lucide-svelte";
+  import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { SvelteSet } from "svelte/reactivity";
   import DataTableToolbar from "$lib/components/treatments/DataTableToolbar.svelte";
   import DataTablePagination from "$lib/components/treatments/DataTablePagination.svelte";

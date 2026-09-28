@@ -263,7 +263,6 @@ public class OAuthTokenService : IOAuthTokenService
             TenantId = oauthToken.Grant.TenantId,
             GrantId = oauthToken.GrantId,
             TokenHash = newTokenHash,
-            IssuedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(90),
         };
 
@@ -543,7 +542,6 @@ public class OAuthTokenService : IOAuthTokenService
             TenantId = grant.TenantId,
             GrantId = grant.Id,
             TokenHash = tokenHash,
-            IssuedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(90),
         };
 

@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { CalendarDays, Filter, SlidersHorizontal } from "lucide-svelte";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import Filter from "@lucide/svelte/icons/funnel";
+  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";

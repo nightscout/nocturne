@@ -5,17 +5,15 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Mail,
-    Shield,
-    Clock,
-    Key,
-    LogOut,
-    Settings,
-    Camera,
-    Loader2,
-    Trash2,
-  } from "lucide-svelte";
+  import Mail from "@lucide/svelte/icons/mail";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Key from "@lucide/svelte/icons/key";
+  import LogOut from "@lucide/svelte/icons/log-out";
+  import Settings from "@lucide/svelte/icons/settings";
+  import Camera from "@lucide/svelte/icons/camera";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";

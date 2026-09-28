@@ -3,12 +3,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { FormError, FormField } from "$lib/forms";
-  import {
-    ShieldAlert,
-    Fingerprint,
-    Loader2,
-    Check,
-  } from "lucide-svelte";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,

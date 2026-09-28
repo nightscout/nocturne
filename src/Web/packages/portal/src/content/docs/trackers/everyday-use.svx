@@ -1,0 +1,153 @@
+---
+title: Everyday use
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Everyday use
+
+Once a tracker is [set up](/docs/trackers/setting-up), day-to-day use comes down
+to two things: start it when you put something new on, and complete it when you
+take it off. If your pump or loop already reports those changes, Nocturne can
+do both for you.
+
+Running trackers are listed on the **Active** tab under **Settings >
+Notifications & Trackers**. Each row shows how long it has left, how old it is
+and when it started.
+
+<Screenshot id="trackers-active" />
+
+## Starting a tracker
+
+Use **Start Tracker** on the Active tab, **Start** on a row of the Definitions
+tab, or one of your [presets](/docs/trackers/setting-up#presets). The Start box
+asks for:
+
+- **Start Time**: defaults to now. Set it earlier if you changed your sensor
+  this morning and are only logging it now. The tracker counts from this time,
+  not from when you pressed the button.
+- **Notes**: optional. A site, a lot number, anything you might want to look
+  back on.
+
+A duration tracker with notification steps also shows a preview of when each
+step will fire, worked out from the start time you chose.
+
+An event tracker asks for **Scheduled For** instead: the date and time of the
+appointment or refill it counts down to.
+
+Starting a duration tracker ends the one already running, so you never have
+two copies each sending their own reminders. The old one is completed at the
+new start time, as **Replaced Early**, or as **Expired** if it had reached its
+lifespan. If you want to record a different reason, complete it yourself
+first.
+
+Nocturne refuses a start dated earlier than the one already running, because
+it would end a newer sensor to log an older one. Complete the newer one first
+if that is really what you mean. Event trackers are the exception: you can
+have several booked at once, such as two appointments.
+
+## Completing a tracker
+
+Press **Complete** on the tracker's row, or **Complete Tracker** in the panel
+that opens when you tap its pill on the home screen.
+
+<Screenshot id="tracker-complete-dialog" />
+
+- **Completed At**: when the change actually happened.
+- **Completion Reason**: why it ended. The choices depend on the category.
+
+  | Category | Reasons offered |
+  |----------|-----------------|
+  | Sensor, Cannula, Consumable | Fell Off, Replaced Early, plus the general ones |
+  | Reservoir | Empty, Refilled, plus the general ones |
+  | Appointment | Attended, Rescheduled, Cancelled, Missed, plus the general ones |
+  | Battery, Reminder, Custom | The general ones: Completed, Failed, Expired, Other |
+
+- **Notes**: optional. For example, "sensor error on day 8".
+- **Start another**: starts a fresh run of the same tracker at the completion
+  time. Tick it when you are replacing like for like.
+
+If the tracker is set to
+[write an event on completion](/docs/trackers/setting-up#writing-events-for-nightscout-apps),
+this is when that event is created. If the same tracker also
+[restarts automatically](#automatic-restarts) on that event, a new run starts
+from it, just as if your pump had reported the change.
+
+Picking an honest reason is what makes the history useful. "Failed" and "Fell
+Off" are worth recording even when they are annoying. Over a few months they
+show whether a particular sensor batch or wear site is giving you trouble,
+which is useful to take to your care team.
+
+## Automatic restarts
+
+Most pumps and loops already report when you change something. Loop, AAPS, Trio
+and many connectors send events such as `Site Change` or `Sensor Start`, and so
+does anything that uploads Nightscout treatments. A tracker can listen for
+those events and restart on its own.
+
+When a matching event arrives, Nocturne:
+
+1. Completes the running tracker at the time of the event. The reason is
+   **Expired** if it reached its lifespan, **Replaced Early** if it did not, and
+   **Completed** if it has no lifespan. The note says which event did it.
+2. Starts a new run from the same moment.
+
+Nocturne ignores the same event arriving twice. It also ignores an older event
+arriving late, so a connector filling in history cannot wind your tracker back
+to a sensor you have already taken off. Only duration trackers restart this
+way. Event trackers are tied to a date, so a device event cannot restart them.
+
+Choose the events in the tracker editor, under
+[Restart automatically on](/docs/trackers/setting-up#restarting-automatically).
+The choices are `Sensor Start`, `Sensor Change`, `Sensor Stop`,
+`Transmitter Sensor Insert`, `Site Change`, `Cannula Change`, `Pod Change`,
+`Insulin Change`, `Reservoir Change` and `Pump Battery Change`.
+
+If two trackers listen for the same event, such as two infusion sites that are
+both logged as `Site Change`, give each one a notes filter. The tracker then
+only restarts when the event's notes contain that text, for example "left" or
+"right".
+
+## On the home screen
+
+Running trackers appear as a row of pills beside your current reading. Each
+one shows the tracker's name and how long it has been running. The thin line
+under it shows how much of its lifespan is used up. The age turns the colour of
+the most urgent step reached, and gets a warning mark from Warning upwards. A
+step lights the pill at the same moment its alert fires, so a "24 hours before
+the end" step changes the colour a day before the end, not before.
+[Dashboard visibility](/docs/trackers/setting-up#on-the-dashboard) decides
+which trackers appear here, and when.
+
+<Screenshot id="tracker-pill-bar" />
+
+Tap a pill for the details: running time, expected lifespan, time remaining,
+your start notes and when it started. **Complete Tracker** at the bottom opens
+the same Complete box as the trackers page.
+
+<Screenshot id="tracker-pill-popover" />
+
+Trackers also appear on the **Calendar**, and the glucose chart can mark when a
+tracker is due. Turn that on or off from the chart legend.
+
+## When a reminder fires
+
+A tracker reminder arrives like your other alerts, on the channels its alert
+rule uses (see
+[where the notification goes](/docs/trackers/setting-up#where-the-notification-goes)).
+Acknowledging it marks it as seen, the same as any other alert. That covers the
+steps the tracker has already reached. The next step on the ladder will still
+notify you when its time comes.
+
+To make every reminder for a tracker stop, complete the tracker. A tracker that
+is not running has nothing to remind you about.
+
+## History
+
+The **History** tab lists finished trackers, newest first. Each entry shows how
+long it ran, why it ended, any completion notes and when it ended. Trackers
+that restarted automatically are listed too, with the event that restarted
+them.

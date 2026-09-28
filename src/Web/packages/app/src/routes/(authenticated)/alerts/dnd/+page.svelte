@@ -22,7 +22,11 @@
     CardTitle,
     CardDescription,
   } from "$lib/components/ui/card";
-  import { ArrowLeft, BellOff, Save, Loader2, ShieldAlert } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import Save from "@lucide/svelte/icons/save";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { EditorActionBar } from "$lib/components/layout";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 

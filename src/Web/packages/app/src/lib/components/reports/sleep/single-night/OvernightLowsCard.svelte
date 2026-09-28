@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { ArrowDownToLine } from "lucide-svelte";
+  import ArrowDownToLine from "@lucide/svelte/icons/arrow-down-to-line";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import { bg, bgLabel, time, toDate } from "$lib/utils/formatting";
   import { laneForStage } from "$lib/utils/sleep-stages";

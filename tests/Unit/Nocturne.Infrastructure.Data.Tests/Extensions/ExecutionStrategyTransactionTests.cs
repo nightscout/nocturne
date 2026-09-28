@@ -1,6 +1,3 @@
-using System.Data.Common;
-using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Storage;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Tests.Shared.Infrastructure;
@@ -29,43 +26,8 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
-    private sealed class TransientFault : Exception;
-
-    private sealed class RetryOnTransientFault(ExecutionStrategyDependencies dependencies)
-        : ExecutionStrategy(dependencies, maxRetryCount: 3, maxRetryDelay: TimeSpan.FromMilliseconds(1))
-    {
-        protected override bool ShouldRetryOn(Exception exception) => exception is TransientFault;
-    }
-
-    public enum Fault { SaveChanges, BeforeCommit, AfterCommit }
-
-    /// <summary>Fails the first save or commit once, then lets every later one through.</summary>
-    private sealed class FirstFault(Fault fault) : IDbTransactionInterceptor, ISaveChangesInterceptor
-    {
-        private int _remaining = 1;
-
-        private bool Fire(Fault at) => at == fault && Interlocked.Decrement(ref _remaining) == 0;
-
-        public ValueTask<InterceptionResult<int>> SavingChangesAsync(
-            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default) =>
-            Fire(Fault.SaveChanges) ? throw new TransientFault() : ValueTask.FromResult(result);
-
-        public ValueTask<InterceptionResult> TransactionCommittingAsync(
-            DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
-            CancellationToken cancellationToken = default) =>
-            Fire(Fault.BeforeCommit) ? throw new TransientFault() : ValueTask.FromResult(result);
-
-        public Task TransactionCommittedAsync(
-            DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default) =>
-            Fire(Fault.AfterCommit) ? throw new TransientFault() : Task.CompletedTask;
-    }
-
-    private NocturneDbContext RetryingContext(Fault fault) =>
-        new(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(_db.Connection, o => o.ExecutionStrategy(d => new RetryOnTransientFault(d)))
-            .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
-            .AddInterceptors(new FirstFault(fault))
-            .Options) { TenantId = TenantId };
+    private NocturneDbContext RetryingContext(TransactionFault fault) =>
+        new(TransactionFaultOptions.RetryingSqlite(_db.Connection, new FirstTransactionFault(fault))) { TenantId = TenantId };
 
     private static AlertRuleEntity NewRule(string name) =>
         new() { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = name, ConditionParams = "{}" };
@@ -85,7 +47,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task A_save_that_failed_after_staging_its_row_inserts_it_once_on_retry()
     {
-        await using var context = RetryingContext(Fault.SaveChanges);
+        await using var context = RetryingContext(TransactionFault.SaveChanges);
 
         var inserted = await context.ExecuteInTransactionAsync(async ct =>
         {
@@ -101,7 +63,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task An_update_whose_commit_failed_is_written_by_the_retry()
     {
-        await using var context = RetryingContext(Fault.BeforeCommit);
+        await using var context = RetryingContext(TransactionFault.BeforeCommit);
 
         await context.ExecuteInTransactionAsync(async ct =>
         {
@@ -116,7 +78,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task An_insert_whose_commit_landed_but_reported_failure_is_not_written_twice()
     {
-        await using var context = RetryingContext(Fault.AfterCommit);
+        await using var context = RetryingContext(TransactionFault.AfterCommit);
 
         var inserted = await context.ExecuteInTransactionAsync(
             async ct =>
@@ -126,7 +88,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
                     new()
                     {
                         Id = Guid.CreateVersion7(), TenantId = TenantId, Origin = "Algorithm", Rate = 1.5,
-                        StartTimestamp = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc),
+                        Timestamp = new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc),
                     },
                 ];
                 context.TempBasals.AddRange(rows);
@@ -143,7 +105,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task A_retry_leaves_what_the_context_tracked_before_the_call()
     {
-        await using var context = RetryingContext(Fault.BeforeCommit);
+        await using var context = RetryingContext(TransactionFault.BeforeCommit);
         var held = await context.AlertRules.SingleAsync(r => r.Id == SeededRuleId);
 
         await context.ExecuteInTransactionAsync(async ct =>
@@ -159,7 +121,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task A_write_to_an_entity_tracked_before_the_call_is_written_by_the_retry()
     {
-        await using var context = RetryingContext(Fault.BeforeCommit);
+        await using var context = RetryingContext(TransactionFault.BeforeCommit);
         var held = await context.AlertRules.SingleAsync(r => r.Id == SeededRuleId);
 
         await context.ExecuteInTransactionAsync(async ct =>
@@ -176,7 +138,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task A_pending_insert_the_caller_left_on_the_context_lands_once_across_a_retry()
     {
-        await using var context = RetryingContext(Fault.BeforeCommit);
+        await using var context = RetryingContext(TransactionFault.BeforeCommit);
         var pending = NewRule("pending");
         context.AlertRules.Add(pending);
 
@@ -192,9 +154,9 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     }
 
     [Theory]
-    [InlineData(Fault.SaveChanges)]
-    [InlineData(Fault.BeforeCommit)]
-    public async Task A_pending_edit_the_caller_left_on_the_context_lands_across_a_retry(Fault fault)
+    [InlineData(TransactionFault.SaveChanges)]
+    [InlineData(TransactionFault.BeforeCommit)]
+    public async Task A_pending_edit_the_caller_left_on_the_context_lands_across_a_retry(TransactionFault fault)
     {
         await using var context = RetryingContext(fault);
         var held = await context.AlertRules.SingleAsync(r => r.Id == SeededRuleId);
@@ -213,7 +175,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task An_edit_that_reads_before_it_writes_is_applied_once_across_a_retry()
     {
-        await using var context = RetryingContext(Fault.BeforeCommit);
+        await using var context = RetryingContext(TransactionFault.BeforeCommit);
         await context.AlertRules.SingleAsync(r => r.Id == SeededRuleId);
 
         await context.ExecuteInTransactionAsync(async ct =>
@@ -249,7 +211,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task An_entity_named_to_detach_is_read_fresh_by_the_retry()
     {
-        await using var context = RetryingContext(Fault.SaveChanges);
+        await using var context = RetryingContext(TransactionFault.SaveChanges);
         await context.AlertRules.SingleAsync(r => r.Id == SeededRuleId);
         var reads = new List<string>();
 
@@ -270,7 +232,7 @@ public sealed class ExecutionStrategyTransactionTests : IDisposable
     [Fact]
     public async Task A_failure_before_the_commit_is_retried_without_asking_whether_it_landed()
     {
-        await using var context = RetryingContext(Fault.SaveChanges);
+        await using var context = RetryingContext(TransactionFault.SaveChanges);
         var verifications = 0;
 
         var inserted = await context.ExecuteInTransactionAsync(

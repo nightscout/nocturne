@@ -29,7 +29,7 @@ public class MigrationTestFixture : IAsyncLifetime
     public const string TestApiSecret = "test-migration-secret-12345";
 
     /// <summary>
-    /// MongoDB connection string accessible from the host (where the Aspire API process runs)
+    /// MongoDB connection string accessible from the host (where the API under test runs)
     /// </summary>
     public string MongoConnectionString => _mongoContainer.GetConnectionString();
 

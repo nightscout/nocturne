@@ -191,7 +191,7 @@ public class AlertRulesControllerRearmTests
     }
 
     [Fact]
-    public async Task A_request_aborted_after_its_save_still_clears_the_hold()
+    public async Task A_request_aborted_before_its_save_neither_saves_nor_clears()
     {
         var gate = new AlertRuleEvaluationGate();
         var (controller, db) = await CreateAsync(gate);
@@ -202,9 +202,11 @@ public class AlertRulesControllerRearmTests
         await Task.Delay(100);
         await request.CancelAsync();
         evaluation.Dispose();
-        await toggle.WaitAsync(TimeSpan.FromSeconds(5));
 
-        (await AwaitingRearm(db)).Should().BeFalse();
+        await toggle.Invoking(t => t.WaitAsync(TimeSpan.FromSeconds(5)))
+            .Should().ThrowAsync<OperationCanceledException>();
+        (await db.AlertRules.AsNoTracking().SingleAsync(r => r.Id == RuleId)).IsEnabled.Should().BeTrue();
+        (await AwaitingRearm(db)).Should().BeTrue();
     }
 
     private static async Task SetHold(NocturneDbContext db, bool held)
