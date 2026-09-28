@@ -1,0 +1,51 @@
+name: Watercolour reveal sweep
+
+# The catalogue-wide reveal gates in reveal_preserves_the_artwork.rs are #[ignore]d in the
+# per-change tests: every artwork at Large detail takes about an hour on the CPU reference.
+on:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watercolour-reveal-sweep
+  cancel-in-progress: false
+
+jobs:
+  # One runner per sweep: each is single-threaded, and the longest takes most of the hour.
+  sweep:
+    strategy:
+      fail-fast: false
+      matrix:
+        test:
+          - every_artwork_survives_its_own_reveal
+          - artworks_survive_their_reveal_on_a_dark_ground
+          - every_artwork_is_still_arriving_a_quarter_of_the_way_in
+          - the_sheet_is_still_settling_at_the_end
+          - no_artwork_snaps_to_its_final_state
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates -> target
+          key: watercolour-reveal-sweep
+      # --exact matching nothing passes with zero tests, so a renamed test must fail here.
+      - name: Reveal sweep
+        shell: bash
+        env:
+          TEST: ${{ matrix.test }}
+        run: |
+          set -o pipefail
+          cargo test -p nocturne-watercolour-infra --release --locked             --test reveal_preserves_the_artwork -- --ignored --exact --nocapture "$TEST"             | tee "$RUNNER_TEMP/sweep.log"
+          grep -q 'test result: ok. 1 passed' "$RUNNER_TEMP/sweep.log"

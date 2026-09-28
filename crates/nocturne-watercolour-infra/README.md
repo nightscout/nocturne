@@ -119,7 +119,9 @@ cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_a
 The default run checks the reveal gates in `tests/reveal_preserves_the_artwork.rs` on one
 artwork at `Medium` detail. The catalogue-wide sweeps at `Large` are `#[ignore]`d: they
 take about an hour in `--release` on 16 cores. Run them after changing the catalogue,
-the choreography or the simulation.
+the choreography or the simulation. CI runs them weekly and on demand
+(`.github/workflows/watercolour-reveal-sweep.yml`); the per-change `watercolour` job in
+`tests.yml` runs the default suite.
 
 The example writes, per artwork and per palette variant (`normal`, `dark`):
 `<name>_<variant>_gpu.png` (transparent, 512²), `<name>_<variant>_gpu_over_light.png`
