@@ -27,6 +27,7 @@
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
+  import JoinWelcome from "$lib/components/members/JoinWelcome.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
   import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
@@ -239,6 +240,9 @@
         <AlertSurfaces />
       {/if}
       <main class="flex-1 overflow-auto">
+        {#if !tenantless}
+          <JoinWelcome />
+        {/if}
         <svelte:boundary>
           {@render children()}
 
