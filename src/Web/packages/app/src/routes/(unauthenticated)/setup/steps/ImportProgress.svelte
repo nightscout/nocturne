@@ -21,12 +21,15 @@
     jobId,
     onProgressChange,
     onResult,
+    onSettled,
     onComplete,
   }: {
     jobId?: string;
     onProgressChange?: (pct: number) => void;
     /** Fires once the server reports the run ended, including a run that ended before this mounted. */
     onResult?: (result: Exclude<ImportResult, null>) => void;
+    /** Fires once there is nothing left to wait for here: the run ended, none exists, or status polling was lost. */
+    onSettled?: () => void;
     onComplete: () => void;
   } = $props();
 
@@ -110,6 +113,7 @@
         } catch (err) {
           error = remoteErrorMessage(err, "Failed to find active migration");
           loading = false;
+          onSettled?.();
           return;
         }
       }
@@ -120,6 +124,7 @@
       // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
         loading = false;
+        onSettled?.();
         return;
       }
 
@@ -175,6 +180,7 @@
             caveatIsFault = Object.values(cp).some((col) => col.failureReason);
             realProgress = 100;
             onResult?.(caveatIsFault ? "partial" : "complete");
+            onSettled?.();
             break;
           }
           if (
@@ -186,6 +192,7 @@
             error =
               status.errorMessage ?? `Migration ${String(status.state).toLowerCase()}`;
             onResult?.("failed");
+            onSettled?.();
             break;
           }
 
@@ -193,6 +200,7 @@
           if (firstPoll) {
             firstPoll = false;
             startedAt = Date.now();
+            onResult?.("running");
           }
 
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -204,7 +212,10 @@
           // Only give up — and tell the user — once polling has failed repeatedly. The import
           // itself keeps running on the server regardless of what we show here.
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            error = "Lost connection to migration status";
+            error =
+              "We lost track of the import's progress. It is still running in the background, and you can follow it in Settings.";
+            onResult?.("running");
+            onSettled?.();
             break;
           }
           await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -320,6 +331,8 @@
         </div>
         <p class="text-sm text-muted-foreground">
           {#if failed}
+            <span class="text-warning">{error}</span>
+          {:else if error}
             <span class="text-warning">{error}</span>
           {:else if caveat}
             <span class={caveatIsFault ? "text-warning" : ""}>{caveat}</span>

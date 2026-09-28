@@ -133,6 +133,8 @@
   );
   let importProgress = $state(0);
   let importResult = $state<ImportResult>(null);
+  // The import step blocks until the run ends or its status can no longer be followed.
+  let importSettled = $state(false);
   let sourceResult = $state<SourceResult>(null);
   let migrationJobId = $state<string | undefined>(undefined);
 
@@ -151,8 +153,13 @@
       : (activeIndex / (activeSteps.length - 1)) * 100
   );
 
+  const importBlocking = $derived(
+    activeStep?.id === "import" && !importSettled
+  );
+
   function handleJumpToStep(index: number) {
-    if (!setupRequired) stepIndex = index;
+    if (importBlocking) return;
+    if (!setupRequired) goToStep(index);
     else if (index <= setupStepIndex) setupStepIndex = index;
   }
 
@@ -165,12 +172,18 @@
   const uploaderApps = $derived(servicesData?.uploaderApps ?? []);
 
   // ── Navigation ──────────────────────────────────────────────────────
+  // A fresh ImportProgress settles again on its own, so leaving the step forgets it.
+  function goToStep(index: number) {
+    stepIndex = index;
+    importSettled = false;
+  }
+
   function handleBack() {
-    if (stepIndex > 0) stepIndex--;
+    if (stepIndex > 0) goToStep(stepIndex - 1);
   }
 
   function handleNext() {
-    if (stepIndex < steps.length - 1) stepIndex++;
+    if (stepIndex < steps.length - 1) goToStep(stepIndex + 1);
   }
 
   async function handleEnterDashboard() {
@@ -199,7 +212,7 @@
 
   function goToFinish() {
     const finishIdx = steps.findIndex((s) => s.id === "finish");
-    if (finishIdx >= 0) stepIndex = finishIdx;
+    if (finishIdx >= 0) goToStep(finishIdx);
   }
 
   function handleConnectorSaved() {
@@ -220,6 +233,7 @@
   async function handleMigrationConnected() {
     try {
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
+      importResult = "running";
     } catch {
       // Leave migrationJobId unset; the import step shows a neutral state if no job exists.
     }
@@ -434,6 +448,7 @@
                 jobId={migrationJobId}
                 onProgressChange={(pct) => (importProgress = pct)}
                 onResult={(result) => (importResult = result)}
+                onSettled={() => (importSettled = true)}
                 onComplete={goToFinish}
               />
             {:else if activeStep?.id === "finish"}
@@ -452,7 +467,7 @@
               class="flex justify-between items-center px-7 py-4.5 border-t bg-muted/40 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
             >
               <div>
-                {#if stepIndex > 0 && currentStep?.id !== "finish"}
+                {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
                   <Button variant="outline" onclick={handleBack}>
                     <ArrowLeft class="h-4 w-4" />
                     Back
@@ -469,6 +484,13 @@
                     Enter Nocturne
                     <ArrowRight class="h-4 w-4" />
                   </Button>
+                {:else if currentStep?.id === "import"}
+                  {#if importSettled}
+                    <Button onclick={handleNext}>
+                      Continue
+                      <ArrowRight class="h-4 w-4" />
+                    </Button>
+                  {/if}
                 {:else if currentStep?.id === "path"}
                   <Button onclick={handleNext}>
                     Continue

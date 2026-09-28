@@ -1,8 +1,8 @@
 <script lang="ts" module>
   /** What the data source step actually achieved; `null` when it was skipped. */
   export type SourceResult = "connector-saved" | "uploader-receiving" | null;
-  /** How the Nightscout import ended; `null` when it never reached an end. */
-  export type ImportResult = "complete" | "partial" | "failed" | null;
+  /** Where the Nightscout import got to; `null` when no run was started. */
+  export type ImportResult = "running" | "complete" | "partial" | "failed" | null;
 </script>
 
 <script lang="ts">
@@ -90,8 +90,12 @@
           Some of your Nightscout history was copied, but not all of it. You can
           see what was missed and run the import again from Settings.
         {:else if importResult === "failed"}
-          The import from Nightscout didn't finish, so none of your history is
-          here yet. You can try again from Settings.
+          The import from Nightscout stopped before it finished, so
+          some or all of your history is missing. You can see what arrived and
+          try again from Settings.
+        {:else if importResult === "running"}
+          Your import is still running in the background. You can follow it in
+          Settings.
         {:else}
           Your Nightscout history hasn't been imported yet. You can start the
           import from Settings whenever you're ready.

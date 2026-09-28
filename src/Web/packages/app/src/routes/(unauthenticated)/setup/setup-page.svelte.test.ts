@@ -28,7 +28,9 @@ const { emptyStub } = vi.hoisted(() => ({
 vi.mock("./steps/TenantIdentity.svelte", emptyStub);
 vi.mock("./steps/AccountCreation.svelte", emptyStub);
 vi.mock("./steps/NightscoutConnect.svelte", emptyStub);
-vi.mock("./steps/ImportProgress.svelte", emptyStub);
+vi.mock("./steps/ImportProgress.svelte", async () => ({
+  default: (await import("$lib/test-stubs/ImportProgress.test-stub.svelte")).default,
+}));
 vi.mock("./steps/Finish.svelte", emptyStub);
 vi.mock("$lib/components/connectors/DataSourceSelectionView.svelte", emptyStub);
 vi.mock("$lib/components/connectors/ConnectorSetup.svelte", emptyStub);
@@ -146,5 +148,40 @@ describe("setup chrome", () => {
     await expect
       .element(page.getByRole("button", { name: "Save and continue" }))
       .not.toBeInTheDocument();
+  });
+});
+
+describe("setup import step", () => {
+  async function reachImport() {
+    render(SetupPage);
+    await migrationCard().click();
+    await continueButton().click();
+    await page.getByRole("button", { name: "Skip for now" }).click();
+    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+  }
+
+  it("blocks leaving while the import runs", async () => {
+    await reachImport();
+
+    await expect.element(continueButton()).not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Skip for now" }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByRole("button", { name: "Back" }))
+      .not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: "Finish" }).click();
+
+    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+  });
+
+  it("offers Continue once the import has settled", async () => {
+    await reachImport();
+
+    await page.getByRole("button", { name: "Stub: settle" }).click();
+    await continueButton().click();
+
+    await expect.element(page.getByText("Step 04 / 04")).toBeVisible();
   });
 });

@@ -6,6 +6,7 @@ import type { MigrationJobInfo, MigrationJobStatus } from "$api";
 
 let status: MigrationJobStatus;
 let history: MigrationJobInfo[] = [];
+let statusUnreachable = false;
 const statusSpy = vi.fn();
 
 // The factory is hoisted above every declaration here, so it may only reach the bindings
@@ -13,7 +14,10 @@ const statusSpy = vi.fn();
 vi.mock("$api/generated/migrations.generated.remote", () => ({
   getStatus: (jobId: string) => {
     statusSpy(jobId);
-    return { run: () => Promise.resolve(status) };
+    return {
+      run: () =>
+        statusUnreachable ? Promise.reject(new Error("unreachable")) : Promise.resolve(status),
+    };
   },
   getHistory: () => ({ run: () => Promise.resolve(history) }),
 }));
@@ -27,6 +31,7 @@ describe("ImportProgress", () => {
     sessionStorage.clear();
     statusSpy.mockClear();
     history = [];
+    statusUnreachable = false;
   });
 
   // A run that imported some collections and was refused others still ends Completed — there is
@@ -193,12 +198,45 @@ describe("ImportProgress", () => {
       { treatments: { collectionName: "treatments", isComplete: true, failureReason: "Could not reach your Nightscout server." } },
     ],
     ["failed", MigrationJobState.Failed, {}],
-  ] as const)("reports a %s run", async (expected, state, collectionProgress) => {
+  ] as const)("reports a %s run and stops blocking", async (expected, state, collectionProgress) => {
     status = { state, progressPercentage: 100, collectionProgress };
     const onResult = vi.fn();
+    const onSettled = vi.fn();
 
-    render(ImportProgress, { jobId: `job-${expected}`, onResult, onComplete: () => {} });
+    render(ImportProgress, { jobId: `job-${expected}`, onResult, onSettled, onComplete: () => {} });
 
     await expect.poll(() => onResult.mock.calls).toEqual([[expected]]);
+    expect(onSettled).toHaveBeenCalledOnce();
   });
+
+  it("reports a live run as running and keeps blocking", async () => {
+    status = { state: MigrationJobState.Running, progressPercentage: 20, collectionProgress: {} };
+    const onResult = vi.fn();
+    const onSettled = vi.fn();
+
+    render(ImportProgress, { jobId: "job-live", onResult, onSettled, onComplete: () => {} });
+
+    await expect.poll(() => onResult.mock.calls).toEqual([["running"]]);
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+
+  it("stops blocking when there is no run to follow", async () => {
+    const onSettled = vi.fn();
+
+    render(ImportProgress, { onSettled, onComplete: () => {} });
+
+    await expect.poll(() => onSettled.mock.calls.length).toBe(1);
+  });
+
+  it("stops blocking once status polling is lost, reporting the run as still running", async () => {
+    statusUnreachable = true;
+    const onResult = vi.fn();
+    const onSettled = vi.fn();
+
+    render(ImportProgress, { jobId: "job-lost", onResult, onSettled, onComplete: () => {} });
+
+    await expect.poll(() => onSettled.mock.calls.length, { timeout: 15000 }).toBe(1);
+    expect(onResult.mock.calls).toEqual([["running"]]);
+    await expect.element(page.getByText(/still running in the background/)).toBeVisible();
+  }, 20000);
 });

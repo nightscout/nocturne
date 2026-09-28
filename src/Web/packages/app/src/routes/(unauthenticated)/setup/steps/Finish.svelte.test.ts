@@ -49,7 +49,8 @@ describe("Finish", () => {
 
   it.each([
     [null, /hasn't been imported yet/],
-    ["failed", /didn't finish/],
+    ["failed", /some or all of your history is missing/],
+    ["running", /still running in the background/],
     ["partial", /not all of it/],
     ["complete", /has been copied into Nocturne/],
   ] as const)("describes a %s import as it ended", async (importResult, lead) => {
