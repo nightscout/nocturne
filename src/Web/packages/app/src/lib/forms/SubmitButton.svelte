@@ -20,6 +20,7 @@
     default: "gap-2 px-4 py-2 has-[>svg]:px-3",
     sm: "gap-1.5 px-3 has-[>svg]:px-2.5",
     lg: "gap-2 px-6 has-[>svg]:px-4",
+    icon: "",
   } as const;
 
   /** How long the glaze stays up before the button returns to rest. */
@@ -50,8 +51,9 @@
 
   interface Props extends Omit<HTMLButtonAttributes, Owned> {
     /**
-     * A count that moves on each successful save, e.g. `Submission.saved`.
-     * The button plays its glaze once per move, never on mount.
+     * A count that moves on each success of the button's own action, e.g.
+     * `Submission.saved` or a copy. The button plays its glaze once per move,
+     * never on mount.
      */
     saved?: number;
     variant?: ButtonVariant;
