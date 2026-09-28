@@ -47,5 +47,7 @@ jobs:
           TEST: ${{ matrix.test }}
         run: |
           set -o pipefail
-          cargo test -p nocturne-watercolour-infra --release --locked \n            --test reveal_preserves_the_artwork -- --ignored --exact --nocapture "$TEST" \n            | tee "$RUNNER_TEMP/sweep.log"
+          cargo test -p nocturne-watercolour-infra --release --locked \
+            --test reveal_preserves_the_artwork -- --ignored --exact --nocapture "$TEST" \
+            | tee "$RUNNER_TEMP/sweep.log"
           grep -q 'test result: ok. 1 passed' "$RUNNER_TEMP/sweep.log"
