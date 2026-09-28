@@ -45,6 +45,15 @@ describe("Google Health diagnostics", () => {
     expect(message).not.toContain("googlehealth");
   });
 
+  it("recognizes the sanitized coordination code", () => {
+    expect(
+      isGoogleHealthAlreadyRunningError({
+        status: 400,
+        body: { message: "already_running" },
+      })
+    ).toBe(true);
+  });
+
   it.each([
     new Error("access_token=private-token client_secret=private-secret"),
     new TypeError("private health reading"),

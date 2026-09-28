@@ -111,6 +111,7 @@ public sealed class GoogleHealthService(
     private const string AccountKeySecret = "accountKey";
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
+    private static readonly TimeSpan PreviewGateTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PreviewTimeout = TimeSpan.FromSeconds(45);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private Guid TenantId => tenantAccessor.TenantId;
@@ -495,7 +496,8 @@ public sealed class GoogleHealthService(
     public async Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct)
     {
         var gate = coordinator.Gate(TenantId);
-        await gate.WaitAsync(ct);
+        if (!await gate.WaitAsync(PreviewGateTimeout, ct))
+            throw new GoogleHealthException("already_running", stage: "preview");
         try
         {
             using var previewCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);

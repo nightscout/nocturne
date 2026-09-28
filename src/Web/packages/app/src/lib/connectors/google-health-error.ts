@@ -21,7 +21,7 @@ export function isGoogleHealthAlreadyRunningError(error: unknown): boolean {
   const reason = errorMessage(error);
   return (
     typeof reason === "string" &&
-    reason.toLowerCase().includes("already running")
+    reason.toLowerCase().replaceAll("_", " ").includes("already running")
   );
 }
 

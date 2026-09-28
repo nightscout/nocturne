@@ -113,6 +113,12 @@ already running and continues polling the server status instead of presenting a
 provider failure. A second import is never started just to satisfy the button
 press.
 
+The inventory preview uses the same guard but waits only briefly for an active
+import. If the slot remains occupied, the page stops the spinner and explains
+that the inventory can be refreshed after the import completes. This prevents a
+long-running historical import from leaving the settings page in an indefinite
+“Scanning inventory” state.
+
 The heart-rate actogram is a presentation view, not the source of truth. The
 report query averages readings into one UTC-minute point in PostgreSQL before
 serializing the response. Raw heart-rate rows remain available to the health

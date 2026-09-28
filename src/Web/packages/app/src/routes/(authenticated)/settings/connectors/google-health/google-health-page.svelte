@@ -133,6 +133,8 @@
       "Google's request limit was reached. Nocturne will retry later.",
     google_unavailable:
       "Google is temporarily unavailable. Existing data was preserved.",
+    already_running:
+      "Another Google Health import is already running. The inventory will be available when it finishes; refresh this page afterwards.",
     account_not_linked: "This Google account is not linked to Fitbit.",
     invalid_google_request: "Google rejected the data request.",
     preview_access_denied: "This account cannot access this API version.",
@@ -177,7 +179,12 @@
     try {
       preview = await previewGoogleHealth();
     } catch (error) {
-      message = describeGoogleHealthError(error, "readings", errors);
+      if (isGoogleHealthAlreadyRunningError(error)) {
+        message = "";
+        notice = errors.already_running;
+      } else {
+        message = describeGoogleHealthError(error, "readings", errors);
+      }
     } finally {
       inventoryBusy = false;
     }
