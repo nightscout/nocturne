@@ -73,12 +73,7 @@ public class TreatmentSocketIdentityTests : IDisposable
         var deviceEventRepo = new DeviceEventRepository(contexts, dedup, caller, NullLogger<DeviceEventRepository>.Instance);
         var bolusCalcRepo = new BolusCalculationRepository(contexts, dedup, caller, NullLogger<BolusCalculationRepository>.Instance);
 
-        var tempBasalRepo = new Mock<ITempBasalRepository>();
-        tempBasalRepo
-            .Setup(r => r.GetAsync(
-                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
+        var tempBasalRepo = new TempBasalRepository(contexts, dedup, caller, NullLogger<TempBasalRepository>.Instance);
 
         var foods = new Mock<ITreatmentFoodService>();
         foods
@@ -94,7 +89,7 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         var decomposer = new TreatmentDecomposer(
             _context,
-            bolusRepo, tempBasalRepo.Object,
+            bolusRepo, tempBasalRepo,
             carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             Mock.Of<IStateSpanService>(),
             foods.Object,
@@ -110,7 +105,7 @@ public class TreatmentSocketIdentityTests : IDisposable
         var projection = new V4ToLegacyProjectionService(
             Mock.Of<ISensorGlucoseRepository>(),
             bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo,
-            tempBasalRepo.Object, bolusCalcRepo,
+            tempBasalRepo, bolusCalcRepo,
             foods.Object,
             _context,
             NullLogger<V4ToLegacyProjectionService>.Instance);
@@ -121,7 +116,7 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         var store = new TreatmentReadService(
             projection, decomposer, pipeline,
-            tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
+            tempBasalRepo, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
             NullLogger<TreatmentReadService>.Instance);
 
         var broadcast = new SignalRBroadcastService(
@@ -246,38 +241,136 @@ public class TreatmentSocketIdentityTests : IDisposable
         Events("delete").Should().ContainSingle().Which.GetProperty("identifier").GetString().Should().Be(restId);
     }
 
+    private const string TempBasal =
+        """{"eventType":"Temp Basal","duration":30,"absolute":0.4,"rate":0.4,"created_at":"2026-01-01T14:00:00.000Z","enteredBy":"e2e"}""";
+
+    private const string ObjectIdTempBasal =
+        """{"_id":"65a1b2c3d4e5f60718293a5c","eventType":"Temp Basal","duration":30,"absolute":0.6,"rate":0.6,"created_at":"2026-01-01T14:30:00.000Z"}""";
+
+    /// <summary>The one treatment document the last write-back sent: a POST's array element or a PUT's body.</summary>
+    private JsonElement LastSent()
+    {
+        var body = JsonSerializer.Deserialize<JsonElement>(_upstream.Bodies.Last());
+        if (body.ValueKind != JsonValueKind.Array)
+            return body;
+        body.GetArrayLength().Should().Be(1);
+        return body[0];
+    }
+
     /// <summary>
-    /// The write-back keys a treatment by its legacy id, as before the served id changed, not by the
-    /// id the reads serve it under.
+    /// The upstream identity of <see cref="UpstreamIdentityJson"/>: <c>_id</c> is the 24-hex id the reads
+    /// serve, <c>identifier</c> the legacy key the stored treatment is upserted by.
     /// </summary>
+    private static void ShouldCarryServedIdAndLegacyKey(JsonElement sent, string restId, string legacyKey)
+    {
+        sent.GetProperty("_id").GetString().Should().MatchRegex("^[0-9a-f]{24}$").And.Be(restId);
+        sent.GetProperty("identifier").GetString().Should().Be(legacyKey);
+    }
+
     [Theory]
-    [InlineData(Note)]
-    [InlineData(LoopBolus)]
-    [InlineData(ObjectIdCarbs)]
-    public async Task WriteBack_SendsTheLegacyIdCoerced(string upload)
+    [InlineData(Note, null)]
+    [InlineData(LoopBolus, "4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f")]
+    [InlineData(ObjectIdCarbs, "65a1b2c3d4e5f60718293a4b")]
+    [InlineData(TempBasal, null)]
+    [InlineData(ObjectIdTempBasal, "65a1b2c3d4e5f60718293a5c")]
+    public async Task WriteBack_OfACreate_SendsTheServedIdAndTheLegacyKey(string upload, string? uploadedKey)
     {
         var submitted = Upload(upload);
         await _service.CreateTreatmentsAsync([submitted]);
         var restId = await RestIdAsync();
 
-        var sent = JsonSerializer.Deserialize<JsonElement>(_upstream.Bodies.Should().ContainSingle().Subject)[0];
-
-        sent.GetProperty("_id").GetString().Should().Be(MongoObjectId.Coerce(submitted.Id)).And.NotBe(restId);
+        _upstream.Bodies.Should().ContainSingle();
+        var legacyKey = submitted.Id!;
+        if (uploadedKey is null)
+            legacyKey.Should().StartWith(TreatmentClientId.SyntheticIdPrefix);
+        else
+            legacyKey.Should().Be(uploadedKey);
+        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, legacyKey);
     }
 
-    /// <summary>
-    /// A treatment uploaded under its own ObjectId goes upstream under it, so the connector's pull of
-    /// the copy updates the stored treatment instead of storing a second one.
-    /// </summary>
-    [Fact]
-    public async Task PullBack_OfATreatmentUploadedUnderAnObjectId_UpdatesTheStoredOne()
+    [Theory]
+    [InlineData(Note)]
+    [InlineData(LoopBolus)]
+    [InlineData(ObjectIdCarbs)]
+    [InlineData(TempBasal)]
+    [InlineData(ObjectIdTempBasal)]
+    public async Task WriteBack_OfAPut_SendsTheServedIdAndTheLegacyKey(string upload)
     {
-        await _service.CreateTreatmentsAsync([Upload(ObjectIdCarbs)]);
+        var submitted = Upload(upload);
+        await _service.CreateTreatmentsAsync([submitted]);
         var restId = await RestIdAsync();
 
-        var pulled = JsonSerializer.Deserialize<List<Treatment>>(_upstream.Bodies.Should().ContainSingle().Subject)!;
-        pulled.ForEach(t => t.DataSource = DataSources.NightscoutConnector);
-        await _service.CreateTreatmentsAsync(pulled);
+        var replacement = Upload(upload);
+        replacement.EnteredBy = "e2e-put";
+        (await _service.UpdateTreatmentAsync(restId, replacement)).Should().NotBeNull();
+
+        _upstream.Bodies.Should().HaveCount(2);
+        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, submitted.Id!);
+    }
+
+    [Theory]
+    [InlineData(Note)]
+    [InlineData(LoopBolus)]
+    [InlineData(ObjectIdCarbs)]
+    [InlineData(TempBasal)]
+    [InlineData(ObjectIdTempBasal)]
+    public async Task WriteBack_OfAPatch_SendsTheServedIdAndTheLegacyKey(string upload)
+    {
+        var submitted = Upload(upload);
+        await _service.CreateTreatmentsAsync([submitted]);
+        var restId = await RestIdAsync();
+
+        (await _service.PatchTreatmentAsync(restId, JsonSerializer.Deserialize<JsonElement>("""{"enteredBy":"e2e-patch"}""")))
+            .Should().NotBeNull();
+
+        _upstream.Bodies.Should().HaveCount(2);
+        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, submitted.Id!);
+    }
+
+    public enum Write { Create, Put, Patch }
+
+    /// <summary>
+    /// The copy of each write-back comes back onto the stored treatment, whether Nightscout kept the
+    /// <c>_id</c> it was sent (15.0.6 and earlier) or upserted by <c>identifier</c> under an
+    /// ObjectId it minted (15.0.7 and later, as <c>e2e/mocks/vendors/nightscout-writeback.ts</c>
+    /// normalises it).
+    /// </summary>
+    public static TheoryData<string, Write, bool> PullBacks()
+    {
+        var data = new TheoryData<string, Write, bool>();
+        foreach (var upload in new[] { Note, LoopBolus, ObjectIdCarbs, TempBasal, ObjectIdTempBasal })
+            foreach (var write in Enum.GetValues<Write>())
+                foreach (var reMinted in new[] { false, true })
+                    data.Add(upload, write, reMinted);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(PullBacks))]
+    public async Task PullBack_OfAWriteBack_UpdatesTheStoredTreatment(string upload, Write write, bool reMinted)
+    {
+        await _service.CreateTreatmentsAsync([Upload(upload)]);
+        var restId = await RestIdAsync();
+
+        switch (write)
+        {
+            case Write.Put:
+                var replacement = Upload(upload);
+                replacement.EnteredBy = "e2e-put";
+                await _service.UpdateTreatmentAsync(restId, replacement);
+                break;
+            case Write.Patch:
+                await _service.PatchTreatmentAsync(restId, JsonSerializer.Deserialize<JsonElement>("""{"enteredBy":"e2e-patch"}"""));
+                break;
+        }
+
+        var sent = LastSent();
+        var pulled = JsonSerializer.Deserialize<Treatment>(sent)!;
+        pulled.UpstreamIdentifier = sent.GetProperty("identifier").GetString();
+        if (reMinted)
+            pulled.Id = "65f0e2e00000000000000001";
+        pulled.DataSource = DataSources.NightscoutConnector;
+        await _service.CreateTreatmentsAsync([pulled]);
 
         (await RestIdAsync()).Should().Be(restId);
     }
