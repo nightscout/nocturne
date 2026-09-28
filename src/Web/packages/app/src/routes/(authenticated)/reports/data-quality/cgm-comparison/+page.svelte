@@ -16,6 +16,7 @@
   import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   setReportPrintMeta(() => ({ title: "CGM Comparison" }));
 
@@ -66,6 +67,9 @@
 
   const comparison = $derived(query?.current);
   const metrics = $derived(comparison?.metrics);
+  const comparisonError = $derived(
+    query?.error ? remoteErrorMessage(query.error, "The comparison could not be loaded.") : null
+  );
 
   const toleranceOptions = [5, 10, 15];
 
@@ -165,10 +169,10 @@
             Pick two different devices to compare.
           </CardContent>
         </Card>
-      {:else if query?.error}
+      {:else if comparisonError}
         <Card>
-          <CardContent variant="muted" class="pt-6">
-            The comparison could not be loaded.
+          <CardContent variant="muted" class="pt-6" role="alert">
+            {comparisonError}
           </CardContent>
         </Card>
       {:else if comparison}

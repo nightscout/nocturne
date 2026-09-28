@@ -47,6 +47,7 @@ public class CountControllerTests
             _mockProfileProjectionService.Object,
             _mockFoodRepository.Object,
             _mockActivityService.Object,
+            TimeProvider.System,
             _mockLogger.Object
         );
 

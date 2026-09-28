@@ -666,6 +666,31 @@ CI must generate the Kotlin bindings from the **same build** (same crate
 revision, same uniffi version) as the `.so` files it packages — the bindings
 checksum the API at load time and refuse a mismatched library.
 
+## Browser (WebAssembly)
+
+The optional `wasm` cargo feature adds a [wasm-bindgen](https://rustwasm.github.io/docs/wasm-bindgen/)
+surface (`src/wasm_api.rs`) for the docs portal's alert simulator, which runs
+this engine against fixture traces instead of a copy of its semantics. It
+exports `replay`, `validate` and `version`, with the same envelopes and
+handlers as their C counterparts:
+
+```js
+import init, { replay, validate } from "./nocturne_alerts.js";
+await init();
+const outcome = JSON.parse(replay(JSON.stringify(request))); // nocturne_alerts_replay
+```
+
+wasm32 has no unwinding, so a panic traps and reaches the host as a thrown
+`RuntimeError` rather than the error envelope. wasm-bindgen is pinned exactly:
+the CLI that generates the JS glue must be the same version as the crate.
+`src/Web/packages/portal/scripts/build-alerts-engine.mjs` builds it, installing
+the matching CLI into `crates/target/tools/`:
+
+```bash
+# from crates/
+cargo build --release --target wasm32-unknown-unknown -p nocturne-alerts-ffi --features wasm
+```
+
 ## Versioning
 
 `schema_version` covers the envelope layer. The time zone rules `time_of_day`

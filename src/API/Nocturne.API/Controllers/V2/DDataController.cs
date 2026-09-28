@@ -112,18 +112,9 @@ public class DDataController : ControllerBase
                 }
             }
             // Try to parse as ISO date string
-            else if (
-                DateTime.TryParse(
-                    timestamp,
-                    null,
-                    System.Globalization.DateTimeStyles.RoundtripKind,
-                    out var parsedDate
-                )
-            )
+            else if (UploaderTimestamp.TryParse(timestamp, out var parsedDate))
             {
-                unixTimestamp = (
-                    (DateTimeOffset)DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc)
-                ).ToUnixTimeMilliseconds();
+                unixTimestamp = parsedDate.ToUnixTimeMilliseconds();
             }
             else
             {
@@ -189,18 +180,9 @@ public class DDataController : ControllerBase
                     return BadRequest(new { error = "Timestamp out of valid range" });
                 }
             }
-            else if (
-                DateTime.TryParse(
-                    timestamp,
-                    null,
-                    System.Globalization.DateTimeStyles.RoundtripKind,
-                    out var parsedDate
-                )
-            )
+            else if (UploaderTimestamp.TryParse(timestamp, out var parsedDate))
             {
-                unixTimestamp = (
-                    (DateTimeOffset)DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc)
-                ).ToUnixTimeMilliseconds();
+                unixTimestamp = parsedDate.ToUnixTimeMilliseconds();
             }
             else
             {

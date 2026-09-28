@@ -13,6 +13,7 @@
     import LayoutGrid from "@lucide/svelte/icons/layout-grid";
     import Package from "@lucide/svelte/icons/package";
     import Utensils from "@lucide/svelte/icons/utensils";
+    import Timer from "@lucide/svelte/icons/timer";
     import ChevronRight from "@lucide/svelte/icons/chevron-right";
     import { DOCS_NAV_SECTIONS, type DocsSectionId } from "$lib/data/docs-nav";
     import { track } from "$lib/analytics";
@@ -24,6 +25,7 @@
         authentication: Shield,
         sharing: Share2,
         food: Utensils,
+        trackers: Timer,
         alerts: Bell,
         bots: Bot,
         configuration: Settings,

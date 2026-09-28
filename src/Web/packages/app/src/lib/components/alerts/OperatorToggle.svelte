@@ -39,6 +39,7 @@
   }}
   variant="segmented"
   size="xs"
+  data-testid="alert-operator-toggle"
 >
   <ToggleGroup.Item
     value="and"

@@ -20,6 +20,8 @@ public class DeviceService : IDeviceService
     private readonly ITenantAccessor _tenantAccessor;
     private readonly ConcurrentDictionary<(string, string, string, string), Device> _cache = new();
     private readonly ConcurrentDictionary<(string, Guid), IReadOnlyList<PatientDevice>> _patientDeviceCache = new();
+    private readonly Dictionary<Guid, (Device Device, DateTime FirstPersisted, DateTime LastPersisted)> _deferredSeen = [];
+    private int _deferDepth;
 
     private string TenantCacheId => _tenantAccessor.Context?.TenantId.ToString()
         ?? throw new InvalidOperationException("Tenant context is not resolved");
@@ -41,14 +43,14 @@ public class DeviceService : IDeviceService
         var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
         if (_cache.TryGetValue(key, out var cached))
         {
-            await AdvanceLastSeenAsync(cached, timestamp, ct);
+            await WidenSeenWindowAsync(cached, timestamp, ct);
             return cached.Id;
         }
 
         var existing = await _repository.FindByCategoryTypeAndSerialAsync(category, type, serial, ct);
         if (existing is not null)
         {
-            await AdvanceLastSeenAsync(existing, timestamp, ct);
+            await WidenSeenWindowAsync(existing, timestamp, ct);
             _cache[key] = existing;
             return existing.Id;
         }
@@ -67,24 +69,77 @@ public class DeviceService : IDeviceService
         return created.Id;
     }
 
-    private async Task AdvanceLastSeenAsync(Device device, DateTime timestamp, CancellationToken ct)
+    private async Task WidenSeenWindowAsync(Device device, DateTime timestamp, CancellationToken ct)
     {
-        if (timestamp <= device.LastSeenTimestamp)
+        // The stored window only ever widens, so an instant inside this copy's window is inside it too.
+        if (timestamp >= device.FirstSeenTimestamp && timestamp <= device.LastSeenTimestamp)
             return;
 
-        var persisted = device.LastSeenTimestamp;
-        device.LastSeenTimestamp = timestamp;
-        try
+        if (_deferDepth > 0)
         {
-            await _repository.UpdateAsync(device.Id, device, WriteOrigin.Live, ct);
+            _deferredSeen.TryAdd(device.Id, (device, device.FirstSeenTimestamp, device.LastSeenTimestamp));
+            Widen(device, timestamp);
+            return;
         }
-        catch
+
+        await _repository.WidenSeenWindowAsync(device.Id, timestamp, WriteOrigin.Live, ct);
+
+        // Widened only once the database took it: the cached device outlives a failed page in a
+        // migration's scope and must not claim a window the database never stored.
+        Widen(device, timestamp);
+    }
+
+    private static void Widen(Device device, DateTime timestamp)
+    {
+        if (timestamp > device.LastSeenTimestamp)
+            device.LastSeenTimestamp = timestamp;
+        if (timestamp < device.FirstSeenTimestamp)
+            device.FirstSeenTimestamp = timestamp;
+    }
+
+    public IAsyncDisposable DeferLastSeen(CancellationToken ct = default)
+    {
+        _deferDepth++;
+        return new SeenWindowDeferral(this, ct);
+    }
+
+    /// <summary>
+    /// A deferred widening is already on the cached device, so a failed flush rolls back every device
+    /// it has not yet written, for the reason <see cref="WidenSeenWindowAsync(Device, DateTime, CancellationToken)"/>
+    /// widens its copy only after the write.
+    /// </summary>
+    private async Task FlushDeferredSeenAsync(CancellationToken ct)
+    {
+        if (--_deferDepth > 0)
+            return;
+
+        var pending = _deferredSeen.Values.ToList();
+        _deferredSeen.Clear();
+        for (var i = 0; i < pending.Count; i++)
         {
-            // The cached device outlives a failed page in a migration's scope, so it must not
-            // claim a last seen the database never took.
-            device.LastSeenTimestamp = persisted;
-            throw;
+            var (device, firstPersisted, lastPersisted) = pending[i];
+            try
+            {
+                if (device.LastSeenTimestamp > lastPersisted)
+                    await _repository.WidenSeenWindowAsync(device.Id, device.LastSeenTimestamp, WriteOrigin.Live, ct);
+                if (device.FirstSeenTimestamp < firstPersisted)
+                    await _repository.WidenSeenWindowAsync(device.Id, device.FirstSeenTimestamp, WriteOrigin.Live, ct);
+            }
+            catch
+            {
+                foreach (var (d, first, last) in pending.Skip(i))
+                {
+                    d.FirstSeenTimestamp = first;
+                    d.LastSeenTimestamp = last;
+                }
+                throw;
+            }
         }
+    }
+
+    private sealed class SeenWindowDeferral(DeviceService owner, CancellationToken ct) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() => new(owner.FlushDeferredSeenAsync(ct));
     }
 
     public async Task<Guid?> ResolvePatientDeviceAsync(Guid? deviceId, long mills, CancellationToken ct = default)

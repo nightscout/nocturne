@@ -4,7 +4,7 @@
   import BolusMarker from "../markers/BolusMarker.svelte";
   import CarbMarker from "../markers/CarbMarker.svelte";
   import { getGlucoseChartContext } from "../chart-context.svelte";
-  import type { SeriesPoint } from "../engine/chart-data-engine.svelte";
+  import type { SeriesPoint } from "../engine/chart-data-view.svelte";
   import {
     placeCenteredLabels,
     placeTrailingLabels,

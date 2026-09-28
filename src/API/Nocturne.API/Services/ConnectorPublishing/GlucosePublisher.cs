@@ -26,6 +26,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
     private readonly IEntryService _entryService;
     private readonly ISensorGlucoseRepository _sensorGlucoseRepository;
     private readonly IMeterGlucoseRepository _meterGlucoseRepository;
+    private readonly ICalibrationRepository _calibrationRepository;
     private readonly IPatientDeviceStamper _patientDeviceStamper;
     private readonly ICanonicalAlertEvaluator _alertEvaluator;
 
@@ -33,6 +34,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         IEntryService entryService,
         ISensorGlucoseRepository sensorGlucoseRepository,
         IMeterGlucoseRepository meterGlucoseRepository,
+        ICalibrationRepository calibrationRepository,
         IPatientDeviceStamper patientDeviceStamper,
         ICanonicalAlertEvaluator alertEvaluator,
         IAuditContext auditContext,
@@ -43,6 +45,7 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
         _meterGlucoseRepository = meterGlucoseRepository ?? throw new ArgumentNullException(nameof(meterGlucoseRepository));
+        _calibrationRepository = calibrationRepository ?? throw new ArgumentNullException(nameof(calibrationRepository));
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
         _alertEvaluator = alertEvaluator ?? throw new ArgumentNullException(nameof(alertEvaluator));
     }
@@ -74,6 +77,20 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
             return false;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>An entry decomposes into a sensor glucose, meter glucose or calibration record.</remarks>
+    public Task<int?> PublishRecentEntriesAsync(
+        IEnumerable<Entry> entries,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+        => PublishUnheldAsync(
+            entries, e => e.Id,
+            unheld => PublishEntriesAsync(unheld, source, origin, cancellationToken),
+            source,
+            ids => _sensorGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
+            ids => _meterGlucoseRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
+            ids => _calibrationRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
 
     /// <remarks>
     /// Alert evaluation after the write is this publisher's one addition to the shared shape.

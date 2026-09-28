@@ -32,6 +32,11 @@
   --glucose-very-low: oklch(0.55 0.25 29);   /* red - CSS named red */
   --glucose-high: oklch(0.9 0.18 105);       /* yellow - same as low (Nightscout uses symmetric warnings) */
   --glucose-very-high: oklch(0.55 0.25 29);  /* red */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.985 0.002 247.839);
 
   /* Insulin Types - Classic blue (#0099ff) */
   --insulin: rgb(0, 153, 255);

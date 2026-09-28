@@ -948,7 +948,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
             Rate = 1.0,
             Origin = "Scheduled",
@@ -981,7 +981,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = tempBasalId,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             Rate = 1.0,
             Origin = "Scheduled",
             DataSource = "glooko"
@@ -1093,7 +1093,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
             Rate = 1.0,
             Origin = "Scheduled",
@@ -1102,7 +1102,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 5400000).UtcDateTime,
             Rate = 0.5,
             Origin = "Algorithm",
@@ -1126,7 +1126,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = null,
             Rate = 1.2,
             Origin = "Algorithm",
@@ -1158,7 +1158,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
             Rate = 1.0,
             Origin = "Scheduled",
@@ -1299,7 +1299,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 18000000).UtcDateTime, // 5 hours
             Rate = 2.0,
             Origin = "Scheduled",
@@ -1353,7 +1353,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3600000).UtcDateTime,
             Rate = 1.0,
             Origin = "Scheduled",
@@ -1362,7 +1362,7 @@ public class DataOverviewServiceTests : IDisposable
         _dbContext.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.NewGuid(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 300000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 300000).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(June15_2024_Noon + 3900000).UtcDateTime,
             Rate = 0.8,
             Origin = "Algorithm",

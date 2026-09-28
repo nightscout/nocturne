@@ -195,18 +195,9 @@ public class Treatment : ProcessableDocumentBase
     private static bool TryParseIsoMills(string? iso, out long mills)
     {
         mills = 0;
-        if (
-            !string.IsNullOrEmpty(iso)
-            && DateTime.TryParse(
-                iso,
-                null,
-                System.Globalization.DateTimeStyles.RoundtripKind,
-                out var parsed
-            )
-        )
+        if (UploaderTimestamp.TryParse(iso, out var parsed))
         {
-            mills = ((DateTimeOffset)DateTime.SpecifyKind(parsed, DateTimeKind.Utc))
-                .ToUnixTimeMilliseconds();
+            mills = parsed.ToUnixTimeMilliseconds();
             return true;
         }
         return false;
@@ -397,9 +388,9 @@ public class Treatment : ProcessableDocumentBase
 
             if (
                 !string.IsNullOrEmpty(Created_at)
-                && DateTime.TryParse(Created_at, out var createdAtDate)
+                && UploaderTimestamp.TryParse(Created_at, out var createdAtDate)
             )
-                return ((DateTimeOffset)createdAtDate).ToUnixTimeMilliseconds();
+                return createdAtDate.ToUnixTimeMilliseconds();
 
             return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }

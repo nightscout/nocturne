@@ -122,7 +122,6 @@ public static class DevIdentityFixtureSeeder
                     IsActive = true,
                     IsSystemSubject = false,
                     ApprovalStatus = "Approved",
-                    UpdatedAt = DateTime.UtcNow,
                 });
             }
             else

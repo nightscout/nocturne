@@ -115,26 +115,17 @@
 
   // Build notification message
   function buildMessage(
-    instance: TrackerInstanceDto & { level: string }
+    instance: TrackerInstanceDto & { level: string; reachedDescription?: string }
   ): string {
-    const def = realtimeStore.trackerDefinitions.find(
-      (d) => d.id === instance.definitionId
-    );
-    if (!def) return "Tracker active";
-
-    // Find threshold hours for the level from notificationThresholds
-    const threshold = def.notificationThresholds?.find(
-      (t) => t.urgency?.toLowerCase() === instance.level
-    );
-    const thresholdHours = threshold?.hours ?? def.lifespanHours;
+    if (instance.reachedDescription) return instance.reachedDescription;
 
     switch (instance.level) {
       case "urgent":
-        return `Exceeded ${thresholdHours ?? "?"}h - change urgently!`;
+        return "Change urgently";
       case "hazard":
-        return `Exceeded ${thresholdHours ?? "?"}h - change soon`;
+        return "Change soon";
       case "warn":
-        return `Approaching ${thresholdHours ?? def.lifespanHours ?? "?"}h limit`;
+        return "Change coming up";
       default:
         return `Active for ${Math.floor(instance.ageHours ?? 0)}h`;
     }

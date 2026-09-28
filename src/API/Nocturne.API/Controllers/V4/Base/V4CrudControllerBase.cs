@@ -105,10 +105,11 @@ public abstract class V4CrudControllerBase<TModel, TCreateRequest, TUpdateReques
     /// <param name="ct">Cancellation token.</param>
     /// <remarks>
     /// Array semantics are per-item, not all-or-nothing. Of the types reachable here, boluses, basal
-    /// injections and sensor glucose upsert on the sync key: an item carrying both `dataSource` and
-    /// `syncIdentifier` updates in place the row already matched by that pair. Every other type —
-    /// notes, device events, BG checks, calibrations, meter readings and bolus calculations — inserts,
-    /// as does any item not carrying both halves of the pair.
+    /// injections, sensor glucose, notes, device events and BG checks upsert on the sync key: an item
+    /// carrying both `dataSource` and `syncIdentifier` updates in place the row already matched by
+    /// that pair, and an item whose pair is held by a record the owner deleted is skipped. Every other
+    /// type — calibrations, meter readings and bolus calculations — inserts, as does any item not
+    /// carrying both halves of the pair.
     ///
     /// The payload is validated as a whole — an empty body, more than the cap, an item with an unset
     /// `timestamp`, an item supplying `syncIdentifier` without `dataSource`, or an item any registered

@@ -23,9 +23,11 @@ public class HistoryPagedIndexTests
         var paged = LegacyTreatmentTables.All
             .Select(t => t.GetType().GetGenericArguments()[1])
             .Append(typeof(ApsSnapshotEntity))
+            .Concat(EntryHistoryTables)
+            .Concat(ProfileHistoryTables)
             .ToList();
 
-        paged.Should().HaveCount(8, "an empty set would let the equality below pass vacuously");
+        paged.Should().HaveCount(16, "an empty set would let the equality below pass vacuously");
 
         var indexed = Model().GetEntityTypes()
             .Where(e => e.GetIndexes().Any(IsHistoryIndex))
@@ -35,6 +37,20 @@ public class HistoryPagedIndexTests
         indexed.Should().BeEquivalentTo(paged,
             "every table a history endpoint pages on sys_updated_at needs the index, and no other table does");
     }
+
+    /// <summary>The glucose types <c>EntryReadService.GetModifiedSinceAsync</c> merges.</summary>
+    private static readonly Type[] EntryHistoryTables =
+        [typeof(SensorGlucoseEntity), typeof(MeterGlucoseEntity), typeof(CalibrationEntity)];
+
+    /// <summary>The tables <c>ProfileProjectionService.GetProfilesModifiedSinceAsync</c> pages.</summary>
+    private static readonly Type[] ProfileHistoryTables =
+    [
+        typeof(TherapySettingsEntity),
+        typeof(BasalScheduleEntity),
+        typeof(CarbRatioScheduleEntity),
+        typeof(SensitivityScheduleEntity),
+        typeof(TargetRangeScheduleEntity),
+    ];
 
     private static bool IsHistoryIndex(IIndex index) =>
         index.GetDatabaseName() == $"ix_{index.DeclaringEntityType.GetTableName()}_tenant_sys_updated_at"

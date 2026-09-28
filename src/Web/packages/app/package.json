@@ -8,12 +8,14 @@
     "./ui/*.svelte": "./src/lib/components/ui/*.svelte",
     "./ui/*": "./src/lib/components/ui/*/index.ts",
     "./utils": "./src/lib/utils/index.ts",
+    "./utils/*": "./src/lib/utils/*.ts",
     "./stores/*.svelte": "./src/lib/stores/*.svelte.ts",
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
     "./components/*": "./src/lib/components/*",
     "./constants/*": "./src/lib/constants/*.ts",
-    "./api/*": "./src/lib/api/generated/*"
+    "./api/*": "./src/lib/api/generated/*",
+    "./api-client": "./src/lib/api/generated/nocturne-api-client.ts"
   },
   "directories": {
     "lib": "lib"
@@ -66,6 +68,7 @@
     "@types/eslint": "^9.6.1",
     "@typescript/native-preview": "7.0.0-dev.20260513.1",
     "@vitest/browser-playwright": "^4.1.6",
+    "@vitest/coverage-v8": "4.1.6",
     "autoprefixer": "^10.5.0",
     "bits-ui": "^2.18.1",
     "clsx": "^2.1.1",

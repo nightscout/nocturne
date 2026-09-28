@@ -50,6 +50,10 @@
      * the sidebar renders without annotations when not provided. */
     factLog?: FactSnapshotLog;
     currentTimeMs: number;
+    /** Every rule starts expanded, not only the one under edit. */
+    expanded?: boolean;
+    /** Each rule has a switch to leave it out; off, the selection is neither shown nor stored. */
+    toggleable?: boolean;
     disabledRuleIds: Set<string>;
     availableRules: { id: string; name: string }[];
   }
@@ -62,6 +66,8 @@
     leafLog,
     factLog,
     currentTimeMs,
+    expanded = false,
+    toggleable = true,
     disabledRuleIds = $bindable(),
     availableRules,
   }: Props = $props();
@@ -83,7 +89,7 @@
   // Hydrate disabled-rule selection from sessionStorage on mount so the user's
   // ON/OFF preferences persist across replay runs within a tab.
   onMount(() => {
-    if (typeof sessionStorage === "undefined") return;
+    if (!toggleable || typeof sessionStorage === "undefined") return;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -101,7 +107,7 @@
   $effect(() => {
     const ids = [...disabledRuleIds];
     untrack(() => {
-      if (typeof sessionStorage === "undefined") return;
+      if (!toggleable || typeof sessionStorage === "undefined") return;
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
       } catch {
@@ -260,7 +266,7 @@
     {@const leaves = tree ? collectLeaves(rule, tree) : []}
     {@const isEditing = editingRuleId === id}
 
-    <Collapsible.Root open={isEditing} variant="outline">
+    <Collapsible.Root open={expanded || isEditing} variant="outline">
       <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
         <Collapsible.Trigger
           class="group flex flex-1 min-w-0 items-center gap-2 text-left"
@@ -284,17 +290,21 @@
               </span>
             {/if}
           </span>
-          <span
-            class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
-          >
-            {disabled ? "Off" : "On"}
-          </span>
+          {#if toggleable}
+            <span
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+            >
+              {disabled ? "Off" : "On"}
+            </span>
+          {/if}
         </Collapsible.Trigger>
-        <Switch
-          checked={!disabled}
-          onCheckedChange={(c: boolean) => id && toggleDisabled(id, c)}
-          aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
-        />
+        {#if toggleable}
+          <Switch
+            checked={!disabled}
+            onCheckedChange={(c: boolean) => id && toggleDisabled(id, c)}
+            aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
+          />
+        {/if}
       </div>
       <Collapsible.Content class="border-t px-2 py-1.5">
         {#if leaves.length === 0}

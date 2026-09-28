@@ -14,7 +14,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import { DangerZoneDialog } from "$lib/components/ui/danger-zone-dialog";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
   import { page } from "$app/state";
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import CheckCircle from "@lucide/svelte/icons/circle-check-big";
@@ -42,7 +42,10 @@
   }: Props = $props();
 
   const canManage = $derived(
-    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+    canManageConnectors(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
   );
 
   const recordCountLabels: Record<string, string> = {

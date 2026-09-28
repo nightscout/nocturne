@@ -242,7 +242,9 @@
         <div class="space-y-1">
           <Label for="capability-notify">Show a notification</Label>
           <p class="text-muted-foreground text-xs">
-            Show a Windows notification when an alert starts, with a button to acknowledge it.
+            Show a Windows notification when an alert starts, with a button to acknowledge it for
+            everyone. If your role cannot acknowledge alerts, the button reads Mute for me and stops
+            the alert only for you.
           </p>
         </div>
         <Switch

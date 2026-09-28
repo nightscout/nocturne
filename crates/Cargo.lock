@@ -498,6 +498,7 @@ dependencies = [
  "serde_json",
  "uniffi",
  "uuid",
+ "wasm-bindgen",
 ]
 
 [[package]]

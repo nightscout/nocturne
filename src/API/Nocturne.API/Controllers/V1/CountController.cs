@@ -8,6 +8,7 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
 
 namespace Nocturne.API.Controllers.V1;
@@ -41,6 +42,7 @@ public class CountController : ControllerBase
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
     private readonly IActivityService _activityService;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<CountController> _logger;
 
     /// <summary>
@@ -52,6 +54,7 @@ public class CountController : ControllerBase
     /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="activityService">Service for activity operations.</param>
+    /// <param name="timeProvider">Clock for the legacy default treatment find window.</param>
     /// <param name="logger">Logger instance.</param>
     public CountController(
         IEntryStore entryStore,
@@ -60,6 +63,7 @@ public class CountController : ControllerBase
         IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
         IActivityService activityService,
+        TimeProvider timeProvider,
         ILogger<CountController> logger
     )
     {
@@ -69,6 +73,7 @@ public class CountController : ControllerBase
         _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
         _activityService = activityService;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -138,6 +143,8 @@ public class CountController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
+        find = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+
         _logger.LogDebug(
             "Count treatments endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
@@ -146,7 +153,8 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _treatmentStore.CountAsync(find, cancellationToken);
+            var count = await _treatmentStore.CountAsync(
+                LegacyTreatmentDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
 
             _logger.LogDebug("Found {Count} treatments matching criteria", count);
             return Ok(new CountResponse { Count = count });
@@ -329,7 +337,10 @@ public class CountController : ControllerBase
                     );
                     break;
                 case "treatments":
-                    count = await _treatmentStore.CountAsync(find, cancellationToken);
+                    count = await _treatmentStore.CountAsync(
+                        LegacyTreatmentDateWindow.Apply(
+                            LegacyFindQueryString.Resolve(HttpContext?.Request, find), _timeProvider.GetUtcNow()),
+                        cancellationToken);
                     break;
                 case "devicestatus":
                     count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);

@@ -109,4 +109,42 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
             .ToListAsync(ct);
         return entities.Select(TherapySettingsMapper.ToDomainModel);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .TherapySettings.AsNoTracking()
+            .Where(e => e.IsDefault)
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync(ct);
+        return entities.Select(TherapySettingsMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx
+            .TherapySettings.AsNoTracking()
+            .Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : TherapySettingsMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task SetDefaultAsync(Guid? id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var affected = await ctx
+            .TherapySettings
+            .Where(e => e.IsDefault || (id != null && e.Id == id))
+            .ToListAsync(ct);
+        foreach (var entity in affected)
+            entity.IsDefault = entity.Id == id;
+        await ctx.SaveChangesAsync(ct);
+    }
 }

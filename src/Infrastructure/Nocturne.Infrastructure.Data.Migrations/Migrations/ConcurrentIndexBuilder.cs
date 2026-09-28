@@ -36,7 +36,19 @@ internal static class ConcurrentIndexBuilder
     /// <param name="name">Unqualified index name. Resolved against <c>public</c> for the validity
     /// probe, matching the schema these migrations create in.</param>
     /// <param name="definition">Everything after the index name: <c>ON table (cols) WHERE …</c>.</param>
-    public static void Build(MigrationBuilder migrationBuilder, string name, string definition)
+    public static void Build(MigrationBuilder migrationBuilder, string name, string definition) =>
+        Create(migrationBuilder, "INDEX", name, definition);
+
+    /// <summary>
+    /// <see cref="Build"/> for a unique index. A unique index over a table the migration did not
+    /// create needs its loser cleanup earlier in the same <c>Up</c>;
+    /// <c>UniqueIndexDeduplicationGuardTests</c> reads the table off <paramref name="definition"/>.
+    /// </summary>
+    /// <inheritdoc cref="Build" path="/param"/>
+    public static void BuildUnique(MigrationBuilder migrationBuilder, string name, string definition) =>
+        Create(migrationBuilder, "UNIQUE INDEX", name, definition);
+
+    private static void Create(MigrationBuilder migrationBuilder, string kind, string name, string definition)
     {
         migrationBuilder.Sql($"""
             DO $$
@@ -53,7 +65,7 @@ internal static class ConcurrentIndexBuilder
             """);
 
         migrationBuilder.Sql(
-            $"CREATE INDEX CONCURRENTLY IF NOT EXISTS {name} {definition};",
+            $"CREATE {kind} CONCURRENTLY IF NOT EXISTS {name} {definition};",
             suppressTransaction: true);
     }
 

@@ -34,7 +34,6 @@ public static class FoodMapper
             HideAfterUse = food.HideAfterUse,
             Hidden = food.Hidden,
             Position = food.Position,
-            SysUpdatedAt = DateTime.UtcNow,
         };
     }
 

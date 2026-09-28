@@ -219,7 +219,7 @@
 </form>
 
 <Dialog.Root bind:open>
-  <Dialog.Content>
+  <Dialog.Content data-testid="tracker-completion-dialog">
     <Dialog.Header>
       <Dialog.Title>Complete {instanceName}</Dialog.Title>
       <Dialog.Description>

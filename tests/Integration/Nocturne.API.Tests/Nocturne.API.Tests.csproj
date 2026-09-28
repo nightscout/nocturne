@@ -7,7 +7,6 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
@@ -34,8 +33,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../../src/API/Nocturne.API/Nocturne.API.csproj" />
-    <ProjectReference Include="../../../src/Aspire/Nocturne.Aspire.Host/Nocturne.Aspire.Host.csproj" />
     <ProjectReference Include="../../../src/Infrastructure/Nocturne.Infrastructure.Data/Nocturne.Infrastructure.Data.csproj" />
+    <ProjectReference Include="../../Shared/Nocturne.Tests.Shared/Nocturne.Tests.Shared.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Migration\Fixtures\*.json">

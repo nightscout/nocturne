@@ -46,7 +46,7 @@ public class MigrationStartupService : IHostedService
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationV1Service>();
 
             // Get the source identifier based on mode
-            var sourceIdentifier = GetSourceIdentifier(migrationMode);
+            var (sourceIdentifier, legacyIdentifier) = GetSourceIdentifiers(migrationMode);
             if (string.IsNullOrEmpty(sourceIdentifier))
             {
                 _logger.LogWarning("Could not determine source identifier for migration mode {Mode}", migrationMode);
@@ -55,7 +55,7 @@ public class MigrationStartupService : IHostedService
 
             // Check if any successful migration runs exist for this source
             var hasCompletedRun = await dbContext.MigrationRuns
-                .AnyAsync(r => r.Source.SourceIdentifier == sourceIdentifier
+                .AnyAsync(r => (r.Source.SourceIdentifier == sourceIdentifier || r.Source.SourceIdentifier == legacyIdentifier)
                            && r.State == "Completed", cancellationToken);
 
             if (hasCompletedRun)
@@ -82,7 +82,7 @@ public class MigrationStartupService : IHostedService
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    private string? GetSourceIdentifier(string migrationMode)
+    private (string? Current, string? Legacy) GetSourceIdentifiers(string migrationMode)
     {
         // Must produce byte-identical identifiers to MigrationJob.UpsertSourceAsync, or the
         // "was this source ever migrated?" check can never match and the pending-migration
@@ -90,12 +90,15 @@ public class MigrationStartupService : IHostedService
         if (migrationMode.Equals("MongoDb", StringComparison.OrdinalIgnoreCase))
         {
             var connectionString = _configuration["MIGRATION_MONGO_CONNECTION_STRING"];
-            return string.IsNullOrEmpty(connectionString)
+            var digest = string.IsNullOrEmpty(connectionString)
                 ? null
                 : MigrationJob.MongoSourceIdentifier(connectionString);
+            return (digest, digest);
         }
 
         var url = _configuration["MIGRATION_NS_URL"];
-        return string.IsNullOrEmpty(url) ? null : MigrationJob.ApiSourceIdentifier(url);
+        return string.IsNullOrEmpty(url)
+            ? (null, null)
+            : (MigrationJob.ApiSourceIdentifier(url), MigrationJob.LegacyApiSourceIdentifier(url));
     }
 }

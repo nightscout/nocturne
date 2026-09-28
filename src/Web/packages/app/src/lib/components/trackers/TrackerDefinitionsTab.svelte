@@ -114,6 +114,8 @@
                   variant="ghost"
                   size="icon"
                   onclick={() => openEditDefinition(def)}
+                  aria-label="Edit {def.name}"
+                  data-testid="tracker-definition-edit"
                 >
                   <Pencil class="h-4 w-4" />
                 </Button>

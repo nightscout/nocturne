@@ -96,7 +96,10 @@ public sealed class ChatIdentityPendingLinkService(
             db.ChatIdentityPendingLinks.Remove(row);
             await db.SaveChangesAsync(attemptCt);
             return row;
-        }, ct: ct);
+        },
+        async (attempt, verifyCt) => attempt is not null
+            && !await db.ChatIdentityPendingLinks.AnyAsync(p => p.Token == token, verifyCt),
+        ct: ct);
 
         if (consumed is not null)
         {

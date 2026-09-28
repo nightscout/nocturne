@@ -34,8 +34,8 @@ public static class RetryingTransactionExtensions
     /// <param name="verifySucceeded">
     /// Judges, after a commit that reported failure, whether it landed anyway, from the result the
     /// attempt returned. When it did, that result is returned instead of running the work again.
-    /// Needed only where a replayed attempt would write a second row; a unique key or an upsert
-    /// already makes a replay harmless.
+    /// Needed where a replayed attempt would write a second row, and where it would find the work
+    /// already done and so report less than was written.
     /// </param>
     /// <param name="detachBeforeEachAttempt">
     /// Entities to detach before every attempt and before the verification, even when tracked
@@ -150,6 +150,26 @@ public static class RetryingTransactionExtensions
             return false;
         var id = inserted[0].Id;
         return await context.Set<TEntity>().IgnoreQueryFilters().AnyAsync(e => e.Id == id, ct);
+    }
+
+    /// <summary>
+    /// A <c>verifySucceeded</c> for work that updates <paramref name="updated"/> in place: one
+    /// transaction commits all of them or none, so the first one decides: it landed when its stored
+    /// row carries the <see cref="ISystemTimestamped.SysUpdatedAt"/> the attempt stamped, which
+    /// <see cref="NocturneDbContext"/> takes at the stored precision. Pass only rows the attempt
+    /// saved with a changed value, so that each was stamped. With none there is nothing to report,
+    /// and the work runs again.
+    /// </summary>
+    public static async Task<bool> AnyUpdateLandedAsync<TEntity>(
+        this DbContext context, IReadOnlyList<TEntity> updated, CancellationToken ct)
+        where TEntity : class, IIdentified, ISystemTimestamped
+    {
+        if (updated.Count == 0)
+            return false;
+        var id = updated[0].Id;
+        var stamp = updated[0].SysUpdatedAt;
+        return await context.Set<TEntity>().IgnoreQueryFilters()
+            .AnyAsync(e => e.Id == id && e.SysUpdatedAt == stamp, ct);
     }
 
     /// <inheritdoc cref="ExecuteInTransactionAsync{T}"/>

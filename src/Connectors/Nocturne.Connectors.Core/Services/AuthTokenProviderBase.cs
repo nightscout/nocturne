@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
@@ -38,6 +39,12 @@ public abstract class AuthTokenProviderBase<TConfig>(
     private SignInFailure? _signInFailure;
 
     /// <summary>
+    ///     Whether the last answer judged in the current login attempt refused the credentials; see
+    ///     <see cref="RecordLoginAnswer(bool)"/>.
+    /// </summary>
+    private bool _attemptRefusedCredentials;
+
+    /// <summary>
     ///     How much a failed login says about the credentials. Only a source that refused them earns
     ///     the wording that sends someone to their password: telling a person to change a working one
     ///     during a source's outage costs them their data while they chase a fault that is not theirs.
@@ -47,7 +54,10 @@ public abstract class AuthTokenProviderBase<TConfig>(
         /// <summary>The source could not be signed in to. Says nothing about the credentials.</summary>
         Unavailable,
 
-        /// <summary>The source rejected the credentials: it answered 401 or 403.</summary>
+        /// <summary>
+        ///     The source rejected the credentials: it answered 401 or 403, or its provider recorded
+        ///     an equivalent refusal through <see cref="RecordLoginAnswer(bool)"/>.
+        /// </summary>
         CredentialsRefused,
     }
 
@@ -159,6 +169,17 @@ public abstract class AuthTokenProviderBase<TConfig>(
     }
 
     /// <summary>
+    ///     What the tenant is told about the last <see cref="GetValidTokenAsync(TConfig, CancellationToken)"/>
+    ///     that returned no token, for the connector service to pass to its sync result.
+    /// </summary>
+    /// <remarks>
+    ///     Unlike the cached sign-in failure, a login that ran out of attempts or threw is reported
+    ///     here too, as the source being unavailable: that run did fail, and only a refusal may send
+    ///     the tenant to their credentials. Read it only right after the null token it explains.
+    /// </remarks>
+    public string SignInFailureReason => SignInFailureMessage(_signInFailure ?? SignInFailure.Unavailable);
+
+    /// <summary>
     ///     Attempts a live authentication with the supplied configuration, bypassing the
     ///     per-tenant token cache entirely: no cached session is read, nothing is stored, and no
     ///     tenant context is required. Used for credential verification, where a cache hit would
@@ -248,6 +269,31 @@ public abstract class AuthTokenProviderBase<TConfig>(
     protected static int LoginAttempts(TConfig config) => Math.Max(1, config.MaxRetryAttempts);
 
     /// <summary>
+    ///     Records whether an answer the login got refused the credentials, for an attempt that then
+    ///     ends with a null token and no retry. The last answer recorded in an attempt wins, so a
+    ///     rejected refresh token followed by a password grant failing another way is not reported
+    ///     as a refused password. <see cref="HandleErrorResponseAsync"/> records every status it sees;
+    ///     a provider calls this itself for a status it handles inline or for a refusal the source
+    ///     answers in a success body.
+    /// </summary>
+    protected void RecordLoginAnswer(bool credentialsRefused) => _attemptRefusedCredentials = credentialsRefused;
+
+    /// <summary>
+    ///     Records a failed status: 401 and 403 are the only answers about the credentials themselves.
+    ///     Every other status — a 404, a 405, a source's own 5xx variant — says the source could not
+    ///     be signed in to, which is not the same claim.
+    /// </summary>
+    protected void RecordLoginAnswer(HttpStatusCode status) =>
+        RecordLoginAnswer(status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden);
+
+    /// <summary>
+    ///     Records that the source refused the sign-in, for an acquisition that ends with a null token
+    ///     without running <see cref="ExecuteWithRetryAsync{T}"/> — e.g. a revoked refresh token with
+    ///     no password to fall back on, which only the tenant can clear.
+    /// </summary>
+    protected void RecordSignInRefused() => _signInFailure = SignInFailure.CredentialsRefused;
+
+    /// <summary>
     ///     Attempts <paramref name="operation"/> under the shared connector retry loop; see
     ///     <see cref="ConnectorRetryLoop.RunAsync{T}"/> for the attempt-budget and delay contract.
     /// </summary>
@@ -267,6 +313,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
         return await ConnectorRetryLoop.RunAsync<T>(
             async (attempt, _) =>
             {
+                _attemptRefusedCredentials = false;
                 try
                 {
                     var (result, shouldRetry) = await operation(attempt);
@@ -276,10 +323,11 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     if (shouldRetry)
                         return RetryStep<T>.RetryAfterDelay;
 
-                    // The source answered with something no further attempt can change, but nothing
-                    // here says the credentials were the problem — that verdict only ever arrives as
-                    // a status, on the exception path below.
-                    _signInFailure = SignInFailure.Unavailable;
+                    // The source answered with something no further attempt can change. Only an answer
+                    // the provider recorded as a refusal says the credentials were the problem.
+                    _signInFailure = _attemptRefusedCredentials
+                        ? SignInFailure.CredentialsRefused
+                        : SignInFailure.Unavailable;
                     return RetryStep<T>.Complete(default);
                 }
                 catch (HttpRequestException ex)
@@ -300,10 +348,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
                     if (shouldRetry)
                         return RetryStep<T>.RetryAfterDelay;
 
-                    // 401 and 403 are the only answers about the credentials themselves. Every other
-                    // non-retryable status — a 404, a 405, a source's own 5xx variant — says the
-                    // source could not be signed in to, which is not the same claim.
-                    _signInFailure = ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    RecordLoginAnswer(ex.StatusCode!.Value);
+                    _signInFailure = _attemptRefusedCredentials
                         ? SignInFailure.CredentialsRefused
                         : SignInFailure.Unavailable;
 
@@ -334,6 +380,8 @@ public abstract class AuthTokenProviderBase<TConfig>(
     ///     Reads the error response body from a failed HTTP response, logs it with the appropriate
     ///     severity based on whether the error is retryable, and returns whether a retry is warranted.
     ///     This consolidates the common error handling pattern used across connector token providers.
+    ///     The status is recorded through <see cref="RecordLoginAnswer(HttpStatusCode)"/>, so a 401 or
+    ///     403 handled here is reported as refused credentials.
     /// </summary>
     /// <param name="response">The failed HTTP response (caller must verify !IsSuccessStatusCode before calling)</param>
     /// <param name="operationName">A human-readable name for the operation, used in log messages</param>
@@ -344,6 +392,7 @@ public abstract class AuthTokenProviderBase<TConfig>(
         string operationName,
         CancellationToken cancellationToken)
     {
+        RecordLoginAnswer(response.StatusCode);
         var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (response.IsRetryableError())
@@ -362,6 +411,46 @@ public abstract class AuthTokenProviderBase<TConfig>(
             response.StatusCode,
             errorContent);
         return false;
+    }
+
+    /// <summary>
+    ///     <see cref="HandleErrorResponseAsync"/> for an OAuth 2.0 token endpoint, which answers
+    ///     rejected credentials with 400 <c>invalid_grant</c> (RFC 6749 section 5.2) rather than 401,
+    ///     so that answer is recorded as a refusal too.
+    /// </summary>
+    protected async Task<bool> HandleOAuthErrorResponseAsync(
+        HttpResponseMessage response,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        var shouldRetry = await HandleErrorResponseAsync(response, operationName, cancellationToken);
+
+        if (response.StatusCode == HttpStatusCode.BadRequest
+            && ReadJsonString(await response.Content.ReadAsStringAsync(cancellationToken), "error") == "invalid_grant")
+            RecordLoginAnswer(credentialsRefused: true);
+
+        return shouldRetry;
+    }
+
+    /// <summary>
+    ///     The string value of a top-level property of a JSON object body, or null when the body is
+    ///     not such an object or lacks that string.
+    /// </summary>
+    protected static string? ReadJsonString(string body, string propertyName)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                   && document.RootElement.TryGetProperty(propertyName, out var value)
+                   && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     protected void Dispose(bool disposing)

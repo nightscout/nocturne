@@ -15,7 +15,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
-  import { buildAppNavigation, type NavItem } from "$lib/navigation/app-navigation";
+  import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
   import {
     goToTenant,
     resolveTenantSwitcher,
@@ -138,7 +138,7 @@
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
 
-  const isActive = (item: NavItem): boolean => {
+  const isActive = (item: NavItem | NavLink): boolean => {
     if (item.href && item?.strict) {
       return page.url.pathname === item.href;
     }
@@ -147,7 +147,7 @@
       return page.url.pathname.startsWith(item.href);
     }
 
-    if (item.children) {
+    if ("children" in item && item.children) {
       return item.children.some((child) => isActive(child));
     }
 
@@ -158,13 +158,13 @@
   $effect(() => {
     navigation.forEach((item) => {
       if (item.children && isActive(item)) {
-        openMenus[item.title] = true;
+        openMenus[item.id] = true;
       }
     });
   });
 
-  function toggleMenu(title: string) {
-    openMenus[title] = !openMenus[title];
+  function toggleMenu(id: string) {
+    openMenus[id] = !openMenus[id];
   }
 </script>
 
@@ -264,17 +264,17 @@
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
-          {#each navigation as item (item.title)}
+          {#each navigation as item (item.id)}
             {#if item.children}
               <!-- Collapsible submenu -->
               <Collapsible.Root
-                open={openMenus[item.title]}
-                onOpenChange={() => toggleMenu(item.title)}
+                open={openMenus[item.id]}
+                onOpenChange={() => toggleMenu(item.id)}
               >
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton
                     isActive={isActive(item)}
-                    onclick={() => toggleMenu(item.title)}
+                    onclick={() => toggleMenu(item.id)}
                   >
                     <item.icon class="h-4 w-4" />
                     <span class="group-data-[collapsible=icon]:hidden">
@@ -282,7 +282,7 @@
                     </span>
                     <ChevronDown
                       class="ml-auto h-4 w-4 transition-transform duration-200 group-data-[collapsible=icon]:hidden {openMenus[
-                        item.title
+                        item.id
                       ]
                         ? 'rotate-180'
                         : ''}"
@@ -291,7 +291,7 @@
                 </Sidebar.MenuItem>
                 <Collapsible.Content>
                   <Sidebar.MenuSub>
-                    {#each item.children as child (child.title)}
+                    {#each item.children as child (child.href)}
                       <Sidebar.MenuSubItem>
                         {#if child.href === "/alerts/dnd"}
                           <SidebarDndToggle />

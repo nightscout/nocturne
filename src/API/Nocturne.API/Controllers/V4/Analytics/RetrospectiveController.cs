@@ -222,7 +222,7 @@ public class RetrospectiveController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
+        if (string.IsNullOrEmpty(date) || !UploaderTimestamp.TryParse(date, out var parsedDate))
         {
             return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
         }
@@ -342,7 +342,7 @@ public class RetrospectiveController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        if (string.IsNullOrEmpty(date) || !DateTimeOffset.TryParse(date, out var parsedDate))
+        if (string.IsNullOrEmpty(date) || !UploaderTimestamp.TryParse(date, out var parsedDate))
         {
             return Problem(detail: "Date parameter must be in YYYY-MM-DD format", statusCode: 400, title: "Bad Request");
         }

@@ -48,7 +48,7 @@
 </script>
 
 <Tabs.Content value="active">
-  <Card>
+  <Card data-testid="active-trackers">
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
         <CardTitle>Active Trackers</CardTitle>
@@ -138,6 +138,7 @@
                   variant="outline"
                   size="sm"
                   onclick={() => openCompleteDialog(instance.id!)}
+                  data-testid="tracker-complete"
                 >
                   <Check class="h-4 w-4 mr-1" />
                   Complete

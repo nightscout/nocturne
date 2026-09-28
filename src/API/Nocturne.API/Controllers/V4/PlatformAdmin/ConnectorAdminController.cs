@@ -78,12 +78,16 @@ public class ConnectorAdminController : ControllerBase
     [HttpPost("{tenantId:guid}/reset-cursors")]
     [RemoteCommand]
     [ProducesResponseType(typeof(ConnectorResetJobInfo), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorResetJobInfo>> ResetTenantCursors(
         Guid tenantId,
         [FromBody] AdminResetCursorsRequest request,
         CancellationToken ct)
     {
+        if (new SyncRequest { From = request.From, To = DateTime.UtcNow }.WindowError() is { } windowError)
+            return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
+
         _logger.LogInformation(
             "Platform admin cursor reset requested for tenant {TenantId} (from {From})",
             tenantId, request.From?.ToString("o") ?? "beginning");

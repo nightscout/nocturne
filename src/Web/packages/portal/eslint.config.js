@@ -1,6 +1,8 @@
 import { svelteConfig } from "@nocturne/eslint-config";
 
 export default [
+  // wasm-bindgen's output, built by scripts/build-alerts-engine.mjs and not checked in.
+  { ignores: ["static/alerts-engine/**"] },
   ...svelteConfig({
     shadcnSettings: { ui: "@nocturne/ui/ui" },
     // A picture of the app's sign-in page, drawn in each provider's own colours; its
@@ -24,7 +26,7 @@ export default [
   {
     // Build-time tooling over the repo's own files: every path is built from the package
     // root or a checked-in manifest, never from a request.
-    files: ["scripts/**", "vite.config.ts"],
+    files: ["scripts/**", "vite.config.ts", "app-aliases.ts"],
     rules: { "security/detect-non-literal-fs-filename": "off" }
   }
 ];

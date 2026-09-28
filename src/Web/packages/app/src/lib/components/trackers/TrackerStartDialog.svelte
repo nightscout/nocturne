@@ -152,12 +152,10 @@
     if (isNaN(referenceTime.getTime())) return [];
 
     return definition.notificationThresholds
-      .filter((n) => n.hours !== undefined)
+      .filter((n) => n.offsetMinutes !== undefined && n.offsetMinutes !== null)
       .map((n) => {
-        // For event mode, hours are relative to scheduled time (negative = before)
-        // For duration mode, hours are relative to start time
         const triggerTime = new Date(
-          referenceTime.getTime() + n.hours! * 60 * 60 * 1000
+          referenceTime.getTime() + n.offsetMinutes! * 60 * 1000
         );
         const timeUntil = triggerTime.getTime() - now.getTime();
         const hoursUntil = timeUntil / (1000 * 60 * 60);
@@ -172,7 +170,7 @@
               : `${Math.abs(hoursUntil).toFixed(1)} hours`,
         };
       })
-      .sort((a, b) => (a.hours ?? 0) - (b.hours ?? 0));
+      .sort((a, b) => a.triggerTime.getTime() - b.triggerTime.getTime());
   });
 
   async function handleStart() {

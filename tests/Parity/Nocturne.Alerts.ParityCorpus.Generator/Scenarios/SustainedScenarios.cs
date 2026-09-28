@@ -57,12 +57,10 @@ public static class SustainedScenarios
                 ]}
                 """)],
             [
-                // Both children true: first sustained sets composite[0].sustained; because OR
-                // short-circuits only on TRUE and the first sustained returns false on its set
-                // tick, the second sustained also runs and sets composite[1].sustained.
+                // Both children true: each sustained sets its own timer row.
                 Tick(T(0), Ctx(T(0), glucose: 65m) with { IobUnits = 4m }),
-                // 10 minutes later the first window has elapsed -> root true (short-circuit
-                // now skips the second sustained, whose timer survives untouched).
+                // 10 minutes later the first window has elapsed -> root true; the second
+                // sustained, still inside its 20 minutes, keeps its timer.
                 Tick(T(10), Ctx(T(10), glucose: 65m) with { IobUnits = 4m }),
                 // Glucose recovers: first sustained clears; second sustained (20m elapsed) fires.
                 Tick(T(20), Ctx(T(20), glucose: 100m) with { IobUnits = 4m }),

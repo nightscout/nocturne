@@ -74,12 +74,13 @@
         {...props}
         variant="dashed"
         size="sm"
+        data-testid="alert-add-condition"
       >
         <Plus class="h-4 w-4 mr-2" /> Add condition
       </Button>
     {/snippet}
   </DropdownMenu.Trigger>
-  <DropdownMenu.Content class="w-80 max-h-96" align="start">
+  <DropdownMenu.Content class="w-80 max-h-96" align="start" data-testid="alert-add-picker">
     {#each FACT_GROUP_ORDER as group (group)}
       {@const facts = LEAF_FACTS.filter((f) => f.group === group)}
       {#if facts.length > 0}

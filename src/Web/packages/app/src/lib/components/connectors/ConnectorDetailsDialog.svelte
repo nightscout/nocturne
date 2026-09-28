@@ -8,7 +8,7 @@
   import { getDataTypeLabel } from "$lib/utils/data-type-labels";
   import { triggerConnectorSync } from "$api/generated/services.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import { satisfiesScope } from "$lib/authorization/scopes";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
   import { page } from "$app/state";
   import Cloud from "@lucide/svelte/icons/cloud";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
@@ -45,7 +45,10 @@
   }: Props = $props();
 
   const canManage = $derived(
-    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings")
+    canManageConnectors(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
   );
 
   let granularSyncFrom = $state("");

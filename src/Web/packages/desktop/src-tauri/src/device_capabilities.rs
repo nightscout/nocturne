@@ -28,7 +28,10 @@ pub struct DeviceCapabilitySettings {
 
 impl Default for DeviceCapabilitySettings {
     fn default() -> Self {
-        Self { notify: true, tray_flash: true }
+        Self {
+            notify: true,
+            tray_flash: true,
+        }
     }
 }
 
@@ -44,7 +47,10 @@ impl DeviceCapabilitySettings {
 
     /// The capabilities to send on the next (re-)registration.
     pub fn advertised(&self) -> Vec<&'static str> {
-        ADVERTISED_CAPABILITIES.into_iter().filter(|c| self.allows(c)).collect()
+        ADVERTISED_CAPABILITIES
+            .into_iter()
+            .filter(|c| self.allows(c))
+            .collect()
     }
 }
 
@@ -111,21 +117,30 @@ mod tests {
     #[test]
     fn default_advertises_every_capability() {
         let s = DeviceCapabilitySettings::default();
-        assert_eq!(s.advertised(), vec![NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY]);
+        assert_eq!(
+            s.advertised(),
+            vec![NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY]
+        );
         assert!(s.allows(NOTIFY_CAPABILITY));
         assert!(s.allows(TRAY_FLASH_CAPABILITY));
     }
 
     #[test]
     fn disabled_capability_is_neither_advertised_nor_allowed() {
-        let s = DeviceCapabilitySettings { notify: false, tray_flash: true };
+        let s = DeviceCapabilitySettings {
+            notify: false,
+            tray_flash: true,
+        };
         assert_eq!(s.advertised(), vec![TRAY_FLASH_CAPABILITY]);
         assert!(!s.allows(NOTIFY_CAPABILITY));
     }
 
     #[test]
     fn both_disabled_advertises_nothing() {
-        let s = DeviceCapabilitySettings { notify: false, tray_flash: false };
+        let s = DeviceCapabilitySettings {
+            notify: false,
+            tray_flash: false,
+        };
         assert!(s.advertised().is_empty());
     }
 
@@ -139,16 +154,23 @@ mod tests {
         // An install that predates the toggles has no file; a partial file leaves the rest enabled.
         let empty: DeviceCapabilitySettings = serde_json::from_str("{}").unwrap();
         assert_eq!(empty, DeviceCapabilitySettings::default());
-        let partial: DeviceCapabilitySettings = serde_json::from_str(r#"{"notify":false}"#).unwrap();
+        let partial: DeviceCapabilitySettings =
+            serde_json::from_str(r#"{"notify":false}"#).unwrap();
         assert!(!partial.notify);
         assert!(partial.tray_flash);
     }
 
     #[test]
     fn settings_round_trip_as_camel_case() {
-        let s = DeviceCapabilitySettings { notify: true, tray_flash: false };
+        let s = DeviceCapabilitySettings {
+            notify: true,
+            tray_flash: false,
+        };
         let json = serde_json::to_string(&s).unwrap();
         assert!(json.contains("trayFlash"));
-        assert_eq!(serde_json::from_str::<DeviceCapabilitySettings>(&json).unwrap(), s);
+        assert_eq!(
+            serde_json::from_str::<DeviceCapabilitySettings>(&json).unwrap(),
+            s
+        );
     }
 }

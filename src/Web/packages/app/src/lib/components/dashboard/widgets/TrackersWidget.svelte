@@ -4,6 +4,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import ListChecks from "@lucide/svelte/icons/list-checks";
   import { DashboardVisibility, NotificationUrgency } from "$lib/api";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
 
   const realtimeStore = getRealtimeStore();
 
@@ -20,28 +21,6 @@
       default:
         return "bg-severity-info/20 text-severity-info border-severity-info/30";
     }
-  }
-
-  // Calculate current urgency level based on age and thresholds
-  function getCurrentUrgency(
-    ageHours: number | undefined,
-    thresholds:
-      | Array<{ hours?: number; urgency?: NotificationUrgency }>
-      | undefined
-  ): NotificationUrgency {
-    if (!ageHours || !thresholds?.length) return NotificationUrgency.Info;
-
-    let currentUrgency = NotificationUrgency.Info;
-    for (const threshold of thresholds) {
-      if (
-        threshold.hours !== undefined &&
-        threshold.urgency !== undefined &&
-        ageHours >= threshold.hours
-      ) {
-        currentUrgency = threshold.urgency;
-      }
-    }
-    return currentUrgency;
   }
 
   // Processed tracker data with definitions
@@ -62,7 +41,7 @@
             (1000 * 60 * 60)
           : (instance.ageHours ?? 0);
 
-        const urgency = getCurrentUrgency(age, def.notificationThresholds);
+        const urgency = reachedUrgency(instance, realtimeStore.now) ?? NotificationUrgency.Info;
 
         return {
           instance,

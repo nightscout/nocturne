@@ -92,11 +92,11 @@ public sealed class ActogramReportService : IActogramReportService
             includeStages: true,
             cancellationToken: cancellationToken);
 
-        var stepRecords = await _stepCountService.GetStepCountsByDateRangeAsync(
+        var stepRecords = (await _stepCountService.GetStepCountsByDateRangeAsync(
             fromDt,
             toDt,
             cancellationToken: cancellationToken
-        );
+        )).Where(s => !s.IsPossibleRunningTotal()).ToList();
 
         var heartRateRecords = await _heartRateService.GetHeartRatesByDateRangeAsync(
             fromDt,

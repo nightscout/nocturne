@@ -72,9 +72,28 @@ export const DOCS_NAV_SECTIONS: DocsNavSection[] = [
         ],
     },
     {
+        id: "trackers",
+        title: "Trackers",
+        items: [
+            { href: "/docs/trackers", label: "Overview" },
+            { href: "/docs/trackers/setting-up", label: "Setting up a tracker" },
+            { href: "/docs/trackers/everyday-use", label: "Everyday use" },
+        ],
+    },
+    {
         id: "alerts",
         title: "Alerts",
-        items: [{ href: "/docs/alerts/email", label: "Email (Resend)" }],
+        items: [
+            { href: "/docs/alerts", label: "Overview" },
+            { href: "/docs/alerts/building-rules", label: "Building a rule" },
+            { href: "/docs/alerts/conditions", label: "Conditions" },
+            { href: "/docs/alerts/combining", label: "All of, any of, NOT" },
+            { href: "/docs/alerts/sustained", label: "Conditions that must last" },
+            { href: "/docs/alerts/when-an-alert-fires", label: "When an alert fires" },
+            { href: "/docs/alerts/recipes", label: "Example rules" },
+            { href: "/docs/alerts/testing", label: "Testing rules" },
+            { href: "/docs/alerts/email", label: "Email (Resend)" },
+        ],
     },
     {
         id: "bots",

@@ -24,6 +24,7 @@
   import DeviceEventMarkers from "$lib/components/dashboard/glucose-chart/markers/DeviceEventMarkers.svelte";
   import TrackerMarkers from "$lib/components/dashboard/glucose-chart/markers/TrackerMarkers.svelte";
   import ChartTooltip from "$lib/components/dashboard/glucose-chart/ChartTooltip.svelte";
+  import { openDayInReview } from "$lib/components/dashboard/glucose-chart/day-in-review";
   import TrackerCategoryIcon from "$lib/components/icons/TrackerCategoryIcon.svelte";
   import type { ClockFaceConfig, TrackerDefinitionDto } from "$lib/api";
   import { getDefinitions } from "$api/generated/trackers.generated.remote";
@@ -300,7 +301,7 @@
             {/if}
           {/snippet}
           {#snippet overlays()}
-            <ChartTooltip />
+            <ChartTooltip onTimeClick={openDayInReview} />
           {/snippet}
         </GlucoseChartShell>
       </div>
@@ -363,7 +364,7 @@
                       {/if}
                     {/snippet}
                     {#snippet overlays()}
-                      <ChartTooltip />
+                      <ChartTooltip onTimeClick={openDayInReview} />
                     {/snippet}
                   </GlucoseChartShell>
                 </div>

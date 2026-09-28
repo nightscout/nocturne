@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Eversense.Models;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Connectors.Eversense.Mappers;
@@ -30,7 +31,7 @@ public class EversenseSensorGlucoseMapper(ILogger logger)
     {
         try
         {
-            if (!DateTimeOffset.TryParse(patient.CgTime, out var timestamp))
+            if (!UploaderTimestamp.TryParse(patient.CgTime, out var timestamp))
             {
                 _logger.LogWarning("Could not parse Eversense timestamp: {Timestamp}", patient.CgTime);
                 return null;

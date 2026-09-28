@@ -9,6 +9,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { TrackerCategoryIcon } from "$lib/components/icons";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
 
   type AlertLevel = "none" | "info" | "warn" | "hazard" | "urgent";
 
@@ -17,6 +18,8 @@
     instance: TrackerInstanceDto;
     /** The tracker definition for metadata */
     definition?: TrackerDefinitionDto;
+    /** Epoch milliseconds the reached level is judged against. */
+    now: number;
     /** Additional CSS classes */
     class?: string;
     /** Callback when complete button is clicked */
@@ -32,6 +35,7 @@
   let {
     instance,
     definition,
+    now,
     class: className,
     onComplete,
   }: TrackerPillProps = $props();
@@ -78,26 +82,16 @@
     return formatAge(hours);
   }
 
-  // Determine alert level based on thresholds
+  const LEVELS: Record<NotificationUrgency, AlertLevel> = {
+    [NotificationUrgency.Info]: "info",
+    [NotificationUrgency.Warn]: "warn",
+    [NotificationUrgency.Hazard]: "hazard",
+    [NotificationUrgency.Urgent]: "urgent",
+  };
+
   const level = $derived.by((): AlertLevel => {
-    if (!instance.ageHours || !definition?.notificationThresholds)
-      return "none";
-
-    const age = instance.ageHours;
-    const thresholds = definition.notificationThresholds.sort(
-      (a, b) => (b.hours ?? 0) - (a.hours ?? 0)
-    );
-
-    for (const threshold of thresholds) {
-      if (threshold.hours && age >= threshold.hours) {
-        const urgency = threshold.urgency;
-        if (urgency === NotificationUrgency.Urgent) return "urgent";
-        if (urgency === NotificationUrgency.Hazard) return "hazard";
-        if (urgency === NotificationUrgency.Warn) return "warn";
-        if (urgency === NotificationUrgency.Info) return "info";
-      }
-    }
-    return "none";
+    const urgency = reachedUrgency(instance, now);
+    return urgency ? LEVELS[urgency] : "none";
   });
 
   // eslint-disable-next-line shadcn/require-static-classes -- this is the pill component: levelClasses is its variant table, and PopoverTrigger renders unstyled.
@@ -166,7 +160,12 @@
       {ageDisplay}
     </span>
   </Popover.Trigger>
-  <Popover.Content class="w-72 p-0" align="center" side="bottom">
+  <Popover.Content
+    class="w-72 p-0"
+    align="center"
+    side="bottom"
+    data-testid="tracker-pill-popover"
+  >
     <div class="px-4 py-3 border-b border-border">
       <h4 class="font-semibold text-sm flex items-center gap-2">
         <TrackerCategoryIcon

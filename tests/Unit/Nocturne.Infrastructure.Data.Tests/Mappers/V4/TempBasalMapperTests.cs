@@ -34,7 +34,7 @@ public class TempBasalMapperTests
         var entity = TempBasalMapper.ToEntity(model);
 
         entity.Id.Should().Be(id);
-        entity.StartTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
+        entity.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
         entity.EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700001800000).UtcDateTime);
         entity.UtcOffset.Should().Be(-300);
         entity.Device.Should().Be("omnipod");
@@ -144,7 +144,7 @@ public class TempBasalMapperTests
         var entity = new TempBasalEntity
         {
             Id = id,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             EndTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700001800000).UtcDateTime,
             UtcOffset = -300,
             Device = "omnipod",
@@ -188,7 +188,7 @@ public class TempBasalMapperTests
         var entity = new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             Rate = 1.0,
             Origin = "InvalidOrigin"
         };
@@ -205,7 +205,7 @@ public class TempBasalMapperTests
         var entity = new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             Rate = 1.0,
             Origin = "Manual",
             EndTimestamp = null
@@ -225,7 +225,7 @@ public class TempBasalMapperTests
             var entity = new TempBasalEntity
             {
                 Id = Guid.CreateVersion7(),
-                StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
                 Rate = 1.0,
                 Origin = origin.ToString()
             };
@@ -246,7 +246,7 @@ public class TempBasalMapperTests
         {
             Id = originalId,
             SysCreatedAt = originalCreatedAt,
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime,
             Rate = 0.5,
             Origin = "Manual"
         };
@@ -274,7 +274,7 @@ public class TempBasalMapperTests
 
         entity.Id.Should().Be(originalId);
         entity.SysCreatedAt.Should().Be(originalCreatedAt);
-        entity.StartTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
+        entity.Timestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime);
         entity.EndTimestamp.Should().Be(DateTimeOffset.FromUnixTimeMilliseconds(1700001800000).UtcDateTime);
         entity.UtcOffset.Should().Be(60);
         entity.Device.Should().Be("tandem");
@@ -438,7 +438,7 @@ public class TempBasalMapperTests
         var entity = new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             Rate = 1.0,
             Origin = "Algorithm",
             AdditionalPropertiesJson = """{"unterminated":""",
@@ -457,7 +457,7 @@ public class TempBasalMapperTests
         var entity = new TempBasalEntity
         {
             Id = Guid.CreateVersion7(),
-            StartTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
             Rate = 1.0,
             Origin = "Algorithm",
             InsulinContextJson = """{"insulinName":""",

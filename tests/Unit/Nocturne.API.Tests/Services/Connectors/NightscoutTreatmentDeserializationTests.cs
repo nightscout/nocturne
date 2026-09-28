@@ -210,4 +210,31 @@ public class NightscoutTreatmentDeserializationTests
         statuses![0].Pump!.Reservoir.Should().Be(120.5);
         statuses[0].IsCharging.Should().Be(true);
     }
+
+    [Theory]
+    [InlineData("""{"_id":"6ab400000000000000000001","id":"B5E5A1C2-0000-4000-8000-000000000001","carbs":10}""")]
+    [InlineData("""{"id":"B5E5A1C2-0000-4000-8000-000000000001","_id":"6ab400000000000000000001","carbs":10}""")]
+    public void Treatment_IsIdentifiedByItsObjectId_AndKeepsTheUploadersIdAsAPlainField(string json)
+    {
+        var treatment = JsonSerializer.Deserialize<Treatment>(json, JsonDefaults.CaseInsensitive)!;
+
+        treatment.Id.Should().Be("6ab400000000000000000001");
+        TreatmentClientId.Of(treatment).Should().Be("B5E5A1C2-0000-4000-8000-000000000001");
+    }
+
+    [Fact]
+    public void CarbEquivalents_SharingOneUploaderId_KeepTheirOwnIdentities()
+    {
+        // Trio stamps every carb equivalent of one fat/protein entry with the same `id`.
+        var json = """
+        [
+            {"_id":"6ab400000000000000000001","id":"B5E5A1C2-0000-4000-8000-000000000001","carbs":10},
+            {"_id":"6ab400000000000000000002","id":"B5E5A1C2-0000-4000-8000-000000000001","carbs":10}
+        ]
+        """;
+
+        var treatments = JsonSerializer.Deserialize<Treatment[]>(json, JsonDefaults.CaseInsensitive)!;
+
+        treatments.Select(t => t.Id).Should().Equal("6ab400000000000000000001", "6ab400000000000000000002");
+    }
 }

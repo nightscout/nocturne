@@ -81,7 +81,7 @@
   }
 </script>
 
-<div class={cn("space-y-3", className)}>
+<div class={cn("space-y-3", className)} data-testid="tracker-thresholds">
   <div class="flex items-center justify-between">
     <Label>Notification Thresholds</Label>
     <Button
@@ -110,7 +110,7 @@
       <!-- eslint-disable-next-line svelte/require-each-key -- each notification is replaced on every edit and new ones have no id, so neither the object nor an id identifies a row -->
       {#each notifications as notification, i}
         {@const config = getUrgencyConfig(notification.urgency)}
-        <div class="flex gap-2 items-start p-3 border rounded-lg bg-muted/30">
+        <div class="flex flex-wrap gap-2 items-start p-3 border rounded-lg bg-muted/30">
           <div class="flex-shrink-0 w-28">
             <Label size="sm" variant="muted" class="mb-1 block">
               Level
@@ -149,7 +149,7 @@
             />
           </div>
 
-          <div class="flex-1 min-w-0">
+          <div class="order-last basis-full min-w-0">
             <Label size="sm" variant="muted" class="mb-1 block">
               Description (optional)
             </Label>
@@ -161,7 +161,7 @@
             />
           </div>
 
-          <div class="flex-shrink-0 pt-5 flex items-center gap-1">
+          <div class="ml-auto flex-shrink-0 pt-5 flex items-center gap-1">
             <!-- New tab: this editor lives in a dialog, so in-place navigation
                  would discard the tracker edits made so far. -->
             {#if notification.alertRuleId}

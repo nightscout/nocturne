@@ -203,6 +203,7 @@
   <!-- Nested group: indented IFTTT block with eyebrow + actions row above -->
   <div
     role="group"
+    data-testid="alert-condition-group"
     class="rounded-md border bg-background p-2 space-y-2 transition-colors"
     class:opacity-50={isDragSource}
     class:ring-2={isOverGroup}
@@ -273,6 +274,7 @@
   <!-- Leaf row (possibly wrapped in NOT/SUSTAINED) -->
   <div
     role="listitem"
+    data-testid="alert-condition-row"
     class="group/row flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 transition-opacity"
     class:opacity-50={isDragSource}
     draggable="true"
@@ -315,6 +317,7 @@
         min="1"
         size="xs"
         class="w-16 text-right tabular-nums"
+        data-testid="alert-sustained-minutes"
         value={sustainedNode.sustained.minutes ?? 15}
         oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
           if (sustainedNode?.sustained) {
@@ -349,12 +352,13 @@
             size="icon-xs"
             class="shrink-0"
             aria-label="Row actions"
+            data-testid="alert-row-actions"
           >
             <MoreHorizontal class="h-4 w-4" />
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
+      <DropdownMenu.Content align="end" data-testid="alert-row-actions-menu">
         <DropdownMenu.Item onclick={() => wrapChild(parent, index, "and")}>
           <Brackets class="h-4 w-4 mr-2" /> Wrap in AND group
         </DropdownMenu.Item>

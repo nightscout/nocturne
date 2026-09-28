@@ -1,0 +1,42 @@
+name: Set up Node and pnpm
+description: Node 24 and pnpm, with the pnpm store cached and the given workspaces installed.
+
+inputs:
+  install:
+    description: >-
+      Space-separated directories to run `pnpm install --frozen-lockfile` in (each has its own
+      pnpm-lock.yaml). Their lockfiles key the store cache. Empty installs nothing and caches nothing.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # src/Web's lockfile is v11 format; the same pin as the image build in docker-publish.yml.
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+      with:
+        version: "11.5.0"
+    - id: lockfiles
+      shell: bash
+      env:
+        INSTALL: ${{ inputs.install }}
+      run: |
+        {
+          echo "paths<<EOF"
+          for dir in $INSTALL; do echo "$dir/pnpm-lock.yaml"; done
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+    - uses: actions/setup-node@v5
+      with:
+        node-version: "24"
+        cache: ${{ inputs.install != '' && 'pnpm' || '' }}
+        cache-dependency-path: ${{ steps.lockfiles.outputs.paths }}
+    - if: inputs.install != ''
+      shell: bash
+      env:
+        INSTALL: ${{ inputs.install }}
+      run: |
+        set -euo pipefail
+        for dir in $INSTALL; do
+          (cd "$dir" && pnpm install --frozen-lockfile)
+        done

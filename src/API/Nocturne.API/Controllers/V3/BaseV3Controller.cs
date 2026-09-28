@@ -199,7 +199,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
 
         // Parse date fields
         var dateFields = new HashSet<string> { "date", "srvModified", "srvCreated", "created_at" };
-        if (dateFields.Contains(field) && DateTimeOffset.TryParse(rawValue, out var dateValue))
+        if (dateFields.Contains(field) && UploaderTimestamp.TryParse(rawValue, out var dateValue))
         {
             return dateValue.ToUnixTimeMilliseconds();
         }
@@ -528,7 +528,7 @@ public abstract class BaseV3Controller<T> : ControllerBase
             var value = values.FirstOrDefault();
             if (!string.IsNullOrEmpty(value))
             {
-                if (DateTimeOffset.TryParse(value, out var result))
+                if (UploaderTimestamp.TryParse(value, out var result))
                 {
                     return result;
                 }

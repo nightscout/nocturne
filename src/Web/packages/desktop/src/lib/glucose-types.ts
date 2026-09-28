@@ -5,6 +5,8 @@ export type Reading = {
   deltaMgdl: number | null;
   direction: string | null;
   mills: number;
+  /** The server's `GlucoseStatus`; see `glucoseTileVariant`. */
+  status: string | null;
 };
 
 // Mirrors the Rust `ClockFaceSummary` returned by `list_clock_faces` — one of the linked user's

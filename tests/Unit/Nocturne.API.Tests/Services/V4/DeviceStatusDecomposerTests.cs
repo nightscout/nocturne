@@ -411,7 +411,9 @@ public class DeviceStatusDecomposerTests : IDisposable
                     && ss.Metadata.ContainsKey("name")
                     && ss.Metadata.ContainsKey("multiplier")
                     && ss.Metadata.ContainsKey("currentCorrectionRange.minValue")
-                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")),
+                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")
+                    && ss.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
+                        == StateSpanMetadataExtensions.DeviceStatusCollection),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -1859,8 +1861,8 @@ public class DeviceStatusDecomposerTests : IDisposable
                 return device;
             });
         deviceRepo
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<V4Models.Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, V4Models.Device device, WriteOrigin _, CancellationToken _) => device);
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var patientDeviceRepo = new Mock<IPatientDeviceRepository>();
         patientDeviceRepo

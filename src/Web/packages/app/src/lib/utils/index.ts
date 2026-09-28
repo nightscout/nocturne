@@ -11,7 +11,7 @@ import { canonicalDirection } from "@nocturne/ui/glucose";
 import { formatLocale } from "$lib/utils/formatting";
 import {
   Direction,
-} from "$lib/api";
+} from "$api-clients";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SvelteComponent = any;

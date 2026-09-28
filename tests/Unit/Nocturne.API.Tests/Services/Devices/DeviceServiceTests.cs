@@ -17,7 +17,7 @@ public class DeviceServiceTests
     private readonly Mock<IDeviceRepository> _mockRepository;
     private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
     private readonly DeviceService _service;
-    private readonly List<(Guid Id, DateTime LastSeen)> _updates = [];
+    private readonly List<(Guid Id, DateTime Seen)> _updates = [];
 
     public DeviceServiceTests()
     {
@@ -25,9 +25,9 @@ public class DeviceServiceTests
         _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
         _service = new DeviceService(_mockRepository.Object, _mockPatientDeviceRepository.Object, MockTenantAccessor.Create().Object);
         _mockRepository
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid id, Device d, WriteOrigin _, CancellationToken _) => _updates.Add((id, d.LastSeenTimestamp)))
-            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid id, DateTime t, WriteOrigin _, CancellationToken _) => _updates.Add((id, t)))
+            .Returns(Task.CompletedTask);
     }
 
     [Fact]
@@ -168,19 +168,15 @@ public class DeviceServiceTests
             .Setup(r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingDevice);
 
-        _mockRepository
-            .Setup(r => r.UpdateAsync(existingId, It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
-
         // Act
         var result = await _service.ResolveAsync(category, type, serial, newerMills);
 
         // Assert
         result.Should().Be(existingId);
         _mockRepository.Verify(
-            r => r.UpdateAsync(
+            r => r.WidenSeenWindowAsync(
                 existingId,
-                It.Is<Device>(d => d.LastSeenTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(newerMills).UtcDateTime),
+                DateTimeOffset.FromUnixTimeMilliseconds(newerMills).UtcDateTime,
                 It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -217,7 +213,7 @@ public class DeviceServiceTests
         // Assert
         result.Should().Be(existingId);
         _mockRepository.Verify(
-            r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -269,7 +265,7 @@ public class DeviceServiceTests
         await ResolveOmnipodAsync(3_000L);
         await ResolveOmnipodAsync(4_000L);
 
-        VerifyLastSeenUpdates(existingId, 2_000L, 3_000L, 4_000L);
+        VerifyWidenings(existingId, 2_000L, 3_000L, 4_000L);
     }
 
     [Fact]
@@ -283,7 +279,7 @@ public class DeviceServiceTests
         await ResolveOmnipodAsync(3_000L);
         await ResolveOmnipodAsync(2_000L);
 
-        VerifyLastSeenUpdates(existingId, 4_000L);
+        VerifyWidenings(existingId, 4_000L);
     }
 
     [Fact]
@@ -297,12 +293,49 @@ public class DeviceServiceTests
         await ResolveOmnipodAsync(4_000L);
         await ResolveOmnipodAsync(5_000L);
 
-        VerifyLastSeenUpdates(existingId);
+        VerifyWidenings(existingId);
     }
 
     [Fact]
     [Trait("Category", "Unit")]
-    public async Task ResolveAsync_CreatedDeviceThenLaterTime_AdvancesLastSeenFromCreatedValue()
+    public async Task ResolveAsync_CreatedDeviceThenEarlierAndLaterTimes_WidensBothBounds()
+    {
+        SetupDeviceCreation();
+
+        var createdId = await ResolveOmnipodAsync(2_000L);
+        await ResolveOmnipodAsync(1_000L);
+        await ResolveOmnipodAsync(3_000L);
+
+        VerifyWidenings(createdId!.Value, 1_000L, 3_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_NewestFirstBackfillOfNewDevice_MovesFirstSeenToEachOlderTime()
+    {
+        SetupDeviceCreation();
+
+        var createdId = await ResolveOmnipodAsync(4_000L);
+        await ResolveOmnipodAsync(3_000L);
+        await ResolveOmnipodAsync(3_500L);
+        await ResolveOmnipodAsync(1_000L);
+
+        VerifyWidenings(createdId!.Value, 3_000L, 1_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_ExistingDeviceMeetsTimeBeforeFirstSeen_WidensFirstSeen()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 5_000L, firstSeenMills: 4_000L);
+
+        await ResolveOmnipodAsync(2_000L);
+
+        VerifyWidenings(existingId, 2_000L);
+    }
+
+    private void SetupDeviceCreation()
     {
         _mockRepository
             .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
@@ -310,12 +343,6 @@ public class DeviceServiceTests
         _mockRepository
             .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Device device, WriteOrigin _, CancellationToken _) => device);
-
-        var createdId = await ResolveOmnipodAsync(2_000L);
-        await ResolveOmnipodAsync(1_000L);
-        await ResolveOmnipodAsync(3_000L);
-
-        VerifyLastSeenUpdates(createdId!.Value, 3_000L);
     }
 
     [Fact]
@@ -327,24 +354,123 @@ public class DeviceServiceTests
         await ResolveOmnipodAsync(1_000L);
 
         _mockRepository
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("transient"));
         var failed = () => ResolveOmnipodAsync(3_000L);
         await failed.Should().ThrowAsync<InvalidOperationException>();
 
         _mockRepository
-            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .Callback((Guid id, Device d, WriteOrigin _, CancellationToken _) => _updates.Add((id, d.LastSeenTimestamp)))
-            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid id, DateTime t, WriteOrigin _, CancellationToken _) => _updates.Add((id, t)))
+            .Returns(Task.CompletedTask);
         await ResolveOmnipodAsync(2_000L);
 
-        VerifyLastSeenUpdates(existingId, 2_000L);
+        VerifyWidenings(existingId, 2_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_FailedFlush_LeavesCachedLastSeenAtPersistedValue()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+        await ResolveOmnipodAsync(1_000L);
+
+        _mockRepository
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transient"));
+        var failed = async () =>
+        {
+            await using (_service.DeferLastSeen())
+                await ResolveOmnipodAsync(3_000L);
+        };
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+
+        _mockRepository
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid id, DateTime t, WriteOrigin _, CancellationToken _) => _updates.Add((id, t)))
+            .Returns(Task.CompletedTask);
+        await ResolveOmnipodAsync(2_000L);
+
+        VerifyWidenings(existingId, 2_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_OldestFirstSequence_WritesOnlyTheLatestOnceTheScopeEnds()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+
+        await using (_service.DeferLastSeen())
+        {
+            await ResolveOmnipodAsync(2_000L);
+            await ResolveOmnipodAsync(3_000L);
+            await ResolveOmnipodAsync(4_000L);
+
+            VerifyWidenings(existingId);
+        }
+
+        VerifyWidenings(existingId, 4_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_WideningBothEnds_WritesTheWidestOfEachOnceTheScopeEnds()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 5_000L, firstSeenMills: 4_000L);
+
+        await using (_service.DeferLastSeen())
+        {
+            await ResolveOmnipodAsync(3_000L);
+            await ResolveOmnipodAsync(6_000L);
+            await ResolveOmnipodAsync(2_000L);
+            await ResolveOmnipodAsync(7_000L);
+
+            VerifyWidenings(existingId);
+        }
+
+        VerifyWidenings(existingId, 7_000L, 2_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_NestedScopes_WriteWhenTheOutermostEnds()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+
+        await using (_service.DeferLastSeen())
+        {
+            await using (_service.DeferLastSeen())
+                await ResolveOmnipodAsync(2_000L);
+
+            VerifyWidenings(existingId);
+            await ResolveOmnipodAsync(3_000L);
+        }
+
+        VerifyWidenings(existingId, 3_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task DeferLastSeen_AfterTheScopeEnds_WritesEachAdvanceAgain()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+
+        await using (_service.DeferLastSeen())
+            await ResolveOmnipodAsync(2_000L);
+        await ResolveOmnipodAsync(3_000L);
+
+        VerifyWidenings(existingId, 2_000L, 3_000L);
     }
 
     private Task<Guid?> ResolveOmnipodAsync(long mills) =>
         _service.ResolveAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", mills);
 
-    private void SetupExistingDevice(Guid id, long lastSeenMills)
+    private void SetupExistingDevice(Guid id, long lastSeenMills, long firstSeenMills = 0L)
     {
         _mockRepository
             .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
@@ -354,12 +480,12 @@ public class DeviceServiceTests
                 Category = DeviceCategory.InsulinPump,
                 Type = "Omnipod DASH",
                 Serial = "ABC123",
-                FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(0L).UtcDateTime,
+                FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(firstSeenMills).UtcDateTime,
                 LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(lastSeenMills).UtcDateTime
             });
     }
 
-    private void VerifyLastSeenUpdates(Guid id, params long[] expectedMills)
+    private void VerifyWidenings(Guid id, params long[] expectedMills)
     {
         _updates.Should().Equal(expectedMills.Select(m => (id, DateTimeOffset.FromUnixTimeMilliseconds(m).UtcDateTime)));
     }

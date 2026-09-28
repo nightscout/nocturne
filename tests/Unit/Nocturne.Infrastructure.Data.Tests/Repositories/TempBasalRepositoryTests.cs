@@ -54,7 +54,7 @@ public class TempBasalRepositoryTests : IDisposable
             {
                 Id = id,
                 TenantId = tenantId,
-                StartTimestamp = start,
+                Timestamp = start,
                 EndTimestamp = end,
                 UtcOffset = 0,
                 Rate = rate,

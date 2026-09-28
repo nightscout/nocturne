@@ -316,10 +316,10 @@ public class DataOverviewService : IDataOverviewService
         var tempBasalByMonth = new Dictionary<int, double>();
         await AccumulateMonthlyTotalsAsync(
             context.TempBasals
-                .Where(e => e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0)
+                .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.TempBasal)
-                .Select(e => new { e.StartTimestamp, e.Rate, e.EndTimestamp }),
+                .Select(e => new { StartTimestamp = e.Timestamp, e.Rate, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
                 ? (r.EndTimestamp.Value - r.StartTimestamp).TotalHours
@@ -1025,13 +1025,13 @@ public class DataOverviewService : IDataOverviewService
         {
             var tempBasalRecords = await context
                 .TempBasals.Where(e =>
-                    e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0
+                    e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Rate > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
                 .ExcludeNonPrimary(context, RecordType.TempBasal)
                 .Select(e => new
                 {
-                    e.StartTimestamp,
+                    StartTimestamp = e.Timestamp,
                     e.Rate,
                     e.EndTimestamp,
                 })

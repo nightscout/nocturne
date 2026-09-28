@@ -73,13 +73,22 @@ public class ConnectorSyncService : IConnectorSyncService
         CancellationToken ct
     )
     {
+        var loggedConnectorId = SanitizeForLog(connectorId);
+
+        if (request.WindowError() is { } windowError)
+        {
+            _logger.LogWarning(
+                "Refused manual sync for connector {ConnectorId}: {WindowError}", loggedConnectorId, windowError);
+            return new SyncResult { Success = false, Message = windowError, Errors = { windowError } };
+        }
+
         var tenantId = _tenantAccessor.Context?.TenantId ?? Guid.Empty;
         using var lease = _runGuard.TryAcquire(tenantId, connectorId);
         if (lease is null)
         {
             _logger.LogInformation(
                 "Refused manual sync for connector {ConnectorId}: a sync for this connector is already running",
-                connectorId);
+                loggedConnectorId);
             return new SyncResult
             {
                 Success = false,
@@ -88,7 +97,7 @@ public class ConnectorSyncService : IConnectorSyncService
             };
         }
 
-        _logger.LogInformation("Manual sync triggered for connector {ConnectorId}", connectorId);
+        _logger.LogInformation("Manual sync triggered for connector {ConnectorId}", loggedConnectorId);
 
         try
         {
@@ -108,7 +117,7 @@ public class ConnectorSyncService : IConnectorSyncService
             if (executor is null)
             {
                 _logger.LogWarning(
-                    "Unknown or disabled connector {ConnectorId}", connectorId);
+                    "Unknown or disabled connector {ConnectorId}", loggedConnectorId);
                 return new SyncResult
                 {
                     Success = false,
@@ -124,7 +133,7 @@ public class ConnectorSyncService : IConnectorSyncService
 
             _logger.LogInformation(
                 "Manual sync for {ConnectorId} completed: Success={Success}, Message={Message}",
-                connectorId,
+                loggedConnectorId,
                 result.Success,
                 result.Message
             );
@@ -135,7 +144,7 @@ public class ConnectorSyncService : IConnectorSyncService
         {
             _logger.LogWarning(
                 "Connector {ConnectorId} is not registered (likely disabled)",
-                connectorId
+                loggedConnectorId
             );
             return new SyncResult
             {
@@ -148,9 +157,16 @@ public class ConnectorSyncService : IConnectorSyncService
             _logger.LogError(
                 ex,
                 "Error during manual sync for connector {ConnectorId}",
-                connectorId
+                loggedConnectorId
             );
             return new SyncResult { Success = false, Message = $"Sync failed: {ex.Message}" };
         }
     }
+
+    /// <summary>
+    /// The connector id arrives from the <c>{id}</c> route segment; stripping CR/LF keeps it
+    /// from forging log lines.
+    /// </summary>
+    private static string SanitizeForLog(string value) =>
+        value.Replace("\r", string.Empty).Replace("\n", string.Empty);
 }

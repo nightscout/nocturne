@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -132,6 +133,13 @@ public class EntryService : IEntryService
             () => _store.GetCurrentAsync(cancellationToken),
             cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<ModifiedSincePage<Entry>> GetEntriesModifiedSinceAsync(
+        long cursorMills,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        _store.GetModifiedSinceAsync(cursorMills, limit, cancellationToken);
 
     /// <inheritdoc />
     public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(

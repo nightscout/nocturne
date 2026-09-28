@@ -1,4 +1,4 @@
-using System.Globalization;
+using Nocturne.Core.Models;
 
 namespace Nocturne.Connectors.CareLink.Utilities;
 
@@ -8,10 +8,10 @@ public static class CareLinkTimestampParser
 
     public static double CalculatePumpOffsetMs(string pumpTimeString, long serverTimeMs)
     {
-        if (!DateTime.TryParse(pumpTimeString, CultureInfo.InvariantCulture, DateTimeStyles.None, out var pumpLocal))
+        if (!UploaderTimestamp.TryParse(pumpTimeString, out var pumpLocal))
             return 0;
 
-        var pumpAsUtcMs = new DateTimeOffset(pumpLocal, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var pumpAsUtcMs = pumpLocal.ToUnixTimeMilliseconds();
         var diffMs = pumpAsUtcMs - serverTimeMs;
 
         return Math.Round(diffMs / MsPerHour) * MsPerHour;
@@ -22,10 +22,10 @@ public static class CareLinkTimestampParser
         if (string.IsNullOrEmpty(datetime))
             return null;
 
-        if (!DateTime.TryParse(datetime, CultureInfo.InvariantCulture, DateTimeStyles.None, out var localTime))
+        if (!UploaderTimestamp.TryParse(datetime, out var localTime))
             return null;
 
-        var localMs = new DateTimeOffset(localTime, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var localMs = localTime.ToUnixTimeMilliseconds();
         var utcMs = localMs - (long)pumpOffsetMs;
 
         return DateTimeOffset.FromUnixTimeMilliseconds(utcMs).UtcDateTime;

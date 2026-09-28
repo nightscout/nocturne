@@ -4,7 +4,7 @@ using static Nocturne.Alerts.ParityCorpus.Generator.Scenarios.B;
 namespace Nocturne.Alerts.ParityCorpus.Generator.Scenarios;
 
 /// <summary>
-/// Containers: composite (and/or, short-circuit, malformed), not (inversion, missing
+/// Containers: composite (and/or, every child evaluated, malformed), not (inversion, missing
 /// child, not-over-unknown), sustained (timer lifecycle, paths), nesting, and the
 /// path-casing quirk.
 /// </summary>
@@ -59,8 +59,8 @@ public static class ContainerScenarios
             [Tick(T(0), Ctx(T(0), glucose: 65m))]);
 
         yield return Scenario(
-            "composite-short-circuit-skips-sustained",
-            "an AND short-circuits at the first false child, so a sustained child after it is neither set nor cleared — its timer survives the skipped tick",
+            "composite-and-evaluates-every-child",
+            "an AND evaluates every child whatever an earlier one returned, so a sustained child's timer runs and clears behind a false sibling, and both row orders fire on the same tick",
             [
                 Rule(1, "composite", """
                     {"operator": "and", "conditions": [
@@ -69,19 +69,29 @@ public static class ContainerScenarios
                             {"type": "trend", "trend": {"bucket": "falling"}}}}
                     ]}
                     """),
+                Rule(2, "composite", """
+                    {"operator": "and", "conditions": [
+                        {"type": "sustained", "sustained": {"minutes": 10, "child":
+                            {"type": "trend", "trend": {"bucket": "falling"}}}},
+                        {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
+                    ]}
+                    """),
             ],
             [
-                // Tick 0: both children evaluated; sustained sets its timer (trend falling), root false (sustained not yet elapsed).
-                Tick(T(0), Ctx(T(0), glucose: 65m) with { TrendBucket = "falling" }),
-                // Tick 1: glucose back above 70 -> AND short-circuits; the sustained child is skipped, timer NOT cleared.
-                Tick(T(5), Ctx(T(5), glucose: 100m) with { TrendBucket = "rising" }),
-                // Tick 2: glucose low again; sustained finds its 10-minute-old timer still set -> fires immediately.
+                // Threshold false, trend falling: the sustained child still sets its timer.
+                Tick(T(0), Ctx(T(0), glucose: 100m) with { TrendBucket = "falling" }),
+                Tick(T(5), Ctx(T(5), glucose: 100m) with { TrendBucket = "falling" }),
+                // Glucose low with the 10-minute window elapsed: both rules true.
                 Tick(T(10), Ctx(T(10), glucose: 65m) with { TrendBucket = "falling" }),
+                // Threshold false again and trend rising: the timer clears behind the false sibling.
+                Tick(T(15), Ctx(T(15), glucose: 100m) with { TrendBucket = "rising" }),
+                // Falling again: the timer restarts from zero, so neither rule is true yet.
+                Tick(T(20), Ctx(T(20), glucose: 65m) with { TrendBucket = "falling" }),
             ]);
 
         yield return Scenario(
-            "or-short-circuit-skips-sustained",
-            "an OR short-circuits at the first true child; a sustained sibling after it is not evaluated that tick",
+            "composite-or-evaluates-every-child",
+            "an OR evaluates every child after one is true, so a sustained sibling's timer starts on that tick and both row orders agree",
             [
                 Rule(1, "composite", """
                     {"operator": "or", "conditions": [
@@ -90,14 +100,19 @@ public static class ContainerScenarios
                             {"type": "trend", "trend": {"bucket": "falling"}}}}
                     ]}
                     """),
+                Rule(2, "composite", """
+                    {"operator": "or", "conditions": [
+                        {"type": "sustained", "sustained": {"minutes": 5, "child":
+                            {"type": "trend", "trend": {"bucket": "falling"}}}},
+                        {"type": "threshold", "threshold": {"direction": "below", "value": 70}}
+                    ]}
+                    """),
             ],
             [
-                // Trend falling but glucose also low: OR short-circuits at the threshold, sustained never starts.
+                // Threshold true, so the OR is true; the sustained sibling still sets its timer.
                 Tick(T(0), Ctx(T(0), glucose: 65m) with { TrendBucket = "falling" }),
-                // Glucose normal: sustained is now evaluated for the first time, sets its timer, root false.
+                // Glucose normal: the 5-minute window has elapsed, so the OR stays true.
                 Tick(T(5), Ctx(T(5), glucose: 100m) with { TrendBucket = "falling" }),
-                // Five minutes later the sustained window has elapsed: root true.
-                Tick(T(10), Ctx(T(10), glucose: 100m) with { TrendBucket = "falling" }),
             ]);
 
         yield return Scenario(

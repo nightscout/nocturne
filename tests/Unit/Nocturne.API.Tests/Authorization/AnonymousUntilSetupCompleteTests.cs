@@ -165,11 +165,19 @@ public partial class AnonymousUntilSetupCompleteTests : IClassFixture<Authentica
             .Prepend(((int)response.StatusCode).ToString())
             .Append(await response.Content.ReadAsStringAsync()));
 
-        return TraceParent().Replace(described, "<trace>");
+        return TraceId().Replace(TraceParent().Replace(described, "<trace>"), "\"traceId\":\"<trace>\"");
     }
 
     [GeneratedRegex("[0-9a-f]{2}-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")]
     private static partial Regex TraceParent();
+
+    /// <summary>
+    /// A ProblemDetails <c>traceId</c>, which is the current Activity's id when the host creates
+    /// one and <c>HttpContext.TraceIdentifier</c> when it does not: the host skips the Activity
+    /// when nothing listens, as in a Release build with no logger.
+    /// </summary>
+    [GeneratedRegex("\"traceId\":\"[^\"]*\"")]
+    private static partial Regex TraceId();
 
     /// <summary>
     /// A cookie header carrying a real session for the seeded owner, which is how the authenticated

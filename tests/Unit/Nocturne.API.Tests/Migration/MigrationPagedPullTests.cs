@@ -84,7 +84,7 @@ public class MigrationPagedPullTests
         await MigrationJobHarness.RunAsync(provider, "entries");
 
         handler.Requests.Should().HaveCount(2);
-        handler.Requests[1].Should().Contain($"find[date][$lte]={oldestMs - 1}");
+        handler.Requests[1].Should().Contain($"find[date][$lte]={oldestMs}");
     }
 
     [Fact]
@@ -104,7 +104,7 @@ public class MigrationPagedPullTests
 
         handler.Requests.Should().HaveCount(2);
         handler.Requests[1].Should().Contain(
-            $"find[created_at][$lte]={oldest.UtcDateTime.AddMilliseconds(-1):o}");
+            $"find[created_at][$lte]={oldest.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss'Z'}");
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class MigrationPagedPullTests
         var status = await MigrationJobHarness.RunAsync(provider, "entries");
 
         handler.Requests.Should().HaveCount(2);
-        handler.Requests[1].Should().Contain($"find[date][$lte]={oldestMs - 1}");
+        handler.Requests[1].Should().Contain($"find[date][$lte]={oldestMs}");
         decomposedPageSizes.Should().Equal(LegacyReadLimits.MaxMergedCount - 1, 2);
 
         var entries = status.CollectionProgress["entries"];
@@ -205,5 +205,83 @@ public class MigrationPagedPullTests
         var entries = status.CollectionProgress["entries"];
         entries.DocumentsMigrated.Should().Be(LegacyReadLimits.MaxMergedCount);
         entries.FailureReason.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task A_profile_that_cannot_be_read_is_counted_failed_and_the_other_profiles_still_migrate()
+    {
+        var handler = new NightscoutPager(
+            "/api/v1/profile.json",
+            new Queue<(HttpStatusCode, string)>([
+                (HttpStatusCode.OK, """[{"_id":"a"},{"_id":"b","store":42},{"_id":"c"}]"""),
+            ]));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "profile");
+
+        var profile = status.CollectionProgress["profile"];
+        profile.DocumentsFailed.Should().Be(1);
+        profile.DocumentsMigrated.Should().Be(2);
+        profile.FailureReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_food_that_cannot_be_read_is_counted_failed_and_the_other_foods_still_migrate()
+    {
+        var handler = new NightscoutPager(
+            "/api/v1/food.json",
+            new Queue<(HttpStatusCode, string)>([
+                (HttpStatusCode.OK, """[{"name":"apple"},{"name":"bread","foods":42},{"name":"rice"}]"""),
+            ]));
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler);
+        var status = await MigrationJobHarness.RunAsync(provider, "food");
+
+        var food = status.CollectionProgress["food"];
+        food.DocumentsFailed.Should().Be(1);
+        food.DocumentsMigrated.Should().Be(2);
+        food.FailureReason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_migration_cancelled_while_a_page_is_stored_does_not_count_that_page_failed()
+    {
+        var handler = new NightscoutPager(
+            "/api/v1/entries.json",
+            new Queue<(HttpStatusCode, string)>([
+                (HttpStatusCode.OK, """[{"date":1770000000000},{"date":1770000000001}]"""),
+            ]));
+        MigrationJob? running = null;
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler, entryOutcome: _ =>
+        {
+            running!.Cancel();
+            throw new OperationCanceledException();
+        });
+        var status = await MigrationJobHarness.RunAsync(provider, job => running = job, ["entries"]);
+
+        status.State.Should().Be(MigrationJobState.Cancelled);
+        status.CollectionProgress["entries"].DocumentsFailed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_migration_cancelled_while_a_profile_is_stored_does_not_count_that_profile_failed()
+    {
+        var handler = new NightscoutPager(
+            "/api/v1/profile.json",
+            new Queue<(HttpStatusCode, string)>([
+                (HttpStatusCode.OK, """[{"_id":"a"},{"_id":"b"}]"""),
+            ]));
+        MigrationJob? running = null;
+
+        await using var provider = MigrationJobHarness.BuildProvider(handler, profileOutcome: _ =>
+        {
+            running!.Cancel();
+            throw new OperationCanceledException();
+        });
+        var status = await MigrationJobHarness.RunAsync(provider, job => running = job, ["profile"]);
+
+        status.State.Should().Be(MigrationJobState.Cancelled);
+        status.CollectionProgress["profile"].DocumentsFailed.Should().Be(0);
     }
 }

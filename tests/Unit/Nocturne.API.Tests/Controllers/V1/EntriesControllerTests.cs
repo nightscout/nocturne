@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -739,6 +740,32 @@ public class EntriesControllerTests
         VerifyInformationLogged("re-sending stored readings", Times.Never());
     }
 
+    [Fact]
+    public async Task CreateEntries_JsonBatchWithStringTrend_ReadsEveryTrendAsANumber()
+    {
+        var body = JsonDocument.Parse("""
+            [
+                {"type": "sgv", "sgv": 120, "trend": "Flat", "direction": "NONE", "date": 1760000000000},
+                {"type": "sgv", "sgv": 125, "trend": 3, "direction": "FortyFiveUp", "date": 1760000300000}
+            ]
+            """).RootElement;
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync([]);
+
+        await _controller.CreateEntries(body);
+
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Trend).Should().Equal(4, 3);
+    }
+
     /// <summary>
     /// A batch of <paramref name="count"/> entries the server already holds, wired through the
     /// processing and duplicate stubs.
@@ -771,6 +798,25 @@ public class EntriesControllerTests
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             times);
+
+    [Theory]
+    [InlineData("""{"_id":"6ab400000000000000000001","id":"B5E5A1C2-0000-4000-8000-000000000001","sgv":120,"date":1700000000000}""")]
+    [InlineData("""{"id":"B5E5A1C2-0000-4000-8000-000000000001","_id":"6ab400000000000000000001","sgv":120,"date":1700000000000}""")]
+    public async Task CreateEntries_UploaderLowercaseId_DoesNotReplaceObjectId(string body)
+    {
+        List<Entry>? processedInput = null;
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+
+        await _controller.CreateEntries(JsonDocument.Parse(body).RootElement.Clone());
+
+        var entry = processedInput.Should().ContainSingle().Subject;
+        entry.Id.Should().Be("6ab400000000000000000001");
+        entry.AdditionalProperties!["id"].ToString().Should().Be("B5E5A1C2-0000-4000-8000-000000000001");
+    }
 
     private void StubNothingStored() => StubStoredAt();
 

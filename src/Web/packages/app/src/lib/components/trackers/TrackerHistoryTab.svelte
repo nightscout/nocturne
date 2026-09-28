@@ -26,7 +26,7 @@
 </script>
 
 <Tabs.Content value="history">
-  <Card>
+  <Card data-testid="tracker-history">
     <CardHeader>
       <CardTitle>History</CardTitle>
       <CardDescription>Completed tracker instances</CardDescription>

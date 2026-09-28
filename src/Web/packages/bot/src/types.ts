@@ -20,13 +20,16 @@ export interface BotApiClient {
   alerts: {
     /** Null when the response body is empty or its status is unmapped. */
     getActiveAlerts(signal?: AbortSignal): Promise<ActiveExcursion[] | null>;
-    /** Acknowledges every active excursion for the tenant. */
-    acknowledge(request: AcknowledgeRequest, signal?: AbortSignal): Promise<void>;
-    acknowledgeExcursion(
-      excursionId: string,
-      request: AcknowledgeRequest,
+    /**
+     * Acknowledges as the member behind the chat link, never as the bot: the
+     * API decides on that member's authority whether this stops the alert for
+     * everyone or mutes it for them alone. Call it on the link's tenant client.
+     */
+    acknowledgeAsLinkedMember(
+      linkId: string,
+      request: ChatAcknowledgeRequest,
       signal?: AbortSignal,
-    ): Promise<void>;
+    ): Promise<AcknowledgementResult>;
     markDelivered(deliveryId: string, request: MarkDeliveredRequest, signal?: AbortSignal): Promise<void>;
     markFailed(deliveryId: string, request: MarkFailedRequest, signal?: AbortSignal): Promise<void>;
     getPendingDeliveries(channelType?: string[], signal?: AbortSignal): Promise<PendingDeliveryResponse[]>;
@@ -77,9 +80,33 @@ export interface SensorGlucoseReading {
   timestamp?: string;
 }
 
-export interface AcknowledgeRequest {
-  acknowledgedBy?: string;
+export interface ChatAcknowledgeRequest {
+  /** The chat account on the link, which the API checks against it. */
+  platform: string;
+  platformUserId: string;
+  /** Null addresses every active alert of the link's tenant. */
+  excursionId: string | null;
+  acknowledgedBy: string;
 }
+
+/**
+ * Wire form of `AlertAcknowledgementOutcome` (Core): `acknowledged` stopped the
+ * alert for everyone, `muted` for the linked member only, and `closed` means
+ * it had already ended.
+ */
+export type AcknowledgementOutcome = "acknowledged" | "muted" | "closed";
+
+/**
+ * An `acknowledged` result names who the API recorded as acknowledging, which
+ * is someone other than the tapping user when `alreadyAcknowledged` is set.
+ */
+export type AcknowledgementResult =
+  | {
+      outcome: "acknowledged";
+      acknowledgedBy: string | null;
+      alreadyAcknowledged: boolean;
+    }
+  | { outcome: "muted" | "closed" };
 
 export interface ActiveExcursion {
   id?: string;

@@ -139,7 +139,7 @@ public class SoftDeleteRestoreQuadrantTests : IDisposable
     }
 
     [Fact]
-    public async Task RestoreAsync_Refuses_WhenALiveRowHoldsItsSyncKey_OnAnEntityOutsideISyncDedupable()
+    public async Task RestoreAsync_Refuses_WhenALiveRowHoldsItsSyncKey_OnATempBasal()
     {
         var deleted = await _tempBasalsA.CreateAsync(NewTempBasal(Base), WriteOrigin.Live);
         var live = await _tempBasalsA.CreateAsync(NewTempBasal(Base.AddMinutes(30)), WriteOrigin.Live);

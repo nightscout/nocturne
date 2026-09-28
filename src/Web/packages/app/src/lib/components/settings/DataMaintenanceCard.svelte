@@ -18,21 +18,22 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { satisfiesScope } from "$lib/authorization/scopes";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
 
   const isPlatformAdmin = $derived(
     page.data.isPlatformAdmin === true
   );
 
   // The two tools answer to different gates: deduplication is RequireAdmin, so it resolves to
-  // the wildcard; deleting demo data is tenant.settings. Data Quality is a page an ordinary
-  // member opens to set a sleep schedule, so neither control is offered to someone the API
-  // would refuse.
+  // the wildcard; deleting demo data is tenant.settings and refuses the demo visitor. Data
+  // Quality is a page an ordinary member opens to set a sleep schedule, so neither control is
+  // offered to someone the API would refuse.
   const effectivePermissions = $derived(
     page.data.effectivePermissions ?? []
   );
   const canDeduplicate = $derived(satisfiesScope(effectivePermissions, "*"));
   const canManageData = $derived(
-    satisfiesScope(effectivePermissions, "tenant.settings")
+    canManageConnectors(effectivePermissions, page.data.refusedAsDemoSubject)
   );
 
   let showDeduplicationDialog = $state(false);

@@ -14,7 +14,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </remarks>
 /// <seealso cref="Note"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface INoteRepository : ILegacyKeyedRepository<Note>
+public interface INoteRepository : ILegacyKeyedRepository<Note>, ISyncKeyedRepository<Note>
 {
     /// <summary>
     /// Retrieve a page of <see cref="Note"/> records filtered by time range, device, source, and origin.
