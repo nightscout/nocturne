@@ -32,6 +32,11 @@ public static class UISettingsSections
     public const string Notifications = "notifications";
 
     /// <summary>
+    /// Name of the section carrying <see cref="FeatureSettings"/>.
+    /// </summary>
+    public const string Features = "features";
+
+    /// <summary>
     /// Every section, in the order the aggregate declares them.
     /// </summary>
     public static IReadOnlyList<UISettingsSection> All { get; } =
@@ -49,7 +54,7 @@ public static class UISettingsSections
             (s, v) => s.Algorithm = (AlgorithmSettings)v
         ),
         new(
-            "features",
+            Features,
             typeof(FeatureSettings),
             s => s.Features,
             (s, v) => s.Features = (FeatureSettings)v

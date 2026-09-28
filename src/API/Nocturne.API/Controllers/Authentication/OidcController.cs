@@ -7,6 +7,7 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Services.Identity;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -625,7 +626,8 @@ public class OidcController : ControllerBase
     [AllowAnonymous]
     [AllowDuringSetup]
     [ProducesResponseType(typeof(SessionInfo), StatusCodes.Status200OK)]
-    public async Task<ActionResult<SessionInfo>> GetSession()
+    public async Task<ActionResult<SessionInfo>> GetSession(
+        [FromServices] IUnitsAndTimezoneService unitsAndTimezone, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
         if (authContext == null || !authContext.IsAuthenticated)
@@ -660,7 +662,9 @@ public class OidcController : ControllerBase
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
-                Preferences = userInfo?.Preferences,
+                Preferences = userInfo?.Preferences is { } own && authContext.TenantId.HasValue
+                    ? await unitsAndTimezone.WithTenantDefaultsAsync(own, ct)
+                    : userInfo?.Preferences,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
