@@ -21,6 +21,7 @@
     getUploaderSetup,
   } from "$api/generated/services.generated.remote";
   import { startOrResumeMigration } from "./migration-session";
+  import { describeSubmitError } from "$lib/forms/submit-error";
   import type {
     UploaderApp,
     DataSourceInfo,
@@ -137,6 +138,7 @@
   let importSettled = $state(false);
   let sourceResult = $state<SourceResult>(null);
   let migrationJobId = $state<string | undefined>(undefined);
+  let migrationStartError = $state<string | undefined>(undefined);
 
   const steps = $derived(STEPS[path]);
   const currentStep = $derived(steps[stepIndex]);
@@ -232,10 +234,13 @@
 
   async function handleMigrationConnected() {
     try {
+      migrationStartError = undefined;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
-      importResult = "running";
-    } catch {
-      // Leave migrationJobId unset; the import step shows a neutral state if no job exists.
+    } catch (err) {
+      migrationStartError = describeSubmitError(
+        err,
+        "Something went wrong while starting it."
+      );
     }
     handleNext();
   }
@@ -446,6 +451,7 @@
             {:else if activeStep?.id === "import"}
               <ImportProgress
                 jobId={migrationJobId}
+                startError={migrationStartError}
                 onProgressChange={(pct) => (importProgress = pct)}
                 onResult={(result) => (importResult = result)}
                 onSettled={() => (importSettled = true)}

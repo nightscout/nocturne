@@ -19,12 +19,15 @@
 
   let {
     jobId,
+    startError,
     onProgressChange,
     onResult,
     onSettled,
     onComplete,
   }: {
     jobId?: string;
+    /** Why the run could not be started, when that was attempted and failed. */
+    startError?: string;
     onProgressChange?: (pct: number) => void;
     /** Fires once the server reports the run ended, including a run that ended before this mounted. */
     onResult?: (result: Exclude<ImportResult, null>) => void;
@@ -95,6 +98,8 @@
     return `${seconds} sec`;
   }
 
+  const nothingToShow = $derived(error !== null && collections.length === 0);
+
   function formatCount(n: number): string {
     return formatNumber(n);
   }
@@ -123,6 +128,9 @@
       // (see the setup page's handleMigrationConnected), so a job should already
       // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
+        error = startError
+          ? `We couldn't start the import from Nightscout. ${startError} You can continue and run it later from Settings.`
+          : "No import from Nightscout is running. You can continue and start one later from Settings.";
         loading = false;
         onSettled?.();
         return;
@@ -213,7 +221,7 @@
           // itself keeps running on the server regardless of what we show here.
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
             error =
-              "We lost track of the import's progress. It is still running in the background, and you can follow it in Settings.";
+              "We lost track of the import's progress. It may still be running; check Settings to see how it ended.";
             onResult?.("running");
             onSettled?.();
             break;
@@ -286,11 +294,13 @@
       </em>
       across.
     </h1>
-    <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-      We're streaming entries, treatments, and profiles from your Nightscout
-      into Nocturne's store. You can navigate away &mdash; this continues in the
-      background.
-    </p>
+    {#if !nothingToShow}
+      <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
+        We're streaming entries, treatments, and profiles from your Nightscout
+        into Nocturne's store. This keeps running on the server even if you
+        close this page.
+      </p>
+    {/if}
   </div>
 
   {#if loading}
@@ -300,7 +310,7 @@
       />
       <p class="text-sm text-muted-foreground">Finding active migration...</p>
     </div>
-  {:else if error && !collections.length}
+  {:else if nothingToShow}
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <AlertTriangle class="h-12 w-12 text-warning" />
       <p class="text-sm text-muted-foreground">{error}</p>

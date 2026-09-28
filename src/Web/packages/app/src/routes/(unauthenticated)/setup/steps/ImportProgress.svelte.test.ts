@@ -133,7 +133,7 @@ describe("ImportProgress", () => {
 
     render(ImportProgress, { onProgressChange, onComplete: () => {} });
 
-    await expect.element(page.getByText(/0 records migrated/)).toBeVisible();
+    await expect.element(page.getByText(/No import from Nightscout is running/)).toBeVisible();
     expect(statusSpy).not.toHaveBeenCalled();
     expect(onProgressChange).not.toHaveBeenCalled();
   });
@@ -226,9 +226,21 @@ describe("ImportProgress", () => {
     render(ImportProgress, { onSettled, onComplete: () => {} });
 
     await expect.poll(() => onSettled.mock.calls.length).toBe(1);
+    await expect.element(page.getByText(/No import from Nightscout is running/)).toBeVisible();
+    await expect.element(page.getByText(/We're streaming/)).not.toBeInTheDocument();
+    await expect.element(page.getByText(/records migrated/)).not.toBeInTheDocument();
   });
 
-  it("stops blocking once status polling is lost, reporting the run as still running", async () => {
+  it("says why no run could be started instead of showing an empty import", async () => {
+    render(ImportProgress, { startError: "Your Nightscout site refused the request.", onComplete: () => {} });
+
+    await expect
+      .element(page.getByText(/We couldn't start the import from Nightscout\. Your Nightscout site refused the request\. You can continue/))
+      .toBeVisible();
+    await expect.element(page.getByText(/records migrated/)).not.toBeInTheDocument();
+  });
+
+  it("stops blocking once status polling is lost, reporting the run as possibly still running", async () => {
     statusUnreachable = true;
     const onResult = vi.fn();
     const onSettled = vi.fn();
@@ -237,6 +249,6 @@ describe("ImportProgress", () => {
 
     await expect.poll(() => onSettled.mock.calls.length, { timeout: 15000 }).toBe(1);
     expect(onResult.mock.calls).toEqual([["running"]]);
-    await expect.element(page.getByText(/still running in the background/)).toBeVisible();
+    await expect.element(page.getByText(/It may still be running; check Settings/)).toBeVisible();
   }, 20000);
 });

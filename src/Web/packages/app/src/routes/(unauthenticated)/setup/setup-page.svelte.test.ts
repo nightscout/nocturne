@@ -27,7 +27,9 @@ const { emptyStub } = vi.hoisted(() => ({
 }));
 vi.mock("./steps/TenantIdentity.svelte", emptyStub);
 vi.mock("./steps/AccountCreation.svelte", emptyStub);
-vi.mock("./steps/NightscoutConnect.svelte", emptyStub);
+vi.mock("./steps/NightscoutConnect.svelte", async () => ({
+  default: (await import("$lib/test-stubs/Complete.test-stub.svelte")).default,
+}));
 vi.mock("./steps/ImportProgress.svelte", async () => ({
   default: (await import("$lib/test-stubs/ImportProgress.test-stub.svelte")).default,
 }));
@@ -36,6 +38,7 @@ vi.mock("$lib/components/connectors/DataSourceSelectionView.svelte", emptyStub);
 vi.mock("$lib/components/connectors/ConnectorSetup.svelte", emptyStub);
 vi.mock("$lib/components/connectors/UploaderSetupView.svelte", emptyStub);
 
+import { startFromConnector } from "$api/generated/migrations.generated.remote";
 import SetupPage from "./+page@.svelte";
 
 const freshCard = () =>
@@ -183,5 +186,17 @@ describe("setup import step", () => {
     await continueButton().click();
 
     await expect.element(page.getByText("Step 04 / 04")).toBeVisible();
+  });
+
+  it("hands the import step the reason a run could not be started", async () => {
+    vi.mocked(startFromConnector).mockRejectedValueOnce(new Error("refused"));
+    render(SetupPage);
+    await migrationCard().click();
+    await continueButton().click();
+
+    await page.getByRole("button", { name: "Stub: complete" }).click();
+
+    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+    await expect.element(page.getByTestId("start-error")).not.toBeEmptyDOMElement();
   });
 });

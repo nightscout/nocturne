@@ -94,8 +94,8 @@
           some or all of your history is missing. You can see what arrived and
           try again from Settings.
         {:else if importResult === "running"}
-          Your import is still running in the background. You can follow it in
-          Settings.
+          We lost track of your import before it finished. It may still be
+          running; check Settings to see how it ended.
         {:else}
           Your Nightscout history hasn't been imported yet. You can start the
           import from Settings whenever you're ready.
