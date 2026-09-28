@@ -50,6 +50,7 @@
   import TrackerMarkers from "./markers/TrackerMarkers.svelte";
   import ChartHighlight from "./tracks/ChartHighlight.svelte";
   import ChartTooltip from "./ChartTooltip.svelte";
+  import { openDayInReview } from "./day-in-review";
 
   // Dialogs
   import TreatmentDisambiguationDialog from "./dialogs/TreatmentDisambiguationDialog.svelte";
@@ -382,7 +383,7 @@
           <ChartHighlight />
         {/snippet}
         {#snippet overlays()}
-          <ChartTooltip />
+          <ChartTooltip onTimeClick={openDayInReview} />
         {/snippet}
       </GlucoseChartShell>
     </div>

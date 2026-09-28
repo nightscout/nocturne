@@ -12,19 +12,17 @@
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    ChevronLeft,
-    ChevronRight,
-    Calendar,
-    ArrowLeft,
-    Apple,
-    ArrowUpDown,
-    ArrowUp,
-    ArrowDown,
-    Edit,
-    Filter,
-    X,
-  } from "lucide-svelte";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Apple from "@lucide/svelte/icons/apple";
+  import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import Edit from "@lucide/svelte/icons/square-pen";
+  import Filter from "@lucide/svelte/icons/funnel";
+  import X from "@lucide/svelte/icons/x";
   import { getDayInReviewData } from "./data.remote";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, formatLongDate, getUnitLabel, time } from "$lib/utils/formatting";

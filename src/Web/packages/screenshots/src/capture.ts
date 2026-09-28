@@ -260,11 +260,13 @@ async function openSession(
 
 /**
  * Runs in the page. Every entry names something that would be photographed mid-flight; an empty
- * result is the only proof the route finished loading. The theme check doubles as proof that
- * hydration finished and the server-rendered markup has been replaced by the live one.
+ * result is the only proof the route finished loading. The theme alone is no proof of hydration:
+ * mode-watcher applies it from an inline head script, before the page is live, and a prepare step
+ * that clicks earlier than hydration clicks markup with no handlers.
  */
 function unsettled(dark: boolean): string[] {
 	const reasons: string[] = [];
+	if (!('hydrated' in document.documentElement.dataset)) reasons.push('not hydrated');
 	if (document.documentElement.classList.contains('dark') !== dark) reasons.push('theme not applied');
 	if (document.fonts.status !== 'loaded') reasons.push('fonts still loading');
 	// A site that has never received a reading holds the glucose indicators' placeholder for good,

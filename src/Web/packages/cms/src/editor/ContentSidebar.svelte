@@ -4,7 +4,9 @@
   import { Badge } from '@nocturne/ui/ui/badge';
   import * as Item from '@nocturne/ui/ui/item';
   import { Separator } from '@nocturne/ui/ui/separator';
-  import { Plus, Search, FileText } from '@lucide/svelte';
+  import Plus from '@lucide/svelte/icons/plus';
+  import Search from '@lucide/svelte/icons/search';
+  import FileText from '@lucide/svelte/icons/file-text';
   import type { ContentItem } from './types.ts';
 
   let {

@@ -65,7 +65,8 @@ export function errorIssues(
  *
  * A scope refusal is usually a bare `ForbidResult`, which NSwag reports with one
  * of its own two `ApiException` messages, and an RFC-7807 refusal carrying no
- * `detail` reaches the 403 arm as its `title` — the status phrase. Only a
+ * `detail` reaches the 403 arm as its `title` — the status phrase. A query
+ * refused on a share host carries the codegen's own 401 phrase. Only a
  * `Problem(detail: …)` refusal — the per-record scope guards — puts a sentence
  * written for a person in the body. NSwag reports an undeclared status the same
  * way at any status, so a bare `BadRequest()` carries one of those two messages
@@ -81,13 +82,14 @@ export function errorIssues(
  *
  * Recognising the synthesized side is the only check that can be complete: these
  * strings are constants of a pinned client, of SvelteKit and of our own codegen,
- * whose 403 arm falls back to the status phrase. What a server may write is
+ * whose 401 and 403 arms fall back to the status phrase. What a server may write is
  * unbounded and so cannot be matched positively.
  */
 const CLIENT_WRITTEN_REASONS: readonly RegExp[] = [
   /^an unexpected server error occurred\.$/i,
   /^a server side error occurred\.$/i,
   /^forbidden$/i,
+  /^unauthorized$/i,
   /^failed to execute remote function$/i,
   /^request failed \(\d{3}\)$/i,
 ];

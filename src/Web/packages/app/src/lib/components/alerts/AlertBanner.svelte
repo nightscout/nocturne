@@ -7,7 +7,9 @@
     acknowledgeExcursion,
   } from "$api/generated/alerts.generated.remote";
   import { Button } from "$lib/components/ui/button";
-  import { AlertTriangle, BellOff, Check } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import Check from "@lucide/svelte/icons/check";
   import { time } from "$lib/utils/formatting";
   import { formatTimeSince } from "./alertTime";
   import { severity, severityLabel } from "./severity";

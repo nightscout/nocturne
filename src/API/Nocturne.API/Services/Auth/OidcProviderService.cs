@@ -208,7 +208,6 @@ public class OidcProviderService : IOidcProviderService
             DefaultRoles = provider.DefaultRoles,
             IsEnabled = provider.IsEnabled,
             DisplayOrder = provider.DisplayOrder,
-            UpdatedAt = DateTime.UtcNow,
         };
 
         _dbContext.OidcProviders.Add(entity);

@@ -25,6 +25,7 @@ public class DeviceStatus : ProcessableDocumentBase
     /// Gets or sets the MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public override string? Id { get; set; }
 
     /// <summary>

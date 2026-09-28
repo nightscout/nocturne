@@ -24,16 +24,14 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
 
-  import {
-    RefreshCw,
-    AlertCircle,
-    Wifi,
-    Sparkles,
-    Database,
-    Copy,
-    Check,
-    KeyRound,
-  } from "lucide-svelte";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Wifi from "@lucide/svelte/icons/wifi";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import Database from "@lucide/svelte/icons/database";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
+  import KeyRound from "@lucide/svelte/icons/key-round";
   import { Artwork } from "@nocturne/watercolour";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";

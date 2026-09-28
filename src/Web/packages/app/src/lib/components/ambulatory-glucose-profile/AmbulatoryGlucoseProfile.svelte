@@ -1,7 +1,7 @@
 <script lang="ts">
   import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
   import { AreaChart, Tooltip } from "layerchart";
-  import { BarChart3 } from "lucide-svelte";
+  import BarChart3 from "@lucide/svelte/icons/chart-column";
   import {
     glucoseUnits,
     timeFormat,

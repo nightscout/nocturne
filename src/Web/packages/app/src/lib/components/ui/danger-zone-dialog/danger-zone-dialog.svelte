@@ -4,7 +4,9 @@
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { AlertTriangle, Loader2, Trash2 } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
 
   interface Props {
     open: boolean;

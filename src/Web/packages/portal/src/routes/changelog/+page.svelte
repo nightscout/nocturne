@@ -3,14 +3,12 @@
     import { getChangelog, type ChangelogRelease } from "$lib/data/portal";
     import { Button } from "@nocturne/ui/ui/button";
     import { renderReleaseMarkdown } from "$lib/utils/release-markdown";
-    import {
-        ExternalLink,
-        Loader2,
-        AlertCircle,
-        RefreshCw,
-        ChevronDown,
-        Github,
-    } from "@lucide/svelte";
+    import ExternalLink from "@lucide/svelte/icons/external-link";
+    import Loader2 from "@lucide/svelte/icons/loader-circle";
+    import AlertCircle from "@lucide/svelte/icons/circle-alert";
+    import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+    import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import Github from "@nocturne/app/components/icons/GithubIcon.svelte";
 
     let releases = $state<ChangelogRelease[]>([]);
     let loading = $state(true);

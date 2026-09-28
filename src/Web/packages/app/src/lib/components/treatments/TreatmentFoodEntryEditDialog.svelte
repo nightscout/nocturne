@@ -4,7 +4,9 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Scale, Pencil, Loader2 } from "lucide-svelte";
+  import Scale from "@lucide/svelte/icons/scale";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import {
     CarbIntakeFoodInputMode,
     type TreatmentFood,

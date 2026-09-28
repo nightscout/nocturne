@@ -5,13 +5,11 @@
   import { Switch } from "$lib/components/ui/switch";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import {
-    Loader2,
-    Pencil,
-    Trash2,
-    Zap,
-    MoreHorizontal,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Zap from "@lucide/svelte/icons/zap";
+  import MoreHorizontal from "@lucide/svelte/icons/ellipsis";
   import {
     summarizeCondition,
     type SummarizeContext,

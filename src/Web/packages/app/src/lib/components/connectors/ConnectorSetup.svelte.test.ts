@@ -3,6 +3,14 @@ import { page } from "vitest/browser";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const calls = vi.hoisted(() => ({ saved: 0, activated: 0, failActivation: false }));
+const grant = vi.hoisted(() => ({
+  scopes: ["tenant.settings"] as string[],
+  refusedAsDemoSubject: false,
+}));
+
+vi.mock("$lib/api/generated/myPermissions.generated.remote", () => ({
+  getMyPermissions: () => ({ current: { ...grant }, loading: false }),
+}));
 
 vi.mock("$lib/api/generated/configurations.generated.remote", () => ({
   getAllConnectorStatus: () => ({ current: [], loading: false }),
@@ -68,6 +76,8 @@ describe("ConnectorSetup", () => {
     calls.saved = 0;
     calls.activated = 0;
     calls.failActivation = false;
+    grant.scopes = ["tenant.settings"];
+    grant.refusedAsDemoSubject = false;
   });
 
   it("hands the setup wizard back its flow once the save succeeds", async () => {
@@ -90,5 +100,42 @@ describe("ConnectorSetup", () => {
 
     expect(calls.activated).toBe(0);
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  describe("controls", () => {
+    function renderManaged() {
+      render(ConnectorSetup, {
+        props: { connectorId: "nightscout", showToggle: true },
+      });
+    }
+
+    async function expectReadOnly() {
+      await expect.element(page.getByTestId("connector-read-only")).toBeVisible();
+      expect(page.getByRole("switch").elements()).toHaveLength(0);
+      expect(page.getByRole("textbox").elements()).toHaveLength(0);
+      expect(page.getByRole("button", { name: "Save" }).elements()).toHaveLength(0);
+    }
+
+    it("offers the form and the enable switch to a member holding tenant.settings", async () => {
+      renderManaged();
+
+      await expect.element(page.getByRole("switch")).toBeVisible();
+      await expect.element(page.getByRole("textbox").first()).toBeVisible();
+      expect(page.getByTestId("connector-read-only").elements()).toHaveLength(0);
+    });
+
+    it("shows a member without tenant.settings no form and no switch", async () => {
+      grant.scopes = ["glucose.read", "treatments.readwrite"];
+      renderManaged();
+
+      await expectReadOnly();
+    });
+
+    it("shows the demo visitor no form and no switch despite its tenant.settings", async () => {
+      grant.refusedAsDemoSubject = true;
+      renderManaged();
+
+      await expectReadOnly();
+    });
   });
 });

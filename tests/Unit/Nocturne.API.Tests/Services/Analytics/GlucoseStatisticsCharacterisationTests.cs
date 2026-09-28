@@ -198,8 +198,8 @@ public class GlucoseStatisticsCharacterisationTests
     }
 
     /// <summary>
-    /// The population variance divides by the reading count, so an unguarded J-Index over an empty
-    /// series would report <see cref="double.NaN"/> from <c>0 / 0</c>.
+    /// An empty series has no mean to measure against the J-Index target, so it reports zero
+    /// rather than the mean component of whatever mean the caller passed.
     /// </summary>
     [Fact]
     public void CalculateJIndex_PinsZeroForAnEmptySeries()

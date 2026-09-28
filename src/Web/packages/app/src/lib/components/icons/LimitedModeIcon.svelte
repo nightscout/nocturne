@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ShieldAlert from "lucide-svelte/icons/shield-alert";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

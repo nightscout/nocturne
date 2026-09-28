@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -38,10 +40,14 @@ internal static class MigrationJobHarness
 
     /// <param name="entryOutcome">What the entry decomposer reports for each page; empty when omitted.</param>
     /// <param name="treatmentOutcome">What the treatment decomposer reports for each page; empty when omitted.</param>
+    /// <param name="profileOutcome">What the profile decomposer reports for each profile; empty when omitted.</param>
+    /// <param name="interceptor">Attached to every <see cref="NocturneDbContext"/> the provider creates.</param>
     public static ServiceProvider BuildProvider(
         HttpMessageHandler handler,
         Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
-        Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null)
+        Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null,
+        Func<Profile, DecompositionResult>? profileOutcome = null,
+        IInterceptor? interceptor = null)
     {
         var database = $"migration-{Guid.NewGuid():N}";
 
@@ -62,19 +68,31 @@ internal static class MigrationJobHarness
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<DeviceStatus>>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
+        var profiles = new Mock<IProfileDecomposer>();
+        profiles
+            .Setup(d => d.DecomposeAsync(It.IsAny<Profile>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Profile profile, WriteOrigin _, CancellationToken _) =>
+                profileOutcome?.Invoke(profile) ?? new DecompositionResult());
+
         var activities = new Mock<IActivityDecomposer>();
         activities
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Activity>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DecompositionResult());
 
         return new ServiceCollection()
-            .AddDbContext<NocturneDbContext>(o => o.UseInMemoryDatabase(database))
+            .AddDbContext<NocturneDbContext>(o =>
+            {
+                o.UseInMemoryDatabase(database);
+                if (interceptor is not null)
+                    o.AddInterceptors(interceptor);
+            })
             .AddScoped<ITenantAccessor, FixedTenantAccessor>()
             .AddScoped<IAuditContext, AuditContext>()
             .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(handler))
             .AddSingleton(entries.Object)
             .AddSingleton(treatments.Object)
             .AddSingleton(deviceStatuses.Object)
+            .AddSingleton(profiles.Object)
             .AddSingleton(activities.Object)
             .BuildServiceProvider();
     }
@@ -95,6 +113,8 @@ internal static class MigrationJobHarness
         IServiceProvider provider,
         Action<MigrationJob>? onCreated,
         string[] collections,
+        ILogger? logger = null,
+        string nightscoutUrl = "https://example-nightscout.invalid",
         TenantContext? owner = null)
     {
         var tenant = owner ?? NewTenant();
@@ -105,7 +125,7 @@ internal static class MigrationJobHarness
             new StartMigrationRequest
             {
                 Mode = MigrationMode.Api,
-                NightscoutUrl = "https://example-nightscout.invalid",
+                NightscoutUrl = nightscoutUrl,
                 Collections = [.. collections],
             },
             new MigrationJobInfo
@@ -115,7 +135,7 @@ internal static class MigrationJobHarness
                 CreatedAt = DateTime.UtcNow,
             },
             tenant,
-            NullLogger.Instance,
+            logger ?? NullLogger.Instance,
             provider);
 
         onCreated?.Invoke(job);

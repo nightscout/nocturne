@@ -249,7 +249,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToArrayAsync(cancellationToken);
@@ -268,7 +268,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => i.DefinitionId == definitionId && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToListAsync(cancellationToken);
@@ -332,7 +332,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
@@ -357,7 +357,7 @@ public class TrackerRepository : ITrackerRepository
         // Get active instances with lifespan defined
         var instances = await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i =>
                 ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null && i.Definition.LifespanHours != null
             )
@@ -386,7 +386,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
     }
 
@@ -425,8 +425,8 @@ public class TrackerRepository : ITrackerRepository
         _context.TrackerInstances.Add(instance);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Load the definition for the returned entity
         await _context.Entry(instance).Reference(i => i.Definition).LoadAsync(cancellationToken);
+        await _context.Entry(instance.Definition).Collection(d => d.NotificationThresholds).LoadAsync(cancellationToken);
 
         return instance;
     }
@@ -451,7 +451,7 @@ public class TrackerRepository : ITrackerRepository
     )
     {
         var instance = await _context
-            .TrackerInstances.Include(i => i.Definition)
+            .TrackerInstances.Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(i => i.Id == instanceId, cancellationToken);
 
         if (instance == null)

@@ -1,54 +1,52 @@
-import type { ComponentType } from "svelte";
-import {
-	Activity,
-	Apple,
-	BarChart3,
-	Battery,
-	Bell,
-	Building,
-	Calendar,
-	CalendarDays,
-	ChartArea,
-	ChartCandlestick,
-	ChartColumnIncreasing,
-	ChartLine,
-	CirclePlus,
-	ClipboardList,
-	Clock,
-	Cpu,
-	Database,
-	Droplet,
-	FileSearch,
-	FileText,
-	Footprints,
-	Heart,
-	House,
-	LifeBuoy,
-	Link,
-	MapPin,
-	Moon,
-	Palette,
-	Pill,
-	Plug,
-	Plus,
-	RefreshCw,
-	Ruler,
-	Shield,
-	Stethoscope,
-	Sun,
-	SunMoon,
-	Syringe,
-	Target,
-	Timer,
-	TrendingUp,
-	TriangleAlert,
-	User,
-	UserPlus,
-	Users,
-	UtensilsCrossed,
-	Wrench,
-	ZoomIn,
-} from "lucide-svelte";
+import type { Component } from "svelte";
+import Activity from "@lucide/svelte/icons/activity";
+import Apple from "@lucide/svelte/icons/apple";
+import BarChart3 from "@lucide/svelte/icons/chart-column";
+import Battery from "@lucide/svelte/icons/battery";
+import Bell from "@lucide/svelte/icons/bell";
+import Building from "@lucide/svelte/icons/building";
+import Calendar from "@lucide/svelte/icons/calendar";
+import CalendarDays from "@lucide/svelte/icons/calendar-days";
+import ChartArea from "@lucide/svelte/icons/chart-area";
+import ChartCandlestick from "@lucide/svelte/icons/chart-candlestick";
+import ChartColumnIncreasing from "@lucide/svelte/icons/chart-column-increasing";
+import ChartLine from "@lucide/svelte/icons/chart-line";
+import CirclePlus from "@lucide/svelte/icons/circle-plus";
+import ClipboardList from "@lucide/svelte/icons/clipboard-list";
+import Clock from "@lucide/svelte/icons/clock";
+import Cpu from "@lucide/svelte/icons/cpu";
+import Database from "@lucide/svelte/icons/database";
+import Droplet from "@lucide/svelte/icons/droplet";
+import FileSearch from "@lucide/svelte/icons/file-search";
+import FileText from "@lucide/svelte/icons/file-text";
+import Footprints from "@lucide/svelte/icons/footprints";
+import Heart from "@lucide/svelte/icons/heart";
+import House from "@lucide/svelte/icons/house";
+import LifeBuoy from "@lucide/svelte/icons/life-buoy";
+import Link from "@lucide/svelte/icons/link";
+import MapPin from "@lucide/svelte/icons/map-pin";
+import Moon from "@lucide/svelte/icons/moon";
+import Palette from "@lucide/svelte/icons/palette";
+import Pill from "@lucide/svelte/icons/pill";
+import Plug from "@lucide/svelte/icons/plug";
+import Plus from "@lucide/svelte/icons/plus";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import Ruler from "@lucide/svelte/icons/ruler";
+import Shield from "@lucide/svelte/icons/shield";
+import Stethoscope from "@lucide/svelte/icons/stethoscope";
+import Sun from "@lucide/svelte/icons/sun";
+import SunMoon from "@lucide/svelte/icons/sun-moon";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Target from "@lucide/svelte/icons/target";
+import Timer from "@lucide/svelte/icons/timer";
+import TrendingUp from "@lucide/svelte/icons/trending-up";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import User from "@lucide/svelte/icons/user";
+import UserPlus from "@lucide/svelte/icons/user-plus";
+import Users from "@lucide/svelte/icons/users";
+import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
+import Wrench from "@lucide/svelte/icons/wrench";
+import ZoomIn from "@lucide/svelte/icons/zoom-in";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export type CommandPaletteGroup =
@@ -65,7 +63,7 @@ export interface CommandPaletteItem {
 	group: CommandPaletteGroup;
 	description?: string;
 	keywords?: string[];
-	icon?: ComponentType;
+	icon?: Component;
 	shortcut?: string;
 	/** Scope required to see this item (e.g. "audit.read"). */
 	scope?: string;

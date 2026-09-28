@@ -20,16 +20,14 @@
   import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import {
-    Eye,
-    EyeOff,
-    Loader2,
-    Save,
-    RotateCcw,
-    ChevronDown,
-    ChevronRight,
-    Lock,
-  } from "lucide-svelte";
+  import Eye from "@lucide/svelte/icons/eye";
+  import EyeOff from "@lucide/svelte/icons/eye-off";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Save from "@lucide/svelte/icons/save";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Lock from "@lucide/svelte/icons/lock";
   import type {
     JsonSchema,
     JsonSchemaProperty,

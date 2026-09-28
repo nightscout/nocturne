@@ -4,15 +4,13 @@ using Nocturne.Core.Models.Alerts;
 namespace Nocturne.API.Services.Alerts.Evaluators;
 
 /// <summary>
-/// Replay-only helper that evaluates every leaf in a <see cref="ConditionNode"/> tree
-/// regardless of any short-circuit logic the live composite/NOT/sustained evaluators
-/// would apply. Used by the replay path to record per-leaf truth at every tick so the
+/// Replay-only helper that evaluates every leaf in a <see cref="ConditionNode"/> tree on
+/// its own. Used by the replay path to record per-leaf truth at every tick so the
 /// editor can render a leaf-by-leaf transition log.
 /// </summary>
 /// <remarks>
-/// The live <c>CompositeEvaluator</c> short-circuits AND/OR — once an AND sees a false
-/// child it skips the rest. That's correct for firing decisions but loses the per-leaf
-/// truth needed by the replay UI. This runner walks the tree in the same pre-order DFS
+/// The live evaluators return only the root's truth: a leaf under NOT or SUSTAINED is
+/// seen through its wrapper, never on its own. This runner walks the tree in the same pre-order DFS
 /// as <see cref="LeafIdentity.AssignLeafIds"/>, evaluates each leaf in isolation against
 /// the same context, and returns the booleans keyed by leaf id. Composite/Not/Sustained
 /// are not looked up via the registry — the runner only descends into their children

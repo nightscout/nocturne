@@ -159,6 +159,9 @@ public interface IStateSpanRepository
 
     /// <summary>
     /// Returns state spans grouped by category for multiple categories within an optional time range.
+    /// Open spans that started before <paramref name="from"/> are limited per category. An exclusive
+    /// category returns its newest span from before <paramref name="from"/> only if that span is open,
+    /// per state for PumpMode. Other categories return at most 10.
     /// </summary>
     /// <param name="categories">The set of <see cref="StateSpanCategory"/> values to query.</param>
     /// <param name="from">Optional start of the time range (inclusive).</param>
@@ -196,6 +199,18 @@ public interface IStateSpanRepository
     /// <param name="source">The data source to scope to.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<DateTime?> GetLatestActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the latest <c>StartTimestamp</c> across the state spans written by
+    /// <paramref name="source"/> outside the activity categories, or <c>null</c> when that source
+    /// has written none. Activity spans are left out because they carry their own watermark
+    /// (<see cref="GetLatestActivityTimestampAsync"/>) and would otherwise advance this one.
+    /// </summary>
+    /// <param name="source">The data source to scope to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<DateTime?> GetLatestNonActivityTimestampAsync(
         string source,
         CancellationToken cancellationToken = default);
 

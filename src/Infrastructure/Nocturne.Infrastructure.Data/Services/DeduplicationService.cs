@@ -323,16 +323,25 @@ public class DeduplicationService : IDeduplicationService
     /// Whether the tight path refuses to put a record from <paramref name="source"/> into a group
     /// already holding <paramref name="groupSources"/>. Two same-amount records from one source
     /// seconds apart are two doses, and the tight window's tolerances cannot tell them from one, so
-    /// a group takes at most one record per source. The exception is a source that
-    /// <see cref="DataSources.EmitsDuplicateEvents"/>, whose twins must still merge.
+    /// a group takes at most one record per source. The exception is a source and record type that
+    /// <see cref="EmitsDuplicateEvents"/>, whose twins must still merge.
     /// <see cref="DeduplicationInput.UnknownDataSource"/> counts as one source like any other.
     /// Only dose-like record types are guarded; see <see cref="TracksTightSources"/>.
     /// </summary>
     internal static bool RefusesTightJoin(RecordType recordType, string source, IReadOnlySet<string>? groupSources) =>
         TracksTightSources(recordType)
-        && !DataSources.EmitsDuplicateEvents(source)
+        && !EmitsDuplicateEvents(recordType, source)
         && groupSources is not null
         && groupSources.Contains(source);
+
+    /// <summary>
+    /// True for a source and record type known to report one event twice under two ids. Tidepool
+    /// imports some carb events as two food records. It is not known to double any other type, so
+    /// two Tidepool boluses of one size at one second are two doses and stay apart.
+    /// </summary>
+    private static bool EmitsDuplicateEvents(RecordType recordType, string source) =>
+        recordType == RecordType.CarbIntake
+        && string.Equals(source, DataSources.TidepoolConnector, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether <see cref="RefusesTightJoin"/> applies to this record type. Sensor glucose and state
@@ -1602,16 +1611,18 @@ public class DeduplicationService : IDeduplicationService
     /// <summary>
     /// One record type's <see cref="DeduplicateAllAsync"/> phase. <see cref="Name"/> is reported as
     /// <see cref="DeduplicationProgress.CurrentPhase"/>, so callers observe it.
-    /// <see cref="RecordIds"/> is every id a link of this type can point at: the type's rows with
-    /// <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record is
-    /// still linked. Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
+    /// <see cref="OrphanedLinks"/> is this type's links whose record id is absent from the type's rows
+    /// with <see cref="NocturneDbContext.SoftDeleteFilterKey"/> lifted, because a soft-deleted record
+    /// is still linked. It is a correlated <c>NOT EXISTS</c>: a negated <c>Contains</c> translates to
+    /// <c>NOT IN</c>, which PostgreSQL rescans per link once the record table outgrows work_mem.
+    /// Tenant isolation stays on, which the <see cref="ITenantScoped"/> constraint on
     /// <see cref="Phase{TEntity}"/> is what guarantees.
     /// </summary>
     private sealed record TypePhase(
         RecordType RecordType,
         string Name,
         Func<NocturneDbContext, CancellationToken, Task<int>> CountAsync,
-        Func<NocturneDbContext, IQueryable<Guid>> RecordIds,
+        Func<NocturneDbContext, IQueryable<LinkedRecordEntity>> OrphanedLinks,
         PhaseRunner RunAsync);
 
     /// <summary>
@@ -1635,9 +1646,15 @@ public class DeduplicationService : IDeduplicationService
             recordType,
             name,
             (context, ct) => set(context).CountAsync(ct),
-            context => set(context)
-                .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
-                .Select(id),
+            context =>
+            {
+                var key = RecordTypeKeys.Key(recordType);
+                var recordIds = set(context)
+                    .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+                    .Select(id);
+                return context.LinkedRecords
+                    .Where(lr => lr.RecordType == key && !recordIds.Any(recordId => recordId == lr.RecordId));
+            },
             (service, totalRecords, startOffset, progress, ct) => service.DeduplicateTypeAsync(
                 recordType,
                 set(service._context),
@@ -1681,7 +1698,7 @@ public class DeduplicationService : IDeduplicationService
             static c => c.BolusCalculations, static bc => bc.Timestamp,
             static bc => bc.Id, static bc => bc.DataSource, MatchCriteriaMapper.From),
         Phase(RecordType.TempBasal, "TempBasals",
-            static c => c.TempBasals, static t => t.StartTimestamp,
+            static c => c.TempBasals, static t => t.Timestamp,
             static t => t.Id, static t => t.DataSource, MatchCriteriaMapper.From),
         Phase(RecordType.StateSpan, "StateSpans",
             static c => c.StateSpans, static s => s.StartTimestamp,
@@ -1713,16 +1730,15 @@ public class DeduplicationService : IDeduplicationService
 
         foreach (var phase in TypePhases)
         {
-            var recordTypeStr = RecordTypeKeys.Key(phase.RecordType);
-            var recordIds = phase.RecordIds(context);
-
-            deleted += await context.LinkedRecords
-                .Where(lr => lr.RecordType == recordTypeStr && !recordIds.Contains(lr.RecordId))
-                .ExecuteDeleteAsync(ct);
+            deleted += await phase.OrphanedLinks(context).ExecuteDeleteAsync(ct);
         }
 
         return deleted;
     }
+
+    internal static IQueryable<LinkedRecordEntity> OrphanedLinksOf(
+        NocturneDbContext context, RecordType recordType) =>
+        TypePhases.Single(p => p.RecordType == recordType).OrphanedLinks(context);
 
     /// <inheritdoc />
     public async Task<DeduplicationResult> DeduplicateAllAsync(

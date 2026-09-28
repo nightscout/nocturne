@@ -421,6 +421,57 @@ public abstract class BaseConnectorService<TConfig> : IConnectorService<TConfig>
     }
 
     /// <summary>
+    ///     One treatment type's resume point: as <see cref="CalculateTreatmentSinceTimestampAsync(TConfig)"/>,
+    ///     over the newest stored record of <paramref name="type"/> alone, for a source that fetches
+    ///     each treatment type separately and so can leave one behind while its siblings advance.
+    /// </summary>
+    protected async Task<DateTime?> CalculateTreatmentSinceTimestampAsync(TConfig config, SyncDataType type)
+    {
+        var latest = await FetchLatestWatermarkAsync(
+            () => _publisher!.Treatments.GetLatestTreatmentTimestampAsync(type, ConnectorSource), type.ToString());
+
+        return CalculateSinceFromTimestamp(latest, type.ToString());
+    }
+
+    /// <summary>
+    ///     The state-span family's resume point: the most recent stored state span outside the
+    ///     activity categories (minus the catch-up overlap), or <see cref="InitialSyncFloor"/> when
+    ///     none is stored.
+    /// </summary>
+    protected async Task<DateTime?> CalculateStateSpanSinceTimestampAsync(TConfig config)
+    {
+        var latest = await FetchLatestWatermarkAsync(
+            () => _publisher!.Metadata.GetLatestStateSpanTimestampAsync(ConnectorSource), "state spans");
+
+        return CalculateSinceFromTimestamp(latest, "state spans");
+    }
+
+    /// <summary>
+    ///     Reads one resume watermark, re-throwing a failed read for the reason given in
+    ///     <see cref="FetchLatestEntryTimestampAsync"/>.
+    /// </summary>
+    private async Task<DateTime?> FetchLatestWatermarkAsync(Func<Task<DateTime?>> read, string dataType)
+    {
+        if (_publisher is not { IsAvailable: true })
+            return null;
+
+        try
+        {
+            return await read();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to fetch latest {DataType} timestamp for {ConnectorSource}",
+                dataType,
+                ConnectorSource
+            );
+            throw;
+        }
+    }
+
+    /// <summary>
     ///     The lower bound a family crawls from, given the caller's bound and the family's own
     ///     resume point: whichever of the two reaches further back, where an open resume point
     ///     reaches back without limit and an absent caller bound leaves the resume point standing.

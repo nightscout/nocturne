@@ -16,7 +16,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromSensorGlucose(SensorGlucose sg)
     {
-        var entry = CreateBase(sg.Id, sg.LegacyId, sg.Timestamp, sg.ModifiedAt, sg.Device, sg.App, sg.DataSource, sg.UtcOffset);
+        var entry = CreateBase(sg.Id, sg.LegacyId, sg.Timestamp, sg.CreatedAt, sg.ModifiedAt, sg.Device, sg.App, sg.DataSource, sg.UtcOffset);
         entry.Type = "sgv";
         entry.Mgdl = sg.Mgdl;
         entry.Sgv = sg.Mgdl;
@@ -36,7 +36,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromMeterGlucose(MeterGlucose mg)
     {
-        var entry = CreateBase(mg.Id, mg.LegacyId, mg.Timestamp, mg.ModifiedAt, mg.Device, mg.App, mg.DataSource, mg.UtcOffset);
+        var entry = CreateBase(mg.Id, mg.LegacyId, mg.Timestamp, mg.CreatedAt, mg.ModifiedAt, mg.Device, mg.App, mg.DataSource, mg.UtcOffset);
         entry.Type = "mbg";
         entry.Mgdl = mg.Mgdl;
         entry.Mbg = mg.Mgdl;
@@ -48,7 +48,7 @@ public static class EntryProjection
     /// </summary>
     public static Entry FromCalibration(Calibration cal)
     {
-        var entry = CreateBase(cal.Id, cal.LegacyId, cal.Timestamp, cal.ModifiedAt, cal.Device, cal.App, cal.DataSource, cal.UtcOffset);
+        var entry = CreateBase(cal.Id, cal.LegacyId, cal.Timestamp, cal.CreatedAt, cal.ModifiedAt, cal.Device, cal.App, cal.DataSource, cal.UtcOffset);
         entry.Type = "cal";
         entry.IsCalibration = true;
         entry.Slope = cal.Slope;
@@ -61,6 +61,7 @@ public static class EntryProjection
         Guid id,
         string? legacyId,
         DateTime timestamp,
+        DateTime createdAt,
         DateTime modifiedAt,
         string? device,
         string? app,
@@ -79,6 +80,7 @@ public static class EntryProjection
             UtcOffset = utcOffset,
             IsValid = true,
             SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
         };
     }
 }

@@ -2,7 +2,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { Loader2 } from "lucide-svelte";
+	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { claimLink } from "$lib/api/generated/chatIdentities.generated.remote";
 	import { describeSubmitError } from "$lib/forms/submit-error";
 

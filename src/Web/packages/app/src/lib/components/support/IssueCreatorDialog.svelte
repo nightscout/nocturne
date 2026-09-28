@@ -6,21 +6,19 @@
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Bug,
-    Lightbulb,
-    Database,
-    CreditCard,
-    Upload,
-    X,
-    ExternalLink,
-    Loader2,
-    CheckCircle,
-    AlertTriangle,
-    Eye,
-    ArrowLeft,
-    Copy,
-  } from "lucide-svelte";
+  import Bug from "@lucide/svelte/icons/bug";
+  import Lightbulb from "@lucide/svelte/icons/lightbulb";
+  import Database from "@lucide/svelte/icons/database";
+  import CreditCard from "@lucide/svelte/icons/credit-card";
+  import Upload from "@lucide/svelte/icons/upload";
+  import X from "@lucide/svelte/icons/x";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Eye from "@lucide/svelte/icons/eye";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Copy from "@lucide/svelte/icons/copy";
   import { submitIssue, getFallbackUrl, getSupportDiagnostics } from "$lib/api/support.remote";
   import { readApiFailures, type ApiFailure } from "$lib/support/api-failure-log";
   import { buildDiagnosticInfo } from "$lib/support/diagnostic-info";

@@ -8,14 +8,12 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Item } from "$lib/components/ui/item";
-  import {
-    ChartLine,
-    Users,
-    Bell,
-    BookOpen,
-    Plug,
-    ArrowRight,
-  } from "lucide-svelte";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import Users from "@lucide/svelte/icons/users";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import Plug from "@lucide/svelte/icons/plug";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
 
   let {
     path,

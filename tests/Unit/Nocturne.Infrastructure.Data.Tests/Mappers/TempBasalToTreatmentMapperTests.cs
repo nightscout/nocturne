@@ -49,6 +49,20 @@ public class TempBasalToTreatmentMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void ToTreatment_ReportsServerClockNotEventTime()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.2);
+        tempBasal.CreatedAt = tempBasal.StartTimestamp.AddDays(2);
+        tempBasal.ModifiedAt = tempBasal.StartTimestamp.AddDays(3);
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.SrvCreated.Should().Be(new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        result.SrvModified.Should().Be(new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ToTreatment_SuspendedOrigin_RateIsZero()
     {
         // Arrange - suspended origin should always result in rate=0 regardless of Rate value

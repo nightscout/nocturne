@@ -6,7 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { HeartPulse } from "lucide-svelte";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,

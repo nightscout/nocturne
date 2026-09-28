@@ -1,5 +1,10 @@
 <script lang="ts">
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import {
+    currentGlucoseStatus,
+    refreshSummaryOnNewReading,
+  } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
@@ -13,7 +18,7 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { beforeNavigate } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
@@ -23,7 +28,7 @@
   import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
@@ -59,6 +64,7 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
+  refreshSummaryOnNewReading(() => realtimeStore.currentEntry?.mills);
   createAuthStore(); // Initialize auth store in context
 
   // Suppress the auth interceptor's login redirect for guest and public
@@ -74,6 +80,7 @@
   let commandPaletteOpen = $state(false);
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const coachRouter: CoachRouter = { beforeNavigate, goto };
 
   // Title/Favicon service for dynamic updates
   const titleFaviconService = getTitleFaviconService();
@@ -153,6 +160,10 @@
   );
   const isDisconnected = $derived(connection.isDisconnected);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
+  const glucoseStatus = $derived(
+    currentGlucoseStatus(realtimeStore.currentEntry?.mills)
+  );
+  const glucoseVariant = $derived(getGlucoseTileVariant(glucoseStatus));
 
   $effect(() => {
     // Determine if we should update
@@ -170,7 +181,7 @@
         dir,
         delta,
         titleFaviconSettings,
-        defaultSettings.thresholds,
+        glucoseVariant,
         isDisconnected,
         isStale,
         title
@@ -178,8 +189,15 @@
     }
   });
 
-  // Handle alarm events for flashing
-  // When an alarm is active, start flashing with the alarm's visual settings
+  const alarmVisual: AlarmVisualSettings = {
+    screenFlash: true,
+    flashColor: "",
+    flashIntervalMs: 1000,
+    persistentBanner: true,
+    wakeScreen: true,
+    showEmergencyContacts: false,
+  };
+
   $effect(() => {
     const bg = realtimeStore.currentBG;
     if (
@@ -187,34 +205,12 @@
       titleFaviconSettings.enabled &&
       titleFaviconSettings.flashOnAlarm
     ) {
-      const status = titleFaviconService.getGlucoseStatus(
-        bg,
-        defaultSettings.thresholds
-      );
-      if (status === "very-low" || status === "very-high") {
-        // Start flashing with default alarm visual settings if not already flashing
-        if (!titleFaviconService.isFlashing) {
-          const alarmVisual: AlarmVisualSettings = {
-            screenFlash: true,
-            flashColor: "",
-            flashIntervalMs: 1000,
-            persistentBanner: true,
-            wakeScreen: true,
-            showEmergencyContacts: false,
-          };
-          titleFaviconService.startFlashing(alarmVisual);
-        }
-      } else {
-        // Stop flashing if no longer in alarm state
-        if (titleFaviconService.isFlashing) {
-          titleFaviconService.stopFlashing();
-        }
-      }
+      titleFaviconService.syncAlarmFlash(glucoseStatus, alarmVisual);
     }
   });
 </script>
 
-<CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
+<CoachMarkProvider adapter={coachMarkAdapter} {sequences} router={coachRouter}>
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>

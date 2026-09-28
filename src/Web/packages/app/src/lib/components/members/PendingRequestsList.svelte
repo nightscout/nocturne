@@ -4,7 +4,12 @@
   import * as Card from "$lib/components/ui/card";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
-  import { UserPlus, Check, X, Loader2, Clock, MessageSquare } from "lucide-svelte";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
+  import Check from "@lucide/svelte/icons/check";
+  import X from "@lucide/svelte/icons/x";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Clock from "@lucide/svelte/icons/clock";
+  import MessageSquare from "@lucide/svelte/icons/message-square";
   import type {
     MembershipRequestDto,
     TenantRoleDto,

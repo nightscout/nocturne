@@ -3,7 +3,7 @@
   import { Chart, Calendar, Layer, Tooltip } from "layerchart";
   import { scaleThreshold } from "d3-scale";
   import { timeMonth, timeWeek, timeMonths } from "d3-time";
-  import { Loader2 } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { formatGlucoseValue, formatMonthLabel, formatWeekdayDate } from "$lib/utils/formatting";

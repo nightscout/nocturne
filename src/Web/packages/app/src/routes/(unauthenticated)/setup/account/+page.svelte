@@ -1,6 +1,8 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
-  import { AlertTriangle, Loader2, UserPlus } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,

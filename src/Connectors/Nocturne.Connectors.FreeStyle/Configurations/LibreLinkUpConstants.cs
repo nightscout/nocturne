@@ -33,6 +33,21 @@ public static class LibreLinkUpConstants
     }
 
     /// <summary>
+    ///     The <c>status</c> LibreLinkUp's login answers a refused credential with. The refusal
+    ///     arrives as HTTP 200 (<c>{"status":2,"error":{"message":"notAuthenticated"}}</c>), so the
+    ///     status line alone reads as a malformed success.
+    /// </summary>
+    public const int RejectedCredentialStatus = 2;
+
+    /// <summary>
+    ///     The <c>status</c> LibreLinkUp's login answers with, as HTTP 200, when the account must act
+    ///     in the LibreLinkUp app first — accept new terms of use or a privacy policy
+    ///     (<c>{"status":4,"data":{"step":{"type":"tou",...}}}</c>). No retry clears it; only the
+    ///     account holder can, like <see cref="RejectedCredentialStatus"/>.
+    /// </summary>
+    public const int AccountActionRequiredStatus = 4;
+
+    /// <summary>
     ///     Configuration specific to LibreLinkUp
     /// </summary>
     public static class Configuration

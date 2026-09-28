@@ -93,6 +93,7 @@ public class MutationAuditInterceptorTests : IDisposable
 {
     private readonly DbConnection _connection;
     private readonly DbContextOptions<NocturneDbContext> _contextOptions;
+    private readonly DbContextOptions<NocturneDbContext> _interceptedOptions;
     private readonly MutationAuditInterceptor _interceptor;
     private readonly Guid _tenantId = Guid.CreateVersion7();
 
@@ -111,6 +112,10 @@ public class MutationAuditInterceptorTests : IDisposable
             .EnableSensitiveDataLogging()
             .Options;
 
+        _interceptedOptions = new DbContextOptionsBuilder<NocturneDbContext>(_contextOptions)
+            .AddInterceptors(_interceptor)
+            .Options;
+
         using var context = CreateContext();
         context.Database.EnsureCreated();
 
@@ -124,17 +129,24 @@ public class MutationAuditInterceptorTests : IDisposable
     /// not audited, so tests that assert an audit row need an actor. Tests covering the
     /// system/unattributed paths pass their own context (or null) explicitly.
     /// </summary>
-    private TestNocturneDbContext CreateContext() => CreateContext(new StubAuditContext
+    private TestNocturneDbContext CreateContext() => CreateContext(DefaultAuditContext());
+
+    /// <summary>A context whose saves run through the real interceptor pipeline.</summary>
+    private TestNocturneDbContext CreateInterceptedContext() =>
+        CreateContext(DefaultAuditContext(), _interceptedOptions);
+
+    private static StubAuditContext DefaultAuditContext() => new()
     {
         SubjectId = Guid.CreateVersion7(),
         SubjectName = "tester",
         AuthType = "SessionCookie",
         Endpoint = "POST /api/v4/treatments"
-    });
+    };
 
-    private TestNocturneDbContext CreateContext(IAuditContext? auditContext)
+    private TestNocturneDbContext CreateContext(
+        IAuditContext? auditContext, DbContextOptions<NocturneDbContext>? options = null)
     {
-        var context = new TestNocturneDbContext(_contextOptions);
+        var context = new TestNocturneDbContext(options ?? _contextOptions);
         context.TenantId = _tenantId;
         context.AuditContext = auditContext;
         return context;
@@ -757,6 +769,69 @@ public class MutationAuditInterceptorTests : IDisposable
 
         context2.Entry(tracked).Property("DeletedByUser").CurrentValue.Should().NotBeNull();
         context2.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task FailedSave_RetriedOnSameContext_WritesOneAuditRowPerChange()
+    {
+        var existing = new TestAuditableEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId };
+        using (var seed = CreateContext())
+        {
+            seed.TestAuditables.Add(existing);
+            await seed.SaveChangesAsync();
+        }
+
+        using var context = CreateInterceptedContext();
+        var created = new TestAuditableEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, Name = "Kept" };
+        var duplicate = new TestAuditableEntity { Id = existing.Id, TenantId = _tenantId, Name = "Clash" };
+        context.TestAuditables.AddRange(created, duplicate);
+
+        var failedSave = () => context.SaveChangesAsync();
+        await failedSave.Should().ThrowAsync<DbUpdateException>();
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+
+        context.Entry(duplicate).State = EntityState.Detached;
+        await context.SaveChangesAsync();
+
+        using var verify = CreateContext();
+        var rows = await verify.MutationAuditLog.ToListAsync();
+        rows.Should().ContainSingle();
+        rows[0].EntityId.Should().Be(created.Id);
+        rows[0].Action.Should().Be("create");
+    }
+
+    [Fact]
+    public async Task CancelledSave_LeavesNoAuditRowsTracked()
+    {
+        using var context = CreateInterceptedContext();
+        var entity = new TestAuditableEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId };
+        context.TestAuditables.Add(entity);
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var cancelledSave = () => context.SaveChangesAsync(cts.Token);
+        await cancelledSave.Should().ThrowAsync<OperationCanceledException>();
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+        context.Entry(entity).State.Should().Be(EntityState.Added);
+    }
+
+    [Fact]
+    public async Task ConcurrencyFailedSave_LeavesNoAuditRowsTracked()
+    {
+        using var context = CreateInterceptedContext();
+        var missing = new TestAuditableEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId };
+        context.TestAuditables.Attach(missing).State = EntityState.Modified;
+        var created = new TestAuditableEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId };
+        context.TestAuditables.Add(created);
+
+        var failedSave = () => context.SaveChangesAsync();
+        await failedSave.Should().ThrowAsync<DbUpdateConcurrencyException>();
+
+        context.ChangeTracker.Entries<MutationAuditLogEntity>()
+            .Should().NotContain(e => e.State == EntityState.Added);
     }
 
     /// <summary>

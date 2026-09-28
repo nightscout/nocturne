@@ -134,7 +134,10 @@ pub async fn begin_device_flow(
         .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Device authorization failed ({}).", oauth_error(resp).await));
+        return Err(format!(
+            "Device authorization failed ({}).",
+            oauth_error(resp).await
+        ));
     }
 
     let body: DeviceAuthResponse = resp
@@ -220,7 +223,8 @@ pub async fn await_authorization(
 /// credential (never linked, or the refresh grant was rejected — re-link needed);
 /// `TokenError::Transient` means the refresh should be retried later.
 pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String), TokenError> {
-    let creds = load().ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
+    let creds = load()
+        .ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
     if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
         return Ok((creds.api_url, creds.access_token));
     }
@@ -230,7 +234,8 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
     let lock = REFRESH_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
     let _guard = lock.lock().await;
 
-    let creds = load().ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
+    let creds = load()
+        .ok_or_else(|| TokenError::NotLinked("Not linked to a Nocturne server yet.".to_string()))?;
     if now_unix() < creds.expires_at_unix - REFRESH_SKEW_SECS {
         return Ok((creds.api_url, creds.access_token));
     }
@@ -250,7 +255,11 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
         .send()
         .await
         .map_err(|e| {
-            TokenError::Transient(format!("Could not reach {}: {}", creds.api_url, crate::error_chain(&e)))
+            TokenError::Transient(format!(
+                "Could not reach {}: {}",
+                creds.api_url,
+                crate::error_chain(&e)
+            ))
         })?;
 
     if !resp.status().is_success() {
@@ -262,7 +271,9 @@ pub async fn get_valid_token(client: &reqwest::Client) -> Result<(String, String
                 "Token refresh was rejected ({}); please link again.",
                 describe_oauth(&e)
             )),
-            Ok(e) => TokenError::Transient(format!("Token refresh failed ({}).", describe_oauth(&e))),
+            Ok(e) => {
+                TokenError::Transient(format!("Token refresh failed ({}).", describe_oauth(&e)))
+            }
             Err(_) => TokenError::Transient(format!("Token refresh failed (HTTP {status}).")),
         });
     }
@@ -388,7 +399,10 @@ async fn register_client(client: &reqwest::Client, api_url: &str) -> Result<Stri
         .map_err(|e| format!("Could not reach {api_url}: {}", crate::error_chain(&e)))?;
 
     if !resp.status().is_success() {
-        return Err(format!("Client registration failed ({}).", oauth_error(resp).await));
+        return Err(format!(
+            "Client registration failed ({}).",
+            oauth_error(resp).await
+        ));
     }
 
     let body: RegisterResponse = resp
@@ -435,7 +449,8 @@ fn load() -> Option<StoredCreds> {
 }
 
 fn store(creds: &StoredCreds) -> Result<(), String> {
-    let secret = serde_json::to_string(creds).map_err(|e| format!("Could not serialize credentials: {e}"))?;
+    let secret = serde_json::to_string(creds)
+        .map_err(|e| format!("Could not serialize credentials: {e}"))?;
     keyring_entry()?
         .set_password(&secret)
         .map_err(|e| format!("Could not save credentials: {e}"))

@@ -1,8 +1,4 @@
 import type { ClientSettings } from '$lib/stores/serverSettings.js';
-import {
-	FALLBACK_GLUCOSE_THRESHOLDS,
-	toStatusThresholds,
-} from '$lib/constants/glucose-thresholds';
 
 export function getDefaultSettings(): ClientSettings {
 	return {
@@ -33,7 +29,6 @@ export function getDefaultSettings(): ClientSettings {
 		heartbeat: 60,
 		baseURL: '',
 		authDefaultRoles: 'readable',
-		thresholds: toStatusThresholds(FALLBACK_GLUCOSE_THRESHOLDS),
 		demoMode: {
 			enabled: false,
 			realTimeUpdates: false,

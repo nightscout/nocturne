@@ -18,7 +18,8 @@
   import { fly } from 'svelte/transition';
   import { flip } from 'svelte/animate';
   import { cubicOut } from 'svelte/easing';
-  import { ChevronUp, ChevronDown } from 'lucide-svelte';
+  import ChevronUp from '@lucide/svelte/icons/chevron-up';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
   import { Button } from '$lib/components/ui/button';
   import { bgRange } from '$lib/utils/formatting';
   import { PrintMode } from '$lib/components/charts/print/print-mode.svelte';

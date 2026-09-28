@@ -2,7 +2,7 @@
 	import commands from '../../../commands/toolbar-commands.ts';
 	import * as DropdownMenu from '@nocturne/ui/ui/dropdown-menu';
 	import { Toggle } from '@nocturne/ui/ui/toggle';
-	import AlignLeft from '@lucide/svelte/icons/align-left';
+	import AlignLeft from '@lucide/svelte/icons/text-align-start';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { Editor } from '@tiptap/core';
 	import EdraToolTip from '../EdraToolTip.svelte';

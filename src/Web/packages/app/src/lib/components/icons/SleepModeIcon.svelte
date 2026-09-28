@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Moon from "lucide-svelte/icons/moon";
+  import Moon from "@lucide/svelte/icons/moon";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import RotateCcw from "lucide-svelte/icons/rotate-ccw";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "$lib/components/ui/button";
   import { time } from "$lib/utils/formatting";
 

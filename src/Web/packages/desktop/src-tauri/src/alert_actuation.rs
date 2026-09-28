@@ -213,7 +213,8 @@ pub async fn run(app: tauri::AppHandle, refresh_tx: mpsc::Sender<()>) {
 
         let session_device_id = match &device_id {
             Some(id) => id.clone(),
-            None => match register_install(&client, &server, &token, &mut install_id, &label).await {
+            None => match register_install(&client, &server, &token, &mut install_id, &label).await
+            {
                 Ok(id) => {
                     NEEDS_RELINK.store(false, Ordering::SeqCst);
                     device_id = Some(id.clone());
@@ -280,7 +281,9 @@ async fn register_install(
     let capabilities = device_capabilities::current().advertised();
     let mut regenerated = false;
     loop {
-        match client_devices::register(client, server, token, install_id, label, &capabilities).await {
+        match client_devices::register(client, server, token, install_id, label, &capabilities)
+            .await
+        {
             Ok(id) => return Ok(id),
             Err(e) => {
                 eprintln!("alert actuation: register: {e}");
@@ -350,7 +353,10 @@ async fn run_session(
                 // Catch up immediately: readings may have arrived while disconnected, before the
                 // Subscribe on this connection took effect.
                 let _ = refresh_tx.try_send(());
-                (Some(spawn_signalr(conn, tx, refresh_tx.clone())), SESSION_SECS)
+                (
+                    Some(spawn_signalr(conn, tx, refresh_tx.clone())),
+                    SESSION_SECS,
+                )
             }
             Err(e) => {
                 eprintln!("alert actuation: SignalR connect failed, falling back to polling: {e}");
@@ -361,8 +367,17 @@ async fn run_session(
     let mut end = SessionEnd::Recycle;
 
     // Reconcile immediately on (re)connect, reusing the token already resolved for `connect`.
-    if ends_session(reconcile_with(app, client, device_id, state, runtime, Some((server, token))).await)
-    {
+    if ends_session(
+        reconcile_with(
+            app,
+            client,
+            device_id,
+            state,
+            runtime,
+            Some((server, token)),
+        )
+        .await,
+    ) {
         end = SessionEnd::InvalidateRegistration;
     } else {
         let mut ticker = tokio::time::interval(Duration::from_secs(RECONCILE_SECS));
@@ -584,7 +599,11 @@ fn reconcile_effects(
     enabled: DeviceCapabilitySettings,
 ) -> ReconcileEffects {
     let wanted_notify = wanted(intents, enabled.notify, DeviceActionIntent::wants_notify);
-    let wanted_flash = wanted(intents, enabled.tray_flash, DeviceActionIntent::wants_tray_flash);
+    let wanted_flash = wanted(
+        intents,
+        enabled.tray_flash,
+        DeviceActionIntent::wants_tray_flash,
+    );
 
     let mut effects = ReconcileEffects::default();
 
@@ -650,7 +669,7 @@ fn clear_actuations(state: &mut ActuationState) {
     state.flashing.clear();
 }
 
-/// Shows the toast for `intent`, wiring the Acknowledge button to the ack endpoint. The ack context
+/// Shows the toast for `intent`, wiring its action button to the ack endpoint. The ack context
 /// carries no token — the toast can outlive it; a fresh one is resolved at click time.
 fn show_toast(intent: &DeviceActionIntent, server: &str, runtime: &tokio::runtime::Handle) {
     let ack = AckContext {
@@ -678,12 +697,17 @@ mod tests {
 
     fn intent(id: &str, active: bool, acked: bool, caps: &[&str]) -> DeviceActionIntent {
         DeviceActionIntent {
-            intent: if active { "opened".into() } else { "resolved".into() },
+            intent: if active {
+                "opened".into()
+            } else {
+                "resolved".into()
+            },
             excursion_id: id.into(),
             rule_name: "r".into(),
             severity: "warning".into(),
             capabilities: caps.iter().map(|c| c.to_string()).collect(),
             acknowledged: acked,
+            acknowledges_for_everyone: None,
             glucose_value: None,
             trend: None,
         }
@@ -705,21 +729,41 @@ mod tests {
     fn new_excursion_toasts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents, all_enabled()).toasted_ids(), vec!["a"]);
+        assert_eq!(
+            reconcile_effects(&mut state, &intents, all_enabled()).toasted_ids(),
+            vec!["a"]
+        );
         // Same active state on the next reconcile → no new toast.
-        assert!(reconcile_effects(&mut state, &intents, all_enabled()).toast.is_empty());
+        assert!(reconcile_effects(&mut state, &intents, all_enabled())
+            .toast
+            .is_empty());
     }
 
     #[test]
     fn resolved_excursion_clears_and_can_reopen() {
         let mut state = ActuationState::default();
-        reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled());
+        reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[NOTIFY_CAPABILITY])],
+            all_enabled(),
+        );
         // Resolved → removed from the notified set.
-        assert!(reconcile_effects(&mut state, &[intent("a", false, false, &[NOTIFY_CAPABILITY])], all_enabled()).toast.is_empty());
+        assert!(reconcile_effects(
+            &mut state,
+            &[intent("a", false, false, &[NOTIFY_CAPABILITY])],
+            all_enabled()
+        )
+        .toast
+        .is_empty());
         assert!(!state.notified.contains("a"));
         // Re-open of the same id toasts again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled()).toasted_ids(),
+            reconcile_effects(
+                &mut state,
+                &[intent("a", true, false, &[NOTIFY_CAPABILITY])],
+                all_enabled()
+            )
+            .toasted_ids(),
             vec!["a"]
         );
     }
@@ -727,7 +771,16 @@ mod tests {
     #[test]
     fn acknowledged_excursion_is_not_actuated() {
         let mut state = ActuationState::default();
-        let fx = reconcile_effects(&mut state, &[intent("a", true, true, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])], all_enabled());
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent(
+                "a",
+                true,
+                true,
+                &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+            )],
+            all_enabled(),
+        );
         assert!(fx.toast.is_empty());
         assert!(fx.flash_start.is_empty());
         assert!(!state.notified.contains("a"));
@@ -738,14 +791,20 @@ mod tests {
     fn closed_while_offline_produces_nothing() {
         // The companion was offline for the whole excursion; the snapshot is empty on reconnect.
         let mut state = ActuationState::default();
-        assert_eq!(reconcile_effects(&mut state, &[], all_enabled()), ReconcileEffects::default());
+        assert_eq!(
+            reconcile_effects(&mut state, &[], all_enabled()),
+            ReconcileEffects::default()
+        );
     }
 
     #[test]
     fn tray_flash_starts_once_then_is_deduped() {
         let mut state = ActuationState::default();
         let intents = vec![intent("a", true, false, &[TRAY_FLASH_CAPABILITY])];
-        assert_eq!(reconcile_effects(&mut state, &intents, all_enabled()).flash_start, vec!["a".to_string()]);
+        assert_eq!(
+            reconcile_effects(&mut state, &intents, all_enabled()).flash_start,
+            vec!["a".to_string()]
+        );
         // Same active state next reconcile → no restart (don't re-flash every 30s poll).
         let fx = reconcile_effects(&mut state, &intents, all_enabled());
         assert!(fx.flash_start.is_empty());
@@ -755,14 +814,27 @@ mod tests {
     #[test]
     fn tray_flash_stops_when_excursion_leaves_active_set() {
         let mut state = ActuationState::default();
-        reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])], all_enabled());
+        reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])],
+            all_enabled(),
+        );
         // Resolved → flash stops and the dedup record clears.
-        let fx = reconcile_effects(&mut state, &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])], all_enabled());
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent("a", false, false, &[TRAY_FLASH_CAPABILITY])],
+            all_enabled(),
+        );
         assert_eq!(fx.flash_stop, vec!["a".to_string()]);
         assert!(!state.flashing.contains("a"));
         // Re-open flashes again.
         assert_eq!(
-            reconcile_effects(&mut state, &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])], all_enabled()).flash_start,
+            reconcile_effects(
+                &mut state,
+                &[intent("a", true, false, &[TRAY_FLASH_CAPABILITY])],
+                all_enabled()
+            )
+            .flash_start,
             vec!["a".to_string()]
         );
     }
@@ -772,7 +844,12 @@ mod tests {
         let mut state = ActuationState::default();
         let fx = reconcile_effects(
             &mut state,
-            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
+            &[intent(
+                "a",
+                true,
+                false,
+                &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+            )],
             all_enabled(),
         );
         assert_eq!(fx.toasted_ids(), vec!["a"]);
@@ -782,7 +859,11 @@ mod tests {
     #[test]
     fn notify_only_intent_does_not_flash() {
         let mut state = ActuationState::default();
-        let fx = reconcile_effects(&mut state, &[intent("a", true, false, &[NOTIFY_CAPABILITY])], all_enabled());
+        let fx = reconcile_effects(
+            &mut state,
+            &[intent("a", true, false, &[NOTIFY_CAPABILITY])],
+            all_enabled(),
+        );
         assert_eq!(fx.toasted_ids(), vec!["a"]);
         assert!(fx.flash_start.is_empty());
         assert!(!state.flashing.contains("a"));
@@ -797,8 +878,16 @@ mod tests {
         let mut state = ActuationState::default();
         let fx = reconcile_effects(
             &mut state,
-            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
-            DeviceCapabilitySettings { notify: false, tray_flash: true },
+            &[intent(
+                "a",
+                true,
+                false,
+                &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+            )],
+            DeviceCapabilitySettings {
+                notify: false,
+                tray_flash: true,
+            },
         );
         assert!(fx.toast.is_empty());
         assert!(!state.notified.contains("a"));
@@ -809,7 +898,12 @@ mod tests {
     #[test]
     fn disabling_a_capability_withdraws_what_it_is_already_actuating() {
         let mut state = ActuationState::default();
-        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])];
+        let intents = vec![intent(
+            "a",
+            true,
+            false,
+            &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+        )];
         reconcile_effects(&mut state, &intents, all_enabled());
         assert!(state.flashing.contains("a"));
 
@@ -818,7 +912,10 @@ mod tests {
         let fx = reconcile_effects(
             &mut state,
             &intents,
-            DeviceCapabilitySettings { notify: true, tray_flash: false },
+            DeviceCapabilitySettings {
+                notify: true,
+                tray_flash: false,
+            },
         );
         assert_eq!(fx.flash_stop, vec!["a".to_string()]);
         assert!(!state.flashing.contains("a"));
@@ -830,8 +927,16 @@ mod tests {
         let mut state = ActuationState::default();
         let fx = reconcile_effects(
             &mut state,
-            &[intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])],
-            DeviceCapabilitySettings { notify: false, tray_flash: false },
+            &[intent(
+                "a",
+                true,
+                false,
+                &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+            )],
+            DeviceCapabilitySettings {
+                notify: false,
+                tray_flash: false,
+            },
         );
         assert_eq!(fx, ReconcileEffects::default());
         assert!(state.notified.is_empty());
@@ -845,7 +950,10 @@ mod tests {
         reconcile_effects(
             &mut state,
             &intents,
-            DeviceCapabilitySettings { notify: false, tray_flash: true },
+            DeviceCapabilitySettings {
+                notify: false,
+                tray_flash: true,
+            },
         );
         let fx = reconcile_effects(&mut state, &intents, all_enabled());
         assert_eq!(fx.toasted_ids(), vec!["a"]);
@@ -854,7 +962,12 @@ mod tests {
     #[test]
     fn withdraw_all_clears_state_and_next_reconcile_reactuates() {
         let mut state = ActuationState::default();
-        let intents = vec![intent("a", true, false, &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY])];
+        let intents = vec![intent(
+            "a",
+            true,
+            false,
+            &[NOTIFY_CAPABILITY, TRAY_FLASH_CAPABILITY],
+        )];
         reconcile_effects(&mut state, &intents, all_enabled());
         assert!(state.notified.contains("a"));
         assert!(state.flashing.contains("a"));
@@ -872,8 +985,14 @@ mod tests {
 
     #[test]
     fn register_errors_classify_by_status() {
-        assert_eq!(classify_register_error(Some(409)), RegisterRecovery::RegenerateId);
-        assert_eq!(classify_register_error(Some(403)), RegisterRecovery::NeedsRelink);
+        assert_eq!(
+            classify_register_error(Some(409)),
+            RegisterRecovery::RegenerateId
+        );
+        assert_eq!(
+            classify_register_error(Some(403)),
+            RegisterRecovery::NeedsRelink
+        );
         assert_eq!(classify_register_error(Some(500)), RegisterRecovery::Retry);
         // No response at all (network) is transient.
         assert_eq!(classify_register_error(None), RegisterRecovery::Retry);
@@ -882,10 +1001,15 @@ mod tests {
     #[test]
     fn device_scope_check_requires_both_scopes() {
         let full: Vec<String> = ["glucose.read", "device.notify", "device.actuate"]
-            .iter().map(|s| s.to_string()).collect();
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!(has_device_scopes(&full));
         // A pre-upgrade grant (read scopes only) lacks them.
-        let stale: Vec<String> = ["glucose.read", "therapy.read"].iter().map(|s| s.to_string()).collect();
+        let stale: Vec<String> = ["glucose.read", "therapy.read"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         assert!(!has_device_scopes(&stale));
         // One of the two is not enough.
         let partial: Vec<String> = ["device.notify"].iter().map(|s| s.to_string()).collect();
@@ -920,14 +1044,22 @@ mod tests {
         let m = mirror("someone-else", "n1");
         assert!(!should_surface_notification(&m, Some("me"), &mut dedup));
         // A drop for the wrong user must not consume the id — the correct user could still get it.
-        assert!(should_surface_notification(&mirror("me", "n1"), Some("me"), &mut dedup));
+        assert!(should_surface_notification(
+            &mirror("me", "n1"),
+            Some("me"),
+            &mut dedup
+        ));
     }
 
     #[test]
     fn notification_dropped_when_subject_unknown() {
         // Unparseable token → subject None → fail closed.
         let mut dedup = NotificationDedup::default();
-        assert!(!should_surface_notification(&mirror("me", "n1"), None, &mut dedup));
+        assert!(!should_surface_notification(
+            &mirror("me", "n1"),
+            None,
+            &mut dedup
+        ));
     }
 
     // ── interruptible backoff ─────────────────────────────────────────────────────────────

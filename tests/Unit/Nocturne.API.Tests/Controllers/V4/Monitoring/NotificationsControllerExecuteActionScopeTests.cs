@@ -17,16 +17,16 @@ namespace Nocturne.API.Tests.Controllers.V4.Monitoring;
 /// read-only member or the desktop Companion can acknowledge a firing alert, but the action it
 /// guards is a dispatcher: <c>InAppNotificationService.ExecuteActionAsync</c> routes on the
 /// notification's type to whichever <c>INotificationActionHandler</c> is registered, and those
-/// handlers mutate their own domains — <c>TrackerSuggestionActionHandler</c>'s <c>accept</c>
-/// completes and restarts tracker instances. So a caller admitted only by <c>device.notify</c>
+/// handlers mutate their own domains — <c>MealMatchActionHandler</c>'s <c>dismiss</c>
+/// rewrites the connector food entry's status. So a caller admitted only by <c>device.notify</c>
 /// reaches the dispatcher for an <c>alert.firing</c> notification and nothing else.
 /// </summary>
 [Trait("Category", "Unit")]
 public class NotificationsControllerExecuteActionScopeTests
 {
-    /// <summary><c>TrackerSuggestionActionHandler.NotificationType</c>, a property rather than a
+    /// <summary><c>MealMatchActionHandler.NotificationType</c>, a property rather than a
     /// constant, so it is repeated here to be usable in <see cref="InlineDataAttribute"/>.</summary>
-    private const string TrackerSuggestionType = "tracker.suggested_match";
+    private const string MealMatchType = "meal_matching.suggested_match";
 
     private static readonly Guid Subject = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
@@ -73,15 +73,15 @@ public class NotificationsControllerExecuteActionScopeTests
     public async Task DeviceNotifyOnly_OnANonAlertNotification_IsForbiddenWithoutDispatching()
     {
         var id = Guid.CreateVersion7();
-        NotificationIsOfType(id, TrackerSuggestionType);
+        NotificationIsOfType(id, MealMatchType);
         // Arranged to succeed, so a lost narrowing shows up as the dispatch it would allow rather
         // than as the 404 an unstubbed dispatcher returns.
-        ActionSucceeds(id, "accept");
+        ActionSucceeds(id, "dismiss");
 
-        var result = await CreateController(DeviceNotifyOnly).ExecuteAction(id, "accept");
+        var result = await CreateController(DeviceNotifyOnly).ExecuteAction(id, "dismiss");
 
         result.Should().BeOfType<ForbidResult>(
-            "device.notify buys the excursion acknowledgement, not the tracker handler's accept");
+            "device.notify buys the excursion acknowledgement, not the meal-match handler's dismiss");
         _notifications.Verify(
             s => s.ExecuteActionAsync(
                 It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
@@ -119,7 +119,7 @@ public class NotificationsControllerExecuteActionScopeTests
     }
 
     [Theory]
-    [InlineData(TrackerSuggestionType, "accept")]
+    [InlineData(MealMatchType, "dismiss")]
     [InlineData(InAppProvider.NotificationType, InAppProvider.AckActionId)]
     public async Task AlertsReadWrite_DispatchesEveryNotificationType(string type, string actionId)
     {

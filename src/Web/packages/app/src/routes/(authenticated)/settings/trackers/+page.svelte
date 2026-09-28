@@ -19,20 +19,19 @@
     ReservoirReportDialog,
     type TrackerNotification,
   } from "$lib/components/trackers";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
   import ActiveTrackersTab from "$lib/components/trackers/ActiveTrackersTab.svelte";
   import TrackerHistoryTab from "$lib/components/trackers/TrackerHistoryTab.svelte";
   import TrackerDefinitionsTab from "$lib/components/trackers/TrackerDefinitionsTab.svelte";
   import TrackerPresetsTab from "$lib/components/trackers/TrackerPresetsTab.svelte";
   import TrackerEditorDialog from "$lib/components/trackers/TrackerEditorDialog.svelte";
-  import {
-    Timer,
-    AlertTriangle,
-    History,
-    Settings2,
-    Bookmark,
-    Loader2,
-    Activity,
-  } from "lucide-svelte";
+  import Timer from "@lucide/svelte/icons/timer";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import History from "@lucide/svelte/icons/history";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Bookmark from "@lucide/svelte/icons/bookmark";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Activity from "@lucide/svelte/icons/activity";
   import { tick } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -119,10 +118,12 @@
   let formDashboardVisibility = $state<DashboardVisibility>(
     DashboardVisibility.Always
   );
-  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Public);
+  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Private);
   let formMode = $state<TrackerMode>(TrackerMode.Duration);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
+  let formTriggerEventTypes = $state<string[]>([]);
+  let formTriggerNotesContains = $state("");
 
   // Helper to convert API format to notifications array
   function definitionToNotifications(
@@ -239,42 +240,14 @@
 
   // Get time remaining for instance
   function getTimeRemaining(instance: TrackerInstanceDto): number | undefined {
-    const def = definitions.find((d) => d.id === instance.definitionId);
-    if (!def || !def.lifespanHours || instance.ageHours === undefined)
-      return undefined;
-    return def.lifespanHours - instance.ageHours;
+    if (!instance.expectedEndAt) return undefined;
+    return (Date.parse(instance.expectedEndAt) - Date.now()) / (60 * 60 * 1000);
   }
 
-  // Get notification level for instance
   function getInstanceLevel(
     instance: TrackerInstanceDto
   ): NotificationUrgency | null {
-    const def = definitions.find((d) => d.id === instance.definitionId);
-    if (!def || !instance.ageHours || !def.notificationThresholds) return null;
-
-    // Find the highest urgency threshold that the age exceeds
-    let highestUrgency: NotificationUrgency | null = null;
-    let highestLevel = -1;
-
-    const urgencyOrder: Record<NotificationUrgency, number> = {
-      [NotificationUrgency.Info]: 0,
-      [NotificationUrgency.Warn]: 1,
-      [NotificationUrgency.Hazard]: 2,
-      [NotificationUrgency.Urgent]: 3,
-    };
-
-    for (const threshold of def.notificationThresholds) {
-      if (threshold.hours && instance.ageHours >= threshold.hours) {
-        const level =
-          urgencyOrder[threshold.urgency ?? NotificationUrgency.Info];
-        if (level > highestLevel) {
-          highestLevel = level;
-          highestUrgency = threshold.urgency ?? NotificationUrgency.Info;
-        }
-      }
-    }
-
-    return highestUrgency;
+    return reachedUrgency(instance, Date.now());
   }
 
   // Level styling
@@ -319,10 +292,12 @@
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
-    formVisibility = TrackerVisibility.Public;
+    formVisibility = TrackerVisibility.Private;
     formMode = TrackerMode.Duration;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
+    formTriggerEventTypes = [];
+    formTriggerNotesContains = "";
     isDefinitionDialogOpen = true;
   }
 
@@ -343,10 +318,12 @@
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
-    formVisibility = def.visibility ?? TrackerVisibility.Public;
+    formVisibility = def.visibility ?? TrackerVisibility.Private;
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
+    formTriggerEventTypes = [...(def.triggerEventTypes ?? [])];
+    formTriggerNotesContains = def.triggerNotesContains ?? "";
     isDefinitionDialogOpen = true;
   }
 
@@ -593,6 +570,8 @@
   bind:formMode
   bind:formStartEventType
   bind:formCompletionEventType
+  bind:formTriggerEventTypes
+  bind:formTriggerNotesContains
   {categoryLabels}
   {loadData}
 />

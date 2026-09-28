@@ -1,4 +1,4 @@
-//! Renders every Lucide icon in `scratchpad/lucide-icons.json` at Small and
+//! Renders every Lucide icon in `tests/fixtures/lucide-icons.json` at Small and
 //! Large on light and dark grounds, and prints element/subpath/point counts
 //! with build and render timings:
 //!
@@ -120,9 +120,9 @@ fn main() {
 
     let json = fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../scratchpad/lucide-icons.json"
+        "/tests/fixtures/lucide-icons.json"
     ))
-    .expect("scratchpad/lucide-icons.json");
+    .expect("tests/fixtures/lucide-icons.json");
     let data: BTreeMap<String, serde_json::Value> = serde_json::from_str(&json).expect("icon map");
     let names: Vec<String> = data
         .keys()

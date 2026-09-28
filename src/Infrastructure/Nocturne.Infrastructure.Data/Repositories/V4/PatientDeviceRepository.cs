@@ -203,10 +203,10 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
+    public async Task<BulkRestoreResult<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, ct)).Select(PatientDeviceMapper.ToDomainModel);
+        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, nameof(PatientDevice), ct)).Map(PatientDeviceMapper.ToDomainModel);
     }
 
     /// <inheritdoc />

@@ -20,7 +20,12 @@
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Label } from "$lib/components/ui/label";
-  import { CheckCircle2, Copy, Download, ExternalLink, KeyRound, Monitor } from "lucide-svelte";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Download from "@lucide/svelte/icons/download";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Monitor from "@lucide/svelte/icons/monitor";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
   // Stable rolling release that always holds the current installers (see desktop-release.yml).

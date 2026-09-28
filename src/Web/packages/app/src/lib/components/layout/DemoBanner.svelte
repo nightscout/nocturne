@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FlaskConical } from "lucide-svelte";
+  import FlaskConical from "@lucide/svelte/icons/flask-conical";
   import { Banner } from "$lib/components/ui/banner";
 
   interface Props {

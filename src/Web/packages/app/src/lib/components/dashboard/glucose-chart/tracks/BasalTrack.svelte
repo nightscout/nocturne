@@ -11,7 +11,7 @@
     getChartContext,
   } from "layerchart";
   import { curveStepAfter } from "d3";
-  import { BasalDeliveryOrigin } from "$lib/api";
+  import { BasalDeliveryOrigin } from "$api-clients";
   import { getGlucoseChartContext } from "../chart-context.svelte";
   import TrackAxis from "./TrackAxis.svelte";
   import TrackLabel from "./TrackLabel.svelte";

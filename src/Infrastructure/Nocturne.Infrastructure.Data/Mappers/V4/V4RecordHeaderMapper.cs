@@ -19,7 +19,6 @@ internal static class V4RecordHeaderMapper
         where TEntity : V4TimeSeriesEntityBase
     {
         entity.Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id;
-        entity.SysUpdatedAt = DateTime.UtcNow;
         UpdateHeader(entity, model);
         return entity;
     }

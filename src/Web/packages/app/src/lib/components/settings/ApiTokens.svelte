@@ -7,16 +7,14 @@
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import TokenScopeSelector from "./TokenScopeSelector.svelte";
-  import {
-    KeyRound,
-    Plus,
-    Trash2,
-    Clock,
-    Copy,
-    Check,
-    AlertTriangle,
-    Loader2,
-  } from "lucide-svelte";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list as listGrants,

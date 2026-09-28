@@ -100,7 +100,10 @@ mod tests {
             parse("nocturne-connect://link?server=https%3A%2F%2Fdemo.nocturne.run"),
             Err(MISSING_PARTS)
         );
-        assert_eq!(parse("nocturne-connect://link?token=abc123"), Err(MISSING_PARTS));
+        assert_eq!(
+            parse("nocturne-connect://link?token=abc123"),
+            Err(MISSING_PARTS)
+        );
         assert_eq!(
             parse("nocturne-connect://link?server=https%3A%2F%2Fdemo.nocturne.run&token="),
             Err(MISSING_PARTS)
@@ -109,7 +112,10 @@ mod tests {
 
     #[test]
     fn rejects_a_non_http_server_scheme() {
-        assert_eq!(parse(&code("file%3A%2F%2F%2FC%3A%2Fwindows")), Err(BAD_SERVER));
+        assert_eq!(
+            parse(&code("file%3A%2F%2F%2FC%3A%2Fwindows")),
+            Err(BAD_SERVER)
+        );
         assert_eq!(parse(&code("javascript%3Aalert(1)")), Err(BAD_SERVER));
         assert_eq!(parse(&code("data%3Atext%2Fhtml%2Chi")), Err(BAD_SERVER));
     }
@@ -121,10 +127,9 @@ mod tests {
 
     #[test]
     fn last_duplicated_parameter_wins() {
-        let parsed = parse(
-            "nocturne-connect://link?server=https%3A%2F%2Fa.example&token=one&token=two",
-        )
-        .unwrap();
+        let parsed =
+            parse("nocturne-connect://link?server=https%3A%2F%2Fa.example&token=one&token=two")
+                .unwrap();
         assert_eq!(parsed.token, "two");
         assert_eq!(parsed.server_url, "https://a.example");
     }

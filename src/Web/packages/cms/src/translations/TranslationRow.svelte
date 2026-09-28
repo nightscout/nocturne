@@ -2,7 +2,7 @@
 	import { Badge } from '@nocturne/ui/ui/badge';
 	import { Button } from '@nocturne/ui/ui/button';
 	import { Textarea } from '@nocturne/ui/ui/textarea';
-	import { RotateCcw } from '@lucide/svelte';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import type { TranslationMessage } from './po';
 
 	interface Props {

@@ -8,14 +8,15 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import * as Select from "$lib/components/ui/select";
-  import ArrowLeft from "lucide-svelte/icons/arrow-left";
-  import GitCompareArrows from "lucide-svelte/icons/git-compare-arrows";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import GitCompareArrows from "@lucide/svelte/icons/git-compare-arrows";
   import { getCgmComparison, getReportsAnalysis } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import PairedGlucoseScatter from "$lib/components/reports/cgm-comparison/PairedGlucoseScatter.svelte";
   import { bg, bgDelta, bgLabel } from "$lib/utils/formatting";
   import { setReportPrintMeta } from "$lib/components/reports/print/report-print.svelte";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
 
   setReportPrintMeta(() => ({ title: "CGM Comparison" }));
 
@@ -66,6 +67,9 @@
 
   const comparison = $derived(query?.current);
   const metrics = $derived(comparison?.metrics);
+  const comparisonError = $derived(
+    query?.error ? remoteErrorMessage(query.error, "The comparison could not be loaded.") : null
+  );
 
   const toleranceOptions = [5, 10, 15];
 
@@ -165,10 +169,10 @@
             Pick two different devices to compare.
           </CardContent>
         </Card>
-      {:else if query?.error}
+      {:else if comparisonError}
         <Card>
-          <CardContent variant="muted" class="pt-6">
-            The comparison could not be loaded.
+          <CardContent variant="muted" class="pt-6" role="alert">
+            {comparisonError}
           </CardContent>
         </Card>
       {:else if comparison}

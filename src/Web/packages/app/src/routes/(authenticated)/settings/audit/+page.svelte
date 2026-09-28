@@ -8,13 +8,11 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    ScrollText,
-    Settings2,
-    Loader2,
-    Info,
-    X,
-  } from "lucide-svelte";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Info from "@lucide/svelte/icons/info";
+  import X from "@lucide/svelte/icons/x";
   import {
     getMutationAuditLog,
     getReadAccessAuditLog,

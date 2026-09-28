@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -141,6 +142,20 @@ public class TwiistAuthTokenProvider(
         }
     }
 
+    /// <summary>
+    ///     Cognito answers a wrong password or an unknown user with 400 and the reason in
+    ///     <c>__type</c>, not with 401, so that answer is carried as 401 for the refusal to be
+    ///     reported. <c>__type</c> may carry a namespace prefix ending in <c>#</c>.
+    /// </summary>
+    private static bool RejectsTheCredentials(HttpStatusCode status, string errorBody)
+    {
+        if (status != HttpStatusCode.BadRequest)
+            return false;
+
+        var type = ReadJsonString(errorBody, "__type");
+        return type?[(type.LastIndexOf('#') + 1)..] is "NotAuthorizedException" or "UserNotFoundException";
+    }
+
     private async Task<CognitoAuthResponse?> PostCognitoAsync(
         string jsonBody, CancellationToken cancellationToken)
     {
@@ -165,7 +180,9 @@ public class TwiistAuthTokenProvider(
             throw new HttpRequestException(
                 $"Cognito auth failed: {response.StatusCode}",
                 null,
-                response.StatusCode);
+                RejectsTheCredentials(response.StatusCode, errorBody)
+                    ? HttpStatusCode.Unauthorized
+                    : response.StatusCode);
         }
 
         return await JsonSerializer.DeserializeAsync<CognitoAuthResponse>(

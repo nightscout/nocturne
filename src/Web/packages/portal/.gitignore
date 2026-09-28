@@ -8,3 +8,5 @@ src/lib/release/
 src/lib/sdk/generated/
 # Docs screenshots are copied from packages/screenshots at build/dev time
 static/screenshots/
+# The alert engine is compiled to WebAssembly from crates/ at build/dev time
+static/alerts-engine/

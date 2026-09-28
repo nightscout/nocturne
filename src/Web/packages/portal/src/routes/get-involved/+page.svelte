@@ -1,12 +1,10 @@
 <script lang="ts">
-  import {
-    MessageCircle,
-    ArrowRight,
-    ArrowUpRight,
-    ExternalLink,
-    MessageSquare,
-    HeartHandshake,
-  } from "@lucide/svelte";
+  import MessageCircle from "@lucide/svelte/icons/message-circle";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import MessageSquare from "@lucide/svelte/icons/message-square";
+  import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
   import { onMount } from "svelte";
   import { Button } from "@nocturne/ui/ui/button";
   import { resolve } from "$app/paths";

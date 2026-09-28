@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Link } from "@lucide/svelte";
+  import Link from "@lucide/svelte/icons/link";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";

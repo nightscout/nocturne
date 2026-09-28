@@ -16,14 +16,12 @@
     TabsList,
     TabsTrigger,
   } from "$lib/components/ui/tabs";
-  import {
-    Bell,
-    Volume2,
-    Eye,
-    Clock,
-    Settings2,
-    Timer,
-  } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import Eye from "@lucide/svelte/icons/eye";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Timer from "@lucide/svelte/icons/timer";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,

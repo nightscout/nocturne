@@ -2,7 +2,10 @@
   import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import { LineChart, Tooltip } from "layerchart";
-  import { Loader2, Activity, Plus, Trash2 } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import * as Card from "$lib/components/ui/card";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { Button } from "$lib/components/ui/button";

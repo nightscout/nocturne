@@ -24,6 +24,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets or sets the MongoDB ObjectId
     /// </summary>
     [JsonPropertyName("_id")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public override string? Id { get; set; }
 
     /// <summary>
@@ -52,22 +53,8 @@ public class Entry : ProcessableDocumentBase
             }
 
             // If mills is not set but dateString is available, calculate it
-            if (!string.IsNullOrEmpty(_dateString))
-            {
-                if (
-                    DateTime.TryParse(
-                        _dateString,
-                        null,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out var parsedDate
-                    )
-                )
-                {
-                    return (
-                        (DateTimeOffset)DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc)
-                    ).ToUnixTimeMilliseconds();
-                }
-            }
+            if (UploaderTimestamp.TryParse(_dateString, out var parsedDate))
+                return parsedDate.ToUnixTimeMilliseconds();
 
             return _mills;
         }
@@ -106,20 +93,8 @@ public class Entry : ProcessableDocumentBase
                 return DateTimeOffset.FromUnixTimeMilliseconds(_mills).UtcDateTime;
             }
             // If date is not set but we have dateString, parse it
-            if (_date == null && !string.IsNullOrEmpty(_dateString))
-            {
-                if (
-                    DateTime.TryParse(
-                        _dateString,
-                        null,
-                        System.Globalization.DateTimeStyles.RoundtripKind,
-                        out var parsedDate
-                    )
-                )
-                {
-                    return DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc);
-                }
-            }
+            if (_date == null && UploaderTimestamp.TryParse(_dateString, out var parsedDate))
+                return parsedDate.UtcDateTime;
             return _date;
         }
         set => _date = value;
@@ -163,6 +138,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets or sets the meter blood glucose in mg/dL
     /// </summary>
     [JsonPropertyName("mbg")]
+    [JsonConverter(typeof(FlexibleNullableDoubleConverter))]
     public double? Mbg { get; set; }
 
     /// <summary>
@@ -187,10 +163,12 @@ public class Entry : ProcessableDocumentBase
     public string? Direction { get; set; }
 
     /// <summary>
-    /// Gets or sets the numeric trend indicator (1-9) used by Dexcom and Loop
-    /// 1=DoubleUp, 2=SingleUp, 3=FortyFiveUp, 4=Flat, 5=FortyFiveDown, 6=SingleDown, 7=DoubleDown, 8=NotComputable, 9=RateOutOfRange
+    /// Dexcom trend number, on the same scale as the direction names: 0=NONE, 1=DoubleUp, 2=SingleUp,
+    /// 3=FortyFiveUp, 4=Flat, 5=FortyFiveDown, 6=SingleDown, 7=DoubleDown, 8=NOT COMPUTABLE,
+    /// 9=RATE OUT OF RANGE.
     /// </summary>
     [JsonPropertyName("trend")]
+    [JsonConverter(typeof(FlexibleTrendConverter))]
     public int? Trend { get; set; }
 
     /// <summary>
@@ -375,6 +353,7 @@ public class Entry : ProcessableDocumentBase
     /// Gets the V3 API identifier - alias for <see cref="ProcessableDocumentBase.Id"/>.
     /// </summary>
     [JsonPropertyName("identifier")]
+    [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
     /// <summary>

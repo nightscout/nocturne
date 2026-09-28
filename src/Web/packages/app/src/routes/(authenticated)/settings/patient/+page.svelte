@@ -1,11 +1,9 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { FormActions } from "$lib/forms";
-  import {
-    HeartPulse,
-    Cpu,
-    Syringe,
-  } from "lucide-svelte";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+  import Cpu from "@lucide/svelte/icons/cpu";
+  import Syringe from "@lucide/svelte/icons/syringe";
   import {
     PatientClinicalForm,
     PatientDeviceManager,

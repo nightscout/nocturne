@@ -81,7 +81,7 @@ internal sealed class ManagedAlertReplayEngine(ILogger<ManagedAlertReplayEngine>
                     met = false;
                 }
 
-                // Every leaf alone, with no short-circuit, for the leaf log.
+                // Every leaf alone, for the leaf log.
                 IReadOnlyDictionary<int, bool> leafValues;
                 try
                 {

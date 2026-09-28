@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AlertTriangle } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import { cn } from "$lib/utils";
   import { fieldMessages, type FieldIssues } from "./field-messages";
 

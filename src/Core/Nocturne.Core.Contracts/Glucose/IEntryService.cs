@@ -2,6 +2,7 @@ using System.Text.Json;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.Core.Contracts.Glucose;
@@ -168,6 +169,13 @@ public interface IEntryService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Most recent entry if exists, null otherwise</returns>
     Task<Entry?> GetCurrentEntryAsync(CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IEntryStore.GetModifiedSinceAsync" />
+    Task<ModifiedSincePage<Entry>> GetEntriesModifiedSinceAsync(
+        long cursorMills,
+        int limit,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Get entries with advanced filtering capabilities

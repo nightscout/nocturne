@@ -83,7 +83,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     /// <remarks>
     /// Every row written carries the fingerprint of the treatment it came from
     /// (<see cref="UpstreamFingerprintScope"/>), which <see cref="PublishRecentTreatmentsAsync"/>
-    /// compares against.
+    /// compares against. Rows stored under a treatment's client id are moved onto its id first
+    /// (<see cref="ITreatmentDecomposer.RekeyClientIdRecordsAsync"/>), so the write lands on them.
     /// </remarks>
     public async Task<bool> PublishTreatmentsAsync(
         IEnumerable<Treatment> treatments,
@@ -99,6 +100,9 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
                 if (treatment.Id is { Length: > 0 } id)
                     fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
             }
+
+            using (PushSystemAudit())
+                await _treatmentDecomposer.RekeyClientIdRecordsAsync(source, list, cancellationToken);
 
             using var scope = UpstreamFingerprintScope.Open(fingerprints);
             var written = await _treatmentService.CreateTreatmentsAsync(list, cancellationToken);
@@ -261,6 +265,27 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             () => _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
             () => _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
             () => _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken));
+
+    /// <inheritdoc />
+    public Task<DateTime?> GetLatestTreatmentTimestampAsync(
+        SyncDataType type,
+        string source,
+        CancellationToken cancellationToken = default)
+        => type switch
+        {
+            SyncDataType.Boluses => _bolusRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.CarbIntake => _carbIntakeRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.ManualBG or SyncDataType.BGChecks =>
+                _bgCheckRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.BolusCalculations =>
+                _bolusCalculationRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.TempBasals => _tempBasalRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.BasalInjections =>
+                _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.Notes => _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
+            SyncDataType.DeviceEvents => _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not a treatment type."),
+        };
 
     /// <inheritdoc />
     /// <remarks>The conflict rule is <see cref="TreatmentDecomposer.SelectForRepublishAsync"/>'s.</remarks>

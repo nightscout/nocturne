@@ -7,9 +7,10 @@ namespace Nocturne.Core.Models.V4;
 /// <remarks>
 /// <para>
 /// This is the V4 equivalent of legacy <see cref="Treatment"/> records with event type
-/// "Temp Basal". Unlike most <see cref="IV4Record"/> types, <see cref="TempBasal"/> has
-/// both a <see cref="StartTimestamp"/> and an <see cref="EndTimestamp"/> (span-based),
-/// and does not implement <see cref="IV4Record"/> directly.
+/// "Temp Basal". Unlike the other <see cref="IV4Record"/> types, <see cref="TempBasal"/> has
+/// both a <see cref="StartTimestamp"/> and an <see cref="EndTimestamp"/> (span-based); its
+/// <see cref="IV4Record.Timestamp"/> is the span start, implemented explicitly so the wire shape
+/// keeps only the start/end pair.
 /// </para>
 /// <para>
 /// <see cref="Origin"/> indicates whether the temp basal was set by an APS algorithm,
@@ -22,12 +23,22 @@ namespace Nocturne.Core.Models.V4;
 /// <seealso cref="ApsSnapshot"/>
 /// <seealso cref="BasalSchedule"/>
 /// <seealso cref="Device"/>
-public class TempBasal : IDeviceAttributed
+public class TempBasal : IV4Record, IDeviceAttributed
 {
     /// <summary>
     /// Attribution timestamp for device matching — the span start.
     /// </summary>
     DateTime IDeviceAttributed.Timestamp => StartTimestamp;
+
+    /// <summary>The span start.</summary>
+    DateTime IV4Record.Timestamp
+    {
+        get => StartTimestamp;
+        set => StartTimestamp = value;
+    }
+
+    /// <summary>The span start in Unix milliseconds.</summary>
+    long IV4Record.Mills => StartMills;
 
     /// <summary>
     /// UUID v7 primary key

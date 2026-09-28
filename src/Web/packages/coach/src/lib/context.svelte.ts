@@ -45,6 +45,9 @@ const indexMarkStates = (states: MarkState[]): MarkStates =>
 const withMarkState = (states: MarkStates, state: MarkState): MarkStates =>
   new Map([...states, [state.markKey, state]]);
 
+const overlaidMarkStates = (base: MarkStates, newer: MarkStates): MarkStates =>
+  new Map([...base, ...newer]);
+
 /** Mark key to the sequence it is a step of. */
 const indexSequences = (sequences: SequenceConfig): ReadonlyMap<string, string> =>
   new Map(
@@ -87,12 +90,23 @@ export class CoachMarkContext {
     this.seenDwellMs = seenDwellMs;
 
     this._keyToSequence = indexSequences(sequences);
+    // Read here rather than in initialize: marks register before the provider mounts, and a
+    // switch read late lets their first visibility pass draw a dot the reader turned off.
+    this._disabled = readDisabledFlag();
   }
 
   async initialize(): Promise<void> {
-    this._disabled = readDisabledFlag();
-    const states = await this.adapter.fetchAll();
-    this._states = indexMarkStates(states);
+    let states: MarkState[];
+    try {
+      states = await this.adapter.fetchAll();
+    } catch (err) {
+      // Left uninitialised, every mark stays ineligible: without the stored states there is no
+      // telling which tips the reader has already finished.
+      console.error("[coach] Failed to load coach mark states:", err);
+      return;
+    }
+    // Marks can complete before the fetch lands; those writes are newer than the response.
+    this._states = overlaidMarkStates(indexMarkStates(states), this._states);
     this._initialized = true;
     this.scheduleSelection();
   }
@@ -140,6 +154,9 @@ export class CoachMarkContext {
         ),
       );
       this.scheduleSelection();
+      // Deferred so an attachment that re-runs, tearing down and registering again in one flush,
+      // keeps its mark up.
+      queueMicrotask(() => this.releaseUnmountedSelection());
     };
   }
 
@@ -203,19 +220,22 @@ export class CoachMarkContext {
   }
 
   complete(key: string): void {
+    const wasActive = this._activeSelection?.key === key;
     this.updateStatus(key, "completed");
-    if (this._activeSelection?.key === key) {
-      this._activeSelection = null;
-    }
+
+    // `completedWhen` and `completeOn` complete marks in the background; one that is not the
+    // mark on screen must not replace it.
+    if (this._activeSelection && !wasActive) return;
+    if (wasActive) this._activeSelection = null;
 
     // Recording progress is worth doing even with the marks switched off, but choosing the next
     // one is not: the paths below assign _activeSelection directly, so the kill switch has to be
     // honoured here as well as in scheduleSelection.
-    if (this._disabled) return;
+    if (this._disabled || !this._initialized) return;
 
     if (this._forcedSequence) {
       this.activateNextForcedStep();
-    } else {
+    } else if (!this._quietUntilNavigation) {
       // Select the next mark immediately rather than via scheduleSelection so that
       // _activeSelection goes from the old key → new key in the same synchronous
       // execution. Svelte batches the two writes and the overlay never unmounts
@@ -242,8 +262,9 @@ export class CoachMarkContext {
 
   isMarkEligible(key: string): boolean {
     // The kill switch has to reach the hotspot dots too, not just the popovers: a mark that stays
-    // eligible while disabled leaves its dot drawn over the UI.
-    if (this._disabled) return false;
+    // eligible while disabled leaves its dot drawn over the UI. Until the stored states arrive every
+    // mark reads as unseen, so the same holds before initialisation.
+    if (this._disabled || !this._initialized) return false;
 
     const seqName = this._keyToSequence.get(key);
     if (!seqName) return true; // standalone marks are always eligible
@@ -303,12 +324,25 @@ export class CoachMarkContext {
     this.scheduleSelection();
   }
 
+  /**
+   * Drops the selection once its mark has no element left on the page. Left in place, an active
+   * key with nothing to show blocks every later selection until reload, and raises the old tip
+   * again whenever its page is revisited.
+   */
+  private releaseUnmountedSelection(): void {
+    const active = this._activeSelection;
+    if (!active || this._registrations.some((r) => r.key === active.key)) return;
+
+    this._activeSelection = null;
+    if (this._forcedSequence) this.activateNextForcedStep();
+    else this.scheduleSelection();
+  }
+
   private activateNextForcedStep(): void {
     if (!this._forcedSequence) return;
 
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
-
 
     for (const stepKey of seq.steps) {
       const status = this.getStatus(stepKey);
@@ -386,7 +420,10 @@ export class CoachMarkContext {
     if (this._forcedSequence) return;
     if (this._settleTimer) clearTimeout(this._settleTimer);
     this._settleTimer = setTimeout(() => {
-      if (this._activeSelection) return;
+      // Any of the guards above can have changed while the timer ran.
+      if (this._activeSelection || this._disabled || this._quietUntilNavigation || this._forcedSequence) {
+        return;
+      }
       this._activeSelection = selectActiveMark(
         this._states,
         this._registrations,

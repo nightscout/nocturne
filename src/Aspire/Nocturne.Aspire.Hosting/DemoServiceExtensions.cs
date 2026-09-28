@@ -76,13 +76,14 @@ public static class DemoServiceExtensions
     /// <returns>The demo service resource builder, or null if demo mode is disabled.</returns>
     public static IResourceBuilder<ProjectResource>? AddDemoService<TDemoService>(
         this IDistributedApplicationBuilder builder,
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         IResourceBuilder<IResourceWithConnectionString>? database,
         IResourceBuilder<ParameterResource> instanceKey,
         Action<DemoServiceOptions>? configure = null)
         where TDemoService : IProjectMetadata, new()
     {
         var options = new DemoServiceOptions();
+        var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
 
         // Load options from configuration
         var configSection = builder.Configuration.GetSection(options.ConfigSection);
@@ -91,7 +92,7 @@ public static class DemoServiceExtensions
         if (!enabled)
         {
             Console.WriteLine("[Aspire] Demo mode disabled");
-            api.WithEnvironment("DemoService__Enabled", "false");
+            apiEnvironment.WithEnvironment("DemoService__Enabled", "false");
             return null;
         }
 
@@ -133,7 +134,7 @@ public static class DemoServiceExtensions
             .WithEnvironment("DemoMode__ResetIntervalMinutes", options.ResetIntervalMinutes.ToString());
 
         // API should reference demo service for health monitoring
-        api.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))
+        apiEnvironment.WithEnvironment("DemoService__Url", demoService.GetEndpoint("http"))
            .WithEnvironment("DemoService__Enabled", "true");
 
         // Configure multi-arch container build for amd64 and arm64 (supports Mac Apple Silicon)

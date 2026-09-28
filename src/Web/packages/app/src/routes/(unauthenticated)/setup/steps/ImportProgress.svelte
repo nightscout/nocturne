@@ -1,15 +1,13 @@
 <script lang="ts">
   import { formatNumber } from "$lib/utils/formatting";
-  import {
-    Database,
-    Upload,
-    Users,
-    ChartLine,
-    BookOpen,
-    Check,
-    AlertTriangle,
-    Loader2,
-  } from "lucide-svelte";
+  import Database from "@lucide/svelte/icons/database";
+  import Upload from "@lucide/svelte/icons/upload";
+  import Users from "@lucide/svelte/icons/users";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
   import { remoteErrorMessage } from "$lib/api/remote-error";

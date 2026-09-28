@@ -212,13 +212,7 @@ public class DataSourceService : IDataSourceService
         await MergeTimeSeriesAsync<BolusCalculationEntity>();
         await MergeTimeSeriesAsync<ApsSnapshotEntity>();
 
-        // TempBasal is span-shaped, so it keys on StartTimestamp and stays off IV4TimeSeriesEntity.
-        var tbStats = await _context.TempBasals
-            .Where(t => t.StartTimestamp >= thirtyDaysAgo)
-            .GroupBy(t => t.DataSource ?? t.Device)
-            .Select(g => new { Key = g.Key, FromDataSource = g.Max(x => x.DataSource) != null, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
-            .ToListAsync(ct);
-        foreach (var s in tbStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest, HandleOf(s.FromDataSource));
+        await MergeTimeSeriesAsync<TempBasalEntity>();
 
         // StateSpan records one undifferentiated origin: its writers populate Source from the
         // reported device string (DeviceStatusDecomposer) or from the row's data source, falling back
@@ -1235,7 +1229,7 @@ public class DataSourceService : IDataSourceService
         var tempBasals24h = tempBasalsTotal > 0
             ? await _context.TempBasals
                 .FromSource(dataSource)
-                .Where(t => t.StartTimestamp >= oneDayAgoDate)
+                .Where(t => t.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
@@ -1330,7 +1324,7 @@ public class DataSourceService : IDataSourceService
             await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.Notes.AsNoTracking().FromSource(dataSource).OrderByDescending(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderByDescending(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.StartTimestamp).Select(t => (DateTime?)t.StartTimestamp).FirstOrDefaultAsync(cancellationToken),
+            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Max() is var max && max == default ? null : max;
@@ -1347,7 +1341,7 @@ public class DataSourceService : IDataSourceService
             await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.Notes.AsNoTracking().FromSource(dataSource).OrderBy(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderBy(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.StartTimestamp).Select(t => (DateTime?)t.StartTimestamp).FirstOrDefaultAsync(cancellationToken),
+            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Min() is var min && min == default ? null : min;

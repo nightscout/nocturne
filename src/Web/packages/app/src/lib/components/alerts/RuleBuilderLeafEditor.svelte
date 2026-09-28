@@ -5,7 +5,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Button } from "$lib/components/ui/button";
   import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
-  import { X } from "lucide-svelte";
+  import X from "@lucide/svelte/icons/x";
   import { bg, bgLabel, convertFromDisplayUnits } from "$lib/utils/formatting";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { untrack } from "svelte";

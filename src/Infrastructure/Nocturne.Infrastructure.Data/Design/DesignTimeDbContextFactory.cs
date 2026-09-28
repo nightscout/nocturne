@@ -47,7 +47,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<NocturneDb
         connectionString ??=
             "Host=localhost;Port=5432;Database=nocturne;Username=nocturne_migrator;Password=dev-migrator-password-change-me";
 
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(connectionString, npgsql => npgsql.UseNocturneMigrations());
 
         return new NocturneDbContext(optionsBuilder.Options);
     }

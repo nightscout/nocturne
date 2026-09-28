@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Calendar, ChevronLeft, ChevronRight } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Button } from "$lib/components/ui/button";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
 

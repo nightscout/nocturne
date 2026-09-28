@@ -13,26 +13,24 @@
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
   import GithubIcon from "$lib/components/icons/GithubIcon.svelte";
+  import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+  import MessageCircle from "@lucide/svelte/icons/message-circle";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Bug from "@lucide/svelte/icons/bug";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Download from "@lucide/svelte/icons/download";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Heart from "@lucide/svelte/icons/heart";
+  import Users from "@lucide/svelte/icons/users";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import Lightbulb from "@lucide/svelte/icons/lightbulb";
+  import Database from "@lucide/svelte/icons/database";
+  import CreditCard from "@lucide/svelte/icons/credit-card";
+  import GraduationCap from "@lucide/svelte/icons/graduation-cap";
   import { DropGroup, DropSurface } from "@nocturne/watercolour";
-  import {
-    HeartHandshake,
-    MessageCircle,
-    FileText,
-    Bug,
-    ExternalLink,
-    Copy,
-    Download,
-    Shield,
-    Heart,
-    Users,
-    BookOpen,
-    HelpCircle,
-    CheckCircle,
-    Lightbulb,
-    Database,
-    CreditCard,
-    GraduationCap,
-  } from "lucide-svelte";
   import { getServicesOverview } from "$api/generated/services.generated.remote";
   import { getStatus } from "$api/generated/status.generated.remote";
   import { getSupportConfig } from "$lib/api/support.remote";

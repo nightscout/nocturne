@@ -1,0 +1,99 @@
+---
+title: Trackers
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Trackers
+
+A tracker keeps count of how long something has been in use, or how long until
+something is due, and reminds you when it matters. The obvious use is the kit
+you wear: a CGM sensor, an infusion site, an insulin reservoir, a pump battery.
+The same idea works for anything with a lifespan or a date: a transmitter, a
+prescription refill, a clinic appointment, a blood test.
+
+<Screenshot id="trackers-active" />
+
+If you have used Nightscout, trackers replace the **CAGE**, **SAGE**, **IAGE**
+and **BAGE** pills. Those showed cannula age, sensor age, insulin age and
+battery age. Trackers do the same job, and the rest of this page explains why
+they are built differently.
+
+<Callout type="warning" title="A reminder, not a safety system">
+
+  A tracker tells you how long something has been running. It cannot tell you
+  whether a sensor is reading accurately, whether a site is absorbing insulin
+  properly, or how much insulin is really left in your pump. Treat its
+  notifications as reminders. Keep your pump's and CGM's own alarms switched on,
+  and follow the wear times from the manufacturer's instructions and your care
+  team. Nothing here is medical advice.
+
+</Callout>
+
+## When to use one
+
+Set up a tracker when you want any of these:
+
+- **A reminder before something runs out.** For example, a notice the day
+  before a 10-day sensor ends, so you can find a replacement before you need it.
+- **More than one of the same thing.** Two infusion sites, say, or a sensor and
+  a separate transmitter, each counted on its own.
+- **Something the old pills never covered.** A transmitter, a pen needle, a
+  prescription that needs renewing, a quarterly clinic visit.
+- **A record of how long things actually last.** Every finished tracker is kept
+  in the history with the reason it ended, so over time you can see whether
+  sensors tend to fail early or sites tend to come off.
+- **Alerts that reach you.** A tracker threshold can go to your phone as a push
+  notification, as well as appearing in Nocturne.
+
+## Trackers compared with CAGE, SAGE, IAGE and BAGE
+
+The Nightscout pills worked by looking for the most recent treatment of one
+fixed type, such as `Site Change` for CAGE or `Sensor Start` for SAGE, and
+showing the time since. That design has limits that trackers remove.
+
+| | CAGE / SAGE / IAGE / BAGE | Trackers |
+|--|--|--|
+| **What you can track** | Four fixed things: cannula, sensor, insulin, battery. | Anything. Each tracker has a category (sensor, cannula, reservoir, battery, consumable, appointment, reminder or custom), and you can have as many as you like. |
+| **How long things last** | Info, warning and urgent ages are set once for each pill, usually in server settings. | Each tracker has its own expected lifespan and up to four notification steps. |
+| **Reminders before the end** | Counted forwards from the start only. | A step can count forwards from the start or backwards from the expected end, such as "24 hours before this sensor ends". If you change the lifespan, those steps move with it. |
+| **Getting the reminder** | A coloured pill, plus the separate Nightscout alarms. | Every step becomes an alert rule, so it can use the same channels as your other alerts, and you can acknowledge it. |
+| **Dates, not ages** | Not possible. | An **event** tracker counts down to a set date and time. Use it for appointments and refills. |
+| **Why it ended** | Not recorded. The next change just resets the clock. | You choose a reason when you complete a tracker, such as completed, failed, fell off or replaced early, and can add notes. The history keeps all of it. |
+| **Notes** | None. | Start notes like "left arm" or a lot number, and completion notes like "sensor error on day 8". |
+| **Insulin left** | IAGE only knows how long ago the reservoir was changed. | A reservoir tracker can also warn when the estimated insulin left drops below a number of units. See [setting up a tracker](/docs/trackers/setting-up#reservoir-trackers). |
+
+## Still works with Nightscout apps
+
+Trackers do not cut you off from apps that still expect the Nightscout way of
+doing things.
+
+- **Events your devices send still count.** A tracker can restart on its own
+  when your pump, loop or a connector reports a `Site Change`, `Sensor Start`,
+  `Insulin Change` and so on, just as the old pills reset. See
+  [automatic restarts](/docs/trackers/everyday-use#automatic-restarts).
+- **Changes you make in Nocturne can be written back out.** A tracker can
+  create a treatment such as `Sensor Change` when you start or complete it, so
+  an app reading your Nightscout treatments sees the change too.
+
+## The pages
+
+- **[Setting up a tracker](/docs/trackers/setting-up)**: the tracker editor,
+  lifespans, notification steps, dashboard pills, reservoir level alerts and
+  presets.
+- **[Everyday use](/docs/trackers/everyday-use)**: starting and completing
+  trackers, automatic restarts, the dashboard pills, acknowledging a reminder,
+  and the history.
+
+## Words used on these pages
+
+- **Definition**: the template for a tracker, with its name, lifespan and
+  notification steps. You set it up once.
+- **Instance**: one run of a tracker. It starts when you put on a new sensor and
+  ends when you take it off. A duration tracker has one run at a time, and
+  starting a new one ends the old one.
+- **Threshold**: one notification step, such as "Warning, 2 hours before the
+  end". It becomes an alert rule of its own.

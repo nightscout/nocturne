@@ -4,7 +4,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
-  import { Clock } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
   import DayOfWeekPicker from "./DayOfWeekPicker.svelte";
 

@@ -1,7 +1,7 @@
 import type { Entry } from "$lib/websocket/types";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
 import { getGlucoseColor } from "$lib/utils/chart-colors";
-import type { GlucosePoint } from "./chart-data-engine.svelte";
+import type { GlucosePoint } from "./chart-data-view.svelte";
 
 /**
  * The server's glucose series with the realtime readings in [fromMs, toMs] it

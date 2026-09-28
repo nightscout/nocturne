@@ -3,13 +3,11 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import {
-    ArrowRight,
-    ArrowLeft,
-    Sprout,
-    Cable,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Sprout from "@lucide/svelte/icons/sprout";
+  import Cable from "@lucide/svelte/icons/cable";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Button } from "$lib/components/ui/button";
   import { markSetupComplete } from "./setup.remote";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";

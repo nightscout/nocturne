@@ -9,7 +9,10 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { ArrowLeft, GitPullRequest, Loader2, Trash2 } from "@lucide/svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import GitPullRequest from "@lucide/svelte/icons/git-pull-request";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import TranslationEditor from "@nocturne/cms/translations/TranslationEditor.svelte";
   import {
     buildMessages,

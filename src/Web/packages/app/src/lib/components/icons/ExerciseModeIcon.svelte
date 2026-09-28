@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Dumbbell from "lucide-svelte/icons/dumbbell";
+  import Dumbbell from "@lucide/svelte/icons/dumbbell";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { distinct } from "$lib/utils/collections";
 	import type { Food } from '$api';
-	import { Trash2, Check } from 'lucide-svelte';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import Check from '@lucide/svelte/icons/check';
 	import GiIcon from './GiIcon.svelte';
 	import GiLabel from './GiLabel.svelte';
 	import { getFoodState } from './food-context.js';

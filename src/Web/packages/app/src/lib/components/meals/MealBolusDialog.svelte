@@ -17,7 +17,11 @@
   } from "$api/generated/bolus.generated.remote";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
-  import { Syringe, Plus, Pencil, Trash2, ArrowLeft } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
 
   interface Props {
     open: boolean;

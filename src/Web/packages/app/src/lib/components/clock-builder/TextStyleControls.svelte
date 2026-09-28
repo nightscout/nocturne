@@ -5,7 +5,8 @@
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import { Plus, X } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
   import {
     COLOR_OPTIONS,
     CUSTOM_COLOR_OPTION,

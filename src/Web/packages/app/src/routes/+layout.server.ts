@@ -24,6 +24,7 @@ async function resolvePermissions(locals: App.Locals): Promise<MyPermissionsResp
     return {
       scopes: locals.effectivePermissions,
       limitTo24Hours: locals.limitTo24Hours ?? false,
+      refusedAsDemoSubject: locals.refusedAsDemoSubject ?? false,
     };
   }
   if (!locals.isShareHost && !locals.isGuestSession) return {};
@@ -109,6 +110,7 @@ export const load: LayoutServerLoad = async ({ locals, request, cookies }) => {
     isShareHost: locals.isShareHost,
     effectivePermissions: permissions.scopes ?? [],
     limitTo24Hours: permissions.limitTo24Hours ?? false,
+    refusedAsDemoSubject: permissions.refusedAsDemoSubject ?? false,
     isPlatformAdmin: locals.isPlatformAdmin,
     isPlatformAccessGrant: locals.isPlatformAccessGrant ?? false,
     tenantSlug,

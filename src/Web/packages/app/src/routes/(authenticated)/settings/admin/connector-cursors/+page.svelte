@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Database } from "@lucide/svelte";
+  import Database from "@lucide/svelte/icons/database";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { formatMediumDateTime } from "$lib/utils/formatting";
@@ -17,16 +17,14 @@
   import * as Select from "$lib/components/ui/select";
   import * as Alert from "$lib/components/ui/alert";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import {
-    RefreshCw,
-    Loader2,
-    AlertTriangle,
-    CheckCircle2,
-    XCircle,
-    Plug,
-    Building2,
-  } from "lucide-svelte";
-      import * as tenantRemote from "$api/generated/tenants.generated.remote";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import XCircle from "@lucide/svelte/icons/circle-x";
+  import Plug from "@lucide/svelte/icons/plug";
+  import Building2 from "@lucide/svelte/icons/building-2";
+  import * as tenantRemote from "$api/generated/tenants.generated.remote";
   import {
     getTenantConnectors,
     resetTenantCursors,

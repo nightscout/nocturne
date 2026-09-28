@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Check, Sprout, Cable } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import Sprout from "@lucide/svelte/icons/sprout";
+  import Cable from "@lucide/svelte/icons/cable";
   import * as RadioGroup from "$lib/components/ui/radio-group";
 
   interface Props {

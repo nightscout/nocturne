@@ -2,7 +2,8 @@
     import DocsSidebar from "$lib/components/DocsSidebar.svelte";
     import DocsScrollDepth from "$lib/components/docs/DocsScrollDepth.svelte";
     import { Button } from "@nocturne/ui/ui/button";
-    import { Menu, X } from "@lucide/svelte";
+    import Menu from "@lucide/svelte/icons/menu";
+    import X from "@lucide/svelte/icons/x";
 
     let { children } = $props();
     let sidebarOpen = $state(false);

@@ -8,14 +8,12 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    BarChart3,
-    Calendar,
-    Target,
-    TrendingUp,
-    ArrowRight,
-    HelpCircle,
-  } from "lucide-svelte";
+  import BarChart3 from "@lucide/svelte/icons/chart-column";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Target from "@lucide/svelte/icons/target";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";

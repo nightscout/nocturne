@@ -8,12 +8,10 @@
   import { PublicClockStore } from "$lib/stores/public-clock-store.svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Settings,
-    ArrowLeft,
-    Clock as ClockIcon,
-    Loader2,
-  } from "lucide-svelte";
+  import Settings from "@lucide/svelte/icons/settings";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ClockIcon from "@lucide/svelte/icons/clock";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";
   import { formatClockTime } from "$lib/components/clock/clock-time";
   import {

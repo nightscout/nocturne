@@ -1,6 +1,7 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
-    import { ArrowRight, Check } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import Check from "@lucide/svelte/icons/check";
     import { Button } from "@nocturne/ui/ui/button";
     import ReportsDemo from "./ReportsDemo.svelte";
     import ConnectorsDemo from "./ConnectorsDemo.svelte";

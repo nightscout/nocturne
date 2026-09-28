@@ -3,7 +3,8 @@
   import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
-  import { BookOpen, ExternalLink } from "lucide-svelte";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import {
     getTenantSettings,
     setPublicDocs,

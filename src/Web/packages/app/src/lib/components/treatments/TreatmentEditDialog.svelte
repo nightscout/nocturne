@@ -27,16 +27,14 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    Syringe,
-    Apple,
-    Droplet,
-    FileText,
-    Smartphone,
-    Clock,
-    Database,
-    Trash2,
-  } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Database from "@lucide/svelte/icons/database";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { formatDateForInput, formatDateTimeCompact } from "$lib/utils/formatting";
   import * as patientRemote from "$api/generated/patientRecords.generated.remote";
   import { getCatalog } from "$api/generated/insulinCatalogs.generated.remote";

@@ -2,7 +2,7 @@
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { Loader2 } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
   import { Artwork } from "@nocturne/watercolour";

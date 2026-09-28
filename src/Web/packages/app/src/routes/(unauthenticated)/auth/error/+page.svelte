@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { page } from "$app/state";
   import { AuthErrorCode } from "$api-clients";
 

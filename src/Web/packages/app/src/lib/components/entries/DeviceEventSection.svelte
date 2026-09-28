@@ -6,7 +6,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import * as Select from "$lib/components/ui/select";
-  import { Smartphone, X } from "lucide-svelte";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import X from "@lucide/svelte/icons/x";
 
   interface Props {
     deviceEvent: Partial<DeviceEvent>;

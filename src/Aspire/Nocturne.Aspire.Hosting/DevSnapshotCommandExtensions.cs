@@ -18,7 +18,7 @@ public static class DevSnapshotCommandExtensions
 
     public static IResourceBuilder<PostgresServerResource> WithDevSnapshotCommands(
         this IResourceBuilder<PostgresServerResource> postgres,
-        IResourceBuilder<ProjectResource> api)
+        IResourceBuilder<IResourceWithEndpoints> api)
     {
         postgres.WithCommand(
             name: "export-snapshot",
@@ -61,7 +61,7 @@ public static class DevSnapshotCommandExtensions
     // -----------------------------------------------------------------
 
     private static async Task<ExecuteCommandResult> OnExportSnapshotAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -103,7 +103,7 @@ public static class DevSnapshotCommandExtensions
     }
 
     private static async Task<ExecuteCommandResult> OnImportSnapshotAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -144,7 +144,7 @@ public static class DevSnapshotCommandExtensions
     }
 
     private static async Task<ExecuteCommandResult> OnSyncAllConnectorsAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -204,7 +204,7 @@ public static class DevSnapshotCommandExtensions
     /// Resolves the API's runtime HTTP base URL from its allocated endpoint.
     /// This only works in run mode after endpoints have been allocated.
     /// </summary>
-    private static string GetApiBaseUrl(IResourceBuilder<ProjectResource> api)
+    private static string GetApiBaseUrl(IResourceBuilder<IResourceWithEndpoints> api)
     {
         var endpoint = api.GetEndpoint("http");
 

@@ -10,16 +10,14 @@
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
-  import {
-    Clock,
-    Copy,
-    Check,
-    X,
-    Loader2,
-    Link,
-    EyeOff,
-    RotateCcw,
-  } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
+  import X from "@lucide/svelte/icons/x";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Link from "@lucide/svelte/icons/link";
+  import EyeOff from "@lucide/svelte/icons/eye-off";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import {
     getGuestLinks,
     createGuestLink,

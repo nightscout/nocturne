@@ -4,7 +4,7 @@
   import { getSingleNightByDate } from "$api/generated/sleepReports.generated.remote";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { ArrowLeft } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import FigureStrip, { type Figure } from "$lib/components/reports/FigureStrip.svelte";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import Hypnogram from "$lib/components/reports/sleep/single-night/Hypnogram.svelte";

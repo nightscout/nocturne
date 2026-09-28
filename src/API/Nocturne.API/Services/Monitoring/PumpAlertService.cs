@@ -588,13 +588,7 @@ public class PumpAlertService : IPumpAlertService
 
     private static DateTimeOffset? ParseDateTime(string? dateString)
     {
-        if (string.IsNullOrEmpty(dateString))
-            return null;
-
-        if (DateTimeOffset.TryParse(dateString, out var result))
-            return result;
-
-        return null;
+        return UploaderTimestamp.TryParse(dateString, out var result) ? result : null;
     }
 
     private static string FormatTimeAgo(DateTimeOffset time, long currentMills)

@@ -2,9 +2,9 @@
   import { StateSpanCategory, ChartSpanKind } from "$lib/api";
   import ExerciseModeIcon from "./ExerciseModeIcon.svelte";
   import SleepModeIcon from "./SleepModeIcon.svelte";
-  import ThermometerIcon from "lucide-svelte/icons/thermometer";
-  import PlaneIcon from "lucide-svelte/icons/plane";
-  import CircleHelp from "lucide-svelte/icons/circle-help";
+  import ThermometerIcon from "@lucide/svelte/icons/thermometer";
+  import PlaneIcon from "@lucide/svelte/icons/plane";
+  import CircleHelp from "@lucide/svelte/icons/circle-question-mark";
 
   interface Props {
     /** Discriminator distinguishing sleep spans (category is null) from state spans. */

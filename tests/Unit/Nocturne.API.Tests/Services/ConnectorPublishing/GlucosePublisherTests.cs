@@ -25,6 +25,7 @@ public class GlucosePublisherTests
     private readonly Mock<IEntryService> _mockEntryService;
     private readonly Mock<ISensorGlucoseRepository> _mockSensorGlucoseRepository;
     private readonly Mock<IMeterGlucoseRepository> _mockMeterGlucoseRepository;
+    private readonly Mock<ICalibrationRepository> _mockCalibrationRepository;
     private readonly Mock<IPatientDeviceStamper> _mockPatientDeviceStamper;
     private readonly Mock<ICanonicalAlertEvaluator> _mockAlertEvaluator;
     private readonly GlucosePublisher _publisher;
@@ -34,6 +35,7 @@ public class GlucosePublisherTests
         _mockEntryService = new Mock<IEntryService>();
         _mockSensorGlucoseRepository = new Mock<ISensorGlucoseRepository>();
         _mockMeterGlucoseRepository = new Mock<IMeterGlucoseRepository>();
+        _mockCalibrationRepository = new Mock<ICalibrationRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
         _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
 
@@ -41,6 +43,7 @@ public class GlucosePublisherTests
             _mockEntryService.Object,
             _mockSensorGlucoseRepository.Object,
             _mockMeterGlucoseRepository.Object,
+            _mockCalibrationRepository.Object,
             _mockPatientDeviceStamper.Object,
             _mockAlertEvaluator.Object,
             Mock.Of<IAuditContext>(),

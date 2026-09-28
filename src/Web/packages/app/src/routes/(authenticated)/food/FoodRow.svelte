@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Food } from '$api';
-	import { Star, ChevronRight } from 'lucide-svelte';
+	import Star from '@lucide/svelte/icons/star';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CarbPill from './CarbPill.svelte';
 	import GiChip from './GiChip.svelte';
 	import { giFromInt } from './types';

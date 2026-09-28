@@ -30,7 +30,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TenantA,
             LegacyId = legacyId,
-            StartTimestamp = DateTime.UtcNow,
+            Timestamp = DateTime.UtcNow,
             Origin = "Manual",
             DeletedAt = softDeleted ? DateTime.UtcNow.AddHours(-1) : null,
         };

@@ -56,8 +56,8 @@ public class InsulinDeliveryFetchBenchmarks
             .OrderBy(e => e.Timestamp).Take(10000).ToListAsync();
 
         _ = await ctx.TempBasals.AsNoTracking()
-            .Where(e => e.TenantId == _tenantId && e.StartTimestamp >= _from && e.StartTimestamp <= _to)
-            .OrderBy(e => e.StartTimestamp).Take(10000).ToListAsync();
+            .Where(e => e.TenantId == _tenantId && e.Timestamp >= _from && e.Timestamp <= _to)
+            .OrderBy(e => e.Timestamp).Take(10000).ToListAsync();
 
         _ = await ctx.Boluses.AsNoTracking()
             .Where(e => e.TenantId == _tenantId && e.Timestamp >= _from && e.Timestamp <= _to
@@ -85,8 +85,8 @@ public class InsulinDeliveryFetchBenchmarks
         {
             await using var ctx = _fixture.CreateContext();
             return await ctx.TempBasals.AsNoTracking()
-                .Where(e => e.TenantId == _tenantId && e.StartTimestamp >= _from && e.StartTimestamp <= _to)
-                .OrderBy(e => e.StartTimestamp).Take(10000).ToListAsync();
+                .Where(e => e.TenantId == _tenantId && e.Timestamp >= _from && e.Timestamp <= _to)
+                .OrderBy(e => e.Timestamp).Take(10000).ToListAsync();
         });
 
         var algoTask = Task.Run(async () =>

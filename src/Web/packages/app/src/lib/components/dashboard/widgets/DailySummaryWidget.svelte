@@ -4,7 +4,9 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
-  import { TrendingUp, TrendingDown, Minus } from "lucide-svelte";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import TrendingDown from "@lucide/svelte/icons/trending-down";
+  import Minus from "@lucide/svelte/icons/minus";
 
   const realtimeStore = getRealtimeStore();
 

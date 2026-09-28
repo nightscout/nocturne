@@ -3,7 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { FileText } from "lucide-svelte";
+  import FileText from "@lucide/svelte/icons/file-text";
 
   interface Props {
     form: {

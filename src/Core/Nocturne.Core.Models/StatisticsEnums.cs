@@ -57,6 +57,10 @@ public enum ClinicalAssessmentLevel
     /// <summary>NeedsSignificantImprovement - most targets not met</summary>
     [JsonPropertyName("needsSignificantImprovement")]
     NeedsSignificantImprovement,
+
+    /// <summary>InsufficientData - at least one target could not be assessed, so no overall grade is given</summary>
+    [JsonPropertyName("insufficientData")]
+    InsufficientData,
 }
 
 /// <summary>

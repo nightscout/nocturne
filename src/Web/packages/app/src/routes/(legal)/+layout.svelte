@@ -1,7 +1,7 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
-  import { ArrowLeft } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
 
   let { children } = $props();
 </script>

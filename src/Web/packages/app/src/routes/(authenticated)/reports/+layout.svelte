@@ -12,7 +12,10 @@
         printReport,
     } from "$lib/components/reports/print/report-print.svelte";
     import {reportCategories} from "$lib/navigation/report-navigation.svelte";
-    import {Filter, Calendar, ChevronDown, Printer} from "lucide-svelte";
+    import Filter from "@lucide/svelte/icons/funnel";
+    import Calendar from "@lucide/svelte/icons/calendar";
+    import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import Printer from "@lucide/svelte/icons/printer";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 

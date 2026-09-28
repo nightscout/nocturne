@@ -80,6 +80,12 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             return result;
         }
 
+        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
+        {
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+            return AuthenticationFailedResult();
+        }
+
         try
         {
             var patients = await FetchPatientListAsync(config, cancellationToken);
@@ -173,7 +179,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
-            TrackFailedRequest("No valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 

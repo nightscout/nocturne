@@ -4,7 +4,12 @@
 
     import { onDestroy } from "svelte";
     import { SvelteSet } from "svelte/reactivity";
-    import { Play, Pause, RotateCcw, ChevronRight, Droplet, Timer } from "@lucide/svelte";
+    import Play from "@lucide/svelte/icons/play";
+    import Pause from "@lucide/svelte/icons/pause";
+    import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+    import ChevronRight from "@lucide/svelte/icons/chevron-right";
+    import Droplet from "@lucide/svelte/icons/droplet";
+    import Timer from "@lucide/svelte/icons/timer";
     import * as Collapsible from "@nocturne/ui/ui/collapsible";
     import { Switch } from "@nocturne/ui/ui/switch";
     import { Button } from "@nocturne/ui/ui/button";

@@ -150,7 +150,7 @@ internal static class MigrationSourceFiles
         while (directory is not null)
         {
             var candidate = Path.Combine(
-                directory.FullName, "src", "Infrastructure", "Nocturne.Infrastructure.Data", "Migrations");
+                directory.FullName, "src", "Infrastructure", "Nocturne.Infrastructure.Data.Migrations", "Migrations");
 
             if (Directory.Exists(candidate))
                 return candidate;

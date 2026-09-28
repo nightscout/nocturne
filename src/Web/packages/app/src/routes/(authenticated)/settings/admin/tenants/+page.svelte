@@ -13,16 +13,14 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
-  import {
-    Building2,
-    Pencil,
-    Loader2,
-    AlertTriangle,
-    Info,
-    X,
-    Plus,
-    ShieldCheck,
-  } from "lucide-svelte";
+  import Building2 from "@lucide/svelte/icons/building-2";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Info from "@lucide/svelte/icons/info";
+  import X from "@lucide/svelte/icons/x";
+  import Plus from "@lucide/svelte/icons/plus";
+  import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import { Debounced } from "runed";
   import * as Alert from "$lib/components/ui/alert";
   import * as tenantRemote from "$api/generated/tenants.generated.remote";

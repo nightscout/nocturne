@@ -7,7 +7,7 @@
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
@@ -260,25 +260,8 @@
     return h > 0 ? `${days}d ${h}h` : `${days}d`;
   }
 
-  function getTrackerLevel(
-    instance: TrackerInstanceDto,
-    def: TrackerDefinitionDto | undefined
-  ): string {
-    if (!instance.ageHours || !def?.notificationThresholds) return "none";
-    const age = instance.ageHours;
-    const thresholds = def.notificationThresholds.sort(
-      (a, b) => (b.hours ?? 0) - (a.hours ?? 0)
-    );
-    for (const threshold of thresholds) {
-      if (threshold.hours && age >= threshold.hours) {
-        const urgency = threshold.urgency;
-        if (urgency === NotificationUrgencyEnum.Urgent) return "urgent";
-        if (urgency === NotificationUrgencyEnum.Hazard) return "hazard";
-        if (urgency === NotificationUrgencyEnum.Warn) return "warn";
-        if (urgency === NotificationUrgencyEnum.Info) return "info";
-      }
-    }
-    return "none";
+  function getTrackerLevel(instance: TrackerInstanceDto): string {
+    return reachedUrgency(instance, Date.now())?.toLowerCase() ?? "none";
   }
 
   function buildTrackerEvents(

@@ -51,7 +51,9 @@ public static class DatabaseInitializationExtensions
         // crash loop. Give migration DDL ample time to complete.
         optionsBuilder.UseNpgsql(
             dataSource,
-            npgsql => npgsql.CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds));
+            npgsql => npgsql
+                .CommandTimeout((int)TimeSpan.FromHours(1).TotalSeconds)
+                .UseNocturneMigrations());
         optionsBuilder.AddInterceptors(interceptor);
 
         var context = new NocturneDbContext(optionsBuilder.Options);

@@ -11,7 +11,9 @@ pub fn nocturne_dir() -> PathBuf {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            let mut p = std::env::var("USERPROFILE").map(PathBuf::from).unwrap_or_default();
+            let mut p = std::env::var("USERPROFILE")
+                .map(PathBuf::from)
+                .unwrap_or_default();
             p.push("AppData");
             p.push("Local");
             p

@@ -51,7 +51,7 @@
     unitLabel: string;
     handleDayClick: (day: PunchCardDay) => void;
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
-    getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
+    getTrackerLevel: (instance: TrackerInstanceDto) => string;
     getTrackerTone: (eventType: string, level: string) => string;
     formatTrackerStartTime: (startedAt: string | undefined) => string | null;
     formatTrackerAge: (hours: number | undefined) => string;
@@ -125,7 +125,7 @@
       <div class="absolute top-1 right-1 flex gap-0.5 z-10">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
-          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
+          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
           {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
@@ -246,7 +246,7 @@
       <div class="absolute top-1 right-1 flex gap-0.5">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
-          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
+          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
           {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
@@ -293,7 +293,7 @@
       <div class="absolute top-1 right-1 flex gap-0.5">
         {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
-          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
+          {@const level = event.eventType === "due" ? getTrackerLevel(event.instance) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
           {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}

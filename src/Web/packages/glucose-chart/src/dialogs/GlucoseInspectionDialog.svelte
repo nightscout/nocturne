@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Syringe, Utensils } from '@lucide/svelte';
+  import Syringe from '@lucide/svelte/icons/syringe';
+  import Utensils from '@lucide/svelte/icons/utensils';
   import { BasalDeliveryOrigin } from '../enums.js';
   import { bg, bgLabel, bgDelta, getDataSourceDisplayName } from '../utils/formatting.js';
   import GlucoseResponseChart from './GlucoseResponseChart.svelte';

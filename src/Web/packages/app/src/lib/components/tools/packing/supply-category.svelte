@@ -7,7 +7,8 @@
   } from "$lib/components/ui/card";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Badge } from "$lib/components/ui/badge";
-  import { ChevronDown, ChevronRight } from "lucide-svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SupplyItem from "./supply-item.svelte";
   import type { SupplyCategoryConfig } from "./packing-config";
   import type { Component } from "svelte";

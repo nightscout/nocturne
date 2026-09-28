@@ -5,7 +5,9 @@
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { Check, ChevronsUpDown, Smartphone } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
   import { cn } from "$lib/utils";
   import {
     DEVICE_EVENT_TYPES,

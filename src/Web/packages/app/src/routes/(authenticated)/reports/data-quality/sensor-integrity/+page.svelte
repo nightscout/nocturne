@@ -7,9 +7,9 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import ArrowLeft from "lucide-svelte/icons/arrow-left";
-  import Activity from "lucide-svelte/icons/activity";
-  import Info from "lucide-svelte/icons/info";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Info from "@lucide/svelte/icons/info";
   import { getDataQualityReport } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";

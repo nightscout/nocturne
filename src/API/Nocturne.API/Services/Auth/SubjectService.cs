@@ -110,7 +110,6 @@ public class SubjectService : ISubjectService
             Name = name ?? email ?? oidcSubjectId,
             Email = email,
             IsActive = true,
-            UpdatedAt = DateTime.UtcNow,
         };
 
         _dbContext.Subjects.Add(newEntity);
@@ -179,7 +178,6 @@ public class SubjectService : ISubjectService
             Email = subject.Email,
             Notes = subject.Notes,
             IsActive = subject.IsActive,
-            UpdatedAt = DateTime.UtcNow,
         };
 
         _dbContext.Subjects.Add(entity);
@@ -273,14 +271,41 @@ public class SubjectService : ISubjectService
             return false;
         }
 
-        _dbContext.Subjects.Remove(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var tx = await _dbContext.Database.BeginTransactionAsync();
+
+            await ScrubAuthAuditPersonalDataAsync(subjectId);
+
+            _dbContext.Subjects.Remove(entity);
+            await _dbContext.SaveChangesAsync();
+
+            await tx.CommitAsync();
+        });
 
         _logger.LogInformation("Deleted subject {SubjectId}", subjectId);
 
         await _auditService.LogAsync(AuthAuditEventType.SubjectDeleted, subjectId, success: true);
 
         return true;
+    }
+
+    /// <summary>
+    /// Clears the deleted subject's personal data from the auth audit trail, leaving the ids that
+    /// make it a pseudonymous record (see <see cref="AuthAuditLogEntity"/>). The client address and
+    /// user agent are the actor's, so another subject's on a row about this one are kept.
+    /// </summary>
+    private async Task ScrubAuthAuditPersonalDataAsync(Guid subjectId)
+    {
+        await _dbContext.AuthAuditLog
+            .Where(a => a.ActorSubjectId == subjectId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(a => a.IpAddress, (string?)null)
+                .SetProperty(a => a.UserAgent, (string?)null));
+
+        await _dbContext.AuthAuditLog
+            .Where(a => a.SubjectId == subjectId || a.ActorSubjectId == subjectId)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.DetailsJson, (string?)null));
     }
 
     /// <inheritdoc />
@@ -529,7 +554,6 @@ public class SubjectService : ISubjectService
             Notes = "Represents unauthenticated access. Assign roles to control what the public can see.",
             IsActive = true,
             IsSystemSubject = true,
-            UpdatedAt = DateTime.UtcNow,
         };
 
         _dbContext.Subjects.Add(entity);

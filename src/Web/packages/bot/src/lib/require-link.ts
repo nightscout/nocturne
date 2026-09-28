@@ -206,10 +206,13 @@ export async function requireLink<T>(
  *
  * @example
  * bot.onAction("ack_alert", async (event) => {
- *   await requireLinkForAction(event, async () => {
+ *   await requireLinkForAction(event, async (link) => {
  *     const { excursionId } = decodeActionValue(event.value);
  *     if (!excursionId) return;
- *     await getApi().alerts.acknowledgeExcursion(excursionId, {
+ *     await getApi().alerts.acknowledgeAsLinkedMember(link.id, {
+ *       platform: event.adapter.name,
+ *       platformUserId: event.user.userId,
+ *       excursionId,
  *       acknowledgedBy: event.user.fullName,
  *     });
  *   });

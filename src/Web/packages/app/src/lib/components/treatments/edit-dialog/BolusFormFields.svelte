@@ -5,7 +5,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { Syringe } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
   import { insulinCategoryLabels } from "$lib/components/patient/labels";
 
   interface Props {

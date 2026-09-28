@@ -57,9 +57,26 @@ public class StepCount : ProcessableDocumentBase
     /// <summary>
     /// Gets or sets the source bitmask.
     /// Bit 0 (value 1) indicates an absolute step count total; otherwise the value is a delta.
+    /// Either way, step totals and chart bubbles add the metric up. Bit 1
+    /// (<see cref="PossibleRunningTotalFlag"/>) marks a metric they leave out.
     /// </summary>
     [JsonPropertyName("source")]
     public int Source { get; set; }
+
+    /// <summary>
+    /// <see cref="Source"/> bit for a metric that may be a running counter reading rather than a
+    /// count for its own interval, so adding it up would overcount. xDrip's <c>steps-total</c>
+    /// uploads carry it. xDrip stores both kinds but uploads nothing that tells them apart, not
+    /// even its own flag, which sets bit 0 on the counts xDrip adds up, the reverse of the bit 0
+    /// meaning above.
+    /// </summary>
+    public const int PossibleRunningTotalFlag = 2;
+
+    /// <summary>
+    /// Whether <see cref="Source"/> has <see cref="PossibleRunningTotalFlag"/> set, so step totals
+    /// and chart bubbles must skip this record.
+    /// </summary>
+    public bool IsPossibleRunningTotal() => (Source & PossibleRunningTotalFlag) != 0;
 
     /// <summary>
     /// Gets or sets the device identifier that recorded this reading

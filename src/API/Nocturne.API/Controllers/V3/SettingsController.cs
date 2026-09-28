@@ -6,6 +6,7 @@ using Nocturne.API.Authorization;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Contracts.Repositories;
 
 namespace Nocturne.API.Controllers.V3;
@@ -358,7 +359,7 @@ public class SettingsController : BaseV3Controller<Settings>
                 {
                     var settings = JsonSerializer.Deserialize<Settings>(
                         element.GetRawText(),
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        UploaderIdJsonModifier.CaseInsensitiveReadOptions
                     );
                     if (settings != null)
                     {
@@ -370,7 +371,7 @@ public class SettingsController : BaseV3Controller<Settings>
             {
                 var settings = JsonSerializer.Deserialize<Settings>(
                     jsonElement.GetRawText(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    UploaderIdJsonModifier.CaseInsensitiveReadOptions
                 );
                 if (settings != null)
                 {

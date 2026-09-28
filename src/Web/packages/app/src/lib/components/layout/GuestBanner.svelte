@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Eye } from "lucide-svelte";
+  import Eye from "@lucide/svelte/icons/eye";
   import { Banner } from "$lib/components/ui/banner";
 
   interface Props {

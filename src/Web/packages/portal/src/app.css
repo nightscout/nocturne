@@ -2,6 +2,10 @@
 @source "../node_modules/@nocturne/ui/src";
 @source "../node_modules/@nocturne/cms/src";
 @source "../node_modules/@nocturne/watercolour/src";
+/* The app's alert replay, embedded in the alerts docs. */
+@source "../node_modules/@nocturne/app/src/lib/components/alerts";
+@source "../node_modules/@nocturne/app/src/lib/components/dashboard/glucose-chart";
+@source "../node_modules/@nocturne/app/node_modules/layerchart/dist";
 @source not "../locales/";
 
 /* The portal renders dark only (app.html pins class="dark"); the light values keep each

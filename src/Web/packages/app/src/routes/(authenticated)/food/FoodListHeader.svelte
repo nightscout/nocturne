@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronDown } from 'lucide-svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import type { SortMode } from './types';
 	import { Button } from '$lib/components/ui/button';
 
