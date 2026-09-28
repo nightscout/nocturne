@@ -188,8 +188,11 @@ describe("setup import step", () => {
     await expect.element(page.getByText("Step 04 / 04")).toBeVisible();
   });
 
-  it("hands the import step the reason a run could not be started", async () => {
-    vi.mocked(startFromConnector).mockRejectedValueOnce(new Error("refused"));
+  it("words a refused start as a connection that isn't saved", async () => {
+    vi.mocked(startFromConnector).mockRejectedValueOnce({
+      status: 400,
+      body: { message: "Nightscout URL not found in connector configuration" },
+    });
     render(SetupPage);
     await migrationCard().click();
     await continueButton().click();
@@ -197,6 +200,8 @@ describe("setup import step", () => {
     await page.getByRole("button", { name: "Stub: complete" }).click();
 
     await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
-    await expect.element(page.getByTestId("start-error")).not.toBeEmptyDOMElement();
+    await expect
+      .element(page.getByTestId("start-error"))
+      .toHaveTextContent("Your Nightscout connection isn't saved yet.");
   });
 });

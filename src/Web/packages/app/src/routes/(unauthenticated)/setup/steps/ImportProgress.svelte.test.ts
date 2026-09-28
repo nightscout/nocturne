@@ -235,8 +235,9 @@ describe("ImportProgress", () => {
     render(ImportProgress, { startError: "Your Nightscout site refused the request.", onComplete: () => {} });
 
     await expect
-      .element(page.getByText(/We couldn't start the import from Nightscout\. Your Nightscout site refused the request\. You can continue/))
+      .element(page.getByText("We couldn't start the import from Nightscout. You can continue and run it later from Settings."))
       .toBeVisible();
+    await expect.element(page.getByText("Your Nightscout site refused the request.", { exact: true })).toBeVisible();
     await expect.element(page.getByText(/records migrated/)).not.toBeInTheDocument();
   });
 

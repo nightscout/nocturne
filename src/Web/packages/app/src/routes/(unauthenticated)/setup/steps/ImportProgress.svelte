@@ -39,6 +39,7 @@
   let progress = $state(0); // displayed progress (smoothed)
   let realProgress = $state(0); // actual backend progress
   let error = $state<string | null>(null);
+  let startReason = $state<string | null>(null);
   let failed = $state(false);
   // A run can complete having imported only part of what was asked for; the server says which
   // collections did not arrive. Without this the wizard shows that run as an unqualified success.
@@ -129,8 +130,9 @@
       // exist by now. If none is found there is nothing to monitor.
       if (!resolvedJobId) {
         error = startError
-          ? `We couldn't start the import from Nightscout. ${startError} You can continue and run it later from Settings.`
+          ? "We couldn't start the import from Nightscout. You can continue and run it later from Settings."
           : "No import from Nightscout is running. You can continue and start one later from Settings.";
+        startReason = startError ?? null;
         loading = false;
         onSettled?.();
         return;
@@ -314,6 +316,9 @@
     <div class="flex flex-col items-center justify-center py-16 gap-4">
       <AlertTriangle class="h-12 w-12 text-warning" />
       <p class="text-sm text-muted-foreground">{error}</p>
+      {#if startReason}
+        <p class="text-xs text-muted-foreground">{startReason}</p>
+      {/if}
     </div>
   {:else}
     <!-- Import hero card -->

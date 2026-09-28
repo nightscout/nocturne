@@ -21,7 +21,7 @@
     getUploaderSetup,
   } from "$api/generated/services.generated.remote";
   import { startOrResumeMigration } from "./migration-session";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import type {
     UploaderApp,
     DataSourceInfo,
@@ -237,10 +237,11 @@
       migrationStartError = undefined;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
     } catch (err) {
-      migrationStartError = describeSubmitError(
-        err,
-        "Something went wrong while starting it."
-      );
+      // Every 400 from start-from-connector means the saved connector is missing or has no URL.
+      migrationStartError =
+        errorStatus(err) === 400
+          ? "Your Nightscout connection isn't saved yet."
+          : describeSubmitError(err, "Something went wrong while starting it.");
     }
     handleNext();
   }
