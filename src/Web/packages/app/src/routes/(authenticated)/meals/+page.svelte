@@ -13,7 +13,7 @@
   import { getMeals, addCarbIntakeFood, deleteCarbIntakeFood } from "$api/generated/nutritions.generated.remote";
   import { getSuggestions as getMealMatchingSuggestions, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import {
     TreatmentFoodSelectorDialog,
     TreatmentFoodEntryEditDialog,
@@ -285,7 +285,7 @@
         id: carbIntakeId,
         request,
       });
-      toast.success("Food added");
+      toastSaved("Food added");
       showAddFoodDialog = false;
       addFoodMeal = null;
       mealsQuery.refresh();
@@ -307,7 +307,7 @@
         carbs: match.carbs ?? 0,
         timeOffsetMinutes: 0,
       });
-      toast.success("Meal match accepted");
+      toastSaved("Meal match accepted");
       // Awaited so the row's pending state covers the refresh too, not just the
       // command; otherwise the row is clickable again before it disappears.
       await Promise.all([mealsQuery.refresh(), suggestionsQuery.refresh()]);

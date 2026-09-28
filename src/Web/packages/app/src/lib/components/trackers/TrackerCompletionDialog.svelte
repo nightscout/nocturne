@@ -10,7 +10,7 @@
   import Check from "@lucide/svelte/icons/check";
   import { CompletionReason, TrackerCategory } from "$api";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import { create as createDeviceEventForm } from "$api/generated/deviceEvents.generated.remote";
 
   interface TrackerCompletionDialogProps {
@@ -190,6 +190,7 @@
         deviceEventFormRef.requestSubmit();
       }
 
+      toastSaved(startAnother && definitionId ? "Tracker completed and restarted" : "Tracker completed");
       open = false;
       await tick();
       onComplete?.();

@@ -8,7 +8,7 @@
   import Play from "@lucide/svelte/icons/play";
   import { cn } from "$lib/utils";
   import { formatClock, formatShortDate, time } from "$lib/utils/formatting";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
 
   import { tick } from "svelte";
   import {
@@ -196,6 +196,7 @@
         deviceEventFormRef.requestSubmit();
       }
 
+      toastSaved(isEventMode ? "Event scheduled" : "Tracker started");
       open = false;
       onStart?.();
     });

@@ -10,6 +10,7 @@ export {
   useToastSubmission,
   type ToastSubmission,
 } from "./toast-submission.svelte";
+export { toastSaved } from "./toast-saved";
 export { fieldMessages, type FieldIssues } from "./field-messages";
 export {
   describeSubmitError,
