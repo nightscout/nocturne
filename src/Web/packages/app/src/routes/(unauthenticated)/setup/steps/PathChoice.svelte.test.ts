@@ -6,7 +6,7 @@ import PathChoice from "./PathChoice.svelte";
 
 describe("PathChoice", () => {
   it("announces the paths as a radio group named by its heading", async () => {
-    render(PathChoice, { path: "fresh" });
+    render(PathChoice, { path: "fresh", voice: { kind: "self" } });
 
     const group = page.getByRole("radiogroup", {
       name: /How are you arriving/,
@@ -19,7 +19,7 @@ describe("PathChoice", () => {
   });
 
   it("moves the selection with the arrow keys", async () => {
-    render(PathChoice, { path: "fresh" });
+    render(PathChoice, { path: "fresh", voice: { kind: "self" } });
 
     const fresh = page.getByRole("radio", { name: /Start with a blank slate/ });
     const migration = page.getByRole("radio", {
@@ -39,7 +39,7 @@ describe("PathChoice", () => {
   });
 
   it("promises only steps the wizard has", async () => {
-    render(PathChoice, { path: "fresh" });
+    render(PathChoice, { path: "fresh", voice: { kind: "self" } });
 
     await expect.element(page.getByText(/target range/i)).not.toBeInTheDocument();
     await expect.element(page.getByText(/glucose units/i)).not.toBeInTheDocument();

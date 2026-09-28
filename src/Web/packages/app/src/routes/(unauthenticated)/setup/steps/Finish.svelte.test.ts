@@ -74,9 +74,9 @@ describe("Finish", () => {
   });
 
   it.each([
-    [PatientRelationship.Self, "Your data is home.", /your uploaders keep sending/, "Open your dashboard"],
-    [PatientRelationship.Caregiver, "Sam's data is home.", /Sam's uploaders keep sending/, "Open Sam's dashboard"],
-    [undefined, "The data is home.", /its uploaders keep sending/, "Open the dashboard"],
+    [PatientRelationship.Self, "Your data is home.", /your uploaders keep\s+sending/, "Open your dashboard"],
+    [PatientRelationship.Caregiver, "Sam's data is home.", /Sam's uploaders keep\s+sending/, "Open Sam's dashboard"],
+    [undefined, "The data is home.", /its uploaders keep\s+sending/, "Open the dashboard"],
   ])("words a complete import for %s", async (relationship, heading, body, button) => {
     renderFinish("migration", {
       importResult: "complete",

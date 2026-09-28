@@ -91,32 +91,6 @@
     accountCreated = true;
   }
 
-  // ── Onboarding step definitions (post-auth) ────────────────────────
-  const importLabel = $derived(
-    voice.kind === "self"
-      ? "Import your history"
-      : voice.kind === "named"
-        ? `Import ${voice.name}'s history`
-        : "Import the history"
-  );
-
-  const STEPS = $derived({
-    fresh: [
-      { id: "who", label: "Who it's for", short: "Who", art: "who" },
-      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
-      { id: "cgm", label: "Connect a data source", short: "Source", art: "source" },
-      { id: "sync", label: "Configure & sync", short: "Setup", art: "source" },
-      { id: "finish", label: "Finish", short: "Done", art: "done" },
-    ],
-    migration: [
-      { id: "who", label: "Who it's for", short: "Who", art: "who" },
-      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
-      { id: "connect", label: "Connect Nightscout", short: "Connect", art: "source" },
-      { id: "import", label: importLabel, short: "Import", art: "import" },
-      { id: "finish", label: "Finish", short: "Done", art: "done" },
-    ],
-  } as const satisfies Record<string, readonly StepDef[]>);
-
   // ── State ───────────────────────────────────────────────────────────
   let path = $state<"fresh" | "migration">("fresh");
   let stepIndex = $state(0);
@@ -170,6 +144,32 @@
     chosenName ?? relationshipQuery?.current?.patientName ?? ""
   );
   const voice = $derived(patientVoice({ relationship, patientName }));
+
+  // ── Onboarding step definitions (post-auth) ────────────────────────
+  const importLabel = $derived(
+    voice.kind === "self"
+      ? "Import your history"
+      : voice.kind === "named"
+        ? `Import ${voice.name}'s history`
+        : "Import the history"
+  );
+
+  const STEPS = $derived({
+    fresh: [
+      { id: "who", label: "Who it's for", short: "Who", art: "who" },
+      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
+      { id: "cgm", label: "Connect a data source", short: "Source", art: "source" },
+      { id: "sync", label: "Configure & sync", short: "Setup", art: "source" },
+      { id: "finish", label: "Finish", short: "Done", art: "done" },
+    ],
+    migration: [
+      { id: "who", label: "Who it's for", short: "Who", art: "who" },
+      { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
+      { id: "connect", label: "Connect Nightscout", short: "Connect", art: "source" },
+      { id: "import", label: importLabel, short: "Import", art: "import" },
+      { id: "finish", label: "Finish", short: "Done", art: "done" },
+    ],
+  } as const satisfies Record<string, readonly StepDef[]>);
 
   const steps = $derived(STEPS[path]);
   const currentStep = $derived(steps[stepIndex]);
