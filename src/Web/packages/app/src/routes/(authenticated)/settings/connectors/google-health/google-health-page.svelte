@@ -66,19 +66,25 @@
     "body-weights": "Weight history",
     "sleep-sessions": "Sleep history",
   };
-  const categoryOrder = [
-    "Vitals",
-    "Activity",
-    "Body measurement",
-    "Nutrition",
-    "Sleep",
-    "Cycle tracking",
-  ];
+  // Capability.category is a stable server/API key. Keep it separate from the
+  // translated label shown to users; comparing against translated strings
+  // makes categories disappear in locales such as Dutch (where "Vitals" and
+  // "Body measurement" are translated).
+  const categoryMeta: Record<string, { label: string; hideForMale?: boolean }> =
+    {
+      Vitals: { label: "Vitals" },
+      Activity: { label: "Activity" },
+      "Body measurement": { label: "Body measurement" },
+      Nutrition: { label: "Nutrition" },
+      Sleep: { label: "Sleep" },
+      "Cycle tracking": { label: "Cycle tracking", hideForMale: true },
+    };
+  const categoryOrder = Object.keys(categoryMeta);
   const categoryGroups = $derived.by(() => {
     const capabilities = status?.capabilities ?? [];
     const items = preview?.items ?? [];
     return categoryOrder
-      .filter((category) => !(isMale && category === "Cycle tracking"))
+      .filter((category) => !(isMale && categoryMeta[category]?.hideForMale))
       .map((category) => {
         // The server catalog is authoritative for what Nocturne can handle.
         // A slow, timed-out, or older inventory response may omit a type; do
@@ -108,6 +114,7 @@
           });
         return {
           category,
+          label: categoryMeta[category]?.label ?? category,
           entries,
           selectedCount: entries.filter((entry) =>
             selected.includes(entry.item.dataType ?? "")
@@ -657,7 +664,8 @@
           {#if categoryGroups.length > 0}<div class="space-y-3">
               {#if inventoryBusy && !preview}
                 <p class="text-sm text-muted-foreground">
-                  Scanning the selected history in Google Health… The catalog remains available while the inventory is loading.
+                  Scanning the selected history in Google Health… The catalog
+                  remains available while the inventory is loading.
                 </p>
               {/if}
               {#each categoryGroups as group (group.category)}
@@ -673,7 +681,7 @@
                   <summary
                     class="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-medium"
                   >
-                    <span>{group.category}</span>
+                    <span>{group.label}</span>
                     <span class="tabular-nums text-sm text-muted-foreground">
                       {group.selectedCount}/{group.entries.length} selected
                     </span>
