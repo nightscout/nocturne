@@ -800,6 +800,10 @@ pub(crate) fn choreograph_stages(timeline: &mut Timeline, params: &Choreography,
         }
         let mut stage = choreograph(&stage, params);
         settle_after_last_stroke(&mut stage);
+        debug_assert_eq!(
+            stage.total_ticks, window,
+            "stage {k} was stretched past its window"
+        );
         for e in stage.events {
             out.push(from + e.at_tick.min(window - 1), e.op);
         }

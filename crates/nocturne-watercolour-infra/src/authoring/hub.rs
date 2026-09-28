@@ -623,8 +623,10 @@ mod tests {
     }
 
     /// A seek to `k / STOPS` of the ticks has to land on a finished stage:
-    /// choreography must not stretch a stage past its window, every stage must
-    /// paint something, and each must be dry on the tick before the next.
+    /// every stage must paint something and be dry on the tick before the
+    /// next. That choreography does not stretch a stage past its window is
+    /// `choreograph_stages`' debug assertion, which building every id here
+    /// runs.
     #[test]
     fn every_stop_lands_on_a_finished_dry_stage() {
         let palette = Palette::moonlight();
@@ -634,19 +636,8 @@ mod tests {
                     let drawn =
                         ArtworkCatalogue::by_id_for(id, Seed(7), &palette, 0.7, detail, background)
                             .unwrap();
-                    let authored = ArtworkCatalogue::by_id_for_unchoreographed(
-                        id,
-                        Seed(7),
-                        &palette,
-                        0.7,
-                        detail,
-                        background,
-                        None,
-                    )
-                    .unwrap();
                     let total = drawn.timeline.total_ticks;
                     let label = format!("{id} / {detail:?} / {background:?}");
-                    assert_eq!(total, authored.timeline.total_ticks, "{label} stretched");
                     assert_eq!(total % STOPS, 0, "{label}");
                     let window = total / STOPS;
                     for k in 0..STOPS {

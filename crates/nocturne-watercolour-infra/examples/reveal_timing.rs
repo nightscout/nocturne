@@ -1,7 +1,8 @@
 //! Reveal timing: renders N frames evenly spaced in wall-clock progress for
-//! one catalogue artwork (or every id with `all`) and prints the numbers the
-//! reveal is designed around, so "the pen moves, the ink blooms, the artwork
-//! sets" is checkable rather than squinted at:
+//! one catalogue artwork (or every unstaged id with `all`; a staged one is
+//! `render_stops`' job) and prints the numbers the reveal is designed around,
+//! so "the pen moves, the ink blooms, the artwork sets" is checkable rather
+//! than squinted at:
 //!
 //! ```text
 //! cargo run -p nocturne-watercolour-infra --example reveal_timing --release -- <out_dir> [id] [palette] [frames] [flags...]
@@ -701,7 +702,14 @@ fn main() {
         std::process::exit(1);
     };
     let ids: Vec<&str> = if id == "all" {
-        ArtworkCatalogue::ids().to_vec()
+        ArtworkCatalogue::ids()
+            .iter()
+            .copied()
+            .filter(|id| ArtworkCatalogue::stages(id).is_none())
+            .collect()
+    } else if ArtworkCatalogue::stages(&id).is_some() {
+        eprintln!("{id} is staged and seeks linearly; use the render_stops example");
+        std::process::exit(1);
     } else if ArtworkCatalogue::ids().contains(&id.as_str()) {
         vec![id.as_str()]
     } else {

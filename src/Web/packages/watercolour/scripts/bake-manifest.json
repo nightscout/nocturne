@@ -394,9 +394,7 @@
         "dark"
       ],
       "stripWidth": 255,
-      "stripHeight": 85,
-      "stripFrames": 7,
-      "linearProgress": true
+      "stripHeight": 85
     },
     {
       "id": "lucide:database",

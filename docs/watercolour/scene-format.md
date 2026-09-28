@@ -182,9 +182,10 @@ That holds in **tick** space. The player's default curve spends the first
 fifth of the wall clock on all the painting, so a host that steps through the
 stops must pass `easing: (t) => t`, which switches the engine to
 `ProgressCurve::Linear`; `seek(k / 6)` then lands on stop `k`. The baked strip
-matches: its manifest entry sets `"stripFrames": 7` and
-`"linearProgress": true`, so strip frame `k` is stop `k` and a linear seek on
-the baked fallback shows the same painting. A contact sheet of every stop, light
+matches: the bake reads the stage count from `ArtworkCatalogue::stages`, gives
+the strip one frame per stop (seven) and samples it linearly, so strip frame
+`k` is stop `k` and a linear seek on the baked fallback shows the same
+painting. A contact sheet of every stop, light
 and dark, is in `docs/watercolour/hub-scenes/` (one row per stop, 0 at the
 top; light ground on the left, dark on the right), regenerated with the
 `render_stops` infra example.

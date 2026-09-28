@@ -29,11 +29,10 @@
 //! strips are rendered at the artwork's natural aspect (long edge 512 / 128
 //! for finals, the manifest's frame size for strips).
 //!
-//! An entry may override the manifest's `stripFrames` with its own and set
-//! `"linearProgress": true`, which samples the strip one-for-one in ticks
-//! (`ProgressCurve::Linear`) instead of on the reveal curve. The staged
-//! setup-hub scenes use both: seven frames, so frame `k` is exactly the
-//! painting after `k` of its six stages.
+//! A staged artwork (`ArtworkCatalogue::stages`) is baked the same way in
+//! every mode: one strip frame per stop, sampled one-for-one in ticks
+//! (`ProgressCurve::Linear`) instead of on the reveal curve, so frame `k` is
+//! exactly the painting after `k` of its stages.
 //!
 //! The PNGs written here are intermediates. `pnpm bake` runs
 //! `src/Web/packages/watercolour/scripts/to-webp.mjs` afterwards, which
@@ -49,7 +48,7 @@ use std::time::Instant;
 use nocturne_watercolour_core::application::{Exporter, Playback, ProgressCurve, Renderer};
 use nocturne_watercolour_core::domain::{Palette, Seed};
 use nocturne_watercolour_infra::authoring::{
-    IconHints, IconNode, parse_icon_elements, parse_icon_hints, svg_icon_scene,
+    ArtworkCatalogue, IconHints, IconNode, parse_icon_elements, parse_icon_hints, svg_icon_scene,
 };
 use nocturne_watercolour_infra::export::{FrameSequence, PngExporter};
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
@@ -89,10 +88,6 @@ struct ManifestArtwork {
     surfaces: Vec<String>,
     strip_width: u32,
     strip_height: u32,
-    #[serde(default)]
-    strip_frames: Option<u32>,
-    #[serde(default)]
-    linear_progress: bool,
 }
 
 /// A `lucide:<name>` manifest entry: the element list and built-in hints
@@ -108,7 +103,6 @@ struct ArtworkSpec {
     id: String,
     palettes: Vec<(String, Surface)>,
     strip_frames: u32,
-    linear_progress: bool,
     strip_width: u32,
     strip_height: u32,
     icon: Option<IconBake>,
@@ -120,6 +114,11 @@ struct BakeConfig {
     detail: DetailLevel,
     duration_ms: u32,
     specs: Vec<ArtworkSpec>,
+}
+
+/// A staged artwork gets a frame per stop; everything else `default`.
+fn strip_frames(id: &str, default: u32) -> u32 {
+    ArtworkCatalogue::stages(id).map_or(default, |stages| stages + 1)
 }
 
 /// Scales `(width, height)` so the long edge is `target`, preserving aspect.
@@ -213,13 +212,12 @@ fn curated(manifest_path: &Path) -> BakeConfig {
                 .as_ref()
                 .map_or(a.id.clone(), |icon| format!("lucide-{}", icon.name));
             ArtworkSpec {
+                strip_frames: strip_frames(&id, manifest.strip_frames),
                 id,
                 palettes: surfaces
                     .into_iter()
                     .map(|surface| (a.palette.clone(), surface))
                     .collect(),
-                strip_frames: a.strip_frames.unwrap_or(manifest.strip_frames),
-                linear_progress: a.linear_progress,
                 strip_width: a.strip_width,
                 strip_height: a.strip_height,
                 icon,
@@ -239,10 +237,9 @@ fn whole_catalogue() -> BakeConfig {
     let specs = catalogue_ids()
         .into_iter()
         .map(|id| ArtworkSpec {
+            strip_frames: strip_frames(&id, STRIP_FRAMES),
             id,
             palettes: full_variants(),
-            strip_frames: STRIP_FRAMES,
-            linear_progress: false,
             strip_width: STRIP_EDGE,
             strip_height: STRIP_EDGE,
             icon: None,
@@ -261,8 +258,7 @@ fn single_artwork(id: &str) -> BakeConfig {
     let specs = vec![ArtworkSpec {
         id: id.to_string(),
         palettes: full_variants(),
-        strip_frames: STRIP_FRAMES,
-        linear_progress: false,
+        strip_frames: strip_frames(id, STRIP_FRAMES),
         strip_width: STRIP_EDGE,
         strip_height: STRIP_EDGE,
         icon: None,
@@ -348,7 +344,7 @@ fn main() {
             fs::create_dir_all(&dir).expect("create asset dir");
 
             let mut playback = Playback::new(template.fork(), scene, 1000.0).expect("playback");
-            if spec.linear_progress {
+            if ArtworkCatalogue::stages(&spec.id).is_some() {
                 playback.set_progress_curve(ProgressCurve::Linear);
             }
             let frames = FrameSequence {

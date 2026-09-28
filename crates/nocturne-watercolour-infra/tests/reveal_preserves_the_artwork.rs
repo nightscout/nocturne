@@ -285,7 +285,9 @@ fn the_silhouette_measure_catches_a_mark_that_shrank() {
 const PACE_AT: f32 = 0.25;
 const MAX_AREA_AT_PACE: f32 = 0.45;
 /// The share of a stage's change from one stop to the next that may be made
-/// by [`PACE_AT`] of that stage's brushwork.
+/// by [`PACE_AT`] of that stage's brushwork: a steady stage is about a quarter
+/// done there (the worst measured is 0.29), so 0.6 passes that with room and
+/// fails a stage that is front-loaded or snaps into place.
 const MAX_STAGE_DONE_AT_PACE: f32 = 0.6;
 /// The least mean change a stage must make to the sheet. Area alone cannot
 /// show it: once the land is down the later stages paint inside the covered
@@ -319,6 +321,9 @@ fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: D
     let palette = Palette::moonlight();
     let mut slow: Vec<String> = Vec::new();
     for &id in ids {
+        if ArtworkCatalogue::stages(id).is_some() {
+            continue;
+        }
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
@@ -330,9 +335,6 @@ fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: D
         .unwrap();
         let aspect = scene.size_hint.height as f32 / scene.size_hint.width as f32;
         let (w, h) = (192u32, ((192.0 * aspect).round() as u32).max(8));
-        if ArtworkCatalogue::stages(id).is_some() {
-            continue;
-        }
         let curve = ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION);
         let ProgressCurve::Reveal { wall_split, .. } = curve else {
             unreachable!("reveal_for always returns Reveal")

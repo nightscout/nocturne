@@ -6,19 +6,19 @@
 //! ```
 //!
 //! A stop `k` of `n` is the tick `k / n` of the timeline, which is where a
-//! `ProgressCurve::Linear` seek lands. Writes `<id>.png` per id.
+//! `ProgressCurve::Linear` seek lands; `n` is `ArtworkCatalogue::stages(id)`,
+//! so an id that is not staged is refused. Writes `<id>.png` per id.
 
 use std::fs;
 use std::path::PathBuf;
 
-use nocturne_watercolour_core::application::{Exporter, Playback, ProgressCurve, Renderer};
+use nocturne_watercolour_core::application::{Exporter, Playback, Renderer};
 use nocturne_watercolour_core::domain::{Background, Image, Palette, Rgb, Seed};
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DEFAULT_INTENSITY, DetailLevel};
 use nocturne_watercolour_infra::export::{PngExporter, srgb_to_linear};
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
 
 const SEED: Seed = Seed(1610);
-const STOPS: u32 = 6;
 const GUTTER: u32 = 12;
 
 fn hex(rgb: u32) -> Rgb {
@@ -72,6 +72,10 @@ fn main() {
         (Background::TransparentOnDark, hex(0x0f1420)),
     ];
     for id in &ids {
+        let Some(stops) = ArtworkCatalogue::stages(id) else {
+            eprintln!("{id} is not a staged artwork");
+            std::process::exit(1);
+        };
         let mut columns: Vec<Vec<Image>> = Vec::new();
         for (background, ground) in grounds {
             let scene = ArtworkCatalogue::by_id_for(
@@ -88,13 +92,12 @@ fn main() {
                 .round() as u32;
             let total = scene.timeline.total_ticks;
             let mut pb = Playback::new(template.fork(), scene, 1000.0).expect("playback");
-            pb.set_progress_curve(ProgressCurve::Linear);
             let mut frames = Vec::new();
-            for k in 0..=STOPS {
-                if k == STOPS {
+            for k in 0..=stops {
+                if k == stops {
                     pb.finish_immediately().expect("finish");
                 } else {
-                    pb.seek_tick(total * k / STOPS).expect("seek");
+                    pb.seek_tick(total * k / stops).expect("seek");
                 }
                 let image = pb.simulator().render(width, height).expect("render");
                 frames.push(image.composite_over(ground));
@@ -103,7 +106,7 @@ fn main() {
             columns.push(frames);
         }
         let (w, h) = (columns[0][0].width, columns[0][0].height);
-        let mut sheet = Image::new(2 * w + 3 * GUTTER, (STOPS + 1) * (h + GUTTER) + GUTTER);
+        let mut sheet = Image::new(2 * w + 3 * GUTTER, (stops + 1) * (h + GUTTER) + GUTTER);
         for px in sheet.rgba.chunks_exact_mut(4) {
             px.copy_from_slice(&[0.5, 0.5, 0.5, 1.0]);
         }
