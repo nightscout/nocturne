@@ -33,6 +33,7 @@ export {
   formatGlucoseValue,
   formatGlucoseDelta,
   getUnitLabel,
+  isGlucoseUnits,
 } from "@nocturne/ui/glucose";
 import {
   convertToDisplayUnits,

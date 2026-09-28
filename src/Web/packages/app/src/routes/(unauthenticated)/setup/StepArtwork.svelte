@@ -10,6 +10,7 @@
     welcome: { artwork: "crescent-moon", palette: "moonlight" },
     account: { icon: fingerprintArtwork, palette: "water" },
     who: { artwork: "people-group", palette: "dusk" },
+    units: { artwork: "world-globe", palette: "water" },
     source: { artwork: "plug", palette: "slate" },
     import: { icon: databaseArtwork, palette: "slate" },
     done: { artwork: "confirmation-mark", palette: "moss" },

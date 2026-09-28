@@ -19,9 +19,29 @@ const relationship = vi.hoisted(() => ({
   stored: {} as { relationship?: string; patientName?: string },
   set: vi.fn(),
 }));
+const unitsAnswer = vi.hoisted(() => ({
+  stored: {} as {
+    glucoseUnits?: string;
+    timezone?: string;
+    nightscout?: { displayUnits?: string; profileUnits?: string; profileTimezone?: string };
+    nightscoutUnavailable?: boolean;
+  },
+  asked: [] as unknown[],
+  set: vi.fn(),
+}));
 vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
   getPatientRelationship: () => remoteQuery(() => relationship.stored),
   setPatientRelationship: relationship.set,
+  getUnitsAndTimezone: (args: unknown) => {
+    unitsAnswer.asked.push(args);
+    return remoteQuery(() => unitsAnswer.stored);
+  },
+  setUnitsAndTimezone: unitsAnswer.set,
+}));
+const { applyPreferences } = vi.hoisted(() => ({ applyPreferences: vi.fn() }));
+vi.mock("$lib/stores/appearance-store.svelte", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  applyPreferences,
 }));
 vi.mock("$api/generated/services.generated.remote", () => ({
   getServicesOverview: () => remoteQuery(() => null),
@@ -63,10 +83,22 @@ async function renderAtPath() {
 }
 
 const sendingCopy = () => page.getByText(/Choose a cloud service/);
+const unitsHeading = () => page.getByRole("heading", { name: /Glucose units and time/ });
+
+/** Past the path step on the fresh path, and past the units step without answering it. */
+async function skipToDataSource() {
+  await continueButton().click();
+  await expect.element(unitsHeading()).toBeVisible();
+  await skipButton().click();
+}
 
 beforeEach(() => {
   relationship.stored = {};
   relationship.set.mockReset();
+  unitsAnswer.stored = { glucoseUnits: "mmol" };
+  unitsAnswer.asked = [];
+  unitsAnswer.set.mockReset();
+  applyPreferences.mockReset();
 });
 
 describe("setup who-for step", () => {
@@ -76,7 +108,7 @@ describe("setup who-for step", () => {
     const group = page.getByRole("radiogroup", { name: /Who is Nocturne for/ });
     await expect.element(group).toBeVisible();
     expect(group.getByRole("radio").elements()).toHaveLength(3);
-    await expect.element(page.getByText("Step 01 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
     await expect
       .element(page.getByTestId("artwork"))
       .toHaveAttribute("data-artwork", "people-group");
@@ -107,7 +139,7 @@ describe("setup who-for step", () => {
     await continueButton().click();
 
     expect(relationship.set).toHaveBeenCalledWith({ relationship: value, patientName: "Sam" });
-    await continueButton().click();
+    await skipToDataSource();
     await expect.element(sendingCopy()).toHaveTextContent(/sending Sam's glucose/);
   });
 
@@ -118,7 +150,7 @@ describe("setup who-for step", () => {
     await continueButton().click();
 
     expect(relationship.set).toHaveBeenCalledWith({ relationship: "Self", patientName: undefined });
-    await continueButton().click();
+    await skipToDataSource();
     await expect.element(sendingCopy()).toHaveTextContent(/sending your glucose/);
   });
 
@@ -127,7 +159,7 @@ describe("setup who-for step", () => {
 
     await page.getByRole("radio", { name: /Someone I care for/ }).click();
     await skipButton().click();
-    await continueButton().click();
+    await skipToDataSource();
 
     expect(relationship.set).not.toHaveBeenCalled();
     await expect.element(sendingCopy()).toHaveTextContent(/sending the glucose/);
@@ -150,7 +182,7 @@ describe("setup who-for step", () => {
     await page.getByRole("radio", { name: /^Me/ }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 01 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
     await expect.element(page.getByRole("alert")).toBeVisible();
   });
 });
@@ -173,7 +205,7 @@ describe("setup path step", () => {
     await expect
       .element(migrationCard())
       .toHaveAttribute("aria-checked", "true");
-    await expect.element(page.getByText("Step 02 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 02 / 06")).toBeVisible();
     await expect
       .element(page.getByText("Nightscout Migration", { exact: true }))
       .toBeVisible();
@@ -185,7 +217,7 @@ describe("setup path step", () => {
     await migrationCard().click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 03 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 03 / 06")).toBeVisible();
     await expect
       .element(page.getByText("Nightscout Migration", { exact: true }))
       .toBeVisible();
@@ -195,7 +227,7 @@ describe("setup path step", () => {
   it("advances the fresh path to its data source step", async () => {
     await renderAtPath();
 
-    await continueButton().click();
+    await skipToDataSource();
 
     await expect
       .element(page.getByRole("heading", { name: /Connect a data source/ }))
@@ -235,6 +267,10 @@ describe("setup chrome", () => {
 
     await continueButton().click();
 
+    await expect.element(artwork).toHaveAttribute("data-artwork", "world-globe");
+
+    await skipButton().click();
+
     await expect.element(artwork).toHaveAttribute("data-artwork", "plug");
   });
 
@@ -252,7 +288,7 @@ describe("setup chrome", () => {
   it("has no action on the data source step that pretends to save", async () => {
     await renderAtPath();
 
-    await continueButton().click();
+    await skipToDataSource();
 
     await expect
       .element(page.getByRole("heading", { name: /Connect a data source/ }))
@@ -269,7 +305,9 @@ describe("setup import step", () => {
     await migrationCard().click();
     await continueButton().click();
     await skipButton().click();
-    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
+    await expect.element(unitsHeading()).toBeVisible();
+    await skipButton().click();
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
   }
 
   it("blocks leaving while the import runs", async () => {
@@ -285,7 +323,7 @@ describe("setup import step", () => {
 
     await page.getByRole("button", { name: "Finish" }).click();
 
-    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
   });
 
   it("offers Continue once the import has settled", async () => {
@@ -294,7 +332,7 @@ describe("setup import step", () => {
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 05 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
   });
 
   it("words a refused start as a connection that isn't saved", async () => {
@@ -307,10 +345,149 @@ describe("setup import step", () => {
     await continueButton().click();
 
     await page.getByRole("button", { name: "Stub: complete" }).click();
+    await skipButton().click();
 
-    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
     await expect
       .element(page.getByTestId("start-error"))
       .toHaveTextContent("Your Nightscout connection isn't saved yet.");
+  });
+});
+
+describe("setup units step", () => {
+  const mgdlCard = () => page.getByRole("radio", { name: /^mg\/dL/ });
+  const mmolCard = () => page.getByRole("radio", { name: /^mmol\/L/ });
+  const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  async function reachUnits() {
+    await renderAtPath();
+    await continueButton().click();
+    await expect.element(unitsHeading()).toBeVisible();
+  }
+
+  async function reachUnitsFromNightscout() {
+    await renderAtPath();
+    await migrationCard().click();
+    await continueButton().click();
+    await page.getByRole("button", { name: "Stub: complete" }).click();
+    await expect.element(unitsHeading()).toBeVisible();
+  }
+
+  it("comes before any data, with the suggested units and an example in each", async () => {
+    await reachUnits();
+
+    await expect.element(page.getByText("Step 03 / 06")).toBeVisible();
+    await expect.element(mmolCard()).toHaveAttribute("aria-checked", "true");
+    await expect.element(mgdlCard()).toHaveAttribute("aria-checked", "false");
+    await expect.element(mmolCard()).toHaveTextContent(/6\.1\s*mmol\/L/);
+    await expect.element(mmolCard()).toHaveTextContent(/3\.9-10 mmol\/L/);
+    await expect.element(mgdlCard()).toHaveTextContent(/110\s*mg\/dL/);
+    await expect.element(mgdlCard()).toHaveTextContent(/70-180 mg\/dL/);
+    expect(unitsAnswer.asked).toContainEqual({ locale: navigator.language, fromNightscout: false });
+  });
+
+  it.each([
+    [{ relationship: "Self" }, /Pick the unit your meter/],
+    [{ relationship: "Caregiver", patientName: "Sam" }, /Pick the unit Sam's meter/],
+    [{}, /Pick the unit the meter/],
+  ])("speaks of whoever it is for (%o)", async (answer, wording) => {
+    relationship.stored = answer;
+    await reachUnits();
+
+    await expect.element(page.getByText(wording)).toBeVisible();
+  });
+
+  it("offers this device's timezone to confirm", async () => {
+    await reachUnits();
+
+    await expect.element(page.getByText(/Detected from this device/)).toBeVisible();
+    await expect.element(page.getByRole("combobox")).toHaveTextContent(browserZone);
+  });
+
+  it("saves the chosen units and timezone and shows the app in them", async () => {
+    await reachUnits();
+
+    await mgdlCard().click();
+    await continueButton().click();
+
+    expect(unitsAnswer.set).toHaveBeenCalledWith({ glucoseUnits: "mg/dl", timezone: browserZone });
+    expect(applyPreferences).toHaveBeenCalledWith({ glucoseUnits: "mg/dl" }, { refreshCookie: true });
+    await expect.element(sendingCopy()).toBeVisible();
+  });
+
+  it("keeps a stored timezone over this device's", async () => {
+    unitsAnswer.stored = { glucoseUnits: "mmol", timezone: "Pacific/Auckland" };
+    await reachUnits();
+
+    await continueButton().click();
+
+    expect(unitsAnswer.set).toHaveBeenCalledWith({ glucoseUnits: "mmol", timezone: "Pacific/Auckland" });
+  });
+
+  it("saves nothing when skipped", async () => {
+    await reachUnits();
+
+    await skipButton().click();
+
+    expect(unitsAnswer.set).not.toHaveBeenCalled();
+    await expect.element(sendingCopy()).toBeVisible();
+  });
+
+  it("stays on the step when the answer cannot be saved", async () => {
+    unitsAnswer.set.mockRejectedValueOnce(new Error("boom"));
+    await reachUnits();
+
+    await continueButton().click();
+
+    await expect.element(unitsHeading()).toBeVisible();
+    await expect.element(page.getByRole("alert")).toBeVisible();
+    expect(applyPreferences).not.toHaveBeenCalled();
+  });
+
+  it("asks the connected Nightscout and says the answer came from it", async () => {
+    unitsAnswer.stored = {
+      glucoseUnits: "mmol",
+      timezone: "Europe/Dublin",
+      nightscout: { displayUnits: "mmol", profileUnits: "mmol", profileTimezone: "Europe/Dublin" },
+    };
+    await reachUnitsFromNightscout();
+
+    expect(unitsAnswer.asked).toContainEqual({ locale: navigator.language, fromNightscout: true });
+    await expect.element(page.getByText(/filled these in from your Nightscout/)).toBeVisible();
+    await expect.element(page.getByTestId("profile-units-mismatch")).not.toBeInTheDocument();
+  });
+
+  it("says plainly when the Nightscout profile is in other units", async () => {
+    unitsAnswer.stored = {
+      glucoseUnits: "mg/dl",
+      nightscout: { displayUnits: "mg/dl", profileUnits: "mmol" },
+    };
+    await reachUnitsFromNightscout();
+
+    const mismatch = page.getByTestId("profile-units-mismatch");
+    await expect.element(mismatch).toHaveTextContent(/Your Nightscout profile uses mmol\/L/);
+    await expect.element(mismatch).toHaveTextContent(/you've chosen mg\/dL/);
+
+    await mmolCard().click();
+
+    await expect.element(mismatch).not.toBeInTheDocument();
+  });
+
+  it("says so when the Nightscout could not be read", async () => {
+    unitsAnswer.stored = { glucoseUnits: "mg/dl", nightscoutUnavailable: true };
+    await reachUnitsFromNightscout();
+
+    await expect.element(page.getByText(/couldn't read your Nightscout's settings/)).toBeVisible();
+  });
+
+  it("starts the import once the step is answered", async () => {
+    vi.mocked(startFromConnector).mockClear();
+    await reachUnitsFromNightscout();
+
+    expect(startFromConnector).not.toHaveBeenCalled();
+    await continueButton().click();
+
+    expect(startFromConnector).toHaveBeenCalledWith("nightscout");
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
   });
 });

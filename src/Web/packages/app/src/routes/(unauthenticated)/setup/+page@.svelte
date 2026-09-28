@@ -21,20 +21,25 @@
   import {
     getPatientRelationship,
     setPatientRelationship,
+    getUnitsAndTimezone,
+    setUnitsAndTimezone,
   } from "$api/generated/tenantSettings.generated.remote";
+  import { applyPreferences, type GlucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import { isGlucoseUnits } from "$lib/utils/formatting";
   import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+  import { PatientRelationship } from "$api";
   import { startOrResumeMigration } from "./migration-session";
   import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import type {
     UploaderApp,
     DataSourceInfo,
-    PatientRelationship,
   } from "$lib/api/generated/nocturne-api-client";
 
   import StepSidebar from "./StepSidebar.svelte";
   import TenantIdentity from "./steps/TenantIdentity.svelte";
   import AccountCreation from "./steps/AccountCreation.svelte";
   import WhoFor from "./steps/WhoFor.svelte";
+  import UnitsAndTimezone from "./steps/UnitsAndTimezone.svelte";
   import PathChoice from "./steps/PathChoice.svelte";
   import NightscoutConnect from "./steps/NightscoutConnect.svelte";
   import DataSourceSelectionView from "$lib/components/connectors/DataSourceSelectionView.svelte";
@@ -96,6 +101,7 @@
     fresh: [
       { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
+      { id: "units", label: "Units and timezone", short: "Units", art: "units" },
       { id: "cgm", label: "Connect a data source", short: "Source", art: "source" },
       { id: "sync", label: "Configure & sync", short: "Setup", art: "source" },
       { id: "finish", label: "Finish", short: "Done", art: "done" },
@@ -104,6 +110,7 @@
       { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
       { id: "connect", label: "Connect your Nightscout", short: "Connect", art: "source" },
+      { id: "units", label: "Units and timezone", short: "Units", art: "units" },
       { id: "import", label: "Import your history", short: "Import", art: "import" },
       { id: "finish", label: "Finish", short: "Done", art: "done" },
     ],
@@ -150,6 +157,8 @@
   let sourceResult = $state<SourceResult>(null);
   let migrationJobId = $state<string | undefined>(undefined);
   let migrationStartError = $state<string | undefined>(undefined);
+  // The import starts after the units step, from the Nightscout connection saved before it.
+  let nightscoutConnected = $state(false);
 
   // Until the step is answered here, it shows the tenant's stored answer.
   let chosenRelationship = $state<PatientRelationship | undefined>(undefined);
@@ -162,9 +171,42 @@
     chosenName ?? relationshipQuery?.current?.patientName ?? ""
   );
   const voice = $derived(patientVoice({ relationship, patientName }));
+  const unitsVoice = $derived({
+    self: relationship === PatientRelationship.Self,
+    named:
+      !!relationship &&
+      relationship !== PatientRelationship.Self &&
+      !!patientName.trim(),
+    name: patientName.trim(),
+  });
 
   const steps = $derived(STEPS[path]);
   const currentStep = $derived(steps[stepIndex]);
+
+  // Read on the step itself, so a Nightscout saved just before it is asked for its settings.
+  const unitsQuery = $derived(
+    !setupRequired && currentStep?.id === "units"
+      ? getUnitsAndTimezone({
+          locale: browser ? navigator.language : undefined,
+          fromNightscout: path === "migration" && nightscoutConnected,
+        })
+      : null
+  );
+  retainQuery(() => unitsQuery);
+  const unitsAnswer = $derived(unitsQuery?.current);
+  const browserTimezone = browser
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : "";
+  let chosenUnits = $state<GlucoseUnits | undefined>(undefined);
+  let chosenTimezone = $state<string | undefined>(undefined);
+  let unitsError = $state<string | undefined>(undefined);
+  const units = $derived(
+    chosenUnits ??
+      (isGlucoseUnits(unitsAnswer?.glucoseUnits) ? unitsAnswer.glucoseUnits : undefined)
+  );
+  const timezone = $derived(
+    chosenTimezone ?? unitsAnswer?.timezone ?? browserTimezone
+  );
 
   // Both phases share one layout; these pick the phase's steps.
   const activeSteps: readonly StepDef[] = $derived(
@@ -232,6 +274,32 @@
       }
     }
     handleNext();
+  }
+
+  // Leaving the units step is what starts a Nightscout import, answered or not.
+  async function leaveUnitsStep() {
+    if (path === "migration" && nightscoutConnected) await handleMigrationConnected();
+    else handleNext();
+  }
+
+  async function handleUnitsContinue() {
+    if (!units || !timezone) return;
+    try {
+      unitsError = undefined;
+      await setUnitsAndTimezone({ glucoseUnits: units, timezone });
+      applyPreferences({ glucoseUnits: units }, { refreshCookie: true });
+    } catch (err) {
+      unitsError = describeSubmitError(err, "We couldn't save your units and timezone.");
+      return;
+    }
+    await leaveUnitsStep();
+  }
+
+  async function handleUnitsSkip() {
+    chosenUnits = undefined;
+    chosenTimezone = undefined;
+    unitsError = undefined;
+    await leaveUnitsStep();
   }
 
   async function handleEnterDashboard() {
@@ -434,8 +502,26 @@
               />
             {:else if activeStep?.id === "path"}
               <PathChoice bind:path />
+            {:else if activeStep?.id === "units"}
+              <UnitsAndTimezone
+                bind:units={() => units, (value) => (chosenUnits = value)}
+                bind:timezone={
+                  () => timezone, (value) => (chosenTimezone = value)
+                }
+                timezoneDetected={chosenTimezone === undefined &&
+                  !unitsAnswer?.timezone}
+                nightscout={unitsAnswer?.nightscout}
+                nightscoutUnavailable={unitsAnswer?.nightscoutUnavailable}
+                voice={unitsVoice}
+                error={unitsError}
+              />
             {:else if activeStep?.id === "connect"}
-              <NightscoutConnect onComplete={handleMigrationConnected} />
+              <NightscoutConnect
+                onComplete={() => {
+                  nightscoutConnected = true;
+                  handleNext();
+                }}
+              />
             {:else if activeStep?.id === "cgm"}
               <div class="flex flex-col gap-8 px-4 py-8">
                 <div class="flex flex-col items-center gap-4 text-center">
@@ -559,6 +645,14 @@
                     Skip for now
                   </Button>
                   <Button onclick={handleWhoForContinue}>
+                    Continue
+                    <ArrowRight class="h-4 w-4" />
+                  </Button>
+                {:else if currentStep?.id === "units"}
+                  <Button variant="ghost" onclick={handleUnitsSkip}>
+                    Skip for now
+                  </Button>
+                  <Button onclick={handleUnitsContinue} disabled={!units || !timezone}>
                     Continue
                     <ArrowRight class="h-4 w-4" />
                   </Button>
