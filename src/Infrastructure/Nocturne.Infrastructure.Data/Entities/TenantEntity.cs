@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Infrastructure.Data.Entities;
 
@@ -54,6 +55,13 @@ public class TenantEntity : ISystemTimestamped
     /// </summary>
     [Column("onboarding_completed_at")]
     public DateTime? OnboardingCompletedAt { get; set; }
+
+    /// <summary>
+    /// The onboarder's answer to "who is Nocturne for". Null until answered.
+    /// </summary>
+    [Column("patient_relationship")]
+    [MaxLength(16)]
+    public PatientRelationship? PatientRelationship { get; set; }
 
     /// <summary>Whether this tenant is a demo instance with synthetic data.</summary>
     [Column("is_demo")]

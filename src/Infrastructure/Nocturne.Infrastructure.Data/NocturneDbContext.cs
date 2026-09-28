@@ -1835,6 +1835,10 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
         // Signal loss sweep: find tenants that haven't reported recently
         modelBuilder.Entity<TenantEntity>()
+            .Property(t => t.PatientRelationship)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<TenantEntity>()
             .HasIndex(t => t.LastReadingAt)
             .HasDatabaseName("ix_tenants_last_reading_at");
 
