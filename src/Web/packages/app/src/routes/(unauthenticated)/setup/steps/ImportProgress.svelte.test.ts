@@ -1,7 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { MigrationJobState, MigrationMode } from "$api";
+import { MigrationJobState, MigrationMode, PatientRelationship } from "$api";
 import type { MigrationJobInfo, MigrationJobStatus } from "$api";
 
 let status: MigrationJobStatus;
@@ -23,6 +23,9 @@ vi.mock("$api/generated/migrations.generated.remote", () => ({
 }));
 
 import ImportProgress from "./ImportProgress.svelte";
+import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+
+const voice = patientVoice({ relationship: PatientRelationship.Self });
 
 describe("ImportProgress", () => {
   beforeEach(() => {
@@ -46,7 +49,7 @@ describe("ImportProgress", () => {
       collectionProgress: {},
     };
 
-    render(ImportProgress, { jobId: "job-1", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-1", onComplete: () => {} });
 
     await expect
       .element(page.getByText(/1 of 7 collections imported/))
@@ -70,7 +73,7 @@ describe("ImportProgress", () => {
       },
     };
 
-    render(ImportProgress, { jobId: "job-3", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-3", onComplete: () => {} });
 
     const summary = page.getByText(/6 of 7 collections imported/);
     await expect.element(summary).toBeVisible();
@@ -91,7 +94,7 @@ describe("ImportProgress", () => {
       },
     };
 
-    render(ImportProgress, { jobId: "job-4", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-4", onComplete: () => {} });
 
     await expect
       .element(page.getByText(/1 of 2 collections imported/))
@@ -106,7 +109,7 @@ describe("ImportProgress", () => {
       collectionProgress: {},
     };
 
-    render(ImportProgress, { jobId: "job-2", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-2", onComplete: () => {} });
 
     await expect.element(page.getByText(/collections imported/)).not.toBeInTheDocument();
   });
@@ -131,7 +134,7 @@ describe("ImportProgress", () => {
     };
     const onProgressChange = vi.fn();
 
-    render(ImportProgress, { onProgressChange, onComplete: () => {} });
+    render(ImportProgress, { voice, onProgressChange, onComplete: () => {} });
 
     await expect.element(page.getByText(/No import from Nightscout is running/)).toBeVisible();
     expect(statusSpy).not.toHaveBeenCalled();
@@ -156,7 +159,7 @@ describe("ImportProgress", () => {
       },
     };
 
-    render(ImportProgress, { jobId: "job-5", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-5", onComplete: () => {} });
 
     await expect
       .element(page.getByText(/412 records were not added again/))
@@ -184,7 +187,7 @@ describe("ImportProgress", () => {
       },
     };
 
-    render(ImportProgress, { jobId: "job-6", onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-6", onComplete: () => {} });
 
     await expect.element(page.getByText("70%", { exact: true })).toBeVisible();
   });
@@ -203,7 +206,7 @@ describe("ImportProgress", () => {
     const onResult = vi.fn();
     const onSettled = vi.fn();
 
-    render(ImportProgress, { jobId: `job-${expected}`, onResult, onSettled, onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: `job-${expected}`, onResult, onSettled, onComplete: () => {} });
 
     await expect.poll(() => onResult.mock.calls).toEqual([[expected]]);
     expect(onSettled).toHaveBeenCalledOnce();
@@ -214,7 +217,7 @@ describe("ImportProgress", () => {
     const onResult = vi.fn();
     const onSettled = vi.fn();
 
-    render(ImportProgress, { jobId: "job-live", onResult, onSettled, onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-live", onResult, onSettled, onComplete: () => {} });
 
     await expect.poll(() => onResult.mock.calls).toEqual([["running"]]);
     expect(onSettled).not.toHaveBeenCalled();
@@ -223,7 +226,7 @@ describe("ImportProgress", () => {
   it("stops blocking when there is no run to follow", async () => {
     const onSettled = vi.fn();
 
-    render(ImportProgress, { onSettled, onComplete: () => {} });
+    render(ImportProgress, { voice, onSettled, onComplete: () => {} });
 
     await expect.poll(() => onSettled.mock.calls.length).toBe(1);
     await expect.element(page.getByText(/No import from Nightscout is running/)).toBeVisible();
@@ -232,7 +235,7 @@ describe("ImportProgress", () => {
   });
 
   it("says why no run could be started instead of showing an empty import", async () => {
-    render(ImportProgress, { startError: "Your Nightscout site refused the request.", onComplete: () => {} });
+    render(ImportProgress, { voice, startError: "Your Nightscout site refused the request.", onComplete: () => {} });
 
     await expect
       .element(page.getByText("We couldn't start the import from Nightscout. You can continue and run it later from Settings."))
@@ -246,7 +249,7 @@ describe("ImportProgress", () => {
     const onResult = vi.fn();
     const onSettled = vi.fn();
 
-    render(ImportProgress, { jobId: "job-lost", onResult, onSettled, onComplete: () => {} });
+    render(ImportProgress, { voice, jobId: "job-lost", onResult, onSettled, onComplete: () => {} });
 
     await expect.poll(() => onSettled.mock.calls.length, { timeout: 15000 }).toBe(1);
     expect(onResult.mock.calls).toEqual([["running"]]);

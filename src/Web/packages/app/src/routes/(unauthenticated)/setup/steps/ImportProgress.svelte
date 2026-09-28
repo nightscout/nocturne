@@ -14,10 +14,12 @@
   import { findSessionJob } from "../migration-session";
   import { SkippedRecordsNote } from "$lib/components/shared";
   import type { ImportResult } from "./Finish.svelte";
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let {
     jobId,
     startError,
+    voice,
     onProgressChange,
     onResult,
     onSettled,
@@ -26,6 +28,7 @@
     jobId?: string;
     /** Why the run could not be started, when that was attempted and failed. */
     startError?: string;
+    voice: PatientVoice;
     onProgressChange?: (pct: number) => void;
     /** Fires once the server reports the run ended, including a run that ended before this mounted. */
     onResult?: (result: Exclude<ImportResult, null>) => void;
@@ -287,7 +290,7 @@
     <h1
       class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
-      Bringing your <em
+      Bringing {voice.possessive} <em
         class="not-italic font-light text-primary"
       >
         history

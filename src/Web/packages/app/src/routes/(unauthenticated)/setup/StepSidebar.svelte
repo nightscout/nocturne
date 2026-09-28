@@ -1,6 +1,7 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
   import StepArtwork, { type StepArt } from "./StepArtwork.svelte";
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let {
     path,
@@ -8,6 +9,7 @@
     steps,
     art,
     artProgress,
+    voice,
     onJumpToStep,
   }: {
     path: "fresh" | "migration";
@@ -16,6 +18,7 @@
     art: StepArt;
     /** See {@link StepArtwork}'s `progress`. */
     artProgress?: number;
+    voice: PatientVoice;
     onJumpToStep: (index: number) => void;
   } = $props();
 </script>
@@ -42,9 +45,9 @@
     class="font-brand text-4xl font-hairline leading-tight tracking-tight text-foreground"
   >
     {#if path === "fresh"}
-      Let's get your data <em class="not-italic text-primary">flowing.</em>
+      Let's get {voice.possessive} data <em class="not-italic text-primary">flowing.</em>
     {:else}
-      Bring your <em class="not-italic text-primary">history</em> with you.
+      Bring {voice.possessive} <em class="not-italic text-primary">history</em> across.
     {/if}
   </h2>
 
@@ -53,7 +56,7 @@
       A few short steps. Skip anything you're not ready for; you can change
       every choice in Settings afterwards.
     {:else}
-      We'll connect to your Nightscout site and copy your history across. Your
+      We'll connect to your Nightscout site and copy {voice.possessive} history across. Your
       Nightscout site isn't changed, and your uploaders keep sending to it
       until you choose to move them.
     {/if}

@@ -9,6 +9,7 @@
   export const STEP_ART = {
     welcome: { artwork: "crescent-moon", palette: "moonlight" },
     account: { icon: fingerprintArtwork, palette: "water" },
+    who: { artwork: "people-group", palette: "dusk" },
     source: { artwork: "plug", palette: "slate" },
     import: { icon: databaseArtwork, palette: "slate" },
     done: { artwork: "confirmation-mark", palette: "moss" },

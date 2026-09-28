@@ -15,6 +15,14 @@ vi.mock("$api/generated/migrations.generated.remote", () => ({
   getHistory: () => remoteQuery(() => []),
   startFromConnector: vi.fn(),
 }));
+const relationship = vi.hoisted(() => ({
+  stored: {} as { relationship?: string; patientName?: string },
+  set: vi.fn(),
+}));
+vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
+  getPatientRelationship: () => remoteQuery(() => relationship.stored),
+  setPatientRelationship: relationship.set,
+}));
 vi.mock("$api/generated/services.generated.remote", () => ({
   getServicesOverview: () => remoteQuery(() => null),
   getActiveDataSources: () => remoteQuery(() => []),
@@ -46,10 +54,110 @@ const freshCard = () =>
 const migrationCard = () =>
   page.getByRole("radio", { name: /Migrate my Nightscout data/ });
 const continueButton = () => page.getByRole("button", { name: "Continue" });
+const skipButton = () => page.getByRole("button", { name: "Skip for now" });
+
+async function renderAtPath() {
+  render(SetupPage);
+  await skipButton().click();
+  await expect.element(freshCard()).toBeVisible();
+}
+
+const sendingCopy = () => page.getByText(/Choose a cloud service/);
+
+beforeEach(() => {
+  relationship.stored = {};
+  relationship.set.mockReset();
+});
+
+describe("setup who-for step", () => {
+  it("asks who Nocturne is for first, as a named radio group", async () => {
+    render(SetupPage);
+
+    const group = page.getByRole("radiogroup", { name: /Who is Nocturne for/ });
+    await expect.element(group).toBeVisible();
+    expect(group.getByRole("radio").elements()).toHaveLength(3);
+    await expect.element(page.getByText("Step 01 / 05")).toBeVisible();
+    await expect
+      .element(page.getByTestId("artwork"))
+      .toHaveAttribute("data-artwork", "people-group");
+  });
+
+  it("asks the patient's name only for someone else", async () => {
+    render(SetupPage);
+    const name = page.getByLabelText("What's their name?");
+
+    await page.getByRole("radio", { name: /^Me/ }).click();
+    await expect.element(name).not.toBeInTheDocument();
+
+    await page.getByRole("radio", { name: /Someone I care for/ }).click();
+    await expect.element(name).toBeVisible();
+
+    await page.getByRole("radio", { name: /setting it up for someone else/ }).click();
+    await expect.element(name).toBeVisible();
+  });
+
+  it.each([
+    ["Someone I care for", "Caregiver"],
+    ["setting it up for someone else", "Helper"],
+  ])("saves %s with the name and speaks of them by it", async (label, value) => {
+    render(SetupPage);
+
+    await page.getByRole("radio", { name: new RegExp(label) }).click();
+    await page.getByLabelText("What's their name?").fill(" Sam ");
+    await continueButton().click();
+
+    expect(relationship.set).toHaveBeenCalledWith({ relationship: value, patientName: "Sam" });
+    await continueButton().click();
+    await expect.element(sendingCopy()).toHaveTextContent(/sending Sam's glucose/);
+  });
+
+  it("speaks to the patient when it is for me", async () => {
+    render(SetupPage);
+
+    await page.getByRole("radio", { name: /^Me/ }).click();
+    await continueButton().click();
+
+    expect(relationship.set).toHaveBeenCalledWith({ relationship: "Self", patientName: undefined });
+    await continueButton().click();
+    await expect.element(sendingCopy()).toHaveTextContent(/sending your glucose/);
+  });
+
+  it("stays neutral and saves nothing when skipped", async () => {
+    render(SetupPage);
+
+    await page.getByRole("radio", { name: /Someone I care for/ }).click();
+    await skipButton().click();
+    await continueButton().click();
+
+    expect(relationship.set).not.toHaveBeenCalled();
+    await expect.element(sendingCopy()).toHaveTextContent(/sending the glucose/);
+  });
+
+  it("keeps the tenant's earlier answer", async () => {
+    relationship.stored = { relationship: "Caregiver", patientName: "Sam" };
+    render(SetupPage);
+
+    await expect
+      .element(page.getByRole("radio", { name: /Someone I care for/ }))
+      .toHaveAttribute("aria-checked", "true");
+    await expect.element(page.getByLabelText("What's their name?")).toHaveValue("Sam");
+  });
+
+  it("stays on the step when the answer cannot be saved", async () => {
+    relationship.set.mockRejectedValueOnce(new Error("boom"));
+    render(SetupPage);
+
+    await page.getByRole("radio", { name: /^Me/ }).click();
+    await continueButton().click();
+
+    await expect.element(page.getByText("Step 01 / 05")).toBeVisible();
+    await expect.element(page.getByRole("alert")).toBeVisible();
+  });
+});
 
 describe("setup path step", () => {
   it("starts on the fresh path", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await expect.element(freshCard()).toHaveAttribute("aria-checked", "true");
     await expect
@@ -58,26 +166,26 @@ describe("setup path step", () => {
   });
 
   it("stays on the path step when a card is selected", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await migrationCard().click();
 
     await expect
       .element(migrationCard())
       .toHaveAttribute("aria-checked", "true");
-    await expect.element(page.getByText("Step 01 / 04")).toBeVisible();
+    await expect.element(page.getByText("Step 02 / 05")).toBeVisible();
     await expect
       .element(page.getByText("Nightscout Migration", { exact: true }))
       .toBeVisible();
   });
 
   it("advances along the chosen path on Continue", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await migrationCard().click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 02 / 04")).toBeVisible();
+    await expect.element(page.getByText("Step 03 / 05")).toBeVisible();
     await expect
       .element(page.getByText("Nightscout Migration", { exact: true }))
       .toBeVisible();
@@ -85,7 +193,7 @@ describe("setup path step", () => {
   });
 
   it("advances the fresh path to its data source step", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await continueButton().click();
 
@@ -95,7 +203,7 @@ describe("setup path step", () => {
   });
 
   it("keeps the chosen path when going back", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await migrationCard().click();
     await continueButton().click();
@@ -114,12 +222,13 @@ describe("setup chrome", () => {
   it("follows the person's theme instead of forcing dark", async () => {
     const { container } = render(SetupPage);
 
+    await skipButton().click();
     await expect.element(freshCard()).toBeVisible();
     expect(container.querySelector(".dark")).toBeNull();
   });
 
   it("shows each step's artwork beside it", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     const artwork = page.getByTestId("artwork");
     await expect.element(artwork).toHaveAttribute("data-artwork", "crescent-moon");
@@ -141,7 +250,7 @@ describe("setup chrome", () => {
   });
 
   it("has no action on the data source step that pretends to save", async () => {
-    render(SetupPage);
+    await renderAtPath();
 
     await continueButton().click();
 
@@ -156,11 +265,11 @@ describe("setup chrome", () => {
 
 describe("setup import step", () => {
   async function reachImport() {
-    render(SetupPage);
+    await renderAtPath();
     await migrationCard().click();
     await continueButton().click();
-    await page.getByRole("button", { name: "Skip for now" }).click();
-    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+    await skipButton().click();
+    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
   }
 
   it("blocks leaving while the import runs", async () => {
@@ -176,7 +285,7 @@ describe("setup import step", () => {
 
     await page.getByRole("button", { name: "Finish" }).click();
 
-    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
   });
 
   it("offers Continue once the import has settled", async () => {
@@ -185,7 +294,7 @@ describe("setup import step", () => {
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await continueButton().click();
 
-    await expect.element(page.getByText("Step 04 / 04")).toBeVisible();
+    await expect.element(page.getByText("Step 05 / 05")).toBeVisible();
   });
 
   it("words a refused start as a connection that isn't saved", async () => {
@@ -193,13 +302,13 @@ describe("setup import step", () => {
       status: 400,
       body: { message: "Nightscout URL not found in connector configuration" },
     });
-    render(SetupPage);
+    await renderAtPath();
     await migrationCard().click();
     await continueButton().click();
 
     await page.getByRole("button", { name: "Stub: complete" }).click();
 
-    await expect.element(page.getByText("Step 03 / 04")).toBeVisible();
+    await expect.element(page.getByText("Step 04 / 05")).toBeVisible();
     await expect
       .element(page.getByTestId("start-error"))
       .toHaveTextContent("Your Nightscout connection isn't saved yet.");

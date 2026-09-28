@@ -14,17 +14,20 @@
   import BookOpen from "@lucide/svelte/icons/book-open";
   import Plug from "@lucide/svelte/icons/plug";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let {
     path,
     source,
     importResult,
+    voice,
     onEnterDashboard,
     onNavigateWithCoach,
   }: {
     path: "fresh" | "migration";
     source: SourceResult;
     importResult: ImportResult;
+    voice: PatientVoice;
     onEnterDashboard: () => void;
     onNavigateWithCoach: (url: string) => void;
   } = $props();
@@ -50,7 +53,7 @@
       ? {
           icon: BookOpen,
           title: "Your first report",
-          subtitle: "Generate an AGP for your next clinic visit",
+          subtitle: `Generate an AGP for ${voice.possessive} next clinic visit`,
           coachUrl: "/reports?coach=setup-reports",
         }
       : {
@@ -72,7 +75,7 @@
       class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight text-foreground"
     >
       {#if path === "migration" && importResult === "complete"}
-        Your data is <em class="not-italic font-light text-primary">home.</em>
+        {voice.Possessive} data is <em class="not-italic font-light text-primary">home.</em>
       {:else}
         You're <em class="not-italic font-light text-primary">in.</em>
       {/if}
@@ -81,31 +84,31 @@
     <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
       {#if path === "migration"}
         {#if importResult === "complete"}
-          Your Nightscout history has been copied into Nocturne. Your Nightscout
+          {voice.Possessive} Nightscout history has been copied into Nocturne. Your Nightscout
           site hasn't been changed, and your uploaders keep sending to it until
           you choose to move them.
         {:else if importResult === "partial"}
-          Some of your Nightscout history was copied, but not all of it. You can
+          Some of {voice.possessive} Nightscout history was copied, but not all of it. You can
           see what was missed and run the import again from Settings.
         {:else if importResult === "failed"}
           The import from Nightscout stopped before it finished, so
-          some or all of your history is missing. You can see what arrived and
+          some or all of {voice.possessive} history is missing. You can see what arrived and
           try again from Settings.
         {:else if importResult === "running"}
           We lost track of your import before it finished. It may still be
           running; check Settings to see how it ended.
         {:else}
-          Your Nightscout history hasn't been imported yet. You can start the
+          {voice.Possessive} Nightscout history hasn't been imported yet. You can start the
           import from Settings whenever you're ready.
         {/if}
       {:else if source === "uploader-receiving"}
-        Your phone app is sending readings to Nocturne, so your dashboard is
-        ready.
+        The phone app is sending readings to Nocturne, so {voice.possessive}
+        dashboard is ready.
       {:else if source === "connector-saved"}
-        Your data source is saved and switched on. Readings will appear on your
-        dashboard after its first sync.
+        Your data source is saved and switched on. Readings will appear on
+        {voice.possessive} dashboard after its first sync.
       {:else}
-        You haven't connected a data source yet, so your dashboard will be empty
+        You haven't connected a data source yet, so {voice.possessive} dashboard will be empty
         until you do. You can connect one from Settings at any time.
       {/if}
     </p>
@@ -113,7 +116,7 @@
     <div class="flex flex-row flex-wrap items-center gap-3">
       <Button onclick={onEnterDashboard}>
         <ChartLine class="mr-2 h-4 w-4" />
-        Open my dashboard
+        Open {voice.possessive} dashboard
       </Button>
       <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
     </div>

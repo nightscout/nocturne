@@ -18,16 +18,23 @@
     getActiveDataSources,
     getUploaderSetup,
   } from "$api/generated/services.generated.remote";
+  import {
+    getPatientRelationship,
+    setPatientRelationship,
+  } from "$api/generated/tenantSettings.generated.remote";
+  import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
   import { startOrResumeMigration } from "./migration-session";
   import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import type {
     UploaderApp,
     DataSourceInfo,
+    PatientRelationship,
   } from "$lib/api/generated/nocturne-api-client";
 
   import StepSidebar from "./StepSidebar.svelte";
   import TenantIdentity from "./steps/TenantIdentity.svelte";
   import AccountCreation from "./steps/AccountCreation.svelte";
+  import WhoFor from "./steps/WhoFor.svelte";
   import PathChoice from "./steps/PathChoice.svelte";
   import NightscoutConnect from "./steps/NightscoutConnect.svelte";
   import DataSourceSelectionView from "$lib/components/connectors/DataSourceSelectionView.svelte";
@@ -87,12 +94,14 @@
   // ── Onboarding step definitions (post-auth) ────────────────────────
   const STEPS = {
     fresh: [
+      { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
       { id: "cgm", label: "Connect a data source", short: "Source", art: "source" },
       { id: "sync", label: "Configure & sync", short: "Setup", art: "source" },
       { id: "finish", label: "Finish", short: "Done", art: "done" },
     ],
     migration: [
+      { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
       { id: "connect", label: "Connect your Nightscout", short: "Connect", art: "source" },
       { id: "import", label: "Import your history", short: "Import", art: "import" },
@@ -112,12 +121,16 @@
   const dataSourcesQuery = $derived(
     !setupRequired ? getActiveDataSources() : null
   );
+  const relationshipQuery = $derived(
+    !setupRequired ? getPatientRelationship() : null
+  );
   const uploaderSetupQuery = $derived(
     selectedUploader?.id ? getUploaderSetup(selectedUploader.id) : null
   );
   retainQuery(() => servicesQuery);
   retainQuery(() => dataSourcesQuery);
   retainQuery(() => uploaderSetupQuery);
+  retainQuery(() => relationshipQuery);
 
   const servicesData = $derived(servicesQuery?.current ?? null);
   const activeDataSources = $derived<DataSourceInfo[]>(
@@ -137,6 +150,18 @@
   let sourceResult = $state<SourceResult>(null);
   let migrationJobId = $state<string | undefined>(undefined);
   let migrationStartError = $state<string | undefined>(undefined);
+
+  // Until the step is answered here, it shows the tenant's stored answer.
+  let chosenRelationship = $state<PatientRelationship | undefined>(undefined);
+  let chosenName = $state<string | undefined>(undefined);
+  let relationshipError = $state<string | undefined>(undefined);
+  const relationship = $derived(
+    chosenRelationship ?? relationshipQuery?.current?.relationship
+  );
+  const patientName = $derived(
+    chosenName ?? relationshipQuery?.current?.patientName ?? ""
+  );
+  const voice = $derived(patientVoice({ relationship, patientName }));
 
   const steps = $derived(STEPS[path]);
   const currentStep = $derived(steps[stepIndex]);
@@ -184,6 +209,29 @@
 
   function handleNext() {
     if (stepIndex < steps.length - 1) goToStep(stepIndex + 1);
+  }
+
+  function handleWhoForSkip() {
+    chosenRelationship = undefined;
+    chosenName = undefined;
+    relationshipError = undefined;
+    handleNext();
+  }
+
+  async function handleWhoForContinue() {
+    if (chosenRelationship) {
+      try {
+        relationshipError = undefined;
+        await setPatientRelationship({
+          relationship: chosenRelationship,
+          patientName: patientName.trim() || undefined,
+        });
+      } catch (err) {
+        relationshipError = describeSubmitError(err, "We couldn't save your answer.");
+        return;
+      }
+    }
+    handleNext();
   }
 
   async function handleEnterDashboard() {
@@ -328,6 +376,7 @@
             currentStep={activeIndex}
             steps={activeSteps}
             art={activeStep?.art ?? "welcome"}
+            {voice}
             {artProgress}
             onJumpToStep={handleJumpToStep}
           />
@@ -373,6 +422,16 @@
               <TenantIdentity onComplete={handleTenantCreated} />
             {:else if activeStep?.id === "account"}
               <AccountCreation onComplete={handleAccountCreated} />
+            {:else if activeStep?.id === "who"}
+              <WhoFor
+                bind:relationship={
+                  () => relationship, (value) => (chosenRelationship = value)
+                }
+                bind:patientName={
+                  () => patientName, (value) => (chosenName = value)
+                }
+                error={relationshipError}
+              />
             {:else if activeStep?.id === "path"}
               <PathChoice bind:path />
             {:else if activeStep?.id === "connect"}
@@ -386,8 +445,9 @@
                     Connect a <em class="not-italic font-light text-primary">data source</em>.
                   </h1>
                   <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-                    Choose a cloud service or phone app to start sending glucose
-                    and treatment data to Nocturne. You can connect more later.
+                    Choose a cloud service or phone app to start sending
+                    {voice.possessive} glucose and treatment data to Nocturne. You
+                    can connect more later.
                   </p>
                 </div>
                 <DataSourceSelectionView
@@ -451,6 +511,7 @@
               <ImportProgress
                 jobId={migrationJobId}
                 startError={migrationStartError}
+                {voice}
                 onProgressChange={(pct) => (importProgress = pct)}
                 onResult={(result) => (importResult = result)}
                 onSettled={() => (importSettled = true)}
@@ -461,6 +522,7 @@
                 {path}
                 source={sourceResult}
                 {importResult}
+                {voice}
                 onEnterDashboard={handleEnterDashboard}
                 onNavigateWithCoach={handleNavigateWithCoach}
               />
@@ -477,10 +539,6 @@
                     <ArrowLeft class="h-4 w-4" />
                     Back
                   </Button>
-                {:else if currentStep?.id === "path"}
-                  <span class="text-xs text-muted-foreground">
-                    Just pick a starting point.
-                  </span>
                 {/if}
               </div>
               <div class="flex items-center gap-3">
@@ -496,6 +554,14 @@
                       <ArrowRight class="h-4 w-4" />
                     </Button>
                   {/if}
+                {:else if currentStep?.id === "who"}
+                  <Button variant="ghost" onclick={handleWhoForSkip}>
+                    Skip for now
+                  </Button>
+                  <Button onclick={handleWhoForContinue}>
+                    Continue
+                    <ArrowRight class="h-4 w-4" />
+                  </Button>
                 {:else if currentStep?.id === "path"}
                   <Button onclick={handleNext}>
                     Continue

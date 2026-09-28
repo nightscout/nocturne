@@ -3,6 +3,8 @@ import { page } from "vitest/browser";
 import { describe, expect, it } from "vitest";
 
 import Finish, { type ImportResult, type SourceResult } from "./Finish.svelte";
+import { PatientRelationship } from "$api";
+import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
 
 const noop = () => {};
 
@@ -14,6 +16,7 @@ function renderFinish(
     path,
     source,
     importResult,
+    voice: patientVoice({ relationship: PatientRelationship.Self }),
     onEnterDashboard: noop,
     onNavigateWithCoach: noop,
   });
