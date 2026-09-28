@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -85,8 +86,6 @@ public class TenantSettingsControllerTests
             .Which.Value.Should().BeEquivalentTo(new TenantSettingsDto(true));
     }
 
-    // Who the tenant is for describes the owner's own relationship to the patient, so running the
-    // tenant (tenant.settings) is not enough to read or change it.
     [Fact]
     public async Task GetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
     {
@@ -180,6 +179,31 @@ public class TenantSettingsControllerTests
         records.Verify(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()), Times.Never);
         records.Verify(r => r.UpdateAsync(
             It.IsAny<PatientRecord>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(3)]
+    public void SetPatientRelationshipRequest_RejectsAnUndefinedRelationship(int value)
+    {
+        var request = new SetPatientRelationshipRequest((PatientRelationship)value, "Sam");
+        var results = new List<ValidationResult>();
+
+        Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true)
+            .Should().BeFalse();
+        results.Should().ContainSingle()
+            .Which.MemberNames.Should().Equal(nameof(SetPatientRelationshipRequest.Relationship));
+    }
+
+    [Fact]
+    public void SetPatientRelationshipRequest_AcceptsEveryDefinedRelationship()
+    {
+        foreach (var answer in Enum.GetValues<PatientRelationship>())
+        {
+            var request = new SetPatientRelationshipRequest(answer, "Sam");
+            Validator.TryValidateObject(request, new ValidationContext(request), null, validateAllProperties: true)
+                .Should().BeTrue();
+        }
     }
 
     private static (TenantSettingsController, Mock<ITenantService>, Mock<IPatientRecordRepository>) BuildAnswering(

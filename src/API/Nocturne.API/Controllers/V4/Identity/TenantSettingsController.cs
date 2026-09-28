@@ -126,7 +126,7 @@ public class TenantSettingsController : ControllerBase
 public record SetPublicDocsRequest(bool Enabled);
 
 public record SetPatientRelationshipRequest(
-    [property: JsonRequired] PatientRelationship Relationship,
+    [property: JsonRequired, EnumDataType(typeof(PatientRelationship))] PatientRelationship Relationship,
     [property: MaxLength(256)] string? PatientName = null);
 
 public record PatientRelationshipDto(PatientRelationship? Relationship, string? PatientName);
