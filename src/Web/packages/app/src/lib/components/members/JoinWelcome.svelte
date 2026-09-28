@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { replaceState } from "$app/navigation";
+  import { afterNavigate, replaceState } from "$app/navigation";
   import { Artwork } from "@nocturne/watercolour";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
@@ -18,6 +18,14 @@
     // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
     replaceState(rest, {});
     shown = isWelcomeViewer(page.data.effectivePermissions ?? []);
+  });
+
+  // The layout persists across pages, so the greeting belongs to the page it
+  // arrived on. The arrival itself also reports here, carrying the marker;
+  // the replaceState that strips it is shallow and reports nothing.
+  afterNavigate(({ to }) => {
+    if (to?.url && takeWelcome(to.url)) return;
+    shown = false;
   });
 
   // A guest session is a member of no tenant, so it gets the nameless line.

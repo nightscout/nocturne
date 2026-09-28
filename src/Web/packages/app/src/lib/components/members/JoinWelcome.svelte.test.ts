@@ -11,10 +11,19 @@ const state = vi.hoisted(() => ({
   },
   tenants: [] as TenantDto[],
   replaceState: vi.fn(),
+  afterNavigate: [] as ((nav: { to: { url: URL } | null }) => void)[],
 }));
 
 vi.mock("$app/state", () => ({ page: state.page }));
-vi.mock("$app/navigation", () => ({ replaceState: state.replaceState }));
+vi.mock("$app/navigation", () => ({
+  replaceState: state.replaceState,
+  afterNavigate: (cb: (typeof state.afterNavigate)[number]) =>
+    state.afterNavigate.push(cb),
+}));
+
+function navigate(url: string) {
+  for (const cb of state.afterNavigate) cb({ to: { url: new URL(url) } });
+}
 vi.mock("$api/generated/myTenants.generated.remote", () => ({
   getMyTenants: () => remoteQuery(() => state.tenants),
 }));
@@ -29,6 +38,7 @@ function arrive(url: string, scopes: string[]) {
 beforeEach(() => {
   state.tenants = [{ slug: "sam", displayName: "Sam" }];
   state.replaceState.mockClear();
+  state.afterNavigate.length = 0;
 });
 
 describe("JoinWelcome", () => {
@@ -85,6 +95,21 @@ describe("JoinWelcome", () => {
     render(JoinWelcome);
 
     await page.getByRole("button", { name: "Dismiss" }).click();
+    await expect
+      .element(page.getByTestId("join-welcome"))
+      .not.toBeInTheDocument();
+  });
+
+  it("stays through its own arrival but leaves on the next navigation", async () => {
+    arrive("http://sam.localhost/?welcome=1", ["glucose.read"]);
+
+    render(JoinWelcome);
+
+    await expect.element(page.getByTestId("join-welcome")).toBeVisible();
+    navigate("http://sam.localhost/?welcome=1");
+    await expect.element(page.getByTestId("join-welcome")).toBeVisible();
+
+    navigate("http://sam.localhost/reports");
     await expect
       .element(page.getByTestId("join-welcome"))
       .not.toBeInTheDocument();
