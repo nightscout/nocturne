@@ -70,16 +70,24 @@
   // translated label shown to users; comparing against translated strings
   // makes categories disappear in locales such as Dutch (where "Vitals" and
   // "Body measurement" are translated).
+  // Use identifier-shaped keys for the internal category IDs. Wuchale treats
+  // a quoted key that is also a translatable message (for example
+  // "Body measurement") as translated text, which would change the key and
+  // make it stop matching Capability.category in non-English locales. The
+  // normalised comparison below keeps these IDs stable while labels remain
+  // translated for users.
   const categoryMeta: Record<string, { label: string; hideForMale?: boolean }> =
     {
       Vitals: { label: "Vitals" },
       Activity: { label: "Activity" },
-      "Body measurement": { label: "Body measurement" },
+      BodyMeasurement: { label: "Body measurement" },
       Nutrition: { label: "Nutrition" },
       Sleep: { label: "Sleep" },
-      "Cycle tracking": { label: "Cycle tracking", hideForMale: true },
+      CycleTracking: { label: "Cycle tracking", hideForMale: true },
     };
   const categoryOrder = Object.keys(categoryMeta);
+  const categoryKey = (category: string) =>
+    category.replace(/[^a-z]/gi, "").toLowerCase();
   const categoryGroups = $derived.by(() => {
     const capabilities = status?.capabilities ?? [];
     const items = preview?.items ?? [];
@@ -94,7 +102,8 @@
             (
               capability
             ): capability is typeof capability & { dataType: string } =>
-              capability.category === category && !!capability.dataType
+              categoryKey(capability.category) === categoryKey(category) &&
+              !!capability.dataType
           )
           .map((capability) => {
             const item = items.find(
@@ -114,6 +123,9 @@
           });
         return {
           category,
+          // Keep the DOM/test identifier on the server's stable category
+          // value; the internal identifier is intentionally locale-neutral.
+          testId: entries[0]?.capability.category ?? category,
           label: categoryMeta[category]?.label ?? category,
           entries,
           selectedCount: entries.filter((entry) =>
@@ -671,7 +683,7 @@
               {#each categoryGroups as group (group.category)}
                 <details
                   class="overflow-hidden rounded-lg border"
-                  data-testid={`google-health-category-${group.category}`}
+                  data-testid={`google-health-category-${group.testId}`}
                   open={expandedGroups[group.category] ??
                     group.hasSelectableItem}
                   ontoggle={(event) => {
