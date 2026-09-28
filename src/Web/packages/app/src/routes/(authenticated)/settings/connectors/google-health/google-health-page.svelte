@@ -86,8 +86,8 @@
       CycleTracking: { label: "Cycle tracking", hideForMale: true },
     };
   const categoryOrder = Object.keys(categoryMeta);
-  const categoryKey = (category: string) =>
-    category.replace(/[^a-z]/gi, "").toLowerCase();
+  const categoryKey = (category: string | null | undefined) =>
+    (category ?? "").replace(/[^a-z]/gi, "").toLowerCase();
   const categoryGroups = $derived.by(() => {
     const capabilities = status?.capabilities ?? [];
     const items = preview?.items ?? [];
