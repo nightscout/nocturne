@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Mappers;
 
@@ -12,14 +14,17 @@ namespace Nocturne.Infrastructure.Data.Repositories;
 public class FoodRepository : IFoodRepository
 {
     private readonly NocturneDbContext _context;
+    private readonly ILogger<FoodRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the FoodRepository class
     /// </summary>
     /// <param name="context">The database context</param>
-    public FoodRepository(NocturneDbContext context)
+    /// <param name="logger">The logger</param>
+    public FoodRepository(NocturneDbContext context, ILogger<FoodRepository> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     /// <summary>
@@ -164,6 +169,34 @@ public class FoodRepository : IFoodRepository
         var entities = await query.Skip(skip).Take(count).ToListAsync(cancellationToken);
 
         return entities.Select(FoodMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Pages on <c>sys_updated_at</c> through <see cref="HistoryPage"/>, so an edited food is
+    /// delivered again and a poll reads only the page, off <c>ix_foods_tenant_sys_updated_at</c>.
+    /// </remarks>
+    public async Task<ModifiedSincePage<Food>> GetFoodModifiedSinceAsync(
+        long cursorMills,
+        int limit,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var entities = await HistoryPage.GetAsync(
+            _context.Foods.AsNoTracking(),
+            f => f.SysUpdatedAt,
+            f => f.Id,
+            cursorMills,
+            limit,
+            _logger,
+            "foods",
+            cancellationToken
+        );
+
+        return new ModifiedSincePage<Food>(
+            entities.Select(FoodMapper.ToDomainModel).ToList(),
+            entities.Count > 0 ? HistoryPage.ToMilliseconds(entities[^1].SysUpdatedAt) : null
+        );
     }
 
     /// <summary>

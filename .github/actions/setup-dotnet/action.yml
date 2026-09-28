@@ -1,0 +1,24 @@
+name: Set up .NET
+description: The .NET 10 SDK and, when a cache key is given, the NuGet package cache.
+
+inputs:
+  nuget-cache-key:
+    description: >-
+      Prefix of the NuGet cache key, distinct per job: an exact hit on another job's key is never
+      re-saved, so packages only this job restores would download on every run. Empty skips the
+      cache, for a job that only runs assemblies the build job compiled.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: "10.0"
+    - if: inputs.nuget-cache-key != ''
+      uses: actions/cache@v5
+      with:
+        path: ~/.nuget/packages
+        key: ${{ inputs.nuget-cache-key }}-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
+        restore-keys: ${{ inputs.nuget-cache-key }}-${{ runner.os }}-

@@ -421,9 +421,9 @@ public class CareLinkConnectorServiceTests
     };
 
     /// <summary>
-    /// A run that never got past authentication reports the shared failure shape: the summary in
-    /// <c>Message</c> for the tenant's sync card and the source-qualified detail in <c>Errors</c>,
-    /// which is what gets persisted as the connector's last error. CareLink authenticates inside
+    /// A run that never got past authentication reports the shared failure shape: the token
+    /// provider's reason in both <c>Message</c>, for the tenant's sync card, and <c>Errors</c>, which
+    /// is what gets persisted as the connector's last error. CareLink authenticates inside
     /// its own sync body, so it has to opt into that shape rather than inherit it.
     /// </summary>
     [Fact]
@@ -436,9 +436,8 @@ public class CareLinkConnectorServiceTests
             new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
 
         result.Success.Should().BeFalse();
-        result.Message.Should().Be("Authentication failed");
-        result.Errors.Should().ContainSingle()
-            .Which.Should().Be($"Authentication failed for {DataSources.CareLinkConnector}");
+        result.Message.Should().Be(fixture.TokenProvider.SignInFailureReason);
+        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     /// <summary>Leaves only the alarm step able to publish, so its failure cannot be confused for another step's.</summary>

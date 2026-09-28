@@ -5,7 +5,12 @@
     EntryCategoryId,
   } from "$lib/constants/entry-categories";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
-  import { Syringe, Utensils, Droplet, FileText, Smartphone, List } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import List from "@lucide/svelte/icons/list";
 
   interface Props {
     activeCategory: EntryCategoryId | "all";

@@ -9,7 +9,11 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { Settings2, Plus, Play, Pencil, Trash2 } from "lucide-svelte";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Play from "@lucide/svelte/icons/play";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import { cn } from "$lib/utils";
   import { TrackerCategory, type TrackerDefinitionDto } from "$api";
@@ -110,6 +114,8 @@
                   variant="ghost"
                   size="icon"
                   onclick={() => openEditDefinition(def)}
+                  aria-label="Edit {def.name}"
+                  data-testid="tracker-definition-edit"
                 >
                   <Pencil class="h-4 w-4" />
                 </Button>

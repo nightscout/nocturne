@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Play, Pause, RotateCcw } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
+  import Pause from "@lucide/svelte/icons/pause";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { AlertReplayEventKind, type AlertRuleSeverity } from "$api-clients";
   import { severityVar } from "./severity";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
@@ -74,7 +76,8 @@
   }
 </script>
 
-<div class="flex items-center gap-2">
+<!-- Narrow, the strip takes a row of its own under the controls. -->
+<div class="flex flex-wrap items-center gap-2">
   <Button
     variant="outline"
     size="icon-sm"
@@ -118,7 +121,7 @@
   <svg
     role="presentation"
     data-testid="playback-tick-strip"
-    class="h-8 flex-1 cursor-pointer rounded border bg-muted/20"
+    class="order-last h-8 basis-full cursor-pointer rounded border bg-muted/20 @md:order-none @md:basis-0 @md:flex-1"
     viewBox="0 0 100 32"
     preserveAspectRatio="none"
     onpointerdown={handleStripPointerDown}
@@ -163,7 +166,7 @@
   </svg>
 
   <span
-    class="font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-32 text-right"
+    class="ml-auto font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-32 text-right"
   >
     {currentDate ? formatDateTimeCompact(currentDate) : ""}
   </span>

@@ -6,9 +6,10 @@
     trendAngle,
     deltaColorClass,
     getUnitLabel,
+    glucoseTileVariant,
     type GlucoseUnits,
   } from "@nocturne/ui/glucose";
-  import { ArrowRight } from "@lucide/svelte";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import type { Reading } from "$lib/glucose-types";
 
   let {
@@ -37,7 +38,7 @@
   <div class="flex items-center gap-3">
     <GlucoseValueIndicator
       displayValue={displayBG}
-      rawBgMgdl={reading.sgvMgdl}
+      variant={glucoseTileVariant(reading.status)}
       {isStale}
       size="lg"
     />

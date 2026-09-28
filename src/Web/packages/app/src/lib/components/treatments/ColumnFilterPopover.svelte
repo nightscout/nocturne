@@ -3,7 +3,9 @@
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
-  import { Filter, X, Check } from "lucide-svelte";
+  import Filter from "@lucide/svelte/icons/funnel";
+  import X from "@lucide/svelte/icons/x";
+  import Check from "@lucide/svelte/icons/check";
   import { cn } from "$lib/utils";
   import type { Component } from "svelte";
 

@@ -9,7 +9,7 @@
   import { bg, bgDelta, minutesAgo, toDate } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { tenantUrl } from "$lib/utils/tenant-host";
-  import { Bell } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
 
   interface Props {
     tenant: TenantOverviewItem;

@@ -146,7 +146,7 @@ public static class DataSeeder
                 {
                     Id = Guid.CreateVersion7(),
                     TenantId = tenantId,
-                    StartTimestamp = start,
+                    Timestamp = start,
                     EndTimestamp = start.AddMinutes(5),
                     Rate = Math.Round(0.5 + Rng.NextDouble() * 2.0, 2),
                     Origin = "Unknown",

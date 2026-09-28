@@ -2,14 +2,12 @@
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Droplet,
-    Syringe,
-    Apple,
-    Activity,
-    AlertTriangle,
-    RefreshCw,
-  } from "lucide-svelte";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Activity from "@lucide/svelte/icons/activity";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getDirectionInfo } from "$lib/utils";
   import {

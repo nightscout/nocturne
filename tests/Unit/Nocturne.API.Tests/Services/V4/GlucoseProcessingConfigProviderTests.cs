@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
@@ -12,11 +13,14 @@ public class GlucoseProcessingConfigProviderTests
 {
     private readonly Mock<ISettingsRepository> _settingsRepository;
     private readonly GlucoseProcessingConfigProvider _sut;
+    private Guid _tenantId = Guid.NewGuid();
 
     public GlucoseProcessingConfigProviderTests()
     {
         _settingsRepository = new Mock<ISettingsRepository>();
-        _sut = new GlucoseProcessingConfigProvider(_settingsRepository.Object);
+        var tenantAccessor = new Mock<ITenantAccessor>();
+        tenantAccessor.SetupGet(x => x.TenantId).Returns(() => _tenantId);
+        _sut = new GlucoseProcessingConfigProvider(_settingsRepository.Object, tenantAccessor.Object);
     }
 
     // --- SetPreferredProcessingAsync ---
@@ -173,5 +177,81 @@ public class GlucoseProcessingConfigProviderTests
                 It.Is<Settings>(s => (string)s.Value! == "[]"),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    // --- Reads, once per scope ---
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSourceDefaults_ReadsTheSettingOncePerScope()
+    {
+        _settingsRepository
+            .Setup(x => x.GetSettingsByKeyAsync("glucoseProcessingSourceDefaults", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Settings { Key = "glucoseProcessingSourceDefaults", Value = "[]" });
+
+        await _sut.GetSourceDefaultsAsync();
+        await _sut.GetSourceDefaultsAsync();
+
+        _settingsRepository.Verify(
+            x => x.GetSettingsByKeyAsync("glucoseProcessingSourceDefaults", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetPreferredProcessing_ReadsAnUnsetSettingOncePerScope()
+    {
+        _settingsRepository
+            .Setup(x => x.GetSettingsByKeyAsync("preferredGlucoseProcessing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Settings?)null);
+
+        (await _sut.GetPreferredProcessingAsync()).Should().BeNull();
+        (await _sut.GetPreferredProcessingAsync()).Should().BeNull();
+
+        _settingsRepository.Verify(
+            x => x.GetSettingsByKeyAsync("preferredGlucoseProcessing", It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetPreferredProcessing_AfterTheScopeSwitchesTenant_ReadsThatTenantsSetting()
+    {
+        _settingsRepository
+            .SetupSequence(x => x.GetSettingsByKeyAsync("preferredGlucoseProcessing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Settings { Key = "preferredGlucoseProcessing", Value = "Smoothed" })
+            .ReturnsAsync(new Settings { Key = "preferredGlucoseProcessing", Value = "Unsmoothed" });
+
+        (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Smoothed);
+        _tenantId = Guid.NewGuid();
+
+        (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Unsmoothed);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetSourceDefaults_ACallerMutatingTheResult_DoesNotChangeTheCachedRules()
+    {
+        _settingsRepository
+            .Setup(x => x.GetSettingsByKeyAsync("glucoseProcessingSourceDefaults", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Settings { Key = "glucoseProcessingSourceDefaults", Value = "[]" });
+
+        (await _sut.GetSourceDefaultsAsync()).Add(new GlucoseProcessingSourceDefault { Match = "xDrip", Field = "device", Processing = GlucoseProcessing.Smoothed });
+
+        (await _sut.GetSourceDefaultsAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task GetPreferredProcessing_AfterASetInTheSameScope_ReturnsTheNewValue()
+    {
+        _settingsRepository
+            .Setup(x => x.GetSettingsByKeyAsync("preferredGlucoseProcessing", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Settings { Id = "abc-123", Key = "preferredGlucoseProcessing", Value = "Unsmoothed" });
+
+        (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Unsmoothed);
+        await _sut.SetPreferredProcessingAsync(GlucoseProcessing.Smoothed);
+
+        (await _sut.GetPreferredProcessingAsync()).Should().Be(GlucoseProcessing.Smoothed);
     }
 }

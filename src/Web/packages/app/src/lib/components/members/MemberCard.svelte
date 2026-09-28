@@ -9,14 +9,12 @@
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import {
-    Trash2,
-    Clock,
-    Loader2,
-    Settings2,
-    ChevronDown,
-    ChevronUp,
-  } from "lucide-svelte";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import type { TenantMemberDto, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 

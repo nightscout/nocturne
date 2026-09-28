@@ -37,6 +37,16 @@ public static class TreatmentClientId
             (update.AdditionalProperties ??= new())[Field] = kept[Field];
     }
 
+    /// <summary>The client id <paramref name="treatment"/> carries, or null.</summary>
+    public static string? Of(Treatment treatment) =>
+        Present(treatment.AdditionalProperties?.GetValueOrDefault(Field)) switch
+        {
+            JsonElement { ValueKind: JsonValueKind.String } id => id.GetString(),
+            JsonElement id => id.GetRawText(),
+            { } id => id.ToString(),
+            null => null,
+        };
+
     /// <summary>The client id inside a serialized additional-properties object, or null.</summary>
     public static string? Of(string? additionalPropertiesJson)
     {

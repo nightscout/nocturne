@@ -57,4 +57,15 @@ public interface IAlertAcknowledgementService
         AlertAcknowledgementAuthority caller,
         bool broadcast,
         CancellationToken ct);
+
+    /// <summary>
+    /// Whether an acknowledgement made with <paramref name="caller"/> would acknowledge for everyone
+    /// rather than mute for the caller: the decision <see cref="AcknowledgeExcursionAsync"/> applies,
+    /// so a client can label the action before it is pressed.
+    /// </summary>
+    /// <param name="tenantId">The tenant whose membership is consulted.</param>
+    /// <param name="caller">The authority an acknowledgement would be made with.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<bool> AcknowledgesForEveryoneAsync(
+        Guid tenantId, AlertAcknowledgementAuthority caller, CancellationToken ct);
 }

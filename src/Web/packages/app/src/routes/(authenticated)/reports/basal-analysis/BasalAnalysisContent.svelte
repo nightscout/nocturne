@@ -9,16 +9,14 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Layers,
-    Calendar,
-    Info,
-    ArrowRight,
-    ArrowLeft,
-    HelpCircle,
-    Clock,
-    Gauge,
-  } from "lucide-svelte";
+  import Layers from "@lucide/svelte/icons/layers";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Info from "@lucide/svelte/icons/info";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Gauge from "@lucide/svelte/icons/gauge";
   import BasalRatePercentileChart from "$lib/components/reports/BasalRatePercentileChart.svelte";
   import InsulinDeliveryChart from "$lib/components/reports/InsulinDeliveryChart.svelte";
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";

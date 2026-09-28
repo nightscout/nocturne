@@ -4,13 +4,11 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { toast } from "svelte-sonner";
-  import {
-    Link2,
-    AlertCircle,
-    CheckCircle,
-    AlertTriangle,
-    Loader2,
-  } from "lucide-svelte";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import {
     startDeduplicationJob,
     getJobStatus as getDeduplicationJobStatus,

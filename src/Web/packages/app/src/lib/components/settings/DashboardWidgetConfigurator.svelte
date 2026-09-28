@@ -22,7 +22,10 @@
     type TopWidgetId,
   } from "$lib/components/dashboard/widget-registry";
   import { WIDGET_ICONS } from "$lib/types/dashboard-widgets";
-  import { GripVertical, LayoutGrid, Plus, X } from "lucide-svelte";
+  import GripVertical from "@lucide/svelte/icons/grip-vertical";
+  import LayoutGrid from "@lucide/svelte/icons/layout-grid";
+  import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
   interface Props {
     /** Currently selected widget IDs (ordered) */
     value: WidgetId[];

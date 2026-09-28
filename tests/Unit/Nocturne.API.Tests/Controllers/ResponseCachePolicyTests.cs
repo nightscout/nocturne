@@ -46,6 +46,7 @@ public class ResponseCachePolicyTests
     [InlineData(typeof(V1EntriesController), nameof(V1EntriesController.GetEntries))]
     [InlineData(typeof(ProfileController), nameof(ProfileController.GetProfileSummary))]
     [InlineData(typeof(PredictionController), nameof(PredictionController.GetProfileSnapshot))]
+    [InlineData(typeof(TreatmentLogController), nameof(TreatmentLogController.GetStats))]
     public void MutableReads_AreNeverStored(Type controller, string action)
     {
         var cache = CacheOn(controller, action);

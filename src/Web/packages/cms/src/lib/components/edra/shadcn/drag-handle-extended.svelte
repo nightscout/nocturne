@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '@nocturne/ui/ui/button';
 	import * as DropdownMenu from '@nocturne/ui/ui/dropdown-menu';
-	import { TextAlignCenter } from '@lucide/svelte';
+	import TextAlignCenter from '@lucide/svelte/icons/text-align-center';
 	import Clipboard from '@lucide/svelte/icons/clipboard';
 	import Duplicate from '@lucide/svelte/icons/copy';
 	import GripVertical from '@lucide/svelte/icons/grip-vertical';

@@ -7,7 +7,7 @@ namespace Nocturne.Core.Contracts.V4;
 /// <summary>
 /// Decomposes legacy Activity records into dedicated v4 models (HeartRate, StepCount).
 /// Activities with "bpm" in AdditionalProperties are routed to heart_rates table.
-/// Activities with "metric" in AdditionalProperties are routed to step_counts table.
+/// Step-count activities, per <see cref="IsStepCount"/>, are routed to step_counts table.
 /// Regular activities (exercise, sleep, etc.) pass through unchanged to StateSpan storage.
 /// </summary>
 /// <seealso cref="IDecompositionPipeline"/>
@@ -47,7 +47,9 @@ public interface IActivityDecomposer
     bool IsHeartRate(Activity activity);
 
     /// <summary>
-    /// Determines whether an activity represents step count data (has "metric" in AdditionalProperties).
+    /// Determines whether an activity represents step count data: it has a <c>metric</c> key in
+    /// <see cref="Activity.AdditionalProperties"/>, or, as xDrip uploads it, a <c>steps</c> key there
+    /// and <see cref="Activity.Type"/> <c>"steps-total"</c>.
     /// </summary>
     bool IsStepCount(Activity activity);
 

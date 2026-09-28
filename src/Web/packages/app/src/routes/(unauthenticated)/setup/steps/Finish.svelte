@@ -3,17 +3,15 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Item } from "$lib/components/ui/item";
   import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import Users from "@lucide/svelte/icons/users";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import Plug from "@lucide/svelte/icons/plug";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import Globe from "@lucide/svelte/icons/globe";
   import { Artwork } from "@nocturne/watercolour";
   import { sproutArtwork } from "$lib/watercolour-icons";
-  import {
-    ChartLine,
-    Users,
-    Bell,
-    BookOpen,
-    Plug,
-    ArrowRight,
-    Globe,
-  } from "lucide-svelte";
 
   let {
     path,

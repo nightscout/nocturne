@@ -397,4 +397,66 @@ public class SensorGlucoseControllerTests
             cleared => cleared.PatientDeviceId.Should().BeNull(),
             attributed => attributed.PatientDeviceId.Should().Be(stamped));
     }
+
+    [Fact]
+    public async Task CreateBulk_CarriesTheSyncKeyTheRepositoryUpsertsOn()
+    {
+        var requests = new[]
+        {
+            new UpsertSensorGlucoseRequest
+            {
+                Timestamp = DateTimeOffset.UtcNow, Mgdl = 120, DataSource = "xdrip", SyncIdentifier = "sg-1",
+            },
+        };
+        IEnumerable<SensorGlucose>? persisted = null;
+        _repoMock
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<SensorGlucose>, WriteOrigin, CancellationToken>((m, _, _) => persisted = m.ToList())
+            .ReturnsAsync((IEnumerable<SensorGlucose> m, WriteOrigin _, CancellationToken _) => [.. m]);
+
+        await CreateController().CreateBulk(requests);
+
+        persisted.Should().ContainSingle().Which.Should().Match<SensorGlucose>(
+            m => m.DataSource == "xdrip" && m.SyncIdentifier == "sg-1");
+    }
+
+    [Fact]
+    public async Task CreateBulk_Returns400_WhenASyncIdentifierHasNoDataSource()
+    {
+        var requests = new[]
+        {
+            new UpsertSensorGlucoseRequest { Timestamp = DateTimeOffset.UtcNow, Mgdl = 120, SyncIdentifier = "sg-1" },
+        };
+
+        var result = await CreateController().CreateBulk(requests);
+
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _repoMock.Verify(
+            r => r.BulkCreateAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_KeepsTheStoredSyncIdentifier()
+    {
+        var id = Guid.NewGuid();
+        SensorGlucose? updated = null;
+        _repoMock
+            .Setup(r => r.GetByIdAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SensorGlucose
+            {
+                Id = id, Timestamp = DateTime.UtcNow, Mgdl = 120, DataSource = "xdrip", SyncIdentifier = "sg-1",
+            });
+        _repoMock
+            .Setup(r => r.UpdateAsync(id, It.IsAny<SensorGlucose>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, SensorGlucose, WriteOrigin, CancellationToken>((_, m, _, _) => updated = m)
+            .ReturnsAsync((Guid _, SensorGlucose m, WriteOrigin _, CancellationToken _) => m);
+
+        await CreateController().Update(id, new UpsertSensorGlucoseRequest
+        {
+            Timestamp = DateTimeOffset.UtcNow, Mgdl = 95, DataSource = "xdrip", SyncIdentifier = "other",
+        });
+
+        updated!.SyncIdentifier.Should().Be("sg-1");
+    }
 }

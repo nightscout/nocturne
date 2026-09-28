@@ -6,6 +6,7 @@ import { blogManifest } from '@nocturne/cms/blog/vite-plugin';
 import { resolve, sep } from 'node:path';
 import { cpSync, rmSync, existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { defineConfig, searchForWorkspaceRoot, type Plugin, type PluginOption } from 'vite';
+import { appAliases } from './app-aliases';
 
 /**
  * pnpm's global virtual store (`enableGlobalVirtualStore` in pnpm-workspace.yaml) links every
@@ -118,6 +119,7 @@ function releaseAssets(): Plugin {
 
 export default defineConfig({
   plugins: [
+    appAliases(),
     sharedLogos(),
     sharedFonts(),
     releaseAssets(),
@@ -142,7 +144,13 @@ export default defineConfig({
       allow: [searchForWorkspaceRoot(process.cwd()), resolve(__dirname, 'src/lib/release'), ...pnpmStoreRoots()],
     },
   },
+  // Per-icon imports would each be a new dep, re-optimized with a reload on first render.
+  optimizeDeps: {
+    exclude: ['@lucide/svelte']
+  },
   ssr: {
-    noExternal: ['@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'lucide-svelte']
+    // layerchart and @layerstack/*, reached through the app's alert replay, emit .svelte sources and
+    // bare `svelte` imports Node cannot resolve from pnpm's store, as in the app's config.
+    noExternal: ['@nocturne/app', '@nocturne/ui', '@nocturne/cms', 'layerchart', /^@layerstack\//]
   }
 });

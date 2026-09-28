@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { KeyRound, X } from "lucide-svelte";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import X from "@lucide/svelte/icons/x";
   import { Banner } from "$lib/components/ui/banner";
   import { Button } from "$lib/components/ui/button";
   import { listCredentials } from "$lib/api/generated/passkeys.generated.remote";

@@ -7,7 +7,8 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { Target, Pencil } from "lucide-svelte";
+  import Target from "@lucide/svelte/icons/target";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import ScheduleView from "./ScheduleView.svelte";
   import { createTargetRangeSchedule } from "$api/generated/profiles.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";

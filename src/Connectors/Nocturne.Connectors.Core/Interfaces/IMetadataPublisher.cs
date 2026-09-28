@@ -94,6 +94,17 @@ public interface IMetadataPublisher
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the start of the most recent state span <paramref name="source"/> published through
+    /// <see cref="PublishStateSpansAsync"/>, or <c>null</c> when it has published none. Activity
+    /// spans share the table but not this watermark; see <see cref="GetLatestActivityTimestampAsync"/>.
+    /// </summary>
+    /// <param name="source">The connector data source (e.g. <c>nocturne-remote-connector</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<DateTime?> GetLatestStateSpanTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads the persisted backfill low-water mark for one of <paramref name="source"/>'s data
     /// collections. A mark means an earlier backfill crawl of that collection stopped before
     /// reaching the source's beginning — history older than the mark may be missing, and the

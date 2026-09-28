@@ -107,7 +107,7 @@ public interface IStatisticsService
     /// <param name="entries"><see cref="SensorGlucose"/> entries with timestamps for time-dependent metrics.</param>
     /// <returns>
     /// A <see cref="GlycemicVariability"/> containing all variability metrics, or null for fewer
-    /// than two values.
+    /// than two plausible glucose values.
     /// </returns>
     GlycemicVariability? CalculateGlycemicVariability(
         IEnumerable<double> values,
@@ -272,20 +272,6 @@ public interface IStatisticsService
     /// <param name="dailyDataPoints">Per-day data points.</param>
     /// <returns>Overall averages, or <c>null</c> if no data.</returns>
     OverallAverages? CalculateOverallAverages(IEnumerable<DayData> dailyDataPoints);
-
-    /// <summary>
-    /// Get total daily insulin from a <see cref="TreatmentSummary"/>.
-    /// </summary>
-    /// <param name="treatmentSummary">Treatment summary to read from.</param>
-    /// <returns>Total insulin in units.</returns>
-    double GetTotalInsulin(TreatmentSummary treatmentSummary);
-
-    /// <summary>
-    /// Get bolus insulin as a percentage of total daily insulin.
-    /// </summary>
-    /// <param name="treatmentSummary">Treatment summary to read from.</param>
-    /// <returns>Bolus percentage (0-100).</returns>
-    double GetBolusPercentage(TreatmentSummary treatmentSummary);
 
     /// <summary>
     /// Calculate comprehensive insulin delivery statistics.

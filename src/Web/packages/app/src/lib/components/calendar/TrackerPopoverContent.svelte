@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { Play, CheckCircle, CalendarClock, Check } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import Check from "@lucide/svelte/icons/check";
   import { Button } from "$lib/components/ui/button";
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import { cn } from "$lib/utils";

@@ -3,9 +3,9 @@
  * categorization, color mapping, and treatment classification is done
  * server-side. Single call replaces 7+ separate API calls.
  */
-import { getRequestEvent, query } from "$app/server";
+import { query } from "$app/server";
 import { z } from "zod";
-import { error } from "@sveltejs/kit";
+import { getDashboardChartData } from "$api/generated/chartDatas.generated.remote";
 import { transformChartData } from "$lib/utils/chart-data-transform";
 
 const chartDataSchema = z.object({
@@ -16,21 +16,5 @@ const chartDataSchema = z.object({
 
 export const getChartData = query(
   chartDataSchema,
-  async ({ startTime, endTime, intervalMinutes }) => {
-    const { locals } = getRequestEvent();
-    const { apiClient } = locals;
-
-    try {
-      const data = await apiClient.chartData.getDashboardChartData(
-        startTime,
-        endTime,
-        intervalMinutes
-      );
-
-      return transformChartData(data);
-    } catch (err) {
-      console.error("Error loading chart data:", err);
-      throw error(500, "Failed to load chart data");
-    }
-  }
+  async (input) => transformChartData(await getDashboardChartData(input))
 );

@@ -2,7 +2,8 @@
   import { untrack } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Loader2, KeyRound } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import KeyRound from "@lucide/svelte/icons/key-round";
   import { FormError, FormField, useSubmission } from "$lib/forms";
   import { activateGuestCode } from "$lib/api/guest.remote";
 

@@ -1,12 +1,10 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Loader2,
-    Check,
-    AlertTriangle,
-    UserPlus,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import { Artwork } from "@nocturne/watercolour";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   import {

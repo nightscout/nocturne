@@ -9,7 +9,8 @@
   } from "$api/generated/tenantAlertSettings.generated.remote";
   import type { TenantAlertSettingsResponse } from "$api-clients";
   import { Switch } from "$lib/components/ui/switch";
-  import { Bell, BellOff } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";
 
   // Manual DND is tenant-wide — it suppresses delivery of every non-critical

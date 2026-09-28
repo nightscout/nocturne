@@ -6,7 +6,7 @@ import DailyInsulinSummary from "./DailyInsulinSummary.svelte";
 describe("DailyInsulinSummary", () => {
 	const full_summary = {
 		totals: {
-			insulin: { bolus: 15.5, basal: 20.3 },
+			insulin: { bolus: 15.5 },
 			food: { carbs: 180, protein: 60, fat: 45 },
 		},
 	};
@@ -22,21 +22,6 @@ describe("DailyInsulinSummary", () => {
 
 		await expect.element(page.getByText("Bolus insulin:")).toBeVisible();
 		await expect.element(page.getByText(/15\.50/)).toBeVisible();
-	});
-
-	it("displays basal insulin", async () => {
-		render(DailyInsulinSummary, { treatmentSummary: full_summary });
-
-		await expect.element(page.getByText("Total basal insulin:")).toBeVisible();
-		await expect.element(page.getByText(/20\.30/)).toBeVisible();
-	});
-
-	it("displays total daily insulin as sum of bolus and basal", async () => {
-		render(DailyInsulinSummary, { treatmentSummary: full_summary });
-
-		await expect.element(page.getByText("Total daily insulin:")).toBeVisible();
-		// 15.5 + 20.3 = 35.8 → "35.80"
-		await expect.element(page.getByText(/35\.80/)).toBeVisible();
 	});
 
 	it("displays carb totals", async () => {

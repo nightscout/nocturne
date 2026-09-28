@@ -460,6 +460,9 @@ public class ServicesController : ControllerBase
         if (string.IsNullOrWhiteSpace(id))
             return Problem(detail: "Connector ID is required", statusCode: 400, title: "Bad Request");
 
+        if (request.WindowError() is { } windowError)
+            return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
+
         var result = await _connectorSyncService.TriggerSyncAsync(id, request, cancellationToken);
         return SyncOrConflict(result);
     }
@@ -521,6 +524,9 @@ public class ServicesController : ControllerBase
             To = DateTime.UtcNow,
             DataTypes = request.DataTypes ?? [],
         };
+
+        if (syncRequest.WindowError() is { } windowError)
+            return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
 
         _logger.LogInformation(
             "Cursor reset requested for connector {ConnectorId} (from {From})",

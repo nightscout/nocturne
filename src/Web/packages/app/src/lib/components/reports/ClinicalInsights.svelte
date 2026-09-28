@@ -42,15 +42,13 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge, type BadgeVariant } from "$lib/components/ui/badge";
-  import {
-    Lightbulb,
-    TrendingUp,
-    AlertCircle,
-    CheckCircle2,
-    Clock,
-    Dumbbell,
-    Pill,
-  } from "lucide-svelte";
+  import Lightbulb from "@lucide/svelte/icons/lightbulb";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Dumbbell from "@lucide/svelte/icons/dumbbell";
+  import Pill from "@lucide/svelte/icons/pill";
   import {
     formatInsight,
     getInsightTypeFromKey,

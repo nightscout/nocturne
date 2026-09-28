@@ -98,7 +98,6 @@ public static class TherapySettingsMapper
         entity.LoopSettingsJson = model.LoopSettings is not null
             ? JsonSerializer.Serialize(model.LoopSettings)
             : null;
-        entity.IsDefault = model.IsDefault;
         entity.EnteredBy = model.EnteredBy;
         entity.IsExternallyManaged = model.IsExternallyManaged;
         entity.StartDate = model.StartDate;

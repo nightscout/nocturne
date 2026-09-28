@@ -1,9 +1,7 @@
-import {
-  Bell,
-  BellRing,
-  MonitorSmartphone,
-  Webhook as WebhookIcon,
-} from "lucide-svelte";
+import Bell from "@lucide/svelte/icons/bell";
+import BellRing from "@lucide/svelte/icons/bell-ring";
+import MonitorSmartphone from "@lucide/svelte/icons/monitor-smartphone";
+import WebhookIcon from "@lucide/svelte/icons/webhook";
 import { ChannelType } from "$api-clients";
 
 /**

@@ -78,7 +78,7 @@ public class LibreConnectorService(
         if (token == null)
         {
             _accountIdHash = string.Empty;
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return false;
         }
 
@@ -117,16 +117,6 @@ public class LibreConnectorService(
     private async Task<List<SensorGlucose>?> FetchSensorGlucoseAsync(
         LibreLinkUpConnectorConfiguration config, DateTime? since = null)
     {
-        if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
-        {
-            _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
-            if (!await AuthenticateWithConfigAsync(config))
-            {
-                _logger.LogError("Failed to authenticate with LibreLinkUp");
-                return null;
-            }
-        }
-
         if (string.IsNullOrWhiteSpace(_selectedConnection?.PatientId))
         {
             _logger.LogError("Invalid LibreLinkUp patient id");
@@ -169,6 +159,16 @@ public class LibreConnectorService(
         if (!activeTypes.Contains(SyncDataType.Glucose))
         {
             return result;
+        }
+
+        if (_tokenProvider.IsTokenExpired || _selectedConnection == null)
+        {
+            _logger.LogInformation("Token expired or missing connection, attempting to re-authenticate");
+            if (!await AuthenticateWithConfigAsync(config))
+            {
+                _logger.LogError("Failed to authenticate with LibreLinkUp");
+                return AuthenticationFailedResult();
+            }
         }
 
         try

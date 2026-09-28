@@ -1,6 +1,9 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { Heart, Activity, Wind, Droplet } from "lucide-svelte";
+  import Heart from "@lucide/svelte/icons/heart";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Wind from "@lucide/svelte/icons/wind";
+  import Droplet from "@lucide/svelte/icons/droplet";
 
   interface Props {
     avgHeartRate: number | undefined;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import AlertTriangle from "lucide-svelte/icons/alert-triangle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

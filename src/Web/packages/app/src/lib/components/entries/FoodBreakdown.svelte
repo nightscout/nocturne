@@ -4,7 +4,9 @@
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { Pencil, Trash2, Plus } from "lucide-svelte";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Plus from "@lucide/svelte/icons/plus";
   import {
     type TreatmentFood,
     type TreatmentFoodBreakdown,

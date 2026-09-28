@@ -167,11 +167,8 @@ public class SummaryService : ISummaryService
             .Select(temp => new SummaryTempBasal
             {
                 Start =
-                    !string.IsNullOrEmpty(temp.Created_at)
-                    && DateTime.TryParse(temp.Created_at, out var createdAt)
-                        ? (
-                            (DateTimeOffset)DateTime.SpecifyKind(createdAt, DateTimeKind.Utc)
-                        ).ToUnixTimeMilliseconds()
+                    UploaderTimestamp.TryParse(temp.Created_at, out var createdAt)
+                        ? createdAt.ToUnixTimeMilliseconds()
                         : temp.Mills,
                 Duration = temp.Duration.HasValue ? (int)(temp.Duration.Value * 60 * 1000) : 0,
                 Absolute = temp.Absolute ?? 0,

@@ -10,7 +10,12 @@
   import GiIcon from './GiIcon.svelte';
   import GiLabel from './GiLabel.svelte';
 
-  import { Plus, Download, Upload, Search, Star, X } from 'lucide-svelte';
+  import Plus from '@lucide/svelte/icons/plus';
+  import Download from '@lucide/svelte/icons/download';
+  import Upload from '@lucide/svelte/icons/upload';
+  import Search from '@lucide/svelte/icons/search';
+  import Star from '@lucide/svelte/icons/star';
+  import X from '@lucide/svelte/icons/x';
   import { Artwork } from "@nocturne/watercolour";
   import * as Select from '$lib/components/ui/select';
   import { Button } from '$lib/components/ui/button';

@@ -11,11 +11,9 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
   import * as Tabs from "$lib/components/ui/tabs";
-  import {
-    Smartphone,
-    CheckCircle,
-    ChevronRight,
-  } from "lucide-svelte";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
 
   interface Props {

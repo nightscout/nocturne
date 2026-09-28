@@ -7,12 +7,10 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import {
-    Loader2,
-    AlertTriangle,
-    Check,
-    Globe,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Check from "@lucide/svelte/icons/check";
+  import Globe from "@lucide/svelte/icons/globe";
   import { OidcProviderType } from "$api";
   import type { OidcProviderResponse, OidcProviderTestResult, TenantRoleDto } from "$api";
   import { describeSubmitError } from "$lib/forms/submit-error";

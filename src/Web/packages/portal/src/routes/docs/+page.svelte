@@ -3,7 +3,7 @@
     import { ArtworkHero, ConfirmationBackground } from "@nocturne/watercolour";
     import Content from "../../content/docs/index.svx";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
-    import { ArrowRight } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import { DOCS_HERO } from "$lib/data/docs-artwork";
 
     const hero = DOCS_HERO[""];

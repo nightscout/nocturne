@@ -124,6 +124,37 @@ public class TempBasalControllerTests
     }
 
     [Fact]
+    public async Task CreateTempBasals_SkipsDeletedSpanAndWritesTheRest()
+    {
+        var before = Request(rate: 1.0, timestamp: T0);
+        var deleted = Request(rate: 2.0, timestamp: T0.AddMinutes(10));
+        var after = Request(rate: 3.0, timestamp: T0.AddMinutes(20));
+        _repo.Setup(r => r.CreateAsync(It.Is<TempBasal>(m => m.SyncIdentifier == deleted.SyncIdentifier), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(RecreationBlockedException.ForSyncKey(nameof(TempBasal), deleted.DataSource!, deleted.SyncIdentifier!));
+
+        var result = await _controller.CreateTempBasals([after, deleted, before], CancellationToken.None);
+
+        var objectResult = (ObjectResult)result.Result!;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status201Created);
+        var written = objectResult.Value.Should().BeOfType<TempBasal[]>().Subject;
+        written.Select(t => t.SyncIdentifier).Should().Equal(before.SyncIdentifier, after.SyncIdentifier);
+        _repo.Verify(r => r.CreateAsync(It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task CreateTempBasals_SingleDeletedSpan_AnswersCreatedWithEmptyArray()
+    {
+        _repo.Setup(r => r.CreateAsync(It.IsAny<TempBasal>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(RecreationBlockedException.ForSyncKey(nameof(TempBasal), "trio", "tb-1"));
+
+        var result = await _controller.CreateTempBasals([Request()], CancellationToken.None);
+
+        var objectResult = (ObjectResult)result.Result!;
+        objectResult.StatusCode.Should().Be(StatusCodes.Status201Created);
+        objectResult.Value.Should().BeOfType<TempBasal[]>().Which.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task CreateTempBasals_RejectsSyncIdentifierWithoutDataSource()
     {
         var request = Request();

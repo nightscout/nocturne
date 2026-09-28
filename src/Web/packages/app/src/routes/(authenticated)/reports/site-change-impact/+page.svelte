@@ -9,14 +9,12 @@
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
   import { formatShortDate } from "$lib/utils/formatting";
-  import {
-    Calendar,
-    Info,
-    ArrowLeft,
-    HelpCircle,
-    Clock,
-    RefreshCw,
-  } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Info from "@lucide/svelte/icons/info";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+  import Clock from "@lucide/svelte/icons/clock";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
   import { getSiteChangeImpact } from "$api/reports.remote";

@@ -2,7 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Columns3, Trash2 } from "lucide-svelte";
+  import Columns3 from "@lucide/svelte/icons/columns-3";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { Table } from "@tanstack/table-core";
 
   interface Props {

@@ -1,0 +1,96 @@
+---
+title: Conditions that must last
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# Conditions that must last
+
+A single reading can be wrong. Lying on a sensor can press a false low into it
+for a few minutes (a "compression low"), and a fresh sensor can be jumpy for its
+first day. An alert on every one of those readings teaches people to ignore
+alerts.
+
+**Make sustained**, in a row's **...** menu, adds a **for at least N min** box to
+the row. The row then only counts once its condition has been true **for that
+long without a break**.
+
+<Screenshot id="alert-rule-sustained-low" />
+
+## How the clock works
+
+- The first time the condition is true, a clock starts. At that moment the row
+  is **not** yet true.
+- Every check after that, the row is true once the clock has reached the
+  number of minutes you set.
+- The first time the condition is **not** true, the clock is thrown away. The
+  next time it is true, the clock starts again from zero.
+
+With a CGM that sends a reading every 5 minutes, "for at least 15 min" means
+four readings in a row: the one that starts the clock, and three more, the
+last of them 15 minutes after the first.
+
+Here are two rules on a quiet afternoon with a short dip: three readings just
+under 70 mg/dL (3.9 mmol/L), covering ten minutes.
+
+<AlertSimulator
+  scenario="brief-dip"
+  scenarios={["brief-dip", "overnight-low"]}
+  rules={["low", "sustained-low"]}
+/>
+
+"Low" alerts on the first reading under 70. "Low for 15 minutes" never alerts,
+because the dip is over before its clock reaches 15 minutes. Switch to
+**Overnight low**, a real low that lasts: now both alert, and "Low for 15
+minutes" alerts exactly 15 minutes after the first low reading.
+
+That delay is the price. A sustained rule always alerts later than the same
+rule without it, by the number of minutes you set.
+
+<Callout type="warning" title="Do not delay an urgent low">
+
+  A "for at least" setting holds back every alert by its length, including
+  real ones. Leave it off rules for dangerous situations, such as an urgent low,
+  where a late alert costs more than a false one. A common pattern is two rules:
+  an urgent low with no delay, and a milder low with a short one. See
+  [Example rules](/docs/alerts/recipes).
+
+</Callout>
+
+## When readings stop
+
+A gap in readings does **not** reset the clock. Only a reading where the
+condition is false does.
+
+A glucose rule is checked when a reading arrives. If readings stop while a
+clock is running, nothing checks the rule until the next reading. When that
+reading arrives and the condition is still true, the time without readings
+counts towards the clock, so the rule can alert on the very first reading back.
+
+While readings are missing, glucose rules cannot alert at all. That is why
+every setup that relies on alerts should also have a **Signal loss** rule (see
+[Conditions](/docs/alerts/conditions#signal-loss)).
+
+<Callout type="info" title="The simulator and Replay fill gaps with the last reading">
+
+  This simulator, and **Replay** in the app, check every 5 minutes whether or
+  not a reading arrived, reusing the last reading through a gap. Around a gap,
+  a sustained glucose rule can therefore alert earlier in a replay than it
+  would have at the time.
+
+</Callout>
+
+## Several conditions that must last
+
+Every row's clock runs on its own, whatever the rows around it are doing, so
+the order of rows never changes when a rule alerts.
+
+In the rule editor, **Make sustained** is offered on a single condition row,
+not on a group. Two rows of "for at least 15 min" under **all of** alert once
+both have held for 15 minutes: after 15 minutes if both started together, later
+if one started later. To require that several conditions hold together for a
+while, making one of them sustained is usually enough.

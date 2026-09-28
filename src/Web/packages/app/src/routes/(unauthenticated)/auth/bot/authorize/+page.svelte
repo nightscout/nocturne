@@ -2,7 +2,7 @@
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
 	import { resolve } from "$app/paths";
-	import { Loader2 } from "lucide-svelte";
+	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { Button } from "$lib/components/ui/button";
 	import { Input } from "$lib/components/ui/input";
 	import { getBotAuthorizeContext, buildTenantRedirectUrl } from "../bot.remote";

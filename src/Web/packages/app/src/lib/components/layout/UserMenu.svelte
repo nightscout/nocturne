@@ -2,7 +2,12 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Avatar from "$lib/components/ui/avatar";
   import * as Sidebar from "$lib/components/ui/sidebar";
-  import { User, LogOut, Settings, Shield, ChevronDown, UserPlus } from "lucide-svelte";
+  import User from "@lucide/svelte/icons/user";
+  import LogOut from "@lucide/svelte/icons/log-out";
+  import Settings from "@lucide/svelte/icons/settings";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import type { AuthUser } from "$lib/stores/auth-store.svelte";

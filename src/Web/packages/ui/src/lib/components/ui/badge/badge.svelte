@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HTMLAnchorAttributes } from "svelte/elements";
-  import { X } from "@lucide/svelte";
+  import X from "@lucide/svelte/icons/x";
   import { cn, type WithElementRef } from "../../../utils";
   import { badgeVariants, type BadgeSize, type BadgeVariant } from "./index.js";
 

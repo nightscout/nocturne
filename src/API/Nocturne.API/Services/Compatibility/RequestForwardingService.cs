@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Models.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
@@ -108,7 +109,7 @@ public class RequestForwardingService : IRequestForwardingService
             using var httpClient = _httpClientFactory.CreateClient("NightscoutClient");
             httpClient.Timeout = TimeSpan.FromSeconds(_configuration.Value.TimeoutSeconds);
 
-            var requestUri = new Uri(new Uri(nightscoutUrl), request.Path);
+            var requestUri = NightscoutBaseUri.Resolve(nightscoutUrl, request.Path);
             using var httpRequest = new HttpRequestMessage(
                 new HttpMethod(request.Method),
                 requestUri);

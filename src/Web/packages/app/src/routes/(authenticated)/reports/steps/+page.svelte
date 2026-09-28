@@ -6,7 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Footprints } from "lucide-svelte";
+  import Footprints from "@lucide/svelte/icons/footprints";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import {
     Actogram,

@@ -2,7 +2,7 @@
     import { Artwork } from "@nocturne/watercolour";
     import * as Accordion from "@nocturne/ui/ui/accordion";
     import { Button } from "@nocturne/ui/ui/button";
-    import { ArrowRight } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
 
     const faqCategories = [
         {

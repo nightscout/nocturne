@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import * as Alert from "$lib/components/ui/alert";
-  import { Clock } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
 
   let { class: className = "" }: { class?: string } = $props();
 </script>

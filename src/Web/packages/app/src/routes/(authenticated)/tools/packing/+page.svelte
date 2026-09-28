@@ -5,16 +5,14 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Luggage,
-    Syringe,
-    Activity,
-    Cpu,
-    TestTube,
-    ShieldAlert,
-    Info,
-    ListChecks,
-  } from "lucide-svelte";
+  import Luggage from "@lucide/svelte/icons/luggage";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Cpu from "@lucide/svelte/icons/cpu";
+  import TestTube from "@lucide/svelte/icons/test-tube";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import Info from "@lucide/svelte/icons/info";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
   import SupplyCategory from "$lib/components/tools/packing/supply-category.svelte";
   import { categories } from "$lib/components/tools/packing/packing-config";
   import { getPackingHints } from "./packing.remote";

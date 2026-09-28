@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Hand from "lucide-svelte/icons/hand";
+  import Hand from "@lucide/svelte/icons/hand";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

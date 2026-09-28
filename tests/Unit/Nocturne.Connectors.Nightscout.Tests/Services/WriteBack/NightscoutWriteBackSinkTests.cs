@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
@@ -149,6 +150,58 @@ public class NightscoutWriteBackSinkTests
         handler.Uris[0].AbsolutePath.Should().Be("/api/v1/entries");
         handler.Bodies[0].Should().StartWith("{");
     }
+
+    /// <summary>
+    /// The upstream instance stores the record under the <c>_id</c> it is sent, and the connector's
+    /// next pull matches that id against the stored legacy id. A legacy id therefore goes out
+    /// verbatim, whatever its shape; only a record with none, whose id is its uuid, takes the 24-hex
+    /// prefix ingest resolves back to it. The internal uuid never leaves, under any key.
+    /// </summary>
+    [Theory]
+    [InlineData("dexcom_7f3c2a91", "dexcom_7f3c2a91")]
+    [InlineData("5f1a2b3c4d5e6f7a8b9c0d1e", "5f1a2b3c4d5e6f7a8b9c0d1e")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task WriteBack_SendsTheRecordUnderTheIdItWasPulledWith(string recordId, string wireId)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = CreateSink(handler);
+        var entry = new Entry { Id = recordId, Sgv = 120, DataSource = "nocturne" };
+
+        await sut.OnCreatedAsync(new[] { entry });
+        await sut.OnUpdatedAsync(entry);
+
+        var posted = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0];
+        var put = JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]);
+        foreach (var body in new[] { posted, put })
+            IdKeys(body).Should().BeEquivalentTo(new Dictionary<string, string?>
+            {
+                ["_id"] = wireId,
+                ["identifier"] = wireId,
+            });
+    }
+
+    [Theory]
+    [InlineData("loop_status_42", "loop_status_42")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", "0198c2a41f3b7c2d9e556a1b")]
+    public async Task DeviceStatusWriteBack_SendsTheRecordUnderTheIdItWasPulledWith(string recordId, string wireId)
+    {
+        var handler = new RecordingHttpMessageHandler();
+        var sut = new NightscoutDeviceStatusWriteBackSink(
+            new HttpClient(handler),
+            CreateLoader(_config).Object,
+            Breaker,
+            NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);
+
+        await sut.OnCreatedAsync(new[] { new DeviceStatus { Id = recordId, Device = "loop" } });
+
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0])
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wireId });
+    }
+
+    private static Dictionary<string, string?> IdKeys(JsonElement body)
+        => body.EnumerateObject()
+            .Where(p => p.Name is "_id" or "id" or "Id" or "identifier")
+            .ToDictionary(p => p.Name, p => p.Value.GetString());
 
     /// <summary>
     /// The update path has its own skip check, separate from the create path's

@@ -3,7 +3,7 @@
   import * as Select from "$lib/components/ui/select";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Droplet } from "lucide-svelte";
+  import Droplet from "@lucide/svelte/icons/droplet";
 
   interface Props {
     form: {

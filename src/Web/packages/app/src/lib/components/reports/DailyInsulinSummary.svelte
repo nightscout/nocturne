@@ -22,18 +22,6 @@
           {formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)}U
         </span>
       </div>
-      <div class="flex justify-between">
-        <span class="text-muted-foreground">Total basal insulin:</span>
-        <span class="font-medium">
-          {formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)}U
-        </span>
-      </div>
-      <div class="flex justify-between border-t pt-2">
-        <span class="text-foreground font-medium">Total daily insulin:</span>
-        <span class="font-semibold">
-          {formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))}U
-        </span>
-      </div>
     </div>
     <div class="space-y-2">
       <div class="flex justify-between">

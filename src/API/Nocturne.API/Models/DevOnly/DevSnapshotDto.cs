@@ -4,6 +4,10 @@ namespace Nocturne.API.Models.DevOnly;
 /// Top-level snapshot of all tenants and their associated identity/config data.
 /// Used for dev-only export/import of non-clinical setup state.
 /// </summary>
+/// <remarks>
+/// The creation stamps on the row DTOs are export-only: they record the original, but both
+/// imports discard them because the column is server-assigned on insert.
+/// </remarks>
 public class DevSnapshotDto
 {
     /// <summary>
@@ -76,6 +80,7 @@ public class TenantEntityDto
     public bool IsActive { get; set; }
     public DateTime? LastReadingAt { get; set; }
     public bool AllowAccessRequests { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime SysCreatedAt { get; set; }
     public DateTime SysUpdatedAt { get; set; }
 }
@@ -94,6 +99,7 @@ public class SubjectEntityDto
     public string? Notes { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemSubject { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
@@ -138,6 +144,7 @@ public class TenantRoleEntityDto
     public string? Description { get; set; }
     public List<string> Permissions { get; set; } = [];
     public bool IsSystem { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime SysCreatedAt { get; set; }
     public DateTime SysUpdatedAt { get; set; }
 }
@@ -152,6 +159,7 @@ public class TenantMemberEntityDto
     public Guid Id { get; set; }
     public Guid TenantId { get; set; }
     public Guid SubjectId { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime SysCreatedAt { get; set; }
     public DateTime SysUpdatedAt { get; set; }
     public List<string>? DirectPermissions { get; set; }
@@ -173,6 +181,7 @@ public class TenantMemberRoleEntityDto
     public Guid Id { get; set; }
     public Guid TenantMemberId { get; set; }
     public Guid TenantRoleId { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime SysCreatedAt { get; set; }
 }
 
@@ -194,6 +203,7 @@ public class OAuthClientEntityDto
     public string? DisplayName { get; set; }
     public bool IsKnown { get; set; }
     public string RedirectUris { get; set; } = "[]";
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -213,6 +223,7 @@ public class ConnectorConfigSnapshotDto
     public int SchemaVersion { get; set; }
     public DateTimeOffset LastModified { get; set; }
     public string? ModifiedBy { get; set; }
+    /// <summary>Export-only; see <see cref="DevSnapshotDto"/>.</summary>
     public DateTime SysCreatedAt { get; set; }
     public DateTime SysUpdatedAt { get; set; }
     public DateTime? LastSyncAttempt { get; set; }

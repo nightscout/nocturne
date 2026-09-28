@@ -2,7 +2,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
-  import { Trash2, Link, Loader2, Check } from "lucide-svelte";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Link from "@lucide/svelte/icons/link";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import type { MemberInviteInfo, TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
 

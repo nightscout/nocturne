@@ -669,8 +669,8 @@ public class ResponseComparisonService : IResponseComparisonService
         // Handle timestamp comparisons with tolerance
         else if (
             IsTimestampField(path)
-            && DateTime.TryParse(nightscoutString, out var nsTime)
-            && DateTime.TryParse(nocturneString, out var nTime)
+            && UploaderTimestamp.TryParse(nightscoutString, out var nsTime)
+            && UploaderTimestamp.TryParse(nocturneString, out var nTime)
         )
         {
             if (Math.Abs((nsTime - nTime).TotalMilliseconds) > settings.TimestampToleranceMs)

@@ -1,8 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Services.Chat;
+using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Controllers.V4.Identity;
 
@@ -22,6 +27,9 @@ public class ChatIdentityDirectoryController : ControllerBase
     private readonly ChatIdentityDirectoryService _directory;
     private readonly ChatIdentityPendingLinkService _pending;
     private readonly IDbContextFactory<NocturneDbContext> _contextFactory;
+    private readonly ITenantDbContextFactory _tenantContextFactory;
+    private readonly ITenantAccessor _tenantAccessor;
+    private readonly IAlertAcknowledgementService _acknowledgementService;
 
     /// <summary>
     /// Initializes a new instance of <see cref="ChatIdentityDirectoryController"/>.
@@ -29,14 +37,23 @@ public class ChatIdentityDirectoryController : ControllerBase
     /// <param name="directory">Service for cross-tenant directory candidate lookups.</param>
     /// <param name="pending">Service for pending link token generation and resolution.</param>
     /// <param name="contextFactory">Factory for creating database context instances.</param>
+    /// <param name="tenantContextFactory">Factory for contexts scoped to the request's tenant.</param>
+    /// <param name="tenantAccessor">Accessor for the request's resolved tenant.</param>
+    /// <param name="acknowledgementService">The one alert acknowledgement decision.</param>
     public ChatIdentityDirectoryController(
         ChatIdentityDirectoryService directory,
         ChatIdentityPendingLinkService pending,
-        IDbContextFactory<NocturneDbContext> contextFactory)
+        IDbContextFactory<NocturneDbContext> contextFactory,
+        ITenantDbContextFactory tenantContextFactory,
+        ITenantAccessor tenantAccessor,
+        IAlertAcknowledgementService acknowledgementService)
     {
         _directory = directory;
         _pending = pending;
         _contextFactory = contextFactory;
+        _tenantContextFactory = tenantContextFactory;
+        _tenantAccessor = tenantAccessor;
+        _acknowledgementService = acknowledgementService;
     }
 
     /// <summary>
@@ -112,6 +129,102 @@ public class ChatIdentityDirectoryController : ControllerBase
         await _directory.RevokeAsync(id, ChatLinkScope.Unscoped, ct);
         return NoContent();
     }
+
+    /// <summary>
+    /// Acknowledges an alert from chat as the member the link belongs to, not as the bot. The
+    /// instance key holds <c>*</c>, so handing it to
+    /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/> would let every linked
+    /// chat user acknowledge for everyone. The authority carries the linked subject and no scopes
+    /// of its own, so the decision rests on that member's membership: with <c>alerts.readwrite</c>
+    /// the excursion is acknowledged for everyone, otherwise it is muted for that member alone.
+    /// </summary>
+    /// <remarks>
+    /// Must be called on the link's tenant host, because the acknowledgement's realtime broadcasts
+    /// go to the request's tenant. Without an <see cref="ChatAcknowledgeRequest.ExcursionId"/> the
+    /// same decision is applied to every active excursion of the tenant, and the outcome reads
+    /// <c>muted</c> if any was muted, else <c>acknowledged</c> if any was, else <c>closed</c>.
+    /// <see cref="IAlertAcknowledgementService.AcknowledgeExcursionAsync"/> reports an excursion
+    /// someone else already acknowledged as <c>acknowledged</c> whoever asks, so the response names
+    /// who is recorded on it instead of crediting the chat user.
+    /// </remarks>
+    [HttpPost("links/{id:guid}/acknowledge")]
+    [ProducesResponseType(typeof(ChatAcknowledgeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ChatAcknowledgeResponse>> AcknowledgeAsLinkedMember(
+        Guid id,
+        [FromBody] ChatAcknowledgeRequest body,
+        CancellationToken ct)
+    {
+        var row = await _directory.GetByIdAsync(id, ChatLinkScope.Unscoped, ct);
+        if (row is null || !row.IsActive) return NotFound();
+        if (row.Platform != body.Platform || row.PlatformUserId != body.PlatformUserId)
+            return Forbid();
+        if (!_tenantAccessor.IsResolved || _tenantAccessor.TenantId != row.TenantId)
+            return NotFound();
+
+        await using var db = await _tenantContextFactory.CreateAsync(ct);
+        List<Guid> excursionIds;
+        if (body.ExcursionId is { } requested)
+        {
+            if (!await db.AlertExcursions.AsNoTracking().AnyAsync(e => e.Id == requested, ct))
+                return NotFound();
+            excursionIds = [requested];
+        }
+        else
+        {
+            var now = DateTime.UtcNow;
+            excursionIds = await db.AlertExcursions.AsNoTracking()
+                .Where(e => e.EndedAt == null || e.EndedAt > now)
+                .Select(e => e.Id)
+                .ToListAsync(ct);
+        }
+
+        var authority = new AlertAcknowledgementAuthority(
+            row.NocturneUserId, new HashSet<string>(StringComparer.Ordinal));
+        var acknowledgedBy = string.IsNullOrWhiteSpace(body.AcknowledgedBy)
+            ? row.NocturneUserId.ToString()
+            : body.AcknowledgedBy;
+
+        var startedAt = DateTime.UtcNow;
+        var outcomes = new Dictionary<Guid, AlertAcknowledgementOutcome>(excursionIds.Count);
+        foreach (var excursionId in excursionIds)
+        {
+            outcomes[excursionId] = await _acknowledgementService.AcknowledgeExcursionAsync(
+                row.TenantId, excursionId, acknowledgedBy, authority, broadcast: true, ct);
+        }
+
+        if (outcomes.ContainsValue(AlertAcknowledgementOutcome.Muted))
+            return Ok(new ChatAcknowledgeResponse { Outcome = AlertAcknowledgementOutcome.Muted });
+
+        var acknowledgedIds = outcomes
+            .Where(o => o.Value == AlertAcknowledgementOutcome.Acknowledged)
+            .Select(o => o.Key)
+            .ToList();
+        if (acknowledgedIds.Count == 0)
+            return Ok(new ChatAcknowledgeResponse { Outcome = AlertAcknowledgementOutcome.Closed });
+
+        var recorded = await db.AlertExcursions.AsNoTracking()
+            .Where(e => acknowledgedIds.Contains(e.Id))
+            .Select(e => new { e.AcknowledgedAt, e.AcknowledgedBy })
+            .ToListAsync(ct);
+        var earlier = recorded.Where(e => e.AcknowledgedAt < startedAt).ToList();
+        if (earlier.Count < acknowledgedIds.Count)
+        {
+            return Ok(new ChatAcknowledgeResponse
+            {
+                Outcome = AlertAcknowledgementOutcome.Acknowledged,
+                AcknowledgedBy = acknowledgedBy,
+            });
+        }
+
+        return Ok(new ChatAcknowledgeResponse
+        {
+            Outcome = AlertAcknowledgementOutcome.Acknowledged,
+            AlreadyAcknowledged = true,
+            AcknowledgedBy = earlier.MaxBy(e => e.AcknowledgedAt)!.AcknowledgedBy,
+        });
+    }
 }
 
 public class DirectoryCandidatesResponse
@@ -141,6 +254,39 @@ public class CreatePendingLinkRequest
 public class PendingLinkResponse
 {
     public string Token { get; set; } = string.Empty;
+}
+
+public class ChatAcknowledgeRequest
+{
+    /// <summary>The chat platform on the link, checked against the row.</summary>
+    public string Platform { get; set; } = string.Empty;
+
+    /// <summary>The chat account on the link, checked against the row.</summary>
+    public string PlatformUserId { get; set; } = string.Empty;
+
+    /// <summary>The excursion to acknowledge, or null for every active excursion of the tenant.</summary>
+    public Guid? ExcursionId { get; set; }
+
+    /// <summary>The chat user's display name, recorded as who acknowledged.</summary>
+    public string? AcknowledgedBy { get; set; }
+}
+
+public class ChatAcknowledgeResponse
+{
+    /// <inheritdoc cref="AcknowledgeExcursionResponse.Outcome"/>
+    public AlertAcknowledgementOutcome Outcome { get; set; }
+
+    /// <summary>
+    /// With an <c>acknowledged</c> outcome, who is recorded as having acknowledged: the chat user
+    /// when this request did it, else whoever had already.
+    /// </summary>
+    public string? AcknowledgedBy { get; set; }
+
+    /// <summary>
+    /// True when every excursion reported <c>acknowledged</c> had been acknowledged before this
+    /// request, so <see cref="AcknowledgedBy"/> is someone else's acknowledgement.
+    /// </summary>
+    public bool AlreadyAcknowledged { get; set; }
 }
 
 public class RevokeByPlatformUserRequest

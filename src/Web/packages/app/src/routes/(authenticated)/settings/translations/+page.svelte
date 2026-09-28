@@ -2,7 +2,8 @@
   import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
-  import { Languages, ChevronRight } from "@lucide/svelte";
+  import Languages from "@lucide/svelte/icons/languages";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import {
     supportedLocales,
     getLanguageLabel,

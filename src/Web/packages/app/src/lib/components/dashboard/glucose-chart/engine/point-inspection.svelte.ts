@@ -3,8 +3,8 @@ import type {
   SeriesFinders,
   GlucosePoint,
   SeriesPoint,
-} from "./chart-data-engine.svelte";
-import { BasalDeliveryOrigin } from "$lib/api";
+} from "./chart-data-view.svelte";
+import { BasalDeliveryOrigin } from "$api-clients";
 import {
   bg,
   bgLabel,

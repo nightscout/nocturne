@@ -186,6 +186,83 @@ public class TreatmentPublisherTests
         result.Should().BeNull();
     }
 
+    private static readonly DateTime PerTypeBase = new(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    /// <summary>
+    /// Gives every treatment repository a distinct newest timestamp for <c>connector-a</c>, so a
+    /// type routed to the wrong table returns a neighbour's watermark.
+    /// </summary>
+    private void SeedDistinctPerTypeWatermarks()
+    {
+        _mockBolusRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(1));
+        _mockCarbIntakeRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(2));
+        _mockBGCheckRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(3));
+        _mockBolusCalculationRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(4));
+        _mockTempBasalRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(5));
+        _mockBasalInjectionRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(6));
+        _mockNoteRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(7));
+        _mockDeviceEventRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase.AddHours(8));
+    }
+
+    [Theory]
+    [InlineData(SyncDataType.Boluses, 1)]
+    [InlineData(SyncDataType.CarbIntake, 2)]
+    [InlineData(SyncDataType.ManualBG, 3)]
+    [InlineData(SyncDataType.BGChecks, 3)]
+    [InlineData(SyncDataType.BolusCalculations, 4)]
+    [InlineData(SyncDataType.TempBasals, 5)]
+    [InlineData(SyncDataType.BasalInjections, 6)]
+    [InlineData(SyncDataType.Notes, 7)]
+    [InlineData(SyncDataType.DeviceEvents, 8)]
+    public async Task GetLatestTreatmentTimestampAsync_PerType_ReadsOnlyThatTypesTable(SyncDataType type, int expectedHour)
+    {
+        SeedDistinctPerTypeWatermarks();
+
+        var result = await _publisher.GetLatestTreatmentTimestampAsync(type, "connector-a");
+
+        result.Should().Be(PerTypeBase.AddHours(expectedHour));
+    }
+
+    [Theory]
+    [InlineData(SyncDataType.Boluses)]
+    [InlineData(SyncDataType.CarbIntake)]
+    [InlineData(SyncDataType.ManualBG)]
+    [InlineData(SyncDataType.BGChecks)]
+    [InlineData(SyncDataType.BolusCalculations)]
+    [InlineData(SyncDataType.TempBasals)]
+    [InlineData(SyncDataType.BasalInjections)]
+    [InlineData(SyncDataType.Notes)]
+    [InlineData(SyncDataType.DeviceEvents)]
+    public async Task GetLatestTreatmentTimestampAsync_PerType_ReturnsNull_WhenOnlyAnotherSourceHasData(SyncDataType type)
+    {
+        SeedDistinctPerTypeWatermarks();
+
+        var result = await _publisher.GetLatestTreatmentTimestampAsync(type, "connector-b");
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetLatestTreatmentTimestampAsync_PerType_ReturnsNull_WhenTableIsEmpty()
+    {
+        _mockCarbIntakeRepository.Setup(r => r.GetLatestTimestampAsync("connector-a", It.IsAny<CancellationToken>())).ReturnsAsync(PerTypeBase);
+
+        var result = await _publisher.GetLatestTreatmentTimestampAsync(SyncDataType.Boluses, "connector-a");
+
+        result.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(SyncDataType.Glucose)]
+    [InlineData(SyncDataType.StateSpans)]
+    [InlineData(SyncDataType.Activity)]
+    public async Task GetLatestTreatmentTimestampAsync_PerType_RejectsNonTreatmentTypes(SyncDataType type)
+    {
+        var act = () => _publisher.GetLatestTreatmentTimestampAsync(type, "connector-a");
+
+        await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
+    }
+
     [Fact]
     public async Task PublishTempBasalsAsync_ReclassifiesScheduledToAlgorithm_WhenRateDiffersFromProgrammed()
     {

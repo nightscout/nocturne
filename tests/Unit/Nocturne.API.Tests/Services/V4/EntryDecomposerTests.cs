@@ -154,6 +154,40 @@ public class EntryDecomposerTests : IDisposable
         sg.Mgdl.Should().Be(110.0, "should fall back to Mgdl when Sgv is null");
     }
 
+    [Theory]
+    [InlineData("NONE", 4, GlucoseDirection.None)]
+    [InlineData(null, 4, null)]
+    [InlineData("Sideways", 4, null)]
+    [InlineData("TripleUp", 1, null)]
+    [InlineData("TripleDown", 7, null)]
+    [InlineData("CGM ERROR", 4, null)]
+    [InlineData("SingleUp", 4, GlucoseDirection.SingleUp)]
+    [InlineData("NONE", 0, GlucoseDirection.None)]
+    [InlineData("NONE", 8, GlucoseDirection.None)]
+    [InlineData("NONE", 9, GlucoseDirection.None)]
+    public async Task DecomposeAsync_SgvEntryWithTrend_StoresDirectionAsUploaded(
+        string? direction, int trend, GlucoseDirection? expected)
+    {
+        var entry = new Entry
+        {
+            Id = "sgv-direction-as-uploaded",
+            Type = "sgv",
+            Mills = 1790000000000,
+            Sgv = 115.0,
+            Direction = direction,
+            Trend = trend
+        };
+
+        var result = await _decomposer.DecomposeAsync(entry, WriteOrigin.Live);
+
+        result.UpdatedRecords.Should().BeEmpty();
+        var sg = result.CreatedRecords.Should().ContainSingle().Which
+            .Should().BeOfType<SensorGlucose>().Subject;
+        sg.LegacyId.Should().Be("sgv-direction-as-uploaded");
+        sg.Mgdl.Should().Be(115.0);
+        sg.Direction.Should().Be(expected);
+    }
+
     #endregion
 
     #region MBG Decomposition

@@ -60,11 +60,17 @@ struct CommandError {
 
 impl CommandError {
     fn new(message: impl Into<String>) -> Self {
-        Self { status: None, message: message.into() }
+        Self {
+            status: None,
+            message: message.into(),
+        }
     }
 
     fn http(status: u16, message: impl Into<String>) -> Self {
-        Self { status: Some(status), message: message.into() }
+        Self {
+            status: Some(status),
+            message: message.into(),
+        }
     }
 }
 
@@ -131,7 +137,12 @@ fn link(link_code: String, session: State<'_, SessionState>) -> CommandResult<Li
 /// Lets the UI recover a deep link that landed before it was listening.
 #[tauri::command]
 fn pending_link_server(session: State<'_, SessionState>) -> Option<String> {
-    session.lock().unwrap().pending.as_ref().map(|p| p.server_url.clone())
+    session
+        .lock()
+        .unwrap()
+        .pending
+        .as_ref()
+        .map(|p| p.server_url.clone())
 }
 
 /// Accepts the pending deep link. Only the user, having seen the server address, gets to call this
@@ -141,7 +152,9 @@ fn confirm_pending_link(session: State<'_, SessionState>) -> CommandResult<LinkI
     let pending = session.lock().unwrap().pending.take();
     match pending {
         Some(credentials) => Ok(apply_link(credentials, &session)),
-        None => Err(CommandError::new("That link is no longer available. Open it again from Nocturne.")),
+        None => Err(CommandError::new(
+            "That link is no longer available. Open it again from Nocturne.",
+        )),
     }
 }
 
@@ -188,7 +201,9 @@ async fn start_connect(region: String, app: tauri::AppHandle) -> CommandResult<(
     };
 
     let response = http_client()?
-        .post(format!("{server_url}/api/v4/connectors/carelink/connect/start"))
+        .post(format!(
+            "{server_url}/api/v4/connectors/carelink/connect/start"
+        ))
         .bearer_auth(&token)
         .json(&serde_json::json!({ "server": region }))
         .send()
@@ -197,7 +212,10 @@ async fn start_connect(region: String, app: tauri::AppHandle) -> CommandResult<(
 
     let status = response.status().as_u16();
     if !response.status().is_success() {
-        return Err(CommandError::http(status, format!("The server rejected the request (HTTP {status}).")));
+        return Err(CommandError::http(
+            status,
+            format!("The server rejected the request (HTTP {status})."),
+        ));
     }
 
     let body: StartResponse = response
@@ -207,7 +225,11 @@ async fn start_connect(region: String, app: tauri::AppHandle) -> CommandResult<(
 
     let (authorize_url, flow_state) = match (body.authorize_url, body.state) {
         (Some(a), Some(s)) if !a.is_empty() && !s.is_empty() => (a, s),
-        _ => return Err(CommandError::new("The server did not return a sign-in URL.")),
+        _ => {
+            return Err(CommandError::new(
+                "The server did not return a sign-in URL.",
+            ))
+        }
     };
 
     let authorize_url: Url = authorize_url
@@ -268,7 +290,9 @@ async fn complete_connect(code: String, app: tauri::AppHandle) -> CommandResult<
     };
 
     let response = http_client()?
-        .post(format!("{server_url}/api/v4/connectors/carelink/connect/complete"))
+        .post(format!(
+            "{server_url}/api/v4/connectors/carelink/connect/complete"
+        ))
         .bearer_auth(&token)
         .json(&serde_json::json!({ "code": code, "state": flow_state }))
         .send()
@@ -277,7 +301,10 @@ async fn complete_connect(code: String, app: tauri::AppHandle) -> CommandResult<
 
     let status = response.status().as_u16();
     if !response.status().is_success() {
-        return Err(CommandError::http(status, format!("The server rejected the sign-in (HTTP {status}).")));
+        return Err(CommandError::http(
+            status,
+            format!("The server rejected the sign-in (HTTP {status})."),
+        ));
     }
 
     let body: CompleteResponse = response
@@ -422,7 +449,8 @@ fn open_floating_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[tauri::command]
 async fn open_floating_clock(app: tauri::AppHandle) -> CommandResult<()> {
-    open_floating_window(&app).map_err(|e| CommandError::new(format!("Could not open the floating clock: {e}")))
+    open_floating_window(&app)
+        .map_err(|e| CommandError::new(format!("Could not open the floating clock: {e}")))
 }
 
 #[tauri::command]
@@ -470,7 +498,10 @@ async fn list_clock_faces() -> CommandResult<Vec<ClockFaceSummary>> {
 
     let status = resp.status().as_u16();
     if !resp.status().is_success() {
-        return Err(CommandError::http(status, format!("Could not load clocks (HTTP {status}).")));
+        return Err(CommandError::http(
+            status,
+            format!("Could not load clocks (HTTP {status})."),
+        ));
     }
 
     resp.json::<Vec<ClockFaceSummary>>()
@@ -484,7 +515,9 @@ async fn list_clock_faces() -> CommandResult<Vec<ClockFaceSummary>> {
 #[tauri::command]
 fn get_run_on_startup(app: tauri::AppHandle) -> CommandResult<bool> {
     use tauri_plugin_autostart::ManagerExt;
-    app.autolaunch().is_enabled().map_err(|e| CommandError::new(e.to_string()))
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| CommandError::new(e.to_string()))
 }
 
 /// Registers/unregisters launch-at-login. The choice is OS-persisted and survives restarts;
@@ -493,7 +526,11 @@ fn get_run_on_startup(app: tauri::AppHandle) -> CommandResult<bool> {
 fn set_run_on_startup(enabled: bool, app: tauri::AppHandle) -> CommandResult<()> {
     use tauri_plugin_autostart::ManagerExt;
     let manager = app.autolaunch();
-    let result = if enabled { manager.enable() } else { manager.disable() };
+    let result = if enabled {
+        manager.enable()
+    } else {
+        manager.disable()
+    };
     result.map_err(|e| CommandError::new(e.to_string()))
 }
 

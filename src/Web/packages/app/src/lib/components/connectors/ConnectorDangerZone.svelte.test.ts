@@ -88,6 +88,32 @@ describe("ConnectorDangerZone", () => {
     ).toHaveLength(0);
   });
 
+  it("hides every destructive control from the demo visitor", async () => {
+    pageState.data = {
+      effectivePermissions: ["tenant.settings"],
+      refusedAsDemoSubject: true,
+    };
+
+    render(ConnectorDangerZone, {
+      props: {
+        connectorId: "dexcom",
+        displayName: "Dexcom",
+        hasExistingConfig: true,
+        hasData: true,
+        dataSummary: null,
+      },
+    });
+
+    expect(
+      page
+        .getByRole("button", { name: "Delete Config", exact: true })
+        .elements()
+    ).toHaveLength(0);
+    expect(
+      page.getByRole("button", { name: "Delete Data", exact: true }).elements()
+    ).toHaveLength(0);
+  });
+
   it("offers the controls to a member holding tenant.settings", async () => {
     render(ConnectorDangerZone, {
       props: {

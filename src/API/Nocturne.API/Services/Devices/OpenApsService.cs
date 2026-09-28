@@ -627,7 +627,7 @@ public class OpenApsService : IOpenApsService
                     moments.Enacted =
                         parsed.Mills != null
                             ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
-                            : DateTime.Parse(parsed.Timestamp);
+                            : UploaderTimestamp.ParseUtcDateTime(parsed.Timestamp);
                 }
                 else if (
                     parsed.Timestamp != null
@@ -640,7 +640,7 @@ public class OpenApsService : IOpenApsService
                     moments.NotEnacted =
                         parsed.Mills != null
                             ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
-                            : DateTime.Parse(parsed.Timestamp);
+                            : UploaderTimestamp.ParseUtcDateTime(parsed.Timestamp);
                 }
             }
         }
@@ -655,7 +655,7 @@ public class OpenApsService : IOpenApsService
                 moments.Suggested =
                     parsed.Mills != null
                         ? DateTimeOffset.FromUnixTimeMilliseconds(parsed.Mills.Value).DateTime
-                        : DateTime.Parse(parsed.Timestamp);
+                        : UploaderTimestamp.ParseUtcDateTime(parsed.Timestamp);
             }
         }
 

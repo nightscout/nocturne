@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { ArrowLeft, ArrowLeftRight, ArrowRight, CalendarDays } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";

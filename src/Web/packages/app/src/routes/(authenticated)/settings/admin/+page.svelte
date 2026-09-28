@@ -7,12 +7,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
-  import {
-    Shield,
-    Loader2,
-    AlertTriangle,
-    Bot,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Bot from "@lucide/svelte/icons/bot";
   import * as rolesRemote from "$lib/api/generated/roles.generated.remote";
   import * as oidcRemote from "$lib/api/generated/oidcProviderAdmins.generated.remote";
   import * as platformSettingsRemote from "$lib/api/generated/platformSettings.generated.remote";

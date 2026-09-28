@@ -9,7 +9,8 @@ and anchor boxes, keyed by id. `src/types.ts` is the contract the docs-side cons
 
 ## Running a capture
 
-Needs a local stack (`aspire start` from the repo root) — capture drives the dev-only seeding API,
+Needs a local stack (`NOCTURNE_DEV_AUTO_LOGIN=false aspire start` from the repo root; with dev
+auto-login on, the sign-in pages sign straight through and cannot be photographed) — capture drives the dev-only seeding API,
 which only exists when the API runs in Development — and a browser binary, which pnpm does not
 install for you:
 

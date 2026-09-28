@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Check, MessageSquareText } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import MessageSquareText from "@lucide/svelte/icons/message-square-text";
   import { copyToClipboard } from "$lib/utils";
 
   interface Props {

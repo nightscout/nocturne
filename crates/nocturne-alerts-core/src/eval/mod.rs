@@ -127,31 +127,25 @@ pub fn eval_payload(payload: &Payload, path: &str, env: &mut Env) -> bool {
     }
 }
 
-/// `and` / `or` short-circuit in document order; a child the short-circuit
-/// skips is not evaluated at all, which its sustained timers show. An absent
-/// or empty list, or an unknown operator, is false.
+/// `and` / `or` evaluate every child in document order, whatever an earlier
+/// one returned, so each sustained timer tracks its own condition wherever it
+/// sits. An absent or empty list, or an unknown operator, is false with no
+/// child evaluated.
 fn composite(p: &crate::model::CompositePayload, path: &str, env: &mut Env) -> bool {
     let Some(conditions) = p.conditions.as_deref().filter(|c| !c.is_empty()) else {
         return false;
     };
-    match p.operator.value {
-        Some(CompositeOp::And) => {
-            for (i, child) in conditions.iter().enumerate() {
-                if !eval_composite_child(child.as_ref(), i, path, env) {
-                    return false;
-                }
-            }
-            true
-        }
-        Some(CompositeOp::Or) => {
-            for (i, child) in conditions.iter().enumerate() {
-                if eval_composite_child(child.as_ref(), i, path, env) {
-                    return true;
-                }
-            }
-            false
-        }
-        None => false,
+    let Some(op) = p.operator.value else {
+        return false;
+    };
+    let results: Vec<bool> = conditions
+        .iter()
+        .enumerate()
+        .map(|(i, child)| eval_composite_child(child.as_ref(), i, path, env))
+        .collect();
+    match op {
+        CompositeOp::And => results.iter().all(|&r| r),
+        CompositeOp::Or => results.iter().any(|&r| r),
     }
 }
 

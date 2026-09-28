@@ -17,6 +17,18 @@ namespace Nocturne.Core.Models;
 public static class StateSpanMetadataExtensions
 {
     /// <summary>
+    /// Metadata key naming the Nightscout collection an <see cref="StateSpanCategory.Override"/>
+    /// span was decomposed from: <see cref="TreatmentsCollection"/> or <see cref="DeviceStatusCollection"/>.
+    /// </summary>
+    public const string CollectionKey = "collection";
+
+    /// <summary>A "Temporary Override" treatment.</summary>
+    public const string TreatmentsCollection = "treatments";
+
+    /// <summary>A devicestatus <c>override</c>.</summary>
+    public const string DeviceStatusCollection = "devicestatus";
+
+    /// <summary>
     /// Reads <paramref name="key"/> as a <see cref="decimal"/>; returns <see langword="null"/>
     /// if missing, non-finite, or unparseable. Numeric strings are parsed with
     /// <see cref="CultureInfo.InvariantCulture"/>.
@@ -43,6 +55,58 @@ public static class StateSpanMetadataExtensions
             JsonElement je when je.ValueKind == JsonValueKind.String => je.GetString(),
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// Whether two <see cref="StateSpanCategory.Override"/> spans are Loop's two records of one
+    /// override, a "Temporary Override" treatment and a devicestatus snapshot, so neither ends the
+    /// other: by name when either has one, else by scale factor. Two records of one collection never
+    /// match, nor does a record without <see cref="CollectionKey"/>.
+    /// </summary>
+    public static bool IsSameOverrideAs(
+        this IDictionary<string, object>? metadata, IDictionary<string, object>? other)
+    {
+        if (metadata is null || other is null || !AreTreatmentAndDeviceStatus(metadata, other))
+            return false;
+
+        var names = OverrideNames(metadata);
+        var otherNames = OverrideNames(other);
+        if (names.Count == 0 && otherNames.Count == 0)
+            return metadata.OverrideScaleFactor() == other.OverrideScaleFactor();
+
+        return names.Overlaps(otherNames);
+    }
+
+    /// <summary>
+    /// Devicestatus <c>multiplier</c> or treatment <c>insulinNeedsScaleFactor</c>. Loop omits it at 100%.
+    /// </summary>
+    private static decimal OverrideScaleFactor(this IDictionary<string, object> metadata) =>
+        metadata.TryReadDecimal("multiplier") ?? metadata.TryReadDecimal("insulinNeedsScaleFactor") ?? 1m;
+
+    private static bool AreTreatmentAndDeviceStatus(
+        IDictionary<string, object> metadata, IDictionary<string, object> other) =>
+        (metadata.TryReadString(CollectionKey), other.TryReadString(CollectionKey)) is
+            (TreatmentsCollection, DeviceStatusCollection) or (DeviceStatusCollection, TreatmentsCollection);
+
+    private static HashSet<string> OverrideNames(IDictionary<string, object> metadata)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (metadata.ContainsKey("name"))
+        {
+            if (metadata.TryReadString("name") is { Length: > 0 } name)
+                names.Add(name);
+        }
+        else if (metadata.TryReadString("reason") is { Length: > 0 } reason)
+        {
+            names.Add(reason);
+            // Loop prefixes a treatment reason with the preset symbol, at most two characters.
+            if (reason.IndexOf(' ') is var space and > 0
+                && space + 1 < reason.Length
+                && new StringInfo(reason[..space]).LengthInTextElements <= 2)
+                names.Add(reason[(space + 1)..]);
+        }
+
+        return names;
     }
 
     private static decimal? CoerceDecimal(object v) => v switch

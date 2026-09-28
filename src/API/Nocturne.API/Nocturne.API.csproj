@@ -120,10 +120,12 @@
     <MakeDir Directories="@(ApiDescriptionSource->'$(MSBuildProjectDirectory)\wwwroot\api-descriptions\%(RecursiveDir)')" />
   </Target>
   <!-- NSwag TypeScript Client Generation -->
-  <!-- Runs on `dotnet build` and on initial Aspire startup (first build before watch loop). -->
+  <!-- Runs on `dotnet build` and on the first build of the API's dotnet watch under Aspire, and -->
+  <!-- only when the client is missing or older than the API's reference assembly, which changes -->
+  <!-- with the public surface (controllers, DTOs, attributes) and not with method bodies. -->
   <!-- Skipped on subsequent `dotnet watch` rebuilds (DOTNET_WATCH_ITERATION is set from -->
   <!-- rebuild #1 onwards) so backend hot-loop iteration doesn't trigger TS regeneration. -->
-  <!-- Force regen during watch: dotnet build -p:GenerateNSwagClient=true -->
+  <!-- Force regen: dotnet build -p:GenerateNSwagClient=true -->
   <PropertyGroup>
     <_GenerateNSwagClientExplicit>$(GenerateNSwagClient)</_GenerateNSwagClientExplicit>
     <GenerateNSwagClient Condition="'$(GenerateNSwagClient)' == ''">true</GenerateNSwagClient>
@@ -132,14 +134,20 @@
     <!-- Skip during publish to avoid issues with runtime dependencies -->
     <GenerateNSwagClient Condition="'$(_GenerateNSwagClientExplicit)' == '' And '$(PublishDir)' != ''">false</GenerateNSwagClient>
   </PropertyGroup>
-  <Target Name="GenerateClient" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true'">
+  <PropertyGroup>
+    <_ApiClientSentinel>$(MSBuildProjectDirectory)/../../Web/packages/app/src/lib/api/api-client.generated.ts</_ApiClientSentinel>
+  </PropertyGroup>
+  <Target Name="InvalidateApiClientStamp" AfterTargets="PostBuildEvent" Condition="'$(GenerateNSwagClient)' == 'true' And ('$(_GenerateNSwagClientExplicit)' == 'true' Or !Exists('$(_ApiClientSentinel)'))">
+    <Delete Files="$(IntermediateOutputPath)api-client.stamp" />
+  </Target>
+  <Target Name="GenerateClient" AfterTargets="InvalidateApiClientStamp" Condition="'$(GenerateNSwagClient)' == 'true'" Inputs="$(TargetRefPath);nswag.json" Outputs="$(IntermediateOutputPath)api-client.stamp">
     <Message Importance="high" Text="Generating TypeScript API client with NSwag..." />
     <Exec Command="$(NSwagExe_Net100) run nswag.json /variables:Configuration=$(Configuration)" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="false" />
     <Message Importance="high" Text="TypeScript API client generation complete." />
   </Target>
   <!-- Zod Schema Generation — runs after NSwag to generate Zod schemas from openapi.json -->
   <!-- Uses the same GenerateNSwagClient flag so it is skipped when NSwag is skipped -->
-  <Target Name="GenerateZodSchemas" AfterTargets="GenerateClient" Condition="'$(GenerateNSwagClient)' == 'true'">
+  <Target Name="GenerateZodSchemas" AfterTargets="GenerateClient" Condition="'$(GenerateNSwagClient)' == 'true'" Inputs="$(TargetRefPath);nswag.json" Outputs="$(IntermediateOutputPath)api-client.stamp">
     <PropertyGroup>
       <WebMonorepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../Web'))</WebMonorepoRoot>
     </PropertyGroup>
@@ -149,12 +157,40 @@
   </Target>
   <!-- Remote Function Codegen — runs after Zod schemas to generate remote functions from openapi.json -->
   <!-- Uses the same GenerateNSwagClient flag so it is skipped when NSwag is skipped -->
-  <Target Name="GenerateRemoteFunctions" AfterTargets="GenerateZodSchemas" Condition="'$(GenerateNSwagClient)' == 'true'">
+  <Target Name="GenerateRemoteFunctions" AfterTargets="GenerateZodSchemas" Condition="'$(GenerateNSwagClient)' == 'true'" Inputs="$(TargetRefPath);nswag.json" Outputs="$(IntermediateOutputPath)api-client.stamp">
     <PropertyGroup>
       <WebMonorepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/../../Web'))</WebMonorepoRoot>
     </PropertyGroup>
     <Message Importance="high" Text="Generating remote functions from OpenAPI spec..." />
     <Exec Command="pnpm run generate-remote-functions" WorkingDirectory="$(WebMonorepoRoot)" ContinueOnError="false" />
     <Message Importance="high" Text="Remote function generation complete." />
+    <Touch Files="$(IntermediateOutputPath)api-client.stamp" AlwaysCreate="true" />
+  </Target>
+  <!-- The EF migrations assembly is built and copied beside the API, never compiled against (see
+       NocturneMigrationsAssembly). It is not a ProjectReference, even with
+       ReferenceOutputAssembly=false, because dotnet watch loads every project in the reference graph
+       into its Roslyn workspace, and this one is 1.7M lines of designer files. Its RID-agnostic build
+       drops the same properties a ProjectReference to a class library would. -->
+  <PropertyGroup>
+    <NocturneMigrationsProjectDir>$(MSBuildProjectDirectory)/../../Infrastructure/Nocturne.Infrastructure.Data.Migrations/</NocturneMigrationsProjectDir>
+    <NocturneMigrationsAssetsFile Condition="'$(UseArtifactsOutput)' == 'true'">$(ArtifactsPath)/obj/Nocturne.Infrastructure.Data.Migrations/project.assets.json</NocturneMigrationsAssetsFile>
+    <NocturneMigrationsAssetsFile Condition="'$(UseArtifactsOutput)' != 'true'">$(NocturneMigrationsProjectDir)obj/project.assets.json</NocturneMigrationsAssetsFile>
+  </PropertyGroup>
+  <Target Name="BuildNocturneMigrations" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <!-- Outside the reference graph, so an API-only restore does not reach it. A distinct global
+         property gives the restore its own evaluation, as dotnet build -restore does. -->
+    <MSBuild Projects="$(NocturneMigrationsProjectDir)Nocturne.Infrastructure.Data.Migrations.csproj"
+             Targets="Restore"
+             Properties="MSBuildRestoreSessionId=$([System.Guid]::NewGuid())"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishDir;PublishProfile;_IsPublishing"
+             Condition="!Exists('$(NocturneMigrationsAssetsFile)')" />
+    <MSBuild Projects="$(NocturneMigrationsProjectDir)Nocturne.Infrastructure.Data.Migrations.csproj"
+             Targets="Build"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishDir;PublishProfile;_IsPublishing">
+      <Output TaskParameter="TargetOutputs" ItemName="_NocturneMigrationsAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <Content Include="@(_NocturneMigrationsAssembly)" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
   </Target>
 </Project>

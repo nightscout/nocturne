@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { replaceState } from "$app/navigation";
+  import { Debounced } from "runed";
 
-  import type { TreatmentSummary } from "$lib/api";
   import {
     TreatmentsDataTable,
     TreatmentEditDialog,
@@ -12,6 +12,9 @@
   import {
     mergeEntryRecords,
     countEntryRecords,
+    filterEntryRecords,
+    isEntryCategoryFilter,
+    TREATMENT_LOG_CATEGORY,
     type EntryCategoryId,
     type EntryRecord,
     ENTRY_CATEGORIES,
@@ -24,16 +27,14 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import {
-    Calendar,
-    X,
-    Plus,
-    Syringe,
-    Utensils,
-    Droplet,
-    FileText,
-    Smartphone,
-  } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import X from "@lucide/svelte/icons/x";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
   import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -48,6 +49,7 @@
     createEntry,
   } from "./data.remote";
   import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
+  import { getStats as getTreatmentLogStats } from "$lib/api/generated/treatmentLogs.generated.remote";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);
@@ -69,29 +71,40 @@
   );
   const dateInfo = $derived(reportsResource.date);
 
-  const emptyTreatmentSummary: TreatmentSummary = {
-    totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
-    treatmentCount: 0,
-  };
-
-  const treatmentSummary = $derived(
-    reportsResource.current?.treatmentSummary ?? emptyTreatmentSummary
-  );
-
   const counts = $derived(countEntryRecords(allRows));
 
   // State
   const initialCategory = page.url.searchParams.get("category");
   const initialSearch = page.url.searchParams.get("search");
 
-  function isCategoryFilter(value: string | null): value is EntryCategoryId | "all" {
-    return value === "all" || (value !== null && Object.hasOwn(ENTRY_CATEGORIES, value));
-  }
-
   let activeCategory = $state<EntryCategoryId | "all">(
-    isCategoryFilter(initialCategory) ? initialCategory : "all"
+    isEntryCategoryFilter(initialCategory) ? initialCategory : "all"
   );
   let searchQuery = $state(initialSearch || "");
+  const debouncedSearch = new Debounced(() => searchQuery.trim(), 300);
+
+  // The stats endpoint takes the range getTreatmentsData resolved on the
+  // patient's calendar, so it waits for that range.
+  const pendingStats = { loading: true, error: null, current: undefined, refresh: () => {} };
+  const statsResource = contextResource(
+    () => {
+      const range = reportsResource.current?.dateRange;
+      if (!range) return pendingStats;
+      return getTreatmentLogStats({
+        from: range.from,
+        to: range.to,
+        dayCount: range.dayCount,
+        category: TREATMENT_LOG_CATEGORY[activeCategory],
+        search: debouncedSearch.current || undefined,
+      });
+    },
+    { errorTitle: "Error Loading Treatments" }
+  );
+
+  function refreshData() {
+    reportsResource.refresh();
+    statsResource.refresh();
+  }
 
   // Modal states
   let showDeleteConfirm = $state(false);
@@ -152,57 +165,10 @@
   // Loading states
   let isLoading = $state(false);
 
-  // Filtered rows based on category and search
-  let filteredRows = $derived.by(() => {
-    let filtered = allRows;
+  const filteredRows = $derived(
+    filterEntryRecords(allRows, { category: activeCategory, search: searchQuery })
+  );
 
-    // Apply category filter
-    if (activeCategory !== "all") {
-      filtered = filtered.filter((r) => r.kind === activeCategory);
-    }
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((r) => {
-        const searchable: string[] = [ENTRY_CATEGORIES[r.kind].name];
-
-        switch (r.kind) {
-          case "bolus":
-            if (r.data.bolusType) searchable.push(r.data.bolusType);
-            break;
-          case "carbs":
-            break;
-          case "bgCheck":
-            if (r.data.glucoseType) searchable.push(r.data.glucoseType);
-            break;
-          case "note":
-            if (r.data.text) searchable.push(r.data.text);
-            if (r.data.eventType) searchable.push(r.data.eventType);
-            break;
-          case "deviceEvent":
-            if (r.data.eventType) searchable.push(r.data.eventType);
-            if (r.data.notes) searchable.push(r.data.notes);
-            break;
-          case "basalInjection":
-            if (r.data.insulinContext?.insulinName)
-              searchable.push(r.data.insulinContext.insulinName);
-            if (r.data.notes) searchable.push(r.data.notes);
-            break;
-        }
-
-        if (r.data.dataSource) searchable.push(r.data.dataSource);
-        if (r.data.app) searchable.push(r.data.app);
-        if (r.data.device) searchable.push(r.data.device);
-
-        return searchable.join(" ").toLowerCase().includes(query);
-      });
-    }
-
-    return filtered;
-  });
-
-  let filteredCounts = $derived(countEntryRecords(filteredRows));
 
   // Handlers
   // Filters are reflected in the URL via SvelteKit shallow routing, so a filtered
@@ -301,7 +267,7 @@
       }
       editDialogOpen = false;
       editRecord = null;
-      reportsResource.refresh();
+      refreshData();
     } catch (error) {
       console.error("Save error:", error);
       toast.error(
@@ -397,7 +363,12 @@
     </p>
   {/if}
 
-  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} />
+  {#if statsResource.current}
+    <TreatmentStatsCard
+      treatmentSummary={statsResource.current.treatmentSummary}
+      counts={statsResource.current.counts ?? {}}
+    />
+  {/if}
 
   <!-- Category Tabs — view toggle, print chaff -->
   <div class="print:hidden">
@@ -576,7 +547,7 @@
                 toast.success("Deleted successfully");
                 showDeleteConfirm = false;
                 rowToDelete = null;
-                reportsResource.refresh();
+                refreshData();
               } catch (error) {
                 console.error("Delete error:", error);
                 toast.error("Failed to delete");
@@ -688,7 +659,7 @@
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
                 rowsToDelete = [];
-                reportsResource.refresh();
+                refreshData();
               } else {
                 toast.error(result.message);
               }

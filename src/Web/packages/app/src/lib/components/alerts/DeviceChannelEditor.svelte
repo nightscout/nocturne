@@ -3,7 +3,7 @@
   import * as Select from "$lib/components/ui/select";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
-  import { AlertTriangle } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import { AlertRuleSeverity } from "$api-clients";
   import type { DeviceCapabilityCatalog } from "$api-clients";
   import type { ChannelDef } from "./types";

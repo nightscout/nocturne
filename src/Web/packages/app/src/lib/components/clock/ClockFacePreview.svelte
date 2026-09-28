@@ -1,7 +1,8 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { Button } from "$lib/components/ui/button";
-  import { Clock as ClockIcon, Loader2 } from "lucide-svelte";
+  import ClockIcon from "@lucide/svelte/icons/clock";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { getById as getClockFaceById } from "$api/generated/clockFaces.generated.remote";
   import ClockFaceRenderer from "$lib/components/clock/ClockFaceRenderer.svelte";

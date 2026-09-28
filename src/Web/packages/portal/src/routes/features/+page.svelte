@@ -1,6 +1,7 @@
 <script lang="ts">
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import Play from "@lucide/svelte/icons/play";
     import { Artwork } from "@nocturne/watercolour";
-    import { ArrowRight, Play } from "@lucide/svelte";
     import { Button } from "@nocturne/ui/ui/button";
     import FeaturePillars from "$lib/components/features/FeaturePillars.svelte";
     import { DATA_SOURCES } from "$lib/data/connectors";

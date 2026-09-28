@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AlertTriangle, RefreshCw } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { Button } from "$lib/components/ui/button";
   import {
     Card,

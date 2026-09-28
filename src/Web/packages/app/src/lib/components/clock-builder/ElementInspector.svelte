@@ -7,7 +7,8 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import * as Select from "$lib/components/ui/select";
-  import { X, Trash2 } from "lucide-svelte";
+  import X from "@lucide/svelte/icons/x";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import {
     elementInfo,

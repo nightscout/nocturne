@@ -1,6 +1,6 @@
 import type { EntryRecord } from "$lib/constants/entry-categories";
 import { uniqueBy } from "$lib/utils/collections";
-import { TREATMENT_PROXIMITY_MS } from "./chart-data-engine.svelte";
+import { TREATMENT_PROXIMITY_MS } from "./chart-data-view.svelte";
 
 /** The entries behind the markers within the treatment proximity of `time`, one per entry id. */
 export function findNearbyEntries(

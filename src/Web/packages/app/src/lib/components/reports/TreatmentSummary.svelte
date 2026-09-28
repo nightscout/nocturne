@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Syringe, Apple, Utensils } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Utensils from "@lucide/svelte/icons/utensils";
   import { formatCarbDisplay, formatInsulinDisplay, formatShortDate } from "$lib/utils/formatting";
   import type { DayToDayDailyData } from "./types";
   import type { TreatmentSummary } from "$lib/api";
@@ -11,8 +13,8 @@
   let { dailyDataPoints }: Props = $props();
 
   // Helper functions to access nested TreatmentSummary properties
-  function getTotalInsulin(summary: TreatmentSummary | undefined): number {
-    return (summary?.totals?.insulin?.bolus ?? 0) + (summary?.totals?.insulin?.basal ?? 0);
+  function getBolusInsulin(summary: TreatmentSummary | undefined): number {
+    return summary?.totals?.insulin?.bolus ?? 0;
   }
 
   function getTotalCarbs(summary: TreatmentSummary | undefined): number {
@@ -34,7 +36,7 @@
   </h2>
   <div class="grid grid-cols-1 @4xl:grid-cols-3 gap-4">
     {#each dailyDataPoints as day (day.date)}
-      {@const totalInsulin = getTotalInsulin(day.treatmentSummary)}
+      {@const totalInsulin = getBolusInsulin(day.treatmentSummary)}
       {@const totalCarbs = getTotalCarbs(day.treatmentSummary)}
       {@const totalProtein = getTotalProtein(day.treatmentSummary)}
       {@const totalFat = getTotalFat(day.treatmentSummary)}
@@ -48,7 +50,7 @@
               <div class="flex items-center gap-2">
                 <Syringe class="w-4 h-4 text-insulin" />
                 <span>
-                  Insulin: {formatInsulinDisplay(totalInsulin)}U
+                  Bolus insulin: {formatInsulinDisplay(totalInsulin)}U
                 </span>
               </div>
             {/if}

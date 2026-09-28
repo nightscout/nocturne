@@ -2,7 +2,8 @@
   import { AreaChart } from "layerchart";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import { Layers, Loader2 } from "lucide-svelte";
+  import Layers from "@lucide/svelte/icons/layers";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
 
   // Local type definition for hourly basal percentile data
   interface HourlyBasalPercentileData {

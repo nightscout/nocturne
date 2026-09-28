@@ -124,6 +124,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
         const permissions = await apiClient.myPermissions.getMyPermissions();
         event.locals.effectivePermissions = permissions.scopes ?? [];
         event.locals.limitTo24Hours = permissions.limitTo24Hours ?? false;
+        event.locals.refusedAsDemoSubject = permissions.refusedAsDemoSubject ?? false;
       } catch {
         // Non-fatal — permissions will default to empty
       }

@@ -80,6 +80,10 @@ declare global {
 			 */
 			limitTo24Hours?: boolean;
 			/**
+			 * Whether the current user is the demo visitor account the demo-subject gate refuses
+			 */
+			refusedAsDemoSubject?: boolean;
+			/**
 			 * Whether the current user is a platform administrator
 			 */
 			isPlatformAdmin: boolean;
@@ -118,6 +122,8 @@ declare global {
 			effectivePermissions?: string[];
 			/** Whether the viewer may read only the last 24 hours, resolved by the root layout. */
 			limitTo24Hours?: boolean;
+			/** Whether the viewer is the demo visitor account, resolved by the root layout. */
+			refusedAsDemoSubject?: boolean;
 		}
 		// Shallow-routing state. Dialogs key their browser-history entries here
 		// (see useDialogHistory) so the back button can dismiss them.

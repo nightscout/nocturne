@@ -1,7 +1,7 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
     import { Button } from "@nocturne/ui/ui/button";
-    import { ArrowRight } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
 </script>
 
 <div class="mb-8">

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ChevronRight, Settings } from "lucide-svelte";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Settings from "@lucide/svelte/icons/settings";
   import {
     adminSettingsSections,
     onboardingSection,

@@ -1,6 +1,9 @@
 import type { FactSnapshotPoint } from "$api-clients";
 import type { ConditionNode } from "./types";
 import { formatMinutesDuration } from "$lib/utils/duration";
+import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
+import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+import { bg, bgLabel } from "$lib/utils/formatting";
 
 /**
  * Sparse-time-series lookup over the per-tick numeric fact snapshots emitted by
@@ -66,12 +69,15 @@ export function leafFactBinding(
     case "threshold":
       return {
         factKey: "latest_glucose",
-        format: (v) => `${Math.round(v)} mg/dL`,
+        format: (v) => `${bg(v)} ${bgLabel()}`,
       };
     case "rate_of_change":
       return {
         factKey: "trend_rate",
-        format: (v) => `${v.toFixed(2)} mg/dL/min`,
+        format: (v) =>
+          glucoseUnits.current === "mmol"
+            ? `${(v / MGDL_PER_MMOL).toFixed(2)} mmol/L/min`
+            : `${v.toFixed(1)} mg/dL/min`,
       };
     case "staleness":
       return { factKey: "staleness_minutes", format: formatMinutesDuration };

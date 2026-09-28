@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Bell } from "@lucide/svelte";
   import { resolve } from "$app/paths";
   import { startOfDay, toDayString } from "$lib/utils/date-range";
   import { formatDayTime, formatLongDate } from "$lib/utils/formatting";
@@ -13,18 +12,17 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
-  import {
-    History,
-    Clock,
-    Check,
-    AlertTriangle,
-    AlertCircle,
-    Timer,
-    Info,
-    Loader2,
-    Settings2,
-    ChevronDown,
-  } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import History from "@lucide/svelte/icons/history";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Timer from "@lucide/svelte/icons/timer";
+  import Info from "@lucide/svelte/icons/info";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { Artwork } from "@nocturne/watercolour";
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -118,26 +116,17 @@
 
   // Build notification message
   function buildMessage(
-    instance: TrackerInstanceDto & { level: string }
+    instance: TrackerInstanceDto & { level: string; reachedDescription?: string }
   ): string {
-    const def = realtimeStore.trackerDefinitions.find(
-      (d) => d.id === instance.definitionId
-    );
-    if (!def) return "Tracker active";
-
-    // Find threshold hours for the level from notificationThresholds
-    const threshold = def.notificationThresholds?.find(
-      (t) => t.urgency?.toLowerCase() === instance.level
-    );
-    const thresholdHours = threshold?.hours ?? def.lifespanHours;
+    if (instance.reachedDescription) return instance.reachedDescription;
 
     switch (instance.level) {
       case "urgent":
-        return `Exceeded ${thresholdHours ?? "?"}h - change urgently!`;
+        return "Change urgently";
       case "hazard":
-        return `Exceeded ${thresholdHours ?? "?"}h - change soon`;
+        return "Change soon";
       case "warn":
-        return `Approaching ${thresholdHours ?? def.lifespanHours ?? "?"}h limit`;
+        return "Change coming up";
       default:
         return `Active for ${Math.floor(instance.ageHours ?? 0)}h`;
     }

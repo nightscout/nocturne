@@ -1,5 +1,6 @@
 using System.Globalization;
 using FluentAssertions;
+using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Core.Utilities;
@@ -207,8 +208,8 @@ public class GlookoConnectorServiceBackgroundWindowTests
     }
 
     /// <summary>
-    /// Nothing can remember a walk without a store, so a detached service (dry-run tooling) takes the
-    /// base window, which for an account without Glooko glucose is the floor.
+    /// Nothing can remember a walk without a store, so a detached service (dry-run tooling) resumes
+    /// from what is stored, which for an account with nothing stored is the floor.
     /// </summary>
     [Fact]
     public async Task ScheduledRun_WithoutACursorStore_TakesTheBaseWindow()
@@ -218,6 +219,30 @@ public class GlookoConnectorServiceBackgroundWindowTests
         await Scheduled(GlookoSyncHarness.Service(handler), ScheduledConfig());
 
         handler.WindowCount.Should().Be(FullWalkChunks());
+    }
+
+    /// <summary>
+    /// Every family is fetched inside one window, so a run resuming from what is stored starts at the
+    /// family furthest behind. Glucose from a chunk that published ahead of a failed one sits days
+    /// past the treatments that chunk never published; the glucose watermark alone would leave those
+    /// treatments below every later run's bound.
+    /// </summary>
+    [Fact]
+    public async Task ScheduledRun_WithoutACursorStore_ResumesFromTheFamilyFurthestBehind()
+    {
+        var now = DateTime.UtcNow;
+        var publisher = new Mock<IConnectorPublisher> { DefaultValue = DefaultValue.Mock };
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        publisher.Setup(p => p.Glucose.GetLatestEntryTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(now.AddDays(-1));
+        publisher.Setup(p => p.Treatments.GetLatestTreatmentTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(now.AddDays(-20));
+        var handler = new GlookoEndpointHandler();
+
+        await Scheduled(GlookoSyncHarness.Service(handler, publisher: publisher.Object), ScheduledConfig());
+
+        Parse(handler.Windows[0].Start).Should().BeCloseTo(now.AddDays(-21), TimeSpan.FromHours(1),
+            "the treatment watermark, a day of padding below it, not the glucose watermark");
     }
 
     /// <summary>

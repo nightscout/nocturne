@@ -106,6 +106,21 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>A device status decomposes into APS, pump and uploader snapshots. One that yields none
+    /// is never held, so it is skipped rather than re-decomposed on every sync.</remarks>
+    public Task<int?> PublishRecentDeviceStatusAsync(
+        IEnumerable<DeviceStatus> deviceStatuses,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+        => PublishUnheldAsync(
+            deviceStatuses.Where(_decomposer.HasLegacyKeyedSnapshot), d => d.Id,
+            unheld => PublishDeviceStatusAsync(unheld, source, origin, cancellationToken),
+            source,
+            ids => _apsSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
+            ids => _pumpSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken),
+            ids => _uploaderSnapshotRepository.GetHeldLegacyIdsAsync(ids, cancellationToken));
+
     public Task<bool> PublishDeviceEventsAsync(
         IEnumerable<DeviceEvent> records,
         string source,

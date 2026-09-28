@@ -40,15 +40,13 @@
   import { BG_UNITS } from "$lib/constants/profile-icons";
   import ProfileIconPicker from "./ProfileIconPicker.svelte";
   import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
-  import {
-    Edit,
-    Plus,
-    Trash2,
-    Activity,
-    Droplet,
-    TrendingUp,
-    Target,
-  } from "lucide-svelte";
+  import Edit from "@lucide/svelte/icons/square-pen";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Target from "@lucide/svelte/icons/target";
 
   interface Props {
     open: boolean;

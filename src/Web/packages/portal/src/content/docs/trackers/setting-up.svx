@@ -1,0 +1,182 @@
+---
+title: Setting up a tracker
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Setting up a tracker
+
+You set up each tracker once, as a **definition**: what it is, how long it
+should last, and when to remind you. After that you start and complete it as
+often as you change the thing it tracks.
+
+Definitions live under **Settings > Notifications & Trackers**, on the
+**Definitions** tab. Press **New Definition** to make one, or the pencil icon on
+a row to edit one.
+
+<Screenshot id="tracker-editor" />
+
+## The basics
+
+| Field | What it does |
+|-------|--------------|
+| **Name** | What you call it: "CGM sensor", "Left site", "Endocrinologist". Shown on the dashboard pill and in notifications. |
+| **Category** | What kind of thing it is. This sets the icon and the reasons you can pick when you complete it, and **Reservoir** adds a [low insulin alert](#reservoir-trackers). |
+| **Description** | Optional. For your own reference. |
+| **Tracker Mode** | **Duration** counts up from when you start it. Use it for anything you wear or use up. **Event** counts down to a date and time you set. Use it for appointments, refills and other booked things. |
+| **Expected Lifespan** | Duration trackers only. How long this thing is meant to last. Type `10d` for ten days, or `10x24` for ten lots of 24 hours. |
+
+The lifespan draws the progress line on the dashboard pill and the "time
+remaining" figure. It is also the "end" that a
+[before-the-end reminder](#notification-thresholds) counts back from. Use the
+wear time from the manufacturer's instructions, or the one your care team has
+given you. A tracker does not know how long your sensor or site is actually
+approved for.
+
+## Restarting automatically
+
+A duration tracker can restart by itself when your pump, loop or a connector
+reports a change. Under **Restart automatically on**, tick the events that mean
+this thing was changed: `Sensor Start` for a CGM sensor, `Site Change` or
+`Cannula Change` for an infusion site, `Pod Change` for a pod, and so on.
+
+<Screenshot id="tracker-triggers" />
+
+Once you tick an event, a **notes** box appears. Leave it empty unless two of
+your trackers listen for the same event. Then give each one a word from the
+event's notes, such as "left" and "right", so each only restarts on its own
+changes.
+
+Which events arrive depends on your devices and apps, so check a tracker
+restarts the first time you make a change. See
+[automatic restarts](/docs/trackers/everyday-use#automatic-restarts) for what
+happens when one does.
+
+## Notification thresholds
+
+A threshold is one reminder step. Each has:
+
+- **Level**: Info, Warning, Hazard or Urgent. This decides how prominent the
+  reminder is, and how it looks on the dashboard.
+- **After (hours)**, or **Hours** for an event tracker: when it fires. For a duration tracker, a positive number counts
+  from the start and a negative number counts back from the end of the
+  lifespan. `-24` on a ten-day sensor means "24 hours before day ten". For an
+  event tracker, a negative number is before the event and a positive number is
+  after.
+- **Description**: the message the notification carries. Leave it blank and
+  Nocturne makes one, such as "24h before end".
+
+<Screenshot id="tracker-thresholds" />
+
+You can add up to four. A common ladder for a sensor looks like the example
+above: a notice the day before it ends, a warning shortly before, and an urgent
+alert once it is overdue.
+
+A before-the-end step needs a lifespan, and must be shorter than it. Change the
+lifespan later and every before-the-end step moves with it.
+
+### Where the notification goes
+
+Each threshold becomes an **alert rule**, and shows up on the **Alerts** page
+alongside your glucose alerts, named after the tracker and the step. That rule
+is what delivers it, so a tracker reminder works like any other alert: you can
+choose its channels, it appears in the alert history, and you can acknowledge
+it.
+
+A new step is delivered inside Nocturne. To have it reach your phone, or any
+other channel, save the tracker, reopen it, and press **Channels** next to the
+step. That opens its alert rule. Your channel choices stay in place when you
+edit the tracker later. Only removing the step removes its rule.
+
+A threshold only fires while its tracker is running. Completing the tracker
+ends any reminder it has raised.
+
+<Callout type="warning" title="Do not rely on one reminder">
+
+  A reminder can arrive late or not at all: your phone may be offline,
+  notifications may be muted, or the server may be down. For anything where a
+  missed change would be a problem, keep a second reminder somewhere else, and
+  keep your device's own alarms on.
+
+</Callout>
+
+## On the dashboard
+
+**Dashboard Visibility** decides when the tracker shows as a pill on the home
+screen:
+
+- **Always show**: whenever it is running.
+- **Show after Info threshold**, **Warn**, **Hazard** or **Urgent**: only once
+  it has reached that step. This keeps long-running things like a pump battery
+  out of the way until they need attention.
+- **Off**: never. It still runs and still sends its notifications.
+
+## Who can see it
+
+**Public Visibility** controls whether other people who sign in to your site,
+such as a family member you have invited, can see this tracker running.
+**Private**, the default, keeps it to your own account. Trackers are never
+shown on a [public share link](/docs/sharing/public-link), whichever you pick.
+
+## Writing events for Nightscout apps
+
+Under **Event Integration**, a tracker can create a treatment when you start it,
+when you complete it, or both. Pick an event type such as `Sensor Start`,
+`Site Change` or `Insulin Change`. Leave it on **None** to create nothing.
+
+Turn this on if something else still reads your Nightscout treatments and
+expects to see those events. For example, a phone app with its own sensor age
+display, or anything using the legacy `/api/v1/treatments` endpoint. If nothing
+reads them, you can leave it off.
+
+## Reservoir trackers
+
+Choose the **Reservoir** category and two more fields appear:
+
+- **Low reservoir alert (units)**: warn when the estimated insulin left in the
+  pump drops below this many units.
+- **Level alert urgency**: how prominent that alert is.
+
+This is separate from the time-based thresholds. A reservoir tracker can remind
+you after three days and warn when it is getting low, whichever comes first.
+
+Nocturne estimates the insulin left from the most recent exact level it has,
+minus the insulin delivered since. That level comes from your pump or loop, if
+it reports one, or from **Record Level** on the tracker. Insulin delivered
+means boluses and basal. Some pumps only report a rough level, such as "50+".
+Nocturne treats that as "at least 50", so it will not raise a low alert from
+it. A level more than 14 days old is ignored. If Nocturne has no recent level
+at all, the low reservoir alert stays quiet rather than guessing.
+
+<Callout type="warning" title="An estimate, not a measurement">
+
+  The estimate can drift. Priming, a leak, a missed upload, or insulin given
+  outside the pump are all invisible to it. Your pump's own reading is the one
+  to trust. Recording a level after you refill (**Record Level** > **Fresh
+  fill**) gives the estimate a fresh starting point.
+
+</Callout>
+
+## Presets
+
+A preset is a saved way of starting a tracker, with notes filled in. Make them
+on the **Presets** tab with **New Preset**. Give it a name, pick the tracker,
+and optionally write the start notes it should use.
+
+Presets suit anything you rotate. For example, "Sensor, left arm" and "Sensor,
+right arm", both starting the same sensor tracker. The history then shows which
+site each sensor was on.
+
+## Deleting a definition
+
+Deleting a definition deletes its history too, along with its alert rules.
+There is one exception for the rules. If another of your alert rules is built
+on one of them, such as an escalation that fires when a tracker reminder goes
+unanswered, the tracker's rule is kept but switched off. That way the rule built
+on it visibly stops, instead of quietly never firing again.
+
+To stop using a tracker but keep its history, complete it, set its dashboard
+visibility to **Off**, and don't start it again.

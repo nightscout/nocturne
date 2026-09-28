@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
-  import { Sunrise } from "lucide-svelte";
+  import Sunrise from "@lucide/svelte/icons/sunrise";
   import { bg, bgDelta, bgLabel, formatLocale, toDate } from "$lib/utils/formatting";
   import type { SleepDawnPhenomenon } from "$lib/api";
 

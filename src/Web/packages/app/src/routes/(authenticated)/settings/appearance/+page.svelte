@@ -63,20 +63,18 @@
     SelectTrigger,
   } from "$lib/components/ui/select";
   import { Label as FormLabel } from "$lib/components/ui/label";
-  import {
-    Activity,
-    Palette,
-    Sun,
-    Moon,
-    Monitor,
-    Clock,
-    Globe,
-    Languages,
-    AlertCircle,
-    Timer,
-    Eye,
-  } from "lucide-svelte";
-    import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Palette from "@lucide/svelte/icons/palette";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Languages from "@lucide/svelte/icons/languages";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Timer from "@lucide/svelte/icons/timer";
+  import Eye from "@lucide/svelte/icons/eye";
+  import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
   import { resolve } from "$app/paths";
   import { WidgetId } from "$lib/api/generated/nocturne-api-client";

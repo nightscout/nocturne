@@ -7,7 +7,7 @@
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
   import * as Popover from "$lib/components/ui/popover/index.js";
-  import { ChevronDown as ChevronDownIcon } from "lucide-svelte";
+  import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
     showDaysPresets?: boolean;

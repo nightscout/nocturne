@@ -18,5 +18,7 @@ export default defineConfig({
       strict: false, // pnpm symlinks into its content-addressable store
     },
   },
+  // Per-icon imports would each be a new dep, re-optimized with a reload on first render.
+  optimizeDeps: { exclude: ["@lucide/svelte"] },
   clearScreen: false,
 });

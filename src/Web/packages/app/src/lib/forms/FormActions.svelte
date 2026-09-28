@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Button } from "$lib/components/ui/button";
-  import { Loader2, Save } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Save from "@lucide/svelte/icons/save";
   import { cn } from "$lib/utils";
   import FormError from "./FormError.svelte";
   import type { FieldIssues } from "./field-messages";

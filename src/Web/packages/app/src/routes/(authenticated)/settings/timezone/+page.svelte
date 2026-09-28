@@ -5,7 +5,11 @@
   import { Label } from "$lib/components/ui/label";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
-  import { Globe, Plus, Trash2, Loader2, RefreshCw } from "lucide-svelte";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { Artwork } from "@nocturne/watercolour";
   import * as tz from "$api/generated/timezoneTimelines.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";

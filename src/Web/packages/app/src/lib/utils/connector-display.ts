@@ -1,12 +1,10 @@
-import {
-  Activity,
-  Cloud,
-  Database,
-  Plug,
-  Settings,
-  Smartphone,
-  Sparkles,
-} from "lucide-svelte";
+import Activity from "@lucide/svelte/icons/activity";
+import Cloud from "@lucide/svelte/icons/cloud";
+import Database from "@lucide/svelte/icons/database";
+import Plug from "@lucide/svelte/icons/plug";
+import Settings from "@lucide/svelte/icons/settings";
+import Smartphone from "@lucide/svelte/icons/smartphone";
+import Sparkles from "@lucide/svelte/icons/sparkles";
 import type { DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
 
 /** Minimal connector status shape needed for display mapping */

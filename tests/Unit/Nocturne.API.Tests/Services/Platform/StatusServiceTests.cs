@@ -501,6 +501,57 @@ public class StatusServiceTests
             .BeOnOrBefore(result.ServerTime);
     }
 
+    [Fact]
+    public async Task GetLastModifiedAsync_BasalScheduleNewerThanSettings_ReportsBasalStampForProfile()
+    {
+        var now = DateTime.UtcNow;
+        var dbName = $"nocturne_lastmod_{Guid.NewGuid()}";
+        await using var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+        SeedLastModifiedData(context, now);
+        var basal = new Nocturne.Infrastructure.Data.Entities.V4.BasalScheduleEntity
+        {
+            Id = Guid.CreateVersion7(),
+            ProfileName = "Default",
+        };
+        context.BasalSchedules.Add(basal);
+        context.SaveChanges();
+        // Insert stamps SysUpdatedAt with the save time; a timestamp-only touch keeps the assigned value.
+        var basalStamp = now.AddMinutes(-10);
+        context.TherapySettings.Single().SysUpdatedAt = now.AddHours(-1);
+        basal.SysUpdatedAt = basalStamp;
+        context.SaveChanges();
+        var service = CreateStatusService(_configuration, context, dbName);
+
+        var result = await service.GetLastModifiedAsync();
+
+        result.Profile.Should().Be(basalStamp);
+    }
+
+    [Fact]
+    public async Task GetLastModifiedAsync_CalibrationNewerThanSgv_ReportsCalibrationStampForEntries()
+    {
+        var now = DateTime.UtcNow;
+        var dbName = $"nocturne_lastmod_{Guid.NewGuid()}";
+        await using var context = TestDbContextFactory.CreateInMemoryContext(dbName);
+        SeedLastModifiedData(context, now);
+        var calibration = new Nocturne.Infrastructure.Data.Entities.V4.CalibrationEntity
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = now.AddMinutes(-1),
+        };
+        context.Calibrations.Add(calibration);
+        context.SaveChanges();
+        var calibrationStamp = now.AddMinutes(-1);
+        context.SensorGlucose.Single().SysUpdatedAt = now.AddMinutes(-5);
+        calibration.SysUpdatedAt = calibrationStamp;
+        context.SaveChanges();
+        var service = CreateStatusService(_configuration, context, dbName);
+
+        var result = await service.GetLastModifiedAsync();
+
+        result.Entries.Should().Be(calibrationStamp);
+    }
+
     #endregion
 
     #region Configuration and Settings Tests

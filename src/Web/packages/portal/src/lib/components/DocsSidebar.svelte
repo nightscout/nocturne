@@ -1,6 +1,20 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, Utensils, ChevronRight } from "@lucide/svelte";
+    import Rocket from "@lucide/svelte/icons/rocket";
+    import Download from "@lucide/svelte/icons/download";
+    import Settings from "@lucide/svelte/icons/settings";
+    import Shield from "@lucide/svelte/icons/shield";
+    import Share2 from "@lucide/svelte/icons/share-2";
+    import Bell from "@lucide/svelte/icons/bell";
+    import Bot from "@lucide/svelte/icons/bot";
+    import Code2 from "@lucide/svelte/icons/code-xml";
+    import KeyRound from "@lucide/svelte/icons/key-round";
+    import Activity from "@lucide/svelte/icons/activity";
+    import LayoutGrid from "@lucide/svelte/icons/layout-grid";
+    import Package from "@lucide/svelte/icons/package";
+    import Utensils from "@lucide/svelte/icons/utensils";
+    import Timer from "@lucide/svelte/icons/timer";
+    import ChevronRight from "@lucide/svelte/icons/chevron-right";
     import { DOCS_NAV_SECTIONS, type DocsSectionId } from "$lib/data/docs-nav";
     import { track } from "$lib/analytics";
 
@@ -11,6 +25,7 @@
         authentication: Shield,
         sharing: Share2,
         food: Utensils,
+        trackers: Timer,
         alerts: Bell,
         bots: Bot,
         configuration: Settings,

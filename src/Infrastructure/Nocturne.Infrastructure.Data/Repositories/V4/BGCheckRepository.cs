@@ -17,12 +17,11 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing blood glucose check records in the database. A DeduplicationService
-/// participant, so it inherits the shared CRUD/soft-delete surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter, dedup
-/// <c>BulkCreateAsync</c>). Soft-deletes inherit the base's audited path.
+/// participant on top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
+/// so it keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
+/// non-primary LinkedRecords filter, post-commit dedup linking).
 /// </summary>
-public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
+public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
     private readonly IDeduplicationService _deduplicationService;
 

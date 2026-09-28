@@ -197,7 +197,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         var token = await _tokenProvider.GetValidTokenAsync(config, cancellationToken);
         if (string.IsNullOrEmpty(token))
         {
-            TrackFailedRequest("Failed to obtain MyFitnessPal access token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return false;
         }
 
@@ -210,7 +210,9 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
 
         if (string.IsNullOrEmpty(_userId))
         {
-            TrackFailedRequest("MyFitnessPal did not return a user id");
+            TrackFailedAuthentication(
+                "MyFitnessPal accepted the sign-in but did not say which account it belongs to. "
+                + "The next sync will try again.");
             return false;
         }
 

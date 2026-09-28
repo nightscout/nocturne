@@ -7,7 +7,7 @@
 	import { Input } from '@nocturne/ui/ui/input';
 	import * as Popover from '@nocturne/ui/ui/popover';
 	import * as Tabs from '@nocturne/ui/ui/tabs';
-	import { Loader } from '@lucide/svelte';
+	import Loader from '@lucide/svelte/icons/loader';
 	import Audio from '@lucide/svelte/icons/audio-lines';
 	import { NodeViewWrapper } from 'svelte-tiptap';
 	import { FileType } from '../../utils.ts';

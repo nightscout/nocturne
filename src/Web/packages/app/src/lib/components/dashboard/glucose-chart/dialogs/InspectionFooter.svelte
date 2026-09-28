@@ -1,7 +1,10 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import { Activity, Pencil, Syringe, Utensils } from "lucide-svelte";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
 
   interface Props {
     onNavigateGlucose?: () => void;

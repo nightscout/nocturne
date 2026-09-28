@@ -793,7 +793,7 @@ public class TddCalculationTests
             tempBasals
         );
 
-        result.DayCount.Should().Be(1);
+        result.DaysWithData.Should().Be(1);
         result.DailyData.Should().HaveCount(1);
 
         var day = result.DailyData[0];
@@ -829,7 +829,7 @@ public class TddCalculationTests
             tempBasals
         );
 
-        result.DayCount.Should().Be(1);
+        result.DaysWithData.Should().Be(1);
 
         var day = result.DailyData[0];
         // 22 * 1.0 + 2 * 2.5 = 27.0
@@ -879,7 +879,7 @@ public class TddCalculationTests
             tempBasals
         );
 
-        result.DayCount.Should().Be(2);
+        result.DaysWithData.Should().Be(2);
         result.DailyData.Should().HaveCount(2);
 
         var d1 = result.DailyData[0];
@@ -1028,7 +1028,7 @@ public class TddCalculationTests
         result.TotalBasal.Should().Be(72.0);
         // TDD = 72 / 3 = 24.0
         result.Tdd.Should().Be(24.0);
-        result.DayCount.Should().Be(3);
+        result.WindowDays.Should().Be(3);
     }
 
     [Fact]

@@ -10,7 +10,7 @@
   } from "layerchart";
   import { scaleTime, scaleLinear } from "d3-scale";
   import { curveMonotoneX } from "d3";
-  import RotateCcw from "lucide-svelte/icons/rotate-ccw";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { Button } from "$lib/components/ui/button";
   import { time, formatDateTimeCompact } from "$lib/utils/formatting";
 

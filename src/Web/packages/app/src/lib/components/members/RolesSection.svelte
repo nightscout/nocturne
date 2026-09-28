@@ -8,19 +8,17 @@
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import {
-    Shield,
-    Ban,
-    Plus,
-    Pencil,
-    Eye,
-    Trash2,
-    Loader2,
-    Users,
-    Lock,
-    AlertTriangle,
-    Check,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Ban from "@lucide/svelte/icons/ban";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Eye from "@lucide/svelte/icons/eye";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Users from "@lucide/svelte/icons/users";
+  import Lock from "@lucide/svelte/icons/lock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Check from "@lucide/svelte/icons/check";
   import {
     getRoles,
     createRole,

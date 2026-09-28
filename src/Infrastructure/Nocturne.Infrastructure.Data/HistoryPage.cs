@@ -24,7 +24,8 @@ namespace Nocturne.Infrastructure.Data;
 /// A single millisecond can only hold up to <see cref="NocturneDbContext.SystemTimestampGroupSize"/>
 /// rows of one type, because the write path spreads a bulk save across successive milliseconds, and
 /// controllers clamp <c>limit</c> to the same size, so the extension adds at most one page.
-/// Both bounds are plain range predicates on the stamp column, so an index on it would serve them.
+/// Both bounds are plain range predicates on the stamp column, served on every
+/// <see cref="NocturneDbContext.V4HistoryPagedEntities"/> table by its tenant-leading stamp index.
 /// </remarks>
 public static class HistoryPage
 {

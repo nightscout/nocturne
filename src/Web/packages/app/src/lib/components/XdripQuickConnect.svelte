@@ -7,15 +7,13 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Smartphone,
-    CheckCircle,
-    Loader2,
-    Check,
-    Shield,
-    AlertTriangle,
-    X,
-  } from "lucide-svelte";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
+  import Shield from "@lucide/svelte/icons/shield";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import X from "@lucide/svelte/icons/x";
   import { buildXdripDeepLink, buildConnectPageUrl } from "$lib/utils/xdrip-links";
   import { getDeviceInfo } from "$routes/(authenticated)/oauth/oauth.remote";
   import { deviceApprove } from "$api/generated/oAuths.generated.remote";

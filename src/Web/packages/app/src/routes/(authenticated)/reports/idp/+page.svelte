@@ -7,13 +7,11 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Syringe,
-    Calendar,
-    Target,
-    Activity,
-    Droplets,
-  } from "lucide-svelte";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Target from "@lucide/svelte/icons/target";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplets from "@lucide/svelte/icons/droplets";
   import { AmbulatoryGlucoseProfile } from "$lib/components/ambulatory-glucose-profile";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";

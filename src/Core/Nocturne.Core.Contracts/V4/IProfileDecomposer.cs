@@ -41,6 +41,19 @@ public interface IProfileDecomposer
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Decomposes the profile a Profile Switch treatment carried inline, as <see cref="DecomposeAsync"/>
+    /// does, except that it never touches the tenant's default profile: its rows are written with
+    /// <see cref="TherapySettings.IsDefault"/> false and it neither claims nor clears the default.
+    /// </summary>
+    /// <remarks>
+    /// In Nightscout a profile switch never changes the profile collection's <c>defaultProfile</c>.
+    /// </remarks>
+    /// <param name="profile">The synthetic profile built from the switch.</param>
+    /// <param name="ct">Cancellation token</param>
+    Task<DecompositionResult> DecomposeProfileSwitchAsync(
+        Profile profile, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
     /// Deletes all V4 records that were decomposed from a legacy Profile with the given ID.
     /// Uses prefix matching since one legacy Profile fans out to multiple composite LegacyIds.
     /// </summary>

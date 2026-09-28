@@ -4,7 +4,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { FileText, X } from "lucide-svelte";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import X from "@lucide/svelte/icons/x";
 
   interface Props {
     note: Partial<Note>;

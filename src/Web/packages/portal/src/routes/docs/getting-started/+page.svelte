@@ -2,8 +2,8 @@
     import { ArtworkHero } from "@nocturne/watercolour";
     import Content from "../../../content/docs/getting-started.svx";
     import { Button } from "@nocturne/ui/ui/button";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
     import { DOCS_HERO } from "$lib/data/docs-artwork";
-    import { ArrowRight } from "@lucide/svelte";
 
     const hero = DOCS_HERO["getting-started"];
 </script>

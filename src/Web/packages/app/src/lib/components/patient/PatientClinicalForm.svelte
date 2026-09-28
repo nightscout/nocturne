@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Scale } from "@lucide/svelte";
+  import Scale from "@lucide/svelte/icons/scale";
   import { labelFor } from "$lib/components/ui/enum-value";
   import { Input } from "$lib/components/ui/input";
   import * as Select from "$lib/components/ui/select";

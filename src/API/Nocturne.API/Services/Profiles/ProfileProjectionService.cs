@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.Profiles;
@@ -81,6 +82,114 @@ public class ProfileProjectionService : IProfileProjectionService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A profile is stamped by the newest of its rows, so it is found through whichever row moved:
+    /// each of the five tables pages through its own history page, and every schedule row leads back
+    /// to the settings it can be assembled into (<see cref="OwnersAsync"/>). Past the horizon — the
+    /// earliest last millisecond among the tables whose page filled — a table holds rows not yet
+    /// read, so only profiles stamped at or before it are known to be complete. When none are, no
+    /// profile is stamped in (cursor, horizon] and the read resumes from the horizon.
+    /// </remarks>
+    public async Task<ModifiedSincePage<Profile>> GetProfilesModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default)
+    {
+        var cursor = cursorMills;
+
+        while (true)
+        {
+            var settingsPage = await _therapyRepo.GetModifiedSinceAsync(cursor, limit, ct);
+            var basal = await _basalRepo.GetModifiedSinceAsync(cursor, limit, ct);
+            var carbRatio = await _carbRatioRepo.GetModifiedSinceAsync(cursor, limit, ct);
+            var sensitivity = await _sensitivityRepo.GetModifiedSinceAsync(cursor, limit, ct);
+            var targetRange = await _targetRangeRepo.GetModifiedSinceAsync(cursor, limit, ct);
+
+            var horizon = Horizon(limit, settingsPage, basal, carbRatio, sensitivity, targetRange);
+            List<IV4Record> schedules = [.. basal, .. carbRatio, .. sensitivity, .. targetRange];
+
+            var candidates = new Dictionary<Guid, TherapySettings>();
+            foreach (var settings in settingsPage.Concat(await OwnersAsync(schedules, ct)))
+                candidates.TryAdd(settings.Id, settings);
+
+            var stamped = new List<(Profile Profile, Guid SettingsId)>();
+            foreach (var settings in candidates.Values)
+            {
+                var profile = await AssembleProfileAsync(settings, ct);
+                if (profile.SrvModified > cursor && (horizon is null || profile.SrvModified <= horizon))
+                    stamped.Add((profile, settings.Id));
+            }
+
+            if (stamped.Count == 0)
+            {
+                if (horizon is null)
+                    return new ModifiedSincePage<Profile>([], null);
+
+                cursor = horizon.Value;
+                continue;
+            }
+
+            var ordered = stamped
+                .OrderBy(p => p.Profile.SrvModified)
+                .ThenBy(p => p.SettingsId)
+                .Select(p => p.Profile)
+                .ToList();
+
+            var page = ordered.Count <= limit
+                ? ordered
+                : ordered.TakeWhile((p, i) => i < limit || p.SrvModified == ordered[limit - 1].SrvModified).ToList();
+
+            return new ModifiedSincePage<Profile>(page, page[^1].SrvModified);
+        }
+    }
+
+    /// <summary>
+    /// The earliest last millisecond among the <paramref name="pages"/> that came back full, or
+    /// <c>null</c> when every table was read to its end.
+    /// </summary>
+    private static long? Horizon(int limit, params IReadOnlyList<IV4Record>[] pages) =>
+        pages
+            .Where(page => page.Count >= limit)
+            .Select(page => (long?)new DateTimeOffset(page[^1].ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds())
+            .Min();
+
+    /// <summary>
+    /// Every settings record <see cref="ScheduleForProfileAsync{TRecord}"/> could pair with one of
+    /// <paramref name="schedules"/>: the same correlation and store name, the same legacy id, or —
+    /// for settings without a correlation id — the same store name. A superset is harmless, since
+    /// each candidate is assembled and judged by its own stamp.
+    /// </summary>
+    private async Task<List<TherapySettings>> OwnersAsync(
+        IReadOnlyList<IV4Record> schedules, CancellationToken ct)
+    {
+        var owners = new List<TherapySettings>();
+
+        foreach (var group in schedules
+                     .Where(s => s.CorrelationId is not null)
+                     .GroupBy(s => s.CorrelationId!.Value))
+        {
+            var names = group.Select(s => ((IProfileScoped)s).ProfileName).ToHashSet();
+            owners.AddRange((await _therapyRepo.GetByCorrelationIdAsync(group.Key, ct))
+                .Where(t => names.Contains(t.ProfileName)));
+        }
+
+        foreach (var legacyId in schedules
+                     .Select(s => s.LegacyId)
+                     .Where(id => !string.IsNullOrEmpty(id))
+                     .Distinct())
+        {
+            if (await _therapyRepo.GetByLegacyIdAsync(legacyId!, ct) is { } settings)
+                owners.Add(settings);
+        }
+
+        foreach (var name in schedules.Select(s => ((IProfileScoped)s).ProfileName).Distinct())
+        {
+            owners.AddRange((await _therapyRepo.GetByProfileNameAsync(name, ct))
+                .Where(t => t.CorrelationId is null));
+        }
+
+        return owners;
+    }
+
+    /// <inheritdoc />
     public async Task<long> CountProfilesAsync(string? find = null, CancellationToken ct = default)
     {
         return await _therapyRepo.CountAsync(from: null, to: null, ct: ct);
@@ -132,6 +241,11 @@ public class ProfileProjectionService : IProfileProjectionService
             StartDate = settings.StartDate ?? settings.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = settings.Mills,
             CreatedAt = settings.CreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            SrvModified = new DateTimeOffset(
+                    new IV4Record?[] { settings, basal.Result, carbRatio.Result, sensitivity.Result, targetRange.Result }
+                        .Max(r => r?.ModifiedAt ?? DateTime.MinValue),
+                    TimeSpan.Zero)
+                .ToUnixTimeMilliseconds(),
             Units = settings.Units ?? "mg/dL",
             EnteredBy = settings.EnteredBy,
             LoopSettings = settings.LoopSettings,

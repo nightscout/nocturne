@@ -27,6 +27,8 @@ pub struct CurrentBg {
     pub delta_mgdl: Option<f64>,
     pub direction: Option<String>,
     pub mills: i64,
+    /// The server's `GlucoseStatus` for this reading, passed through unparsed.
+    pub status: Option<String>,
 }
 
 // Tolerant: we only need `current` here; everything else passes through to the file untouched.
@@ -40,6 +42,7 @@ struct CurrentReading {
     delta: Option<f64>,
     direction: Option<String>,
     mills: Option<i64>,
+    status: Option<String>,
 }
 
 impl CurrentReading {
@@ -50,6 +53,7 @@ impl CurrentReading {
             delta_mgdl: self.delta,
             direction: self.direction,
             mills: self.mills.unwrap_or(0),
+            status: self.status,
         })
     }
 }
@@ -101,4 +105,18 @@ pub async fn poll_once(
         .and_then(|h| h.current)
         .and_then(CurrentReading::into_current_bg);
     Ok(current)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_status_reaches_the_readout_unchanged() {
+        let head: SummaryHead =
+            serde_json::from_str(r#"{"current":{"sgv":170,"mills":1,"status":"High"}}"#).unwrap();
+        let bg = head.current.unwrap().into_current_bg().unwrap();
+
+        assert_eq!(serde_json::to_value(&bg).unwrap()["status"], "High");
+    }
 }

@@ -3,7 +3,8 @@
   import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
-  import { UserPlus, Info } from "lucide-svelte";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
+  import Info from "@lucide/svelte/icons/info";
   import {
     getMembershipRequestSettings,
     setMembershipRequestSettings,

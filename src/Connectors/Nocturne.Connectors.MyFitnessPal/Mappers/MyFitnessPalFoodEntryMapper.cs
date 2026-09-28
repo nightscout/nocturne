@@ -118,7 +118,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
 
         // Not the shape production sends, but honour a full instant if it ever does.
         if (entry.ConsumedAt != null
-            && DateTimeOffset.TryParse(entry.ConsumedAt, CultureInfo.InvariantCulture, out var parsed))
+            && UploaderTimestamp.TryParse(entry.ConsumedAt, out var parsed))
             return (parsed.ToUniversalTime(), false);
 
         var mealHour = mealName?.ToLowerInvariant() switch
@@ -154,7 +154,7 @@ public class MyFitnessPalFoodEntryMapper(ILogger logger)
         if (string.IsNullOrEmpty(timestamp))
             return null;
 
-        return DateTimeOffset.TryParse(timestamp, CultureInfo.InvariantCulture, out var result)
+        return UploaderTimestamp.TryParse(timestamp, out var result)
             ? result.ToUniversalTime()
             : null;
     }

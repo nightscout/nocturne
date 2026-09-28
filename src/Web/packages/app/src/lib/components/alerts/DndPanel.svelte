@@ -12,7 +12,10 @@
   import type { TenantAlertSettingsResponse } from "$api-clients";
   import { describeSubmitError } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { Bell, BellOff, Settings as SettingsIcon, Loader2 } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Item } from "$lib/components/ui/item";
   import { isDndActiveNow, isDndScheduleConfigured } from "./dnd";

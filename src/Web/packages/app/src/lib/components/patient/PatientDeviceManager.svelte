@@ -11,21 +11,19 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Textarea } from "$lib/components/ui/textarea";
-  import {
-    Cpu,
-    Activity,
-    Droplets,
-    Syringe,
-    PenLine,
-    Upload,
-    Plus,
-    Pencil,
-    Trash2,
-    Save,
-    Loader2,
-    ChevronUp,
-    ChevronDown,
-  } from "lucide-svelte";
+  import Cpu from "@lucide/svelte/icons/cpu";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplets from "@lucide/svelte/icons/droplets";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import PenLine from "@lucide/svelte/icons/pen-line";
+  import Upload from "@lucide/svelte/icons/upload";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Save from "@lucide/svelte/icons/save";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import {
     type PatientDevice,
     type DiscoveredSource,

@@ -58,7 +58,7 @@ public class TreatmentReadService : ITreatmentStore
     /// Upper bound on rows fetched into memory when a find query carries field filters, which can
     /// only be applied after projection and therefore defeat limit pushdown.
     /// </summary>
-    private const int MaxFilterFetch = 100_000;
+    internal int MaxFilterFetch { get; set; } = 100_000;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
@@ -298,8 +298,12 @@ public class TreatmentReadService : ITreatmentStore
         {
             // Field filters only exist on the projected shape; count matches within the
             // (bounded) window instead of delegating to per-repo counts.
-            var projected = await _projection.GetProjectedTreatmentsAsync(
-                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, nativeOnly: false, ct: ct);
+            var projected = (await _projection.GetProjectedTreatmentsAsync(
+                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, nativeOnly: false, ct: ct)).ToList();
+            if (projected.Count >= MaxFilterFetch)
+                _logger.LogWarning(
+                    "Find-filtered treatment count hit the {MaxFetch}-row window; older matches are not counted",
+                    MaxFilterFetch);
             return projected.Count(findQuery.Matches);
         }
 
@@ -431,7 +435,7 @@ public class TreatmentReadService : ITreatmentStore
             ?? await ResolveOrBackfillLegacyIdAsync(_noteRepo, low, high, ct)
             ?? await ResolveOrBackfillLegacyIdAsync(_deviceEventRepo, low, high, ct)
             ?? await ResolveOrBackfillLegacyIdAsync(_bolusCalcRepo, low, high, ct)
-            ?? await ResolveOrBackfillTempBasalLegacyIdAsync(low, high, ct);
+            ?? await ResolveOrBackfillLegacyIdAsync(_tempBasalRepo, low, high, ct);
     }
 
     private static async Task<string?> ResolveOrBackfillLegacyIdAsync<T>(
@@ -444,18 +448,6 @@ public class TreatmentReadService : ITreatmentStore
         var objectId = MongoObjectId.FromGuid(entity.Id);
         entity.LegacyId = objectId;
         await repo.UpdateAsync(entity.Id, entity, WriteOrigin.Live, ct);
-        return objectId;
-    }
-
-    private async Task<string?> ResolveOrBackfillTempBasalLegacyIdAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
-        if (tempBasal is null) return null;
-        if (!string.IsNullOrEmpty(tempBasal.LegacyId)) return tempBasal.LegacyId;
-
-        var objectId = MongoObjectId.FromGuid(tempBasal.Id);
-        tempBasal.LegacyId = objectId;
-        await _tempBasalRepo.UpdateAsync(tempBasal.Id, tempBasal, WriteOrigin.Live, ct);
         return objectId;
     }
 

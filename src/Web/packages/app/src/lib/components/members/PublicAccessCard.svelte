@@ -8,18 +8,16 @@
   import { Switch } from "$lib/components/ui/switch";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
-  import {
-    Globe,
-    Lock,
-    Copy,
-    Check,
-    RefreshCw,
-    Loader2,
-    Link as LinkIcon,
-    Eye,
-    EyeOff,
-    Clock,
-  } from "lucide-svelte";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Lock from "@lucide/svelte/icons/lock";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import LinkIcon from "@lucide/svelte/icons/link";
+  import Eye from "@lucide/svelte/icons/eye";
+  import EyeOff from "@lucide/svelte/icons/eye-off";
+  import Clock from "@lucide/svelte/icons/clock";
   import {
     getShareLink,
     revealShareLink,

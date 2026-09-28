@@ -2,7 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { FormField } from "$lib/forms";
-  import { Fingerprint, Loader2 } from "lucide-svelte";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
 
   interface Props {
     onRegister: (username: string, displayName: string) => Promise<void>;

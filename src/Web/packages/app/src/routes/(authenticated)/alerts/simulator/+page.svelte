@@ -10,7 +10,9 @@
     CardTitle,
     CardDescription,
   } from "$lib/components/ui/card";
-  import { ArrowLeft, PlayCircle, Loader2 } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import PlayCircle from "@lucide/svelte/icons/circle-play";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import ReplayPanel from "$lib/components/alerts/ReplayPanel.svelte";
 
   const rulesQuery = getRules();

@@ -288,9 +288,11 @@ public class DevAdminController : ControllerBase
     /// Wraps the entire operation in a transaction.
     /// </summary>
     /// <remarks>
-    /// Creation timestamps do not round-trip: every restored row is stamped with the restore time,
-    /// because <see cref="Infrastructure.Data.Entities.ISystemCreated"/> and
-    /// <see cref="Infrastructure.Data.Entities.IEntityCreated"/> are server-assigned on insert.
+    /// Creation and update timestamps do not round-trip: every restored row is stamped with the
+    /// restore time, because <see cref="Infrastructure.Data.Entities.ISystemTimestamped"/>,
+    /// <see cref="Infrastructure.Data.Entities.IEntityTimestamped"/> and
+    /// <see cref="Infrastructure.Data.Entities.ConnectorConfigurationEntity.LastModified"/> are
+    /// server-assigned on insert. A tenant updated in place is stamped only if its columns changed.
     /// </remarks>
     [HttpPost("snapshot")]
     public async Task<ActionResult> ImportSnapshot(
@@ -380,7 +382,6 @@ public class DevAdminController : ControllerBase
                         existingTenant.IsActive = td.IsActive;
                         existingTenant.LastReadingAt = td.LastReadingAt;
                         existingTenant.AllowAccessRequests = td.AllowAccessRequests;
-                        existingTenant.SysUpdatedAt = td.SysUpdatedAt;
                     }
                     else
                     {
@@ -392,7 +393,6 @@ public class DevAdminController : ControllerBase
                             IsActive = td.IsActive,
                             LastReadingAt = td.LastReadingAt,
                             AllowAccessRequests = td.AllowAccessRequests,
-                            SysUpdatedAt = td.SysUpdatedAt,
                         });
                     }
 
@@ -414,7 +414,6 @@ public class DevAdminController : ControllerBase
                         Notes = s.Notes,
                         IsActive = s.IsActive,
                         IsSystemSubject = s.IsSystemSubject,
-                        UpdatedAt = s.UpdatedAt,
                         LastLoginAt = s.LastLoginAt,
                         OriginalId = s.OriginalId,
                         PreferredLanguage = s.PreferredLanguage,
@@ -464,7 +463,6 @@ public class DevAdminController : ControllerBase
                             Description = r.Description,
                             Permissions = r.Permissions,
                             IsSystem = r.IsSystem,
-                            SysUpdatedAt = r.SysUpdatedAt,
                         });
                     }
 
@@ -476,7 +474,6 @@ public class DevAdminController : ControllerBase
                             Id = m.Id,
                             TenantId = m.TenantId,
                             SubjectId = m.SubjectId,
-                            SysUpdatedAt = m.SysUpdatedAt,
                             DirectPermissions = m.DirectPermissions,
                             Label = m.Label,
                             LimitTo24Hours = m.LimitTo24Hours,
@@ -514,7 +511,6 @@ public class DevAdminController : ControllerBase
                             DisplayName = c.DisplayName,
                             IsKnown = c.IsKnown,
                             RedirectUris = c.RedirectUris,
-                            UpdatedAt = c.UpdatedAt,
                         });
                     }
 
@@ -545,9 +541,7 @@ public class DevAdminController : ControllerBase
                             ConfigurationJson = c.ConfigurationJson,
                             SecretsJson = secretsJson,
                             SchemaVersion = c.SchemaVersion,
-                            LastModified = c.LastModified,
                             ModifiedBy = c.ModifiedBy,
-                            SysUpdatedAt = c.SysUpdatedAt,
                             LastSyncAttempt = c.LastSyncAttempt,
                             LastSuccessfulSync = c.LastSuccessfulSync,
                             LastErrorMessage = c.LastErrorMessage,
@@ -757,12 +751,15 @@ public class DevAdminController : ControllerBase
     // ── Scoped snapshot import ────────────────────────────────────────────────
 
     /// <summary>
-    /// Import snapshot data for a single tenant, matched by slug in the
-    /// provided snapshot. Upserts referenced subjects and passkeys without
+    /// Import a tenant snapshot into the tenant named on the route, which need not be the tenant
+    /// the snapshot was exported from. Upserts referenced subjects and passkeys without
     /// affecting other tenants.
     /// </summary>
     /// <remarks>
-    /// Creation timestamps do not round-trip; see <see cref="ImportSnapshot"/>.
+    /// Roles, memberships, member-role links, OAuth clients and connector configurations are
+    /// re-keyed on insert, so the same snapshot can be imported into several tenants. A
+    /// membership's invite link is kept only when that invite exists in the route tenant.
+    /// Creation and update timestamps do not round-trip; see <see cref="ImportSnapshot"/>.
     /// </remarks>
     [HttpPost("tenants/{id:guid}/import-snapshot")]
     public async Task<ActionResult> ImportScopedSnapshot(
@@ -773,6 +770,12 @@ public class DevAdminController : ControllerBase
         var tenant = await _db.Tenants.FindAsync([id], ct);
         if (tenant is null)
             return NotFound(new { error = $"Tenant {id} not found" });
+
+        var snapshotMemberIds = snapshot.Members.Select(m => m.Id).ToHashSet();
+        var snapshotRoleIds = snapshot.Roles.Select(r => r.Id).ToHashSet();
+        if (snapshot.MemberRoles.Any(mr =>
+                !snapshotMemberIds.Contains(mr.TenantMemberId) || !snapshotRoleIds.Contains(mr.TenantRoleId)))
+            return BadRequest(new { error = "Snapshot has member-role links to members or roles it does not contain" });
 
         _logger.LogInformation(
             "Scoped snapshot import for tenant {Slug} ({TenantId}): {Roles} roles, {Members} members, {OAuthClients} OAuth clients, {Connectors} connectors",
@@ -808,30 +811,42 @@ public class DevAdminController : ControllerBase
 
                 await _db.SaveChangesAsync(token);
 
-                // Phase 2: Upsert subjects and passkeys referenced by this tenant
+                // Phase 2: Upsert subjects and passkeys referenced by this tenant. Subjects are
+                // updated in place: deleting one cascades to its memberships in every other tenant.
                 var subjectIds = snapshot.Subjects.Select(s => s.Id).Distinct().ToList();
                 var passkeyIds = snapshot.PasskeyCredentials.Select(p => p.Id).Distinct().ToList();
 
                 var existingPasskeys = await _db.PasskeyCredentials.Where(p => passkeyIds.Contains(p.Id)).ToListAsync(token);
                 _db.PasskeyCredentials.RemoveRange(existingPasskeys);
-
-                var existingSubjects = await _db.Subjects.Where(s => subjectIds.Contains(s.Id)).ToListAsync(token);
-                _db.Subjects.RemoveRange(existingSubjects);
                 await _db.SaveChangesAsync(token);
+
+                var existingSubjects = await _db.Subjects
+                    .Where(s => subjectIds.Contains(s.Id))
+                    .ToDictionaryAsync(s => s.Id, token);
 
                 var addedSubjectIds = new HashSet<Guid>();
                 foreach (var s in snapshot.Subjects)
                 {
                     if (!addedSubjectIds.Add(s.Id)) continue;
-                    _db.Subjects.Add(new()
+                    if (!existingSubjects.TryGetValue(s.Id, out var subject))
                     {
-                        Id = s.Id, Name = s.Name, Username = s.Username,
-                        Email = s.Email, Notes = s.Notes, IsActive = s.IsActive,
-                        IsSystemSubject = s.IsSystemSubject, UpdatedAt = s.UpdatedAt,
-                        LastLoginAt = s.LastLoginAt, OriginalId = s.OriginalId,
-                        PreferredLanguage = s.PreferredLanguage, ApprovalStatus = s.ApprovalStatus,
-                        AccessRequestMessage = s.AccessRequestMessage, IsPlatformAdmin = s.IsPlatformAdmin,
-                    });
+                        subject = new() { Id = s.Id };
+                        _db.Subjects.Add(subject);
+                    }
+
+                    subject.Name = s.Name;
+                    subject.Username = s.Username;
+                    subject.Email = s.Email;
+                    subject.Notes = s.Notes;
+                    subject.IsActive = s.IsActive;
+                    subject.IsSystemSubject = s.IsSystemSubject;
+                    subject.UpdatedAt = s.UpdatedAt;
+                    subject.LastLoginAt = s.LastLoginAt;
+                    subject.OriginalId = s.OriginalId;
+                    subject.PreferredLanguage = s.PreferredLanguage;
+                    subject.ApprovalStatus = s.ApprovalStatus;
+                    subject.AccessRequestMessage = s.AccessRequestMessage;
+                    subject.IsPlatformAdmin = s.IsPlatformAdmin;
                 }
                 await _db.SaveChangesAsync(token);
 
@@ -850,25 +865,60 @@ public class DevAdminController : ControllerBase
                 }
                 await _db.SaveChangesAsync(token);
 
-                // Phase 3: Insert scoped data, remapping tenant_id to the actual tenant
+                // Phase 3: Insert scoped data under the route tenant. The primary keys of these
+                // tables are global while the rows are per-tenant, so every row gets a fresh id
+                // and the member-role links are re-pointed through the maps.
+                var roleIds = new Dictionary<Guid, Guid>();
+                var newRoleIdsBySlug = new Dictionary<string, Guid>();
                 foreach (var r in snapshot.Roles)
                 {
+                    var newId = Guid.CreateVersion7();
+                    roleIds[r.Id] = newId;
+                    newRoleIdsBySlug[r.Slug] = newId;
                     _db.TenantRoles.Add(new()
                     {
-                        Id = r.Id, TenantId = id, Name = r.Name, Slug = r.Slug,
+                        Id = newId, TenantId = id, Name = r.Name, Slug = r.Slug,
                         Description = r.Description, Permissions = r.Permissions,
-                        IsSystem = r.IsSystem, SysUpdatedAt = r.SysUpdatedAt,
+                        IsSystem = r.IsSystem,
                     });
                 }
 
+                // Invites are not in the snapshot and survive Phase 1, but their RoleIds carry no FK
+                // and name the roles Phase 1 deleted, which the snapshot's role ids need not match.
+                // They are re-pointed by slug, unique per tenant; a role absent from the snapshot
+                // no longer exists and is dropped from the invite.
+                var deletedToNewRoleIds = existingRoles
+                    .Where(r => newRoleIdsBySlug.ContainsKey(r.Slug))
+                    .ToDictionary(r => r.Id, r => newRoleIdsBySlug[r.Slug]);
+                var targetInvites = await _db.MemberInvites.Where(i => i.TenantId == id).ToListAsync(token);
+                foreach (var invite in targetInvites)
+                    invite.RoleIds = invite.RoleIds
+                        .Where(deletedToNewRoleIds.ContainsKey)
+                        .Select(r => deletedToNewRoleIds[r])
+                        .ToList();
+
+                var inviteIds = snapshot.Members
+                    .Where(m => m.CreatedFromInviteId.HasValue)
+                    .Select(m => m.CreatedFromInviteId!.Value)
+                    .Distinct()
+                    .ToList();
+                var survivingInviteIds = (await _db.MemberInvites
+                    .Where(i => i.TenantId == id && inviteIds.Contains(i.Id))
+                    .Select(i => i.Id)
+                    .ToListAsync(token)).ToHashSet();
+
+                var memberIds = new Dictionary<Guid, Guid>();
                 foreach (var m in snapshot.Members)
                 {
+                    var newId = Guid.CreateVersion7();
+                    memberIds[m.Id] = newId;
                     _db.TenantMembers.Add(new()
                     {
-                        Id = m.Id, TenantId = id, SubjectId = m.SubjectId,
-                        SysUpdatedAt = m.SysUpdatedAt,
+                        Id = newId, TenantId = id, SubjectId = m.SubjectId,
                         DirectPermissions = m.DirectPermissions, Label = m.Label,
-                        LimitTo24Hours = m.LimitTo24Hours, CreatedFromInviteId = m.CreatedFromInviteId,
+                        LimitTo24Hours = m.LimitTo24Hours,
+                        CreatedFromInviteId = m.CreatedFromInviteId is { } inviteId
+                            && survivingInviteIds.Contains(inviteId) ? inviteId : null,
                         LastUsedAt = m.LastUsedAt, LastUsedIp = m.LastUsedIp,
                         LastUsedUserAgent = m.LastUsedUserAgent,
                     });
@@ -878,8 +928,9 @@ public class DevAdminController : ControllerBase
                 {
                     _db.TenantMemberRoles.Add(new()
                     {
-                        Id = mr.Id, TenantMemberId = mr.TenantMemberId,
-                        TenantRoleId = mr.TenantRoleId,
+                        Id = Guid.CreateVersion7(),
+                        TenantMemberId = memberIds[mr.TenantMemberId],
+                        TenantRoleId = roleIds[mr.TenantRoleId],
                     });
                 }
 
@@ -887,12 +938,11 @@ public class DevAdminController : ControllerBase
                 {
                     _db.OAuthClients.Add(new()
                     {
-                        Id = c.Id, TenantId = id, ClientId = c.ClientId,
+                        Id = Guid.CreateVersion7(), TenantId = id, ClientId = c.ClientId,
                         SoftwareId = c.SoftwareId, ClientName = c.ClientName,
                         ClientUri = c.ClientUri, LogoUri = c.LogoUri,
                         CreatedFromIp = c.CreatedFromIp, DisplayName = c.DisplayName,
                         IsKnown = c.IsKnown, RedirectUris = c.RedirectUris,
-                        UpdatedAt = c.UpdatedAt,
                     });
                 }
 
@@ -916,10 +966,9 @@ public class DevAdminController : ControllerBase
 
                     _db.ConnectorConfigurations.Add(new()
                     {
-                        Id = c.Id, TenantId = id, ConnectorName = c.ConnectorName,
+                        Id = Guid.CreateVersion7(), TenantId = id, ConnectorName = c.ConnectorName,
                         ConfigurationJson = c.ConfigurationJson, SecretsJson = secretsJson,
-                        SchemaVersion = c.SchemaVersion, LastModified = c.LastModified,
-                        ModifiedBy = c.ModifiedBy, SysUpdatedAt = c.SysUpdatedAt,
+                        SchemaVersion = c.SchemaVersion, ModifiedBy = c.ModifiedBy,
                         LastSyncAttempt = c.LastSyncAttempt, LastSuccessfulSync = c.LastSuccessfulSync,
                         LastErrorMessage = c.LastErrorMessage, LastErrorAt = c.LastErrorAt, IsHealthy = c.IsHealthy,
                     });

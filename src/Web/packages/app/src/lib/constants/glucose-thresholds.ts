@@ -58,23 +58,3 @@ export function resolveChartThresholds(
     targetHigh: supplied?.targetHigh ?? null,
   };
 }
-
-/**
- * The cut-points in the shape `getGlucoseStatus` (@nocturne/ui/glucose-icon)
- * and `ClientSettings.thresholds` expect. Field names do not line up: there,
- * `low` and `high` are the urgent cut-points and `targetBottom`/`targetTop` are
- * the in-range band.
- */
-export function toStatusThresholds(t: GlucoseThresholds): {
-  low: number;
-  targetBottom: number;
-  targetTop: number;
-  high: number;
-} {
-  return {
-    low: t.veryLow,
-    targetBottom: t.low,
-    targetTop: t.high,
-    high: t.veryHigh,
-  };
-}

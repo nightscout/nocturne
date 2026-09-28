@@ -2,7 +2,7 @@
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { SlidersHorizontal } from "lucide-svelte";
+  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import { formatGlucoseValue, getUnitLabel, type GlucoseUnits } from "$lib/utils/formatting";
   import ColorFocusRange from "./ColorFocusRange.svelte";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";

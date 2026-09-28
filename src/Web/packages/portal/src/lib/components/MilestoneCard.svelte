@@ -1,14 +1,12 @@
 <script lang="ts">
     import type { RoadmapMilestone, GitHubIssue } from "$lib/data/portal";
     import * as Collapsible from "@nocturne/ui/ui/collapsible";
-    import {
-        Circle,
-        CheckCircle2,
-        Calendar,
-        ExternalLink,
-        ChevronDown,
-    Flag,
-} from "@lucide/svelte";
+    import Circle from "@lucide/svelte/icons/circle";
+    import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+    import Calendar from "@lucide/svelte/icons/calendar";
+    import ExternalLink from "@lucide/svelte/icons/external-link";
+    import ChevronDown from "@lucide/svelte/icons/chevron-down";
+    import Flag from "@lucide/svelte/icons/flag";
 
     interface Props {
         milestone: RoadmapMilestone;

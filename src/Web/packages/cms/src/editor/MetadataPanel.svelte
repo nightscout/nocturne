@@ -4,7 +4,8 @@
   import { Textarea } from '@nocturne/ui/ui/textarea';
   import { Switch } from '@nocturne/ui/ui/switch';
   import { Label } from '@nocturne/ui/ui/label';
-  import { ChevronDown, ChevronUp } from '@lucide/svelte';
+  import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import ChevronUp from '@lucide/svelte/icons/chevron-up';
   import type { MetadataField } from './types.ts';
 
   let {

@@ -1,18 +1,17 @@
 <script lang="ts">
   import TrackerPill from "./TrackerPill.svelte";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$lib/api";
-  import {
-    DashboardVisibility,
-    NotificationUrgency,
-    TrackerCategory,
-  } from "$lib/api";
+  import { DashboardVisibility, NotificationUrgency, TrackerCategory } from "$lib/api";
   import { cn } from "$lib/utils";
+  import { reachedUrgency, urgencyRank } from "$lib/components/trackers/schedule";
 
   interface TrackerPillBarProps {
     /** Active tracker instances */
     instances: TrackerInstanceDto[];
     /** Tracker definitions for metadata */
     definitions: TrackerDefinitionDto[];
+    /** Epoch milliseconds the reached level is judged against. */
+    now: number;
     /** Additional CSS classes */
     class?: string;
     /** Callback when complete button is clicked */
@@ -28,111 +27,52 @@
   let {
     instances = [],
     definitions = [],
+    now,
     class: className,
     onComplete,
   }: TrackerPillBarProps = $props();
 
-  // Get definition for an instance
   function getDefinition(
     instance: TrackerInstanceDto
   ): TrackerDefinitionDto | undefined {
     return definitions.find((d) => d.id === instance.definitionId);
   }
 
-  // Map urgency enum to numeric level for comparison
-  function urgencyToLevel(urgency: NotificationUrgency | undefined): number {
-    switch (urgency) {
-      case NotificationUrgency.Info:
-        return 0;
-      case NotificationUrgency.Warn:
-        return 1;
-      case NotificationUrgency.Hazard:
-        return 2;
-      case NotificationUrgency.Urgent:
-        return 3;
-      default:
-        return -1;
-    }
-  }
+  /** The step a pill waits for before it appears; null for always, undefined for never. */
+  const SHOWN_FROM: Record<DashboardVisibility, NotificationUrgency | null | undefined> = {
+    [DashboardVisibility.Off]: undefined,
+    [DashboardVisibility.Always]: null,
+    [DashboardVisibility.Info]: NotificationUrgency.Info,
+    [DashboardVisibility.Warn]: NotificationUrgency.Warn,
+    [DashboardVisibility.Hazard]: NotificationUrgency.Hazard,
+    [DashboardVisibility.Urgent]: NotificationUrgency.Urgent,
+  };
 
-  // Map DashboardVisibility enum to numeric level
-  function visibilityToLevel(
-    visibility: DashboardVisibility | undefined
-  ): number {
-    switch (visibility) {
-      case DashboardVisibility.Off:
-        return Infinity; // Never show
-      case DashboardVisibility.Always:
-        return -1; // Always show
-      case DashboardVisibility.Info:
-        return 0;
-      case DashboardVisibility.Warn:
-        return 1;
-      case DashboardVisibility.Hazard:
-        return 2;
-      case DashboardVisibility.Urgent:
-        return 3;
-      default:
-        return -1; // Default to always show
-    }
-  }
-
-  // Calculate current alert level for an instance
-  function getCurrentLevel(
-    instance: TrackerInstanceDto,
-    def?: TrackerDefinitionDto
-  ): number {
-    if (!instance.ageHours || !def?.notificationThresholds) return -1;
-
-    const age = instance.ageHours;
-    let maxLevel = -1;
-
-    for (const threshold of def.notificationThresholds) {
-      if (threshold.hours && age >= threshold.hours) {
-        const level = urgencyToLevel(threshold.urgency);
-        if (level > maxLevel) maxLevel = level;
-      }
-    }
-    return maxLevel;
-  }
-
-  // Check if an instance should be visible based on its definition's visibility setting
-  function isVisible(
-    instance: TrackerInstanceDto,
-    def?: TrackerDefinitionDto
-  ): boolean {
+  function isVisible(instance: TrackerInstanceDto, def?: TrackerDefinitionDto): boolean {
     if (!def) return false;
-
-    const visibilityThreshold = visibilityToLevel(def.dashboardVisibility);
-
-    // Off = never show
-    if (visibilityThreshold === Infinity) return false;
-
-    // Always = always show
-    if (visibilityThreshold === -1) return true;
-
-    // Otherwise, show if current level >= visibility threshold
-    const currentLevel = getCurrentLevel(instance, def);
-    return currentLevel >= visibilityThreshold;
+    const shownFrom = SHOWN_FROM[def.dashboardVisibility ?? DashboardVisibility.Always];
+    if (shownFrom === undefined) return false;
+    if (shownFrom === null) return true;
+    return urgencyRank(reachedUrgency(instance, now)) >= urgencyRank(shownFrom);
   }
 
-  // Filter instances based on per-definition visibility
-  const visibleInstances = $derived.by(() => {
-    return instances.filter((instance) => {
-      const def = getDefinition(instance);
-      return isVisible(instance, def);
-    });
-  });
+  const visibleInstances = $derived(
+    instances.filter((instance) => isVisible(instance, getDefinition(instance)))
+  );
 
   const hasVisiblePills = $derived(visibleInstances.length > 0);
 </script>
 
 {#if hasVisiblePills}
-  <div class={cn("flex flex-wrap items-center gap-x-2 gap-y-1", className)}>
+  <div
+    class={cn("flex flex-wrap items-center gap-x-2 gap-y-1", className)}
+    data-testid="tracker-pill-bar"
+  >
     {#each visibleInstances as instance (instance.id)}
       <TrackerPill
         {instance}
         definition={getDefinition(instance)}
+        {now}
         {onComplete}
       />
     {/each}

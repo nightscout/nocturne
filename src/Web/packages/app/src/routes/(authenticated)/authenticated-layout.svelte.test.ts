@@ -51,6 +51,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     dashboardSlugs: [],
     effectivePermissions: [],
     limitTo24Hours: false,
+    refusedAsDemoSubject: false,
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,

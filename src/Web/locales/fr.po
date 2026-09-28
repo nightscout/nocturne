@@ -1810,8 +1810,6 @@ msgstr ""
 #. 0: snapshot.enactedBolusVolume.toFixed(2)
 #. 0: snapshot.recommendedBolus.toFixed(2)
 #. 0: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.bolus)
-#. 0: formatInsulinDisplay(treatmentSummary?.totals?.insulin?.basal)
-#. 0: formatInsulinDisplay((treatmentSummary?.totals?.insulin?.bolus ?? 0) + (treatmentSummary?.totals?.insulin?.basal ?? 0))
 #. 0: d.value.toFixed(2)
 #. 0: (row.insulin ?? 0).toFixed(2)
 #: src/lib/components/calendar/CalendarDayCell.svelte
@@ -1825,8 +1823,6 @@ msgstr ""
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
 #: src/lib/components/reports/ApsStateCard.svelte
-#: src/lib/components/reports/DailyInsulinSummary.svelte
-#: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 #: src/lib/components/reports/InsulinDonutChart.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
@@ -1846,6 +1842,7 @@ msgid "Click to view full day report"
 msgstr ""
 
 #: src/lib/components/calendar/CalendarHeader.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Calendar"
 msgstr ""
 
@@ -2458,6 +2455,7 @@ msgstr ""
 #: src/lib/components/treatments/FoodSearchCombobox.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
 #: src/lib/components/treatments/TreatmentFoodSelectorDialog.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Food"
 msgstr ""
 
@@ -2578,6 +2576,7 @@ msgstr ""
 msgid "Select a date range to re-sync specific data."
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -2585,6 +2584,7 @@ msgstr ""
 msgid "From"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/connectors/ConnectorDetailsDialog.svelte
 #: src/routes/(authenticated)/alerts/dnd/+page.svelte
 #: src/routes/(authenticated)/settings/audit/+page.svelte
@@ -3468,11 +3468,13 @@ msgstr ""
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/alerts/+page.svelte
 #: src/routes/(unauthenticated)/setup/steps/Finish.svelte
 msgid "Alerts"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/members/+page.svelte
 msgid "Sharing & Privacy"
 msgstr ""
@@ -3841,6 +3843,7 @@ msgstr ""
 msgid "<0/> BG Check"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
@@ -4231,9 +4234,9 @@ msgstr ""
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Automatic"
@@ -4443,55 +4446,68 @@ msgstr ""
 msgid "Accept"
 msgstr ""
 
-#~ msgid "Dashboard"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Dashboard"
+msgstr ""
 
-#~ msgid "Time Spans"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Time Spans"
+msgstr ""
 
 #: ../portal/src/routes/features/+page.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/+layout.svelte
 #: src/routes/(authenticated)/reports/+page.svelte
 msgid "Reports"
 msgstr ""
 
 #: src/lib/components/dashboard/widgets/ClockWidget.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Clock"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/compatibility/[id]/+page.svelte
 msgid "Overview"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/meals/+page.svelte
 msgid "Meals"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/tools/+page.svelte
 msgid "Tools"
 msgstr ""
 
-#~ msgid "Packing"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Packing"
+msgstr ""
 
-#~ msgid "Dev Tools"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Dev Tools"
+msgstr ""
 
-#~ msgid "Compatibility"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Compatibility"
+msgstr ""
 
-#~ msgid "Test Endpoint Compatibility"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Test Endpoint Compatibility"
+msgstr ""
 
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/support/IssueCreatorDialog.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/+page.svelte
 msgid "Settings"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Setup"
 msgstr ""
@@ -4499,33 +4515,40 @@ msgstr ""
 #: src/lib/components/layout/UserMenu.svelte
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/account/+page.svelte
 #: src/routes/(unauthenticated)/setup/+page@.svelte
 msgid "Account"
 msgstr ""
 
 #: src/lib/components/rbac/PermissionCategorySelector.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/patient/+page.svelte
 msgid "Patient Record"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Appearance"
 msgstr ""
 
-#~ msgid "Therapy"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Therapy"
+msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Data Quality"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 msgid "Notifications & Trackers"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/connectors/+page.svelte
 msgid "Connectors & Apps"
 msgstr ""
@@ -4535,10 +4558,12 @@ msgstr ""
 msgid "Audit Log"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/support/+page.svelte
 msgid "Support & Community"
 msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/admin/tenants/+page.svelte
 msgid "Tenant Management"
 msgstr ""
@@ -4757,7 +4782,6 @@ msgstr ""
 
 #: src/lib/components/meals/MealsTable.svelte
 #: src/lib/components/reports/year-overview/YearHeatmap.svelte
-#: src/lib/components/treatments/TreatmentStatsCard.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 #: src/routes/(authenticated)/reports/day-in-review/+page.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -5055,6 +5079,8 @@ msgstr ""
 msgid "Peak"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
 #: src/lib/components/alerts/RuleBuilderLeafEditor.svelte
@@ -5878,13 +5904,11 @@ msgstr ""
 msgid "Bolus insulin:"
 msgstr ""
 
-#: src/lib/components/reports/DailyInsulinSummary.svelte
-msgid "Total basal insulin:"
-msgstr ""
+#~ msgid "Total basal insulin:"
+#~ msgstr ""
 
-#: src/lib/components/reports/DailyInsulinSummary.svelte
-msgid "Total daily insulin:"
-msgstr ""
+#~ msgid "Total daily insulin:"
+#~ msgstr ""
 
 #: src/lib/components/reports/DailyInsulinSummary.svelte
 msgid "Total carbs:"
@@ -6343,6 +6367,7 @@ msgstr ""
 #~ msgid "Avg Before"
 #~ msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/settings/alarm-profile/AlarmGeneralTab.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
@@ -6402,10 +6427,8 @@ msgstr ""
 msgid "Overall Treatment Summary"
 msgstr ""
 
-#. 0: formatInsulinDisplay(totalInsulin)
-#: src/lib/components/reports/TreatmentSummary.svelte
-msgid "Insulin: {0}U"
-msgstr ""
+#~ msgid "Insulin: {0}U"
+#~ msgstr ""
 
 #. 0: formatCarbDisplay(totalCarbs)
 #: src/lib/components/reports/TreatmentSummary.svelte
@@ -7656,20 +7679,16 @@ msgstr ""
 msgid "Public Visibility"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-msgid "Public - Visible to everyone"
-msgstr ""
+#~ msgid "Public - Visible to everyone"
+#~ msgstr ""
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 msgid "Private - Only you can see"
 msgstr ""
 
-#: src/lib/components/trackers/TrackerEditorDialog.svelte
-msgid "Controls whether this tracker is visible to unauthenticated users"
-msgstr ""
+#~ msgid "Controls whether this tracker is visible to unauthenticated users"
+#~ msgstr ""
 
 #: src/lib/components/trackers/TrackerEditorDialog.svelte
 msgid "Event Integration (Nightscout)"
@@ -7763,6 +7782,7 @@ msgid "<0/> Start"
 msgstr ""
 
 #: src/lib/components/trackers/TrackerHistoryTab.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "History"
 msgstr ""
 
@@ -8797,24 +8817,17 @@ msgstr ""
 msgid "Failed to load notification data"
 msgstr ""
 
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Tracker active"
-msgstr ""
+#~ msgid "Tracker active"
+#~ msgstr ""
 
-#. 0: thresholdHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Exceeded {0}h - change urgently!"
-msgstr ""
+#~ msgid "Exceeded {0}h - change urgently!"
+#~ msgstr ""
 
-#. 0: thresholdHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Exceeded {0}h - change soon"
-msgstr ""
+#~ msgid "Exceeded {0}h - change soon"
+#~ msgstr ""
 
-#. 0: thresholdHours ?? def.lifespanHours ?? "?"
-#: src/routes/(authenticated)/notifications/+page.svelte
-msgid "Approaching {0}h limit"
-msgstr ""
+#~ msgid "Approaching {0}h limit"
+#~ msgstr ""
 
 #. 0: Math.floor(instance.ageHours ?? 0)
 #: src/routes/(authenticated)/notifications/+page.svelte
@@ -10304,6 +10317,7 @@ msgstr ""
 msgid "+ Add Range"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/settings/alarm-profile/AlarmScheduleTab.svelte
 #: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
 msgid "to"
@@ -10637,6 +10651,7 @@ msgstr ""
 msgid "Mmol"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "mmol/L"
@@ -12440,6 +12455,7 @@ msgstr ""
 msgid "No data available for this week"
 msgstr ""
 
+#: src/routes/(authenticated)/reports/treatments/+page.svelte
 #: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Error Loading Treatments"
 msgstr ""
@@ -15316,7 +15332,7 @@ msgstr ""
 msgid "Window: {0}"
 msgstr ""
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "No events would have fired in this window."
 msgstr ""
 
@@ -15328,6 +15344,7 @@ msgstr ""
 #: src/lib/components/alerts/DndPanel.svelte
 #: src/lib/components/alerts/SidebarDndToggle.svelte
 #: src/lib/components/ui/dropdown-menu/nested-in-popover.test.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Do Not Disturb"
 msgstr ""
 
@@ -15614,10 +15631,12 @@ msgstr ""
 msgid "<0/> Suggest"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/RuleBuilder.svelte
 msgid "Notify when"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/RuleBuilder.svelte
 msgid "these are true:"
 msgstr ""
@@ -15647,6 +15666,7 @@ msgstr ""
 msgid "NOT"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/RuleBuilderRow.svelte
 msgid "for at least"
 msgstr ""
@@ -15748,11 +15768,13 @@ msgid "Toggle Do Not Disturb"
 msgstr ""
 
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
+#: src/lib/navigation/app-navigation.svelte.ts
 msgid "Rules"
 msgstr ""
 
-#~ msgid "Simulator"
-#~ msgstr ""
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Simulator"
+msgstr ""
 
 #: src/routes/(authenticated)/alerts/history/+page.svelte
 msgid "Every real fire from this tenant. Test fires aren't shown."
@@ -15795,10 +15817,12 @@ msgstr ""
 msgid "Shift"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/OperatorToggle.svelte
 msgid "All conditions must hold"
 msgstr ""
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/alerts/OperatorToggle.svelte
 msgid "Any condition is enough"
 msgstr ""
@@ -15816,7 +15840,7 @@ msgstr ""
 msgid "Turn off"
 msgstr ""
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "No events yet — playhead at start of window."
 msgstr ""
 
@@ -15879,7 +15903,7 @@ msgid "No leaves to evaluate."
 msgstr ""
 
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "Resolved"
 msgstr ""
 
@@ -16767,6 +16791,7 @@ msgstr ""
 #~ msgid "Alerts, reminders, and tracked events."
 #~ msgstr ""
 
+#: src/lib/navigation/app-navigation.svelte.ts
 #: src/routes/(authenticated)/settings/access/+page.svelte
 msgid "Active Access"
 msgstr ""
@@ -23855,8 +23880,10 @@ msgstr ""
 msgid "Energy <0>auto</0>"
 msgstr ""
 
+#. 0: rule.name
 #. 0: perm
 #. 0: item.l
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Remove {0}"
@@ -24370,12 +24397,12 @@ msgstr ""
 msgid "TIR after"
 msgstr ""
 
-#. 0: treatmentSummary.bolusCount ?? 0; 1: (treatmentSummary.dailyBoluses ?? 0).toFixed(1); 2: (treatmentSummary.averagePerBolus ?? 0).toFixed(1)
+#. 0: treatmentSummary?.bolusCount ?? 0; 1: (treatmentSummary?.dailyBoluses ?? 0).toFixed(1); 2: (treatmentSummary?.averagePerBolus ?? 0).toFixed(1)
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 msgid "{0} boluses · {1}/day · {2}U avg"
 msgstr ""
 
-#. 0: treatmentSummary.carbEntryCount ?? 0; 1: (treatmentSummary.dailyCarbs ?? 0).toFixed(0); 2: (treatmentSummary.averageCarbsPerEntry ?? 0).toFixed(0)
+#. 0: treatmentSummary?.carbEntryCount ?? 0; 1: (treatmentSummary?.dailyCarbs ?? 0).toFixed(0); 2: (treatmentSummary?.averageCarbsPerEntry ?? 0).toFixed(0)
 #: src/lib/components/treatments/TreatmentStatsCard.svelte
 msgid "{0} meals · {1}g/day · {2}g avg/meal"
 msgstr ""
@@ -25521,4 +25548,196 @@ msgstr ""
 
 #: src/lib/components/members/InviteSummary.svelte
 msgid "You can press Mute for me on an alert to stop it reaching you. Other people keep getting it until someone who manages alerts acknowledges it, or it ends."
+msgstr ""
+
+#~ msgid "NOT applies to: "
+#~ msgstr ""
+
+#~ msgid "No alert over this trace."
+#~ msgstr ""
+
+#~ msgid "Glucose readings for the {0} example, with the times each rule was alerting shaded."
+#~ msgstr ""
+
+#~ msgid "Whole rule is true"
+#~ msgstr ""
+
+#~ msgid "Alerting"
+#~ msgstr ""
+
+#. 0: issues[index].map((i) => issueText[i.reason] ?? i.reason).join(", ")
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "A save would be refused: this rule needs {0}."
+msgstr ""
+
+#~ msgid "· last reading {0} min ago"
+#~ msgstr ""
+
+#~ msgid "· no reading yet"
+#~ msgstr ""
+
+#~ msgid "<0/> Reset the example"
+#~ msgstr ""
+
+#. 0: failure
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "The alert engine could not run here ({0}). The rest of this page still applies."
+msgstr ""
+
+#~ msgid "This runs Nocturne's own alert engine in your browser, one check every 5 minutes, as <0>Replay</0> does in the app. The readings are made up to show one behaviour; they are not anyone's data, and nothing here is medical advice."
+#~ msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Group: match"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "all of"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "any of"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Remove group"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "NOT: the opposite of this condition"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Glucose value"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Rate"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "at least"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Minutes without a reading"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "no reading for"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Only when true for a while"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Minutes it must hold"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Remove condition"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "not"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "<0/> Group"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "<0/> Condition"
+msgstr ""
+
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Tenants"
+msgstr ""
+
+#: src/lib/navigation/app-navigation.svelte.ts
+msgid "Translations"
+msgstr ""
+
+#: src/lib/components/connectors/ConnectorSetup.svelte
+msgid "Only members who can manage this site's settings can configure or enable this connector."
+msgstr ""
+
+#. 0: formatInsulinDisplay(totalInsulin)
+#: src/lib/components/reports/TreatmentSummary.svelte
+msgid "Bolus insulin: {0}U"
+msgstr ""
+
+#. 0: def.name
+#: src/lib/components/trackers/TrackerDefinitionsTab.svelte
+msgid "Edit {0}"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "Restart automatically on"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "When your pump, loop or a connector reports one of these, the running tracker is completed and a new one starts at that moment."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "Only when the event's notes contain (optional)"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "Use this to keep two trackers that listen for the same event apart, such as a left and a right site."
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "Public - Other members can see it"
+msgstr ""
+
+#: src/lib/components/trackers/TrackerEditorDialog.svelte
+msgid "Whether other people signed in to this site can see it running. Trackers are never shown on a public share link."
+msgstr ""
+
+#: src/lib/components/treatments/TreatmentStatsCard.svelte
+msgid "Bolus insulin"
+msgstr ""
+
+#: src/routes/(authenticated)/notifications/+page.svelte
+msgid "Change urgently"
+msgstr ""
+
+#: src/routes/(authenticated)/notifications/+page.svelte
+msgid "Change soon"
+msgstr ""
+
+#: src/routes/(authenticated)/notifications/+page.svelte
+msgid "Change coming up"
+msgstr ""
+
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
+msgid "The chart data could not be loaded."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "<0/> Add an example rule"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "<0/> Start over"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "Nocturne's own alert engine and Replay, running in your browser on made-up readings. Not anyone's data, and not medical advice."
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Grams"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Minutes since carbs"
+msgstr ""
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "min ago"
 msgstr ""

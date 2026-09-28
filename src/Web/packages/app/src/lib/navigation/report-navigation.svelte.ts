@@ -1,26 +1,24 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
-import {
-  Activity,
-  BarChart3,
-  BatteryFull,
-  ArrowLeftRight,
-  Calendar,
-  CalendarDays,
-  Clock,
-  Dumbbell,
-  FileText,
-  Footprints,
-  Gauge,
-  HeartPulse,
-  Layers,
-  Moon,
-  PieChart,
-  Sunrise,
-  SunMoon,
-  Syringe,
-  Utensils,
-} from "lucide-svelte";
+import Activity from "@lucide/svelte/icons/activity";
+import BarChart3 from "@lucide/svelte/icons/chart-column";
+import BatteryFull from "@lucide/svelte/icons/battery-full";
+import ArrowLeftRight from "@lucide/svelte/icons/arrow-left-right";
+import Calendar from "@lucide/svelte/icons/calendar";
+import CalendarDays from "@lucide/svelte/icons/calendar-days";
+import Clock from "@lucide/svelte/icons/clock";
+import Dumbbell from "@lucide/svelte/icons/dumbbell";
+import FileText from "@lucide/svelte/icons/file-text";
+import Footprints from "@lucide/svelte/icons/footprints";
+import Gauge from "@lucide/svelte/icons/gauge";
+import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+import Layers from "@lucide/svelte/icons/layers";
+import Moon from "@lucide/svelte/icons/moon";
+import PieChart from "@lucide/svelte/icons/chart-pie";
+import Sunrise from "@lucide/svelte/icons/sunrise";
+import SunMoon from "@lucide/svelte/icons/sun-moon";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Utensils from "@lucide/svelte/icons/utensils";
 import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
 import { satisfiesAllScopes } from "$lib/authorization/scopes";
 
