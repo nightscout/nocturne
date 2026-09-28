@@ -136,28 +136,10 @@ public static class AuditedBulkDeleteExtensions
     {
         return await context.ExecuteInTransactionAsync(async token =>
         {
-            var count = await context.AuditedSoftDeleteInTransactionAsync(query, auditContext, scope, token);
+            var count = await SoftDeleteRowsAsync(query, auditContext, token);
+            await WriteBulkDeleteSummaryAsync<T>(context, count, scope, auditContext, token);
             return count;
         }, ct: ct);
-    }
-
-    /// <summary>
-    /// <see cref="AuditedSoftDeleteAsync{T}"/>'s body without the transaction, for a caller spanning
-    /// several tables that must commit or roll back as one. EF rejects a nested
-    /// <c>BeginTransactionAsync</c>, so such a caller cannot reach the delete through the wrapper.
-    /// The caller owns the execution strategy, the transaction and the commit. A returned count is
-    /// not durable until that commit.
-    /// </summary>
-    public static async Task<int> AuditedSoftDeleteInTransactionAsync<T>(
-        this NocturneDbContext context,
-        IQueryable<T> query,
-        IAuditContext? auditContext,
-        string scope,
-        CancellationToken ct = default) where T : class, IAuditable, ISoftDeletable
-    {
-        var count = await SoftDeleteRowsAsync(query, auditContext, ct);
-        await WriteBulkDeleteSummaryAsync<T>(context, count, scope, auditContext, ct);
-        return count;
     }
 
     /// <summary>
