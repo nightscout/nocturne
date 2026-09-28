@@ -911,9 +911,9 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         => PointAtStoredRecordsAsync(
             statuses,
             [
-                Table(_apsRepo, resolvesUuidLegacyIds: true),
-                Table(_pumpRepo, resolvesUuidLegacyIds: true),
-                Table(_uploaderRepo, resolvesUuidLegacyIds: true),
+                Table(_apsRepo, WireForms.UuidPrefix),
+                Table(_pumpRepo, WireForms.UuidPrefix),
+                Table(_uploaderRepo, WireForms.UuidPrefix),
             ],
             _ => source == DataSources.NightscoutConnector,
             ct);

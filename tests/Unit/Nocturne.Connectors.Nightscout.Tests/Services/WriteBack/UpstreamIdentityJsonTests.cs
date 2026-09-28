@@ -81,6 +81,49 @@ public class UpstreamIdentityJsonTests
         entry.Sgv.Should().Be(110);
     }
 
+    /// <summary>
+    /// Before this serializer, a treatment went out through the web defaults, whose converter wrote
+    /// the coerced id as both <c>_id</c> and <c>identifier</c>. The copies upstream are stored under
+    /// that identifier, so a created treatment must keep going out exactly so.
+    /// </summary>
+    [Theory]
+    [InlineData("65a1b2c3d4e5f60718293a4b")]
+    [InlineData("syn-3a7c0e9f1b2d4c6e")]
+    [InlineData("4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
+    public void A_treatment_is_written_under_the_ids_earlier_write_backs_sent(string id)
+    {
+        var treatment = new Treatment { Id = id, EventType = "Correction Bolus", Insulin = 1 };
+
+        var sent = JsonSerializer.SerializeToElement(treatment, UpstreamIdentityJson.Options);
+        var before = JsonSerializer.SerializeToElement(treatment, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        sent.GetProperty("_id").GetString().Should().Be(before.GetProperty("_id").GetString()).And.Be(MongoObjectId.Coerce(id));
+        sent.GetProperty("identifier").GetString().Should().Be(before.GetProperty("identifier").GetString());
+    }
+
+    [Fact]
+    public void A_treatment_is_written_under_its_legacy_id_rather_than_the_uuid_it_is_served_by()
+    {
+        var json = JsonSerializer.SerializeToElement(
+            new Treatment { Id = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f", LegacyId = "syn-3a7c0e9f1b2d4c6e", EventType = "Note" },
+            UpstreamIdentityJson.Options);
+
+        json.GetProperty("_id").GetString().Should().Be(MongoObjectId.Coerce("syn-3a7c0e9f1b2d4c6e"));
+        json.GetProperty("identifier").GetString().Should().Be(MongoObjectId.Coerce("syn-3a7c0e9f1b2d4c6e"));
+        json.TryGetProperty("legacyId", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_treatment_written_id_only_carries_no_identifier()
+    {
+        var json = JsonSerializer.SerializeToElement(
+            new Treatment { Id = "65a1b2c3d4e5f60718293a4b", EventType = "Note" }, UpstreamIdentityJson.IdOnlyOptions);
+
+        json.GetProperty("_id").GetString().Should().Be("65a1b2c3d4e5f60718293a4b");
+        json.TryGetProperty("identifier", out _).Should().BeFalse();
+    }
+
     [Fact]
     public void A_status_is_written_with_its_own_key_as_its_identifier()
     {

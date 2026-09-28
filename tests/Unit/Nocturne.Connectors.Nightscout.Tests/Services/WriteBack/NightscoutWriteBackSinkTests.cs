@@ -591,62 +591,177 @@ public class NightscoutWriteBackSinkTests
             });
     }
 
+    private NightscoutTreatmentWriteBackSink TreatmentSink(RecordingHttpMessageHandler handler) => new(
+        new HttpClient(handler),
+        CreateLoader(_config).Object,
+        Breaker,
+        NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
+
     /// <summary>
-    /// A treatment is served by its record's uuid and carries its legacy id apart; the legacy id is
-    /// the key its pull-back is matched by, and a v4-native treatment with none is matched by that
-    /// uuid instead. An ObjectId legacy id is covered by
-    /// <see cref="TreatmentWriteBack_SendsAnObjectIdLegacyIdAsItsIdWithNoIdentifier"/>.
+    /// A treatment goes upstream as it always has: <c>_id</c> and <c>identifier</c> both carry the
+    /// 24-hex coercion of its key, so an upsert matches the copy an earlier write-back left there by
+    /// that <c>identifier</c>. A v1 create carries the key as its id and a v1 edit carries it apart
+    /// from the uuid it is served by, and both come to the same value.
     /// </summary>
     [Theory]
-    [InlineData("syn-3a7c0e9f1b2d4c6e", "syn-3a7c0e9f1b2d4c6e")]
-    [InlineData("4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f", "4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f")]
-    [InlineData(null, RecordUuid)]
-    public async Task TreatmentWriteBack_SendsTheRecordsObjectIdAndItsLegacyIdAsItsIdentifier(string? legacyId, string identifier)
+    [InlineData("65a1b2c3d4e5f60718293a4b")]
+    [InlineData("syn-3a7c0e9f1b2d4c6e")]
+    [InlineData("4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f")]
+    [InlineData("5F1A2B3C4D5E6F7A8B9C0D1E")]
+    public async Task TreatmentCreate_SendsItsCoercedKeyAsIdAndIdentifier(string legacyId)
     {
         var handler = new RecordingHttpMessageHandler();
-        var sut = new NightscoutTreatmentWriteBackSink(
-            new HttpClient(handler),
-            CreateLoader(_config).Object,
-            Breaker,
-            NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
 
-        await sut.OnCreatedAsync(new[] { new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Note", DataSource = "nocturne" } });
+        await TreatmentSink(handler).OnCreatedAsync(new[]
+        {
+            new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" },
+            new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" },
+        });
 
-        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0])
-            .Should().BeEquivalentTo(new Dictionary<string, string?>
-            {
-                ["_id"] = MongoObjectId.FromGuid(Guid.Parse(RecordUuid)),
-                ["identifier"] = identifier,
-            });
+        var wire = MongoObjectId.Coerce(legacyId);
+        wire.Should().MatchRegex("^[0-9a-f]{24}$");
+        var sent = JsonSerializer.Deserialize<JsonElement>(handler.Bodies.Single());
+        foreach (var body in sent.EnumerateArray())
+            IdKeys(body).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wire, ["identifier"] = wire });
+    }
+
+    [Fact]
+    public async Task TreatmentCreate_WithNoLegacyId_SendsItsUuidPrefixAsIdAndIdentifier()
+    {
+        var handler = new RecordingHttpMessageHandler();
+
+        await TreatmentSink(handler).OnCreatedAsync(new[] { new Treatment { Id = RecordUuid, EventType = "Note", DataSource = "nocturne" } });
+
+        var prefix = MongoObjectId.FromGuid(Guid.Parse(RecordUuid));
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies.Single())[0])
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = prefix, ["identifier"] = prefix });
+    }
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
+        new(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
+
+    /// <summary>
+    /// An edit asks the upstream whether it holds a copy under the treatment's identifier. A copy
+    /// an earlier write-back stored is found that way, and the edit is POSTed in its shape: 15.0.7
+    /// and later upsert it onto that copy by identifier, and up to 15.0.6 a POST finds it by time and
+    /// event type where a PUT, saving under an ObjectId, would miss the string <c>_id</c> it was
+    /// stored under and insert a second copy. An upstream that cannot answer is given the same.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.OK, """[{"_id":"66b0c1d2e3f405162738495a","identifier":"{0}"}]""")]
+    [InlineData(HttpStatusCode.InternalServerError, "")]
+    [InlineData(HttpStatusCode.OK, "not json")]
+    public async Task TreatmentEdit_OfACopyUnderItsIdentifierOrUnknown_IsPostedInTheSameShape(HttpStatusCode probe, string probeBody)
+    {
+        const string legacyId = "syn-3a7c0e9f1b2d4c6e";
+        var wire = MongoObjectId.Coerce(legacyId)!;
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (method, _) => method == HttpMethod.Get ? Json(probe, probeBody.Replace("{0}", wire)) : null,
+        };
+
+        await TreatmentSink(handler).OnUpdatedAsync(
+            new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 2, DataSource = "nocturne" });
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Post);
+        handler.Uris[0].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[identifier]={wire}&count=1");
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1])[0])
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wire, ["identifier"] = wire });
     }
 
     /// <summary>
-    /// A treatment upsert that carries an <c>identifier</c> matches <c>identifier</c> or a string
-    /// <c>_id</c> equal to it, never an ObjectId <c>_id</c>, so the copy written back before
-    /// identifiers were sent (under its ObjectId, with none) would get a second copy on its next
-    /// edit. A treatment whose key is an ObjectId goes out under it as <c>_id</c> alone, which the
-    /// upsert matches, and which the pull-back then finds by legacy id.
+    /// With no copy under its identifier, a treatment is one the upstream holds under its <c>_id</c>
+    /// alone, such as the original a Nightscout migration imported, or holds nowhere. An identifier
+    /// would make 15.0.7 and later match neither and store a second copy of the dose, so the edit is
+    /// PUT under the <c>_id</c> alone, which every version saves in place or as the one copy.
     /// </summary>
     [Fact]
-    public async Task TreatmentWriteBack_SendsAnObjectIdLegacyIdAsItsIdWithNoIdentifier()
+    public async Task TreatmentEdit_WithNoCopyUnderItsIdentifier_IsPutUnderItsIdAlone()
     {
         const string legacyId = "65a1b2c3d4e5f60718293a4b";
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (method, _) => method == HttpMethod.Get ? Json(HttpStatusCode.OK, "[]") : null,
+        };
+
+        await TreatmentSink(handler).OnUpdatedAsync(
+            new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 2, DataSource = "nocturne" });
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Put);
+        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]))
+            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId });
+    }
+
+    [Fact]
+    public async Task TreatmentEdit_OfAConnectorTreatment_AsksAndSendsNothing()
+    {
         var handler = new RecordingHttpMessageHandler();
-        var sut = new NightscoutTreatmentWriteBackSink(
+
+        await TreatmentSink(handler).OnUpdatedAsync(
+            new Treatment { Id = RecordUuid, LegacyId = "65a1b2c3d4e5f60718293a4b", EventType = "Note", DataSource = DataSources.NightscoutConnector });
+
+        handler.RequestCount.Should().Be(0);
+    }
+
+    private static HttpResponseMessage DuplicateKey() => Json(
+        HttpStatusCode.InternalServerError,
+        """{"status":500,"message":"Mongo Error","description":"E11000 duplicate key error collection: nightscout.devicestatus index: _id_ dup key"}""");
+
+    /// <summary>
+    /// A status goes upstream under a stable <c>_id</c>, and Nightscout inserts statuses with an
+    /// ordered <c>insertMany</c>, so one it already holds refuses the batch with a duplicate-key
+    /// error and stops the statuses after it. The batch is sent again one status at a time; the one
+    /// already there counts as written, and none of it counts against the shared circuit breaker.
+    /// </summary>
+    [Fact]
+    public async Task DeviceStatusBatch_RefusedForAStatusAlreadyUpstream_IsSentOneByOneWithoutTrippingTheBreaker()
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (_, body) => body.StartsWith('[') && (JsonSerializer.Deserialize<JsonElement>(body).GetArrayLength() > 1
+                    || body.Contains("\"loop_status_1\"", StringComparison.Ordinal))
+                ? DuplicateKey()
+                : null,
+        };
+        for (var i = 0; i < 4; i++)
+            Breaker.RecordFailure();
+        var sut = new NightscoutDeviceStatusWriteBackSink(
             new HttpClient(handler),
             CreateLoader(_config).Object,
             Breaker,
-            NullLogger<NightscoutTreatmentWriteBackSink>.Instance);
-        var served = new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" };
-        var uploaded = new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1, DataSource = "nocturne" };
+            NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);
 
-        await sut.OnCreatedAsync(new[] { uploaded });
-        await sut.OnUpdatedAsync(served);
+        await sut.OnCreatedAsync(new[]
+        {
+            new DeviceStatus { Id = "loop_status_1", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_2", Device = "loop" },
+            new DeviceStatus { Id = "loop_status_3", Device = "loop" },
+        });
 
-        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[0])[0])
-            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId });
-        IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1]))
-            .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId });
+        handler.RequestCount.Should().Be(4);
+        handler.Bodies.Skip(1).Select(b => JsonSerializer.Deserialize<JsonElement>(b)[0].GetProperty("identifier").GetString())
+            .Should().Equal("loop_status_1", "loop_status_2", "loop_status_3");
+        Breaker.IsOpen.Should().BeFalse();
+        Breaker.RecordFailure();
+        Breaker.IsOpen.Should().BeFalse("the refusal for a status already upstream reset the failure count");
+    }
+
+    [Fact]
+    public async Task DeviceStatusBatch_RefusedForAnotherReason_CountsAsOneFailure()
+    {
+        var handler = new RecordingHttpMessageHandler(HttpStatusCode.InternalServerError);
+        for (var i = 0; i < 4; i++)
+            Breaker.RecordFailure();
+        var sut = new NightscoutDeviceStatusWriteBackSink(
+            new HttpClient(handler),
+            CreateLoader(_config).Object,
+            Breaker,
+            NullLogger<NightscoutDeviceStatusWriteBackSink>.Instance);
+
+        await sut.OnCreatedAsync(new[] { new DeviceStatus { Id = "a", Device = "loop" }, new DeviceStatus { Id = "b", Device = "loop" } });
+
+        handler.RequestCount.Should().Be(1);
+        Breaker.IsOpen.Should().BeTrue();
     }
 
     private const string RecordUuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";

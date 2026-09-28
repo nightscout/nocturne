@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -274,7 +275,7 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
     };
 
     /// <summary>
-    /// A copy the connector pulls of a reading stored from another source is that reading's
+    /// A copy the connector pulls of a reading write-back may have sent upstream is that reading's
     /// write-back echo. It lands on the reading and changes nothing, attribution included: a reading
     /// re-attributed to the connector would no longer be written back.
     /// </summary>
@@ -489,6 +490,146 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
         var live = await LiveBolusesAsync(slot);
         live.Should().ContainSingle().Which.Insulin.Should().Be(3.0);
         (await BolusAsync(live[0].Id)).GetProperty("legacyId").GetString().Should().Be(storedKey);
+    }
+    /// <summary>Runs <paramref name="import"/> as the Nightscout migration does, straight through a decomposer.</summary>
+    private async Task ImportAsync(Func<IServiceProvider, Task> import)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
+        await import(scope.ServiceProvider);
+    }
+
+    private async Task<Guid> UploadBolusAsync(DateTimeOffset slot, string id, double insulin = 2.5)
+    {
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = id, eventType = "Correction Bolus", insulin, created_at = slot.ToString("O") },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        return (await LiveBolusesAsync(slot)).Single().Id;
+    }
+
+    /// <summary>
+    /// A treatment goes upstream under the coercion of its key as both <c>_id</c> and
+    /// <c>identifier</c>, and Nightscout 15.0.7+ keeps the identifier under a <c>_id</c> of its own.
+    /// The copy lands on the treatment its identifier names, whatever the key's shape: an ObjectId
+    /// as it is, a uuid as its prefix, anything else as its hash, which Postgres resolves through its
+    /// own index. It is the treatment's echo, so nothing changes.
+    /// </summary>
+    [Theory]
+    [InlineData("objectid")]
+    [InlineData("uuid")]
+    [InlineData("other")]
+    public async Task APulledCopyOfATreatmentWrittenBackUnderItsCoercedKey_LandsOnItAndChangesNothing(string shape)
+    {
+        var slot = UniqueSlot();
+        var legacyId = shape switch
+        {
+            "objectid" => MongoObjectId.NewObjectId(),
+            "uuid" => Guid.NewGuid().ToString(),
+            _ => $"syn-{Guid.NewGuid():N}",
+        };
+        var id = await UploadBolusAsync(slot, legacyId);
+        var source = (await BolusAsync(id)).DataSourceOrNull();
+        var wire = MongoObjectId.Coerce(legacyId)!;
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync(
+            [PulledBolus(slot, MongoObjectId.NewObjectId(), wire, insulin: 4)], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveBolusesAsync(slot)).Should().Equal((id, 2.5d));
+        (await BolusAsync(id)).DataSourceOrNull().Should().Be(source).And.NotBe(ConnectorSource);
+    }
+
+    private static Treatment PulledBolus(DateTimeOffset slot, string id, string? identifier, double insulin) => new()
+    {
+        Id = id,
+        UpstreamIdentifier = identifier,
+        EventType = "Correction Bolus",
+        Insulin = insulin,
+        CreatedAt = slot.ToString("O"),
+        DataSource = ConnectorSource,
+    };
+
+    /// <summary>
+    /// An earlier write-back sent an edit under the id the treatment is served by, its own uuid's
+    /// prefix, whatever its legacy id; that copy lands on the treatment too, rather than beside it.
+    /// </summary>
+    [Fact]
+    public async Task APulledCopyUnderTheIdATreatmentIsServedBy_LandsOnIt()
+    {
+        var slot = UniqueSlot();
+        var id = await UploadBolusAsync(slot, $"syn-{Guid.NewGuid():N}");
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync(
+            [PulledBolus(slot, MongoObjectId.NewObjectId(), MongoObjectId.FromGuid(id), insulin: 4)], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveBolusesAsync(slot)).Should().Equal((id, 2.5d));
+    }
+
+    /// <summary>
+    /// A treatment a Nightscout migration imported was never written back: the upstream document is
+    /// the record's own, and an edit made to it there, such as AAPS marking a dose invalid, reaches
+    /// Nocturne on the next pull, whatever form of its key the copy carries.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnUpstreamEditOfAMigratedTreatment_UpdatesIt(bool underAHash)
+    {
+        var slot = UniqueSlot();
+        var legacyId = underAHash ? $"syn-{Guid.NewGuid():N}" : MongoObjectId.NewObjectId();
+        await ImportAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>().DecomposeBatchAsync(
+            [new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 2.5, CreatedAt = slot.ToString("O") }],
+            WriteOrigin.Backfill));
+        var id = (await LiveBolusesAsync(slot)).Single().Id;
+        var wire = MongoObjectId.Coerce(legacyId)!;
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync(
+            [PulledBolus(slot, underAHash ? MongoObjectId.NewObjectId() : legacyId, underAHash ? wire : null, insulin: 1.5)],
+            ConnectorSource, WriteOrigin.Live));
+
+        (await LiveBolusesAsync(slot)).Should().Equal((id, 1.5d));
+    }
+
+    [Fact]
+    public async Task AnUpstreamEditOfAMigratedTempBasal_ShortensIt()
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        Treatment TempBasal(double duration, string? source) => new()
+        {
+            Id = legacyId, EventType = "Temp Basal", Absolute = 0.4, Rate = 0.4, Duration = duration,
+            CreatedAt = slot.ToString("O"), DataSource = source,
+        };
+        await ImportAsync(sp => sp.GetRequiredService<ITreatmentDecomposer>().DecomposeBatchAsync([TempBasal(30, null)], WriteOrigin.Backfill));
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([TempBasal(12, ConnectorSource)], ConnectorSource, WriteOrigin.Live));
+
+        TimeSpan? duration = null;
+        await ImportAsync(async sp => duration = await sp.GetRequiredService<NocturneDbContext>().TempBasals.AsNoTracking()
+            .Where(t => t.LegacyId == legacyId)
+            .Select(t => t.EndTimestamp - t.Timestamp)
+            .SingleAsync());
+        duration.Should().Be(TimeSpan.FromMinutes(12));
+    }
+
+    [Fact]
+    public async Task AnUpstreamEditOfAMigratedReading_UpdatesIt()
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var date = DateTimeOffset.UtcNow.AddMinutes(-95).ToUnixTimeMilliseconds();
+        var legacyId = MongoObjectId.NewObjectId();
+        await ImportAsync(sp => sp.GetRequiredService<IEntryDecomposer>().DecomposeBatchAsync(
+            [new Entry { Id = legacyId, Type = "sgv", Sgv = 111, Mills = date, Device = device }], WriteOrigin.Backfill));
+        var id = (await LiveSensorReadingsAsync(device)).Single().Id;
+
+        var pulled = PulledReading(device, date, 118, null);
+        pulled.Id = legacyId;
+
+        await PublishAsync(p => p.Glucose.PublishEntriesAsync([pulled], ConnectorSource, WriteOrigin.Live));
+
+        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 118d));
     }
 }
 

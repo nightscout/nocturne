@@ -63,6 +63,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// </exception>
     public override async Task<TModel> CreateAsync(TModel model, WriteOrigin origin, CancellationToken ct = default)
     {
+        using var live = LiveWriteScope.Open(origin == WriteOrigin.Live);
         await using var ctx = await ContextFactory.CreateAsync(ct);
         // The domain models carry no sync-key contract, so the key is read off the mapped entity.
         var entity = ToEntity(model);

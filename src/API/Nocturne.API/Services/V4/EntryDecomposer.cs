@@ -222,9 +222,9 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         {
             var table = byType.Key switch
             {
-                "sgv" => Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true),
-                "mbg" => Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true),
-                "cal" => Table(_calibrationRepository, resolvesUuidLegacyIds: true),
+                "sgv" => Table(_sensorGlucoseRepository, WireForms.UuidPrefix),
+                "mbg" => Table(_meterGlucoseRepository, WireForms.UuidPrefix),
+                "cal" => Table(_calibrationRepository, WireForms.UuidPrefix),
                 _ => (KeyedTable?)null,
             };
             if (table is { } keyed)

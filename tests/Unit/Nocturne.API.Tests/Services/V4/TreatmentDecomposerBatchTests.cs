@@ -56,6 +56,14 @@ public class TreatmentDecomposerBatchTests : IDisposable
         _activeProfileResolverMock = new Mock<IActiveProfileResolver>();
         _insulinRepoMock = new Mock<IPatientInsulinRepository>();
 
+        NothingHeld<IBolusRepository, V4Models.Bolus>(_bolusRepoMock);
+        NothingHeld<ICarbIntakeRepository, V4Models.CarbIntake>(_carbRepoMock);
+        NothingHeld<IBGCheckRepository, V4Models.BGCheck>(_bgCheckRepoMock);
+        NothingHeld<INoteRepository, V4Models.Note>(_noteRepoMock);
+        NothingHeld<IBolusCalculationRepository, V4Models.BolusCalculation>(_bolusCalcRepoMock);
+        NothingHeld<IDeviceEventRepository, V4Models.DeviceEvent>(_deviceEventRepoMock);
+        NothingHeld<ITempBasalRepository, V4Models.TempBasal>(_tempBasalRepoMock);
+
         // BulkUpsertAsync returns the input records
         _bolusRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -511,6 +519,9 @@ public class TreatmentDecomposerBatchTests : IDisposable
         var correlationId = Guid.CreateVersion7();
         var calls = new List<string>();
         _bolusRepoMock
+            .Setup(x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UnkeyedOwnId(wireId, WriteBackMaySend: false)]);
+        _bolusRepoMock
             .Setup(x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) => calls.Add($"bolus.adopt({string.Join(",", ids)})"))
             .ReturnsAsync([new V4Models.Bolus { LegacyId = wireId, CorrelationId = correlationId }]);
@@ -549,6 +560,14 @@ public class TreatmentDecomposerBatchTests : IDisposable
     public async Task DecomposeAsync_AdoptsTheCanonicalUuidOfAStoredTreatment_AndSkipsIdsThatNameNone()
     {
         const string uuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        _noteRepoMock
+            .Setup(x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) =>
+                ids.Where(i => i == uuid).Select(i => new UnkeyedOwnId(i, WriteBackMaySend: false)));
+        _noteRepoMock
+            .Setup(x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(i => i == uuid).Select(i => new V4Models.Note { LegacyId = i }));
 
         await _decomposer.DecomposeAsync(
             new Treatment { Id = uuid, EventType = "Note", Mills = 1700000000000, Notes = "echo" }, WriteOrigin.Live);
@@ -565,7 +584,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
     /// <summary>
     /// A treatment the Nightscout connector pulls under a <c>_id</c> Nightscout minted, whose
-    /// identifier names a bolus stored from another source, is that bolus's write-back echo: it takes
+    /// identifier names a bolus write-back may have sent upstream, is that bolus's write-back echo: it takes
     /// the bolus's id and writes nothing, so the bolus keeps its attribution and any edit made since.
     /// </summary>
     [Fact]
@@ -582,7 +601,7 @@ public class TreatmentDecomposerBatchTests : IDisposable
             .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { legacyId });
         _bolusRepoMock
-            .Setup(x => x.GetLegacyIdsHeldOutsideSourceAsync(
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId));
         List<V4Models.Bolus>? written = null;
@@ -607,6 +626,119 @@ public class TreatmentDecomposerBatchTests : IDisposable
         echoes.Should().BeEquivalentTo([echo]);
         echo.Id.Should().Be(legacyId);
         written!.Select(b => b.LegacyId).Should().Equal("66f0a1b2c3d4e0f6a7b8c9d1");
+    }
+
+    private static Treatment PulledBolus(string id, string? identifier, double insulin = 2.5) => new()
+    {
+        Id = id, UpstreamIdentifier = identifier, EventType = "Correction Bolus",
+        Mills = 1700000000000, Insulin = insulin, DataSource = "nightscout-connector",
+    };
+
+    /// <summary>
+    /// Treatment write-back sends a legacy id that is neither an ObjectId nor a uuid as its hash, in
+    /// <c>_id</c> and <c>identifier</c> alike, and 15.0.7 and later keep only the identifier. The copy
+    /// is pointed at the treatment the hash names; a treatment only an import wrote is the
+    /// upstream's own record, so the pull updates it.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_UpdatesTheTreatmentAPulledHashNames_WhenWriteBackNeverSentIt()
+    {
+        const string legacyId = "syn-3a7c0e9f1b2d4c6e";
+        var hash = MongoObjectId.Coerce(legacyId)!;
+        _bolusRepoMock
+            .Setup(x => x.ResolveHashedLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(i => i == hash).Select(i => new WireLegacyId(i, legacyId)));
+        List<V4Models.Bolus>? written = null;
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        var copy = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", hash, insulin: 0);
+
+        await _decomposer.DecomposeBatchAsync([copy], WriteOrigin.Live);
+
+        copy.Id.Should().Be(legacyId);
+        written!.Select(b => (b.LegacyId, b.Insulin)).Should().Equal((legacyId, 0d));
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_WritesNothingForTheEchoOfATreatmentAPulledHashNames()
+    {
+        const string legacyId = "syn-3a7c0e9f1b2d4c6e";
+        var hash = MongoObjectId.Coerce(legacyId)!;
+        _bolusRepoMock
+            .Setup(x => x.ResolveHashedLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(i => i == hash).Select(i => new WireLegacyId(i, legacyId)));
+        _bolusRepoMock
+            .Setup(x => x.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), "nightscout-connector", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) => ids.Where(i => i == legacyId));
+        var bolusWrites = 0;
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(() => bolusWrites++)
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync([PulledBolus(hash, hash)], WriteOrigin.Live);
+
+        bolusWrites.Should().Be(0);
+    }
+
+    /// <summary>
+    /// An earlier write-back sent an edit under the id the treatment is served by, its own uuid's
+    /// prefix, whatever its legacy id. That copy is pointed at the treatment too.
+    /// </summary>
+    [Fact]
+    public async Task ResolveStoredIdentitiesAsync_PointsAPulledCopyNamingATreatmentByItsServedIdAtItsLegacyId()
+    {
+        const string servedId = "0198c2a41f3b7c2d9e556a1b";
+        _carbRepoMock
+            .Setup(x => x.ResolveKeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(i => i == servedId).Select(i => new WireLegacyId(i, "65a1b2c3d4e5f60718293a4b")));
+        var copy = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", servedId);
+
+        await _decomposer.ResolveStoredIdentitiesAsync([copy]);
+
+        copy.Id.Should().Be("65a1b2c3d4e5f60718293a4b");
+    }
+
+    /// <summary>
+    /// A connector sync selects the treatments to publish, resolves them for their fingerprints, and
+    /// decomposes them. Each treatment's identity is looked up once across the three, and the
+    /// selection, a read, gives no record an id: that waits for the publish.
+    /// </summary>
+    [Fact]
+    public async Task ASync_LooksEachIdentityUpOnce_AndGivesARecordItsIdOnlyWhenPublishing()
+    {
+        const string wireId = "0198c2a41f3b7c2d9e556a1b";
+        var adopted = 0;
+        _bolusRepoMock
+            .Setup(x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UnkeyedOwnId(wireId, WriteBackMaySend: false)]);
+        _bolusRepoMock
+            .Setup(x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Callback(() => adopted++)
+            .ReturnsAsync([new V4Models.Bolus { LegacyId = wireId }]);
+        var copy = PulledBolus("66f0a1b2c3d4e0f6a7b8c9d0", wireId);
+
+        var selected = await _decomposer.SelectForRepublishAsync("nightscout-connector", [copy]);
+        adopted.Should().Be(0);
+        await _decomposer.ResolveStoredIdentitiesAsync(selected);
+        adopted.Should().Be(1);
+        await _decomposer.DecomposeBatchAsync([copy], WriteOrigin.Live);
+
+        selected.Should().Equal(copy);
+        copy.Id.Should().Be(wireId);
+        adopted.Should().Be(1);
+        _bolusRepoMock.Verify(
+            x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _bolusRepoMock.Verify(
+            x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     private static void NothingHeld<TRepo, TRecord>(Mock<TRepo> repo)

@@ -14,7 +14,9 @@
 // - an entry is upserted by date and type with `$set: doc`, in one ordered bulk write: a `_id`
 //   other than the stored reading's is an immutable-field error that stores nothing from that
 //   document on and fails the request;
-// - `identifier` is always kept as sent.
+// - device statuses are inserted in one ordered `insertMany`: a `_id` already stored is a
+//   duplicate-key error (E11000) that stores nothing from that document on and fails the request;
+// - `identifier` is always kept as sent, and `find[identifier]` reads by it.
 // State lives for the life of the mocks container and is shared by every tenant pointed here, so a
 // spec keeps its records apart by device name or time.
 
@@ -101,7 +103,22 @@ function storeDeviceStatuses(body: string): VendorReply {
   const docs = parseDocs(body);
   const invalid = docs.find((d) => d._id !== undefined && d._id !== null && !(typeof d._id === "string" && OBJECT_ID.test(d._id)));
   if (invalid) return { status: 400, body: { status: 400, message: "Invalid _id format", description: String(invalid._id) } };
-  return ok(docs.map((d) => upsert(deviceStatuses, normaliseId(d), undefined)));
+  const stored: Doc[] = [];
+  for (const raw of docs) {
+    const doc = normaliseId(raw);
+    if (typeof doc._id === "string" && deviceStatuses.has(doc._id)) {
+      return {
+        status: 500,
+        body: {
+          status: 500,
+          message: "Mongo Error",
+          description: `E11000 duplicate key error collection: nightscout.devicestatus index: _id_ dup key: { _id: ObjectId('${doc._id}') }`,
+        },
+      };
+    }
+    stored.push(upsert(deviceStatuses, doc, undefined));
+  }
+  return ok(stored);
 }
 
 function count(query: Record<string, string>): number {
