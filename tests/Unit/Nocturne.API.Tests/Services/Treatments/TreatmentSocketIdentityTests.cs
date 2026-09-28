@@ -50,6 +50,7 @@ public class TreatmentSocketIdentityTests : IDisposable
     private readonly JsonHubProtocolOptions _protocol = new();
     private readonly List<(string Method, object Payload)> _sent = [];
     private readonly UpstreamCapture _upstream = new();
+    private readonly BolusRepository _bolusRepo;
 
     public TreatmentSocketIdentityTests()
     {
@@ -66,7 +67,7 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         var dedup = new Mock<IDeduplicationService>().Object;
         var contexts = new TestTenantDbContextFactory(_context);
-        var bolusRepo = new BolusRepository(contexts, dedup, caller, NullLogger<BolusRepository>.Instance);
+        var bolusRepo = _bolusRepo = new BolusRepository(contexts, dedup, caller, NullLogger<BolusRepository>.Instance);
         var carbRepo = new CarbIntakeRepository(contexts, dedup, caller, NullLogger<CarbIntakeRepository>.Instance);
         var bgCheckRepo = new BGCheckRepository(contexts, dedup, caller, NullLogger<BGCheckRepository>.Instance);
         var noteRepo = new NoteRepository(contexts, dedup, caller, NullLogger<NoteRepository>.Instance);
@@ -259,10 +260,18 @@ public class TreatmentSocketIdentityTests : IDisposable
 
     /// <summary>
     /// The upstream identity of <see cref="UpstreamIdentityJson"/>: <c>_id</c> is the 24-hex id the reads
-    /// serve, <c>identifier</c> the legacy key the stored treatment is upserted by.
+    /// serve, <c>identifier</c> the legacy key the stored treatment is upserted by. A legacy key that is
+    /// itself an ObjectId goes out as the <c>_id</c> alone.
     /// </summary>
     private static void ShouldCarryServedIdAndLegacyKey(JsonElement sent, string restId, string legacyKey)
     {
+        if (MongoObjectId.IsObjectId(legacyKey))
+        {
+            sent.GetProperty("_id").GetString().Should().Be(legacyKey);
+            sent.TryGetProperty("identifier", out _).Should().BeFalse();
+            return;
+        }
+
         sent.GetProperty("_id").GetString().Should().MatchRegex("^[0-9a-f]{24}$").And.Be(restId);
         sent.GetProperty("identifier").GetString().Should().Be(legacyKey);
     }
@@ -366,13 +375,47 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         var sent = LastSent();
         var pulled = JsonSerializer.Deserialize<Treatment>(sent)!;
-        pulled.UpstreamIdentifier = sent.GetProperty("identifier").GetString();
-        if (reMinted)
-            pulled.Id = "65f0e2e00000000000000001";
+        // A copy sent without an identifier is upserted by its _id, so Nightscout never re-mints it.
+        if (sent.TryGetProperty("identifier", out var identifier))
+        {
+            pulled.UpstreamIdentifier = identifier.GetString();
+            if (reMinted)
+                pulled.Id = "65f0e2e00000000000000001";
+        }
         pulled.DataSource = DataSources.NightscoutConnector;
+        var before = (await _service.GetTreatmentsAsync(count: 10)).Single();
         await _service.CreateTreatmentsAsync([pulled]);
 
         (await RestIdAsync()).Should().Be(restId);
+        var after = (await _service.GetTreatmentsAsync(count: 10)).Single();
+        after.DataSource.Should().Be(before.DataSource, "a write-back echo leaves the record it names as it stands");
+        after.EnteredBy.Should().Be(before.EnteredBy);
+    }
+
+    /// <summary>
+    /// A v4-native treatment has no legacy id. A v1 PATCH re-decomposes it under the id it is served by,
+    /// so the legacy id it takes names the same record, and the read and the write-back agree afterwards.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Patch_OfANativeTreatment_TakesALegacyIdTheServedIdStillNames(bool byUuid)
+    {
+        var bolus = await _bolusRepo.CreateAsync(
+            new V4Models.Bolus { Timestamp = new DateTime(2026, 1, 1, 15, 0, 0, DateTimeKind.Utc), Insulin = 1.5 },
+            WriteOrigin.Live);
+        var restId = await RestIdAsync();
+        restId.Should().Be(MongoObjectId.FromGuid(bolus.Id));
+
+        var patched = await _service.PatchTreatmentAsync(
+            byUuid ? bolus.Id.ToString() : restId, JsonSerializer.Deserialize<JsonElement>("""{"insulin":1.75}"""));
+
+        JsonSerializer.SerializeToElement(patched).GetProperty("_id").GetString().Should().Be(restId);
+        (await RestIdAsync()).Should().Be(restId);
+        var stored = (await _bolusRepo.GetByIdAsync(bolus.Id))!;
+        stored.Insulin.Should().Be(1.75);
+        stored.LegacyId.Should().BeOneOf(restId, bolus.Id.ToString());
+        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, stored.LegacyId!);
     }
 
     private sealed class UpstreamCapture : HttpMessageHandler

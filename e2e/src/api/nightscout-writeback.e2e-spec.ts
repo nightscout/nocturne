@@ -286,16 +286,19 @@ describe("Nightscout connector write-back round trip", () => {
     const stored = (await bolusesAround(at)).data;
     expect(stored).toHaveLength(1);
     expect(uuidPrefix(stored[0]!.id)).toBe(id);
+    // The pulled copy is the write-back's echo: it leaves the upload's source, so later edits are written back too.
+    const kept = [[stored[0]!.id, stored[0]!.dataSource ?? null]];
+    expect(kept[0]![1]).not.toBe("nightscout-connector");
 
     await tenant.api.ok("PUT", `/api/v1/treatments/${id}`, { ...upload, insulin: 0.8 });
     expect(await sentTreatments(syncIdentifier)).toEqual([[id, syncIdentifier], [id, syncIdentifier]]);
     expect((await sync()).success).toBe(true);
-    expect((await bolusesAround(at)).data.map((b) => b.id)).toEqual([stored[0]!.id]);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
 
     await tenant.api.ok("PATCH", `/api/v3/treatments/${id}`, { insulin: 0.85 });
     expect(await sentTreatments(syncIdentifier)).toEqual([[id, syncIdentifier], [id, syncIdentifier], [id, syncIdentifier]]);
     expect((await sync()).success).toBe(true);
-    expect((await bolusesAround(at)).data.map((b) => b.id)).toEqual([stored[0]!.id]);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
   });
 
   it("pulls a temp basal it wrote back onto that temp basal", async () => {
