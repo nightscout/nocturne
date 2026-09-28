@@ -284,6 +284,13 @@ fn the_silhouette_measure_catches_a_mark_that_shrank() {
 /// arriving, and the share of the final area it may have covered by then.
 const PACE_AT: f32 = 0.25;
 const MAX_AREA_AT_PACE: f32 = 0.45;
+/// The share of a stage's change from one stop to the next that may be made
+/// by [`PACE_AT`] of that stage's brushwork.
+const MAX_STAGE_DONE_AT_PACE: f32 = 0.6;
+/// The least mean change a stage must make to the sheet. Area alone cannot
+/// show it: once the land is down the later stages paint inside the covered
+/// sheet (the sun, mist, birds), and some of them lift paint.
+const MIN_STAGE_CHANGE: f32 = 1e-4;
 
 fn covered_area(image: &Image) -> f32 {
     let present = image
@@ -302,7 +309,8 @@ fn covered_area(image: &Image) -> f32 {
 ///
 /// Measured in the viewer's time, not the simulation's: a quarter of the way
 /// through the paint phase's wall clock, no more than
-/// [`MAX_AREA_AT_PACE`] of the finished artwork may be on the paper.
+/// [`MAX_AREA_AT_PACE`] of the finished artwork may be on the paper. A staged
+/// artwork is gated by [`assert_each_stage_is_laid_in_order`] instead.
 ///
 /// The full sweep gates at `Large`, the tier a hero renders at. `Small` draws
 /// fewer marks and so paces more easily; gating there would pass artworks
@@ -322,17 +330,7 @@ fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: D
         .unwrap();
         let aspect = scene.size_hint.height as f32 / scene.size_hint.width as f32;
         let (w, h) = (192u32, ((192.0 * aspect).round() as u32).max(8));
-        if let Some(stages) = ArtworkCatalogue::stages(id) {
-            let share = first_stage_pace(scene, stages, (w, h));
-            println!(
-                "{id:<24} first stage at {:.0} %: {share:.2}",
-                PACE_AT * 100.0
-            );
-            if share > MAX_AREA_AT_PACE {
-                slow.push(format!(
-                    "{id}: {share:.2} of its first stage was already there"
-                ));
-            }
+        if ArtworkCatalogue::stages(id).is_some() {
             continue;
         }
         let curve = ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION);
@@ -365,38 +363,94 @@ fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: D
     );
 }
 
-/// [`every_artwork_is_still_arriving_a_quarter_of_the_way_in`] for a staged
-/// artwork, which a host steps through one stage at a time with a linear
-/// seek: the share of the first stage's finished area already down a quarter
-/// of the way through that stage's brushwork.
-fn first_stage_pace(
-    scene: nocturne_watercolour_core::domain::Scene,
-    stages: u32,
-    (w, h): (u32, u32),
-) -> f32 {
-    let window = scene.timeline.total_ticks / stages;
-    let last_stroke = scene
-        .timeline
-        .events
-        .iter()
-        .filter(|e| e.at_tick < window)
-        .filter(|e| {
-            matches!(
-                e.op,
-                Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
-            )
-        })
-        .map(|e| e.at_tick)
-        .max()
-        .unwrap_or(window);
-    let mut pb = Playback::new(CpuEngine::default(), scene, 3000.0).unwrap();
-    pb.set_progress_curve(ProgressCurve::Linear);
-    pb.seek_tick((PACE_AT * last_stroke as f32).round() as u32)
+/// The pace gate for a staged artwork, which
+/// [`assert_each_is_still_arriving_a_quarter_of_the_way_in`] skips: a host
+/// steps it one stage at a time with a linear seek, and each stage lays a whole
+/// layer (the first is the sky, about half the sheet), so a cap on the share of
+/// the finished area early on measures the layer, not the pacing. Instead, per
+/// stage `k`: the sheet at stop `k + 1` covers no less than at stop `k` and
+/// differs from it by at least [`MIN_STAGE_CHANGE`], and a quarter of the way
+/// through the stage's brushwork no more than [`MAX_STAGE_DONE_AT_PACE`] of the
+/// change from stop `k` to stop `k + 1` has been made. That each stop is dry and holds exactly its first `k` stages is
+/// the `hub` authoring tests' job.
+fn assert_each_stage_is_laid_in_order(ids: &[&str], detail: DetailLevel) {
+    let palette = Palette::moonlight();
+    let mut failed: Vec<String> = Vec::new();
+    for &id in ids {
+        let stages = ArtworkCatalogue::stages(id).expect("a staged artwork");
+        let scene = ArtworkCatalogue::by_id_for(
+            id,
+            Seed(11),
+            &palette,
+            DEFAULT_INTENSITY,
+            detail,
+            Background::Transparent,
+        )
         .unwrap();
-    let early = covered_area(&pb.simulator().render(w, h).unwrap());
-    pb.seek_tick(window).unwrap();
-    let full = covered_area(&pb.simulator().render(w, h).unwrap());
-    if full > 0.0 { early / full } else { 0.0 }
+        let aspect = scene.size_hint.height as f32 / scene.size_hint.width as f32;
+        let (w, h) = (192u32, ((192.0 * aspect).round() as u32).max(8));
+        let window = scene.timeline.total_ticks / stages;
+        let last_strokes: Vec<u32> = (0..stages)
+            .map(|k| {
+                scene
+                    .timeline
+                    .events
+                    .iter()
+                    .filter(|e| e.at_tick / window == k)
+                    .filter(|e| {
+                        matches!(
+                            e.op,
+                            Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
+                        )
+                    })
+                    .map(|e| e.at_tick)
+                    .max()
+                    .unwrap_or((k + 1) * window)
+            })
+            .collect();
+        let mut pb = Playback::new(CpuEngine::default(), scene, 3000.0).unwrap();
+        pb.set_progress_curve(ProgressCurve::Linear);
+        let mut stop = pb.simulator().render(w, h).unwrap();
+        for k in 0..stages {
+            let from = k * window;
+            let pace_tick =
+                from + (PACE_AT * (last_strokes[k as usize] - from) as f32).round() as u32;
+            pb.seek_tick(pace_tick).unwrap();
+            let early = pb.simulator().render(w, h).unwrap();
+            pb.seek_tick(from + window).unwrap();
+            let next = pb.simulator().render(w, h).unwrap();
+            let change = body_mae(&stop, &next);
+            let done = if change > 0.0 {
+                1.0 - body_mae(&early, &next) / change
+            } else {
+                1.0
+            };
+            let (before, after) = (covered_area(&stop), covered_area(&next));
+            println!(
+                "{id:<24} stage {k}: covered {before:.3} -> {after:.3}, change {change:.4}, {done:.2} done at {:.0} %",
+                PACE_AT * 100.0
+            );
+            if after < before || change < MIN_STAGE_CHANGE {
+                failed.push(format!(
+                    "{id}: stage {k} adds nothing (covered {before:.3} -> {after:.3}, change {change:.4})"
+                ));
+            }
+            if done > MAX_STAGE_DONE_AT_PACE {
+                failed.push(format!(
+                    "{id}: stage {k} was {done:.2} done a quarter of the way through its brushwork"
+                ));
+            }
+            stop = next;
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "{}",
+        failed.join(
+            "
+  "
+        )
+    );
 }
 
 /// How much longer than its authored wall clock an artwork's brushwork may
@@ -654,6 +708,8 @@ const REPRESENTATIVE_DETAIL: DetailLevel = DetailLevel::Medium;
 /// as well. Only the settle check gets it: a wide scene is the slowest thing
 /// in the catalogue to render.
 const REPRESENTATIVE_EARLY_DRY: &str = "moonlit-shoreline";
+/// The staged artwork the default run steps through stop by stop.
+const REPRESENTATIVE_STAGED: &str = "hub-dawn-ridges";
 
 #[test]
 #[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
@@ -714,4 +770,20 @@ fn no_artwork_snaps_to_its_final_state() {
 #[test]
 fn no_representative_artwork_snaps_to_its_final_state() {
     assert_none_snaps_to_its_final_state(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every staged catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_staged_artwork_lays_its_stages_in_order() {
+    let staged: Vec<&str> = ArtworkCatalogue::ids()
+        .iter()
+        .copied()
+        .filter(|id| ArtworkCatalogue::stages(id).is_some())
+        .collect();
+    assert_each_stage_is_laid_in_order(&staged, DetailLevel::Large);
+}
+
+#[test]
+fn the_representative_staged_artwork_lays_its_stages_in_order() {
+    assert_each_stage_is_laid_in_order(&[REPRESENTATIVE_STAGED], REPRESENTATIVE_DETAIL);
 }
