@@ -11,6 +11,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Separator } from "$lib/components/ui/separator";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
   import Plus from "@lucide/svelte/icons/plus";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
@@ -22,6 +23,7 @@
     ConfirmationBackground,
     DEFAULT_TAIL,
     type ArtworkPlayer,
+    type PlayerState,
   } from "@nocturne/watercolour";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
@@ -37,7 +39,8 @@
     try {
       const encoded = page.url.searchParams.get("d");
       if (!encoded) return [];
-      return JSON.parse(decodeBase64Utf8(decodeURIComponent(encoded)));
+      const decoded: PackingItem[] = JSON.parse(decodeBase64Utf8(decodeURIComponent(encoded)));
+      return decoded.map((item) => ({ ...item, p: item.p ? 1 : undefined }));
     } catch {
       return [];
     }
@@ -64,6 +67,8 @@
   // the settle plays once everything is in.
   const PAINT_END = 1 - DEFAULT_TAIL;
   let suitcase = $state<ArtworkPlayer>();
+  let suitcasePaints = $state(true);
+  const showSuitcase = $derived(totalCount > 0 && suitcasePaints);
   const reveal = new Tween(0, { easing: cubicOut });
 
   $effect(() => {
@@ -86,6 +91,10 @@
   function followPacking(player: ArtworkPlayer) {
     suitcase = player;
     return () => (suitcase = undefined);
+  }
+
+  function followMode(state: PlayerState) {
+    suitcasePaints = state.mode !== "none";
   }
 
   function setPacked(index: number, packed: boolean) {
@@ -142,19 +151,25 @@
       {#if complete}
         <ConfirmationBackground />
       {/if}
-      {#if totalCount > 0}
-        <!-- Reduced motion would otherwise resolve to the finished still, which cannot show a part-packed bag. -->
+      {#if showSuitcase}
+        <!-- Reduced motion keeps the baked strip: each seek draws one still frame, so progress shows without animating. -->
         <Artwork
           artwork="suitcase"
           palette="dusk"
           autoplay="never"
           mode={prefersReducedMotion.current ? "baked" : "auto"}
           onready={followPacking}
+          onstatechange={followMode}
           class="size-20 shrink-0"
         />
       {/if}
       <div class="relative flex flex-1 items-center justify-between gap-2">
-        <h1 class="text-2xl font-bold tracking-tight">Packing List</h1>
+        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+          {#if !showSuitcase}
+            <ListChecks class="h-6 w-6" data-testid="packing-icon" />
+          {/if}
+          Packing List
+        </h1>
         {#if complete}
           <span class="text-sm font-medium">All packed</span>
         {:else if totalCount > 0}

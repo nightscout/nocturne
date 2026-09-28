@@ -1,6 +1,6 @@
 <script lang="ts">
   import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface } from '../types';
-  import { type PlayerReadyCallback, mountPlayer } from './helpers';
+  import { type PlayerReadyCallback, type PlayerStateCallback, mountPlayer } from './helpers';
 
   let {
     artwork,
@@ -20,6 +20,7 @@
     position = 'relative',
     assetBaseUrl,
     onready,
+    onstatechange,
     class: className = '',
   }: {
     artwork?: ArtworkId;
@@ -39,6 +40,8 @@
     assetBaseUrl?: string;
     /** Fires once a backend is drawing; the returned cleanup runs with the player's disposal. */
     onready?: PlayerReadyCallback;
+    /** Fires on every player state change, including settling on `none`, where `onready` never fires. */
+    onstatechange?: PlayerStateCallback;
     class?: string;
   } & ArtworkOptions = $props();
 
@@ -53,6 +56,7 @@
       artwork,
       { icon, palette, seed, intensity, durationMs, easing, tail, motion, quality, mode, autoplay, fit, surface, assetBaseUrl },
       onready,
+      onstatechange,
     );
   });
 </script>

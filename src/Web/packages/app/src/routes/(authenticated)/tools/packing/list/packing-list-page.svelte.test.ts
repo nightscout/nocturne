@@ -41,6 +41,17 @@ describe("packing list page", () => {
     await expect.element(page.getByText("1/2 packed")).toBeVisible();
   });
 
+  it("agrees with the count on any packed flag a link carries", async () => {
+    pageState.url = listUrl([
+      { c: "Supplies", l: "Test strips", q: 2, p: true as unknown as 1 },
+      { c: "Supplies", l: "Pen needles", q: 10 },
+    ]);
+    render(PackingListPage, {});
+
+    await expect.element(packed("Test strips")).toBeChecked();
+    await expect.element(page.getByText("1/2 packed")).toBeVisible();
+  });
+
   it("keeps packed items with their own row when another item is removed", async () => {
     render(PackingListPage, {});
     await packed("Pen needles").click();

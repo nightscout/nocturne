@@ -9,7 +9,7 @@ export { default as DropSurface } from './components/DropSurface.svelte';
 export { default as DropGroup } from './components/DropGroup.svelte';
 export { createDropGroup, getDropGroup, setDropGroup } from './components/drop-group';
 export type { DropGroupContext } from './components/drop-group';
-export type { PlayerReadyCallback } from './components/helpers';
+export type { PlayerReadyCallback, PlayerStateCallback } from './components/helpers';
 export { hostSurface, watchSurface } from './components/helpers';
 
 export type {
