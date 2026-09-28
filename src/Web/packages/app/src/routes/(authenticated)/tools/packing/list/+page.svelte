@@ -11,16 +11,25 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Separator } from "$lib/components/ui/separator";
-  import ListChecks from "@lucide/svelte/icons/list-checks";
   import Plus from "@lucide/svelte/icons/plus";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
+  import { untrack } from "svelte";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
+  import { cubicOut } from "svelte/easing";
+  import {
+    Artwork,
+    ConfirmationBackground,
+    DEFAULT_TAIL,
+    type ArtworkPlayer,
+  } from "@nocturne/watercolour";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
   interface PackingItem {
     c: string; // category
     l: string; // label
     q: number; // quantity
+    p?: 1; // packed; carried in the URL so a reload keeps it
   }
 
   // Decode items from URL
@@ -35,7 +44,6 @@
   }
 
   let items = $state<PackingItem[]>(decodeItems());
-  let checked = $state<Record<number, boolean>>({});
 
   // Group items by category
   const grouped = $derived.by(() => {
@@ -47,8 +55,43 @@
     return groups;
   });
 
-  const totalChecked = $derived(Object.values(checked).filter(Boolean).length);
+  const totalChecked = $derived(items.filter((item) => item.p).length);
   const totalCount = $derived(items.length);
+  const complete = $derived(totalCount > 0 && totalChecked === totalCount);
+
+  // A catalogue reveal draws every stroke in its first `1 - DEFAULT_TAIL` and
+  // spends the rest settling, so packing spreads over the brushwork alone and
+  // the settle plays once everything is in.
+  const PAINT_END = 1 - DEFAULT_TAIL;
+  let suitcase = $state<ArtworkPlayer>();
+  const reveal = new Tween(0, { easing: cubicOut });
+
+  $effect(() => {
+    const target = totalCount ? (totalChecked / totalCount) * PAINT_END : 0;
+    // Unpainting is not something paint does, and each backwards frame is a
+    // checkpoint replay, so an unpack jumps.
+    const instant = prefersReducedMotion.current || target < untrack(() => reveal.target);
+    void reveal.set(target, { duration: instant ? 0 : 700 });
+  });
+
+  $effect(() => {
+    const player = suitcase;
+    if (!player) return;
+    const at = reveal.current;
+    if (!complete || at < PAINT_END) player.seek(at);
+    else if (prefersReducedMotion.current) player.finishImmediately();
+    else player.play();
+  });
+
+  function followPacking(player: ArtworkPlayer) {
+    suitcase = player;
+    return () => (suitcase = undefined);
+  }
+
+  function setPacked(index: number, packed: boolean) {
+    items = items.map((it, i) => (i === index ? { ...it, p: packed ? 1 : undefined } : it));
+    updateUrl();
+  }
 
   // Add custom item
   let addingToCategory = $state<string | null>(null);
@@ -70,14 +113,6 @@
 
   function removeItem(index: number) {
     items = items.filter((_, i) => i !== index);
-    // Shift checked states
-    const newChecked: Record<number, boolean> = {};
-    Object.entries(checked).forEach(([k, v]) => {
-      const ki = parseInt(k);
-      if (ki < index) newChecked[ki] = v;
-      else if (ki > index) newChecked[ki - 1] = v;
-    });
-    checked = newChecked;
     updateUrl();
   }
 
@@ -103,16 +138,31 @@
       <ArrowLeft class="h-4 w-4" />
       Back to calculator
     </Button>
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-        <ListChecks class="h-6 w-6" />
-        Packing List
-      </h1>
-      {#if totalCount > 0}
-        <span class="text-sm text-muted-foreground tabular-nums">
-          {totalChecked}/{totalCount} packed
-        </span>
+    <div class="relative -mx-3 flex items-center gap-4 rounded-xl px-3 py-2" data-testid="packing-header">
+      {#if complete}
+        <ConfirmationBackground />
       {/if}
+      {#if totalCount > 0}
+        <!-- Reduced motion would otherwise resolve to the finished still, which cannot show a part-packed bag. -->
+        <Artwork
+          artwork="suitcase"
+          palette="dusk"
+          autoplay="never"
+          mode={prefersReducedMotion.current ? "baked" : "auto"}
+          onready={followPacking}
+          class="size-20 shrink-0"
+        />
+      {/if}
+      <div class="relative flex flex-1 items-center justify-between gap-2">
+        <h1 class="text-2xl font-bold tracking-tight">Packing List</h1>
+        {#if complete}
+          <span class="text-sm font-medium">All packed</span>
+        {:else if totalCount > 0}
+          <span class="text-sm text-muted-foreground tabular-nums">
+            {totalChecked}/{totalCount} packed
+          </span>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -155,20 +205,21 @@
           </div>
         </CardHeader>
         <CardContent class="pt-0 pb-2">
-          <!-- eslint-disable-next-line svelte/require-each-key -- rows are positional: items carry no id, and removing one shifts the checked map by index -->
+          <!-- eslint-disable-next-line svelte/require-each-key -- rows are positional: items carry no id -->
           {#each categoryItems as { item, index }, i}
             {#if i > 0}
               <Separator class="my-0" />
             {/if}
             <div
-              class="flex items-center gap-3 py-2.5 group transition-opacity duration-200 {checked[index] ? 'opacity-40' : ''}"
+              class="flex items-center gap-3 py-2.5 group transition-opacity duration-200 {item.p ? 'opacity-40' : ''}"
             >
               <Checkbox
-                checked={checked[index] ?? false}
-                onCheckedChange={(v: boolean) => (checked[index] = v === true)}
+                checked={item.p === 1}
+                onCheckedChange={(v: boolean) => setPacked(index, v === true)}
+                aria-label="Packed: {item.l}"
               />
               <span
-                class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary shrink-0 {checked[index] ? 'line-through' : ''}"
+                class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary shrink-0 {item.p ? 'line-through' : ''}"
               >
                 &times;{item.q}
               </span>
@@ -176,7 +227,7 @@
               <input
                 type="text"
                 value={item.l}
-                class="text-sm flex-1 bg-transparent border-none outline-none rounded px-1 -mx-1 focus:ring-1 focus:ring-ring {checked[index] ? 'line-through text-muted-foreground' : ''}"
+                class="text-sm flex-1 bg-transparent border-none outline-none rounded px-1 -mx-1 focus:ring-1 focus:ring-ring {item.p ? 'line-through text-muted-foreground' : ''}"
                 onblur={(e) => {
                   const val = e.currentTarget.value.trim();
                   if (val && val !== item.l) {
