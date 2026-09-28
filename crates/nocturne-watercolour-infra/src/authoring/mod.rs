@@ -6,6 +6,7 @@
 mod accents;
 mod geometry;
 mod icons;
+mod icons_devices;
 mod icons_objects;
 mod icons_places;
 mod icons_time;
@@ -133,6 +134,10 @@ impl ArtworkCatalogue {
         "exclamation-mark",
         "chat-bubble",
         "phone",
+        "cgm-sensor",
+        "insulin-pump",
+        "glucose-gauge",
+        "ringing-bell",
     ];
 
     pub fn ids() -> &'static [&'static str] {
@@ -255,6 +260,10 @@ impl ArtworkCatalogue {
             "exclamation-mark" => icons_places::exclamation_mark(&style, palette),
             "chat-bubble" => icons_places::chat_bubble(&style, palette),
             "phone" => icons_places::phone(&style, palette),
+            "cgm-sensor" => icons_devices::cgm_sensor(&style, palette),
+            "insulin-pump" => icons_devices::insulin_pump(&style, palette),
+            "glucose-gauge" => icons_devices::glucose_gauge(&style, palette),
+            "ringing-bell" => icons::ringing_bell(&style, palette),
             _ => return None,
         };
         Some(scene)
