@@ -108,6 +108,7 @@ export type Surface = 'light' | 'dark';
 export type DetailLevel = 'small' | 'medium' | 'large' | 'extraLarge';
 
 export interface ArtworkOptions {
+  /** Default: the palette the artwork is baked in (`DEFAULT_PALETTE`), else moonlight. */
   palette?: PaletteId;
   seed?: number;
   /** 0..1, default 0.7: scales pigment concentration. */

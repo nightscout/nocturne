@@ -1,6 +1,7 @@
 import type { ArtworkId, DetailLevel, IconHints, IconNode, PaletteId, Surface } from '../types';
 import { DEFAULT_INTENSITY } from '../types';
 import { ICON_HINTS } from './icon-hints';
+import { iconAssetId, sourcePalette } from './palette-defaults';
 import { WatercolourError, toWatercolourError } from './errors';
 import type { WasmModule } from './engine-host';
 
@@ -126,7 +127,7 @@ export function resolveSceneJson(
         JSON.stringify(ref.icon),
         ref.name,
         ref.seed ?? 0,
-        ref.palette ?? 'moonlight',
+        sourcePalette(iconAssetId(ref.name), ref.palette),
         ref.intensity ?? DEFAULT_INTENSITY,
         override.detail ?? ref.detail ?? 'large',
         ref.surface ?? 'light',
@@ -137,7 +138,7 @@ export function resolveSceneJson(
     return module.catalogueScene(
       ref.id,
       ref.seed ?? 0,
-      ref.palette ?? 'moonlight',
+      sourcePalette(ref.id, ref.palette),
       ref.intensity ?? DEFAULT_INTENSITY,
       override.detail ?? ref.detail ?? 'large',
       ref.surface ?? 'light',
