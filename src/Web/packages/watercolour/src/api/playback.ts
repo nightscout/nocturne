@@ -791,6 +791,7 @@ class Player implements ArtworkPlayer {
       options.dpr ?? (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1),
     );
     this.ready = this.init().catch((error) => {
+      this.mode = 'none';
       this.fail(toWatercolourError(error));
     });
   }
@@ -991,7 +992,10 @@ class Player implements ArtworkPlayer {
 
   private createBackend(mode: ResolvedMode): Promise<Backend> {
     const callbacks: BackendCallbacks = {
-      onFinished: () => this.emit('finished'),
+      onFinished: () => {
+        this.emit('finished');
+        this.emit('statechange');
+      },
       onFault: (error) => this.handleFault(error),
     };
     switch (mode) {
