@@ -654,7 +654,12 @@
             Health. Empty results are not errors. Clear all selections and save
             to pause imports; previously imported data is kept.
           </p>
-          {#if preview}<div class="space-y-3">
+          {#if categoryGroups.length > 0}<div class="space-y-3">
+              {#if inventoryBusy && !preview}
+                <p class="text-sm text-muted-foreground">
+                  Scanning the selected history in Google Health… The catalog remains available while the inventory is loading.
+                </p>
+              {/if}
               {#each categoryGroups as group (group.category)}
                 <details
                   class="overflow-hidden rounded-lg border"

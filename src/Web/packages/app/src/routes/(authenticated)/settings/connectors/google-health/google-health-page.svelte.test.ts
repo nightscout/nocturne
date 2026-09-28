@@ -184,6 +184,28 @@ describe("Google Health connector page", () => {
       .toBeEnabled();
   });
 
+  it("keeps catalog categories visible when the inventory scan is already running", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        grantedTypes: ["steps", "heart-rate", "weight", "sleep"],
+      })
+    );
+    googleHealthMocks.preview.mockRejectedValue(new Error("already_running"));
+    render(GoogleHealthPage);
+
+    await expect
+      .element(page.getByTestId("google-health-category-Vitals"))
+      .toBeVisible();
+    await expect
+      .element(page.getByTestId("google-health-category-Body measurement"))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("row", { name: /Heart rate/ }))
+      .toHaveTextContent("Not scanned");
+  });
+
   it("allows problematic selected types to be unchecked and saved without syncing", async () => {
     googleHealthMocks.status.mockResolvedValue(
       status({
