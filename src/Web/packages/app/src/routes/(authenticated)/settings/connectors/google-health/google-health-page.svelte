@@ -84,7 +84,12 @@
         // A slow, timed-out, or older inventory response may omit a type; do
         // not make its whole category disappear while the server advertises it.
         const entries = capabilities
-          .filter((capability) => capability.category === category)
+          .filter(
+            (
+              capability
+            ): capability is typeof capability & { dataType: string } =>
+              capability.category === category && !!capability.dataType
+          )
           .map((capability) => {
             const item = items.find(
               (candidate) => candidate.dataType === capability.dataType
