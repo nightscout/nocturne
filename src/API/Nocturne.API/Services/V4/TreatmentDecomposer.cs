@@ -371,6 +371,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     {
         NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope([treatment]);
+        await PointAtStoredTreatmentsAsync([treatment], ct);
 
         var result = new V4Models.DecompositionResult
         {
@@ -458,6 +459,26 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         return result;
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the treatment tables, so a
+    /// v4-native treatment's copy lands on the records it decomposed into (a meal's bolus and carbs
+    /// follow through their shared correlation id). A treatment's uuid-shaped legacy id goes
+    /// upstream in its <c>identifier</c> verbatim, so no table resolves one from its prefix.
+    /// </summary>
+    private Task PointAtStoredTreatmentsAsync(IEnumerable<Treatment> treatments, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            treatments,
+            [
+                Table(_bolusRepository, resolvesUuidLegacyIds: false),
+                Table(_carbIntakeRepository, resolvesUuidLegacyIds: false),
+                Table(_bgCheckRepository, resolvesUuidLegacyIds: false),
+                Table(_noteRepository, resolvesUuidLegacyIds: false),
+                Table(_deviceEventRepository, resolvesUuidLegacyIds: false),
+                Table(_bolusCalculationRepository, resolvesUuidLegacyIds: false),
+                Table(_tempBasalRepository, resolvesUuidLegacyIds: false),
+            ],
+            ct);
 
     #region Decomposition Methods
 
@@ -1178,6 +1199,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
         using var restated = OpenRestatedScope(treatments);
+        await PointAtStoredTreatmentsAsync(treatments, ct);
 
         var result = new V4Models.DecompositionResult();
 

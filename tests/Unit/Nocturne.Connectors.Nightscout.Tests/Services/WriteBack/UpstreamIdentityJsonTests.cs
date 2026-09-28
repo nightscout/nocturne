@@ -41,4 +41,44 @@ public class UpstreamIdentityJsonTests
         status!.Id.Should().BeNull();
         status.Device.Should().Be("loop");
     }
+
+    /// <summary>
+    /// A pulled document's <c>identifier</c>, where write-back put the record's own key, reaches the
+    /// decomposers beside its <c>_id</c>, for every document kind the connector pulls.
+    /// </summary>
+    [Fact]
+    public void A_pulled_identifier_is_read_beside_the_id()
+    {
+        var entry = JsonSerializer.Deserialize<Entry>(
+            """{"_id":"66f0a1b2c3d4e5f6a7b8c9d0","identifier":"dexcom_7f3c2a91","sgv":110}""", UpstreamIdentityJson.ReadOptions);
+        var treatment = JsonSerializer.Deserialize<Treatment>(
+            """{"_id":"66f0a1b2c3d4e5f6a7b8c9d1","identifier":"syn-3a7c","eventType":"Note"}""", UpstreamIdentityJson.ReadOptions);
+        var status = JsonSerializer.Deserialize<DeviceStatus>(
+            """{"_id":"66f0a1b2c3d4e5f6a7b8c9d2","identifier":"loop_status_42","device":"loop"}""", UpstreamIdentityJson.ReadOptions);
+
+        (entry!.Id, entry.UpstreamIdentifier).Should().Be(("66f0a1b2c3d4e5f6a7b8c9d0", "dexcom_7f3c2a91"));
+        (treatment!.Id, treatment.UpstreamIdentifier).Should().Be(("66f0a1b2c3d4e5f6a7b8c9d1", "syn-3a7c"));
+        (status!.Id, status.UpstreamIdentifier).Should().Be(("66f0a1b2c3d4e5f6a7b8c9d2", "loop_status_42"));
+        (status.ExtensionData ?? []).Should().NotContainKey("identifier");
+    }
+
+    [Fact]
+    public void A_pulled_document_without_an_identifier_reads_as_before()
+    {
+        var entry = JsonSerializer.Deserialize<Entry>("""{"_id":"66f0a1b2c3d4e5f6a7b8c9d0","SGV":"110"}""", UpstreamIdentityJson.ReadOptions);
+
+        entry!.Id.Should().Be("66f0a1b2c3d4e5f6a7b8c9d0");
+        entry.UpstreamIdentifier.Should().BeNull();
+        entry.Sgv.Should().Be(110);
+    }
+
+    [Fact]
+    public void A_status_is_written_with_its_own_key_as_its_identifier()
+    {
+        var json = JsonSerializer.SerializeToElement(new DeviceStatus { Id = "loop_status_42", Device = "loop" }, UpstreamIdentityJson.Options);
+
+        json.GetProperty("_id").GetString().Should().Be(MongoObjectId.Coerce("loop_status_42"));
+        json.GetProperty("identifier").GetString().Should().Be("loop_status_42");
+    }
 }
+

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
@@ -267,6 +268,142 @@ public abstract class V4RepositoryBase<TModel, TEntity>
             .OrderBy(e => e.Id)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : ToDomain(entity);
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.AdoptOwnIdsAsync" />
+    public async Task<IEnumerable<TModel>> AdoptOwnIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var ranges = new List<(string Id, Guid Low, Guid High)>();
+        foreach (var id in ids.Distinct(StringComparer.Ordinal))
+        {
+            if (MongoObjectId.TryGetOwnIdRange(id, out var low, out var high))
+                ranges.Add((id, low, high));
+        }
+
+        if (ranges.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var claims = new List<(TEntity Row, string LegacyId)>();
+        foreach (var chunk in ranges.Chunk(OwnIdRangesPerQuery))
+        {
+            foreach (var row in await UnkeyedRows(ctx).Where(IdInAnyRange(chunk)).ToListAsync(ct))
+                claims.Add((row, chunk.First(r => row.Id >= r.Low && row.Id <= r.High).Id));
+        }
+
+        return (await AdoptAsync(ctx, claims, ct)).Select(ToDomain).ToList();
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.AdoptLegacyIdsByCorrelationAsync" />
+    public async Task<int> AdoptLegacyIdsByCorrelationAsync(
+        IReadOnlyDictionary<Guid, string> legacyIdByCorrelation, CancellationToken ct = default)
+    {
+        if (legacyIdByCorrelation.Count == 0)
+            return 0;
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var correlationIds = legacyIdByCorrelation.Keys.ToList();
+        var rows = await UnkeyedRows(ctx)
+            .Where(e => e.CorrelationId != null && correlationIds.Contains(e.CorrelationId.Value))
+            .ToListAsync(ct);
+
+        var claims = rows.Select(row => (row, legacyIdByCorrelation[row.CorrelationId!.Value])).ToList();
+        return (await AdoptAsync(ctx, claims, ct)).Count;
+    }
+
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync" />
+    /// <remarks>Raw ADO rather than <c>SqlQueryRaw</c>, which would read the regex quantifiers in
+    /// <see cref="UuidLegacyIdPrefix.Predicate"/> as parameter placeholders.</remarks>
+    public async Task<IEnumerable<UuidLegacyId>> ResolveUuidLegacyIdsAsync(
+        IReadOnlyCollection<string> ids, CancellationToken ct = default)
+    {
+        var prefixes = ids.Where(MongoObjectId.IsGuidPrefixShaped).Distinct(StringComparer.Ordinal).ToArray();
+        if (prefixes.Length == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var table = ctx.Model.FindEntityType(typeof(TEntity))!.GetTableName();
+        await ctx.Database.OpenConnectionAsync(ct);
+        await using var command = ctx.Database.GetDbConnection().CreateCommand();
+        command.CommandText = $"""
+            SELECT DISTINCT legacy_id FROM {table}
+            WHERE tenant_id = @tenant
+              AND {UuidLegacyIdPrefix.Predicate}
+              AND {UuidLegacyIdPrefix.Key} = ANY(@prefixes)
+            """;
+        command.Parameters.Add(new Npgsql.NpgsqlParameter("tenant", ctx.TenantId));
+        command.Parameters.Add(new Npgsql.NpgsqlParameter("prefixes", prefixes));
+
+        var wanted = prefixes.ToHashSet(StringComparer.Ordinal);
+        var resolved = new List<UuidLegacyId>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var legacyId = reader.GetString(0);
+            if (Guid.TryParse(legacyId, out var uuid) && wanted.Contains(MongoObjectId.FromGuid(uuid)))
+                resolved.Add(new UuidLegacyId(MongoObjectId.FromGuid(uuid), legacyId));
+        }
+
+        return resolved;
+    }
+
+    /// <summary>Bounds the OR chain <see cref="IdInAnyRange"/> builds for one query.</summary>
+    private const int OwnIdRangesPerQuery = 200;
+
+    private static IQueryable<TEntity> UnkeyedRows(NocturneDbContext ctx) =>
+        ctx.Set<TEntity>()
+            .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+            .AsNoTracking()
+            .Where(e => e.LegacyId == null);
+
+    private static Expression<Func<TEntity, bool>> IdInAnyRange(IEnumerable<(string Id, Guid Low, Guid High)> ranges)
+    {
+        var row = Expression.Parameter(typeof(TEntity), "e");
+        var id = Expression.Property(row, nameof(IIdentified.Id));
+        Expression? any = null;
+        foreach (var (_, low, high) in ranges)
+        {
+            // Closure members rather than constants, so EF sends the bounds as parameters.
+            Expression<Func<Guid>> lowBound = () => low;
+            Expression<Func<Guid>> highBound = () => high;
+            var inRange = Expression.AndAlso(
+                Expression.GreaterThanOrEqual(id, lowBound.Body),
+                Expression.LessThanOrEqual(id, highBound.Body));
+            any = any is null ? inRange : Expression.OrElse(any, inRange);
+        }
+
+        return Expression.Lambda<Func<TEntity, bool>>(any ?? Expression.Constant(false), row);
+    }
+
+    /// <summary>
+    /// Writes each claimed legacy id onto its row, outside audit and broadcast: the id is the one the
+    /// record is already known by on the wire, so what it serves does not change. The unique
+    /// legacy-id index counts live rows only, so a live row takes an id only while no live row holds
+    /// it, which also lets only one of two live claimants of the same id take it; any number of
+    /// deleted rows may share one.
+    /// </summary>
+    private static async Task<List<TEntity>> AdoptAsync(
+        NocturneDbContext ctx, List<(TEntity Row, string LegacyId)> claims, CancellationToken ct)
+    {
+        var adopted = new List<TEntity>();
+        foreach (var (row, legacyId) in claims)
+        {
+            var id = row.Id;
+            var target = ctx.Set<TEntity>()
+                .IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+                .Where(e => e.Id == id && e.LegacyId == null);
+            if (row.DeletedAt is null)
+                target = target.Where(_ => !ctx.Set<TEntity>().Any(held => held.LegacyId == legacyId));
+
+            if (await target.ExecuteUpdateAsync(s => s.SetProperty(e => e.LegacyId, legacyId), ct) == 0)
+                continue;
+
+            row.LegacyId = legacyId;
+            adopted.Add(row);
+        }
+
+        return adopted;
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.CreateAsync" />

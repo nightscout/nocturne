@@ -60,6 +60,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             CorrelationId = Guid.CreateVersion7()
         };
 
+        await PointEntriesAtStoredRecordsAsync([entry], ct);
+
         var entryType = entry.Type?.ToLowerInvariant();
 
         switch (entryType)
@@ -152,6 +154,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (entries.Count == 0)
             return new DecompositionResult();
 
+        await PointEntriesAtStoredRecordsAsync(entries, ct);
+
         var result = new DecompositionResult();
 
         var sgvList = new List<SensorGlucose>();
@@ -165,18 +169,12 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             switch (entry.Type?.ToLowerInvariant())
             {
                 case "sgv":
-                    if (await EchoesUnkeyedRecordAsync(_sensorGlucoseRepository, entry.Id, ct))
-                        continue;
                     sgvList.Add(await BuildSensorGlucoseAsync(entry, correlationId, ct));
                     break;
                 case "mbg":
-                    if (await EchoesUnkeyedRecordAsync(_meterGlucoseRepository, entry.Id, ct))
-                        continue;
                     mbgList.Add(MapToMeterGlucose(entry, correlationId));
                     break;
                 case "cal":
-                    if (await EchoesUnkeyedRecordAsync(_calibrationRepository, entry.Id, ct))
-                        continue;
                     calList.Add(MapToCalibration(entry, correlationId));
                     break;
                 default:
@@ -211,18 +209,27 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     }
 
     /// <summary>
-    /// Whether <paramref name="id"/> is the 24-hex form <see cref="MongoObjectId.FromGuid"/> gave a
-    /// stored record that has no legacy id: the id Nightscout write-back sent it under, now pulled
-    /// back by the connector. Keyed on <c>LegacyId</c>, the bulk upsert cannot see that record and
-    /// would store the reading a second time. A record with a legacy id was written back under that
-    /// id, which the bulk upsert already matches.
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
+    /// table that type is stored in.
     /// </summary>
-    private static async Task<bool> EchoesUnkeyedRecordAsync<TRecord>(
-        IV4Repository<TRecord> repository, string? id, CancellationToken ct)
-        where TRecord : class, IV4Record
-        => MongoObjectId.IsGuidPrefixShaped(id)
-           && MongoObjectId.TryGetGuidPrefixRange(id, out var low, out var high)
-           && await repository.GetByGuidRangeAsync(low, high, ct) is { LegacyId: null };
+    private async Task PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    {
+        foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
+        {
+            switch (byType.Key)
+            {
+                case "sgv":
+                    await PointAtStoredRecordsAsync(byType, [Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
+                    break;
+                case "mbg":
+                    await PointAtStoredRecordsAsync(byType, [Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
+                    break;
+                case "cal":
+                    await PointAtStoredRecordsAsync(byType, [Table(_calibrationRepository, resolvesUuidLegacyIds: true)], ct);
+                    break;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)

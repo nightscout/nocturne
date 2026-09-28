@@ -497,4 +497,70 @@ public class TreatmentDecomposerBatchTests : IDisposable
 
         result.CreatedRecords.Should().HaveCount(1);
     }
+
+    /// <summary>
+    /// A v4-native treatment is written back under its record's uuid prefix; the pull-back must
+    /// land on that record. The decomposer offers every treatment table the ids that can name a
+    /// stored record, before the upserts, and gives the adopting record's correlation siblings the
+    /// same id in every table (the carbs of a meal whose bolus took it).
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_AdoptsTheWireIdOnTheStoredTreatmentBeforeUpserting()
+    {
+        const string wireId = "0198c2a41f3b7c2d9e556a1b";
+        var correlationId = Guid.CreateVersion7();
+        var calls = new List<string>();
+        _bolusRepoMock
+            .Setup(x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyCollection<string> ids, CancellationToken _) => calls.Add($"bolus.adopt({string.Join(",", ids)})"))
+            .ReturnsAsync([new V4Models.Bolus { LegacyId = wireId, CorrelationId = correlationId }]);
+        _carbRepoMock
+            .Setup(x => x.AdoptLegacyIdsByCorrelationAsync(It.IsAny<IReadOnlyDictionary<Guid, string>>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyDictionary<Guid, string> map, CancellationToken _) => calls.Add($"carb.siblings({map[correlationId]})"))
+            .ReturnsAsync(1);
+        _bolusRepoMock
+            .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<V4Models.Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback(() => calls.Add("bolus.upsert"))
+            .ReturnsAsync((IEnumerable<V4Models.Bolus> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await _decomposer.DecomposeBatchAsync(
+        [
+            new Treatment { Id = wireId, EventType = "Meal Bolus", Mills = 1700000000000, Insulin = 2.5, Carbs = 40 },
+            new Treatment { Id = "aaps-bolus-7", EventType = "Correction Bolus", Mills = 1700000300000, Insulin = 1 },
+        ], WriteOrigin.Live);
+
+        calls.Should().Equal($"bolus.adopt({wireId})", $"carb.siblings({wireId})", "bolus.upsert");
+        VerifyOffered<ICarbIntakeRepository, V4Models.CarbIntake>(_carbRepoMock, wireId);
+        VerifyOffered<IBGCheckRepository, V4Models.BGCheck>(_bgCheckRepoMock, wireId);
+        VerifyOffered<INoteRepository, V4Models.Note>(_noteRepoMock, wireId);
+        VerifyOffered<IBolusCalculationRepository, V4Models.BolusCalculation>(_bolusCalcRepoMock, wireId);
+        VerifyOffered<IDeviceEventRepository, V4Models.DeviceEvent>(_deviceEventRepoMock, wireId);
+        VerifyOffered<ITempBasalRepository, V4Models.TempBasal>(_tempBasalRepoMock, wireId);
+    }
+
+    private static void VerifyOffered<TRepo, TRecord>(Mock<TRepo> repo, string wireId)
+        where TRepo : class, ILegacyKeyedRepository<TRecord>
+        where TRecord : class, V4Models.IV4Record
+        => repo.Verify(
+            x => x.AdoptOwnIdsAsync(It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(new[] { wireId })), It.IsAny<CancellationToken>()),
+            Times.Once);
+
+    [Fact]
+    public async Task DecomposeAsync_AdoptsTheCanonicalUuidOfAStoredTreatment_AndSkipsIdsThatNameNone()
+    {
+        const string uuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+
+        await _decomposer.DecomposeAsync(
+            new Treatment { Id = uuid, EventType = "Note", Mills = 1700000000000, Notes = "echo" }, WriteOrigin.Live);
+        await _decomposer.DecomposeAsync(
+            new Treatment { Id = "aaps-note-1", EventType = "Note", Mills = 1700000300000, Notes = "upload" }, WriteOrigin.Live);
+
+        _noteRepoMock.Verify(
+            x => x.AdoptOwnIdsAsync(It.Is<IReadOnlyCollection<string>>(ids => ids.SequenceEqual(new[] { uuid })), It.IsAny<CancellationToken>()),
+            Times.Once);
+        _noteRepoMock.Verify(
+            x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }
+

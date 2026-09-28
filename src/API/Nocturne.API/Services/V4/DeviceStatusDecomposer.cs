@@ -70,6 +70,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     public async Task<V4Models.DecompositionResult> DecomposeAsync(DeviceStatus ds, string? source, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeMills(ds);
+        await PointAtStoredStatusesAsync([ds], ct);
 
         var legacyId = ds.Id;
         var storedCorrelationIds = await GetStoredCorrelationIdsAsync([ds], ct);
@@ -776,6 +777,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         var uploaderList = new List<V4Models.UploaderSnapshot>();
         var extrasList = new List<V4Models.DeviceStatusExtras>();
         var overrideSpans = new List<(StateSpan Span, Guid CorrelationId)>();
+        await PointAtStoredStatusesAsync(statuses, ct);
         var correlationIds = await GetStoredCorrelationIdsAsync(statuses, ct);
 
         await using (_deviceService.DeferLastSeen(ct))
@@ -891,6 +893,25 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
         return result;
     }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the snapshot tables. A status
+    /// with no legacy id is named by its anchor snapshot's id, as <see cref="StoredKey"/> puts it on
+    /// the wire, and the anchor's siblings follow it through their shared correlation id.
+    /// </summary>
+    /// <remarks>
+    /// An override uploaded with such a status is stored under that same <see cref="StoredKey"/>, so
+    /// the adopted legacy id is the override's key too, and its upsert updates the span in place.
+    /// </remarks>
+    private Task PointAtStoredStatusesAsync(IEnumerable<DeviceStatus> statuses, CancellationToken ct)
+        => PointAtStoredRecordsAsync(
+            statuses,
+            [
+                Table(_apsRepo, resolvesUuidLegacyIds: true),
+                Table(_pumpRepo, resolvesUuidLegacyIds: true),
+                Table(_uploaderRepo, resolvesUuidLegacyIds: true),
+            ],
+            ct);
 
     /// <summary>
     /// The correlation id each re-sent status's stored group already carries, preferring the APS,
