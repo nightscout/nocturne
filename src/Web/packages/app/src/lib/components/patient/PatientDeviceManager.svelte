@@ -37,6 +37,8 @@
     aidAlgorithmLabels,
   } from "./labels";
   import { DeviceListState } from "./state.svelte";
+  import { EmptyState } from "$lib/components/shared";
+  import { sensorArtwork } from "$lib/watercolour-icons";
 
   interface Props {
     /** "inline" = wizard-style card forms, "dialog" = settings-style dialog CRUD */
@@ -315,9 +317,12 @@
   <!-- ── Dialog variant (settings-style) ───────────────────────── -->
 
   {#if deviceList.items.length === 0}
-    <p class="text-sm text-muted-foreground py-4 text-center">
-      No devices added yet. Add your first device to get started.
-    </p>
+    <EmptyState
+      art={sensorArtwork}
+      variant="dashed"
+      title="No devices added yet"
+      body="Add your first device to get started."
+    />
   {:else}
     <div class="space-y-3">
       {#each deviceList.items as device, i (device.id)}

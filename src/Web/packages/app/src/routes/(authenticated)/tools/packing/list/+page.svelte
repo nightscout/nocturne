@@ -11,6 +11,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Separator } from "$lib/components/ui/separator";
+  import { EmptyState } from "$lib/components/shared";
   import { ListChecks, Plus, ArrowLeft, X } from "lucide-svelte";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
@@ -114,14 +115,11 @@
   </div>
 
   {#if items.length === 0}
-    <Card>
-      <CardContent class="pt-6 text-center">
-        <p class="text-muted-foreground">No items in this list.</p>
-        <Button variant="outline" href="/tools/packing" class="mt-4">
-          Go to calculator
-        </Button>
-      </CardContent>
-    </Card>
+    <EmptyState art="suitcase" variant="card" title="No items in this list">
+      {#snippet action()}
+        <Button variant="outline" href="/tools/packing">Go to calculator</Button>
+      {/snippet}
+    </EmptyState>
   {:else}
     <!-- Progress bar -->
     {#if totalCount > 0}

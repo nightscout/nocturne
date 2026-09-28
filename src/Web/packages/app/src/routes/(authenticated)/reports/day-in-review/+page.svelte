@@ -1,5 +1,6 @@
 <script lang="ts">
   import { timeDay } from "d3-time";
+  import { EmptyState } from "$lib/components/shared";
   import { distinct } from "$lib/utils/collections";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -542,11 +543,13 @@
         </Table.Root>
         </div>
       {:else}
-        <p class="text-center text-muted-foreground py-8">
-          {filterEventType
+        <EmptyState
+          art="report-pages"
+          size="compact"
+          title={filterEventType
             ? `No ${filterEventType} treatments found for this day`
             : "No treatments recorded for this day"}
-        </p>
+        />
       {/if}
     </Card.Content>
   </Card.Root>

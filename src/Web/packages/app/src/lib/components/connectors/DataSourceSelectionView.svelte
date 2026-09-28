@@ -19,8 +19,8 @@
     Loader2,
     Smartphone,
     Cloud,
-    Plug,
   } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
   import Apple from "lucide-svelte/icons/apple";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
 
@@ -254,15 +254,12 @@
 
     <!-- Empty state when both are empty -->
     {#if connectors.length === 0 && uploaderApps.length === 0}
-      <Card.Root>
-        <Card.Content class="py-8 text-center">
-          <Plug class="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <p class="font-medium">No data sources available</p>
-          <p class="text-sm text-muted-foreground mt-1">
-            There are no data sources available at this time.
-          </p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState
+        art="plug"
+        variant="card"
+        title="No data sources available"
+        body="There are no data sources available at this time."
+      />
     {/if}
   </div>
 

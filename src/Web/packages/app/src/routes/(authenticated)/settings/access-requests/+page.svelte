@@ -5,6 +5,7 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
+  import { EmptyState } from "$lib/components/shared";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import {
     Loader2,
@@ -162,21 +163,12 @@
   {/if}
 
   {#if requests.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <UserPlus class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No pending access requests. When someone requests access to your data,
-          they will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="people-group"
+      variant="card"
+      title="No pending access requests"
+      body="When someone requests access to your data, they will appear here."
+    />
   {:else}
     <div class="space-y-4">
       {#each requests as request (request.subjectId)}

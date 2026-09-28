@@ -4,8 +4,8 @@
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
+  import { EmptyState } from "$lib/components/shared";
   import {
-    Shield,
     Trash2,
     Check,
     AlertTriangle,
@@ -92,21 +92,12 @@
   {/if}
 
   {#if apps.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Shield class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No connected applications. When you authorize apps to access your
-          data, they will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="shield"
+      variant="card"
+      title="No connected applications"
+      body="When you authorize apps to access your data, they will appear here."
+    />
   {:else}
     {#each apps as app (app.grantId)}
       <Card.Root>

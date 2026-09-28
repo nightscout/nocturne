@@ -7,6 +7,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { EmptyState } from "$lib/components/shared";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -401,20 +402,12 @@
 
     <!-- Guest Links List -->
     {#if allLinks.length === 0 && !showCreateForm}
-      <Card.Root>
-        <Card.Content
-          class="flex flex-col items-center justify-center py-12 text-center"
-        >
-          <div
-            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-          >
-            <Clock class="h-6 w-6 text-muted-foreground" />
-          </div>
-          <p class="text-sm text-muted-foreground max-w-sm">
-            No guest links yet. Create one to share temporary read-only access.
-          </p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState
+        art="key"
+        variant="dashed"
+        title="No guest links yet"
+        body="Create one to share temporary read-only access."
+      />
     {:else if allLinks.length > 0}
       <div class="space-y-2">
         {#each guestLinks as link (link.id)}

@@ -10,6 +10,8 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
+	import { EmptyState } from '$lib/components/shared';
+	import { databaseArtwork } from '$lib/watercolour-icons';
 	import {
 		ArrowRightLeft,
 		Activity,
@@ -154,7 +156,11 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="text-sm text-muted-foreground">No migration data available yet.</p>
+					<EmptyState
+						art={databaseArtwork}
+						size="compact"
+						title="No migration data available yet"
+					/>
 				{/if}
 
 				<Separator />

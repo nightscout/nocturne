@@ -7,6 +7,7 @@
 	import { Input } from "$lib/components/ui/input";
 	import { Label } from "$lib/components/ui/label";
 	import { Badge } from "$lib/components/ui/badge";
+	import { EmptyState } from "$lib/components/shared";
 	import { Link2, Link2Off, Plus, Star, Pencil, Save, X, Loader2 } from "lucide-svelte";
 	import {
 		getLinks,
@@ -149,9 +150,11 @@
 		</Card.Header>
 		<Card.Content class="space-y-3">
 			{#if links.length === 0}
-				<p class="text-sm text-muted-foreground">
-					No Discord accounts linked yet. Use the button below to connect one.
-				</p>
+				<EmptyState
+					art="chat-bubble"
+					title="No Discord accounts linked yet"
+					body="Use the button below to connect one."
+				/>
 			{:else}
 				{#each links as link (link.id)}
 					<div class="flex flex-col gap-2 p-3 border rounded-md">

@@ -2,8 +2,7 @@
   import { AreaChart, Rule } from "layerchart";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
-  import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
-  import { AlertCircle } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
   import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
   import type {
     SiteChangeImpactAnalysis,
@@ -242,32 +241,27 @@
       </dl>
     {/if}
   {:else if analysis && !analysis.hasSufficientData}
-    <div
-      class="flex h-[400px] w-full flex-col items-center justify-center text-muted-foreground"
-    >
-      <AlertCircle class="mx-auto h-10 w-10 opacity-30" />
-      <p class="mt-2 font-medium">Insufficient Data</p>
-      <p class="text-sm text-center max-w-md">
-        {#if (analysis.siteChangeCount ?? 0) < 2}
-          At least 2 site changes are required for meaningful analysis.
-          Currently found: {analysis.siteChangeCount ?? 0} site change(s).
-        {:else}
-          Not enough glucose readings around your site changes to generate a
-          reliable analysis.
-        {/if}
-      </p>
+    <div class="flex h-[400px] w-full items-center justify-center">
+      <EmptyState art="report-pages" size="compact" title="Insufficient Data">
+        <p>
+          {#if (analysis.siteChangeCount ?? 0) < 2}
+            At least 2 site changes are required for meaningful analysis.
+            Currently found: {analysis.siteChangeCount ?? 0} site change(s).
+          {:else}
+            Not enough glucose readings around your site changes to generate a
+            reliable analysis.
+          {/if}
+        </p>
+      </EmptyState>
     </div>
   {:else}
-    <div
-      class="flex h-[400px] w-full items-center justify-center text-muted-foreground"
-    >
-      <div class="text-center">
-        <SiteChangeIcon class="mx-auto h-10 w-10 opacity-30" />
-        <p class="mt-2 font-medium">No site change data available</p>
-        <p class="text-sm">
-          Site changes are required to analyze glucose patterns
-        </p>
-      </div>
+    <div class="flex h-[400px] w-full items-center justify-center">
+      <EmptyState
+        art="report-pages"
+        size="compact"
+        title="No site change data available"
+        body="Site changes are required to analyze glucose patterns"
+      />
     </div>
   {/if}
 </div>

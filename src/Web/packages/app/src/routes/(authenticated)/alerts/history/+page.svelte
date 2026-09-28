@@ -13,6 +13,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
   import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
@@ -75,9 +76,7 @@
       </CardHeader>
       <CardContent>
         {#if !history || (history.items ?? []).length === 0}
-          <div class="rounded-md border border-dashed py-10 text-center text-muted-foreground">
-            <p class="text-sm">No alert history yet.</p>
-          </div>
+          <EmptyState art="clock" variant="dashed" title="No alert history yet" />
         {:else}
           <div class="space-y-2">
             {#each (history.items ?? []) as h (h.id)}

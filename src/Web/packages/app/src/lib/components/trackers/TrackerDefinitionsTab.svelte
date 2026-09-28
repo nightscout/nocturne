@@ -9,7 +9,8 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { Settings2, Plus, Play, Pencil, Trash2 } from "lucide-svelte";
+  import { Plus, Play, Pencil, Trash2 } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
   import { TrackerCategoryIcon } from "$lib/components/icons";
   import { cn } from "$lib/utils";
   import { TrackerCategory, type TrackerDefinitionDto } from "$api";
@@ -51,13 +52,12 @@
     </CardHeader>
     <CardContent>
       {#if definitions.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <Settings2 class="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No definitions yet</p>
-          <p class="text-sm">
-            Create a tracker definition to get started
-          </p>
-        </div>
+        <EmptyState
+          art="stopwatch"
+          variant="dashed"
+          title="No definitions yet"
+          body="Create a tracker definition to get started"
+        />
       {:else}
         <div class="space-y-3">
           {#each definitions as def (def.id)}

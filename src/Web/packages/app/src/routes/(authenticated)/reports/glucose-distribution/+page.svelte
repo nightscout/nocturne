@@ -2,6 +2,7 @@
   import { PieChart, Text } from "layerchart";
   import * as Card from "$lib/components/ui/card";
   import * as Table from "$lib/components/ui/table";
+  import { EmptyState } from "$lib/components/shared";
   import { Button } from "$lib/components/ui/button";
   import { getReportsAnalysis } from "$api/reports.remote";
   import HourlyGlucoseDistributionChart from "$lib/components/reports/HourlyGlucoseDistributionChart.svelte";
@@ -106,15 +107,12 @@
     </header>
 
     {#if !hasReadings}
-      <Card.Root>
-        <Card.Content class="py-12 text-center">
-          <p class="font-medium">No readings in this date range</p>
-          <p class="mt-1 text-sm text-muted-foreground">
-            Distribution, A1c estimation and variability statistics need glucose
-            readings to be calculated. Try a wider date range.
-          </p>
-        </Card.Content>
-      </Card.Root>
+      <EmptyState
+        art="report-pages"
+        variant="card"
+        title="No readings in this date range"
+        body="Distribution, A1c estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+      />
     {:else}
       <FigureStrip
         figures={[
@@ -176,10 +174,8 @@
                   items={rangeStats.map((stat) => ({ texture: stat.texture, label: stat.key }))}
                 />
               {:else}
-                <div
-                  class="flex h-[300px] items-center justify-center text-muted-foreground"
-                >
-                  No data available
+                <div class="flex h-[300px] items-center justify-center">
+                  <EmptyState art="report-pages" size="compact" title="No data available" />
                 </div>
               {/if}
             </div>

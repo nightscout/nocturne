@@ -10,8 +10,9 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
+  import { EmptyState } from "$lib/components/shared";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import {
-    Shield,
     Plus,
     Pencil,
     Trash2,
@@ -72,10 +73,10 @@
             <Alert.Description>{error}</Alert.Description>
           </Alert.Root>
         {:else if providers.length === 0}
-          <div class="text-center py-8 text-muted-foreground">
-            <Shield class="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No identity providers configured.</p>
-          </div>
+          <EmptyState
+            art={fingerprintArtwork}
+            title="No identity providers configured"
+          />
         {:else}
           <div class="space-y-2">
             {#each providers as provider (provider.id)}

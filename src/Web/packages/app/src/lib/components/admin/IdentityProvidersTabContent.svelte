@@ -14,12 +14,13 @@
     Plus,
     Loader2,
     AlertTriangle,
-    Shield,
     ToggleRight,
     ToggleLeft,
     Pencil,
     Trash2,
   } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
   import type { OidcProviderResponse } from "$api";
 
@@ -69,10 +70,10 @@
           <Alert.Description>{oidcError}</Alert.Description>
         </Alert.Root>
       {:else if oidcProviders.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <Shield class="h-12 w-12 mx-auto mb-2 opacity-50" />
-          <p>No identity providers configured.</p>
-        </div>
+        <EmptyState
+          art={fingerprintArtwork}
+          title="No identity providers configured"
+        />
       {:else}
         <div class="space-y-2">
           {#each oidcProviders as provider (provider.id)}

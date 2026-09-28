@@ -11,6 +11,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { EmptyState } from "$lib/components/shared";
+  import { soundArtwork } from "$lib/watercolour-icons";
   import {
     Dialog,
     DialogContent,
@@ -25,7 +27,6 @@
     Trash2,
     Play,
     Square,
-    Music,
     FileAudio,
     AlertCircle,
     Check,
@@ -244,13 +245,13 @@
       Loading custom sounds...
     </div>
   {:else if customSounds.length === 0}
-    <div
-      class="flex flex-col items-center justify-center py-8 text-muted-foreground border-2 border-dashed rounded-lg"
-    >
-      <Music class="h-8 w-8 mb-2 opacity-50" />
-      <p class="text-sm">No custom sounds uploaded yet</p>
-      <p class="text-xs">Click "Upload Sound" to add your own</p>
-    </div>
+    <EmptyState
+      art={soundArtwork}
+      size="compact"
+      variant="dashed"
+      title="No custom sounds uploaded yet"
+      body='Click "Upload Sound" to add your own'
+    />
   {:else}
     <div class="space-y-2">
       {#each customSounds as sound (sound.id)}

@@ -38,7 +38,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { Plus, AlertTriangle, Check, ChevronRight, Loader2 } from "lucide-svelte";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { resolve } from "$app/paths";
 
@@ -329,22 +329,18 @@
       </CardHeader>
       <CardContent>
         {#if rules.length === 0}
-          <div class="rounded-md border border-dashed py-10 text-center text-muted-foreground">
-            <Artwork
-              artwork="alarm-bell"
-              palette="moonlight"
-              motion="auto"
-              autoplay="once"
-              class="mx-auto size-48"
-            />
-            <p class="mt-2 text-sm font-medium">No alert rules yet</p>
-            <p class="mt-1 text-xs">Add a rule so Nocturne can notify you when glucose goes out of range.</p>
-            {#if canManageAlerts}
-              <Button class="mt-3" size="sm" onclick={newRule}>
-                <Plus class="h-4 w-4 mr-2" /> New rule
-              </Button>
-            {/if}
-          </div>
+          <EmptyState
+            art="alarm-bell"
+            variant="dashed"
+            title="No alert rules yet"
+            body="Add a rule so Nocturne can notify you when glucose goes out of range."
+            action={canManageAlerts ? newRuleAction : undefined}
+          />
+          {#snippet newRuleAction()}
+            <Button size="sm" onclick={newRule}>
+              <Plus class="h-4 w-4 mr-2" /> New rule
+            </Button>
+          {/snippet}
         {:else}
           <div class="space-y-2">
             {#each rules as rule (rule.id)}

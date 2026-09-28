@@ -39,8 +39,7 @@
 	import Clock from 'lucide-svelte/icons/clock';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
-	import AlertTriangle from 'lucide-svelte/icons/triangle-alert';
-	import History from 'lucide-svelte/icons/history';
+	import { EmptyState } from '$lib/components/shared';
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
@@ -401,64 +400,61 @@
 		</div>
 
 		{#if suggestions.length === 0}
-			<Card>
-				<CardContent class="py-12 text-center">
-					<History class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
-					<h2 class="mb-2 text-lg font-semibold">No compression lows detected yet</h2>
-					<p class="mb-4 text-muted-foreground">
-						When compression lows are detected during your sleep, they will appear here.
-					</p>
-					{#if canReviewSuggestions}
-					<div class="flex flex-col items-center gap-4 print:hidden">
-						<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
-							<div class="flex flex-col gap-1">
-								<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
-								<Input
-									id="start-date"
-									type="date"
-									bind:value={testStartDate}
-									class="w-auto"
-								/>
-							</div>
-							<div class="flex flex-col gap-1">
-								<label for="end-date" class="text-sm text-muted-foreground"
-									>End Date (optional)</label
-								>
-								<Input
-									id="end-date"
-									type="date"
-									bind:value={testEndDate}
-									min={testStartDate}
-									class="w-auto"
-								/>
-							</div>
-							<Button
-								onclick={handleTriggerDetection}
-								disabled={isLoading || !testStartDate}
-								class="@sm:mt-5"
-							>
-								<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
-								Run Detection
-							</Button>
+			<EmptyState
+				art="confirmation-mark"
+				variant="card"
+				title="No compression lows detected yet"
+				body="When compression lows are detected during your sleep, they will appear here."
+				action={canReviewSuggestions ? runDetectionAction : undefined}
+			/>
+			{#snippet runDetectionAction()}
+				<div class="flex flex-col items-center gap-4 print:hidden">
+					<div class="flex flex-col items-center gap-2 @sm:flex-row @sm:items-end">
+						<div class="flex flex-col gap-1">
+							<label for="start-date" class="text-sm text-muted-foreground">Start Date</label>
+							<Input
+								id="start-date"
+								type="date"
+								bind:value={testStartDate}
+								class="w-auto"
+							/>
 						</div>
-						{#if detectionResult}
-							<p class="text-sm text-muted-foreground">
-								Found {detectionResult.totalSuggestionsCreated} compression low(s) across {detectionResult.nightsProcessed}
-								night(s)
-							</p>
-						{/if}
+						<div class="flex flex-col gap-1">
+							<label for="end-date" class="text-sm text-muted-foreground"
+								>End Date (optional)</label
+							>
+							<Input
+								id="end-date"
+								type="date"
+								bind:value={testEndDate}
+								min={testStartDate}
+								class="w-auto"
+							/>
+						</div>
+						<Button
+							onclick={handleTriggerDetection}
+							disabled={isLoading || !testStartDate}
+							class="@sm:mt-5"
+						>
+							<RefreshCw class="mr-2 h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
+							Run Detection
+						</Button>
 					</div>
+					{#if detectionResult}
+						<p class="text-sm text-muted-foreground">
+							Found {detectionResult.totalSuggestionsCreated} compression low(s) across {detectionResult.nightsProcessed}
+							night(s)
+						</p>
 					{/if}
-				</CardContent>
-			</Card>
+				</div>
+			{/snippet}
 		{:else if filteredSuggestions.length === 0}
-			<Card>
-				<CardContent class="py-12 text-center">
-					<AlertTriangle class="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
-					<h2 class="mb-2 text-lg font-semibold">No matching results</h2>
-					<p class="text-muted-foreground">Try changing your filter criteria.</p>
-				</CardContent>
-			</Card>
+			<EmptyState
+				art="magnifying-glass"
+				variant="card"
+				title="No matching results"
+				body="Try changing your filter criteria."
+			/>
 		{:else}
 			<!-- The row list is a selection control; print lists every night as a table instead. -->
 			<div class="hidden print:block">

@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Item } from "$lib/components/ui/item";
   import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
+  import { EmptyState } from "$lib/components/shared";
   import type { SyncProgressEvent } from "$lib/websocket/types";
   import { formatSyncMessage } from "$lib/utils/sync-messages";
   import { tick } from "svelte";
@@ -148,15 +149,12 @@
             </p>
           </div>
         {:else if outcome === "nothing-to-sync"}
-          <div class="rounded-lg border bg-muted/30 p-4">
-            <div class="flex items-center gap-2">
-              <AlertCircle class="h-5 w-5 text-muted-foreground" />
-              <span class="font-medium">Nothing to sync</span>
-            </div>
-            <p class="text-muted-foreground text-sm mt-1">
-              No enabled connectors were found.
-            </p>
-          </div>
+          <EmptyState
+            art="plug"
+            size="compact"
+            title="Nothing to sync"
+            body="No enabled connectors were found."
+          />
         {:else}
           <div class="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
             <div class="flex items-center gap-2 text-destructive">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Entry } from "$lib/api";
   import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/shared";
 
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -68,7 +69,7 @@
         {/each}
       </ul>
     {:else}
-      <p class="text-muted-foreground text-center py-8">No recent entries</p>
+      <EmptyState art="clock" size="compact" title="No recent entries" />
     {/if}
   </CardContent>
 </Card>

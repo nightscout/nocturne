@@ -25,6 +25,8 @@
     insulinRoleLabels,
   } from "./labels";
   import { InsulinListState } from "./state.svelte";
+  import { EmptyState } from "$lib/components/shared";
+  import { syringeArtwork } from "$lib/watercolour-icons";
   import InsulinFormFields from "./InsulinFormFields.svelte";
 
   interface Props {
@@ -321,9 +323,12 @@
   <!-- ── Dialog variant (settings-style) ───────────────────────── -->
 
   {#if insulinList.items.length === 0}
-    <p class="text-sm text-muted-foreground py-4 text-center">
-      No insulins added yet. Add your first insulin to get started.
-    </p>
+    <EmptyState
+      art={syringeArtwork}
+      variant="dashed"
+      title="No insulins added yet"
+      body="Add your first insulin to get started."
+    />
   {:else}
     <div class="space-y-3">
       {#each insulinList.items as insulin (insulin.id)}

@@ -5,7 +5,7 @@
   import { Loader2 } from "lucide-svelte";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import {
     getAvailableYears,
     getDailySummary,
@@ -677,27 +677,21 @@
         class="flex items-center justify-center py-20"
         in:fade={{ duration: 300 }}
       >
-        <div class="max-w-md space-y-4 text-center">
-          <Artwork
-            artwork="calendar"
-            palette="moonlight"
-            motion="auto"
-            autoplay="once"
-            class="mx-auto size-48"
-          />
-          <h2 class="text-xl font-semibold">No Data Available</h2>
-          <p class="text-muted-foreground">
-            There is no data to display yet. Connect a data source in your
-            settings to get started.
-          </p>
-          <Button
-            href="/settings/connectors"
-            variant="outline"
-            class="print:hidden"
-          >
-            Configure Data Sources
-          </Button>
-        </div>
+        <EmptyState
+          art="calendar"
+          title="No Data Available"
+          body="There is no data to display yet. Connect a data source in your settings to get started."
+        >
+          {#snippet action()}
+            <Button
+              href="/settings/connectors"
+              variant="outline"
+              class="print:hidden"
+            >
+              Configure Data Sources
+            </Button>
+          {/snippet}
+        </EmptyState>
       </div>
     {/if}
 

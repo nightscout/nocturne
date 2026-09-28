@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EmptyState } from "$lib/components/shared";
   import {
     Card,
     CardContent,
@@ -211,9 +212,7 @@
             </div>
           </div>
         {:else}
-          <div class="text-center text-muted-foreground py-8">
-            No glucose analysis available
-          </div>
+          <EmptyState art="report-pages" size="compact" title="No glucose analysis available" />
         {/if}
       </CardContent>
     </Card>
@@ -274,9 +273,7 @@
         {#if analysis?.gri}
           <GlycemicRiskIndexChart gri={analysis.gri} />
         {:else}
-          <div class="flex items-center justify-center h-full text-muted-foreground">
-            No GRI data available
-          </div>
+          <EmptyState art="report-pages" size="compact" title="No GRI data available" />
         {/if}
       </CardContent>
     </Card>

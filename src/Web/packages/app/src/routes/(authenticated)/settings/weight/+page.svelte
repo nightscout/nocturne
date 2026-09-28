@@ -8,6 +8,7 @@
   import { Weight, Plus, Trash2, Loader2 } from "lucide-svelte";
   import { Artwork } from "@nocturne/watercolour";
   import { weightScaleArtwork } from "$lib/watercolour-icons";
+  import { EmptyState } from "$lib/components/shared";
   import * as bw from "$api/generated/bodyWeights.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import type { BodyWeight } from "$api";
@@ -91,16 +92,7 @@
     </Card.Header>
     <Card.Content class="space-y-4">
       {#if entries.length === 0}
-        <div class="flex flex-col items-center gap-3 py-8 text-center">
-          <Artwork
-            icon={weightScaleArtwork}
-            palette="moss"
-            motion="auto"
-            autoplay="once"
-            class="size-48"
-          />
-          <p class="text-muted-foreground text-sm">No entries yet.</p>
-        </div>
+        <EmptyState art={weightScaleArtwork} title="No entries yet" />
       {:else}
         <ul class="divide-border divide-y">
           {#each entries as entry (entry.id)}
