@@ -11,7 +11,9 @@ using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Tests.Shared.Mocks;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -28,6 +30,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<IUISettingsService> _uiSettings = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockLogger;
     private readonly Mock<ITenantAccessor> _mockTenantAccessor;
@@ -192,6 +195,7 @@ public class StatusServiceTests
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
             TestPublicAccessCache.Create(),
+            _uiSettings.Object,
             _mockLogger.Object);
 
         await service.GetSystemStatusAsync();
@@ -555,6 +559,38 @@ public class StatusServiceTests
     #endregion
 
     #region Configuration and Settings Tests
+
+    [Theory]
+    [InlineData("mmol", "mmol")]
+    [InlineData("mmol/L", "mmol")]
+    [InlineData("mg/dl", "mg/dl")]
+    public async Task GetSystemStatusAsync_ReportsTheTenantDefaultUnitsOverTheInstanceConfig(
+        string tenantUnits, string expected)
+    {
+        _uiSettings.Setup(u => u.GetSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UISettingsConfiguration
+            {
+                Features = new FeatureSettings { Display = new DisplaySettings { Units = tenantUnits } },
+            });
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mmol/l" })
+            .Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be(expected);
+        (await CreateStatusService(configuration, _dbContext).GetV3SystemStatusAsync())
+            .Settings!["units"].Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_FallsBackToMgDlWithNeitherTenantNorConfigUnits()
+    {
+        var result = await CreateStatusService(new ConfigurationBuilder().Build(), _dbContext)
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+    }
 
     [Fact]
     public async Task GetSystemStatusAsync_WithCustomDisplaySettings_ShouldIncludeInSettings()
@@ -1070,6 +1106,7 @@ public class StatusServiceTests
             _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _uiSettings.Object,
             _mockLogger.Object
         );
     }

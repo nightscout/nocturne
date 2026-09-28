@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
+using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Configuration;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Identity;
@@ -63,6 +65,7 @@ public class UnitsAndTimezoneService(
     IPatientRecordRepository patientRecords,
     IConnectorConfigurationService connectorConfigurations,
     IMigrationJobService migrations,
+    ICacheService cache,
     ILogger<UnitsAndTimezoneService> logger) : IUnitsAndTimezoneService
 {
     /// <summary>The connector onboarding saves a Nightscout instance under.</summary>
@@ -115,6 +118,7 @@ public class UnitsAndTimezoneService(
 
         features.Display.Units = glucoseUnits;
         await uiSettings.SaveSectionAsync(UISettingsSections.Features, features, ct);
+        await cache.RemoveByPatternAsync(StatusService.SystemStatusCacheKey(db.TenantId.ToString()) + "*", ct);
 
         var record = await patientRecords.GetOrCreateAsync(ct);
         record.Timezone = timezone;

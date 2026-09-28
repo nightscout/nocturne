@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -36,6 +37,7 @@ public class UnitsAndTimezoneServiceTests
     private readonly Mock<IPatientRecordRepository> _records = new();
     private readonly Mock<IConnectorConfigurationService> _connectors = new();
     private readonly Mock<IMigrationJobService> _migrations = new(MockBehavior.Strict);
+    private readonly Mock<ICacheService> _cache = new();
     private PatientRecord? _record;
 
     public UnitsAndTimezoneServiceTests()
@@ -112,11 +114,20 @@ public class UnitsAndTimezoneServiceTests
     }
 
     [Fact]
-    public async Task WithTenantDefaults_ReadsTheShippedDefaultBeforeAnyoneChooses()
+    public async Task WithTenantDefaults_LeavesTheUnitsUnsetBeforeTheOwnerChooses()
     {
         var member = await Service().WithTenantDefaultsAsync(new UserDisplayPreferences());
 
-        member.GlucoseUnits.Should().Be("mg/dl");
+        member.GlucoseUnits.Should().BeNull();
+    }
+
+    // v1/v3 status reads the tenant default, and is cached per tenant.
+    [Fact]
+    public async Task SetAsync_DropsTheTenantsCachedStatus()
+    {
+        await Service().SetAsync(OwnerId, "mmol", "Europe/London");
+
+        _cache.Verify(c => c.RemoveByPatternAsync($"status:system:{TenantId}*", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -207,7 +218,7 @@ public class UnitsAndTimezoneServiceTests
     {
         var db = Context();
         return new UnitsAndTimezoneService(
-            db, UiSettings(db), _records.Object, _connectors.Object, _migrations.Object,
+            db, UiSettings(db), _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
             NullLogger<UnitsAndTimezoneService>.Instance);
     }
 
