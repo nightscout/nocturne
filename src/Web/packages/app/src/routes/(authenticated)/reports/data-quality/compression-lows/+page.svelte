@@ -40,7 +40,6 @@
 	import Clock from '@lucide/svelte/icons/clock';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
-	import History from '@lucide/svelte/icons/history';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { EmptyState } from '$lib/components/shared';
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
@@ -403,9 +402,10 @@
 
 		{#if suggestions.length === 0}
 			<EmptyState
-				art="confirmation-mark"
+				art="report-pages"
 				variant="card"
 				title="No compression lows detected yet"
+				headingLevel={2}
 				body="When compression lows are detected during your sleep, they will appear here."
 				action={canReviewSuggestions ? runDetectionAction : undefined}
 			/>
@@ -455,6 +455,7 @@
 				art="magnifying-glass"
 				variant="card"
 				title="No matching results"
+				headingLevel={2}
 				body="Try changing your filter criteria."
 			/>
 		{:else}

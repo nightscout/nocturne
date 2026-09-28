@@ -271,7 +271,7 @@
         {#if analysis?.gri}
           <GlycemicRiskIndexChart gri={analysis.gri} />
         {:else}
-          <EmptyState art="report-pages" size="compact" title="No GRI data available" />
+          <EmptyState art="report-pages" size="compact" title="No GRI data available" class="h-full" />
         {/if}
       </CardContent>
     </Card>

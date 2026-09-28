@@ -235,6 +235,7 @@
           art="report-pages"
           variant="dashed"
           title="No data in this range"
+          headingLevel={2}
           body="There aren't enough glucose readings between these dates to summarise. Choose a longer date range."
         />
       {/if}

@@ -317,7 +317,7 @@
   {#if deviceList.items.length === 0}
     <EmptyState
       art={sensorArtwork}
-      variant="dashed"
+      variant="outline"
       title="No devices added yet"
       body="Add your first device to get started."
     />

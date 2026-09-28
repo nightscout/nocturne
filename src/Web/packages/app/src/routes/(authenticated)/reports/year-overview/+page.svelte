@@ -680,6 +680,7 @@
         <EmptyState
           art="calendar"
           title="No Data Available"
+          headingLevel={2}
           body="There is no data to display yet. Connect a data source in your settings to get started."
         >
           {#snippet action()}

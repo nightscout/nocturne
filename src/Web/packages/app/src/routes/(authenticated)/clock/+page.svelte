@@ -115,6 +115,7 @@
           art="clock"
           variant="dashed"
           title="No clock faces yet"
+          headingLevel={3}
           body="Create your first custom clock face to display your glucose data exactly how you want it."
         >
           {#snippet action()}

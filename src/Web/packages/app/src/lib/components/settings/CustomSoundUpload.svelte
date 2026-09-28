@@ -246,7 +246,7 @@
     <EmptyState
       art={soundArtwork}
       size="compact"
-      variant="dashed"
+      variant="outline"
       title="No custom sounds uploaded yet"
       body='Click "Upload Sound" to add your own'
     />

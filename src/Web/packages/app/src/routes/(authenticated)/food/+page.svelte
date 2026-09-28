@@ -162,10 +162,12 @@
         title="Build your food database"
         body="Add the foods you eat regularly with their carb counts. Once they're here, logging a meal takes a couple of taps anywhere in Nocturne."
       >
-        <p class="mt-2 text-xs">Or browse the Nocturne food bank →</p>
         {#snippet action()}
           <Button size="sm" onclick={() => (state.composerOpen = true)}><Plus class="h-3.5 w-3.5" /> Add your first food</Button>
           <Button variant="outline" size="sm"><Upload class="h-3.5 w-3.5" /> Import CSV</Button>
+        {/snippet}
+        {#snippet footnote()}
+          <p class="mt-3 text-muted-foreground/60">Or browse the Nocturne food bank →</p>
         {/snippet}
       </EmptyState>
     {:else if state.filteredFoods.length === 0}

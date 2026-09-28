@@ -141,6 +141,7 @@
       art={batteryArtwork}
       variant="card"
       title="No Battery Data Available"
+      headingLevel={3}
       body="Battery data is collected from devices that report uploader status. Make sure your CGM uploader app is sending device status data."
     />
   {:else}

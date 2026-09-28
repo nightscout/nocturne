@@ -49,7 +49,7 @@
       {#if presets.length === 0}
         <EmptyState
           art="stopwatch"
-          variant="dashed"
+          variant="outline"
           title="No presets yet"
           body="Create presets for one-click tracker activation"
           action={definitions.length > 0 ? createPresetAction : undefined}

@@ -8,6 +8,7 @@
       title: "font-medium text-foreground",
       body: "max-w-md text-muted-foreground",
       actions: "flex flex-wrap items-center justify-center gap-2",
+      footnote: "text-xs text-muted-foreground",
     },
     variants: {
       size: {
@@ -18,23 +19,34 @@
           title: "text-base",
           body: "text-sm",
           actions: "mt-1",
+          footnote: "mt-1",
         },
         // A card, dialog or widget, where a full-size painting would crowd its neighbours.
         compact: {
-          root: "gap-2 px-4 py-6",
+          root: "gap-2 px-4 py-3",
           art: "size-16",
           title: "text-sm",
           body: "text-xs",
         },
       },
-      // Inside a Card, whose own py-6 stands in for part of the padding.
-      framed: { true: {}, false: {} },
+      frame: {
+        // Sits inside the caller's own card or panel.
+        plain: {},
+        // Inside a Card.Root this component draws, whose own py-6 stands in for part of the padding.
+        card: {},
+        // Inside a card that is already there: the dashed empty-state mark as an outline, with no
+        // fill or shadow, since a filled tile may not nest in a card.
+        outline: { root: "rounded-lg border border-dashed" },
+      },
+      // A page or section heading, which reads at heading weight.
+      heading: { true: {}, false: {} },
     },
     compoundVariants: [
-      { size: "default", framed: true, class: { root: "py-4" } },
-      { size: "compact", framed: true, class: { root: "py-0" } },
+      { size: "default", frame: "card", class: { root: "py-4" } },
+      { size: "compact", frame: "card", class: { root: "py-0" } },
+      { size: "default", heading: true, class: { title: "text-lg font-semibold" } },
     ],
-    defaultVariants: { size: "default", framed: false },
+    defaultVariants: { size: "default", frame: "plain", heading: false },
   });
 
   export type EmptyStateSize = VariantProps<typeof emptyStateVariants>["size"];
@@ -62,16 +74,21 @@
     /** Defaults to the palette the artwork is baked in, so the fallback matches the live paint. */
     palette?: PaletteId;
     title: string;
+    /** Renders the title as a heading of this level; without it the title is a paragraph. */
+    headingLevel?: 2 | 3 | 4;
     body?: string;
     /** Rich body content, rendered after `body`. */
     children?: Snippet;
     action?: Snippet;
+    /** A low-emphasis line after the actions, e.g. a pointer to somewhere else to look. */
+    footnote?: Snippet;
     size?: EmptyStateSize;
     /**
      * `plain` sits inside the caller's own card or panel; `card` is a standalone card;
-     * `dashed` is a dashed card, the design system's mark for content yet to be added.
+     * `dashed` is a standalone dashed card, the design system's mark for content yet to be
+     * added; `outline` is that dashed mark inside a card that is already there.
      */
-    variant?: "plain" | "card" | "dashed";
+    variant?: "plain" | "card" | "dashed" | "outline";
     class?: string;
     "data-testid"?: string;
   }
@@ -80,9 +97,11 @@
     art,
     palette,
     title,
+    headingLevel,
     body,
     children,
     action,
+    footnote,
     size = "default",
     variant = "plain",
     class: className,
@@ -94,11 +113,18 @@
   const resolvedPalette = $derived(
     palette ?? defaultPaletteFor(typeof art === "string" ? art : `lucide-${art.name}`)
   );
-  const styles = $derived(emptyStateVariants({ size, framed: variant !== "plain" }));
+  const inCard = $derived(variant === "card" || variant === "dashed");
+  const styles = $derived(
+    emptyStateVariants({
+      size,
+      frame: inCard ? "card" : variant === "outline" ? "outline" : "plain",
+      heading: headingLevel !== undefined,
+    })
+  );
 </script>
 
 {#snippet content()}
-  <div class={cn(styles.root(), variant === "plain" && className)} data-testid={variant === "plain" ? testId : undefined}>
+  <div class={cn(styles.root(), !inCard && className)} data-testid={inCard ? undefined : testId}>
     <Artwork
       {artwork}
       {icon}
@@ -107,7 +133,9 @@
       autoplay="once"
       class={styles.art()}
     />
-    <p class={styles.title()}>{title}</p>
+    <svelte:element this={headingLevel ? `h${headingLevel}` : "p"} class={styles.title()}>
+      {title}
+    </svelte:element>
     {#if body || children}
       <div class={styles.body()}>
         {#if body}<p>{body}</p>{/if}
@@ -117,13 +145,16 @@
     {#if action}
       <div class={styles.actions()}>{@render action()}</div>
     {/if}
+    {#if footnote}
+      <div class={styles.footnote()}>{@render footnote()}</div>
+    {/if}
   </div>
 {/snippet}
 
-{#if variant === "plain"}
-  {@render content()}
-{:else}
+{#if inCard}
   <Card.Root variant={variant === "dashed" ? "dashed" : "default"} class={className} data-testid={testId}>
     {@render content()}
   </Card.Root>
+{:else}
+  {@render content()}
 {/if}

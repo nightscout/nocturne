@@ -61,7 +61,7 @@
         <EmptyState
           art="plug"
           size="compact"
-          variant="dashed"
+          variant="outline"
           title="No rules configured"
           body="Add a rule to set processing defaults based on the uploading client."
         />

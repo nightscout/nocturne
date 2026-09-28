@@ -227,6 +227,7 @@
         art={syringeArtwork}
         variant="dashed"
         title="No Profile Found"
+        headingLevel={3}
         body="Profiles are typically uploaded from your diabetes management app (like AAPS, Loop, or xDrip+). They contain your basal rates, insulin sensitivity factors, and carb ratios."
       >
         {#snippet action()}

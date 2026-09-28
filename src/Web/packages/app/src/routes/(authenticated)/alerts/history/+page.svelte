@@ -78,7 +78,7 @@
       </CardHeader>
       <CardContent>
         {#if !history || (history.items ?? []).length === 0}
-          <EmptyState art="clock" variant="dashed" title="No alert history yet" />
+          <EmptyState art="clock" variant="outline" title="No alert history yet" />
         {:else}
           <div class="space-y-2">
             {#each (history.items ?? []) as h (h.id)}

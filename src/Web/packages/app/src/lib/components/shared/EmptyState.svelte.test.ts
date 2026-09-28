@@ -104,6 +104,38 @@ describe("EmptyState", () => {
     expect(card?.className).toContain("border-dashed");
   });
 
+  it("renders the title as a paragraph unless given a heading level", async () => {
+    render(EmptyState, { art: "report-pages", title: "No sleep data", headingLevel: 2 });
+    await expect.element(page.getByRole("heading", { level: 2, name: "No sleep data" })).toBeVisible();
+
+    render(EmptyState, { art: "report-pages", title: "No recent meals", size: "compact" });
+    await expect.element(page.getByText("No recent meals")).toBeVisible();
+    expect(page.getByRole("heading", { name: "No recent meals" }).elements()).toHaveLength(0);
+  });
+
+  it("draws the outline variant as a dashed border with no card", async () => {
+    const { container } = render(EmptyState, {
+      art: "stopwatch",
+      title: "No definitions yet",
+      variant: "outline",
+      "data-testid": "definitions-empty",
+    });
+
+    const outline = container.querySelector('[data-testid="definitions-empty"]');
+    expect(outline?.getAttribute("data-slot")).toBeNull();
+    expect(outline?.className).toContain("border-dashed");
+    expect(container.querySelector('[data-slot="card"]')).toBeNull();
+  });
+
+  it("renders the footnote after the actions", async () => {
+    const footnote = createRawSnippet(() => ({ render: () => "<p>Or browse the food bank</p>" }));
+    render(EmptyState, { art: "apple", title: "Build your food database", action, footnote });
+
+    const button = page.getByRole("button", { name: "Create a token" }).element();
+    const note = page.getByText("Or browse the food bank").element();
+    expect(button.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   describe("without a GPU", () => {
     for (const reducedMotion of [false, true]) {
       const label = reducedMotion ? "under reduced motion" : "with motion";

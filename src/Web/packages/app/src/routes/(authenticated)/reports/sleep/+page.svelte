@@ -280,6 +280,7 @@
       art="crescent-moon"
       variant="card"
       title="No sleep data"
+      headingLevel={2}
       body="Sleep sessions arrive from connected sources (Apple Health, Health Connect, Fitbit, Oura, Garmin, Samsung) or manual entries. If tracking started recently, try a larger date range."
     />
   {:else}

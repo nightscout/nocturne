@@ -7,7 +7,6 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import History from "@lucide/svelte/icons/history";
   import { EmptyState } from "$lib/components/shared";
   import { CompletionReason, type TrackerInstanceDto } from "$api";
 

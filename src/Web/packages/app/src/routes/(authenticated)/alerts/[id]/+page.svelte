@@ -596,7 +596,7 @@
               <EmptyState
                 art="clock"
                 size="compact"
-                variant="dashed"
+                variant="outline"
                 title="No firings yet"
               />
             {:else}

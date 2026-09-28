@@ -7,7 +7,6 @@
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Download from "@lucide/svelte/icons/download";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { Artwork, DropGroup, DropSurface } from "@nocturne/watercolour";
   import { DropGroup, DropSurface } from "@nocturne/watercolour";
   import { resolve } from "$app/paths";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
@@ -43,6 +42,7 @@
   <EmptyState
     art="sunrise"
     title="Waiting for your first reading"
+    headingLevel={2}
     body="Your glucose chart will appear here as soon as the first reading arrives."
   />
   <CardContent class="space-y-4">

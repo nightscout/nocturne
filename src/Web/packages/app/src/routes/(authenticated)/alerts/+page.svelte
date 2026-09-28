@@ -335,7 +335,7 @@
         {#if rules.length === 0}
           <EmptyState
             art="alarm-bell"
-            variant="dashed"
+            variant="outline"
             title="No alert rules yet"
             body="Add a rule so Nocturne can notify you when glucose goes out of range."
             action={canManageAlerts ? newRuleAction : undefined}

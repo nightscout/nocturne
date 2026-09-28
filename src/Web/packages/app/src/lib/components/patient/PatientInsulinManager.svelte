@@ -323,7 +323,7 @@
   {#if insulinList.items.length === 0}
     <EmptyState
       art={syringeArtwork}
-      variant="dashed"
+      variant="outline"
       title="No insulins added yet"
       body="Add your first insulin to get started."
     />

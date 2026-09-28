@@ -57,7 +57,7 @@
       {#if definitions.length === 0}
         <EmptyState
           art="stopwatch"
-          variant="dashed"
+          variant="outline"
           title="No definitions yet"
           body="Create a tracker definition to get started"
         />
