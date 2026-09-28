@@ -1171,9 +1171,9 @@ mod tests {
     fn every_test_set_icon_builds_a_valid_scene() {
         let json = std::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../scratchpad/lucide-icons.json"
+            "/tests/fixtures/lucide-icons.json"
         ))
-        .expect("scratchpad/lucide-icons.json");
+        .expect("tests/fixtures/lucide-icons.json");
         let data: serde_json::Map<String, serde_json::Value> =
             serde_json::from_str(&json).expect("icon map");
         let palette = Palette::moonlight();

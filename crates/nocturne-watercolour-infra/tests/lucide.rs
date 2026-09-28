@@ -1,4 +1,4 @@
-//! The Lucide test-set contract: every icon in `scratchpad/lucide-icons.json`
+//! The Lucide test-set contract: every icon in `tests/fixtures/lucide-icons.json`
 //! builds a valid scene for every detail level and both grounds, with the
 //! per-icon hints the web library ships applied.
 
@@ -9,7 +9,7 @@ use nocturne_watercolour_infra::authoring::{
 
 const ICON_JSON: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../scratchpad/lucide-icons.json"
+    "/tests/fixtures/lucide-icons.json"
 );
 
 const TEST_SET: [&str; 18] = [
@@ -57,7 +57,7 @@ fn hints(name: &str) -> IconHints {
 }
 
 fn elements(name: &str) -> Vec<nocturne_watercolour_infra::authoring::IconNode> {
-    let json = std::fs::read_to_string(ICON_JSON).expect("scratchpad/lucide-icons.json");
+    let json = std::fs::read_to_string(ICON_JSON).expect("tests/fixtures/lucide-icons.json");
     let data: serde_json::Map<String, serde_json::Value> =
         serde_json::from_str(&json).expect("icon map");
     let list = data
