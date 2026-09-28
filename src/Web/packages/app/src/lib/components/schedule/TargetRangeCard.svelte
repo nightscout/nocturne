@@ -167,7 +167,7 @@
     </CardHeader>
     <CardContent>
       <EmptyState
-        art="blood-drop"
+        art="report-pages"
         size="compact"
         title="No target range configured"
         action={readOnly ? undefined : setTargetRangeAction}
