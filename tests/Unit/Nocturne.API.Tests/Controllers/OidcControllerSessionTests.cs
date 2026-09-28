@@ -32,7 +32,7 @@ public class OidcControllerSessionTests
     public async Task GetSession_GivesAMemberTheTenantDefaultUnits()
     {
         var own = new UserDisplayPreferences { TimeFormat = "24" };
-        _unitsAndTimezone.Setup(u => u.WithTenantDefaultsAsync(own, It.IsAny<CancellationToken>()))
+        _unitsAndTimezone.Setup(u => u.WithTenantDefaultsAsync(TenantId, own, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new UserDisplayPreferences { TimeFormat = "24", GlucoseUnits = "mmol" });
 
         var session = await GetSession(own, TenantId);

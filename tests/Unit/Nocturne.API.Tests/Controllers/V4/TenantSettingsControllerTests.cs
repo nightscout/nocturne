@@ -214,7 +214,7 @@ public class TenantSettingsControllerTests
     {
         var (controller, units) = BuildForUnits(Scope.FullAccess);
         var saved = new UnitsAndTimezoneDto("mmol", "Australia/Sydney");
-        units.Setup(u => u.SetAsync(OwnerId, "mmol", "Australia/Sydney", It.IsAny<CancellationToken>()))
+        units.Setup(u => u.SetAsync(TenantId, OwnerId, "mmol", "Australia/Sydney", It.IsAny<CancellationToken>()))
             .ReturnsAsync(saved);
 
         var result = await controller.SetUnitsAndTimezone(

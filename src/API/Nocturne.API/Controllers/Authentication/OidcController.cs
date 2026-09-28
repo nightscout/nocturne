@@ -662,8 +662,8 @@ public class OidcController : ControllerBase
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
-                Preferences = userInfo?.Preferences is { } own && authContext.TenantId.HasValue
-                    ? await unitsAndTimezone.WithTenantDefaultsAsync(own, ct)
+                Preferences = userInfo?.Preferences is { } own && authContext.TenantId is { } tenantId
+                    ? await unitsAndTimezone.WithTenantDefaultsAsync(tenantId, own, ct)
                     : userInfo?.Preferences,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,

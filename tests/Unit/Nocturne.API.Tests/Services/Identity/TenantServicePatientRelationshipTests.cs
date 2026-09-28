@@ -72,4 +72,15 @@ public sealed class TenantServicePatientRelationshipTests : IDisposable
 
         (await Service().GetPatientRelationshipAsync(_otherTenantId)).Should().BeNull();
     }
+
+    [Fact]
+    public async Task DefaultGlucoseUnits_AreUnsetUntilChosenAndStayOnTheirTenant()
+    {
+        (await Service().GetDefaultGlucoseUnitsAsync(_tenantId)).Should().BeNull();
+
+        await Service().SetDefaultGlucoseUnitsAsync(_tenantId, "mmol");
+
+        (await Service().GetDefaultGlucoseUnitsAsync(_tenantId)).Should().Be("mmol");
+        (await Service().GetDefaultGlucoseUnitsAsync(_otherTenantId)).Should().BeNull();
+    }
 }

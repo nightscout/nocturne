@@ -63,6 +63,15 @@ public class TenantEntity : ISystemTimestamped
     [MaxLength(16)]
     public PatientRelationship? PatientRelationship { get; set; }
 
+    /// <summary>
+    /// Glucose units ("mg/dl" or "mmol") the owner chose for the tenant, which members who have
+    /// not chosen their own and Nightscout clients reading status see. Null until chosen; only an
+    /// explicit choice is ever written here.
+    /// </summary>
+    [Column("default_glucose_units")]
+    [MaxLength(8)]
+    public string? DefaultGlucoseUnits { get; set; }
+
     /// <summary>Whether this tenant is a demo instance with synthetic data.</summary>
     [Column("is_demo")]
     public bool IsDemo { get; set; }

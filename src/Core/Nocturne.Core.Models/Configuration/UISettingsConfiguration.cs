@@ -268,12 +268,8 @@ public class DisplaySettings
     [JsonPropertyName("timeFormat")]
     public string TimeFormat { get; set; } = "12";
 
-    /// <summary>
-    /// The tenant default glucose units, "mg/dl" or "mmol", for members who have not chosen their
-    /// own and for Nightscout clients reading status. Null until the owner chooses.
-    /// </summary>
     [JsonPropertyName("units")]
-    public string? Units { get; set; }
+    public string Units { get; set; } = "mg/dl";
 
     [JsonPropertyName("showRawBG")]
     public bool ShowRawBG { get; set; }

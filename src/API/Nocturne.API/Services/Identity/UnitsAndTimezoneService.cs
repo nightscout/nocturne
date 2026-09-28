@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Services.Platform;
 using Nocturne.Core.Contracts.Connectors;
-using Nocturne.Core.Contracts.Profiles;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Configuration;
@@ -18,8 +18,9 @@ namespace Nocturne.API.Services.Identity;
 /// </summary>
 /// <remarks>
 /// One units answer sets the owner's own display units and the tenant default
-/// (<see cref="DisplaySettings.Units"/>), which a member who has never chosen their own reads
-/// until they do. Therapy settings are entered in the editor's display units, so the owner's
+/// (<see cref="ITenantService.GetDefaultGlucoseUnitsAsync"/>), which a member who has never chosen
+/// their own reads until they do. The legacy <see cref="DisplaySettings.Units"/> is not that
+/// default: it held "mg/dl" for every tenant that ever saved its features, chosen or not. Therapy settings are entered in the editor's display units, so the owner's
 /// display units are also the unit the owner enters them in; a profile's stored
 /// <c>TherapySettings.Units</c> is never rewritten, because it says what its numbers mean. The
 /// timezone is the patient's (<c>PatientRecord.Timezone</c>).
@@ -40,12 +41,12 @@ public interface IUnitsAndTimezoneService
     /// member has never chosen. The stored preferences are left as they are, so the member's
     /// own later choice still wins.
     /// </summary>
-    Task<UserDisplayPreferences> WithTenantDefaultsAsync(UserDisplayPreferences own, CancellationToken ct = default);
+    Task<UserDisplayPreferences> WithTenantDefaultsAsync(
+        Guid tenantId, UserDisplayPreferences own, CancellationToken ct = default);
 
     /// <summary>Saves the answer. <paramref name="glucoseUnits"/> is "mg/dl" or "mmol".</summary>
-    /// <exception cref="InvalidOperationException">The tenant's display settings could not be read.</exception>
     Task<UnitsAndTimezoneDto> SetAsync(
-        Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default);
+        Guid tenantId, Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default);
 }
 
 /// <param name="GlucoseUnits">"mg/dl" or "mmol".</param>
@@ -61,7 +62,7 @@ public record UnitsAndTimezoneDto(
 /// <inheritdoc />
 public class UnitsAndTimezoneService(
     NocturneDbContext db,
-    IUISettingsService uiSettings,
+    ITenantService tenants,
     IPatientRecordRepository patientRecords,
     IConnectorConfigurationService connectorConfigurations,
     IMigrationJobService migrations,
@@ -92,22 +93,15 @@ public class UnitsAndTimezoneService(
     }
 
     public async Task<UserDisplayPreferences> WithTenantDefaultsAsync(
-        UserDisplayPreferences own, CancellationToken ct = default)
+        Guid tenantId, UserDisplayPreferences own, CancellationToken ct = default)
     {
-        if (own.GlucoseUnits is null
-            && await uiSettings.GetSectionAsync<FeatureSettings>(UISettingsSections.Features, ct) is { } features)
-        {
-            own.GlucoseUnits = GlucoseUnitDefaults.Normalize(features.Display.Units);
-        }
-
+        own.GlucoseUnits ??= await tenants.GetDefaultGlucoseUnitsAsync(tenantId, ct);
         return own;
     }
 
     public async Task<UnitsAndTimezoneDto> SetAsync(
-        Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default)
+        Guid tenantId, Guid ownerSubjectId, string glucoseUnits, string timezone, CancellationToken ct = default)
     {
-        var features = await uiSettings.GetSectionAsync<FeatureSettings>(UISettingsSections.Features, ct)
-            ?? throw new InvalidOperationException("The tenant's display settings could not be read.");
         var subject = await db.Subjects.FirstAsync(s => s.Id == ownerSubjectId, ct);
 
         var preferences = UserDisplayPreferences.Deserialize(subject.Preferences);
@@ -116,9 +110,8 @@ public class UnitsAndTimezoneService(
         subject.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        features.Display.Units = glucoseUnits;
-        await uiSettings.SaveSectionAsync(UISettingsSections.Features, features, ct);
-        await cache.RemoveByPatternAsync(StatusService.SystemStatusCacheKey(db.TenantId.ToString()) + "*", ct);
+        await tenants.SetDefaultGlucoseUnitsAsync(tenantId, glucoseUnits, ct);
+        await cache.RemoveByPatternAsync(StatusService.SystemStatusCacheKey(tenantId.ToString()) + "*", ct);
 
         var record = await patientRecords.GetOrCreateAsync(ct);
         record.Timezone = timezone;

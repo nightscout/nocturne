@@ -8,7 +8,6 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Auth;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Platform;
-using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
@@ -41,7 +40,7 @@ public class StatusService : IStatusService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ITenantAccessor _tenantAccessor;
     private readonly PublicAccessCacheService _publicAccessCacheService;
-    private readonly IUISettingsService _uiSettings;
+    private readonly ITenantService _tenants;
     private readonly ILogger<StatusService> _logger;
 
     /// <summary>The cache key of a tenant's system status, before its demo-mode suffix.</summary>
@@ -59,7 +58,7 @@ public class StatusService : IStatusService
         IHttpContextAccessor httpContextAccessor,
         ITenantAccessor tenantAccessor,
         PublicAccessCacheService publicAccessCacheService,
-        IUISettingsService uiSettings,
+        ITenantService tenants,
         ILogger<StatusService> logger
     )
     {
@@ -71,7 +70,7 @@ public class StatusService : IStatusService
         _httpContextAccessor = httpContextAccessor;
         _tenantAccessor = tenantAccessor;
         _publicAccessCacheService = publicAccessCacheService;
-        _uiSettings = uiSettings;
+        _tenants = tenants;
         _logger = logger;
     }
 
@@ -403,8 +402,10 @@ public class StatusService : IStatusService
 
         // Core display settings. Units are the tenant default chosen in onboarding, which is what a
         // Nightscout client reads as DISPLAY_UNITS.
-        var tenantUnits = (await _uiSettings.GetSettingsAsync())?.Features.Display.Units;
-        settings["units"] = GlucoseUnitDefaults.Normalize(tenantUnits)
+        var tenantUnits = _tenantAccessor.Context is { } tenant
+            ? await _tenants.GetDefaultGlucoseUnitsAsync(tenant.TenantId)
+            : null;
+        settings["units"] = tenantUnits
             ?? _configuration[ServiceNames.ConfigKeys.DisplayUnits]
             ?? GlucoseUnitDefaults.MgDl;
         settings["timeFormat"] = _configuration.GetValue<int>("Display:TimeFormat", 12);

@@ -7,6 +7,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Services.Profiles;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Configuration;
@@ -38,6 +39,8 @@ public class UnitsAndTimezoneServiceTests
     private readonly Mock<IConnectorConfigurationService> _connectors = new();
     private readonly Mock<IMigrationJobService> _migrations = new(MockBehavior.Strict);
     private readonly Mock<ICacheService> _cache = new();
+    private readonly Mock<ITenantService> _tenants = new();
+    private string? _tenantUnits;
     private PatientRecord? _record;
 
     public UnitsAndTimezoneServiceTests()
@@ -59,6 +62,11 @@ public class UnitsAndTimezoneServiceTests
             .ReturnsAsync(() => _record ??= new PatientRecord());
         _records.Setup(r => r.UpdateAsync(It.IsAny<PatientRecord>(), WriteOrigin.Live, It.IsAny<CancellationToken>()))
             .ReturnsAsync((PatientRecord record, WriteOrigin _, CancellationToken _) => _record = record);
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => _tenantUnits);
+        _tenants.Setup(t => t.SetDefaultGlucoseUnitsAsync(TenantId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid _, string units, CancellationToken _) => _tenantUnits = units)
+            .Returns(Task.CompletedTask);
         _connectors.Setup(c => c.GetConfigurationAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((ConnectorConfigurationResponse?)null);
     }
@@ -68,7 +76,7 @@ public class UnitsAndTimezoneServiceTests
     {
         _record = new PatientRecord { PreferredName = "Sam" };
 
-        var result = await Service().SetAsync(OwnerId, "mmol", "Australia/Sydney");
+        var result = await Service().SetAsync(TenantId, OwnerId, "mmol", "Australia/Sydney");
 
         result.Should().Be(new UnitsAndTimezoneDto("mmol", "Australia/Sydney"));
 
@@ -77,7 +85,8 @@ public class UnitsAndTimezoneServiceTests
         owner.GlucoseUnits.Should().Be("mmol");
         owner.TimeFormat.Should().Be("24");
 
-        (await UiSettings(db).GetSettingsAsync())!.Features.Display.Units.Should().Be("mmol");
+        _tenantUnits.Should().Be("mmol");
+        (await UiSettings(db).GetSettingsAsync())!.Features.Display.Units.Should().Be("mg/dl");
 
         _record!.Timezone.Should().Be("Australia/Sydney");
         _record.PreferredName.Should().Be("Sam");
@@ -86,7 +95,7 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task SetAsync_LeavesOtherMembersOwnPreferencesAlone()
     {
-        await Service().SetAsync(OwnerId, "mmol", "Europe/London");
+        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
 
         await using var db = Context();
         (await db.Subjects.SingleAsync(s => s.Id == MemberId)).Preferences.Should().BeNull();
@@ -95,9 +104,9 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task WithTenantDefaults_GivesAMemberWhoNeverChoseTheTenantDefault()
     {
-        await Service().SetAsync(OwnerId, "mmol", "Europe/London");
+        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
 
-        var member = await Service().WithTenantDefaultsAsync(new UserDisplayPreferences { TimeFormat = "12" });
+        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences { TimeFormat = "12" });
 
         member.GlucoseUnits.Should().Be("mmol");
         member.TimeFormat.Should().Be("12");
@@ -106,9 +115,9 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task WithTenantDefaults_KeepsAMembersOwnChoice()
     {
-        await Service().SetAsync(OwnerId, "mmol", "Europe/London");
+        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
 
-        var member = await Service().WithTenantDefaultsAsync(new UserDisplayPreferences { GlucoseUnits = "mg/dl" });
+        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences { GlucoseUnits = "mg/dl" });
 
         member.GlucoseUnits.Should().Be("mg/dl");
     }
@@ -116,7 +125,23 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task WithTenantDefaults_LeavesTheUnitsUnsetBeforeTheOwnerChooses()
     {
-        var member = await Service().WithTenantDefaultsAsync(new UserDisplayPreferences());
+        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences());
+
+        member.GlucoseUnits.Should().BeNull();
+    }
+
+    // A tenant that saved its features before the explicit default existed holds "mg/dl" there
+    // from the old class default, which is no choice at all.
+    [Fact]
+    public async Task WithTenantDefaults_IgnoresTheLegacyFeaturesUnits()
+    {
+        await using (var db = Context())
+        {
+            await UiSettings(db).SaveSectionAsync(
+                "features", new FeatureSettings { Display = new DisplaySettings { Units = "mg/dl" } });
+        }
+
+        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences());
 
         member.GlucoseUnits.Should().BeNull();
     }
@@ -125,7 +150,7 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task SetAsync_DropsTheTenantsCachedStatus()
     {
-        await Service().SetAsync(OwnerId, "mmol", "Europe/London");
+        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
 
         _cache.Verify(c => c.RemoveByPatternAsync($"status:system:{TenantId}*", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -145,7 +170,7 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task GetAsync_PrefersTheOwnersSavedChoiceToTheLocale()
     {
-        await Service().SetAsync(OwnerId, "mmol", "America/Chicago");
+        await Service().SetAsync(TenantId, OwnerId, "mmol", "America/Chicago");
 
         var result = await Service().GetAsync(OwnerId, "en-US", readNightscout: false);
 
@@ -155,7 +180,7 @@ public class UnitsAndTimezoneServiceTests
     [Fact]
     public async Task GetAsync_PreFillsFromTheSavedNightscout()
     {
-        await Service().SetAsync(OwnerId, "mg/dl", "America/Chicago");
+        await Service().SetAsync(TenantId, OwnerId, "mg/dl", "America/Chicago");
         SaveNightscout();
         var nightscout = new NightscoutDisplaySettings("mmol", "mmol", "Europe/Dublin");
         _migrations.Setup(m => m.ReadDisplaySettingsAsync(NightscoutUrl, "secret", It.IsAny<CancellationToken>()))
@@ -218,7 +243,7 @@ public class UnitsAndTimezoneServiceTests
     {
         var db = Context();
         return new UnitsAndTimezoneService(
-            db, UiSettings(db), _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
+            db, _tenants.Object, _records.Object, _connectors.Object, _migrations.Object, _cache.Object,
             NullLogger<UnitsAndTimezoneService>.Instance);
     }
 

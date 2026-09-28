@@ -167,7 +167,8 @@ public class TenantSettingsController : ControllerBase
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out _))
             return Problem(detail: $"'{timezone}' is not a known timezone.", statusCode: 400, title: "Bad Request");
 
-        return Ok(await _unitsAndTimezone.SetAsync(subjectId, request.GlucoseUnits, timezone, ct));
+        return Ok(await _unitsAndTimezone.SetAsync(
+            _tenantAccessor.TenantId, subjectId, request.GlucoseUnits, timezone, ct));
     }
 
     private async Task<PatientRelationshipDto> ReadPatientRelationshipAsync(CancellationToken ct)

@@ -292,6 +292,26 @@ public partial class TenantService : ITenantService
         await context.SaveChangesAsync(ct);
     }
 
+    public async Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        return await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => t.DefaultGlucoseUnits)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.DefaultGlucoseUnits = units;
+        await context.SaveChangesAsync(ct);
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
         await using var context = await _factory.CreateDbContextAsync(ct);

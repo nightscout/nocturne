@@ -40,6 +40,12 @@ public interface ITenantService
     /// <summary>Records the onboarder's relationship to the patient, replacing any earlier answer.</summary>
     Task SetPatientRelationshipAsync(Guid id, PatientRelationship relationship, CancellationToken ct = default);
 
+    /// <summary>The glucose units the owner chose for the tenant, or null when none was chosen.</summary>
+    Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Records the owner's choice of tenant glucose units, "mg/dl" or "mmol".</summary>
+    Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default);
+
     /// <summary>Permanently deletes a tenant and all associated data.</summary>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
