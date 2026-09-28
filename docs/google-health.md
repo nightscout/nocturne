@@ -92,6 +92,13 @@ starting before the requested range is included when it ends inside that range,
 with its stages intact. Local filtering and reconciliation use the same window.
 Use **Refresh inventory** to rescan availability after a failed inventory request.
 
+The settings page treats the server capability catalogue as authoritative. If a
+preview is partial (for example while Google is still scanning a large history),
+categories such as **Vitals** and **Body measurement** remain visible and the
+missing rows are labelled **Not scanned**. This is different from **No
+permission** or **Not yet supported**: it means the row can be selected, but the
+latest inventory response did not include a count yet.
+
 Completed types are reconciled within their requested windows. Native source
 identifiers support repeat imports and updates. Reconciliation is scoped to Google
 Health and the current tenant; an empty type result does not delete its stored

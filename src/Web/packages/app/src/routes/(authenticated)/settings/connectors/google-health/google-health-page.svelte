@@ -80,14 +80,27 @@
     return categoryOrder
       .filter((category) => !(isMale && category === "Cycle tracking"))
       .map((category) => {
-        const entries = items
-          .map((item) => ({
-            item,
-            capability: capabilities.find(
-              (entry) => entry.dataType === item.dataType
-            ),
-          }))
-          .filter((entry) => entry.capability?.category === category);
+        // The server catalog is authoritative for what Nocturne can handle.
+        // A slow, timed-out, or older inventory response may omit a type; do
+        // not make its whole category disappear while the server advertises it.
+        const entries = capabilities
+          .filter((capability) => capability.category === category)
+          .map((capability) => {
+            const item = items.find(
+              (candidate) => candidate.dataType === capability.dataType
+            );
+            return {
+              capability,
+              inventoryMissing: !item,
+              item: item ?? {
+                dataType: capability.dataType,
+                granted:
+                  status?.grantedTypes?.includes(capability.dataType) ?? false,
+                count: 0,
+                supported: capability.supported,
+              },
+            };
+          });
         return {
           category,
           entries,
@@ -269,13 +282,17 @@
     preview = null;
     await refresh();
   }
-  function itemStatus(item: NonNullable<GoogleHealthPreview["items"]>[number]) {
+  function itemStatus(
+    item: NonNullable<GoogleHealthPreview["items"]>[number],
+    inventoryMissing = false
+  ) {
     if (item.errorCode) return `Read failed (${item.errorCode})`;
     if (!item.supported)
       return (
         status?.capabilities?.find((entry) => entry.dataType === item.dataType)
           ?.unavailableReason ?? "Not yet supported by Nocturne"
       );
+    if (inventoryMissing) return "Not scanned";
     if (!item.granted) return "Permission not granted";
     if (
       !status?.previewRequired &&
@@ -664,7 +681,8 @@
                       </thead>
                       <tbody>
                         {#each group.entries as entry (entry.item.dataType)}
-                          {@const { item, capability } = entry}
+                          {@const { item, capability, inventoryMissing } =
+                            entry}
                           <tr class="border-b last:border-b-0">
                             <td class="p-3">
                               <Checkbox
@@ -691,15 +709,17 @@
                               {capability?.displayName ?? item.dataType}
                             </td>
                             <td class="p-3">
-                              {!item.supported
+                              {inventoryMissing
                                 ? "Not scanned"
-                                : !item.granted
-                                  ? "No permission"
-                                  : item.errorCode
-                                    ? "Scan failed"
-                                    : (item.count ?? 0) > 0
-                                      ? `Yes (${item.count})`
-                                      : "No"}
+                                : !item.supported
+                                  ? "Not scanned"
+                                  : !item.granted
+                                    ? "No permission"
+                                    : item.errorCode
+                                      ? "Scan failed"
+                                      : (item.count ?? 0) > 0
+                                        ? `Yes (${item.count})`
+                                        : "No"}
                             </td>
                             <td class="p-3">
                               {capability?.destination
@@ -707,7 +727,9 @@
                                   capability.destination)
                                 : "No destination yet"}
                             </td>
-                            <td class="p-3">{itemStatus(item)}</td>
+                            <td class="p-3">
+                              {itemStatus(item, inventoryMissing)}
+                            </td>
                           </tr>
                         {/each}
                       </tbody>
