@@ -3,6 +3,11 @@ import { describeSubmitError } from "./submit-error";
 export interface Submission {
   /** Why the last attempt failed, or null. Render it with FormError. */
   readonly error: string | null;
+  /**
+   * Counts the submissions that succeeded. Pass it to `SubmitButton`'s `saved`,
+   * which plays its saved moment each time the count moves.
+   */
+  readonly saved: number;
   clear(): void;
   /**
    * Runs a form's `submit()` and turns a rejection into {@link error}.
@@ -27,10 +32,14 @@ export interface Submission {
  */
 export function useSubmission(options?: { fallback?: string }): Submission {
   let error = $state<string | null>(null);
+  let saved = $state(0);
 
   return {
     get error() {
       return error;
+    },
+    get saved() {
+      return saved;
     },
     clear() {
       error = null;
@@ -39,7 +48,10 @@ export function useSubmission(options?: { fallback?: string }): Submission {
       error = null;
       try {
         const succeeded = await submit();
-        if (succeeded) await onSuccess?.();
+        if (succeeded) {
+          await onSuccess?.();
+          saved++;
+        }
         return succeeded;
       } catch (err) {
         console.error("Form submission failed:", err);

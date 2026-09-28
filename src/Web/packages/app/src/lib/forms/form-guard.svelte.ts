@@ -2,7 +2,8 @@ import { beforeNavigate } from "$app/navigation";
 import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
-import { describeSubmitError, GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { useSubmission, type Submission } from "./submission.svelte";
 
 /** The part of SvelteKit's `RemoteForm` the guard drives. */
 export interface GuardedForm {
@@ -33,11 +34,14 @@ export class FormGuard<T extends Record<string, unknown>> {
   #issues: ZodIssue[] = $state([]);
   #touched: boolean = $state(false);
   #submitted: boolean = $state(false);
-  #submitError: string | null = $state(null);
+  #submission: Submission;
   #debounced: Debounced<boolean>;
 
   constructor(options: FormGuardOptions<T>) {
     this.#options = options;
+    this.#submission = useSubmission({
+      fallback: options.submitErrorMessage ?? GENERIC_SUBMIT_ERROR,
+    });
 
     // Snapshot from initial when truthy
     const initial = options.initial();
@@ -105,7 +109,12 @@ export class FormGuard<T extends Record<string, unknown>> {
    * the submit control — the form stays dirty and the entered values stay put.
    */
   get submitError(): string | null {
-    return this.#submitError;
+    return this.#submission.error;
+  }
+
+  /** See `Submission.saved`. */
+  get saved(): number {
+    return this.#submission.saved;
   }
 
   validate(): boolean {
@@ -130,7 +139,7 @@ export class FormGuard<T extends Record<string, unknown>> {
   reset(): void {
     this.#touched = false;
     this.#issues = [];
-    this.#submitError = null;
+    this.#submission.clear();
     if (this.#snapshot != null && this.#options.onreset) {
       this.#options.onreset(structuredClone(this.#snapshot));
     }
@@ -154,48 +163,28 @@ export class FormGuard<T extends Record<string, unknown>> {
   ) {
     return this.#options.form.enhance(
       async (helpers: { submit: () => Promise<boolean> }) => {
-        this.#submitError = null;
+        this.#submission.clear();
 
-        // 1. Validate BEFORE submit
         if (!this.validate()) {
           this.focusInvalid();
           return;
         }
 
-        // 2. Submit. A handler that throws (e.g. `error(400, …)`) rejects here;
-        //    letting that propagate makes SvelteKit swap in the nearest error
-        //    page, discarding everything the user typed.
-        let succeeded: boolean;
-        try {
-          succeeded = await helpers.submit();
-        } catch (err) {
-          console.error("Form submission failed:", err);
-          this.#submitError = describeSubmitError(
-            err,
-            this.#options.submitErrorMessage ?? GENERIC_SUBMIT_ERROR,
-          );
-          return;
-        }
+        const succeeded = await this.#submission.run(helpers.submit, async () => {
+          const updated = this.#options.initial();
+          if (updated != null) {
+            this.#snapshot = structuredClone(updated);
+          }
+          this.#submitted = true;
+          this.#touched = false;
+          this.#issues = [];
+          await callback?.(helpers);
+        });
 
-        // 3. `submit()` resolves false when the server returned validation
-        //    issues. The form stays dirty so the values aren't lost, and the
-        //    guard keeps blocking navigation.
-        if (!succeeded) {
-          this.focusInvalid();
-          return;
-        }
-
-        // 4. Success: re-snapshot as clean and clear stale issues
-        const updated = this.#options.initial();
-        if (updated != null) {
-          this.#snapshot = structuredClone(updated);
-        }
-        this.#submitted = true;
-        this.#touched = false;
-        this.#issues = [];
-
-        // 5. Consumer callback
-        await callback?.(helpers);
+        // `submit()` resolves false when the server returned validation issues.
+        // The form stays dirty so the values aren't lost, and the guard keeps
+        // blocking navigation.
+        if (!succeeded && this.#submission.error == null) this.focusInvalid();
       },
     );
   }

@@ -21,3 +21,5 @@ export {
 export { default as FormField, type FormFieldControl } from "./FormField.svelte";
 export { default as FormError } from "./FormError.svelte";
 export { default as FormActions } from "./FormActions.svelte";
+export { default as SubmitButton } from "./SubmitButton.svelte";
+export { default as SuccessBanner } from "./SuccessBanner.svelte";

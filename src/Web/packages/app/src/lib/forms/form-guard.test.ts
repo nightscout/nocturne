@@ -504,6 +504,25 @@ describe("FormGuard", () => {
       await form._triggerEnhance();
       expect(guard.submitError).toBeNull();
       expect(guard.submitted).toBe(true);
+      expect(guard.saved).toBe(1);
+    });
+
+    it("counts a save only once the consumer callback has run", async () => {
+      const form = createMockForm();
+      const guard = new FormGuard({
+        form,
+        schema,
+        el: () => null,
+        initial: () => ({ name: "Alice", age: 30 }),
+        values: () => ({ name: "Bob", age: 30 }),
+      });
+      let savedDuringCallback: number | undefined;
+      guard.enhance(async () => {
+        savedDuringCallback = guard.saved;
+      });
+      await form._triggerEnhance();
+      expect(savedDuringCallback).toBe(0);
+      expect(guard.saved).toBe(1);
     });
   });
 

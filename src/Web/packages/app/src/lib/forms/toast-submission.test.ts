@@ -25,6 +25,7 @@ describe("useToastSubmission", () => {
 
     await expect(submission.run(async () => {})).resolves.toBe(true);
     expect(error).not.toHaveBeenCalled();
+    expect(submission.saved).toBe(1);
   });
 
   it("shows the server's reason for a rejected action, not the fallback", async () => {

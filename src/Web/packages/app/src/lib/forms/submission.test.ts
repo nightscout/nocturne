@@ -78,6 +78,27 @@ describe("useSubmission", () => {
     expect(submission.error).toBeNull();
   });
 
+  it("counts only the submissions that succeeded, after onSuccess", async () => {
+    const submission = useSubmission();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await submission.run(async () => false);
+    await submission.run(async () => {
+      throw new Error("offline");
+    });
+    await submission.run(
+      async () => true,
+      () => {
+        throw new Error("follow-up failed");
+      }
+    );
+    expect(submission.saved).toBe(0);
+
+    await submission.run(async () => true);
+    await submission.run(async () => true);
+    expect(submission.saved).toBe(2);
+  });
+
   it("clears on demand", async () => {
     const submission = useSubmission();
     await submission.run(async () => {
