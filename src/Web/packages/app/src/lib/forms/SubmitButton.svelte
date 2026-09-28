@@ -32,7 +32,23 @@
    */
   const DARK_FILL_PEAK = 1.6;
 
-  interface Props extends Omit<HTMLButtonAttributes, "class" | "children"> {
+  /** Seeds the glaze. Not the button's `name`, which a DropSurface cannot forward. */
+  const GLAZE_SEED = "saved";
+
+  /**
+   * What DropSurface owns on its host: `name` is its seed, and it sets these
+   * handlers and `class` after spreading the rest, so a caller's would be lost.
+   */
+  type Owned =
+    | "class"
+    | "children"
+    | "name"
+    | "onpointerenter"
+    | "onpointerleave"
+    | "onfocusin"
+    | "onfocusout";
+
+  interface Props extends Omit<HTMLButtonAttributes, Owned> {
     /**
      * A count that moves on each successful save, e.g. `Submission.saved`.
      * The button plays its glaze once per move, never on mount.
@@ -88,7 +104,7 @@
   {type}
   {...rest}
   data-slot="button"
-  name="saved"
+  name={GLAZE_SEED}
   kind="glaze"
   palette="moss"
   spatter={false}

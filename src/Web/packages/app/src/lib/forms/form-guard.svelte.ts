@@ -3,7 +3,7 @@ import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
 import { GENERIC_SUBMIT_ERROR } from "./submit-error";
-import { useSubmission, type Submission } from "./submission.svelte";
+import { FOLLOW_UP_ERROR, useSubmission, type Submission } from "./submission.svelte";
 
 /** The part of SvelteKit's `RemoteForm` the guard drives. */
 export interface GuardedForm {
@@ -41,6 +41,7 @@ export class FormGuard<T extends Record<string, unknown>> {
     this.#options = options;
     this.#submission = useSubmission({
       fallback: options.submitErrorMessage ?? GENERIC_SUBMIT_ERROR,
+      followUpFallback: FOLLOW_UP_ERROR,
     });
 
     // Snapshot from initial when truthy
@@ -154,12 +155,14 @@ export class FormGuard<T extends Record<string, unknown>> {
 
   /**
    * Wraps the form's `enhance` with client-side validation and dirty-state
-   * bookkeeping. The consumer callback runs only after a successful submission.
+   * bookkeeping. The consumer callback runs only after a successful submission;
+   * it returns false when a follow-up save failed, as `Submission.run`'s
+   * `onSuccess` does.
    */
   enhance(
     callback?: (helpers: {
       submit: () => Promise<boolean>;
-    }) => Promise<void>,
+    }) => Promise<void | boolean>,
   ) {
     return this.#options.form.enhance(
       async (helpers: { submit: () => Promise<boolean> }) => {
@@ -178,7 +181,7 @@ export class FormGuard<T extends Record<string, unknown>> {
           this.#submitted = true;
           this.#touched = false;
           this.#issues = [];
-          await callback?.(helpers);
+          return callback?.(helpers);
         });
 
         // `submit()` resolves false when the server returned validation issues.

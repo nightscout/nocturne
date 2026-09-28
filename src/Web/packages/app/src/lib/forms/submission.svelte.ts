@@ -13,14 +13,21 @@ export interface Submission {
    * Runs a form's `submit()` and turns a rejection into {@link error}.
    *
    * @param submit The `submit` helper from the form's `enhance` callback.
-   * @param onSuccess Runs only when the submission succeeded.
+   * @param onSuccess Runs only when the submission succeeded. Returning false
+   *   says a follow-up save failed and has shown its own error, so the save is
+   *   not counted in {@link saved}. A throw is not counted either, and says
+   *   `followUpFallback` when no reason came with it.
    * @returns Whether the submission succeeded.
    */
   run(
     submit: () => Promise<boolean>,
-    onSuccess?: () => void | Promise<void>
+    onSuccess?: () => void | boolean | Promise<void | boolean>
   ): Promise<boolean>;
 }
+
+/** For a form whose `onSuccess` saves something more after the record itself. */
+export const FOLLOW_UP_ERROR =
+  "Your changes were saved, but the step after saving didn't finish. Please try again.";
 
 /**
  * Failure handling for a `form()` remote function's `enhance` callback.
@@ -30,7 +37,11 @@ export interface Submission {
  * sign-in form that means the user loses what they typed and gets no reason
  * why. Wrapping the call keeps them on the page with a message they can act on.
  */
-export function useSubmission(options?: { fallback?: string }): Submission {
+export function useSubmission(options?: {
+  fallback?: string;
+  /** What a throw from `onSuccess` says. Defaults to {@link fallback}. */
+  followUpFallback?: string;
+}): Submission {
   let error = $state<string | null>(null);
   let saved = $state(0);
 
@@ -46,18 +57,22 @@ export function useSubmission(options?: { fallback?: string }): Submission {
     },
     async run(submit, onSuccess) {
       error = null;
+      let succeeded: boolean;
       try {
-        const succeeded = await submit();
-        if (succeeded) {
-          await onSuccess?.();
-          saved++;
-        }
-        return succeeded;
+        succeeded = await submit();
       } catch (err) {
         console.error("Form submission failed:", err);
         error = describeSubmitError(err, options?.fallback);
         return false;
       }
+      if (!succeeded) return false;
+      try {
+        if ((await onSuccess?.()) !== false) saved++;
+      } catch (err) {
+        console.error("Follow-up after a successful submission failed:", err);
+        error = describeSubmitError(err, options?.followUpFallback ?? options?.fallback);
+      }
+      return true;
     },
   };
 }
