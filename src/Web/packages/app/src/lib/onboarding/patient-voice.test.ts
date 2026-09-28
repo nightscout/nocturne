@@ -6,15 +6,15 @@ describe("patientVoice", () => {
   it("speaks to the patient when Nocturne is for the onboarder", () => {
     expect(
       patientVoice({ relationship: PatientRelationship.Self, patientName: "Sam" })
-    ).toEqual({ possessive: "your", Possessive: "Your" });
+    ).toEqual({ kind: "self" });
   });
 
   it.each([PatientRelationship.Caregiver, PatientRelationship.Helper])(
     "names the patient for a %s",
     (relationship) => {
       expect(patientVoice({ relationship, patientName: " Sam " })).toEqual({
-        possessive: "Sam's",
-        Possessive: "Sam's",
+        kind: "named",
+        name: "Sam",
       });
     }
   );
@@ -27,6 +27,6 @@ describe("patientVoice", () => {
       { relationship: PatientRelationship.Caregiver, patientName: "  " },
     ],
   ])("stays neutral when %s", (_, answer) => {
-    expect(patientVoice(answer)).toEqual({ possessive: "the", Possessive: "The" });
+    expect(patientVoice(answer)).toEqual({ kind: "neutral" });
   });
 });

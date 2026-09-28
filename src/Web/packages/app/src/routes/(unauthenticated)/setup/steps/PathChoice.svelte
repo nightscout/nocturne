@@ -4,13 +4,16 @@
   import Cable from "@lucide/svelte/icons/cable";
   import * as RadioGroup from "$lib/components/ui/radio-group";
 
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
+
   interface Props {
     path: "fresh" | "migration";
+    voice: PatientVoice;
   }
 
-  let { path = $bindable() }: Props = $props();
+  let { path = $bindable(), voice }: Props = $props();
 
-  const PATHS = [
+  const PATHS = $derived([
     {
       value: "fresh",
       tag: "Fresh start",
@@ -21,23 +24,36 @@
       bullets: [
         "Connect a CGM, pump, or phone app",
         "Skip anything and set it up later",
-        "Land on your dashboard",
+        voice.kind === "self"
+          ? "Land on your dashboard"
+          : voice.kind === "named"
+            ? `Land on ${voice.name}'s dashboard`
+            : "Land on the dashboard",
       ],
     },
     {
       value: "migration",
       tag: "Coming from Nightscout",
       icon: Cable,
-      title: "Migrate my Nightscout data",
+      title:
+        voice.kind === "self"
+          ? "Migrate my Nightscout data"
+          : voice.kind === "named"
+            ? `Migrate ${voice.name}'s Nightscout data`
+            : "Migrate Nightscout data",
       description:
-        "I already run Nightscout. Copy my history across without changing my Nightscout site.",
+        voice.kind === "self"
+          ? "I already run Nightscout. Copy my history across without changing my Nightscout site."
+          : voice.kind === "named"
+            ? `${voice.name} already has a Nightscout site. Copy ${voice.name}'s history across without changing that site.`
+            : "There's already a Nightscout site. Copy its history across without changing that site.",
       bullets: [
-        "Point at your existing Nightscout address",
+        "Point at the existing Nightscout address",
         "Import entries, treatments, and profiles",
         "Keep Nightscout running while you try Nocturne",
       ],
     },
-  ] as const;
+  ] as const);
 </script>
 
 <div class="flex flex-col items-center gap-10 px-4 py-8">
@@ -51,7 +67,7 @@
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
       Both roads end in the same place. We just want to know whether to carry
-      your existing Nightscout data over, or give you a clean notebook to start
+      existing Nightscout data over, or give you a clean notebook to start
       in.
     </p>
   </div>

@@ -290,17 +290,18 @@
     <h1
       class="font-brand font-hairline leading-tight tracking-tight text-foreground text-3xl md:text-4xl xl:text-5xl"
     >
-      Bringing {voice.possessive} <em
-        class="not-italic font-light text-primary"
-      >
-        history
-      </em>
-      across.
+      {#if voice.kind === "self"}
+        Bringing your <em class="not-italic font-light text-primary">history</em> across.
+      {:else if voice.kind === "named"}
+        Bringing {voice.name}'s <em class="not-italic font-light text-primary">history</em> across.
+      {:else}
+        Bringing the <em class="not-italic font-light text-primary">history</em> across.
+      {/if}
     </h1>
     {#if !nothingToShow}
       <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-        We're streaming entries, treatments, and profiles from your Nightscout
-        into Nocturne's store. This keeps running on the server even if you
+        We're streaming entries, treatments, and profiles from Nightscout into
+        Nocturne's store. This keeps running on the server even if you
         close this page.
       </p>
     {/if}

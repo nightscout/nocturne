@@ -92,7 +92,15 @@
   }
 
   // ── Onboarding step definitions (post-auth) ────────────────────────
-  const STEPS = {
+  const importLabel = $derived(
+    voice.kind === "self"
+      ? "Import your history"
+      : voice.kind === "named"
+        ? `Import ${voice.name}'s history`
+        : "Import the history"
+  );
+
+  const STEPS = $derived({
     fresh: [
       { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
@@ -103,11 +111,11 @@
     migration: [
       { id: "who", label: "Who it's for", short: "Who", art: "who" },
       { id: "path", label: "Choose your path", short: "Path", art: "welcome" },
-      { id: "connect", label: "Connect your Nightscout", short: "Connect", art: "source" },
-      { id: "import", label: "Import your history", short: "Import", art: "import" },
+      { id: "connect", label: "Connect Nightscout", short: "Connect", art: "source" },
+      { id: "import", label: importLabel, short: "Import", art: "import" },
       { id: "finish", label: "Finish", short: "Done", art: "done" },
     ],
-  } as const satisfies Record<string, readonly StepDef[]>;
+  } as const satisfies Record<string, readonly StepDef[]>);
 
   // ── State ───────────────────────────────────────────────────────────
   let path = $state<"fresh" | "migration">("fresh");
@@ -218,14 +226,22 @@
     handleNext();
   }
 
+  // Saves only an answer that differs from the stored one. The server's reply replaces the local
+  // edit, since a cleared name leaves the stored one in place.
   async function handleWhoForContinue() {
-    if (chosenRelationship) {
+    const stored = relationshipQuery?.current;
+    const changed =
+      relationship !== stored?.relationship ||
+      patientName.trim() !== (stored?.patientName ?? "");
+    if (relationship && changed) {
       try {
         relationshipError = undefined;
-        await setPatientRelationship({
-          relationship: chosenRelationship,
+        const saved = await setPatientRelationship({
+          relationship,
           patientName: patientName.trim() || undefined,
         });
+        chosenRelationship = saved.relationship;
+        chosenName = saved.patientName ?? "";
       } catch (err) {
         relationshipError = describeSubmitError(err, "We couldn't save your answer.");
         return;
@@ -433,7 +449,7 @@
                 error={relationshipError}
               />
             {:else if activeStep?.id === "path"}
-              <PathChoice bind:path />
+              <PathChoice bind:path {voice} />
             {:else if activeStep?.id === "connect"}
               <NightscoutConnect onComplete={handleMigrationConnected} />
             {:else if activeStep?.id === "cgm"}
@@ -445,9 +461,16 @@
                     Connect a <em class="not-italic font-light text-primary">data source</em>.
                   </h1>
                   <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-                    Choose a cloud service or phone app to start sending
-                    {voice.possessive} glucose and treatment data to Nocturne. You
-                    can connect more later.
+                    {#if voice.kind === "self"}
+                      Choose a cloud service or phone app to start sending your
+                      glucose and treatment data to Nocturne. You can connect more later.
+                    {:else if voice.kind === "named"}
+                      Choose a cloud service or phone app to start sending {voice.name}'s
+                      glucose and treatment data to Nocturne. You can connect more later.
+                    {:else}
+                      Choose a cloud service or phone app to start sending the glucose
+                      and treatment data to Nocturne. You can connect more later.
+                    {/if}
                   </p>
                 </div>
                 <DataSourceSelectionView
@@ -471,7 +494,15 @@
                       Configure your <em class="not-italic font-light text-primary">connection</em>.
                     </h1>
                     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-                      Enter your credentials and we'll start syncing your data.
+                      {#if voice.kind === "self"}
+                        Enter your credentials and we'll start syncing your data.
+                      {:else if voice.kind === "named"}
+                        Enter the service's sign-in details and we'll start syncing
+                        {voice.name}'s data.
+                      {:else}
+                        Enter the service's sign-in details and we'll start syncing the
+                        data.
+                      {/if}
                     </p>
                   </div>
                   <ConnectorSetup
@@ -488,10 +519,10 @@
                     <h1
                       class="font-brand font-hairline leading-tight tracking-tight text-3xl md:text-4xl xl:text-5xl"
                     >
-                      Set up your <em class="not-italic font-light text-primary">app</em>.
+                      Set up the <em class="not-italic font-light text-primary">app</em>.
                     </h1>
                     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-                      Follow the steps below to connect your phone app to
+                      Follow the steps below to connect the phone app to
                       Nocturne.
                     </p>
                   </div>

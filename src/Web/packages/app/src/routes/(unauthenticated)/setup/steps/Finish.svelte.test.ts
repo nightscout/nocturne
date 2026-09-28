@@ -4,19 +4,23 @@ import { describe, expect, it } from "vitest";
 
 import Finish, { type ImportResult, type SourceResult } from "./Finish.svelte";
 import { PatientRelationship } from "$api";
-import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
+import { patientVoice, type PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
 const noop = () => {};
 
 function renderFinish(
   path: "fresh" | "migration",
-  { source = null, importResult = null }: { source?: SourceResult; importResult?: ImportResult } = {}
+  {
+    source = null,
+    importResult = null,
+    voice = patientVoice({ relationship: PatientRelationship.Self }),
+  }: { source?: SourceResult; importResult?: ImportResult; voice?: PatientVoice } = {}
 ) {
   return render(Finish, {
     path,
     source,
     importResult,
-    voice: patientVoice({ relationship: PatientRelationship.Self }),
+    voice,
     onEnterDashboard: noop,
     onNavigateWithCoach: noop,
   });
@@ -52,7 +56,7 @@ describe("Finish", () => {
 
   it.each([
     [null, /hasn't been imported yet/],
-    ["failed", /some or all of your history is missing/],
+    ["failed", /some or all of the history is missing/],
     ["running", /may still be\s+running/],
     ["partial", /not all of it/],
     ["complete", /has been copied into Nocturne/],
@@ -67,6 +71,21 @@ describe("Finish", () => {
 
     await expect.element(page.getByRole("heading", { name: /You're in/ })).toBeVisible();
     await expect.element(page.getByText(/is home/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [PatientRelationship.Self, "Your data is home.", /your uploaders keep sending/, "Open your dashboard"],
+    [PatientRelationship.Caregiver, "Sam's data is home.", /Sam's uploaders keep sending/, "Open Sam's dashboard"],
+    [undefined, "The data is home.", /its uploaders keep sending/, "Open the dashboard"],
+  ])("words a complete import for %s", async (relationship, heading, body, button) => {
+    renderFinish("migration", {
+      importResult: "complete",
+      voice: patientVoice({ relationship, patientName: "Sam" }),
+    });
+
+    await expect.element(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expect.element(page.getByText(body)).toBeVisible();
+    await expect.element(page.getByRole("button", { name: button })).toBeVisible();
   });
 
   it("offers no public share link", async () => {
