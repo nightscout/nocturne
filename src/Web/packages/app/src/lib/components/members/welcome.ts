@@ -7,11 +7,21 @@ export const WELCOME_PARAM = "welcome";
 /** Owners hold full access (the seeded owner role); they never joined anyone. */
 const FULL_ACCESS = "*";
 
-/** `path` (a same-origin path, possibly with a query or hash) carrying the marker. */
+/**
+ * `path` carrying the marker. The path text is kept verbatim: parsing and
+ * re-serialising it would collapse dot segments, turning `/.//host` into the
+ * protocol-relative `//host`.
+ */
 export function withWelcome(path: string): string {
-  const url = new URL(path, "http://welcome.invalid");
-  url.searchParams.set(WELCOME_PARAM, "1");
-  return `${url.pathname}${url.search}${url.hash}`;
+  const hashAt = path.indexOf("#");
+  const head = hashAt < 0 ? path : path.slice(0, hashAt);
+  const hash = hashAt < 0 ? "" : path.slice(hashAt);
+  const separator = !head.includes("?")
+    ? "?"
+    : head.endsWith("?") || head.endsWith("&")
+      ? ""
+      : "&";
+  return `${head}${separator}${WELCOME_PARAM}=1${hash}`;
 }
 
 /** `url` with the marker removed, or null when it carries none. */

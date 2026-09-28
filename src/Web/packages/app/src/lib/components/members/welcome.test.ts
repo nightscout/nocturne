@@ -6,6 +6,18 @@ describe("withWelcome", () => {
     expect(withWelcome("/")).toBe("/?welcome=1");
   });
 
+  it("never rebuilds the path, so dot segments cannot collapse to another host", () => {
+    for (const path of ["/.//x", "/..//x", "/a/..//x", "/%2e//x"]) {
+      expect(withWelcome(path)).toBe(`${path}?welcome=1`);
+    }
+  });
+
+  it("appends to an empty or trailing query", () => {
+    expect(withWelcome("/?")).toBe("/?welcome=1");
+    expect(withWelcome("/?a=1&")).toBe("/?a=1&welcome=1");
+    expect(withWelcome("/#top")).toBe("/?welcome=1#top");
+  });
+
   it("keeps the destination's own query and hash", () => {
     expect(withWelcome("/reports?range=7d#tir")).toBe(
       "/reports?range=7d&welcome=1#tir"

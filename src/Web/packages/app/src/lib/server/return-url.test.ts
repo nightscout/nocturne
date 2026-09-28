@@ -28,6 +28,18 @@ describe("safeReturnUrl", () => {
     expect(safeReturnUrl("/reports\u0000")).toBe("/");
   });
 
+  it("falls back for dot segments that resolve to a protocol-relative path", () => {
+    expect(safeReturnUrl("/.//evil.test")).toBe("/");
+    expect(safeReturnUrl("/..//evil.test")).toBe("/");
+    expect(safeReturnUrl("/a/..//evil.test")).toBe("/");
+    expect(safeReturnUrl("/%2e//evil.test")).toBe("/");
+    expect(safeReturnUrl("/%2E%2E//evil.test")).toBe("/");
+  });
+
+  it("keeps dot segments that stay on a rooted path", () => {
+    expect(safeReturnUrl("/a/../reports")).toBe("/a/../reports");
+  });
+
   it("falls back for a relative path", () => {
     expect(safeReturnUrl("reports")).toBe("/");
   });
