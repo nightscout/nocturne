@@ -18,8 +18,7 @@ import { z } from "zod";
 import type { Mock } from "vitest";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { FormGuard, type GuardedForm } from "./form-guard.svelte";
-import { GENERIC_SUBMIT_ERROR } from "./submit-error";
-import { FOLLOW_UP_ERROR } from "./submission.svelte";
+import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
 
 const schema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),

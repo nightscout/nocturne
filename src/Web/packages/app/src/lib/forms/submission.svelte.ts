@@ -25,10 +25,6 @@ export interface Submission {
   ): Promise<boolean>;
 }
 
-/** For a form whose `onSuccess` saves something more after the record itself. */
-export const FOLLOW_UP_ERROR =
-  "Your changes were saved, but the step after saving didn't finish. Please try again.";
-
 /**
  * Failure handling for a `form()` remote function's `enhance` callback.
  *

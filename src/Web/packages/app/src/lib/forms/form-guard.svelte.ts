@@ -2,8 +2,8 @@ import { beforeNavigate } from "$app/navigation";
 import { Debounced } from "runed";
 import type { z, ZodIssue } from "zod";
 import { deepEqual } from "./deep-equal";
-import { GENERIC_SUBMIT_ERROR } from "./submit-error";
-import { FOLLOW_UP_ERROR, useSubmission, type Submission } from "./submission.svelte";
+import { FOLLOW_UP_ERROR, GENERIC_SUBMIT_ERROR } from "./submit-error";
+import { useSubmission, type Submission } from "./submission.svelte";
 
 /** The part of SvelteKit's `RemoteForm` the guard drives. */
 export interface GuardedForm {
