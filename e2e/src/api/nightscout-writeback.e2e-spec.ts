@@ -8,6 +8,10 @@ import { NIGHTSCOUT_API_SECRET_HEADER } from "../../mocks/vendors/nightscout.ts"
 // 15.0.7+ does, and serves it back). Every record Nocturne writes upstream comes back on the next
 // pull, often under a `_id` the upstream minted; it must land on the record it was written from,
 // and a record the user deleted must stay deleted (#1804).
+//
+// Each reading is on its own device and at least 6 minutes from every other: readings of two
+// devices in one 5-minute bucket compete as streams, and only the canonical one is projected to
+// the legacy entry that write-back sends (CanonicalGlucoseStream).
 const FAKE_SECRET = "e2e-fake-nightscout-secret";
 const VENDOR = `${env.mocksUrl}/nightscout-writeback`;
 const MINUTE = 60_000;
@@ -213,7 +217,7 @@ describe("Nightscout connector write-back round trip", () => {
   it("pulls a reading whose legacy id is not an ObjectId back onto that reading", async () => {
     const device = `e2e-writeback-legacy-${run}`;
     const legacyId = `e2e-legacy-${run}`;
-    const date = Date.now() - 12 * MINUTE;
+    const date = Date.now() - 18 * MINUTE;
     await tenant.api.ok("POST", "/api/v1/entries", [
       { _id: legacyId, type: "sgv", sgv: 133, date, dateString: new Date(date).toISOString(), device },
     ]);
