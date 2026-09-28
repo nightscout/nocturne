@@ -1,16 +1,17 @@
 //! Setup-hub headers: wide scenes painted in [`STOPS`] stages (see
 //! [`Stages`]), one per hub item, so every stop is a finished painting with
-//! fewer layers rather than a painting interrupted. The paper is the sky; the
-//! land and water sit in a [`Lens`] that tapers to points at the horizon, so
-//! the picture ends on the page instead of at the frame.
+//! fewer layers rather than a painting interrupted. Every layer is clipped to
+//! one irregular [`Sheet`], so the picture dissolves into the page along a
+//! broken, lopsided edge instead of stopping at a frame or a stamped oval.
 
+use nocturne_watercolour_core::domain::seed::SeedStream;
 use nocturne_watercolour_core::domain::{
     LiftStroke, Operation, Palette, Paper, PigmentRole, Point, RadiusProfile, Scene, SizeHint,
     StrokeSpan,
 };
 
 use super::geometry::{Frame, value_noise_1d};
-use super::{Painting, Stages, Style, brush, granulating_role, role, tapered, water};
+use super::{Painting, Stages, Style, brush, granulating_role, lift, role, tapered, water};
 
 pub(super) const STOPS: u32 = 6;
 
@@ -21,38 +22,70 @@ const WIDE_3_1: SizeHint = SizeHint {
     height: 256,
 };
 
-const STAGE_TICKS: u32 = 200;
+const STAGE_TICKS: u32 = 280;
 
-/// The outline every land and water layer of a hub scene is clipped to: its
-/// floor dips from `rim` at the ends to `deep` in the middle, with a wobble.
-struct Lens {
-    cx: f32,
-    rx: f32,
+/// The extent of a hub painting on the page. Everything is laid inside it:
+/// the sky rises from the horizon to a ragged, uneven top edge and the land
+/// and water fall to a ragged floor, and both thin out toward ends that sit
+/// at different distances from the frame, so no two sides match.
+struct Sheet {
+    x0: f32,
+    x1: f32,
+    /// The sky's own extent, offset from the land's so the two ends differ.
+    sky_x: (f32, f32),
+    /// Where the floor meets the ends and how far below them it falls.
     rim: f32,
     deep: f32,
-    power: f32,
-    wobble: f32,
     seed: u64,
 }
 
-impl Lens {
-    const SAMPLES: usize = 120;
+impl Sheet {
+    const SAMPLES: usize = 240;
+    /// How far a stencil's loose edge sits past the paint.
+    const SLACK: f32 = 0.07;
+    const PAST: f32 = 0.08;
 
-    fn floor(&self, x: f32) -> f32 {
-        let u = ((x - self.cx) / self.rx).abs().min(1.0);
-        let depth = (1.0 - u.powf(self.power)).max(0.0).powf(1.0 / self.power);
-        let wobble = value_noise_1d(self.seed ^ 0x72, x * 3.0) - 0.5
-            + (value_noise_1d(self.seed ^ 0x73, x * 11.0) - 0.5) * 0.4;
-        self.rim + (self.deep - self.rim) * depth + wobble * 2.0 * self.wobble * depth
+    fn noise(&self, salt: u64, x: f32, freq: f32) -> f32 {
+        value_noise_1d(self.seed ^ salt, x * freq) - 0.5
     }
 
-    /// The part of the lens below `upper(x)`.
-    fn below(&self, frame: &Frame, upper: impl Fn(f32) -> f32) -> Vec<Point> {
-        let spans: Vec<(f32, f32, f32)> = (0..=Self::SAMPLES)
-            .map(|i| {
-                let x = self.cx - self.rx + 2.0 * self.rx * i as f32 / Self::SAMPLES as f32;
-                (x, upper(x), self.floor(x))
-            })
+    /// Where a stencil is sampled: a little past the paint on each side, so
+    /// the brush's own ends, not the stencil, finish the wash.
+    fn xs(&self) -> impl Iterator<Item = f32> + '_ {
+        let (a, b) = (
+            (self.x0 - Self::PAST).max(0.0),
+            (self.x1 + Self::PAST).min(3.0),
+        );
+        (0..=Self::SAMPLES).map(move |i| a + (b - a) * i as f32 / Self::SAMPLES as f32)
+    }
+
+    /// `0` at the ends, `1` across the body; the shoulders differ in width
+    /// and wander, so the silhouette is lopsided.
+    fn envelope(&self, x: f32, salt: u64, shoulders: (f32, f32)) -> f32 {
+        let u = ((x - self.x0) / (self.x1 - self.x0)).clamp(0.0, 1.0);
+        let rise = smooth(0.0, shoulders.0, u) * smooth(0.0, shoulders.1, 1.0 - u);
+        (rise * (0.9 + 0.4 * self.noise(salt, x, 1.7))).clamp(0.0, 1.0)
+    }
+
+    /// A dry-brush edge: fine, sharp wobble that breaks the contour.
+    fn ragged(&self, salt: u64, x: f32) -> f32 {
+        self.noise(salt, x, 23.0) * 0.016 + self.noise(salt ^ 0x5, x, 57.0) * 0.008
+    }
+
+    fn floor(&self, x: f32) -> f32 {
+        let e = 0.25 + 0.75 * self.envelope(x, 0x71, (0.2, 0.33));
+        self.rim
+            + (self.deep - self.rim) * e.powf(0.6)
+            + e * (self.noise(0x72, x, 3.1) * 0.09 + self.noise(0x73, x, 9.0) * 0.03)
+            + self.ragged(0x74, x) * e.sqrt()
+    }
+
+    /// The part of the sheet below `upper(x)`, its floor `slack` further
+    /// down than the paint goes, so the wash ends on its own edge.
+    fn below(&self, frame: &Frame, upper: impl Fn(f32) -> f32, slack: f32) -> Vec<Point> {
+        let spans: Vec<(f32, f32, f32)> = self
+            .xs()
+            .map(|x| (x, upper(x), self.floor(x) + slack))
             .filter(|&(_, t, b)| t < b - 0.004)
             .collect();
         let mut pts: Vec<Point> = spans.iter().map(|&(x, t, _)| frame.pt(x, t)).collect();
@@ -60,24 +93,51 @@ impl Lens {
         pts
     }
 
-    /// A band of sky up to `height` above `ground(x)`, thinning to nothing
-    /// toward the lens's ends.
+    /// The sky's top edge above `ground(x)`: up to `height`, rising and
+    /// falling along its length like a sky laid with a loaded brush.
+    fn sky_top(&self, x: f32, height: f32, ground: &impl Fn(f32) -> f32) -> f32 {
+        let u = ((x - self.sky_x.0) / (self.sky_x.1 - self.sky_x.0)).clamp(0.0, 1.0);
+        let e = 0.3 + 0.7 * smooth(0.0, 0.3, u) * smooth(0.0, 0.22, 1.0 - u);
+        let swell =
+            0.62 + 0.75 * (self.noise(0x76, x, 1.3) + 0.5) * 0.8 + self.noise(0x77, x, 4.2) * 0.25;
+        ground(x) - height * e.sqrt() * swell.clamp(0.3, 1.2) + self.ragged(0x78, x) * e.sqrt()
+    }
+
+    /// Sky from its top edge down to just below `ground(x)`.
     fn sky(&self, frame: &Frame, height: f32, ground: impl Fn(f32) -> f32) -> Vec<Point> {
-        let reach = self.rx * 0.97;
-        let xs: Vec<f32> = (0..=Self::SAMPLES)
-            .map(|i| self.cx - reach + 2.0 * reach * i as f32 / Self::SAMPLES as f32)
+        let (a, b) = (
+            (self.sky_x.0 - Self::PAST).max(0.0),
+            (self.sky_x.1 + Self::PAST).min(3.0),
+        );
+        let spans: Vec<(f32, f32, f32)> = (0..=Self::SAMPLES)
+            .map(|i| a + (b - a) * i as f32 / Self::SAMPLES as f32)
+            .map(|x| (x, self.sky_top(x, height, &ground), ground(x) + 0.004))
+            .filter(|&(_, t, b)| t < b - 0.006)
             .collect();
-        let rise = |x: f32| {
-            let u = ((x - self.cx) / reach).clamp(-1.0, 1.0);
-            height * (1.0 - u * u).sqrt()
-        };
-        let mut pts: Vec<Point> = xs
-            .iter()
-            .map(|&x| frame.pt(x, ground(x) - rise(x)))
-            .collect();
-        pts.extend(xs.iter().rev().map(|&x| frame.pt(x, ground(x) + 0.004)));
+        let mut pts: Vec<Point> = spans.iter().map(|&(x, t, _)| frame.pt(x, t)).collect();
+        pts.extend(spans.iter().rev().map(|&(x, _, b)| frame.pt(x, b)));
         pts
     }
+
+    /// A path `inset` inside the sky's top edge.
+    fn sky_edge(&self, height: f32, ground: impl Fn(f32) -> f32, inset: f32) -> Vec<(f32, f32)> {
+        let (a, b) = self.sky_x;
+        (0..=16)
+            .map(|i| a + 0.05 + (b - a - 0.1) * i as f32 / 16.0)
+            .map(|x| (x, self.sky_top(x, height, &ground) + inset))
+            .collect()
+    }
+}
+
+/// Clean water run along `path` into a wet wash: it pushes the pigment
+/// aside and blooms, so an edge softens into a pale, broken fringe instead
+/// of stopping on a line.
+fn wet_edge(p: &mut Painting, frame: &Frame, style: &Style, path: &[(f32, f32)], radius: f32) {
+    if !style.fine() || style.dark() {
+        return;
+    }
+    let pts: Vec<Point> = path.iter().map(|&(x, y)| frame.pt(x, y)).collect();
+    p.at(0.0, water(pts, radius, style.water(0.7), 0.85));
 }
 
 /// A ridge line: `floor` is the valley height and each peak `(centre_x,
@@ -96,7 +156,10 @@ impl Range {
             .iter()
             .map(|&(cx, hw, h)| h * (-((x - cx) / hw).powi(2)).exp())
             .sum();
-        self.floor - rise - (value_noise_1d(self.seed, x * 7.0) - 0.5) * self.wobble
+        self.floor
+            - rise
+            - (value_noise_1d(self.seed, x * 7.0) - 0.5) * self.wobble
+            - (value_noise_1d(self.seed ^ 1, x * 29.0) - 0.5) * self.wobble * 0.3
     }
 
     fn crest(&self) -> f32 {
@@ -137,158 +200,82 @@ fn disc_above(
         .collect()
 }
 
-/// A reflection gap in water: a column hanging from `top` under `x`,
-/// narrowing from `hw.0` to `hw.1`, its edges broken so it reads as moving
-/// light.
-fn reflection(
-    frame: &Frame,
-    x: f32,
-    (top, bottom): (f32, f32),
-    hw: (f32, f32),
-    seed: u64,
-) -> Vec<Point> {
-    let steps = 16;
-    let edge = |side: f32| -> Vec<Point> {
-        (0..=steps)
-            .map(|i| {
-                let t = i as f32 / steps as f32;
-                let half = hw.0 + (hw.1 - hw.0) * t;
-                let wob =
-                    (value_noise_1d(seed ^ u64::from(side > 0.0), t * 5.0) - 0.5) * half * 0.25;
-                frame.pt(x + side * (half + wob), top + (bottom - top) * t)
-            })
-            .collect()
-    };
-    let mut pts = edge(-1.0);
-    pts.extend(edge(1.0).into_iter().rev());
-    pts
+/// Uniform `0..1` from a seeded stream.
+fn unit(stream: &mut SeedStream) -> f32 {
+    (stream.next_u64() >> 40) as f32 / (1u64 << 24) as f32
 }
 
-/// A damp brush dabbed along `from..to`, lifting up to `strength` of the
-/// paint under it, the dabs widening from `radius.0` to `radius.1`.
-///
-/// Dabs rather than one stroke: the choreography cuts a stroke into spans,
-/// and lifts multiply, so a lift drawn in spans lifts less where two spans
-/// overlap and dries into a dashed line. A single-point dab is never cut.
-fn lift_along(
-    p: &mut Painting,
-    frame: &Frame,
-    style: &Style,
-    (from, to): ((f32, f32), (f32, f32)),
-    radius: (f32, f32),
-    strength: f32,
-) {
-    // Every dab takes the pen at least two ticks, so shorter stages afford
-    // fewer; a fifth of the stage leaves the rest of its strokes room.
-    let max_dabs = (style.ticks(STAGE_TICKS) / 5).max(4) as usize;
-    let length = ((to.0 - from.0).powi(2) + (to.1 - from.1).powi(2))
-        .sqrt()
-        .max(1e-4);
-    let r_at = |t: f32| radius.0 + (radius.1 - radius.0) * t;
-    // Each dab sits `pitch` of its own radius past the last, so a widening
-    // lift stays evenly overlapped; the pitch opens up if that needs too many.
-    let place = |pitch: f32| {
-        let mut ts = vec![0.0f32];
-        while let Some(&t) = ts.last() {
-            let next = t + pitch * r_at(t) / length;
-            if next >= 1.0 {
-                break;
-            }
-            ts.push(next);
-        }
-        ts
-    };
-    let mut pitch = 0.45;
-    let mut ts = place(pitch);
-    if ts.len() > max_dabs {
-        pitch *= ts.len() as f32 / max_dabs as f32;
-        ts = place(pitch);
-    }
-    // About `2 / pitch` dabs overlap any point.
-    let each = 1.0 - (1.0 - strength.clamp(0.0, 0.99)).powf(pitch * 0.5);
-    for t in ts {
-        p.at(
-            0.0,
-            Operation::Lift(LiftStroke {
-                path: vec![frame.pt(from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t)],
-                radius: RadiusProfile::uniform(radius.0 + (radius.1 - radius.0) * t),
-                strength: each,
-                softness: 0.8,
-                span: StrokeSpan::FULL,
-            }),
-        );
-    }
-}
-
-/// Light laid on dry water the way a painter does it: a damp brush lifts a
-/// soft column out of the wash under `x`, then `glow` is glazed into the
-/// `gap` stencil inside it, so the reflection is crisp at its core and fades
-/// into the water at its edges.
-#[allow(clippy::too_many_arguments)]
-fn lit_reflection(
-    p: &mut Painting,
-    frame: &Frame,
-    style: &Style,
-    glow: usize,
-    gap: &[Point],
-    x: f32,
-    (top, bottom): (f32, f32),
-    radius: (f32, f32),
-) {
-    lift_along(
-        p,
-        frame,
-        style,
-        ((x, top + radius.0), (x, bottom)),
-        (radius.0 * 1.4, radius.1 * 1.4),
-        0.85,
-    );
-    p.mask(0.0, gap.to_vec(), 0.006);
-    let (c, w) = style.glow(0.85, 0.5);
+fn dab_lift(p: &mut Painting, frame: &Frame, (x, y): (f32, f32), r: f32, strength: f32) {
     p.at(
         0.0,
-        tapered(frame.line(x, top, x, bottom), radius, glow, c, w, 0.8),
+        Operation::Lift(LiftStroke {
+            path: vec![frame.pt(x, y)],
+            radius: RadiusProfile::uniform(r),
+            strength,
+            softness: 0.9,
+            span: StrokeSpan::FULL,
+        }),
     );
-    p.clear_mask(0.0);
 }
 
-/// A graded sky laid in rows from `y0` down to `y1`, the way a sky is
-/// painted wet: each row lays every `(pigment, top, bottom)` layer at its
-/// graded concentration, alternating direction, so neighbouring rows and
-/// pigments run together. The stencil's feather fades the ends; each row
-/// overshoots by a different amount, so the pen's steps along one row never
-/// line up with the next row's into a vertical seam.
-fn graded_sky(
+/// A graded wash laid in rows from `upper(x)` down to `lower(x)` across
+/// `x0..x1`, each row following the band's shape: each
+/// row lays every `(pigment, top, bottom)` layer at its graded concentration,
+/// alternating direction, so rows and pigments run together wet. The rows
+/// stop short of the span by different amounts, so the wash's sides are the
+/// brush's own staggered ends, not a stencil, and the pen's steps along one
+/// row never line up with the next row's into a vertical seam.
+#[allow(clippy::too_many_arguments)]
+fn graded(
     p: &mut Painting,
     frame: &Frame,
     style: &Style,
-    (cx, reach): (f32, f32),
-    (y0, y1): (f32, f32),
+    (x0, x1): (f32, f32),
+    (upper, lower): (&dyn Fn(f32) -> f32, &dyn Fn(f32) -> f32),
     rows: usize,
     layers: &[(usize, f32, f32)],
+    (fade_top, fade_bottom): (f32, f32),
 ) {
-    let radius = frame.hatch_radius(y0, y1, rows) * 1.4;
+    let mid = (x0 + x1) * 0.5;
+    let radius = frame.hatch_radius(upper(mid), lower(mid), rows) * 1.5;
     for i in 0..rows {
         let t = i as f32 / (rows - 1).max(1) as f32;
-        let y = y0 + (y1 - y0) * t;
-        let left = cx - reach - 0.05 - 0.2 * ((i as f32 * 0.618_034).fract());
-        let right = cx + reach + 0.05 + 0.2 * ((i as f32 * 0.414_214 + 0.3).fract());
+        // Rows within `fade_top` / `fade_bottom` of an edge run thin, so the
+        // wash pales out toward that edge instead of stopping on it.
+        let ramp = |d: f32, share: f32| {
+            if share > 0.0 {
+                0.3 + 0.7 * smooth(0.0, share, d)
+            } else {
+                1.0
+            }
+        };
+        let edge = ramp(t, fade_top) * ramp(1.0 - t, fade_bottom);
+        let left = x0 + 0.28 * ((i as f32 * 0.618_034 + 0.1).fract());
+        let right = x1 - 0.28 * ((i as f32 * 0.414_214 + 0.3).fract());
         let (a, b) = if i % 2 == 0 {
             (left, right)
         } else {
             (right, left)
         };
+        let path: Vec<Point> = (0..=16)
+            .map(|k| {
+                let x = a + (b - a) * k as f32 / 16.0;
+                frame.pt(x, upper(x) + (lower(x) - upper(x)) * t)
+            })
+            .collect();
         for &(pigment, top, bottom) in layers {
-            let conc = top + (bottom - top) * t.powf(1.5);
-            if conc > 0.01 {
+            let conc = (top + (bottom - top) * t) * edge;
+            // Skip only a layer that is empty throughout, so which rows are laid
+            // never depends on the ground (a dark ground must not add marks).
+            if top.max(bottom) > 0.0 {
                 p.at(
                     0.0,
                     brush(
-                        frame.line(a, y, b, y),
+                        path.clone(),
                         radius,
                         pigment,
                         style.conc(conc),
-                        style.water(0.38),
+                        style.water(0.4),
                         0.9,
                     ),
                 );
@@ -297,31 +284,109 @@ fn graded_sky(
     }
 }
 
-/// Fills `poly` with a flat hatched wash of each `(pigment, conc)`; the
-/// hatch overshoots `x0..x1` so its turns fall outside the stencil.
-fn stencil_fill(
+/// Wet-into-wet: loaded dabs of `pigment` dropped into the still-wet wash
+/// at seeded places inside `(x0, x1, y0, y1)`, where they bloom and bleed.
+#[allow(clippy::too_many_arguments)]
+fn drop_ins(
     p: &mut Painting,
     frame: &Frame,
     style: &Style,
-    (poly, feather): (Vec<Point>, f32),
+    stream: &mut SeedStream,
+    pigment: usize,
     (x0, x1, y0, y1): (f32, f32, f32, f32),
-    rows: usize,
-    layers: &[(usize, f32)],
+    count: usize,
+    (radius, conc): (f32, f32),
 ) {
-    p.mask(0.0, poly, feather);
-    for (i, &(pigment, conc)) in layers.iter().enumerate() {
+    for _ in 0..count {
+        let (x, y) = (x0 + (x1 - x0) * unit(stream), y0 + (y1 - y0) * unit(stream));
+        let r = radius * (0.6 + 0.8 * unit(stream));
+        let dx = r * (0.5 + unit(stream));
         p.at(
             0.0,
             brush(
-                frame.hatch(x0 - 0.06, x1 + 0.06, y0, y1, rows),
-                frame.hatch_radius(y0, y1, rows) * 1.25,
+                vec![frame.pt(x - dx, y), frame.pt(x + dx, y + r * 0.1)],
+                r,
                 pigment,
-                style.conc(conc),
-                style.water(if i == 0 { 0.4 } else { 0.22 }),
-                0.8,
+                style.conc(conc * (0.7 + 0.6 * unit(stream))),
+                style.water(0.3),
+                0.95,
             ),
         );
     }
+}
+
+/// Moonlight or lamplight on water: broken horizontal strokes, each laid
+/// into a lifted strip so the light reads on the dark water, narrowing and
+/// breaking up with distance from the light.
+#[allow(clippy::too_many_arguments)]
+fn broken_reflection(
+    p: &mut Painting,
+    frame: &Frame,
+    style: &Style,
+    stream: &mut SeedStream,
+    glow: usize,
+    x: f32,
+    (top, bottom): (f32, f32),
+    (hw_top, hw_bottom): (f32, f32),
+) {
+    let bars = if style.fine() { 7 } else { 4 };
+    let pitch = (bottom - top) / bars as f32;
+    for i in 0..bars {
+        let t = i as f32 / (bars - 1).max(1) as f32;
+        let y = top + pitch * (i as f32 + 0.5) * (0.85 + 0.3 * unit(stream));
+        let hw = (hw_top + (hw_bottom - hw_top) * t) * (0.6 + 0.8 * unit(stream));
+        let cx = x + (unit(stream) - 0.5) * hw * 0.8;
+        let r = (pitch * 0.32).min(0.014) * (1.0 - 0.4 * t);
+        // One stroke, not dabs: a lift cut into spans lifts unevenly, which on
+        // a ripple of light is the broken edge it should have.
+        p.at(
+            0.0,
+            lift(frame.line(cx - hw, y, cx + hw, y), r * 1.4, 0.7, 0.8),
+        );
+        let (c, w) = style.glow(0.9 * (1.0 - 0.35 * t), 0.35);
+        p.at(
+            0.0,
+            tapered(
+                vec![frame.pt(cx - hw, y + r * 0.2), frame.pt(cx + hw * 0.9, y)],
+                (r, r * 0.4),
+                glow,
+                c,
+                w,
+                0.6,
+            ),
+        );
+    }
+}
+
+/// A painted moon: a soft bloom glazed into the sky around it, then the disc
+/// itself, shaded on one side and lifted on the other so it reads round.
+fn paint_moon(
+    p: &mut Painting,
+    frame: &Frame,
+    style: &Style,
+    (gold, shade): (usize, usize),
+    (x, y, r): (f32, f32, f32),
+    sky: Vec<Point>,
+) {
+    p.mask(0.0, sky, 0.045);
+    let (c, w) = style.glow(if style.dark() { 0.12 } else { 0.08 }, 0.5);
+    p.at(0.0, brush(vec![frame.pt(x, y)], r * 2.6, gold, c, w, 1.0));
+    p.mask(0.0, frame.circle(x, y, r, 48), 0.006);
+    glow(p, frame, style, gold, (x, y), r * 1.3, 1.25);
+    if !style.dark() {
+        p.at(
+            0.0,
+            brush(
+                vec![frame.pt(x + r * 0.45, y + r * 0.35)],
+                r * 0.7,
+                shade,
+                style.conc(0.12),
+                style.water(0.3),
+                0.95,
+            ),
+        );
+    }
+    dab_lift(p, frame, (x - r * 0.35, y - r * 0.3), r * 0.45, 0.35);
 }
 
 fn glow(
@@ -404,9 +469,36 @@ fn streak(
     );
 }
 
-/// Dawn over folded ridges: a warm glow along the far skyline, three ridges
-/// glazed nearer and darker, then the sun rising in the saddle and the
-/// morning's cloud bars and birds.
+/// Fills `poly` with a hatched wash of each `(pigment, conc)`; the hatch
+/// overshoots `x0..x1` so its turns fall outside the stencil.
+fn stencil_fill(
+    p: &mut Painting,
+    frame: &Frame,
+    style: &Style,
+    (poly, feather): (Vec<Point>, f32),
+    (x0, x1, y0, y1): (f32, f32, f32, f32),
+    rows: usize,
+    layers: &[(usize, f32)],
+) {
+    p.mask(0.0, poly, feather);
+    for (i, &(pigment, conc)) in layers.iter().enumerate() {
+        p.at(
+            0.0,
+            brush(
+                frame.hatch(x0 - 0.06, x1 + 0.06, y0, y1, rows),
+                frame.hatch_radius(y0, y1, rows) * 1.25,
+                pigment,
+                style.conc(conc),
+                style.water(if i == 0 { 0.4 } else { 0.22 }),
+                0.8,
+            ),
+        );
+    }
+}
+
+/// Dawn over folded ridges: a warm sky, three ridges glazed nearer and
+/// darker with mist lifted along each foot, then the sun rising in the
+/// saddle, and last the morning's cloud bars and birds.
 pub(super) fn dawn_ridges(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(WIDE_3_1);
     let rose = role(palette, PigmentRole::BaseWash);
@@ -415,13 +507,13 @@ pub(super) fn dawn_ridges(style: &Style, palette: &Palette) -> Scene {
     let gold = role(palette, PigmentRole::Glow);
     let seed = style.seed().0;
     let dark = style.dark();
-    let lens = Lens {
-        cx: 1.5,
-        rx: 1.42,
-        rim: 0.58,
-        deep: 0.98,
-        power: 2.2,
-        wobble: 0.02,
+    let mut stream = style.stream(0x48);
+    let sheet = Sheet {
+        x0: 0.1,
+        x1: 2.9,
+        sky_x: (0.22, 2.82),
+        rim: 0.6,
+        deep: 0.9,
         seed,
     };
     let far = Range {
@@ -431,100 +523,167 @@ pub(super) fn dawn_ridges(style: &Style, palette: &Palette) -> Scene {
         seed: seed ^ 0x11,
     };
     let mid = Range {
-        floor: 0.73,
+        floor: 0.7,
         peaks: &[(0.35, 0.4, 0.12), (1.05, 0.3, 0.05), (2.15, 0.45, 0.1)],
         wobble: 0.02,
         seed: seed ^ 0x12,
     };
     let near = Range {
-        floor: 0.88,
-        peaks: &[(0.8, 0.5, 0.1), (2.6, 0.4, 0.07)],
+        floor: 0.82,
+        peaks: &[(0.8, 0.5, 0.07), (2.6, 0.4, 0.05)],
         wobble: 0.015,
         seed: seed ^ 0x13,
     };
-    let sun = (1.96, 0.55, 0.115);
+    let sun = (1.96, 0.55, 0.11);
     let rows = |fine: usize, coarse: usize| if style.fine() { fine } else { coarse };
     let mut stages = Stages::new(style.ticks(STAGE_TICKS));
     stages.stage(|p| {
-        let (height, top, warm) = if dark {
-            (0.24, 0.4, 1.2)
-        } else {
-            (0.4, 0.24, 1.0)
-        };
-        p.mask(0.0, lens.sky(&frame, height, |x| far.y(x)), 0.06);
-        graded_sky(
+        p.mask(
+            0.0,
+            sheet.sky(&frame, 0.42 + Sheet::SLACK, |x| far.y(x)),
+            0.03,
+        );
+        let k = if dark { 1.15 } else { 1.0 };
+        graded(
             p,
             &frame,
             style,
-            (lens.cx, lens.rx),
-            (top, 0.62),
-            rows(5, 3),
-            &[(rose, 0.0, 0.16 * warm), (gold, 0.0, 0.5 * warm)],
+            sheet.sky_x,
+            (&|x| sheet.sky_top(x, 0.42, &|x| far.y(x)), &|x| {
+                far.y(x) + 0.02
+            }),
+            rows(6, 3),
+            &[
+                (rose, 0.3 * k, 0.12 * k),
+                (gold, 0.0, 0.55 * k),
+                (indigo, if dark { 0.0 } else { 0.08 }, 0.0),
+            ],
+            (if dark { 0.0 } else { 0.45 }, 0.0),
         );
-        p.settle(0.9, 2.5);
-    });
-    for (range, layers) in [
-        (&far, vec![(rose, 0.26), (indigo, 0.1)]),
-        (&mid, vec![(indigo, 0.3), (rose, 0.14)]),
-        (&near, vec![(indigo, 0.8)]),
-    ] {
-        stages.stage(|p| {
-            stencil_fill(
+        if style.fine() {
+            drop_ins(
                 p,
                 &frame,
                 style,
-                (lens.below(&frame, |x| range.y(x)), 0.007),
-                (0.0, 3.0, range.crest() - 0.02, lens.deep),
-                rows(8, 5),
-                &layers,
+                &mut stream,
+                rose,
+                (0.3, 2.7, 0.2, 0.36),
+                4,
+                (0.06, 0.4),
             );
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                gold,
+                (1.6, 2.4, 0.4, 0.52),
+                2,
+                (0.08, 0.5),
+            );
+        }
+        wet_edge(
+            p,
+            &frame,
+            style,
+            &sheet.sky_edge(0.42, |x| far.y(x), 0.03),
+            0.04,
+        );
+        p.settle(0.9, 2.5);
+    });
+    for (range, layers, mist) in [
+        (&far, vec![(rose, 0.26), (indigo, 0.1)], rose),
+        (&mid, vec![(indigo, 0.3), (rose, 0.14)], rose),
+        (&near, vec![(indigo, 0.75), (rose, 0.08)], indigo),
+    ] {
+        stages.stage(|p| {
+            p.mask(
+                0.0,
+                sheet.below(&frame, |x| range.y(x), Sheet::SLACK),
+                0.006,
+            );
+            let flat: Vec<(usize, f32, f32)> = layers.iter().map(|&(g, c)| (g, c, c)).collect();
+            graded(
+                p,
+                &frame,
+                style,
+                (sheet.x0, sheet.x1),
+                (&|x| range.y(x) + 0.015, &|x| sheet.floor(x) - 0.02),
+                rows(6, 4),
+                &flat,
+                (0.0, 0.5),
+            );
+            if style.fine() {
+                drop_ins(
+                    p,
+                    &frame,
+                    style,
+                    &mut stream,
+                    mist,
+                    (0.3, 2.7, range.crest() + 0.02, range.floor),
+                    3,
+                    (0.07, 0.35),
+                );
+                let y = range.floor + 0.04;
+                wet_edge(
+                    p,
+                    &frame,
+                    style,
+                    &[(0.3, y), (1.5, y - 0.01), (2.7, y + 0.01)],
+                    0.03,
+                );
+            }
+
             p.settle(0.9, 2.5);
         });
     }
     stages.stage(|p| {
-        if !dark {
-            p.mask(0.0, lens.sky(&frame, 0.3, |x| far.y(x) - 0.006), 0.06);
-            glow(
-                p,
-                &frame,
-                style,
-                gold,
-                (sun.0, sun.1 - 0.03),
-                sun.2 * 2.4,
-                0.2,
-            );
-        }
-        p.mask(0.0, disc_above(&frame, sun, |x| far.y(x)), 0.004);
+        p.mask(
+            0.0,
+            disc_above(&frame, (sun.0, sun.1, sun.2 * 2.6), |x| far.y(x)),
+            0.1,
+        );
+        glow(
+            p,
+            &frame,
+            style,
+            gold,
+            (sun.0, sun.1 - 0.03),
+            sun.2 * 2.2,
+            if dark { 0.18 } else { 0.16 },
+        );
+        p.mask(0.0, disc_above(&frame, sun, |x| far.y(x)), 0.005);
         glow(p, &frame, style, gold, (sun.0, sun.1), sun.2 * 1.4, 1.3);
         if !dark {
             p.at(
                 0.0,
                 brush(
-                    frame.line(
-                        sun.0 - sun.2,
-                        sun.1 + sun.2 * 0.5,
-                        sun.0 + sun.2,
-                        sun.1 + sun.2 * 0.5,
-                    ),
-                    sun.2 * 0.5,
+                    vec![frame.pt(sun.0 + sun.2 * 0.3, sun.1 + sun.2 * 0.5)],
+                    sun.2 * 0.7,
                     ember,
                     style.conc(0.3),
                     style.water(0.3),
-                    0.9,
+                    0.95,
                 ),
             );
         }
+        dab_lift(
+            p,
+            &frame,
+            (sun.0 - sun.2 * 0.3, sun.1 - sun.2 * 0.4),
+            sun.2 * 0.4,
+            0.3,
+        );
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
-        p.mask(0.0, lens.sky(&frame, 0.6, |x| far.y(x) - 0.012), 0.03);
+        p.mask(0.0, sheet.sky(&frame, 0.6, |x| far.y(x) - 0.012), 0.03);
         let bar = if dark { gold } else { ember };
         for &(pigment, x0, x1, y, conc) in &[
-            (bar, 1.6, 2.4, 0.5, 0.35),
-            (rose, 0.55, 1.2, 0.38, 0.32),
-            (rose, 2.2, 2.72, 0.43, 0.28),
+            (bar, 1.6, 2.4, 0.49, 0.35),
+            (rose, 0.55, 1.2, 0.4, 0.32),
+            (rose, 2.2, 2.72, 0.44, 0.28),
         ] {
-            let y = if dark { f32::max(y, 0.45) + 0.02 } else { y };
             p.at(
                 0.0,
                 water(
@@ -545,7 +704,7 @@ pub(super) fn dawn_ridges(style: &Style, palette: &Palette) -> Scene {
             );
         }
         if style.fine() {
-            for &(x, y, span) in &[(1.02, 0.22, 0.12), (1.18, 0.17, 0.095), (1.27, 0.27, 0.075)] {
+            for &(x, y, span) in &[(1.02, 0.25, 0.12), (1.18, 0.2, 0.095), (1.27, 0.3, 0.075)] {
                 bird(p, &frame, style, indigo, (x, y), span);
             }
         }
@@ -555,15 +714,14 @@ pub(super) fn dawn_ridges(style: &Style, palette: &Palette) -> Scene {
         "hub-dawn-ridges",
         palette,
         WIDE_3_1,
-        Paper::hot_press(style.seed()),
+        Paper::cold_press(style.seed()),
         stages.finish(),
     )
 }
 
-/// A lighthouse on a headland at night: twilight along the horizon with the
-/// beam's path held back, the sea around the lamp's reflection, the headland
-/// and the tower, then the lamp lit into the beam, and last its light on the
-/// water.
+/// A lighthouse on a headland at night: a sky graded down to the horizon,
+/// the sea picking up its colour, the headland and the tower, then the lamp
+/// lit into a beam that fades into the sky, and last its light on the water.
 pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(WIDE_3_1);
     let cerulean = role(palette, PigmentRole::BaseWash);
@@ -571,36 +729,24 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
     let rock = granulating_role(palette, &[PigmentRole::Accent, PigmentRole::Shadow]);
     let gold = role(palette, PigmentRole::Glow);
     let seed = style.seed().0;
+    let dark = style.dark();
+    let mut stream = style.stream(0x49);
     let horizon = 0.63;
-    let lens = Lens {
-        cx: 1.5,
-        rx: 1.42,
+    let sheet = Sheet {
+        x0: 0.2,
+        x1: 2.86,
+        sky_x: (0.12, 2.75),
         rim: horizon,
-        deep: 0.97,
-        power: 2.2,
-        wobble: 0.02,
+        deep: 0.91,
         seed,
     };
     let (lamp_x, lamp_y) = (2.3, 0.33);
-    let beam_end = (0.95, 0.27);
+    let beam_end = (1.05, 0.3);
     let beam_at = |t: f32| {
         (
             lamp_x - 0.03 + (beam_end.0 - lamp_x + 0.03) * t,
             lamp_y + (beam_end.1 - lamp_y) * t,
         )
-    };
-    let beam: Vec<Point> = {
-        let steps = 20;
-        let edge = |i: usize, sign: f32| {
-            let t = i as f32 / steps as f32;
-            let (x, y) = beam_at(t);
-            let close = 1.0 - smooth(0.75, 1.0, t) * 0.8;
-            frame.pt(x, y + sign * (0.02 + 0.06 * t) * close)
-        };
-        (0..=steps)
-            .map(|i| edge(i, -1.0))
-            .chain((0..=steps).rev().map(|i| edge(i, 1.0)))
-            .collect()
     };
     let headland: Vec<Point> = frame.map(&[
         Point::new(1.82, horizon + 0.012),
@@ -635,57 +781,102 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
         Point::new(lamp_x, lantern_top - 0.03),
         Point::new(lamp_x + 0.024, lantern_top),
     ]);
-    let glint = reflection(
-        &frame,
-        lamp_x,
-        (horizon + 0.008, 0.88),
-        (0.034, 0.01),
-        seed ^ 3,
-    );
-    let sea = lens.below(&frame, |_| horizon);
+    let sky_height = 0.44;
+    let sky = sheet.sky(&frame, sky_height + Sheet::SLACK, |_| horizon);
+    let sea = sheet.below(&frame, |_| horizon, Sheet::SLACK);
     let rows = |fine: usize, coarse: usize| if style.fine() { fine } else { coarse };
 
     let mut stages = Stages::new(style.ticks(STAGE_TICKS));
     stages.stage(|p| {
-        let (height, top) = if style.dark() {
-            (0.28, horizon - 0.24)
+        p.mask(0.0, sky.clone(), 0.03);
+        let layers = if dark {
+            [(phthalo, 0.1, 0.18), (cerulean, 0.0, 0.14)]
         } else {
-            (0.5, horizon - 0.44)
+            [(cerulean, 0.36, 0.1), (phthalo, 0.14, 0.0)]
         };
-        p.mask(0.0, lens.sky(&frame, height, |_| horizon), 0.04);
-        graded_sky(
+        graded(
             p,
             &frame,
             style,
-            (lens.cx, lens.rx),
-            (top, horizon - 0.015),
-            rows(5, 3),
-            &if style.dark() {
-                [(cerulean, 0.1, 0.34), (phthalo, 0.0, 0.07)]
-            } else {
-                [(cerulean, 0.34, 0.12), (phthalo, 0.12, 0.0)]
-            },
+            sheet.sky_x,
+            (&|x| sheet.sky_top(x, sky_height, &|_| horizon), &|_| {
+                horizon + 0.01
+            }),
+            rows(6, 3),
+            &layers,
+            (if dark { 0.0 } else { 0.45 }, 0.0),
+        );
+        if style.fine() {
+            let cloud = if dark { cerulean } else { phthalo };
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                cloud,
+                (0.4, 2.6, 0.26, 0.44),
+                4,
+                (0.07, if dark { 0.2 } else { 0.35 }),
+            );
+            if !dark {
+                for _ in 0..3 {
+                    let (x, y) = (
+                        0.4 + 2.2 * unit(&mut stream),
+                        0.4 + 0.12 * unit(&mut stream),
+                    );
+                    dab_lift(p, &frame, (x, y), 0.06, 0.35);
+                }
+            }
+        }
+        wet_edge(
+            p,
+            &frame,
+            style,
+            &sheet.sky_edge(sky_height, |_| horizon, 0.03),
+            0.04,
         );
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
-        stencil_fill(
+        p.mask(0.0, sea.clone(), 0.008);
+        graded(
             p,
             &frame,
             style,
-            (sea.clone(), 0.008),
-            (0.0, 3.0, horizon, lens.deep),
-            rows(8, 5),
-            &[(phthalo, 0.34), (cerulean, 0.12)],
+            (sheet.x0, sheet.x1),
+            (&|_| horizon + 0.012, &|x| sheet.floor(x) - 0.02),
+            rows(5, 3),
+            &[(cerulean, 0.34, 0.16), (phthalo, 0.1, 0.34)],
+            (0.0, 0.5),
         );
         if style.fine() {
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                phthalo,
+                (0.3, 2.6, 0.7, 0.88),
+                3,
+                (0.07, 0.4),
+            );
+            for _ in 0..2 {
+                let (x, y) = (
+                    0.3 + 2.0 * unit(&mut stream),
+                    0.68 + 0.18 * unit(&mut stream),
+                );
+                p.at(
+                    0.0,
+                    lift(frame.line(x, y, x + 0.25, y + 0.004), 0.01, 0.5, 0.8),
+                );
+            }
             streak(
                 p,
                 &frame,
                 style,
                 phthalo,
                 (0.35, 1.55, horizon + 0.02),
-                0.02,
+                0.018,
                 0.35,
             );
         }
@@ -699,17 +890,19 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
             (headland.clone(), 0.005),
             (1.8, 2.9, 0.46, horizon + 0.012),
             rows(7, 4),
-            &[(rock, 0.65), (phthalo, 0.2)],
+            &[(rock, 0.6), (phthalo, 0.18)],
         );
-        streak(
+        drop_ins(
             p,
             &frame,
             style,
+            &mut stream,
             phthalo,
-            (1.86, 2.86, horizon - 0.012),
-            0.02,
-            0.6,
+            (1.9, 2.8, 0.55, 0.62),
+            3,
+            (0.04, 0.7),
         );
+        dab_lift(p, &frame, (2.1, 0.49), 0.03, 0.35);
         p.at(
             0.0,
             tapered(
@@ -725,6 +918,18 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
                 0.8,
             ),
         );
+        p.mask(0.0, sea.clone(), 0.008);
+        p.at(
+            0.0,
+            brush(
+                frame.line(1.86, horizon + 0.025, 2.86, horizon + 0.028),
+                0.025,
+                rock,
+                style.conc(0.3),
+                style.water(0.3),
+                1.0,
+            ),
+        );
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
@@ -735,9 +940,25 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
                 frame.line(lamp_x, tower_base + 0.01, lamp_x, lantern_bottom),
                 (0.032, 0.022),
                 phthalo,
-                style.conc(1.0),
+                style.conc(0.85),
                 style.water(0.35),
                 0.5,
+            ),
+        );
+        p.at(
+            0.0,
+            tapered(
+                frame.line(
+                    lamp_x + 0.014,
+                    tower_base + 0.005,
+                    lamp_x + 0.01,
+                    lantern_bottom + 0.012,
+                ),
+                (0.01, 0.007),
+                phthalo,
+                style.conc(1.3),
+                style.water(0.2),
+                0.7,
             ),
         );
         p.mask(0.0, roof.clone(), 0.003);
@@ -766,32 +987,33 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
             0.003,
         );
         glow(p, &frame, style, gold, (lamp_x, lamp_y), 0.04, 1.4);
-        if style.dark() {
-            p.clear_mask(0.0);
-        } else {
-            lift_along(
-                p,
-                &frame,
-                style,
-                ((lamp_x - 0.04, lamp_y), beam_at(1.0)),
-                (0.02, 0.075),
-                0.8,
+        // The beam stays inside the sky, and fades out along it.
+        p.mask(0.0, sky.clone(), 0.04);
+        if !dark {
+            let (x, y) = beam_at(1.0);
+            p.at(
+                0.0,
+                Operation::Lift(LiftStroke {
+                    path: vec![frame.pt(lamp_x - 0.04, lamp_y), frame.pt(x, y)],
+                    radius: RadiusProfile {
+                        start: 0.02,
+                        end: 0.07,
+                    },
+                    strength: 0.7,
+                    softness: 0.85,
+                    span: StrokeSpan::FULL,
+                }),
             );
-            p.mask(0.0, beam.clone(), 0.03);
         }
-        let (layer, reach) = if style.dark() {
-            (0.12, 0.45)
-        } else {
-            (0.1, 1.0)
-        };
-        for t in [reach, reach * 0.75, reach * 0.5] {
+        let layer = if dark { 0.06 } else { 0.09 };
+        for t in [1.0, 0.7, 0.45, 0.25] {
             let (c, w) = style.glow(layer, 0.5);
             let (x, y) = beam_at(t);
             p.at(
                 0.0,
                 tapered(
                     vec![frame.pt(lamp_x - 0.04, lamp_y), frame.pt(x, y)],
-                    (0.015, 0.015 + 0.07 * t),
+                    (0.015, 0.015 + 0.055 * t),
                     gold,
                     c,
                     w,
@@ -799,28 +1021,32 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
                 ),
             );
         }
+        let (c, w) = style.glow(0.16, 0.5);
+        p.at(
+            0.0,
+            brush(vec![frame.pt(lamp_x, lamp_y)], 0.09, gold, c, w, 1.0),
+        );
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
-        lit_reflection(
+        p.mask(0.0, sea.clone(), 0.008);
+        broken_reflection(
             p,
             &frame,
             style,
+            &mut stream,
             gold,
-            &glint,
             lamp_x,
-            (horizon + 0.012, 0.86),
-            (0.034, 0.012),
+            (horizon + 0.012, 0.88),
+            (0.04, 0.012),
         );
-        p.mask(0.0, sea.clone(), 0.008);
         for &(x0, x1, y) in &[
             (0.45, 0.85, 0.72),
             (1.1, 1.6, 0.79),
             (0.7, 1.0, 0.86),
-            (2.45, 2.72, 0.74),
-            (1.75, 2.05, 0.9),
+            (2.45, 2.72, 0.76),
         ] {
-            streak(p, &frame, style, phthalo, (x0, x1, y), 0.008, 0.8);
+            streak(p, &frame, style, phthalo, (x0, x1, y), 0.007, 0.8);
         }
         p.settle(0.9, 2.5);
     });
@@ -828,7 +1054,7 @@ pub(super) fn lighthouse(style: &Style, palette: &Palette) -> Scene {
         "hub-lighthouse",
         palette,
         WIDE_3_1,
-        Paper::hot_press(style.seed()),
+        Paper::cold_press(style.seed()),
         stages.finish(),
     )
 }
@@ -868,29 +1094,33 @@ fn pine(x: f32, top: f32, foot: f32, w: f32) -> Vec<Point> {
     pts
 }
 
-/// A cabin on a lake shore under the moon: afterglow along the horizon, far
-/// hills, the lake around the moon's reflection, the shore with the cabin
-/// and pines, then the moon and the lit window, and last their light on the
-/// water.
+/// A cabin on a lake shore under the moon: afterglow graded down to the
+/// horizon around the moon's place, far hills, the lake picking up the sky,
+/// the shore with the cabin and pines, then the moon and the lit window, and
+/// last their light broken across the water.
 pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(WIDE_3_1);
     let indigo = role(palette, PigmentRole::BaseWash);
     let grey = role(palette, PigmentRole::Shadow);
-    let silhouette = if style.dark() { indigo } else { grey };
+    let silhouette = grey;
+    // Under luminous compositing a silhouette glows rather than darkens, so it
+    // needs more paint to read against the sky.
+    let dense = if style.dark() { 1.6 } else { 1.0 };
     let rose = role(palette, PigmentRole::Accent);
     let gold = role(palette, PigmentRole::Glow);
     let seed = style.seed().0;
+    let dark = style.dark();
+    let mut stream = style.stream(0x4a);
     let horizon = 0.57;
-    let lens = Lens {
-        cx: 1.5,
-        rx: 1.42,
+    let sheet = Sheet {
+        x0: 0.1,
+        x1: 2.76,
+        sky_x: (0.16, 2.84),
         rim: horizon,
-        deep: 0.97,
-        power: 2.2,
-        wobble: 0.02,
-        seed,
+        deep: 0.91,
+        seed: seed ^ 0x33,
     };
-    let moon = (0.8, 0.22, 0.08);
+    let moon = (0.78, 0.25, 0.07);
     let hills = Range {
         floor: horizon + 0.01,
         peaks: &[(0.4, 0.32, 0.06), (1.3, 0.45, 0.11), (2.4, 0.3, 0.04)],
@@ -901,21 +1131,7 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
     let (cabin_x, cabin_w, eave, ridge_y) = (2.13, 0.2, 0.52, 0.445);
     let window = (cabin_x + 0.055, cabin_x + 0.105, 0.545, 0.585);
     let window_x = (window.0 + window.1) * 0.5;
-    let moon_glint = reflection(
-        &frame,
-        moon.0,
-        (horizon + 0.006, 0.9),
-        (0.07, 0.014),
-        seed ^ 5,
-    );
-    let lamp_glint = reflection(
-        &frame,
-        window_x,
-        (sill - 0.005, sill + 0.13),
-        (0.028, 0.008),
-        seed ^ 6,
-    );
-    let lake = lens.below(&frame, |_| horizon);
+    let lake = sheet.below(&frame, |_| horizon, Sheet::SLACK);
     let pines = [(1.94, 0.37, 0.12), (2.48, 0.31, 0.15), (2.63, 0.4, 0.11)];
     let mut outline = vec![Point::new(1.66, sill + 0.02), Point::new(1.8, sill - 0.008)];
     outline.extend(pine(pines[0].0, pines[0].1, sill, pines[0].2));
@@ -939,64 +1155,129 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
 
     let mut stages = Stages::new(style.ticks(STAGE_TICKS));
     stages.stage(|p| {
-        let (height, top) = if style.dark() {
-            (0.22, horizon - 0.18)
-        } else {
-            (0.36, horizon - 0.3)
-        };
         p.mask(
             0.0,
             with_hole(
-                lens.sky(&frame, height, |_| horizon),
-                frame.circle(moon.0, moon.1, moon.2 + 0.006, 40),
+                sheet.sky(&frame, 0.42 + Sheet::SLACK, |_| horizon),
+                frame.circle(moon.0, moon.1, moon.2 + 0.004, 48),
             ),
-            0.06,
+            0.03,
         );
-        graded_sky(
+        let layers = if dark {
+            [(indigo, 0.1, 0.16), (rose, 0.04, 0.32)]
+        } else {
+            [(indigo, 0.34, 0.1), (rose, 0.02, 0.32)]
+        };
+        graded(
             p,
             &frame,
             style,
-            (lens.cx, lens.rx),
-            (top, horizon - 0.012),
-            rows(5, 3),
-            &[(indigo, 0.0, 0.16), (rose, 0.0, 0.34)],
-        );
-        p.settle(0.9, 2.5);
-    });
-    stages.stage(|p| {
-        stencil_fill(
-            p,
-            &frame,
-            style,
-            (
-                lens.below(&frame, |x| hills.y(x)).into_iter().collect(),
-                0.006,
-            ),
-            (0.0, 3.0, hills.crest() - 0.02, horizon + 0.02),
-            rows(5, 3),
-            &[(indigo, 0.34), (grey, 0.1)],
-        );
-        p.settle(0.9, 2.5);
-    });
-    stages.stage(|p| {
-        stencil_fill(
-            p,
-            &frame,
-            style,
-            (lake.clone(), 0.008),
-            (0.0, 3.0, horizon, lens.deep),
-            rows(8, 5),
-            &[(indigo, 0.36)],
+            sheet.sky_x,
+            (&|x| sheet.sky_top(x, 0.42, &|_| horizon), &|_| {
+                horizon + 0.01
+            }),
+            rows(6, 3),
+            &layers,
+            (if dark { 0.0 } else { 0.45 }, 0.0),
         );
         if style.fine() {
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                rose,
+                (0.3, 2.6, 0.38, 0.52),
+                3,
+                (0.07, 0.4),
+            );
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                grey,
+                (1.2, 2.7, 0.14, 0.3),
+                3,
+                (0.06, if dark { 0.1 } else { 0.3 }),
+            );
+        }
+        wet_edge(
+            p,
+            &frame,
+            style,
+            &sheet.sky_edge(0.42, |_| horizon, 0.03),
+            0.04,
+        );
+        p.settle(0.9, 2.5);
+    });
+    stages.stage(|p| {
+        p.mask(0.0, sheet.below(&frame, |x| hills.y(x), 0.0), 0.006);
+        graded(
+            p,
+            &frame,
+            style,
+            (sheet.x0 + 0.1, sheet.x1),
+            (&|x| hills.y(x) + 0.01, &|_| horizon + 0.02),
+            rows(4, 3),
+            &[(indigo, 0.32, 0.32), (grey, 0.1, 0.1)],
+            (0.0, 0.0),
+        );
+        if style.fine() {
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                rose,
+                (0.3, 2.4, horizon - 0.06, horizon - 0.02),
+                3,
+                (0.04, 0.3),
+            );
+        }
+        p.settle(0.9, 2.5);
+    });
+    stages.stage(|p| {
+        p.mask(0.0, lake.clone(), 0.008);
+        graded(
+            p,
+            &frame,
+            style,
+            (sheet.x0, sheet.x1),
+            (&|_| horizon + 0.012, &|x| sheet.floor(x) - 0.02),
+            rows(5, 3),
+            &[(rose, 0.26, 0.0), (indigo, 0.18, 0.44)],
+            (0.0, 0.5),
+        );
+        if style.fine() {
+            drop_ins(
+                p,
+                &frame,
+                style,
+                &mut stream,
+                grey,
+                (0.3, 2.6, 0.7, 0.9),
+                3,
+                (0.07, 0.3),
+            );
+            for _ in 0..2 {
+                let (x, y) = (
+                    0.25 + 2.2 * unit(&mut stream),
+                    0.66 + 0.2 * unit(&mut stream),
+                );
+                p.at(
+                    0.0,
+                    lift(frame.line(x, y, x + 0.28, y + 0.004), 0.01, 0.5, 0.8),
+                );
+            }
             streak(
                 p,
                 &frame,
                 style,
                 grey,
                 (0.25, 1.45, horizon + 0.018),
-                0.018,
-                0.4,
+                0.016,
+                0.35,
             );
         }
         p.settle(0.9, 2.5);
@@ -1009,7 +1290,7 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
                 frame.line(1.6, sill - 0.002, 2.95, sill - 0.002),
                 0.02,
                 silhouette,
-                style.conc(1.0),
+                style.conc(1.0 * dense),
                 style.water(0.35),
                 0.6,
             ),
@@ -1021,9 +1302,20 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
                     frame.line(x, top, x, sill),
                     (0.012, w * 0.55),
                     silhouette,
-                    style.conc(1.1),
+                    style.conc(0.95 * dense),
                     style.water(0.35),
                     0.6,
+                ),
+            );
+            p.at(
+                0.0,
+                brush(
+                    vec![frame.pt(x + w * 0.12, sill - (sill - top) * 0.25)],
+                    w * 0.35,
+                    indigo,
+                    style.conc(0.7),
+                    style.water(0.25),
+                    0.95,
                 ),
             );
         }
@@ -1039,16 +1331,35 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
                 ),
                 0.028,
                 silhouette,
-                style.conc(1.1),
+                style.conc(0.95 * dense),
                 style.water(0.35),
                 0.6,
+            ),
+        );
+        dab_lift(p, &frame, (cabin_x + 0.02, eave - 0.01), 0.025, 0.3);
+        p.mask(0.0, lake.clone(), 0.008);
+        p.at(
+            0.0,
+            brush(
+                frame.line(1.7, sill + 0.03, 2.88, sill + 0.032),
+                0.03,
+                silhouette,
+                style.conc(0.35),
+                style.water(0.3),
+                1.0,
             ),
         );
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
-        p.mask(0.0, frame.circle(moon.0, moon.1, moon.2, 40), 0.004);
-        glow(p, &frame, style, gold, (moon.0, moon.1), moon.2 * 1.3, 1.3);
+        paint_moon(
+            p,
+            &frame,
+            style,
+            (gold, rose),
+            moon,
+            sheet.sky(&frame, 0.42 + Sheet::SLACK, |_| horizon),
+        );
         p.mask(
             0.0,
             frame.rect(window.0, window.2, window.1, window.3),
@@ -1066,24 +1377,34 @@ pub(super) fn lakeside_cabin(style: &Style, palette: &Palette) -> Scene {
         p.settle(0.9, 2.5);
     });
     stages.stage(|p| {
-        for (glint, x, span, r) in [
-            (&moon_glint, moon.0, (horizon + 0.01, 0.88), (0.065, 0.014)),
-            (
-                &lamp_glint,
-                window_x,
-                (sill + 0.004, sill + 0.12),
-                (0.026, 0.008),
-            ),
-        ] {
-            lit_reflection(p, &frame, style, gold, glint, x, span, r);
-        }
+        p.mask(0.0, lake.clone(), 0.008);
+        broken_reflection(
+            p,
+            &frame,
+            style,
+            &mut stream,
+            gold,
+            moon.0,
+            (horizon + 0.01, 0.88),
+            (0.07, 0.02),
+        );
+        broken_reflection(
+            p,
+            &frame,
+            style,
+            &mut stream,
+            gold,
+            window_x,
+            (sill + 0.035, sill + 0.13),
+            (0.028, 0.01),
+        );
         p.settle(0.9, 2.5);
     });
     style.scene(
         "hub-lakeside-cabin",
         palette,
         WIDE_3_1,
-        Paper::hot_press(style.seed()),
+        Paper::cold_press(style.seed()),
         stages.finish(),
     )
 }

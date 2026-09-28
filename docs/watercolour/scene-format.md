@@ -188,7 +188,15 @@ matches: these manifest entries set `"stripFrames": 7` and
 the baked fallback shows the same painting. Contact sheets of every stop, light
 and dark, are in `docs/watercolour/hub-scenes/` (one row per stop, 0 at the
 top; light ground on the left, dark on the right), regenerated with the
-`render_stops` infra example.
+`render_stops` infra example. `compare-with-catalogue.webp` there sets each
+finished candidate beside `moonlit-shoreline`, `connected-shores` and
+`distant-mountains` at the same width.
+
+Every layer of a hub scene is laid in rows that follow its band (sky top,
+ridge line, water floor) inside a stencil left deliberately loose, so the wash
+ends on the brush's own soft, staggered edge rather than piling pigment
+against a stencil boundary; the stencil is kept tight only where an edge
+should be crisp, such as a ridge crest or the horizon.
 
 ## Static PNG export
 
