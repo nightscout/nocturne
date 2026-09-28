@@ -25,6 +25,13 @@
   /** How long the glaze stays up before the button returns to rest. */
   const HOLD_MS = 1600;
 
+  /**
+   * Lifts the glaze on a dark fill. DropSurface dims dark-ground paint so a
+   * wide mark does not dry to a pale slab; on a label-sized fill that dimming
+   * left the glaze barely readable. Judged by eye on the primary button.
+   */
+  const DARK_FILL_PEAK = 1.6;
+
   interface Props extends Omit<HTMLButtonAttributes, "class" | "children"> {
     /**
      * A count that moves on each successful save, e.g. `Submission.saved`.
@@ -88,9 +95,17 @@
   shown={playing}
   {generation}
   {surface}
+  peak={surface === "dark" ? DARK_FILL_PEAK : 1}
   revealMs={600}
   exitMs={600}
-  class={cn(buttonVariants({ variant, size }), "p-0", className)}
+  class={cn(
+    buttonVariants({ variant, size }),
+    "p-0",
+    // A saved form is clean, so its submit disables at the moment the glaze
+    // lands; it dims to rest as the paint leaves instead.
+    playing && "disabled:opacity-100",
+    className,
+  )}
   contentClass={cn("flex size-full items-center justify-center", CONTENT_PADDING[size])}
 >
   {@render children()}

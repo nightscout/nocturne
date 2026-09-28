@@ -19,6 +19,6 @@
     className,
   )}
 >
-  <ConfirmationBackground palette="moss" motion="auto" class="-z-10" />
+  <ConfirmationBackground palette="moss" motion="auto" fit="fill" class="-z-10" />
   <p>{@render children()}</p>
 </div>
