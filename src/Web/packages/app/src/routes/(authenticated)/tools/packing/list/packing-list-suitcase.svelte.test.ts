@@ -52,7 +52,7 @@ describe("packing list suitcase", () => {
     await expect.poll(lastSeek).toBe(0);
 
     await packed("Test strips").click();
-    await expect.poll(lastSeek).toBeCloseTo(PAINT_END / 2);
+    await expect.poll(lastSeek).toBeCloseTo(PAINT_END / 2, 10);
     const rising = seeks();
     expect(rising.every((at, i) => i === 0 || at >= rising[i - 1])).toBe(true);
 
@@ -86,7 +86,7 @@ describe("packing list suitcase", () => {
     reducedMotion.current = true;
     render(PackingListPage, {});
     await packed("Test strips").click();
-    await expect.poll(lastSeek).toBeCloseTo(PAINT_END / 2);
+    await expect.poll(lastSeek).toBeCloseTo(PAINT_END / 2, 10);
     expect(spyPlayer.finishImmediately).not.toHaveBeenCalled();
 
     await packed("Pen needles").click();
