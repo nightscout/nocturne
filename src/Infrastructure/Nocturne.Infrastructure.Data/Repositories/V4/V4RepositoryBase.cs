@@ -259,6 +259,28 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         return (await ctx.GetBlockingLegacyIdsAsync<TEntity>(legacyIds.ToHashSet(StringComparer.Ordinal), ct)).Held;
     }
 
+    /// <inheritdoc cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsHeldOutsideSourceAsync" />
+    public async Task<IEnumerable<string>> GetLegacyIdsHeldOutsideSourceAsync(
+        IReadOnlyCollection<string> legacyIds, string source, CancellationToken ct = default)
+    {
+        if (legacyIds.Count == 0)
+            return [];
+
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var ids = legacyIds.Distinct(StringComparer.Ordinal).ToList();
+        var rows = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
+            .Where(e => e.TenantId == ctx.TenantId && e.LegacyId != null && ids.Contains(e.LegacyId))
+            .WhereBlocksRecreation()
+            .Select(e => new { LegacyId = e.LegacyId!, e.DataSource, e.DeletedAt })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.LegacyId, StringComparer.Ordinal)
+            .Where(g => (g.FirstOrDefault(r => r.DeletedAt == null) ?? g.First()).DataSource != source)
+            .Select(g => g.Key)
+            .ToList();
+    }
+
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByGuidRangeAsync" />
     public async Task<TModel?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
     {

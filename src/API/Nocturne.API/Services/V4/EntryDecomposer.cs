@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using System.Linq;
 using Nocturne.Core.Contracts.Devices;
@@ -60,7 +61,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             CorrelationId = Guid.CreateVersion7()
         };
 
-        await PointEntriesAtStoredRecordsAsync([entry], ct);
+        if ((await PointEntriesAtStoredRecordsAsync([entry], ct)).Count > 0)
+            return result;
 
         var entryType = entry.Type?.ToLowerInvariant();
 
@@ -154,7 +156,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         if (entries.Count == 0)
             return new DecompositionResult();
 
-        await PointEntriesAtStoredRecordsAsync(entries, ct);
+        var echoes = await PointEntriesAtStoredRecordsAsync(entries, ct);
 
         var result = new DecompositionResult();
 
@@ -163,7 +165,7 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         var calList = new List<Calibration>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var entry in entries)
+        foreach (var entry in entries.Where(e => !echoes.Contains(e)))
         {
             var correlationId = Guid.CreateVersion7();
             switch (entry.Type?.ToLowerInvariant())
@@ -212,24 +214,27 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
     /// table that type is stored in.
     /// </summary>
-    private async Task PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private async Task<IReadOnlySet<Entry>> PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
     {
+        var echoes = new HashSet<Entry>(ReferenceEqualityComparer.Instance);
         foreach (var byType in entries.GroupBy(e => e.Type?.ToLowerInvariant()))
         {
-            switch (byType.Key)
+            var table = byType.Key switch
             {
-                case "sgv":
-                    await PointAtStoredRecordsAsync(byType, [Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
-                    break;
-                case "mbg":
-                    await PointAtStoredRecordsAsync(byType, [Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true)], ct);
-                    break;
-                case "cal":
-                    await PointAtStoredRecordsAsync(byType, [Table(_calibrationRepository, resolvesUuidLegacyIds: true)], ct);
-                    break;
-            }
+                "sgv" => Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true),
+                "mbg" => Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true),
+                "cal" => Table(_calibrationRepository, resolvesUuidLegacyIds: true),
+                _ => (KeyedTable?)null,
+            };
+            if (table is { } keyed)
+                echoes.UnionWith(await PointAtStoredRecordsAsync(byType, [keyed], PulledFromNightscout, ct));
         }
+
+        return echoes;
     }
+
+    private static bool PulledFromNightscout(Entry entry) => entry.DataSource == DataSources.NightscoutConnector;
 
     /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)

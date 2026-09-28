@@ -266,5 +266,42 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
         (await boluses.GetByLegacyIdAsync(wireId, CancellationToken.None))!.Id.Should().Be(bolus.Id);
         carbEcho.SkippedDeleted.Should().Be(1, "the carbs the user deleted hold the adopted id");
     }
+
+    /// <summary>
+    /// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsHeldOutsideSourceAsync"/> is how a
+    /// pull tells a write-back echo from the connector's own record: a live row decides over the
+    /// user's deletion of the same id, a user's deletion holds on its own, a system sweep does not,
+    /// and a row with no source counts as another source.
+    /// </summary>
+    [Fact]
+    public async Task LegacyIdsHeldOutsideASource_AreDecidedByTheRowThatGovernsTheId()
+    {
+        using (var otherScope = await fx.BeginTenantScopeAsync(Guid.NewGuid()))
+            await otherScope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
+                .CreateAsync(Reading("other-tenant"), WriteOrigin.Live, CancellationToken.None);
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        await repo.CreateAsync(Reading("dexcom-live"), WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(Echo("connector-live", minute: 5), WriteOrigin.Live, CancellationToken.None);
+        var deleted = await repo.CreateAsync(Reading("dexcom-deleted", minute: 10), WriteOrigin.Live, CancellationToken.None);
+        await DeleteByUserAsync(tenant, deleted.Id);
+        var replaced = await repo.CreateAsync(Reading("connector-over-tombstone", minute: 15), WriteOrigin.Live, CancellationToken.None);
+        await DeleteByUserAsync(tenant, replaced.Id);
+        var liveOverTombstone = await repo.CreateAsync(Echo("connector-pending", minute: 20), WriteOrigin.Live, CancellationToken.None);
+        await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE sensor_glucose SET legacy_id = 'connector-over-tombstone' WHERE id = {liveOverTombstone.Id}"));
+        var swept = await repo.CreateAsync(Reading("dexcom-swept", minute: 25), WriteOrigin.Live, CancellationToken.None);
+        await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE sensor_glucose SET deleted_at = now(), deleted_by_user = false WHERE id = {swept.Id}"));
+        await repo.CreateAsync(
+            new SensorGlucose { Timestamp = T0.AddMinutes(30), Mgdl = 120, LegacyId = "unsourced" }, WriteOrigin.Live, CancellationToken.None);
+
+        var held = await repo.GetLegacyIdsHeldOutsideSourceAsync(
+            ["dexcom-live", "connector-live", "dexcom-deleted", "connector-over-tombstone", "dexcom-swept", "unsourced", "other-tenant", "absent"],
+            "nightscout-connector", CancellationToken.None);
+
+        held.Should().BeEquivalentTo("dexcom-live", "dexcom-deleted", "unsourced");
+    }
 }
 

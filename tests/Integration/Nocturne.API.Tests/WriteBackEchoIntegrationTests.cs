@@ -273,20 +273,89 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
         DataSource = ConnectorSource,
     };
 
+    /// <summary>
+    /// A copy the connector pulls of a reading stored from another source is that reading's
+    /// write-back echo. It lands on the reading and changes nothing, attribution included: a reading
+    /// re-attributed to the connector would no longer be written back.
+    /// </summary>
     [Theory]
     [InlineData("legacy-{0}")]
     [InlineData("0198C2A4-1F3B-7C2D-9E55-{0}")]
-    public async Task APulledCopyUnderAMintedId_UpdatesTheReadingItsIdentifierNames(string legacyIdFormat)
+    public async Task APulledCopyUnderAMintedId_LandsOnTheReadingItsIdentifierNamesAndChangesNothing(string legacyIdFormat)
     {
         var device = $"echo-{Guid.NewGuid():N}";
         var legacyId = string.Format(legacyIdFormat, Guid.NewGuid().ToString("N")[..12]);
         var date = DateTimeOffset.UtcNow.AddMinutes(-70).ToUnixTimeMilliseconds();
         await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", new[] { Reading(device, date, sgv: 111, legacyId) });
         var id = (await LiveSensorReadingsAsync(device)).Single().Id;
+        var source = await SensorDataSourceAsync(id);
 
         await PublishAsync(p => p.Glucose.PublishEntriesAsync([PulledReading(device, date, 114, legacyId)], ConnectorSource, WriteOrigin.Live));
 
-        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 114d));
+        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 111d));
+        (await SensorDataSourceAsync(id)).Should().Be(source).And.NotBe(ConnectorSource);
+    }
+
+    private async Task<string?> SensorDataSourceAsync(Guid id) =>
+        (await AuthenticatedClient.GetFromJsonAsync<JsonElement>($"/api/v4/glucose/sensor/{id}"))
+            .DataSourceOrNull();
+
+    private async Task<int?> PublishRecentAsync(Func<IConnectorPublisher, Task<int?>> publish)
+    {
+        using var scope = Fixture.Services.CreateScope();
+        scope.ServiceProvider.GetRequiredService<ITenantAccessor>().SetTenant(
+            new TenantContext(Fixture.TenantId, ApiIntegrationTestFixture.TenantSlug, "Integration", true, false));
+        scope.ServiceProvider.GetRequiredService<NocturneDbContext>().TenantId = Fixture.TenantId;
+        return await publish(scope.ServiceProvider.GetRequiredService<IConnectorPublisher>());
+    }
+
+    /// <summary>
+    /// The recent path compares what a catch-up re-read against what is stored. A written-back
+    /// copy is stored under the identifier it came back with, or, written back before identifiers
+    /// were sent, under the uuid-shaped legacy id its prefix stands for, so it is not written again.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ARecentReadingWrittenBack_IsNotPublishedAgain(bool withIdentifier)
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var legacyId = Guid.NewGuid().ToString();
+        var date = DateTimeOffset.UtcNow.AddMinutes(-85).ToUnixTimeMilliseconds();
+        await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", new[] { Reading(device, date, sgv: 111, legacyId) });
+        var pulled = PulledReading(device, date, 111, withIdentifier ? legacyId : null);
+        if (!withIdentifier)
+            pulled.Id = MongoObjectId.FromGuid(Guid.Parse(legacyId));
+
+        var written = await PublishRecentAsync(p => p.Glucose.PublishRecentEntriesAsync([pulled], ConnectorSource, WriteOrigin.Live));
+
+        written.Should().Be(0);
+        (await LiveSensorReadingsAsync(device)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task ARecentStatusWrittenBack_IsNotPublishedAgain()
+    {
+        var device = $"openaps://echo-{Guid.NewGuid():N}";
+        var legacyId = $"loop_status_{Guid.NewGuid():N}";
+        var at = DateTimeOffset.UtcNow.AddMinutes(-25).ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/devicestatus", new
+        {
+            _id = legacyId, device, created_at = at, openaps = new { iob = new { iob = 0.7, timestamp = at } },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var pulled = new DeviceStatus
+        {
+            Id = MongoObjectId.NewObjectId(),
+            UpstreamIdentifier = legacyId,
+            Device = device,
+            CreatedAt = at,
+            OpenAps = new OpenApsStatus(),
+        };
+
+        var written = await PublishRecentAsync(p => p.Device.PublishRecentDeviceStatusAsync([pulled], ConnectorSource, WriteOrigin.Live));
+
+        written.Should().Be(0);
+        (await LiveApsSnapshotsAsync(device)).Should().Be(1);
     }
 
     [Fact]
@@ -342,7 +411,89 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
         if (deletedByUser)
             live.Should().BeEmpty();
         else
-            live.Should().Equal((id, 3d));
+            live.Should().Equal((id, 2.5d));
+    }
+
+    private async Task<JsonElement> BolusAsync(Guid id) =>
+        await AuthenticatedClient.GetFromJsonAsync<JsonElement>($"/api/v4/insulin/boluses/{id}");
+
+    /// <summary>
+    /// Nightscout re-mints the <c>_id</c> of a treatment written back with an identifier, so every
+    /// sync pulls the copy back under an id Nocturne never stored. Keyed by that id, the republish
+    /// rule saw a new treatment each sync, and the write re-attributed the bolus to the connector:
+    /// write-back then skipped it, so an edit made in Nocturne stayed local and the next sync
+    /// restored the stale upstream dose over it. Resolved to the bolus, the copy is its echo.
+    /// </summary>
+    [Fact]
+    public async Task AWrittenBackTreatment_KeepsItsSourceAcrossSyncs_AndANocturneEditSurvivesTheStaleCopy()
+    {
+        var slot = UniqueSlot();
+        var id = await CreateV4BolusAsync(slot);
+        var source = (await BolusAsync(id)).DataSourceOrNull();
+        var mintedUpstream = MongoObjectId.NewObjectId();
+        Treatment Copy() => new()
+        {
+            Id = mintedUpstream,
+            UpstreamIdentifier = id.ToString(),
+            EventType = "Correction Bolus",
+            Insulin = 2.5,
+            CreatedAt = slot.ToString("O"),
+            DataSource = ConnectorSource,
+        };
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([Copy()], ConnectorSource, WriteOrigin.Live));
+        (await PublishRecentAsync(p => p.Treatments.PublishRecentTreatmentsAsync([Copy()], ConnectorSource, WriteOrigin.Live)))
+            .Should().Be(0);
+
+        var afterSyncs = await BolusAsync(id);
+        afterSyncs.DataSourceOrNull().Should().Be(source).And.NotBe(ConnectorSource);
+        afterSyncs.GetProperty("legacyId").GetString().Should().Be(id.ToString());
+
+        (await AuthenticatedClient.PutAsJsonAsync($"/api/v4/insulin/boluses/{id}", new { timestamp = slot, insulin = 4.0, dataSource = source }))
+            .IsSuccessStatusCode.Should().BeTrue();
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([Copy()], ConnectorSource, WriteOrigin.Live));
+        (await PublishRecentAsync(p => p.Treatments.PublishRecentTreatmentsAsync([Copy()], ConnectorSource, WriteOrigin.Live)))
+            .Should().Be(0);
+
+        (await LiveBolusesAsync(slot)).Should().Equal((id, 4d));
+        (await BolusAsync(id)).DataSourceOrNull().Should().Be(source);
+    }
+
+    /// <summary>
+    /// A treatment the connector stores that comes back under a new <c>_id</c> carrying its stored
+    /// key as identifier is written under that key, so its fingerprint is stamped there and the next
+    /// catch-up finds it unchanged.
+    /// </summary>
+    [Fact]
+    public async Task AConnectorTreatmentReKeyedUpstream_IsFingerprintedUnderItsStoredId()
+    {
+        var slot = UniqueSlot();
+        var storedKey = MongoObjectId.NewObjectId();
+        var reKeyed = MongoObjectId.NewObjectId();
+        Treatment Pulled(string id, string? identifier, double insulin) => new()
+        {
+            Id = id,
+            UpstreamIdentifier = identifier,
+            EventType = "Correction Bolus",
+            Insulin = insulin,
+            CreatedAt = slot.ToString("O"),
+            DataSource = ConnectorSource,
+        };
+
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([Pulled(storedKey, null, 2.5)], ConnectorSource, WriteOrigin.Live));
+        await PublishAsync(p => p.Treatments.PublishTreatmentsAsync([Pulled(reKeyed, storedKey, 3.0)], ConnectorSource, WriteOrigin.Live));
+
+        (await PublishRecentAsync(p => p.Treatments.PublishRecentTreatmentsAsync([Pulled(reKeyed, storedKey, 3.0)], ConnectorSource, WriteOrigin.Live)))
+            .Should().Be(0);
+        var live = await LiveBolusesAsync(slot);
+        live.Should().ContainSingle().Which.Insulin.Should().Be(3.0);
+        (await BolusAsync(live[0].Id)).GetProperty("legacyId").GetString().Should().Be(storedKey);
     }
 }
 
+internal static class WriteBackEchoJson
+{
+    public static string? DataSourceOrNull(this JsonElement record) =>
+        record.TryGetProperty("dataSource", out var source) ? source.GetString() : null;
+}

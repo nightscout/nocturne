@@ -3,6 +3,8 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -84,32 +86,33 @@ internal abstract class ConnectorPublisherBase
     }
 
     /// <summary>
-    /// Publishes the records of <paramref name="records"/> whose legacy id none of
-    /// <paramref name="heldBy"/> holds. Records without an id are dropped: nothing could tell them
+    /// Publishes the records of <paramref name="records"/> that none of <paramref name="heldBy"/>
+    /// holds, under their id or under the <see cref="ProcessableDocumentBase.UpstreamIdentifier"/>
+    /// a written-back copy returns with. Records without an id are dropped: nothing could tell them
     /// apart from what is stored.
     /// </summary>
-    /// <param name="heldBy">One lookup per table the record type decomposes into.</param>
+    /// <param name="heldBy">One lookup per table the record type decomposes into, such as <see cref="HeldAsync"/>.</param>
     /// <returns>How many were written, or null when a lookup or the write failed.</returns>
     protected async Task<int?> PublishUnheldAsync<TRecord>(
         IEnumerable<TRecord> records,
-        Func<TRecord, string?> legacyIdOf,
         Func<List<TRecord>, Task<bool>> publish,
         string source,
         params Func<IReadOnlyCollection<string>, Task<IReadOnlySet<string>>>[] heldBy)
+        where TRecord : ProcessableDocumentBase
     {
         List<TRecord> unheld;
         try
         {
-            var identified = records.Where(r => legacyIdOf(r) is { Length: > 0 }).ToList();
-            var ids = identified.Select(r => legacyIdOf(r)!).ToHashSet(StringComparer.Ordinal);
+            var identified = records.Where(r => r.Id is { Length: > 0 }).ToList();
+            var ids = identified.SelectMany(KeysOf).ToHashSet(StringComparer.Ordinal);
             var held = new HashSet<string>(StringComparer.Ordinal);
             foreach (var lookup in heldBy)
             {
-                if (ids.Count > held.Count)
+                if (identified.Any(r => !KeysOf(r).Any(held.Contains)))
                     held.UnionWith(await lookup(ids));
             }
 
-            unheld = identified.Where(r => !held.Contains(legacyIdOf(r)!)).ToList();
+            unheld = identified.Where(r => !KeysOf(r).Any(held.Contains)).ToList();
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -123,6 +126,36 @@ internal abstract class ConnectorPublisherBase
             return 0;
 
         return await publish(unheld) ? unheld.Count : null;
+    }
+
+    private static IEnumerable<string> KeysOf(ProcessableDocumentBase record)
+    {
+        yield return record.Id!;
+        if (record.UpstreamIdentifier is { Length: > 0 } identifier)
+            yield return identifier;
+    }
+
+    /// <summary>
+    /// The ids among <paramref name="ids"/> <paramref name="repository"/> holds as legacy ids, or as
+    /// the 24-hex prefix a held uuid-shaped legacy id is written back under
+    /// (<see cref="ILegacyKeyedRepository{TRecord}.ResolveUuidLegacyIdsAsync"/>).
+    /// </summary>
+    protected static async Task<IReadOnlySet<string>> HeldAsync<TRecord>(
+        ILegacyKeyedRepository<TRecord> repository, IReadOnlyCollection<string> ids, CancellationToken ct)
+        where TRecord : class, IV4Record
+    {
+        var resolved = (await repository.ResolveUuidLegacyIdsAsync(ids, ct)).ToList();
+        var held = new HashSet<string>(
+            await repository.GetHeldLegacyIdsAsync(
+                ids.Concat(resolved.Select(r => r.LegacyId)).ToHashSet(StringComparer.Ordinal), ct),
+            StringComparer.Ordinal);
+        foreach (var uuid in resolved)
+        {
+            if (held.Contains(uuid.LegacyId))
+                held.Add(uuid.WireId);
+        }
+
+        return held;
     }
 
     /// <summary>

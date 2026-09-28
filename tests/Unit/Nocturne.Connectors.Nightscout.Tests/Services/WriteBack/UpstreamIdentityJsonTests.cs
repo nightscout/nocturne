@@ -16,9 +16,18 @@ public class UpstreamIdentityJsonTests
     [Fact]
     public void A_record_without_an_id_is_written_with_a_null_id()
     {
-        var json = JsonSerializer.SerializeToElement(new Entry { Id = null, Sgv = 110 }, UpstreamIdentityJson.Options);
+        var json = JsonSerializer.SerializeToElement(new Treatment { Id = null, EventType = "Note" }, UpstreamIdentityJson.Options);
 
         json.GetProperty("_id").ValueKind.Should().Be(JsonValueKind.Null);
+        json.GetProperty("identifier").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public void An_entry_without_an_ObjectId_is_written_with_no_id()
+    {
+        var json = JsonSerializer.SerializeToElement(new Entry { Id = null, Sgv = 110 }, UpstreamIdentityJson.Options);
+
+        json.TryGetProperty("_id", out _).Should().BeFalse();
         json.GetProperty("identifier").ValueKind.Should().Be(JsonValueKind.Null);
     }
 

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.V4;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -306,6 +307,82 @@ public class OwnIdAdoptionTests : IDisposable
 
         status.Id.Should().Be("loop_status_42");
         _calls.Should().NotContain(c => c.Contains(".adopt(") || c.Contains(".resolve("));
+    }
+
+    /// <summary>
+    /// A copy the Nightscout connector pulls that names a record stored from another source is that
+    /// record's write-back echo. It keeps the identity it was pointed at and writes nothing, so the
+    /// record keeps its attribution and any edit made in Nocturne since.
+    /// </summary>
+    [Fact]
+    public async Task EntryBatch_WritesNothingForAnEchoOfAReadingAnotherSourceStores()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        sg.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
+        sg.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["dexcom_7f3c2a91"]);
+        List<SensorGlucose>? written = null;
+        sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+        var echo = new Entry
+        {
+            Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "dexcom_7f3c2a91", Type = "sgv",
+            Mills = 1_700_000_000_000, Sgv = 120, DataSource = DataSources.NightscoutConnector,
+        };
+        var pulled = new Entry
+        {
+            Id = "66f0a1b2c3d4e0f6a7b8c9d1", Type = "sgv", Mills = 1_700_000_300_000, Sgv = 121,
+            DataSource = DataSources.NightscoutConnector,
+        };
+
+        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync([echo, pulled], WriteOrigin.Live);
+
+        echo.Id.Should().Be("dexcom_7f3c2a91");
+        written!.Select(r => r.LegacyId).Should().Equal("66f0a1b2c3d4e0f6a7b8c9d1");
+    }
+
+    [Fact]
+    public async Task EntryBatch_UpdatesARecordAnotherSourceStoresWhenTheCopyIsNotFromTheNightscoutConnector()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        sg.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["dexcom_7f3c2a91"]);
+
+        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+            [new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = "xdrip" }],
+            WriteOrigin.Live);
+
+        _calls.Should().Equal("sg.upsert");
+        sg.Verify(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task DeviceStatusSingle_WritesNothingForAnEchoOfAStatusAnotherSourceStores()
+    {
+        var (decomposer, aps, _, _) = DeviceStatusDecomposer();
+        aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "loop_status_42" });
+        aps.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(["loop_status_42"]);
+        var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
+        status.UpstreamIdentifier = "loop_status_42";
+
+        var result = await decomposer.DecomposeAsync(status, DataSources.NightscoutConnector, WriteOrigin.Live);
+
+        status.Id.Should().Be("loop_status_42");
+        result.CreatedRecords.Should().BeEmpty();
+        result.UpdatedRecords.Should().BeEmpty();
+        _calls.Should().NotContain(c => c.Contains(".get(") || c.Contains(".correlations"));
     }
 }
 
