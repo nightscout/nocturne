@@ -174,6 +174,76 @@ public class GitHubIssueServiceTests
         service.HasLocalPat.Should().BeFalse();
     }
 
+    [Theory]
+    [InlineData(true, "ghp_test123", true)]
+    [InlineData(true, null, false)]
+    [InlineData(true, "", false)]
+    [InlineData(false, "ghp_test123", false)]
+    [InlineData(false, null, false)]
+    public void AcceptsRelay_Needs_Both_The_Opt_In_And_A_Local_Pat(
+        bool optedIn, string? pat, bool expected)
+    {
+        var service = new GitHubIssueService(
+            new Mock<IHttpClientFactory>().Object,
+            Options.Create(new GitHubIssueOptions { IssuesPat = pat, AcceptRelayedIssues = optedIn }),
+            NullLogger<GitHubIssueService>.Instance);
+
+        service.AcceptsRelay.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Defaults_RelayToTheAnonymousIngress_AndAcceptNoRelay()
+    {
+        var options = new GitHubIssueOptions();
+
+        // /issues is [Authorize], and the relay carries no credential.
+        options.RelayUrl.Should().Be("https://nocturne.run/api/v4/support/relay");
+        options.AcceptRelayedIssues.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RelayAsync_PostsTheFormToTheConfiguredUrl_WithNoCredential()
+    {
+        var requests = new List<(HttpRequestMessage Message, string Body)>();
+        var handler = new StubHttpMessageHandler(async request =>
+        {
+            requests.Add((request, await request.Content!.ReadAsStringAsync()));
+            return Respond(HttpStatusCode.Created,
+                """{"issueNumber":5,"issueUrl":"https://github.com/o/r/issues/5"}""");
+        });
+        var service = CreateService(handler, opts =>
+        {
+            opts.IssuesPat = null;
+            opts.RelayUrl = "https://relay.example/api/v4/support/relay";
+        });
+
+        using var content = new MultipartFormDataContent { { new StringContent("bug"), "template" } };
+        var result = await service.RelayAsync(content, CancellationToken.None);
+
+        result.IssueNumber.Should().Be(5);
+        result.IssueUrl.Should().Be("https://github.com/o/r/issues/5");
+        var (message, body) = requests.Should().ContainSingle().Subject;
+        message.Method.Should().Be(HttpMethod.Post);
+        message.RequestUri!.AbsoluteUri.Should().Be("https://relay.example/api/v4/support/relay");
+        message.Headers.Authorization.Should().BeNull();
+        body.Should().Contain("name=template");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task RelayAsync_RelayRefusal_Throws(HttpStatusCode status)
+    {
+        var handler = new StubHttpMessageHandler(_ => Task.FromResult(Respond(status, "{}")));
+        var service = CreateService(handler, opts => opts.IssuesPat = null);
+
+        using var content = new MultipartFormDataContent();
+        var act = () => service.RelayAsync(content, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage($"Relay error: {status}");
+    }
+
     [Fact]
     public void BuildIssueBody_DiagnosticInfoWithTripleBackticks_EscapesThem()
     {

@@ -82,8 +82,8 @@ public sealed class ScenarioRunner
         var evaluator = registry.GetEvaluator(rule.ConditionType);
         if (evaluator is null)
         {
-            // Orchestrator parity: no evaluator (e.g. signal_loss as a root type) means the
-            // rule is skipped entirely — no tracker call, no auto-resolve.
+            // Orchestrator parity: no evaluator for the root type means the rule is
+            // skipped entirely — no tracker call, no auto-resolve.
             return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
         }
 
@@ -94,7 +94,26 @@ public sealed class ScenarioRunner
             CurrentPath = wire,
         };
 
-        var conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
+        bool conditionMet;
+        try
+        {
+            if (ConditionTreeFaults.InRule(rule.ConditionType, rule.ConditionParams) is { } fault)
+                throw new ConditionTreeFaultException(fault);
+            conditionMet = await evaluator.EvaluateAsync(rule.ConditionParams, rootContext, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Orchestrator parity: its per-rule catch skips a rule whose evaluation throws,
+            // leaving the tracker and auto-resolve untouched. A throw partway through keeps
+            // the timer writes made before it, which the Rust engine never makes for a
+            // skipped rule, so a scenario that reaches one is a divergence, not a snapshot.
+            if (timerStore.DrainOps() is { Count: > 0 } written)
+            {
+                throw new InvalidOperationException(
+                    $"Rule {rule.Id} wrote {written.Count} timer op(s) before its evaluation threw: {ex.Message}");
+            }
+            return new ExpectedRuleResult { RuleId = rule.Id, Skipped = true };
+        }
 
         // Replay-parity leaf log: force-evaluate every leaf in isolation (no
         // short-circuit), using the rule-root context exactly as AlertReplayService does.
@@ -102,10 +121,19 @@ public sealed class ScenarioRunner
         var node = BuildFullNode(wire, scenarioRule.ConditionParams);
         var leafValues = await forceRunner.EvaluateAllLeavesAsync(node, rootContext, registry, ct);
 
-        var transition = await tracker.ProcessEvaluationAsync(rule.Id, conditionMet, ct);
+        var rearmReadResolve = false;
+        var transition = await tracker.ProcessEvaluationAsync(
+            rule.Id,
+            conditionMet,
+            token =>
+            {
+                rearmReadResolve = true;
+                return AutoResolveHoldsAsync(rule, context, registry, token);
+            },
+            ct);
 
         var autoResolved = false;
-        if (rule.AutoResolveEnabled && !string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+        if (rule.AutoResolveEnabled && !string.IsNullOrWhiteSpace(rule.AutoResolveParams) && !rearmReadResolve)
         {
             autoResolved = await TryAutoResolveAsync(rule, context, registry, tracker, ct);
         }
@@ -129,6 +157,8 @@ public sealed class ScenarioRunner
                     State = state.State,
                     ConfirmationCount = state.ConfirmationCount,
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
+                    HysteresisStartedAt = state.HysteresisStartedAt,
+                    AwaitingRearm = state.AwaitingRearm ? true : null,
                 },
             AutoResolved = autoResolved ? true : null,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,
@@ -147,6 +177,23 @@ public sealed class ScenarioRunner
         if (activeExcursionId is null)
             return false;
 
+        if (!await AutoResolveHoldsAsync(rule, context, registry, ct))
+            return false;
+
+        var transition = await tracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
+        return transition.Type == ExcursionTransitionType.ExcursionClosed;
+    }
+
+    /// <summary>Mirrors <c>ManagedAlertEngine.AutoResolveHoldsAsync</c>.</summary>
+    private static async Task<bool> AutoResolveHoldsAsync(
+        AlertRule rule,
+        SensorContext context,
+        ConditionEvaluatorRegistry registry,
+        CancellationToken ct)
+    {
+        if (!rule.AutoResolveEnabled || string.IsNullOrWhiteSpace(rule.AutoResolveParams))
+            return false;
+
         ConditionNode? node;
         try
         {
@@ -156,7 +203,7 @@ public sealed class ScenarioRunner
         {
             return false;
         }
-        if (node is null)
+        if (node is null || ConditionTreeFaults.InNode(node, AlertConditionTypeNames.AutoResolvePathRoot) is not null)
             return false;
 
         var autoResolveContext = context with
@@ -165,12 +212,7 @@ public sealed class ScenarioRunner
             CurrentPath = AlertConditionTypeNames.AutoResolvePathRoot,
         };
 
-        var shouldResolve = await registry.EvaluateNodeAsync(node, autoResolveContext, ct);
-        if (!shouldResolve)
-            return false;
-
-        var transition = await tracker.ForceCloseAsync(rule.Id, ExcursionCloseReason.AutoResolve, ct);
-        return transition.Type == ExcursionTransitionType.ExcursionClosed;
+        return await registry.EvaluateNodeAsync(node, autoResolveContext, ct);
     }
 
     /// <summary>

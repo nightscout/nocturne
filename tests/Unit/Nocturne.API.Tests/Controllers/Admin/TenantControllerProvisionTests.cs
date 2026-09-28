@@ -84,8 +84,10 @@ public class TenantControllerProvisionTests
 
         var result = await _controller.Provision(request, CancellationToken.None);
 
-        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var badRequest = result.Should().BeOfType<ObjectResult>().Subject;
         badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        badRequest.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Either Credential or OidcIdentity must be provided");
     }
 
     [Fact]
@@ -110,7 +112,9 @@ public class TenantControllerProvisionTests
 
         var result = await _controller.Provision(request, CancellationToken.None);
 
-        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var badRequest = result.Should().BeOfType<ObjectResult>().Subject;
         badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        badRequest.Value.Should().BeOfType<ProblemDetails>()
+            .Which.Detail.Should().Be("Provide either Credential or OidcIdentity, not both");
     }
 }

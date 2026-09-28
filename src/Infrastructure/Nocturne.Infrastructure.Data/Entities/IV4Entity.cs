@@ -8,6 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 public interface IV4Entity : ITenantScoped, ISoftDeletable, IIdentified
 {
+    /// <summary>The record's legacy (Nightscout/MongoDB) identifier, kept for v1-v3 round-tripping.</summary>
     string? LegacyId { get; set; }
 
     /// <summary>Links records decomposed from the same legacy Treatment or DeviceStatus.</summary>

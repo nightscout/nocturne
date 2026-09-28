@@ -5,7 +5,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { Eye } from "lucide-svelte";
+  import Eye from "@lucide/svelte/icons/eye";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,
@@ -66,6 +66,7 @@
       <div class="space-y-2">
         <Label>Flash Color</Label>
         <div class="flex items-center gap-2">
+          <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
           <input
             type="color"
             bind:value={profile.visual.flashColor}

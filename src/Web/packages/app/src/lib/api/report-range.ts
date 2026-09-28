@@ -10,7 +10,7 @@ import { z } from "zod";
 import { error } from "@sveltejs/kit";
 import { getRequestEvent } from "$app/server";
 import { getLocalDayBoundariesUtc } from "$lib/utils/timezone";
-import { dayCount, resolveDayRange } from "$lib/utils/date-range";
+import { dayCount, daysBetween, resolveDayRange } from "$lib/utils/date-range";
 import { resolvePatientTimeZone } from "$lib/server/patient-timezone";
 
 /**
@@ -27,12 +27,16 @@ export const DateRangeSchema = z.object({
 export type DateRangeInput = z.infer<typeof DateRangeSchema>;
 
 export interface ReportRange {
-  /** UTC instant at which the patient's first day begins. */
-  startDate: Date;
-  /** UTC instant of the last millisecond of the patient's last day. */
-  endDate: Date;
+  /** ISO 8601 UTC instant at which the patient's first day begins. */
+  startDate: string;
+  /** ISO 8601 UTC instant of the last millisecond of the patient's last day. */
+  endDate: string;
   /** Calendar days the window covers, counting both end days. */
   dayCount: number;
+  /** The patient's IANA zone, or null when no source names one. */
+  timeZone: string | null;
+  /** Every `YYYY-MM-DD` day the window covers, in patient-calendar order. */
+  days: string[];
 }
 
 /**
@@ -58,5 +62,11 @@ export async function resolveReportRange(
     throw error(400, "Invalid date parameters provided");
   }
 
-  return { startDate, endDate, dayCount: dayCount(from, to) };
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    dayCount: dayCount(from, to),
+    timeZone,
+    days: daysBetween(from, to),
+  };
 }

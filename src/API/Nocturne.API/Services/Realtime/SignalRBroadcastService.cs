@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -71,9 +72,20 @@ public interface ISignalRBroadcastService
     Task BroadcastStorageDeleteAsync(string collectionName, object data);
 
     /// <summary>
-    /// Broadcast tracker update to authorized clients (for real-time tracker notifications)
+    /// Broadcast a tracker instance update, routed by its definition's visibility: a Public instance
+    /// reaches the tenant's authorized clients, a Private one only its owner's subject group.
     /// </summary>
-    Task BroadcastTrackerUpdateAsync(string action, object trackerInstance);
+    /// <remarks>
+    /// Mirrors the HTTP read rule in
+    /// <see cref="Nocturne.Infrastructure.Data.Repositories.TrackerRepository.GetActiveInstancesAsync"/>:
+    /// only a Public definition is visible tenant-wide, otherwise just to its owner.
+    /// </remarks>
+    Task BroadcastTrackerUpdateAsync(
+        string action,
+        TrackerInstanceDto trackerInstance,
+        string ownerSubjectId,
+        TrackerVisibility visibility
+    );
 
     /// <summary>
     /// Broadcast configuration change event to subscribers via ConfigHub
@@ -117,6 +129,14 @@ public interface ISignalRBroadcastService
     /// </summary>
     /// <param name="intent">The actuation intent to deliver.</param>
     Task BroadcastDeviceActionAsync(DeviceActionIntent intent);
+
+    /// <summary>
+    /// Send a device actuation intent to one subject's DataHub connections only, for a change
+    /// that concerns that member alone, such as muting an excursion for themselves.
+    /// </summary>
+    /// <param name="subjectId">The subject whose registered devices should reconcile.</param>
+    /// <param name="intent">The actuation intent to deliver.</param>
+    Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent);
 
     /// <summary>
     /// Mirror a non-alert in-app notification to the tenant's authenticated clients. A device
@@ -231,20 +251,19 @@ public class SignalRBroadcastService : ISignalRBroadcastService
             _logger.LogInformation(
                 "Broadcasting data update to {Group}: {DataType}",
                 group,
-                data?.GetType().Name ?? "null"
+                data.GetType().Name
             );
             await _dataHubContext
                 .Clients.Group(group)
                 .SendCoreAsync("dataUpdate", new[] { data });
             _logger.LogInformation("Data update broadcast completed successfully");
-
-            // Relay to Home Assistant subscribers
-            await BroadcastHomeAssistantGlucoseAsync(data);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting data update");
         }
+
+        await BroadcastHomeAssistantGlucoseAsync(data);
 
         // Tenant-tagged ping to cross-tenant overview subscribers. Same "{tenantId}:" group
         // scheme but on OverviewHub, so no collision with DataHub groups. Minimal payload:
@@ -448,7 +467,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
     }
 
     /// <inheritdoc />
-    public async Task BroadcastTrackerUpdateAsync(string action, object trackerInstance)
+    public async Task BroadcastTrackerUpdateAsync(
+        string action,
+        TrackerInstanceDto trackerInstance,
+        string ownerSubjectId,
+        TrackerVisibility visibility
+    )
     {
         try
         {
@@ -457,8 +481,11 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 action
             );
             var payload = new { action, instance = trackerInstance };
+            var group = visibility == TrackerVisibility.Public
+                ? RealtimeGroups.Authorized
+                : RealtimeGroups.ForSubject(ownerSubjectId);
             await _dataHubContext
-                .Clients.Group(TenantGroup(RealtimeGroups.Authorized))
+                .Clients.Group(TenantGroup(group))
                 .SendCoreAsync("trackerUpdate", new[] { payload });
             _logger.LogDebug("Tracker update broadcast completed for action {Action}", action);
         }
@@ -519,12 +546,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationCreated", new object[] { notification });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationCreated", new object[] { notification });
+                .SendCoreAsync(
+                    "notificationCreated",
+                    new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification created broadcast completed for user {UserId}", userId);
         }
@@ -558,12 +585,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationArchived", new object[] { payload });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationArchived", new object[] { payload });
+                .SendCoreAsync(
+                    "notificationArchived",
+                    new object[] { payload, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification archived broadcast completed for user {UserId}", userId);
         }
@@ -595,12 +622,12 @@ public class SignalRBroadcastService : ISignalRBroadcastService
                 .Clients.Group(TenantGroup(userGroup))
                 .SendCoreAsync("notificationUpdated", new object[] { notification });
 
-            // The socket.io bridge holds one instance-key connection per tenant and fans out to
-            // browser clients itself, so it needs the tenant-wide copy. What the relay group does and
-            // does not guarantee is on RealtimeGroups.Relay.
+            // The bridge's copy, naming the recipient. See RealtimeGroups.Relay.
             await _dataHubContext
                 .Clients.Group(TenantGroup(RealtimeGroups.Relay))
-                .SendCoreAsync("notificationUpdated", new object[] { notification });
+                .SendCoreAsync(
+                    "notificationUpdated",
+                    new object[] { notification, RealtimeGroups.NormalizeSubjectId(userId) });
 
             _logger.LogDebug("Notification updated broadcast completed for user {UserId}", userId);
         }
@@ -658,6 +685,22 @@ public class SignalRBroadcastService : ISignalRBroadcastService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error broadcasting device_action for excursion {ExcursionId}", intent.ExcursionId);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task BroadcastDeviceActionToSubjectAsync(Guid subjectId, DeviceActionIntent intent)
+    {
+        try
+        {
+            await _dataHubContext
+                .Clients.Group(TenantGroup(RealtimeGroups.ForSubject(subjectId)))
+                .SendCoreAsync("device_action", new object[] { intent });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending device_action for excursion {ExcursionId} to subject {SubjectId}",
+                intent.ExcursionId, subjectId);
         }
     }
 

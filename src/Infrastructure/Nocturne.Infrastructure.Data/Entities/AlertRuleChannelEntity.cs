@@ -72,7 +72,7 @@ public class AlertRuleChannelEntity : ITenantScoped
 
     /// <summary>
     /// Channel-specific configuration stored as JSONB. Schema varies by channel type.
-    /// For home_assistant: { "allow_ack": bool, "delivery_methods": string[], "critical_push": bool }
+    /// For home_assistant: { "delivery_methods": string[], "critical_push": bool }
     /// </summary>
     [Column("metadata", TypeName = "jsonb")]
     public string? Metadata { get; set; }

@@ -26,8 +26,6 @@ public class EversenseAuthTokenProvider(
 
     protected override int TokenLifetimeBufferMinutes => 5;
 
-    protected override string ConnectorName => "Eversense";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {

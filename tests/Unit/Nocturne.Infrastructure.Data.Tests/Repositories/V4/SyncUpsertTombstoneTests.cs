@@ -197,6 +197,7 @@ public class SyncUpsertTombstoneTests : IDisposable
             WriteOrigin.Live);
 
         result.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
         broadcaster.Created.Should().BeEmpty();
         broadcaster.Updated.Should().BeEmpty();
         await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(
@@ -226,6 +227,7 @@ public class SyncUpsertTombstoneTests : IDisposable
             WriteOrigin.Live);
 
         result.Should().BeEmpty();
+        result.SkippedDeleted.Should().Be(1);
         broadcaster.Created.Should().BeEmpty();
         broadcaster.Updated.Should().BeEmpty();
         await AssertTombstoneStillHoldsTheKeyAsync<BolusEntity>(
@@ -266,7 +268,7 @@ public class SyncUpsertTombstoneTests : IDisposable
         TEntity deleted,
         Func<string, double, TModel> build,
         Func<TModel, Task<TModel>> createAsync,
-        Func<TModel[], Task<IEnumerable<TModel>>> bulkCreateAsync,
+        Func<TModel[], Task<BulkWrite<TModel>>> bulkCreateAsync,
         RecordingV4RecordBroadcaster<TModel> broadcaster,
         Func<TEntity, double?> value)
         where TModel : V4RecordBase
@@ -533,7 +535,8 @@ public class SyncUpsertTombstoneTests : IDisposable
     }
 
     private DeviceStatusExtrasRepository NewExtrasRepository() =>
-        new(new TestTenantDbContextFactory(_context), new Mock<IAuditContext>().Object);
+        new(new TestTenantDbContextFactory(_context), new Mock<IAuditContext>().Object,
+            NullLogger<DeviceStatusExtrasRepository>.Instance);
 
     private Guid SeedExtrasRow(Guid correlationId, DateTime? deletedAt, bool deletedByUser)
     {

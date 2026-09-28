@@ -17,9 +17,11 @@ namespace Nocturne.API.Services.Alerts;
 /// trail is complete on provider failure.
 /// </summary>
 /// <remarks>
-/// DND suppression is the orchestrator's responsibility — by the time DispatchAsync is called
-/// we already know the alert should reach the user. Real-time <see cref="ISignalRBroadcastService"/>
-/// notifications are sent alongside channel deliveries.
+/// DND suppression is the caller's responsibility — by the time DispatchAsync is called we
+/// already know the rule should reach the user. Snooze is enforced here instead, because it
+/// belongs to the instance rather than the rule: <see cref="DispatchAsync"/> sends nothing, on
+/// any channel, for an instance under <see cref="AlertSnooze"/>. Real-time
+/// <see cref="ISignalRBroadcastService"/> notifications are sent alongside channel deliveries.
 /// </remarks>
 internal sealed class AlertDeliveryService(
     IDbContextFactory<NocturneDbContext> contextFactory,
@@ -43,6 +45,22 @@ internal sealed class AlertDeliveryService(
     {
         var tenantId = tenantAccessor.TenantId;
 
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        db.TenantId = tenantId;
+
+        var snoozedUntil = await db.AlertInstances
+            .AsNoTracking()
+            .Where(i => i.Id == alertInstanceId)
+            .Select(i => i.SnoozedUntil)
+            .FirstOrDefaultAsync(ct);
+        if (AlertSnooze.IsSnoozed(snoozedUntil, DateTime.UtcNow))
+        {
+            logger.LogInformation(
+                "Alert instance {InstanceId} is snoozed until {SnoozedUntil}; dispatch skipped",
+                alertInstanceId, snoozedUntil);
+            return;
+        }
+
         // Always emit the alert_dispatch broadcast so SignalR-connected web clients render
         // the toast even when there are zero configured channels (the user explicitly opted
         // out of every push/sound/in-app delivery surface).
@@ -56,9 +74,6 @@ internal sealed class AlertDeliveryService(
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
-
-        await using var db = await contextFactory.CreateDbContextAsync(ct);
-        db.TenantId = tenantId;
 
         // Zero-channel rules still leave an audit anchor: an InApp delivery row marked
         // delivered immediately. Without this row the History/Replay page cannot tell the
@@ -84,9 +99,14 @@ internal sealed class AlertDeliveryService(
             return;
         }
 
-        var deliveryRows = new List<AlertDeliveryEntity>(channels.Count);
+        var muted = await MutedDestinationsAsync(db, tenantId, payload.ExcursionId, channels, ct);
+
+        var deliveries = new List<(AlertDeliveryEntity Row, AlertRuleChannelSnapshot Channel)>(channels.Count);
         foreach (var channel in channels)
         {
+            if (muted.Contains(channel))
+                continue;
+
             var delivery = new AlertDeliveryEntity
             {
                 Id = Guid.CreateVersion7(),
@@ -100,18 +120,17 @@ internal sealed class AlertDeliveryService(
                 CreatedAt = DateTime.UtcNow,
             };
             db.AlertDeliveries.Add(delivery);
-            deliveryRows.Add(delivery);
+            deliveries.Add((delivery, channel));
         }
         await db.SaveChangesAsync(ct);
 
         // Hand each persisted row to its provider. Provider failures are caught and recorded
         // on the delivery row; one bad webhook does not abort the rest of the batch.
-        for (var i = 0; i < deliveryRows.Count; i++)
+        foreach (var (delivery, channel) in deliveries)
         {
-            var delivery = deliveryRows[i];
             try
             {
-                await DispatchToProviderAsync(delivery, channels[i], payload, ct);
+                await DispatchToProviderAsync(delivery, channel, payload, ct);
             }
             catch (Exception ex)
             {
@@ -119,6 +138,54 @@ internal sealed class AlertDeliveryService(
                     delivery.Id, delivery.ChannelType);
                 await MarkFailedAsync(delivery.Id, ex.Message, ct);
             }
+        }
+    }
+
+    /// <summary>
+    /// The destinations of members who muted the excursion. Two channel kinds name a member: an
+    /// <c>in_app</c> channel by subject id, and a linked-identity DM by the platform id of that
+    /// member's linked chat identity, which is unique per tenant. A <c>device_action</c> channel
+    /// names a device kind and reaches every member's devices, so a mute is applied to it in the
+    /// per-device active-intents snapshot instead (<c>ClientDeviceService.GetActiveIntentsAsync</c>).
+    /// </summary>
+    private async Task<MutedDestinations> MutedDestinationsAsync(
+        NocturneDbContext db,
+        Guid tenantId,
+        Guid excursionId,
+        IReadOnlyList<AlertRuleChannelSnapshot> channels,
+        CancellationToken ct)
+    {
+        var subjects = await db.AlertExcursionMutes
+            .AsNoTracking()
+            .Where(m => m.AlertExcursionId == excursionId)
+            .Select(m => m.SubjectId)
+            .ToHashSetAsync(ct);
+
+        var chatIdentities = new HashSet<(string Platform, string PlatformUserId)>();
+        if (subjects.Count > 0 && channels.Any(c => ChannelDestinations.ResolvesFromLinkedIdentity(c.ChannelType)))
+        {
+            var directory = serviceProvider.GetRequiredService<Chat.ChatIdentityDirectoryService>();
+            foreach (var link in await directory.GetByTenantAsync(tenantId, ct))
+            {
+                if (subjects.Contains(link.NocturneUserId))
+                    chatIdentities.Add((link.Platform, link.PlatformUserId));
+            }
+        }
+
+        return new MutedDestinations(subjects, chatIdentities);
+    }
+
+    private sealed record MutedDestinations(
+        IReadOnlySet<Guid> Subjects, IReadOnlySet<(string Platform, string PlatformUserId)> ChatIdentities)
+    {
+        public bool Contains(AlertRuleChannelSnapshot channel)
+        {
+            if (channel.ChannelType == ChannelType.InApp)
+                return Guid.TryParse(channel.Destination, out var subjectId) && Subjects.Contains(subjectId);
+
+            return ChannelDestinations.ResolvesFromLinkedIdentity(channel.ChannelType)
+                   && ChannelDestinations.PlatformOf(channel.ChannelType) is { } platform
+                   && ChatIdentities.Contains((platform, channel.Destination));
         }
     }
 
@@ -349,27 +416,7 @@ internal sealed class AlertDeliveryService(
                 var haProvider = serviceProvider.GetService<Providers.HomeAssistantProvider>();
                 if (haProvider is not null)
                 {
-                    object? channelMeta = null;
-                    if (!string.IsNullOrEmpty(channel.Metadata))
-                    {
-                        try
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(channel.Metadata);
-                            var allowAck = doc.RootElement.TryGetProperty("allow_ack", out var prop)
-                                           && prop.ValueKind == System.Text.Json.JsonValueKind.True;
-                            channelMeta = new { allowAck };
-                        }
-                        catch (System.Text.Json.JsonException)
-                        {
-                            channelMeta = new { allowAck = false };
-                        }
-                    }
-                    else
-                    {
-                        channelMeta = new { allowAck = false };
-                    }
-
-                    var delivered = await haProvider.SendAsync(delivery.TenantId, delivery.Destination, payload, channelMeta, ct);
+                    var delivered = await haProvider.SendAsync(delivery.TenantId, delivery.Destination, payload, ct);
                     if (delivered)
                         await MarkDeliveredAsync(delivery.Id, null, null, ct);
                     else

@@ -17,6 +17,7 @@ public class OAuthGrantService : IOAuthGrantService
     private readonly IDbContextFactory<NocturneDbContext> _dbContextFactory;
     private readonly IOAuthClientService _clientService;
     private readonly GuestSessionCacheService _guestSessionCache;
+    private readonly GrantRevocationService _grantRevocation;
     private readonly ILogger<OAuthGrantService> _logger;
 
     /// <summary>
@@ -26,19 +27,22 @@ public class OAuthGrantService : IOAuthGrantService
     /// <param name="dbContextFactory">Factory used by <see cref="IsGrantRevokedAsync"/>, which runs
     /// during authentication and so cannot rely on the scoped context being tenant-pinned yet.</param>
     /// <param name="clientService">Used to resolve client metadata (currently unused in this implementation).</param>
-    /// <param name="guestSessionCache">Cache evicted when a grant is revoked, so a revoked guest link stops resolving.</param>
+    /// <param name="guestSessionCache">Cache evicted when a grant's scopes are narrowed.</param>
+    /// <param name="grantRevocation">Applies the consequences of a revoke.</param>
     /// <param name="logger">Logger instance.</param>
     public OAuthGrantService(
         NocturneDbContext dbContext,
         IDbContextFactory<NocturneDbContext> dbContextFactory,
         IOAuthClientService clientService,
         GuestSessionCacheService guestSessionCache,
+        GrantRevocationService grantRevocation,
         ILogger<OAuthGrantService> logger)
     {
         _dbContext = dbContext;
         _dbContextFactory = dbContextFactory;
         _clientService = clientService;
         _guestSessionCache = guestSessionCache;
+        _grantRevocation = grantRevocation;
         _logger = logger;
     }
 
@@ -49,6 +53,7 @@ public class OAuthGrantService : IOAuthGrantService
         IEnumerable<string> scopes,
         string grantType = OAuthGrantTypes.App,
         string? label = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         var existingGrant = await _dbContext.OAuthGrants
@@ -67,6 +72,7 @@ public class OAuthGrantService : IOAuthGrantService
                 .ToList();
 
             existingGrant.Scopes = mergedScopes;
+            existingGrant.LimitTo24Hours = limitTo24Hours;
 
             if (label != null)
             {
@@ -92,7 +98,7 @@ public class OAuthGrantService : IOAuthGrantService
             GrantType = grantType,
             Scopes = scopeList,
             Label = label,
-            CreatedAt = DateTime.UtcNow,
+            LimitTo24Hours = limitTo24Hours,
         };
 
         _dbContext.OAuthGrants.Add(entity);
@@ -182,33 +188,11 @@ public class OAuthGrantService : IOAuthGrantService
             return;
         }
 
-        var now = DateTime.UtcNow;
-
-        // Revoke the grant
-        grant.RevokedAt = now;
-
-        // Cascade revoke all associated OAuth refresh tokens
-        var refreshTokens = await _dbContext.OAuthRefreshTokens
-            .Where(t => t.GrantId == grantId && t.RevokedAt == null)
-            .ToListAsync(ct);
-
-        foreach (var token in refreshTokens)
-        {
-            token.RevokedAt = now;
-        }
-
-        await _dbContext.SaveChangesAsync(ct);
-
-        // Guest sessions are cached for 30 seconds, so revoking the grant is not enough on its
-        // own. Evicting here rather than in GuestLinkService covers every revoke path: a guest
-        // grant's SubjectId is the data owner, and DeleteGrant filters only on SubjectId, so the
-        // owner can revoke their own guest link through the OAuth grants API without ever
-        // entering GuestLinkService.
-        _guestSessionCache.Evict(grant.TenantId, grant.Id);
+        var outcome = await _grantRevocation.RevokeAsync(_dbContext, grant, ct);
 
         _logger.LogInformation(
-            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount}",
-            "grant_revoked", grantId, grant.SubjectId, refreshTokens.Count);
+            "OAuthAudit: {Event} grant_id={GrantId} subject_id={SubjectId} revoked_tokens={TokenCount} revoked_devices={DeviceCount}",
+            "grant_revoked", grantId, grant.SubjectId, outcome.RevokedRefreshTokenCount, outcome.RemovedDeviceCount);
     }
 
     /// <inheritdoc />
@@ -275,6 +259,7 @@ public class OAuthGrantService : IOAuthGrantService
             LastUsedIp = entity.LastUsedIp,
             LastUsedUserAgent = entity.LastUsedUserAgent,
             IsRevoked = entity.IsRevoked,
+            LimitTo24Hours = entity.LimitTo24Hours,
         };
     }
 
@@ -316,8 +301,7 @@ public class OAuthGrantService : IOAuthGrantService
         await _dbContext.SaveChangesAsync(ct);
 
         // The cached guest session carries the grant's scopes, so narrowing a guest link's scopes
-        // would otherwise leave the wider set live for the rest of the 30-second TTL. Mirrors
-        // RevokeGrantAsync, and for the same reason: this path never enters GuestLinkService.
+        // would otherwise leave the wider set live for the rest of the 30-second TTL.
         _guestSessionCache.Evict(grant.TenantId, grant.Id);
 
         _logger.LogInformation(

@@ -24,25 +24,19 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBolusRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<BolusRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BolusRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     public BolusRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BolusRepository> logger,
         IV4RecordBroadcaster<Bolus>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -162,9 +156,9 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
 
     /// <summary>
     /// Insert-time deduplication runs AFTER commit: the ingested rows are durably persisted first, and
-    /// dedup linking is best-effort (a failure is logged and healed by the reconcile service, not allowed
-    /// to roll back the insert). Only runs on newly inserted entities — updated-in-place rows were already
-    /// linked when first inserted.
+    /// dedup linking is best-effort (a failure is logged, not allowed to roll back the insert). A row
+    /// missed here stays unlinked until the full dedup job: the reconcile pass reads only links. Only
+    /// runs on newly inserted entities — updated-in-place rows were already linked when first inserted.
     /// </summary>
     protected override async Task PostCommitDedupAsync(
         NocturneDbContext ctx, IReadOnlyList<BolusEntity> inserted, WriteOrigin origin, CancellationToken ct)
@@ -185,7 +179,7 @@ public class BolusRepository : SyncUpsertRepositoryBase<Bolus, BolusEntity>, IBo
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Bolus", inserted.Count);
         }
     }
 

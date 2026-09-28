@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Glooko.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Connectors;
@@ -40,6 +41,8 @@ public class DataSourceServiceDiscoveryTests : IDisposable
 
     public DataSourceServiceDiscoveryTests()
     {
+        _ = typeof(GlookoConnectorConfiguration);
+
         _db = TestDbContextFactory.CreateSqlite();
 
         using var db = NewContext();
@@ -294,5 +297,19 @@ public class DataSourceServiceDiscoveryTests : IDisposable
         var sources = await DiscoverAsync();
 
         sources.Sum(s => s.TotalEntries).Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Discovery_ResolvesADeviceStatusOnlyEntrysConnectorFromItsDataSource()
+    {
+        // Glooko's 180-minute active window is what separates its thresholds from the 15/60 default
+        // a lookup by the unrecognised device string falls back to.
+        SeedSnapshot(DataSources.GlookoConnector, "pump-42", DateTime.UtcNow.AddMinutes(-90));
+
+        var sources = await DiscoverAsync();
+
+        var info = sources.Should().ContainSingle(s => s.DeviceId == "pump-42").Subject;
+        info.ConnectorId.Should().Be("glooko");
+        info.Status.Should().Be("active");
     }
 }

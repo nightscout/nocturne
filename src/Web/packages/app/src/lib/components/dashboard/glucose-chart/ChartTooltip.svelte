@@ -2,6 +2,7 @@
   import { Tooltip, getChartContext } from "layerchart";
   import { cn } from "$lib/utils";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { BasalDeliveryOrigin, ChartSpanKind } from "$lib/api";
   import {
     bg,
@@ -163,7 +164,7 @@
               : "var(--insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-warning font-bold"
                 : ""
             )}
           />
@@ -198,7 +199,7 @@
               : "var(--insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-warning font-bold"
                 : ""
             )}
           />
@@ -279,7 +280,7 @@
     <Tooltip.Item
       value={data?.time}
       format={(v) => (v instanceof Date ? time(v) : String(v))}
-      onclick={() => goto(`/reports/day-in-review?date=${data?.time}`)}
+      onclick={() => goto(resolve(`/reports/day-in-review?date=${data?.time}`))}
     />
   {/snippet}
 </Tooltip.Root>

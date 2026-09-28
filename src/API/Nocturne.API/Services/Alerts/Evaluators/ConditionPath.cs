@@ -54,12 +54,14 @@ public static class ConditionPath
     /// </summary>
     /// <remarks>
     /// Recurses into wrapper kinds: <c>composite</c> children, <c>not.child</c>,
-    /// <c>sustained.child</c>. All other condition kinds are leaves.
+    /// <c>sustained.child</c>. All other condition kinds are leaves. A missing child, a missing
+    /// child list and an untyped node are not visited: stored trees predating save-time
+    /// validation can hold them, and <see cref="ConditionTreeFaults"/> is what reports them.
     /// </remarks>
-    public static T? Walk<T>(ConditionNode root, Func<ConditionNode, string, T?> visit)
+    public static T? Walk<T>(ConditionNode? root, Func<ConditionNode, string, T?> visit)
         where T : class
     {
-        return WalkInternal(root, root.Type, visit);
+        return root?.Type is null ? null : WalkInternal(root, root.Type, visit);
     }
 
     private static T? WalkInternal<T>(ConditionNode node, string path, Func<ConditionNode, string, T?> visit)
@@ -71,33 +73,23 @@ public static class ConditionPath
 
         switch (node.Type.ToLowerInvariant())
         {
-            case "composite" when node.Composite is not null:
+            case "composite" when node.Composite?.Conditions is { } children:
+                for (var i = 0; i < children.Count; i++)
                 {
-                    var children = node.Composite.Conditions;
-                    for (var i = 0; i < children.Count; i++)
-                    {
-                        var child = children[i];
-                        var childPath = $"{path}[{i}].{child.Type}";
-                        var result = WalkInternal(child, childPath, visit);
-                        if (result is not null)
-                            return result;
-                    }
-                    break;
+                    if (WalkChild(children[i], path, i, visit) is { } result)
+                        return result;
                 }
-            case "not" when node.Not is not null:
-                {
-                    var child = node.Not.Child;
-                    var childPath = $"{path}[0].{child.Type}";
-                    return WalkInternal(child, childPath, visit);
-                }
-            case "sustained" when node.Sustained is not null:
-                {
-                    var child = node.Sustained.Child;
-                    var childPath = $"{path}[0].{child.Type}";
-                    return WalkInternal(child, childPath, visit);
-                }
+                break;
+            case "not":
+                return WalkChild(node.Not?.Child, path, 0, visit);
+            case "sustained":
+                return WalkChild(node.Sustained?.Child, path, 0, visit);
         }
 
         return null;
     }
+
+    private static T? WalkChild<T>(ConditionNode? child, string path, int index, Func<ConditionNode, string, T?> visit)
+        where T : class =>
+        child?.Type is null ? null : WalkInternal(child, $"{path}[{index}].{child.Type}", visit);
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import { Button } from "$lib/components/ui/button";
   import { cn } from "$lib/utils";
   import {
@@ -15,22 +17,29 @@
 
   let { notification, onAction }: Props = $props();
 
+  // An alert's ack action mutes it for this member only unless they hold
+  // alerts.readwrite, so it is labelled for what the server will do.
+  const mutesOnly = $derived(
+    notification.type === "alert.firing" &&
+      !satisfiesScope(page.data.effectivePermissions ?? [], "alerts.readwrite")
+  );
+
   // Get color classes based on urgency
   function getUrgencyClasses(urgency: NotificationUrgency | undefined): string {
     switch (urgency) {
       case NotificationUrgency.Urgent:
-        return "text-red-500 bg-red-500/10 border-red-500/20";
+        return "text-severity-urgent bg-severity-urgent/10 border-severity-urgent/20";
       case NotificationUrgency.Hazard:
-        return "text-orange-500 bg-orange-500/10 border-orange-500/20";
+        return "text-severity-hazard bg-severity-hazard/10 border-severity-hazard/20";
       case NotificationUrgency.Warn:
-        return "text-yellow-500 bg-yellow-500/10 border-yellow-500/20";
+        return "text-severity-warn bg-severity-warn/10 border-severity-warn/20";
       default:
         return "text-muted-foreground bg-muted/50 border-border";
     }
   }
 
   // Format relative time
-  function formatRelativeTime(date: Date | undefined): string {
+  function formatRelativeTime(date: string | undefined): string {
     if (!date) return "";
     const now = Date.now();
     const timestamp = new Date(date).getTime();
@@ -112,7 +121,11 @@
             size="sm"
             onclick={() => onAction?.(action.actionId!)}
           >
-            {resolveNotificationLabel(action.label)}
+            {#if mutesOnly && action.actionId === "ack"}
+              Mute for me
+            {:else}
+              {resolveNotificationLabel(action.label)}
+            {/if}
           </Button>
         {/each}
       </div>

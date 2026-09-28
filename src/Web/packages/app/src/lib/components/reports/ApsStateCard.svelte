@@ -4,14 +4,12 @@
   import { Badge } from "$lib/components/ui/badge";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { formatClock, formatGlucoseValue, getUnitLabel } from "$lib/utils/formatting";
-  import {
-    Brain,
-    Syringe,
-    Apple,
-    Target,
-    Check,
-    Minus,
-  } from "lucide-svelte";
+  import Brain from "@lucide/svelte/icons/brain";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Target from "@lucide/svelte/icons/target";
+  import Check from "@lucide/svelte/icons/check";
+  import Minus from "@lucide/svelte/icons/minus";
 
   interface Props {
     snapshot: ApsSnapshot | null;
@@ -44,10 +42,8 @@
           APS Decision at {snapshotTime}
         </Card.Title>
         <Badge
-          variant={isEnacted ? "default" : "outline"}
-          class={isEnacted
-            ? "shrink-0 bg-green-600/20 text-green-400 border-green-600/40"
-            : "shrink-0"}
+          variant={isEnacted ? "success" : "outline"}
+          class="shrink-0"
         >
           {#if isEnacted}
             <Check class="h-3 w-3 mr-1" />

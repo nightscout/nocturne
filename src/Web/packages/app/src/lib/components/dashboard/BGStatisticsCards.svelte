@@ -5,14 +5,12 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import {
-    BatteryCharging,
-    BatteryFull,
-    BatteryLow,
-    BatteryMedium,
-    BatteryWarning,
-    Zap,
-  } from "lucide-svelte";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
+  import Zap from "@lucide/svelte/icons/zap";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
@@ -117,10 +115,10 @@
             <span
               class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
               'urgent'
-                ? 'bg-red-500/20 text-red-400'
+                ? 'bg-destructive/20 text-destructive'
                 : currentStatus.status === 'warn'
-                  ? 'bg-yellow-500/20 text-yellow-400'
-                  : 'bg-green-500/20 text-green-400'}"
+                  ? 'bg-warning/20 text-warning'
+                  : 'bg-success/20 text-success'}"
             >
               {#if currentStatus.min.isCharging}
                 <BatteryCharging class="h-3 w-3" />

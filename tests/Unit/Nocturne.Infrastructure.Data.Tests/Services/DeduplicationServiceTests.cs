@@ -815,14 +815,16 @@ public class DeduplicationServiceTests : IDisposable
     public async Task DeduplicateBatchAsync_PinsTightWindowEdge(long offsetMillis, bool laterFirst, int expectedGroups)
     {
         // Both records carry the same source, so the wide window can never rescue the just-past
-        // case: only the tight window's inclusive bound decides the outcome. Separate batches so
-        // the second record matches through the persisted link rather than intra-batch state.
-        // laterFirst flips which end of the window the second record has to reach across.
+        // case: only the tight window's inclusive bound decides the outcome. That source is Tidepool
+        // because it is the one source whose same-source pairs may tight-merge at all
+        // (DataSources.EmitsDuplicateEvents). Separate batches so the second record matches through
+        // the persisted link rather than intra-batch state. laterFirst flips which end of the
+        // window the second record has to reach across.
         await using var context = NewContext();
         var service = CreateService(context);
 
-        var earlier = CreateBolus(WideBase, 2.0, "mylife-connector");
-        var later = CreateBolus(WideBase + offsetMillis, 2.0, "mylife-connector");
+        var earlier = CreateBolus(WideBase, 2.0, "tidepool-connector");
+        var later = CreateBolus(WideBase + offsetMillis, 2.0, "tidepool-connector");
         context.Boluses.AddRange(earlier, later);
         await context.SaveChangesAsync();
 
@@ -1312,8 +1314,7 @@ public class DeduplicationServiceTests : IDisposable
     [Fact]
     public async Task DeduplicateBatchAsync_Note_DoesNotMatchASoftDeletedNote()
     {
-        // Notes match on the time window alone, so nothing about the note's own content can keep a
-        // deleted one out of range — only the deleted check can.
+        // Same text inside the window, so only the deleted check can keep them apart.
         await using var context = NewContext();
         var service = CreateService(context);
 
@@ -1323,7 +1324,7 @@ public class DeduplicationServiceTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TestTenantId,
             Timestamp = timestamp,
-            Text = "removed",
+            Text = "same note",
             DataSource = "mylife-connector",
             DeletedAt = DateTime.UtcNow
         };
@@ -1332,7 +1333,7 @@ public class DeduplicationServiceTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TestTenantId,
             Timestamp = timestamp.AddSeconds(10),
-            Text = "kept",
+            Text = "same note",
             DataSource = "glooko-connector"
         };
         context.Notes.AddRange(deleted, fresh);
@@ -1687,7 +1688,7 @@ public class DeduplicationServiceTests : IDisposable
 
     private static DeduplicationInput ToInput(NoteEntity e, string? dataSource = null) =>
         new(e.Id, ToMills(e.Timestamp), dataSource ?? e.DataSource ?? DeduplicationInput.UnknownDataSource,
-            MatchCriteriaMapper.ForNote());
+            MatchCriteriaMapper.From(e));
 
     private static StateSpan CreateTestStateSpan(
         StateSpanCategory category,

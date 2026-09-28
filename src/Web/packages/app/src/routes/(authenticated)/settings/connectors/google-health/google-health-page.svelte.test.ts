@@ -109,8 +109,8 @@ describe("Google Health connector page", () => {
 
   it("saves an older history date and an empty selection without reconnecting", async () => {
     googleHealthMocks.status
-      .mockResolvedValueOnce(status({ configured: true, connected: true, selectedTypes: ["heart-rate"], importFrom: new Date("2026-08-29T00:00:00Z") }))
-      .mockResolvedValue(status({ configured: true, connected: true, selectedTypes: [], importFrom: new Date("2020-01-01T00:00:00Z") }));
+      .mockResolvedValueOnce(status({ configured: true, connected: true, selectedTypes: ["heart-rate"], importFrom: "2026-08-29T00:00:00Z" }))
+      .mockResolvedValue(status({ configured: true, connected: true, selectedTypes: [], importFrom: "2020-01-01T00:00:00Z" }));
     googleHealthMocks.preview.mockResolvedValue({ items: [
       { dataType: "heart-rate", granted: true, supported: true, count: 0 },
     ] });
@@ -197,5 +197,16 @@ describe("Google Health connector page", () => {
     await expect.element(page.getByRole("progressbar", { name: "Google Health import progress" })).toHaveAttribute("aria-valuenow", "22");
     await expect.element(page.getByRole("button", { name: "Sync now" })).toBeDisabled();
     expect(googleHealthMocks.preview).not.toHaveBeenCalled();
+  });
+
+  it("exposes the shared connector reset page for configured imports", async () => {
+    googleHealthMocks.status.mockResolvedValue(status({ configured: true, connected: true }));
+    googleHealthMocks.preview.mockResolvedValue({ items: [] });
+    render(GoogleHealthPage);
+
+    await expect.element(page.getByText("Import recovery", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "Open connector reset" }))
+      .toHaveAttribute("href", "/settings/admin/connector-cursors");
   });
 });

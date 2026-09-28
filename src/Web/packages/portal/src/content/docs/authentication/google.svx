@@ -33,9 +33,11 @@ If you don't already have a Google Cloud project:
 6. Review and **Create**
 
 <Callout type="info" title="Testing vs Production">
+
   While the consent screen is in **Testing** status, only users you've explicitly
   added as test users can sign in. Once you're ready, click **Publish App** to
   allow any Google account. Publishing requires a brief review by Google.
+
 </Callout>
 
 ## 3. Create OAuth credentials
@@ -84,7 +86,9 @@ The Google sign-in button will appear on your login page immediately.
 4. You should be redirected back to Nocturne and signed in
 
 <Callout type="tip" title="Multiple tenants">
+
   OIDC providers are platform-wide: all tenants on the same Nocturne instance
   share the same provider configuration. You only need to register one callback URL
   in Google Cloud Console regardless of how many tenants you run.
+
 </Callout>

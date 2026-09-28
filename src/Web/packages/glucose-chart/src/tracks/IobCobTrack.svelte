@@ -101,7 +101,7 @@
     x={4}
     y={iobTrackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     IOB/COB
   </text>
@@ -140,7 +140,7 @@
 <ChartClipPath>
   <!-- Bolus markers -->
   {#if showBolus}
-    {#each bolusMarkers as marker}
+    {#each bolusMarkers as marker, i (marker.treatmentId ?? i)}
       {@const xPos = context.xScale(marker.time)}
       {@const yPos = context.yScale(iobScale(marker.insulin ?? 0))}
       <BolusMarker
@@ -156,7 +156,7 @@
 
   <!-- Carb markers -->
   {#if showCarbs}
-    {#each carbMarkers as marker}
+    {#each carbMarkers as marker, i (marker.treatmentId ?? i)}
       {@const xPos = context.xScale(marker.time)}
       {@const yPos = context.yScale(
         iobScale((marker.carbs ?? 0) / carbRatio)

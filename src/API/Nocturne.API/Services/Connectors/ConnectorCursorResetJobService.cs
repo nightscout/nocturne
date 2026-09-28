@@ -12,7 +12,7 @@ namespace Nocturne.API.Services.Connectors;
 /// <summary>
 /// Runs a tenant-wide connector cursor reset as a background job so the HTTP request that kicks it
 /// off can return immediately (202) instead of blocking for the minutes a full-history re-pull can
-/// take. Callers poll <see cref="GetStatus"/> for per-connector progress.
+/// take. Callers poll <see cref="GetStatusAsync"/> for per-connector progress.
 /// </summary>
 /// <remarks>
 /// Modelled on the migration job service: jobs run on detached <see cref="Task"/> instances tracked

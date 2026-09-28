@@ -6,7 +6,7 @@ export interface SelectionResult {
 }
 
 export function selectActiveMark(
-  states: Map<string, MarkState>,
+  states: ReadonlyMap<string, MarkState>,
   registrations: MarkRegistration[],
   sequences: SequenceConfig,
 ): SelectionResult | null {
@@ -64,7 +64,7 @@ export function selectActiveMark(
 export function isSequenceDone(
   seqName: string,
   sequences: SequenceConfig,
-  states: Map<string, MarkState>,
+  states: ReadonlyMap<string, MarkState>,
 ): boolean {
   const seq = sequences[seqName];
   if (!seq) return true;
@@ -78,7 +78,7 @@ export function isSequenceDone(
 export function sequenceProgress(
   seqName: string,
   sequences: SequenceConfig,
-  states: Map<string, MarkState>,
+  states: ReadonlyMap<string, MarkState>,
 ): { completed: number; total: number } {
   const seq = sequences[seqName];
   if (!seq) return { completed: 0, total: 0 };

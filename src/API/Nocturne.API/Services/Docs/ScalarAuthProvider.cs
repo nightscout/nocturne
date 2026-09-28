@@ -364,7 +364,6 @@ public sealed class ScalarAuthProvider
                 DisplayName = ClientName,
                 IsKnown = KnownOAuthClients.MatchBySoftwareId(ScalarSoftwareId) is not null,
                 RedirectUris = JsonSerializer.Serialize(new[] { redirectUri }),
-                CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
             db.OAuthClients.Add(client);

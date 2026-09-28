@@ -50,6 +50,7 @@
   );
 </script>
 
+<!-- eslint-disable-next-line no-restricted-syntax -- calendar day cell drawing a glucose sparkline -->
 <button
   type="button"
   {disabled}
@@ -69,7 +70,7 @@
 >
   <span
     class={cn(
-      "absolute top-1 left-1.5 text-[10px] font-medium z-10 tabular-nums",
+      "absolute top-1 left-1.5 text-2xs font-medium z-10 tabular-nums",
       inMonth ? "text-foreground" : "text-muted-foreground",
       (selected || isStart || isEnd) && "text-primary"
     )}

@@ -17,9 +17,8 @@
 <NodeViewWrapper
 	as="div"
 	contenteditable="false"
-	class={`media-placeholder ${className}`}
+	class={`select-none ${className}`}
 	onclick={onClick}
-	style="user-select: none;"
 >
 	{#if !children && icon && title}
 		{@const Icon = icon}

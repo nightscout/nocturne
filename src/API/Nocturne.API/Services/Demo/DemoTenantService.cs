@@ -6,6 +6,7 @@ using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Demo;
 
@@ -102,7 +103,6 @@ public sealed class DemoTenantService
             .AsNoTracking()
             .Where(m => m.TenantId == tenantId
                 && m.Username == DemoMemberUsername
-                && m.RevokedAt == null
                 && m.Subject!.IsDemoSubject)
             .Select(m => (Guid?)m.SubjectId)
             .FirstOrDefaultAsync(ct);
@@ -174,18 +174,11 @@ public sealed class DemoTenantService
 
         await using (var db = await _factory.CreateDbContextAsync(ct))
         {
-            var strategy = db.Database.CreateExecutionStrategy();
-
-            // Each attempt re-reads the tenant on its own context: a retry must not
-            // reuse entities the previous attempt already detached or began tracking.
-            await strategy.ExecuteAsync(async () =>
+            await db.ExecuteInTransactionAsync(async token =>
             {
-                await using var attempt = await _factory.CreateDbContextAsync(ct);
-                await using var transaction = await attempt.Database.BeginTransactionAsync(ct);
-
-                var tenant = await attempt.Set<TenantEntity>()
+                var tenant = await db.Set<TenantEntity>()
                     .Include(t => t.DemoConfig)
-                    .FirstOrDefaultAsync(t => t.Id == tenantId.Value, ct);
+                    .FirstOrDefaultAsync(t => t.Id == tenantId.Value, token);
 
                 if (tenant is null)
                     return;
@@ -193,15 +186,13 @@ public sealed class DemoTenantService
                 var preserved = SnapshotTenant(tenant);
                 var preservedConfig = SnapshotDemoConfig(tenant);
 
-                attempt.Set<TenantEntity>().Remove(tenant);
-                await attempt.SaveChangesAsync(ct);
+                db.Set<TenantEntity>().Remove(tenant);
+                await db.SaveChangesAsync(token);
 
-                attempt.Set<TenantEntity>().Add(preserved);
-                attempt.Set<TenantDemoConfigEntity>().Add(preservedConfig);
-                await attempt.SaveChangesAsync(ct);
-
-                await transaction.CommitAsync(ct);
-            });
+                db.Set<TenantEntity>().Add(preserved);
+                db.Set<TenantDemoConfigEntity>().Add(preservedConfig);
+                await db.SaveChangesAsync(token);
+            }, ct);
         }
 
         // Subjects and refresh tokens are subject-scoped, so the cascade does not reach
@@ -256,7 +247,6 @@ public sealed class DemoTenantService
             ShareToken = tenant.ShareToken,
             ShareTokenEncrypted = tenant.ShareTokenEncrypted,
             ShareTokenSetAt = tenant.ShareTokenSetAt,
-            SysCreatedAt = tenant.SysCreatedAt,
             SysUpdatedAt = DateTime.UtcNow,
         };
 
@@ -390,7 +380,6 @@ public sealed class DemoTenantService
                 Slug = DemoRoleSlug,
                 Permissions = new List<string>(Scope.DemoVisitorPermissions),
                 IsSystem = true,
-                SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
             };
             db.TenantRoles.Add(role);
@@ -490,7 +479,6 @@ public sealed class DemoTenantService
                 Username = DemoMemberUsername,
                 LimitTo24Hours = false,
                 Label = DemoMemberName,
-                SysCreatedAt = DateTime.UtcNow,
                 SysUpdatedAt = DateTime.UtcNow,
             };
             db.TenantMembers.Add(member);
@@ -498,7 +486,6 @@ public sealed class DemoTenantService
         }
         else
         {
-            member.RevokedAt = null;
             member.LimitTo24Hours = false;
         }
 
@@ -519,7 +506,6 @@ public sealed class DemoTenantService
             Id = Guid.CreateVersion7(),
             TenantMemberId = memberId,
             TenantRoleId = roleId,
-            SysCreatedAt = DateTime.UtcNow,
         });
     }
 }

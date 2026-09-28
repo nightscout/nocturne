@@ -151,4 +151,29 @@ public sealed class TenantResolutionMiddlewareApexTests : TenantResolutionMiddle
         nextCalled.Should().BeFalse();
         context.Response.StatusCode.Should().Be(StatusCodes.Status503ServiceUnavailable);
     }
+
+    [Fact]
+    public async Task Apex_accepts_a_relayed_support_issue_on_a_multi_tenant_install()
+    {
+        SeedTenant("alpha");
+        SeedTenant("beta");
+
+        var (context, served) = await InvokeAsync(BaseDomain, "/api/v4/support/relay", HttpMethods.Post);
+
+        // The relaying instance posts to the apex it was configured with, and a multi-tenant apex
+        // otherwise 404s every path it cannot pin to one tenant.
+        served.Should().BeTrue();
+        Resolve<ITenantAccessor>(context).IsResolved.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Apex_admits_the_support_relay_under_post_only_and_not_the_direct_ingress()
+    {
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/support/relay", HttpMethods.Post)
+            .Should().BeTrue();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/support/relay", HttpMethods.Get)
+            .Should().BeFalse();
+        TenantResolutionMiddleware.IsTenantlessAllowed("/api/v4/support/issues", HttpMethods.Post)
+            .Should().BeFalse();
+    }
 }

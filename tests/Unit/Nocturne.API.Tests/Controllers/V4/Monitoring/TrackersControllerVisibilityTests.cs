@@ -53,7 +53,7 @@ public class TrackersControllerVisibilityTests
         if (isAdmin)
         {
             var trie = new PermissionTrie();
-            trie.Add("admin");
+            trie.Add("*");
             httpContext.Items["PermissionTrie"] = trie;
         }
 

@@ -7,10 +7,20 @@
   import DayGlucoseProfile from "$lib/components/calendar/DayGlucoseProfile.svelte";
   import TrackerPopoverContent from "$lib/components/calendar/TrackerPopoverContent.svelte";
   import { TrackerCategory } from "$api";
-  import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
+  import type { TrackerInstanceDto, TrackerDefinitionDto, PunchCardDay } from "$api";
+
+  /** A calendar grid slot: a day with data, a numbered day without, or padding. */
+  type CalendarSlot = PunchCardDay | null | { empty: true; dayNumber?: number };
+
+  interface CalendarTrackerEvent {
+    instance: TrackerInstanceDto;
+    eventType: "start" | "due" | "completed";
+    date: string;
+  }
   import { formatGlucoseValue, formatLocale } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
   import { formatCalendarDate, getCalendarDayNumber } from "$lib/components/calendar/calendar-date";
+
 
   let {
     day,
@@ -29,24 +39,24 @@
     formatTrackerStartTime,
     formatTrackerAge,
     openCompletionDialog,
-  } = $props<{
-    day: any; // Using any for brevity in this complex propset, but it maps to calendar logic
+  }: {
+    day: CalendarSlot;
     viewMode: "tir" | "profile";
     currentYear: number;
     currentMonth: number;
-    trackerEvents: Map<string, any[]>;
+    trackerEvents: Map<string, CalendarTrackerEvent[]>;
     definitions: TrackerDefinitionDto[];
     openPopoverId: string | null;
     units: GlucoseUnits;
     unitLabel: string;
-    handleDayClick: (day: any) => void;
+    handleDayClick: (day: PunchCardDay) => void;
     getDefinition: (instance: TrackerInstanceDto, defs: TrackerDefinitionDto[]) => TrackerDefinitionDto | undefined;
     getTrackerLevel: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined) => string;
     getTrackerTone: (eventType: string, level: string) => string;
-    formatTrackerStartTime: (startedAt: Date | undefined) => string | null;
+    formatTrackerStartTime: (startedAt: string | undefined) => string | null;
     formatTrackerAge: (hours: number | undefined) => string;
     openCompletionDialog: (instance: TrackerInstanceDto, def: TrackerDefinitionDto | undefined, date: string) => void;
-  }>();
+  } = $props();
 
   // Helper for today check (can be simplified if passed as prop)
   function isToday(date: string): boolean {
@@ -56,10 +66,10 @@
   }
 
   function getCellClasses(
-    day: any
+    day: CalendarSlot
   ): string {
     const base = "flex items-center justify-center rounded-lg border min-h-20 relative";
-    const isTodayCell = day && "date" in day && isToday(day.date);
+    const isTodayCell = day && "date" in day && day.date !== undefined && isToday(day.date);
 
     return cn(
       base,
@@ -78,32 +88,54 @@
   );
 
   const dayTrackerEvents = $derived(dateStr ? (trackerEvents.get(dateStr) ?? []) : []);
+
+  /** A dated day's figures, defaulted once so the markup reads plain numbers. */
+  const stats = $derived.by(() => {
+    if (!day || !("date" in day) || day.date === undefined) return null;
+    return {
+      source: day,
+      date: day.date,
+      timestamp: day.timestamp,
+      totalReadings: day.totalReadings ?? 0,
+      lowPercent: day.lowPercent ?? 0,
+      inRangePercent: day.inRangePercent ?? 0,
+      highPercent: day.highPercent ?? 0,
+      totalCarbs: day.totalCarbs ?? 0,
+      totalBolus: day.totalBolus ?? 0,
+      totalBasal: day.totalBasal ?? 0,
+      averageGlucose: day.averageGlucose ?? 0,
+      entries: (day.entries ?? []).flatMap((e) =>
+        e.mills != null && e.mgdl != null ? [{ mills: e.mills, mgdl: e.mgdl }] : []
+      ),
+    };
+  });
 </script>
 
 <div class={getCellClasses(day)}>
-  {#if day && "date" in day && day.totalReadings > 0}
+  {#if stats && stats.totalReadings > 0}
     <!-- Day number in corner -->
     <span
       class="absolute top-1 left-2 text-xs text-muted-foreground font-medium z-10"
     >
-      {getCalendarDayNumber(day.date)}
+      {getCalendarDayNumber(stats.date)}
     </span>
 
     <!-- Tracker icons in top-right corner -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5 z-10">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
@@ -140,30 +172,30 @@
               class="absolute inset-0 p-2 pt-6"
             >
               <DayStackedBar
-                lowPercent={day.lowPercent}
-                inRangePercent={day.inRangePercent}
-                highPercent={day.highPercent}
-                onclick={() => handleDayClick(day)}
+                lowPercent={stats.lowPercent}
+                inRangePercent={stats.inRangePercent}
+                highPercent={stats.highPercent}
+                onclick={() => handleDayClick(stats.source)}
               />
             </div>
           {:else}
             <div {...props} class="absolute inset-0">
               <DayGlucoseProfile
-                entries={day.entries}
-                dayStartMills={day.timestamp}
-                onclick={() => handleDayClick(day)}
+                entries={stats.entries}
+                dayStartMills={stats.timestamp}
+                onclick={() => handleDayClick(stats.source)}
               />
             </div>
           {/if}
         {/snippet}
       </Tooltip.Trigger>
       <Tooltip.Content
+        variant="popover"
         side="top"
-        class="bg-card text-card-foreground border shadow-lg p-3"
       >
         <div class="space-y-1.5">
           <div class="font-medium text-sm">
-            {formatCalendarDate(day.date, formatLocale(), {
+            {formatCalendarDate(stats.date, formatLocale(), {
               weekday: "long",
               month: "short",
               day: "numeric",
@@ -174,28 +206,28 @@
               <span class="w-2 h-2 rounded-full bg-glucose-in-range"></span>
               <span class="text-muted-foreground">In Range:</span>
             </div>
-            <span class="font-medium">{day.inRangePercent.toFixed(1)}%</span>
+            <span class="font-medium">{stats.inRangePercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-low"></span>
               <span class="text-muted-foreground">Low:</span>
             </div>
-            <span class="font-medium">{day.lowPercent.toFixed(1)}%</span>
+            <span class="font-medium">{stats.lowPercent.toFixed(1)}%</span>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-glucose-high"></span>
               <span class="text-muted-foreground">High:</span>
             </div>
-            <span class="font-medium">{day.highPercent.toFixed(1)}%</span>
+            <span class="font-medium">{stats.highPercent.toFixed(1)}%</span>
           </div>
           <div class="border-t pt-1.5 mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
             <span class="text-muted-foreground">Carbs:</span>
-            <span class="font-medium">{day.totalCarbs.toFixed(0)}g</span>
+            <span class="font-medium">{stats.totalCarbs.toFixed(0)}g</span>
             <span class="text-muted-foreground">Bolus:</span>
-            <span class="font-medium">{day.totalBolus.toFixed(1)}U</span>
+            <span class="font-medium">{stats.totalBolus.toFixed(1)}U</span>
             <span class="text-muted-foreground">Basal:</span>
-            <span class="font-medium">{day.totalBasal.toFixed(1)}U</span>
+            <span class="font-medium">{stats.totalBasal.toFixed(1)}U</span>
             <span class="text-muted-foreground">Avg Glucose:</span>
             <span class="font-medium">
-              {formatGlucoseValue(day.averageGlucose, units)} {unitLabel}
+              {formatGlucoseValue(stats.averageGlucose, units)} {unitLabel}
             </span>
           </div>
           <div class="text-xs text-muted-foreground italic pt-1">
@@ -212,18 +244,19 @@
     <!-- Tracker icons for empty days -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
@@ -250,26 +283,27 @@
       </div>
     {/if}
     <div class="w-6 h-6 rounded-full border-2 border-dashed border-muted-foreground/20"></div>
-  {:else if day && "date" in day}
+  {:else if stats}
     <!-- Day exists in data but has no readings -->
     <span class="absolute top-1 left-2 text-xs text-muted-foreground">
-      {getCalendarDayNumber(day.date)}
+      {getCalendarDayNumber(stats.date)}
     </span>
     <!-- Tracker icons for days with no readings -->
     {#if dayTrackerEvents.length > 0}
       <div class="absolute top-1 right-1 flex gap-0.5">
-        {#each dayTrackerEvents as event}
+        {#each dayTrackerEvents as event (`${event.instance.id}-${event.eventType}`)}
           {@const def = getDefinition(event.instance, definitions)}
           {@const level = event.eventType === "due" ? getTrackerLevel(event.instance, def) : "none"}
           {@const category = def?.category ?? TrackerCategory.Consumable}
           {@const startTime = formatTrackerStartTime(event.instance.startedAt)}
-          {@const popoverId = `${event.instance.id}-${event.date}`}
+          {@const popoverId = `${event.instance.id}-${event.eventType}-${event.date}`}
           <Popover.Root
             open={openPopoverId === popoverId}
             onOpenChange={(open) => (openPopoverId = open ? popoverId : null)}
           >
             <Popover.Trigger>
               {#snippet child({ props }: { props: Record<string, unknown> })}
+                <!-- eslint-disable-next-line no-restricted-syntax -- tracker dot is a popover trigger inside a calendar cell -->
                 <button
                   {...props}
                   class="tracker-icon h-4 w-4 rounded-full flex items-center justify-center hover:scale-125 transition-transform"
@@ -311,15 +345,15 @@
     color: var(--status-normal);
   }
   .tracker-icon[data-tone="info"] {
-    color: var(--system-event-info);
+    color: var(--severity-info);
   }
   .tracker-icon[data-tone="warn"] {
-    color: var(--system-event-warning);
+    color: var(--severity-warn);
   }
   .tracker-icon[data-tone="hazard"] {
-    color: var(--system-event-hazard);
+    color: var(--severity-hazard);
   }
   .tracker-icon[data-tone="urgent"] {
-    color: var(--system-event-alarm);
+    color: var(--severity-urgent);
   }
 </style>

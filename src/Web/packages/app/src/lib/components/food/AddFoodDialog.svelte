@@ -123,14 +123,14 @@
         protein: foodProtein,
         energy: foodEnergy,
         gi: foodGi,
-      } as Food;
+      };
 
       const result = editingFoodId
         ? await updateFood({ foodId: editingFoodId, request: payload })
         : await createFood(payload);
 
       toast.success(editingFoodId ? "Food updated successfully" : "Food created successfully");
-      onSave?.(result as Food);
+      onSave?.(result);
       onOpenChange(false);
     });
   }
@@ -181,7 +181,7 @@
           </h3>
           <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
-              <Label for="food-carbs" class="text-base font-semibold">
+              <Label for="food-carbs" size="lg">
                 Carbs (g)
               </Label>
               <Input
@@ -189,11 +189,10 @@
                 name="n:carbs"
                 type="number"
                 bind:value={foodCarbs}
-                class="text-lg font-medium"
               />
             </div>
             <div class="space-y-2">
-              <Label for="food-gi" class="text-base font-semibold">
+              <Label for="food-gi" size="lg">
                 Glycemic Index
               </Label>
               <input type="hidden" name="n:gi" value={foodGi} />
@@ -278,7 +277,7 @@
           </h3>
           <div class="grid gap-4 @lg:grid-cols-4">
             <div class="space-y-2">
-              <Label for="food-carbs" class="text-base font-semibold">
+              <Label for="food-carbs" size="lg">
                 Carbs (g)
               </Label>
               <Input
@@ -286,11 +285,10 @@
                 name="n:carbs"
                 type="number"
                 bind:value={foodCarbs}
-                class="text-lg font-medium"
               />
             </div>
             <div class="space-y-2">
-              <Label for="food-gi" class="text-base font-semibold">
+              <Label for="food-gi" size="lg">
                 Glycemic Index
               </Label>
               <input type="hidden" name="n:gi" value={foodGi} />

@@ -1,20 +1,17 @@
 {
   "schema_version": 1,
   "name": "malformed-container-payloads",
-  "description": "a container whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
+  "description": "a not or sustained whose payload is missing is treated as a leaf (gets a leaf id) and evaluates false",
   "rules": [
     {
       "id": "00000000-0000-0000-0000-000000000001",
       "name": "rule-1",
       "condition_type": "composite",
       "condition_params": {
-        "operator": "and",
+        "operator": "or",
         "conditions": [
           {
             "type": "sustained"
-          },
-          {
-            "type": "composite"
           },
           {
             "type": "not"

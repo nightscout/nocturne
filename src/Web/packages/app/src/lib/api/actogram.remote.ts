@@ -1,66 +1,62 @@
 /**
- * Remote function for actogram report data.
- * Thin wrapper around the lean `getActogram` API endpoint that adds
- * frontend-only glucose color resolution.
+ * Remote function for actogram report data. Thin wrapper around the lean
+ * `getActogram` API endpoint that adds frontend-only glucose color resolution.
  */
-import { getRequestEvent, query } from '$app/server';
-import { z } from 'zod';
-import { error } from '@sveltejs/kit';
-import { getGlucoseColor } from '$lib/utils/chart-colors';
-import { resolveGlucoseThresholds } from '$lib/constants/glucose-thresholds';
+import { getRequestEvent, query } from "$app/server";
+import { z } from "zod";
+import { error } from "@sveltejs/kit";
+import { getGlucoseColor } from "$lib/utils/chart-colors";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
 
 const actogramSchema = z.object({
-	from: z.number(),
-	to: z.number(),
+  from: z.number(),
+  to: z.number(),
 });
 
 export const getActogramData = query(actogramSchema, async ({ from, to }) => {
-	const { locals } = getRequestEvent();
-	const { apiClient } = locals;
+  const { locals } = getRequestEvent();
+  const { apiClient } = locals;
 
-	try {
-		const data = await apiClient.actogram.getActogram(from, to);
+  try {
+    const data = await apiClient.actogram.getActogram(from, to);
 
-		const thresholds = {
-			...resolveGlucoseThresholds(data.thresholds),
-			glucoseYMax: data.thresholds?.glucoseYMax ?? 300,
-		};
+    const thresholds = resolveChartThresholds(data.thresholds);
 
-		const glucoseData = (data.glucose ?? []).map((p) => {
-			const sgv = p.sgv ?? 0;
-			return {
-				mills: p.time ?? 0,
-				sgv,
-				color: getGlucoseColor(sgv, thresholds),
-			};
-		});
+    const glucoseData = (data.glucose ?? []).map((p) => {
+      const sgv = p.sgv ?? 0;
+      return {
+        mills: p.time ?? 0,
+        sgv,
+        color: getGlucoseColor(sgv, thresholds),
+      };
+    });
 
-		const stepCounts = (data.stepCounts ?? []).map((s) => ({
-			mills: s.time ?? 0,
-			metric: s.steps ?? 0,
-		}));
+    const stepCounts = (data.stepCounts ?? []).map((s) => ({
+      mills: s.time ?? 0,
+      metric: s.steps ?? 0,
+    }));
 
-		const heartRates = (data.heartRates ?? []).map((h) => ({
-			mills: h.time ?? 0,
-			bpm: h.bpm ?? 0,
-		}));
+    const heartRates = (data.heartRates ?? []).map((h) => ({
+      mills: h.time ?? 0,
+      bpm: h.bpm ?? 0,
+    }));
 
-		const sleepSpans = (data.sleepSpans ?? []).map((s) => ({
-			startMills: s.startMills ?? 0,
-			endMills: s.endMills ?? s.startMills ?? 0,
-			state: s.state ?? 'Unknown',
-		}));
+    const sleepSpans = (data.sleepSpans ?? []).map((s) => ({
+      startMills: s.startMills ?? 0,
+      endMills: s.endMills ?? s.startMills ?? 0,
+      state: s.state ?? "Unknown",
+    }));
 
-		return {
-			stepCounts,
-			stepDayTotals: data.stepDayTotals ?? {},
-			heartRates,
-			glucoseData,
-			sleepSpans,
-			thresholds,
-		};
-	} catch (err) {
-		console.error('Error loading actogram data:', err);
-		throw error(500, 'Failed to load actogram data');
-	}
+    return {
+      stepCounts,
+      stepDayTotals: data.stepDayTotals ?? {},
+      heartRates,
+      glucoseData,
+      sleepSpans,
+      thresholds,
+    };
+  } catch (err) {
+    console.error("Error loading actogram data:", err);
+    throw error(500, "Failed to load actogram data");
+  }
 });

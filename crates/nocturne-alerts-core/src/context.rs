@@ -1,20 +1,19 @@
-//! `SensorContext` as plain data: pure input to the evaluators, deserialisable
-//! from the corpus scenario context wire format (see `ScenarioModels.cs`).
-//! Enum-valued facts are stored as C# enum ordinals so payload comparisons are
-//! direct integer equality.
+//! `SensorContext` as plain data: pure input to the evaluators, read from the
+//! context wire format (engine-semantics.md §4). An enum name this crate does
+//! not know (a host newer than it) degrades only that fact: an unknown bucket
+//! reads as absent and an unknown pump mode or state-span category drops that
+//! entry, so every other leaf still evaluates.
 
 use std::collections::HashMap;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::Deserialize;
-use serde_json::Number;
+use serde_json::{Map, Number, Value};
 use uuid::Uuid;
 
-use crate::model::{
-    GLUCOSE_BUCKET_NAMES, PUMP_MODE_NAMES, STATE_SPAN_CATEGORY_NAMES, TREND_BUCKET_NAMES,
-    decimal_from_number, enum_ordinal,
-};
+use crate::enums::{GlucoseBucket, PumpMode, StateSpanCategory, TrendBucket, WireEnum};
+use crate::model::decimal_from_number;
 
 #[derive(Debug, Clone)]
 pub struct ActiveAlertSnapshot {
@@ -30,8 +29,8 @@ pub struct TempBasalSnapshot {
     pub started_at: DateTime<Utc>,
 }
 
-/// `OverrideSnapshot` / `PumpSuspensionSnapshot` / `DoNotDisturbSnapshot` —
-/// the evaluators only read `StartedAt`.
+/// An override, pump suspension or Do Not Disturb span; only its start is
+/// read.
 #[derive(Debug, Clone, Copy)]
 pub struct StartedSpan {
     pub started_at: DateTime<Utc>,
@@ -39,8 +38,7 @@ pub struct StartedSpan {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PumpStateSnapshot {
-    /// `PumpModeState` ordinal.
-    pub mode: i64,
+    pub mode: PumpMode,
     pub started_at: DateTime<Utc>,
 }
 
@@ -63,8 +61,7 @@ pub struct SensorContext {
     pub latest_timestamp: Option<DateTime<Utc>>,
     pub trend_rate: Option<Decimal>,
     pub last_reading_at: Option<DateTime<Utc>>,
-    /// `TrendBucket` ordinal (0 unknown … 5 falling_fast).
-    pub trend_bucket: Option<i64>,
+    pub trend_bucket: Option<TrendBucket>,
     pub iob_units: Option<Decimal>,
     pub cob_grams: Option<Decimal>,
     pub reservoir_units: Option<Decimal>,
@@ -88,15 +85,14 @@ pub struct SensorContext {
     pub has_ever_pump_snapshot: bool,
     pub has_ever_uploader_snapshot: bool,
     pub has_ever_aps_sensitivity: bool,
-    /// `GlucoseBucket` ordinal (0 very_low … 5 very_high).
-    pub glucose_bucket: Option<i64>,
+    pub glucose_bucket: Option<GlucoseBucket>,
     pub last_carb_at: Option<DateTime<Utc>>,
     pub last_bolus_at: Option<DateTime<Utc>>,
     pub tenant_time_zone_id: Option<String>,
     pub active_pump_state: Option<PumpStateSnapshot>,
-    /// Keyed by `(StateSpanCategory ordinal, state)`; a `None` state means
-    /// "any state of this category" (the enricher loads that exact key shape).
-    pub active_state_spans: HashMap<(i64, Option<String>), StateSpanSnapshot>,
+    /// Keyed by `(category, state)`; a `None` state means "any state of this
+    /// category".
+    pub active_state_spans: HashMap<(StateSpanCategory, Option<String>), StateSpanSnapshot>,
     /// Reference timestamp of the active tracker instance per tracker
     /// definition: start time for duration trackers, scheduled time for event
     /// trackers (resolved by the enricher). Absent key = no active instance.
@@ -231,15 +227,41 @@ struct WireTrackerReference {
 }
 
 fn dec(n: &Number, what: &str) -> Result<Decimal, String> {
-    decimal_from_number(n).ok_or_else(|| format!("invalid decimal for {what}: {n}"))
+    decimal_from_number(n).ok_or_else(|| format!("invalid decimal for {what}"))
 }
 
 fn opt_dec(n: Option<&Number>, what: &str) -> Result<Option<Decimal>, String> {
     n.map(|n| dec(n, what)).transpose()
 }
 
-fn ord(names: &[&str], s: &str, what: &str) -> Result<i64, String> {
-    enum_ordinal(names, s).ok_or_else(|| format!("unknown {what} wire value: {s}"))
+/// Rejects an instant outside 0001-01-01 up to, not including, 10000-01-01
+/// UTC, the host `DateTime` domain, whose elapsed-time arithmetic has no host
+/// counterpart outside it. The error names the field, never the value.
+pub fn check_timestamp(at: DateTime<Utc>, field: &str) -> Result<DateTime<Utc>, String> {
+    let min = NaiveDate::from_ymd_opt(1, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));
+    let end = NaiveDate::from_ymd_opt(10_000, 1, 1).and_then(|d| d.and_hms_opt(0, 0, 0));
+    let in_range = match (min, end) {
+        (Some(min), Some(end)) => (min.and_utc()..end.and_utc()).contains(&at),
+        _ => false,
+    };
+    if in_range {
+        Ok(at)
+    } else {
+        Err(format!("{field} is outside the supported timestamp range"))
+    }
+}
+
+fn opt_ts(at: Option<DateTime<Utc>>, field: &str) -> Result<Option<DateTime<Utc>>, String> {
+    at.map(|at| check_timestamp(at, field)).transpose()
+}
+
+fn started(span: Option<WireStartedSpan>, field: &str) -> Result<Option<StartedSpan>, String> {
+    span.map(|s| {
+        Ok(StartedSpan {
+            started_at: check_timestamp(s.started_at, field)?,
+        })
+    })
+    .transpose()
 }
 
 impl<'de> Deserialize<'de> for SensorContext {
@@ -247,9 +269,30 @@ impl<'de> Deserialize<'de> for SensorContext {
     where
         D: serde::Deserializer<'de>,
     {
-        let w = WireContext::deserialize(deserializer)?;
+        let value = Value::deserialize(deserializer)?;
+        let w = WireContext::deserialize(&value)
+            .map_err(|_| serde::de::Error::custom(wire_error(&value)))?;
         Self::try_from_wire(w).map_err(serde::de::Error::custom)
     }
+}
+
+/// Names the top-level context field that fails to deserialise. serde's own
+/// messages quote the offending value, which here is health data bound for
+/// host logs.
+fn wire_error(value: &Value) -> String {
+    let Value::Object(fields) = value else {
+        return "context must be a JSON object".into();
+    };
+    fields
+        .iter()
+        .find(|(name, field)| {
+            let single = Value::Object(Map::from_iter([((*name).clone(), (*field).clone())]));
+            WireContext::deserialize(&single).is_err()
+        })
+        .map_or_else(
+            || "invalid context".into(),
+            |(name, _)| format!("invalid value for context field {name}"),
+        )
 }
 
 impl SensorContext {
@@ -260,43 +303,40 @@ impl SensorContext {
                 a.alert_id,
                 ActiveAlertSnapshot {
                     state: a.state,
-                    triggered_at: a.triggered_at,
-                    acknowledged_at: a.acknowledged_at,
+                    triggered_at: check_timestamp(a.triggered_at, "active_alerts.triggered_at")?,
+                    acknowledged_at: opt_ts(a.acknowledged_at, "active_alerts.acknowledged_at")?,
                 },
             );
         }
 
         let mut active_trackers = HashMap::new();
         for t in w.active_trackers.unwrap_or_default() {
-            active_trackers.insert(t.tracker_definition_id, t.reference_at);
+            active_trackers.insert(
+                t.tracker_definition_id,
+                check_timestamp(t.reference_at, "active_trackers.reference_at")?,
+            );
         }
 
         let mut active_state_spans = HashMap::new();
         for s in w.active_state_spans.unwrap_or_default() {
-            let category = ord(&STATE_SPAN_CATEGORY_NAMES, &s.category, "StateSpanCategory")?;
-            active_state_spans.insert(
-                (category, s.state),
-                StateSpanSnapshot {
-                    started_at: s.started_at,
-                },
-            );
+            let started_at = check_timestamp(s.started_at, "active_state_spans.started_at")?;
+            if let Some(category) = StateSpanCategory::from_name(&s.category) {
+                active_state_spans.insert((category, s.state), StateSpanSnapshot { started_at });
+            }
         }
 
         Ok(SensorContext {
             latest_value: opt_dec(w.latest_value.as_ref(), "latest_value")?,
-            latest_timestamp: w.latest_timestamp,
+            latest_timestamp: opt_ts(w.latest_timestamp, "latest_timestamp")?,
             trend_rate: opt_dec(w.trend_rate.as_ref(), "trend_rate")?,
-            last_reading_at: w.last_reading_at,
-            trend_bucket: w
-                .trend_bucket
-                .map(|s| ord(&TREND_BUCKET_NAMES, &s, "TrendBucket"))
-                .transpose()?,
+            last_reading_at: opt_ts(w.last_reading_at, "last_reading_at")?,
+            trend_bucket: w.trend_bucket.and_then(|s| TrendBucket::from_name(&s)),
             iob_units: opt_dec(w.iob_units.as_ref(), "iob_units")?,
             cob_grams: opt_dec(w.cob_grams.as_ref(), "cob_grams")?,
             reservoir_units: opt_dec(w.reservoir_units.as_ref(), "reservoir_units")?,
             reservoir_is_lower_bound: w.reservoir_is_lower_bound.unwrap_or(false),
-            last_site_change_at: w.last_site_change_at,
-            last_sensor_start_at: w.last_sensor_start_at,
+            last_site_change_at: opt_ts(w.last_site_change_at, "last_site_change_at")?,
+            last_sensor_start_at: opt_ts(w.last_sensor_start_at, "last_sensor_start_at")?,
             predictions: w
                 .predictions
                 .unwrap_or_default()
@@ -309,8 +349,8 @@ impl SensorContext {
                 })
                 .collect::<Result<Vec<_>, String>>()?,
             active_alerts,
-            last_aps_cycle_at: w.last_aps_cycle_at,
-            last_aps_enacted_at: w.last_aps_enacted_at,
+            last_aps_cycle_at: opt_ts(w.last_aps_cycle_at, "last_aps_cycle_at")?,
+            last_aps_enacted_at: opt_ts(w.last_aps_enacted_at, "last_aps_enacted_at")?,
             pump_battery_percent: opt_dec(w.pump_battery_percent.as_ref(), "pump_battery_percent")?,
             active_temp_basal: w
                 .active_temp_basal
@@ -318,7 +358,7 @@ impl SensorContext {
                     Ok::<_, String>(TempBasalSnapshot {
                         rate: dec(&tb.rate, "temp basal rate")?,
                         scheduled_rate: opt_dec(tb.scheduled_rate.as_ref(), "scheduled_rate")?,
-                        started_at: tb.started_at,
+                        started_at: check_timestamp(tb.started_at, "active_temp_basal.started_at")?,
                     })
                 })
                 .transpose()?,
@@ -326,36 +366,35 @@ impl SensorContext {
                 w.uploader_battery_percent.as_ref(),
                 "uploader_battery_percent",
             )?,
-            active_override: w.active_override.map(|s| StartedSpan {
-                started_at: s.started_at,
-            }),
-            active_pump_suspension: w.active_pump_suspension.map(|s| StartedSpan {
-                started_at: s.started_at,
-            }),
+            active_override: started(w.active_override, "active_override.started_at")?,
+            active_pump_suspension: started(
+                w.active_pump_suspension,
+                "active_pump_suspension.started_at",
+            )?,
             sensitivity_ratio: opt_dec(w.sensitivity_ratio.as_ref(), "sensitivity_ratio")?,
-            active_do_not_disturb: w.active_do_not_disturb.map(|s| StartedSpan {
-                started_at: s.started_at,
-            }),
+            active_do_not_disturb: started(
+                w.active_do_not_disturb,
+                "active_do_not_disturb.started_at",
+            )?,
             has_ever_aps_cycled: w.has_ever_aps_cycled,
             has_ever_pump_snapshot: w.has_ever_pump_snapshot,
             has_ever_uploader_snapshot: w.has_ever_uploader_snapshot,
             has_ever_aps_sensitivity: w.has_ever_aps_sensitivity,
-            glucose_bucket: w
-                .glucose_bucket
-                .map(|s| ord(&GLUCOSE_BUCKET_NAMES, &s, "GlucoseBucket"))
-                .transpose()?,
-            last_carb_at: w.last_carb_at,
-            last_bolus_at: w.last_bolus_at,
+            glucose_bucket: w.glucose_bucket.and_then(|s| GlucoseBucket::from_name(&s)),
+            last_carb_at: opt_ts(w.last_carb_at, "last_carb_at")?,
+            last_bolus_at: opt_ts(w.last_bolus_at, "last_bolus_at")?,
             tenant_time_zone_id: w.tenant_time_zone_id,
             active_pump_state: w
                 .active_pump_state
                 .map(|p| {
-                    Ok::<_, String>(PumpStateSnapshot {
-                        mode: ord(&PUMP_MODE_NAMES, &p.mode, "PumpModeState")?,
-                        started_at: p.started_at,
-                    })
+                    let started_at = check_timestamp(p.started_at, "active_pump_state.started_at")?;
+                    Ok::<_, String>(
+                        PumpMode::from_name(&p.mode)
+                            .map(|mode| PumpStateSnapshot { mode, started_at }),
+                    )
                 })
-                .transpose()?,
+                .transpose()?
+                .flatten(),
             active_state_spans,
             active_trackers,
             sleep_session_active: w.sleep_session_active,

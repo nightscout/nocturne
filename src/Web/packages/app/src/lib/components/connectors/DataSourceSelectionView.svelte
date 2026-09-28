@@ -12,15 +12,14 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    AlertCircle,
-    ChevronRight,
-    Loader2,
-    Smartphone,
-    Cloud,
-    Plug,
-  } from "lucide-svelte";
-  import Apple from "lucide-svelte/icons/apple";
+  import { Item } from "$lib/components/ui/item";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Cloud from "@lucide/svelte/icons/cloud";
+  import Plug from "@lucide/svelte/icons/plug";
+  import Apple from "@lucide/svelte/icons/apple";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
 
   interface Props {
@@ -65,7 +64,7 @@
   const groupedApps = $derived.by(() => {
     const groups: Record<string, UploaderApp[]> = {};
     for (const app of filteredApps) {
-      const cat = app.category ?? (UploaderCategory.Uploader as string);
+      const cat: string = app.category ?? UploaderCategory.Uploader;
       if (!groups[cat]) groups[cat] = [];
       groups[cat].push(app);
     }
@@ -110,7 +109,7 @@
     <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
   </div>
 {:else if loadError}
-  <Card.Root class="border-destructive">
+  <Card.Root variant="destructive">
     <Card.Content class="flex items-center gap-3 pt-6">
       <AlertCircle class="h-5 w-5 text-destructive" />
       <div>
@@ -131,16 +130,14 @@
         <div class="grid gap-3 @xl:grid-cols-2">
           {#each connectors as connector (connector.id)}
             {@const configured = connector.isConfigured ?? false}
-            <button
-              type="button"
-              class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {configured
-                ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10'
-                : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
+            <Item
+              variant={configured ? "success" : "outline"}
+              size="lg"
               onclick={() => onSelectConnector(connector.id ?? "")}
             >
               <div
                 class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {configured
-                  ? 'bg-green-500/10 text-green-600'
+                  ? 'bg-success/10 text-success'
                   : 'bg-primary/10 text-primary'}"
               >
                 <AppLogo icon={connector.icon} invertMode />
@@ -149,7 +146,7 @@
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-medium">{connector.name}</span>
                   {#if configured}
-                    <Badge variant="secondary" class="text-xs text-green-600">
+                    <Badge variant="success">
                       Connected
                     </Badge>
                   {/if}
@@ -163,7 +160,7 @@
               <ChevronRight
                 class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0"
               />
-            </button>
+            </Item>
           {/each}
         </div>
       </div>
@@ -188,7 +185,6 @@
             <Button
               variant={platformFilter === UploaderPlatform.IOS ? "default" : "outline"}
               size="sm"
-              class="gap-1.5"
               onclick={() => (platformFilter = UploaderPlatform.IOS)}
             >
               <Apple class="h-3.5 w-3.5" />
@@ -197,7 +193,6 @@
             <Button
               variant={platformFilter === UploaderPlatform.Android ? "default" : "outline"}
               size="sm"
-              class="gap-1.5"
               onclick={() => (platformFilter = UploaderPlatform.Android)}
             >
               <Smartphone class="h-3.5 w-3.5" />
@@ -213,16 +208,14 @@
               <div class="grid gap-3 @xl:grid-cols-2">
                 {#each group.apps as app (app.id)}
                   {@const detected = isDetected(app.id)}
-                  <button
-                    type="button"
-                    class="flex items-center gap-4 p-4 rounded-lg border transition-colors text-left group {detected
-                      ? 'border-green-500/30 bg-green-500/5 hover:bg-green-500/10'
-                      : 'bg-muted/30 hover:border-primary/50 hover:bg-accent/50'}"
+                  <Item
+                    variant={detected ? "success" : "outline"}
+                    size="lg"
                     onclick={() => onSelectUploader(app)}
                   >
                     <div
                       class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {detected
-                        ? 'bg-green-500/10 text-green-600'
+                        ? 'bg-success/10 text-success'
                         : 'bg-primary/10 text-primary'}"
                     >
                       <AppLogo icon={app.icon} invertMode />
@@ -230,11 +223,11 @@
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-medium">{getUploaderName(app)}</span>
-                        <Badge variant="outline" class="text-xs gap-1">
+                        <Badge variant="outline">
                           {getPlatformLabel(app.platform)}
                         </Badge>
                         {#if detected}
-                          <Badge variant="secondary" class="text-xs text-green-600">
+                          <Badge variant="success">
                             Connected
                           </Badge>
                         {/if}
@@ -248,7 +241,7 @@
                     <ChevronRight
                       class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0"
                     />
-                  </button>
+                  </Item>
                 {/each}
               </div>
             </div>
@@ -273,12 +266,8 @@
 
   <!-- Skip link -->
   <div class="pt-4 text-center">
-    <button
-      type="button"
-      class="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline transition-colors"
-      onclick={onSkip}
-    >
+    <Button variant="link" size="inline" onclick={onSkip}>
       Skip for now
-    </button>
+    </Button>
   </div>
 {/if}

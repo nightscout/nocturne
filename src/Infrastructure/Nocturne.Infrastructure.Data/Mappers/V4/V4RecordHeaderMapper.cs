@@ -13,13 +13,12 @@ internal static class V4RecordHeaderMapper
 {
     /// <summary>
     /// Stamp a newly built entity with the model's header, minting a UUID v7 when the model carries
-    /// no id and setting both system timestamps to now.
+    /// no id.
     /// </summary>
     public static TEntity WithHeaderFrom<TEntity>(this TEntity entity, V4RecordBase model)
         where TEntity : V4TimeSeriesEntityBase
     {
         entity.Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id;
-        entity.SysCreatedAt = DateTime.UtcNow;
         entity.SysUpdatedAt = DateTime.UtcNow;
         UpdateHeader(entity, model);
         return entity;

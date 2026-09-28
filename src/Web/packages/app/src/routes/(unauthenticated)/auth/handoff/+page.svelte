@@ -7,7 +7,8 @@
   import { DeadEndCard } from "$lib/components/shared";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
-  import { AlertTriangle, Loader2 } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { readHandoffExchange } from "./handoff-link";
 
   let failed = $state(false);

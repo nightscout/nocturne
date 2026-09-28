@@ -30,7 +30,7 @@
     <!-- Legend Skeleton -->
     <div class="flex items-center justify-between px-4 pb-3">
       <div class="flex items-center gap-4">
-        {#each Array(3) as _}
+        {#each Array(3) as _, i (i)}
           <div class="flex items-center gap-2">
             <Skeleton class="h-3 w-3 rounded-full" />
             <Skeleton class="h-4 w-16" />
@@ -47,7 +47,7 @@
       <Card.Content class="@container p-4 h-full flex flex-col">
         <!-- Day of week headers -->
         <div class="grid grid-cols-7 gap-1 mb-2">
-          {#each Array(7) as _}
+          {#each Array(7) as _, i (i)}
             <div class="text-center py-2">
               <Skeleton class="h-4 w-8 mx-auto" />
             </div>
@@ -56,9 +56,9 @@
 
         <!-- Calendar grid -->
         <div class="flex-1 grid grid-rows-5 gap-1">
-          {#each Array(5) as _}
+          {#each Array(5) as _, idx (idx)}
             <div class="grid grid-cols-7 gap-1">
-              {#each Array(7) as _}
+              {#each Array(7) as _, i (i)}
                 <div
                   class="flex items-center justify-center rounded-lg border border-border/50 min-h-20 relative p-2"
                 >
@@ -72,7 +72,7 @@
 
         <!-- Month Summary Skeleton -->
         <div class="mt-4 pt-4 border-t grid grid-cols-2 @lg:grid-cols-4 gap-4">
-          {#each Array(4) as _}
+          {#each Array(4) as _, i (i)}
             <div class="text-center">
               <Skeleton class="h-8 w-16 mx-auto mb-1" />
               <Skeleton class="h-4 w-20 mx-auto" />

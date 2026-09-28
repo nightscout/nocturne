@@ -46,7 +46,7 @@ class ValidationError extends Error {
 class ActionFailure {
   constructor(
     public status: number,
-    public data?: any
+    public data?: unknown
   ) {}
 }
 
@@ -67,11 +67,11 @@ export function isRedirect(e: unknown): boolean {
   return e instanceof Redirect;
 }
 
-export function json(data: any, init?: ResponseInit) {
+export function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), init);
 }
 
-export function fail(status: number, data?: any) {
+export function fail(status: number, data?: unknown) {
   return new ActionFailure(status, data);
 }
 

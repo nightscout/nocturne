@@ -14,6 +14,9 @@
     onclick?: (e: MouseEvent) => void;
   } = $props();
 
+  // `ref` is destructured out of `restProps` so it is not forwarded to the button.
+  void ref;
+
   const sidebar = useSidebar();
 </script>
 

@@ -11,6 +11,7 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models.Alerts;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
@@ -190,7 +191,10 @@ public class AlertRulesControllerWebhookSecretTests
             Mock.Of<IAlertReferenceService>(),
             Mock.Of<IAlertDeliveryService>(),
             Mock.Of<IRuleScopeClassifier>(),
+            new NoConditionIssues(),
             encryption,
+            new AlertRuleRearm(new AlertRuleEvaluationGate(), new AlertTrackerRepository(ctx)),
+            new AlertRuleRetirement(Mock.Of<IExcursionTracker>(), Mock.Of<IExcursionResolutionHandler>()),
             Mock.Of<ILogger<AlertRulesController>>());
 
         return (controller, ctx, encryption);

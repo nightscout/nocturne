@@ -10,7 +10,9 @@ To run the application run the following command:
 aspire run
 ```
 
-If there is already an instance of the application running it will prompt to stop the existing instance. You only need to restart the application if code in `apphost.cs` is changed, but if you experience problems it can be useful to reset everything to the starting state.
+If there is already an instance of the application running it will prompt to stop the existing instance. The `nocturne-api` resource runs under `dotnet watch`: method-body edits hot-reload, and a rude edit restarts only the API process. You only need to restart the application if code under `src/Aspire/` is changed, but if you experience problems it can be useful to reset everything to the starting state.
+
+The Aspire dashboard is off by default (`Aspire__OptionalServices__AspireDashboard__Enabled=true aspire run` turns it on). Without it, use `aspire describe`, `aspire logs <resource>` and `aspire resource <resource> <command>` (e.g. `aspire resource nocturne-api restart`; the tenant commands such as seed-tenant live on `nocturne-postgres-server`). Dev auto-login is on by default; start with `NOCTURNE_DEV_AUTO_LOGIN=false` when testing auth itself.
 
 ## Development Commands
 
@@ -32,9 +34,12 @@ dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
 
 # Type checking for frontend
 cd src/Web/packages/app && pnpm run check
+
+# Lint the frontend before pushing (CI gate: no errors, warnings capped in each package.json)
+cd src/Web && pnpm --recursive --no-bail run lint:ci
 ```
 
-Aspire creates the NSwag client on startup, and orchestrates everything. All you need to do to regenerate the NSwag client is `aspire start`.
+Aspire orchestrates everything. The API build regenerates the NSwag client when it is missing or older than the API's public surface (controllers, DTOs, attributes); `dotnet watch` rebuilds skip it. Force a regen with `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true`.
 
 ## Architecture
 
@@ -108,6 +113,7 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 
 - **PostgreSQL** via Entity Framework Core
 - Domain models (`Entry`) → Database entities (`EntryEntity`) via mappers in `Infrastructure.Data/Mappers/`
+- EF migrations live in `Nocturne.Infrastructure.Data.Migrations` (loaded by the API at runtime, not referenced at compile time): `dotnet ef migrations add <Name> -p src/Infrastructure/Nocturne.Infrastructure.Data.Migrations -s src/API/Nocturne.API`. `dotnet watch` does not see that project, so restart the API afterwards: `aspire resource nocturne-api restart`
 - Tables use snake_case: `entries`, `treatments`
 - UUID v7 for new records, preserve `OriginalId` for MongoDB migration compatibility
 

@@ -24,7 +24,7 @@
 		class:completing={!active}
 		class:navigating={active}
 	>
-		<div class="bar h-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)]"></div>
+		<div class="bar h-full bg-primary shadow-[0_0_8px_color-mix(in_oklch,var(--primary)_40%,transparent)]"></div>
 	</div>
 {/if}
 

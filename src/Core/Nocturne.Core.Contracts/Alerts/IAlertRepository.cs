@@ -95,6 +95,14 @@ public interface IAlertRepository
     Task ExpirePendingDeliveriesAsync(Guid tenantId, IReadOnlyList<Guid> instanceIds, CancellationToken ct);
 
     /// <summary>
+    /// Deletes every member's mute of an excursion, so no mute outlives the excursion it silenced.
+    /// </summary>
+    /// <param name="tenantId">The tenant that owns the excursion, used to scope the delete.</param>
+    /// <param name="excursionId">The closed excursion.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct);
+
+    /// <summary>
     /// Counts the number of active (unresolved) excursions for a tenant.
     /// </summary>
     /// <param name="tenantId">The tenant identifier.</param>
@@ -165,33 +173,11 @@ public interface IAlertRepository
     Task MarkInstanceSuppressedAsync(Guid tenantId, Guid instanceId, string reason, CancellationToken ct);
 
     /// <summary>
-    /// Returns all enabled signal-loss detection rules across all tenants.
-    /// Used by background services that monitor for stale sensor data.
+    /// Returns every enabled rule across all active tenants, each tenant's in
+    /// <c>SortOrder</c>. The sweep selects the rules it evaluates on the wall clock from these.
     /// </summary>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>A read-only list of enabled signal-loss rule snapshots.</returns>
-    Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(CancellationToken ct);
-
-    /// <summary>
-    /// Returns all enabled rules with the given root condition type across all tenants.
-    /// Used by the sweep service to periodically evaluate wall-clock-driven rules
-    /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
-    /// Rules that only reference the type inside a composite tree are not returned —
-    /// those still evaluate on the per-reading path.
-    /// </summary>
-    /// <param name="conditionType">The root condition type to filter on.</param>
-    /// <param name="ct">Cancellation token.</param>
-    Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
-        Nocturne.Core.Models.Alerts.AlertConditionType conditionType, CancellationToken ct);
-
-    /// <summary>
-    /// Returns the latest glucose trend rate (mg/dL per minute) for the tenant,
-    /// used by rate-of-change alert conditions.
-    /// </summary>
-    /// <param name="tenantId">The tenant identifier.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The latest trend rate, or <c>null</c> if no trend data is available.</returns>
-    Task<double?> GetLatestTrendRateAsync(Guid tenantId, CancellationToken ct);
+    Task<IReadOnlyList<AlertRuleSnapshot>> GetAllEnabledRulesAsync(CancellationToken ct);
 
     /// <summary>
     /// Returns snoozed alert instances whose snooze period has expired as of

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { KeyRound } from "lucide-svelte";
+  import KeyRound from "@lucide/svelte/icons/key-round";
   import ActiveSessions from "$lib/components/settings/ActiveSessions.svelte";
   import ApiReference from "$lib/components/settings/ApiReference.svelte";
   import SettingsLinkCard from "$lib/components/settings/SettingsLinkCard.svelte";

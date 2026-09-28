@@ -10,6 +10,7 @@ import {
 } from '@playwright/test';
 import sharp from 'sharp';
 import { definitions } from './manifest.js';
+import { stringField } from './json.js';
 import { imagesDir, manifestPath } from './paths.js';
 import { embeds, references, report } from './report.js';
 import type {
@@ -65,7 +66,7 @@ const SETTLE_MS = 750;
 /** SvelteKit serves every remote query and command under this prefix. */
 const REMOTE_ENDPOINT = '/_app/remote/';
 
-const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const ID_SEGMENT = /^[a-z0-9]+$/;
 const PLACEHOLDER_PATTERN = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
 /** A route that is nothing but one hole, which is the only shape allowed to resolve off-origin. */
 const WHOLE_ROUTE_PLACEHOLDER = /^\{[A-Za-z][A-Za-z0-9]*\}$/;
@@ -93,7 +94,7 @@ function validate(candidates: ScreenshotDefinition[]): string[] {
 	for (const [index, definition] of candidates.entries()) {
 		const where = definition.id ? `"${definition.id}"` : `definition #${index}`;
 
-		if (!ID_PATTERN.test(definition.id)) {
+		if (!definition.id.split('-').every((segment) => ID_SEGMENT.test(segment))) {
 			problems.push(`${where}: id must be kebab-case (lowercase letters, digits and single hyphens)`);
 		} else if (seen.has(definition.id)) {
 			problems.push(`${where}: duplicate id`);
@@ -138,18 +139,17 @@ async function seedTenant(scenario: Scenario, runStart: Date): Promise<DevTenant
 		);
 	}
 
-	const body = (await response.json()) as Partial<DevTenant> & { tenantId?: string };
-	if (!body.tenantId || !body.url || !body.loginLink || !body.accessToken) {
+	const body: unknown = await response.json();
+	const id = stringField(body, 'tenantId');
+	const url = stringField(body, 'url');
+	const loginLink = stringField(body, 'loginLink');
+	const accessToken = stringField(body, 'accessToken');
+	if (!id || !url || !loginLink || !accessToken) {
 		throw new Error(
 			`seed-tenant returned no tenantId/url/loginLink/accessToken for scenario "${scenario}"`,
 		);
 	}
-	return {
-		id: body.tenantId,
-		url: body.url,
-		loginLink: body.loginLink,
-		accessToken: body.accessToken,
-	};
+	return { id, url, loginLink, accessToken };
 }
 
 /**
@@ -163,7 +163,7 @@ function arrangeContext(definition: ScreenshotDefinition, tenant: DevTenant): Ar
 	return {
 		tenant: { id: tenant.id, url: tenant.url, accessToken: tenant.accessToken },
 		apiUrl: API_URL,
-		fetch: async <T>(path: string, request: ArrangeRequest = {}): Promise<T> => {
+		fetch: async (path: string, request: ArrangeRequest = {}): Promise<unknown> => {
 			const hasBody = request.body !== undefined;
 			const response = await fetch(`${API_URL}${path}`, {
 				method: request.method ?? 'GET',
@@ -180,7 +180,7 @@ function arrangeContext(definition: ScreenshotDefinition, tenant: DevTenant): Ar
 					`${definition.id}: ${request.method ?? 'GET'} ${path} returned ${response.status} ${await response.text()}`,
 				);
 			}
-			return (await response.json()) as T;
+			return await response.json();
 		},
 	};
 }
@@ -236,15 +236,13 @@ async function openSession(
 	context.setDefaultNavigationTimeout(NAVIGATION_TIMEOUT_MS);
 	context.setDefaultTimeout(ACTION_TIMEOUT_MS);
 
-	await context.addInitScript(
-		(entries: [string, string][]) => {
-			for (const [key, value] of entries) window.localStorage.setItem(key, value);
-		},
-		[
-			[MODE_STORAGE_KEY, theme],
-			[COACH_DISABLED_KEY, 'true'],
-		] as [string, string][],
-	);
+	const storage: [string, string][] = [
+		[MODE_STORAGE_KEY, theme],
+		[COACH_DISABLED_KEY, 'true'],
+	];
+	await context.addInitScript((entries: [string, string][]) => {
+		for (const [key, value] of entries) window.localStorage.setItem(key, value);
+	}, storage);
 	// Relative-time labels ("3 minutes ago") would otherwise differ between the first and last
 	// capture of a run. Fixing the clock leaves timers running, so the app still hydrates.
 	await context.clock.setFixedTime(runStart);
@@ -271,7 +269,7 @@ function unsettled(dark: boolean): string[] {
 	if (document.fonts.status !== 'loaded') reasons.push('fonts still loading');
 	// A site that has never received a reading holds the glucose indicators' placeholder for good,
 	// so inside one it is a steady state rather than a load in progress.
-	const skeletons = document.querySelectorAll('.animate-pulse:not(.glucose-value-indicator *)').length;
+	const skeletons = document.querySelectorAll('.animate-pulse:not([data-slot=glucose-value-indicator] *)').length;
 	if (skeletons > 0) reasons.push(`${skeletons} skeleton placeholders`);
 	const spinners = document.querySelectorAll('.animate-spin').length;
 	if (spinners > 0) reasons.push(`${spinners} spinners`);
@@ -280,7 +278,7 @@ function unsettled(dark: boolean): string[] {
 	// The kill switch leaves ineligible marks in the DOM as display:none, so only a visible one
 	// means it broke.
 	const marks = document.querySelectorAll('.coach-popover, .coach-hotspot');
-	if ([...marks].some((mark) => (mark as HTMLElement).checkVisibility())) {
+	if ([...marks].some((mark) => mark.checkVisibility())) {
 		reasons.push('coach mark on screen');
 	}
 	return reasons;
@@ -375,7 +373,7 @@ async function measure(page: Page, definition: ScreenshotDefinition): Promise<La
 			.map((target) => `${target.label} (${target.selector})`);
 
 		if (missing.length === 0) {
-			const boxes = measured.boxes as Box[];
+			const boxes = measured.boxes.filter((box): box is Box => box !== null);
 			const clip = definition.clip ? boxes[0] : null;
 			const offset = definition.clip ? 1 : 0;
 			return {
@@ -418,6 +416,7 @@ async function expose(
 		if (error instanceof errors.TimeoutError) {
 			throw new Error(
 				`${definition.id}: screenshot timed out after ${SCREENSHOT_TIMEOUT_MS}ms; the renderer stopped producing frames`,
+				{ cause: error },
 			);
 		}
 		throw error;

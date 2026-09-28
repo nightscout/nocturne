@@ -17,12 +17,17 @@ public class DeviceServiceTests
     private readonly Mock<IDeviceRepository> _mockRepository;
     private readonly Mock<IPatientDeviceRepository> _mockPatientDeviceRepository;
     private readonly DeviceService _service;
+    private readonly List<(Guid Id, DateTime LastSeen)> _updates = [];
 
     public DeviceServiceTests()
     {
         _mockRepository = new Mock<IDeviceRepository>();
         _mockPatientDeviceRepository = new Mock<IPatientDeviceRepository>();
         _service = new DeviceService(_mockRepository.Object, _mockPatientDeviceRepository.Object, MockTenantAccessor.Create().Object);
+        _mockRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid id, Device d, WriteOrigin _, CancellationToken _) => _updates.Add((id, d.LastSeenTimestamp)))
+            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
     }
 
     [Fact]
@@ -251,6 +256,112 @@ public class DeviceServiceTests
         _mockRepository.Verify(
             r => r.FindByCategoryTypeAndSerialAsync(category, type, serial, It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_OldestFirstSequence_AdvancesLastSeenOnEachLaterTime()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+
+        await ResolveOmnipodAsync(2_000L);
+        await ResolveOmnipodAsync(3_000L);
+        await ResolveOmnipodAsync(4_000L);
+
+        VerifyLastSeenUpdates(existingId, 2_000L, 3_000L, 4_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_NewestFirstSequence_LeavesLastSeenAtNewest()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+
+        await ResolveOmnipodAsync(4_000L);
+        await ResolveOmnipodAsync(3_000L);
+        await ResolveOmnipodAsync(2_000L);
+
+        VerifyLastSeenUpdates(existingId, 4_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_CacheHitWithEarlierOrEqualTime_IssuesNoUpdate()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 5_000L);
+
+        await ResolveOmnipodAsync(5_000L);
+        await ResolveOmnipodAsync(4_000L);
+        await ResolveOmnipodAsync(5_000L);
+
+        VerifyLastSeenUpdates(existingId);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_CreatedDeviceThenLaterTime_AdvancesLastSeenFromCreatedValue()
+    {
+        _mockRepository
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Device?)null);
+        _mockRepository
+            .Setup(r => r.CreateAsync(It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Device device, WriteOrigin _, CancellationToken _) => device);
+
+        var createdId = await ResolveOmnipodAsync(2_000L);
+        await ResolveOmnipodAsync(1_000L);
+        await ResolveOmnipodAsync(3_000L);
+
+        VerifyLastSeenUpdates(createdId!.Value, 3_000L);
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task ResolveAsync_FailedUpdate_LeavesCachedLastSeenAtPersistedValue()
+    {
+        var existingId = Guid.NewGuid();
+        SetupExistingDevice(existingId, lastSeenMills: 1_000L);
+        await ResolveOmnipodAsync(1_000L);
+
+        _mockRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("transient"));
+        var failed = () => ResolveOmnipodAsync(3_000L);
+        await failed.Should().ThrowAsync<InvalidOperationException>();
+
+        _mockRepository
+            .Setup(r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((Guid id, Device d, WriteOrigin _, CancellationToken _) => _updates.Add((id, d.LastSeenTimestamp)))
+            .ReturnsAsync((Guid _, Device d, WriteOrigin _, CancellationToken _) => d);
+        await ResolveOmnipodAsync(2_000L);
+
+        VerifyLastSeenUpdates(existingId, 2_000L);
+    }
+
+    private Task<Guid?> ResolveOmnipodAsync(long mills) =>
+        _service.ResolveAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", mills);
+
+    private void SetupExistingDevice(Guid id, long lastSeenMills)
+    {
+        _mockRepository
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(DeviceCategory.InsulinPump, "Omnipod DASH", "ABC123", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Device
+            {
+                Id = id,
+                Category = DeviceCategory.InsulinPump,
+                Type = "Omnipod DASH",
+                Serial = "ABC123",
+                FirstSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(0L).UtcDateTime,
+                LastSeenTimestamp = DateTimeOffset.FromUnixTimeMilliseconds(lastSeenMills).UtcDateTime
+            });
+    }
+
+    private void VerifyLastSeenUpdates(Guid id, params long[] expectedMills)
+    {
+        _updates.Should().Equal(expectedMills.Select(m => (id, DateTimeOffset.FromUnixTimeMilliseconds(m).UtcDateTime)));
     }
 
     [Fact]

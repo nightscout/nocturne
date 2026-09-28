@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { ExternalLink } from "@lucide/svelte";
+    import ExternalLink from "@lucide/svelte/icons/external-link";
     import { DEMO_ENABLED, DEMO_WEB_URL, SCALAR_API_URL } from "$lib/config";
 
     // This embed is for reading. Sending a request needs a tenant to send it to and a
@@ -20,6 +20,15 @@
             config: Record<string, unknown>,
         ) => { destroy?: () => void };
     };
+
+    function isScalarGlobal(value: unknown): value is ScalarGlobal {
+        return (
+            typeof value === "object" &&
+            value !== null &&
+            "createApiReference" in value &&
+            typeof value.createApiReference === "function"
+        );
+    }
 
     let container: HTMLDivElement;
 
@@ -46,8 +55,8 @@
         const script = document.createElement("script");
         script.src = SCALAR_SCRIPT;
         script.onload = () => {
-            const scalar = (window as unknown as { Scalar?: ScalarGlobal }).Scalar;
-            instance = scalar?.createApiReference(container, config);
+            const scalar: unknown = Reflect.get(window, "Scalar");
+            if (isScalarGlobal(scalar)) instance = scalar.createApiReference(container, config);
         };
         document.head.appendChild(script);
 
@@ -94,7 +103,7 @@
         <a
             href={demoScalarUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="external noopener noreferrer"
             class="inline-flex items-center gap-1.5 font-medium underline underline-offset-4"
         >
             Try it on the demo

@@ -99,10 +99,12 @@ public class OAuthTokenServiceTests : IDisposable
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
+                    LimitTo24Hours = limitTo24Hours,
                     Id = _testGrantId,
                     ClientEntityId = clientEntityId,
                     ClientId = TestClientId,
@@ -111,17 +113,31 @@ public class OAuthTokenServiceTests : IDisposable
                 });
     }
 
-    private OAuthTokenService CreateService(NocturneDbContext dbContext)
+    private OAuthTokenService CreateService(
+        NocturneDbContext dbContext, IOAuthGrantService? grantService = null)
     {
         return new OAuthTokenService(
             dbContext,
             _mockJwtService.Object,
             _mockSubjectService.Object,
-            _mockGrantService.Object,
+            grantService ?? _mockGrantService.Object,
             _mockRevocationCache.Object,
             _mockLogger.Object
         );
     }
+
+    private void VerifyMintedHistoryLimit(bool limitTo24Hours, Times times) =>
+        _mockJwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string?>(),
+            limitTo24Hours,
+            It.IsAny<Guid?>(),
+            It.IsAny<TimeSpan?>(),
+            It.IsAny<bool>(),
+            It.IsAny<Guid?>()), times);
 
     private NocturneDbContext CreateDbContext() => _db.CreateContext();
 
@@ -171,10 +187,12 @@ public class OAuthTokenServiceTests : IDisposable
         string? redirectUri = null,
         string? codeChallenge = null,
         DateTime? expiresAt = null,
-        DateTime? redeemedAt = null)
+        DateTime? redeemedAt = null,
+        bool limitTo24Hours = false)
     {
         var entity = new OAuthAuthorizationCodeEntity
         {
+            LimitTo24Hours = limitTo24Hours,
             Id = Guid.CreateVersion7(),
             ClientEntityId = clientEntityId ?? _testClientEntityId,
             SubjectId = subjectId ?? _testSubjectId,
@@ -198,11 +216,13 @@ public class OAuthTokenServiceTests : IDisposable
         Guid? id = null,
         Guid? clientEntityId = null,
         Guid? subjectId = null,
-        DateTime? revokedAt = null)
+        DateTime? revokedAt = null,
+        bool limitTo24Hours = false)
     {
         var grantId = id ?? _testGrantId;
         var entity = new OAuthGrantEntity
         {
+            LimitTo24Hours = limitTo24Hours,
             Id = grantId,
             ClientEntityId = clientEntityId ?? _testClientEntityId,
             SubjectId = subjectId ?? _testSubjectId,
@@ -298,7 +318,66 @@ public class OAuthTokenServiceTests : IDisposable
             It.IsAny<IEnumerable<string>>(),
             It.IsAny<string>(),
             It.IsAny<string?>(),
+            It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExchangeAuthorizationCodeAsync_ConsentedHistoryLimit_ReachesTheGrantAndTheToken(bool limitTo24Hours)
+    {
+        // The real grant service, so the limit is proven on the stored grant, where refresh reads
+        // it back, as well as on the token minted now.
+        const string testCode = "limited-auth-code";
+        const string testCodeHash = "limited-auth-code-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(testCode)).Returns(testCodeHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        await SeedAuthorizationCodeAsync(db, testCodeHash, limitTo24Hours: limitTo24Hours);
+        var guestSessionCache = new GuestSessionCacheService(new Microsoft.Extensions.Caching.Memory.MemoryCache(
+            new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()));
+        var grantService = new OAuthGrantService(
+            db,
+            _db.ContextFactory,
+            Mock.Of<IOAuthClientService>(),
+            guestSessionCache,
+            new GrantRevocationService(guestSessionCache),
+            Mock.Of<ILogger<OAuthGrantService>>());
+
+        var result = await CreateService(db, grantService).ExchangeAuthorizationCodeAsync(
+            testCode, TestCodeVerifier, TestRedirectUri, TestClientId);
+
+        Assert.True(result.Success);
+        var grant = await db.OAuthGrants.AsNoTracking()
+            .SingleAsync(g => g.ClientEntityId == _testClientEntityId && g.SubjectId == _testSubjectId);
+        Assert.Equal(limitTo24Hours, grant.LimitTo24Hours);
+        VerifyMintedHistoryLimit(limitTo24Hours, Times.Once());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RefreshAccessTokenAsync_CarriesTheGrantsHistoryLimitIntoTheToken(bool limitTo24Hours)
+    {
+        const string oldToken = "limited-refresh-token";
+        const string oldTokenHash = "limited-refresh-token-hash";
+        _mockJwtService.Setup(j => j.HashRefreshToken(oldToken)).Returns(oldTokenHash);
+        _mockJwtService.Setup(j => j.GenerateRefreshToken()).Returns(TestNewRefreshToken);
+        _mockJwtService.Setup(j => j.HashRefreshToken(TestNewRefreshToken)).Returns(TestNewRefreshTokenHash);
+
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db, limitTo24Hours: limitTo24Hours);
+        await SeedRefreshTokenAsync(db, oldTokenHash, grantId: grantId);
+
+        var result = await CreateService(db).RefreshAccessTokenAsync(oldToken, TestClientId);
+
+        Assert.True(result.Success);
+        VerifyMintedHistoryLimit(limitTo24Hours, Times.Once());
     }
 
     [Fact]

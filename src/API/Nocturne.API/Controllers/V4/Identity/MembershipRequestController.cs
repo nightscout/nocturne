@@ -110,7 +110,8 @@ public class MembershipRequestController(
             return Unauthorized();
 
         var result = await membershipRequestService.ApproveRequestAsync(
-            id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(), ct);
+            id, tenantId, request.RoleIds, subjectId.Value, HttpContext.GetGrantedScopes(),
+            HttpContext.IsCallerHistoryClamped(), ct);
 
         if (!result.Success)
             return BadRequest(result);

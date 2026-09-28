@@ -20,16 +20,14 @@
   import { Separator } from "$lib/components/ui/separator";
   import { Badge } from "$lib/components/ui/badge";
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import {
-    Eye,
-    EyeOff,
-    Loader2,
-    Save,
-    RotateCcw,
-    ChevronDown,
-    ChevronRight,
-    Lock,
-  } from "lucide-svelte";
+  import Eye from "@lucide/svelte/icons/eye";
+  import EyeOff from "@lucide/svelte/icons/eye-off";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Save from "@lucide/svelte/icons/save";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Lock from "@lucide/svelte/icons/lock";
   import type {
     JsonSchema,
     JsonSchemaProperty,
@@ -60,7 +58,7 @@
   }: Props = $props();
 
   // Track which secret fields are visible
-  let visibleSecrets = $state(new SvelteSet<string>());
+  const visibleSecrets = new SvelteSet<string>();
 
   // Track initial configuration for unsaved change detection
   let initialConfiguration = $state<Record<string, unknown>>({});
@@ -311,20 +309,19 @@
           <div class="flex flex-wrap items-center gap-2">
             <Label>{meta.label}</Label>
             {#if hasUnsavedChanges(propName)}
-              <Badge variant="default" class="text-xs">Unsaved</Badge>
+              <Badge variant="default">Unsaved</Badge>
             {:else if hasUserOverride(propName)}
-              <Badge variant="secondary" class="text-xs">Modified</Badge>
+              <Badge variant="secondary">Modified</Badge>
               <Button
                 variant="ghost"
-                size="sm"
-                class="h-5 px-1"
+                size="icon-xs"
                 title="Reset to environment variable value"
                 onclick={() => resetToEnvVar(propName)}
               >
                 <RotateCcw class="h-3 w-3" />
               </Button>
             {:else if hasEnvOverride(propName)}
-              <Badge variant="outline" class="text-xs">From Env</Badge>
+              <Badge variant="outline">From Env</Badge>
             {/if}
           </div>
           {#if meta.description}
@@ -346,20 +343,19 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Select
@@ -385,20 +381,19 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Input
@@ -437,20 +432,19 @@
       <div class="flex flex-wrap items-center gap-2">
         <Label>{meta.label}</Label>
         {#if hasUnsavedChanges(propName)}
-          <Badge variant="default" class="text-xs">Unsaved</Badge>
+          <Badge variant="default">Unsaved</Badge>
         {:else if hasUserOverride(propName)}
-          <Badge variant="secondary" class="text-xs">Modified</Badge>
+          <Badge variant="secondary">Modified</Badge>
           <Button
             variant="ghost"
-            size="sm"
-            class="h-5 px-1"
+            size="icon-xs"
             title="Reset to environment variable value"
             onclick={() => resetToEnvVar(propName)}
           >
             <RotateCcw class="h-3 w-3" />
           </Button>
         {:else if hasEnvOverride(propName)}
-          <Badge variant="outline" class="text-xs">From Env</Badge>
+          <Badge variant="outline">From Env</Badge>
         {/if}
       </div>
       <Input
@@ -494,13 +488,11 @@
     <Collapsible.Root bind:open={advancedExpanded}>
       <Card>
         <Collapsible.Trigger class="w-full">
-          <CardHeader
-            class="cursor-pointer hover:bg-muted/50 transition-colors"
-          >
+          <CardHeader interactive>
             <div class="flex items-center justify-between">
               <CardTitle class="flex items-center gap-2">
                 {advancedGroup.name}
-                <Badge variant="secondary" class="text-xs font-normal">
+                <Badge variant="secondary">
                   {advancedGroup.properties.length} settings
                 </Badge>
               </CardTitle>
@@ -540,9 +532,9 @@
           Sensitive credentials are stored encrypted and never displayed after
           saving.
           {#if hasSecrets}
-            <Badge variant="outline" class="ml-2 text-xs">Configured</Badge>
+            <Badge variant="outline" class="ml-2">Configured</Badge>
           {:else}
-            <Badge variant="destructive" class="ml-2 text-xs">
+            <Badge variant="destructive" class="ml-2">
               Not configured
             </Badge>
           {/if}

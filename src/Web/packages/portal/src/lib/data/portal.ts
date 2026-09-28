@@ -11,20 +11,23 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const githubCache = new Map<string, CacheEntry<unknown>>();
 
-function getCached<T>(key: string): T | null {
-  const entry = githubCache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
-    githubCache.delete(key);
-    return null;
-  }
-  return entry.data as T;
-}
-
-function setCache<T>(key: string, data: T): void {
-  githubCache.set(key, { data, timestamp: Date.now() });
+function createCache<T>() {
+  const entries = new Map<string, CacheEntry<T>>();
+  return {
+    get(key: string): T | null {
+      const entry = entries.get(key);
+      if (!entry) return null;
+      if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+        entries.delete(key);
+        return null;
+      }
+      return entry.data;
+    },
+    set(key: string, data: T): void {
+      entries.set(key, { data, timestamp: Date.now() });
+    },
+  };
 }
 
 // GitHub API schemas
@@ -86,10 +89,21 @@ const headers: HeadersInit = {
   "User-Agent": "Nocturne-Portal",
 };
 
+interface CommunityData {
+  stars: number;
+  forks: number;
+  contributors: GitHubContributor[];
+  latestRelease: string | null;
+}
+
+const roadmapCache = createCache<RoadmapMilestone[]>();
+const changelogCache = createCache<ChangelogRelease[]>();
+const communityCache = createCache<CommunityData>();
+
 // Fetch milestones from GitHub
 export async function getRoadmapData(): Promise<RoadmapMilestone[]> {
   const cacheKey = "roadmap-data";
-  const cached = getCached<RoadmapMilestone[]>(cacheKey);
+  const cached = roadmapCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -134,7 +148,7 @@ export async function getRoadmapData(): Promise<RoadmapMilestone[]> {
     })
   );
 
-  setCache(cacheKey, roadmapMilestones);
+  roadmapCache.set(cacheKey, roadmapMilestones);
   return roadmapMilestones;
 }
 
@@ -173,7 +187,7 @@ export async function getChangelog(options?: { page?: number; per_page?: number 
   const page = options?.page ?? 1;
   const per_page = options?.per_page ?? 30;
   const cacheKey = `changelog-page-${page}-${per_page}`;
-  const cached = getCached<ChangelogRelease[]>(cacheKey);
+  const cached = changelogCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -193,24 +207,14 @@ export async function getChangelog(options?: { page?: number; per_page?: number 
   // Filter out drafts
   const published = releases.filter((r) => !r.draft);
 
-  setCache(cacheKey, published);
+  changelogCache.set(cacheKey, published);
   return published;
 }
 
 // Fetch community data (repo stats, contributors, latest release)
-export async function getCommunityData(): Promise<{
-  stars: number;
-  forks: number;
-  contributors: GitHubContributor[];
-  latestRelease: string | null;
-}> {
+export async function getCommunityData(): Promise<CommunityData> {
   const cacheKey = "community-data";
-  const cached = getCached<{
-    stars: number;
-    forks: number;
-    contributors: GitHubContributor[];
-    latestRelease: string | null;
-  }>(cacheKey);
+  const cached = communityCache.get(cacheKey);
   if (cached) {
     return cached;
   }
@@ -258,6 +262,6 @@ export async function getCommunityData(): Promise<{
     latestRelease,
   };
 
-  setCache(cacheKey, result);
+  communityCache.set(cacheKey, result);
   return result;
 }

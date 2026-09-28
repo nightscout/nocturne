@@ -30,8 +30,6 @@ public class GlookoAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    protected override string ConnectorName => "Glooko";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         GlookoConnectorConfiguration config, CancellationToken cancellationToken)
     {

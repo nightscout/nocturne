@@ -33,22 +33,22 @@ export interface DeviceStatus {
 	loop?: {
 		timestamp?: string;
 		name?: string;
-		iob?: { iob?: number; timestamp?: string };
-		cob?: { cob?: number; timestamp?: string };
-		enacted?: any;
+		iob?: { iob?: number | null; timestamp?: string };
+		cob?: { cob?: number | null; timestamp?: string };
+		enacted?: LoopEnactedData;
 		predicted?: { values?: number[] };
 	};
 	openaps?: {
 		timestamp?: string;
-		iob?: any;
-		suggested?: any;
-		enacted?: any;
+		iob?: OpenApsIobEntry | OpenApsIobEntry[];
+		suggested?: OpenApsSuggestedEnacted;
+		enacted?: OpenApsSuggestedEnacted;
 	};
 	pump?: {
-		iob?: number | { iob?: number; bolusiob?: number };
-		bolusiob?: number;
+		iob?: number | null | { iob?: number | null; bolusiob?: number | null };
+		bolusiob?: number | null;
 	};
-	connect?: any;
+	connect?: unknown;
 }
 
 
@@ -61,20 +61,20 @@ export { DEFAULT_PILLS_CONFIG } from '$lib/types/status-pills';
  */
 interface OpenApsSuggestedEnacted {
 	timestamp?: string;
-	rate?: number;
-	duration?: number;
+	rate?: number | null;
+	duration?: number | null;
 	reason?: string;
-	COB?: number;
-	eventualBG?: number;
+	COB?: number | null;
+	eventualBG?: number | null;
 	received?: boolean;
 }
 
 interface OpenApsIobEntry {
 	timestamp?: string;
 	time?: string;
-	iob?: number;
-	basaliob?: number;
-	activity?: number;
+	iob?: number | null;
+	basaliob?: number | null;
+	activity?: number | null;
 }
 
 /**
@@ -83,9 +83,9 @@ interface OpenApsIobEntry {
  */
 interface LoopEnactedData {
 	timestamp?: string;
-	rate?: number;
-	duration?: number;
-	bolusVolume?: number;
+	rate?: number | null;
+	duration?: number | null;
+	bolusVolume?: number | null;
 	reason?: string;
 	failureReason?: string;
 }
@@ -106,12 +106,14 @@ function statusNumber(value: number | null | undefined): number | undefined {
 /**
  * Helper to safely access OpenAPS IOB data which can be an array or single object
  */
-function getOpenApsIob(iob: unknown): OpenApsIobEntry | null {
+function getOpenApsIob(
+	iob: OpenApsIobEntry | OpenApsIobEntry[] | undefined
+): OpenApsIobEntry | null {
 	if (!iob) return null;
 	if (Array.isArray(iob)) {
-		return iob[0] as OpenApsIobEntry;
+		return iob[0] ?? null;
 	}
-	return iob as OpenApsIobEntry;
+	return iob;
 }
 
 /**
@@ -510,8 +512,8 @@ export function processCOB(
 		// Check OpenAPS COB (from suggested or enacted)
 		const openaps = status.openaps;
 		if (openaps) {
-			const suggested = openaps.suggested as OpenApsSuggestedEnacted | undefined;
-			const enacted = openaps.enacted as OpenApsSuggestedEnacted | undefined;
+			const suggested = openaps.suggested;
+			const enacted = openaps.enacted;
 
 			let lastCOB: number | null = null;
 			let lastMoment: number | null = null;
@@ -706,7 +708,7 @@ export function processSAGE(
 	}
 
 	// Format display
-	let display = '';
+	let display: string;
 	if (ageHours >= 24) {
 		display = `${ageDays}d${remainingHours}h`;
 	} else {
@@ -819,13 +821,13 @@ export function processBasal(
 
 	let totalBasal = scheduledBasal; // Start with scheduled, override if temp basal active
 	let isTempBasal = false;
-	let isComboActive = false;
+	const isComboActive = false;
 	let tempBasalInfo: BasalPillData['tempBasal'] | undefined;
 
 	// Check for temp basal from various sources
 	if (openaps?.enacted) {
-		const enacted = openaps.enacted as OpenApsSuggestedEnacted;
-		if (enacted.rate !== undefined && enacted.duration !== undefined) {
+		const enacted = openaps.enacted;
+		if (enacted.rate != null && enacted.duration != null) {
 			// Check if the temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
 			const elapsedMinutes = (now - enactedTimestamp) / 60000;
@@ -845,8 +847,8 @@ export function processBasal(
 	}
 
 	if (loopData?.enacted) {
-		const enacted = loopData.enacted as LoopEnactedData;
-		if (enacted.rate !== undefined && enacted.duration !== undefined) {
+		const enacted = loopData.enacted;
+		if (enacted.rate != null && enacted.duration != null) {
 			// Check if temp basal is still active
 			const enactedTimestamp = enacted.timestamp ? new Date(enacted.timestamp).getTime() : now;
 			const elapsedMinutes = (now - enactedTimestamp) / 60000;
@@ -919,7 +921,7 @@ export function processLoop(
 	const loopData = latestStatus.loop;
 	const openapsData = latestStatus.openaps;
 
-	let result: LoopPillData = {
+	const result: LoopPillData = {
 		status: 'warning',
 		symbol: '⚠',
 		display: '---',
@@ -950,7 +952,7 @@ export function processLoop(
 
 		// Get enacted/recommended
 		if (loopData.enacted) {
-			const enacted = loopData.enacted as LoopEnactedData;
+			const enacted = loopData.enacted;
 			const enactedTime = enacted.timestamp ? new Date(enacted.timestamp).getTime() : loopTimestamp;
 
 			result.lastEnacted = {

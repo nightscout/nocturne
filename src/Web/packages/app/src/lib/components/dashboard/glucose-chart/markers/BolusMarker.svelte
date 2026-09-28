@@ -2,6 +2,7 @@
   import {
     bolusMarkerPoints,
     BOLUS_LABEL_Y,
+    PRINT_BOLUS_LABEL_Y,
     MARKER_HEIGHT,
     MARKER_HEIGHT_OVERRIDE,
   } from "$lib/components/icons/marker-shapes";
@@ -20,6 +21,8 @@
      * would collide with a neighbour's; the glyph itself always draws.
      */
     showLabel?: boolean;
+    /** Laid out for paper: the label prints larger and in ink. */
+    printed?: boolean;
   }
 
   let {
@@ -31,6 +34,7 @@
     treatmentId,
     onMarkerClick,
     showLabel = true,
+    printed = false,
   }: Props = $props();
 
   // Algorithm-delivered doses (SMBs / auto-boluses) render outlined so they read
@@ -70,11 +74,11 @@
   {/if}
   {#if showLabel}
     <text
-      y={BOLUS_LABEL_Y}
+      y={printed ? PRINT_BOLUS_LABEL_Y : BOLUS_LABEL_Y}
       dy="-0.355em"
       text-anchor="middle"
       pointer-events="none"
-      class="text-[8px] fill-insulin-bolus font-medium"
+      class="{printed ? 'text-2xs fill-foreground' : 'text-3xs fill-insulin-bolus'} font-medium"
     >
       {insulin.toFixed(1)}U
     </text>

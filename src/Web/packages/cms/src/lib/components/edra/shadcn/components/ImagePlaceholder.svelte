@@ -45,9 +45,8 @@
 	contenteditable="false"
 	class={buttonVariants({
 		variant: 'secondary',
-		class: 'media-placeholder relative my-4! flex w-full items-center justify-start gap-4 p-6'
+		class: 'relative my-4! select-none flex w-full items-center justify-start gap-4 p-6'
 	})}
-	style="user-select: none;"
 	draggable={true}
 	onclick={() => (open = true)}
 >
@@ -65,7 +64,7 @@
 		<Popover.Content
 			onCloseAutoFocus={(e) => e.preventDefault()}
 			contenteditable={false}
-			class="bg-popover z-50 w-96 rounded-lg p-0"
+			class="z-50 w-96 p-0"
 			portalProps={{ disabled: true, to: undefined }}
 		>
 			<Tabs.Root value="local">

@@ -40,6 +40,7 @@
   --insulin-temp-basal: rgba(0, 153, 255, 0.25);
   --insulin-manual-temp-basal: rgba(0, 153, 255, 0.8);
   --insulin-scheduled-basal: rgb(60, 170, 255);
+  --basal: rgb(60, 170, 255);
   --insulin-additional-basal: rgb(100, 190, 255);
 
   /* Carbohydrates - warm orange */

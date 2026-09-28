@@ -128,5 +128,23 @@ public static class LoopDeviceScenarios
                 }),
                 Tick(T(10), Ctx(T(10))),
             ]);
+
+        yield return Scenario(
+            "state-span-active-integer-category",
+            "an integer category is the StateSpanCategory ordinal: 4 is Exercise and 8 is TemporaryTarget",
+            [
+                Rule(1, "state_span_active", """{"category": 4, "state": null, "is_active": true, "for_minutes": null}"""),
+                Rule(2, "state_span_active", """{"category": 8, "state": null, "is_active": true, "for_minutes": null}"""),
+            ],
+            [
+                Tick(T(0), Ctx(T(0)) with
+                {
+                    ActiveStateSpans = [new("Exercise", null, T(-10)), new("TemporaryTarget", null, T(-10))],
+                }),                                                                        // both true
+                Tick(T(5), Ctx(T(5)) with
+                {
+                    ActiveStateSpans = [new("Illness", null, T(-10)), new("DataExclusion", null, T(-10))],
+                }),                                                                        // neighbours only: both false
+            ]);
     }
 }

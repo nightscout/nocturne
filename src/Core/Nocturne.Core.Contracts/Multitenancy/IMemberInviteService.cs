@@ -89,15 +89,24 @@ public interface IMemberInviteService
 /// <param name="Token">The opaque token embedded in the invite URL.</param>
 /// <param name="InviteUrl">The full URL that the invitee should visit to accept.</param>
 /// <param name="ExpiresAt">The UTC timestamp after which the invite is no longer valid.</param>
+/// <param name="CreatedByName">
+/// The inviter's display name, as the join page will show it. Empty when the subject has none.
+/// </param>
 public record MemberInviteResult(
     Guid Id,
     string Token,
     string InviteUrl,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    string CreatedByName);
 
 /// <summary>
 /// Detailed view of an invite, including its current validity state and usage history.
 /// </summary>
+/// <param name="RoleNames">Names of the invite's roles that still exist.</param>
+/// <param name="Permissions">
+/// What accepting the invite grants: the permissions of <paramref name="RoleNames"/> unioned with
+/// the direct permissions, as a member's effective permissions are.
+/// </param>
 public record MemberInviteInfo(
     Guid Id,
     Guid TenantId,
@@ -115,11 +124,39 @@ public record MemberInviteInfo(
     bool IsRevoked,
     DateTime CreatedAt,
     List<InviteUsageInfo> UsedBy,
-    InviteViewer? Viewer = null);
+    List<string> RoleNames,
+    List<string> Permissions);
 
 /// <summary>
-/// Where the caller of <see cref="IMemberInviteService.GetInviteByTokenAsync"/> stands relative to
-/// the invite. Null on the management listing, whose caller is the tenant, not the invitee.
+/// What the holder of an invite link is shown before joining. Anonymous, so it carries only what
+/// the invitee needs: not the invite's private label, nor who else has joined through it.
+/// </summary>
+/// <param name="TenantName">The tenant's display name.</param>
+/// <param name="CreatedByName">The inviter's display name.</param>
+/// <param name="RoleNames">See <see cref="MemberInviteInfo.RoleNames"/>.</param>
+/// <param name="Permissions">See <see cref="MemberInviteInfo.Permissions"/>.</param>
+/// <param name="LimitTo24Hours">Whether the invitee will see only the last 24 hours of data.</param>
+/// <param name="ExpiresAt">When the link stops working.</param>
+/// <param name="GrantsAccess">
+/// False when accepting would grant nothing, for example once every role on the invite is deleted.
+/// </param>
+/// <param name="IsViewOnlyForRecordsAndAccess">
+/// See <see cref="Nocturne.Core.Models.Authorization.Scope.IsViewOnlyForRecordsAndAccess"/>.
+/// </param>
+/// <param name="Viewer">Where the caller stands relative to the invite.</param>
+public record JoinInviteInfo(
+    string TenantName,
+    string CreatedByName,
+    List<string> RoleNames,
+    List<string> Permissions,
+    bool LimitTo24Hours,
+    DateTime ExpiresAt,
+    bool GrantsAccess,
+    bool IsViewOnlyForRecordsAndAccess,
+    InviteViewer? Viewer);
+
+/// <summary>
+/// Where the caller of the join page's invite lookup stands relative to the invite.
 /// </summary>
 /// <param name="SubjectId">The signed-in caller's subject, or null when nobody is signed in.</param>
 /// <param name="Name">The signed-in caller's display name.</param>

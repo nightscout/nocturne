@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { FormError } from "$lib/forms";
-  import { Fingerprint, KeyRound, Loader2, Check } from "lucide-svelte";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
@@ -25,7 +29,7 @@
   const username = $derived(page.url.searchParams.get("username") ?? "");
   const returnUrl = $derived(page.url.searchParams.get("returnUrl") ?? "/");
   const loginUrl = $derived(
-    `/auth/login?${new URLSearchParams({ returnUrl })}`
+    resolve(`/auth/login?${new URLSearchParams({ returnUrl })}`)
   );
 
   let isRegistering = $state(false);
@@ -97,10 +101,10 @@
     <Card.Content class="space-y-4">
       {#if registered}
         <div
-          class="flex items-start gap-3 rounded-md border border-green-500/20 bg-green-500/5 p-3"
+          class="flex items-start gap-3 rounded-md border border-success/20 bg-success/5 p-3"
         >
-          <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-          <p class="text-sm text-green-700 dark:text-green-400">
+          <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+          <p class="text-sm text-success">
             Passkey registered. Your recovery code is now used up.
           </p>
         </div>
@@ -129,6 +133,7 @@
     </Card.Content>
 
     <Card.Footer class="justify-center">
+      <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- loginUrl is built with resolve() above; the rule cannot see through $derived -->
       <a href={loginUrl} class="text-xs text-muted-foreground hover:underline">
         Back to sign in
       </a>

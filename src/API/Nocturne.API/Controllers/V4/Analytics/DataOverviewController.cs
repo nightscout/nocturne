@@ -53,7 +53,7 @@ public class DataOverviewController : ControllerBase
     /// <returns>A <see cref="DataOverviewYearsResponse"/> with available years and data source names.</returns>
     [HttpGet("years")]
     [RemoteQuery]
-    [ResponseCache(Duration = 300)]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(DataOverviewYearsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     [ErrorEnvelope]
@@ -73,7 +73,7 @@ public class DataOverviewController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("daily-summary")]
     [RemoteQuery]
-    [ResponseCache(Duration = 180, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 180, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(DailySummaryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -108,7 +108,7 @@ public class DataOverviewController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("gri-timeline")]
     [RemoteQuery]
-    [ResponseCache(Duration = 300, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(GriTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -144,7 +144,7 @@ public class DataOverviewController : ControllerBase
     /// <param name="cancellationToken">Cancellation token</param>
     [HttpGet("ehba1c-timeline")]
     [RemoteQuery]
-    [ResponseCache(Duration = 300, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 300, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(EHbA1cTimelineResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]

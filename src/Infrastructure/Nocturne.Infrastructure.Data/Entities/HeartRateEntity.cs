@@ -14,9 +14,6 @@ public class HeartRateEntity
     /// <summary>
     /// Identifier of the tenant this heart rate record belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 

@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardDescription,
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Luggage } from "lucide-svelte";
+  import Luggage from "@lucide/svelte/icons/luggage";
 </script>
 
 <div class="@container container mx-auto p-6 max-w-5xl space-y-6">
@@ -15,8 +16,8 @@
   </div>
 
   <div class="grid gap-4 @xl:grid-cols-2">
-    <a href="/tools/packing" class="block">
-      <Card class="h-full hover:bg-muted/50 transition-colors cursor-pointer">
+    <a href={resolve("/tools/packing")} class="block">
+      <Card interactive class="h-full cursor-pointer">
         <CardHeader>
           <div class="flex items-center gap-3">
             <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -24,7 +25,7 @@
             </div>
             <div>
               <CardTitle class="text-base">Packing Calculator</CardTitle>
-              <CardDescription class="text-xs">
+              <CardDescription size="sm">
                 Calculate supplies needed for a trip
               </CardDescription>
             </div>

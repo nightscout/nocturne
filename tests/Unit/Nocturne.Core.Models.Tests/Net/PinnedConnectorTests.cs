@@ -163,7 +163,7 @@ public class PinnedConnectorTests : IDisposable
             {
                 var stream = connection.GetStream();
                 var request = new byte[4096];
-                await stream.ReadAsync(request, _stopping.Token);
+                await stream.ReadAtLeastAsync(request, 1, throwOnEndOfStream: false, _stopping.Token);
                 await stream.WriteAsync(
                     Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
                     _stopping.Token);

@@ -280,6 +280,33 @@ public class RuleDataNeedsTests
         result.NeedsLastApsCycle.Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData("""{"operator":"and"}""")]
+    [InlineData("""{"operator":"and","conditions":[null]}""")]
+    [InlineData("""{"operator":"and","conditions":[{"iob":{"operator":">","value":2}}]}""")]
+    [InlineData("""{"operator":"and","conditions":[{"type":"not","not":{}}]}""")]
+    [InlineData("""{"operator":"and","conditions":[{"type":"composite","composite":{"operator":"or"}}]}""")]
+    public void Malformed_stored_composite_does_not_abort_the_batch(string json)
+    {
+        var bad = MakeRule(AlertConditionType.Composite, json);
+        var iob = MakeRule(AlertConditionType.Iob, """{"operator":">","value":2}""");
+
+        var result = RuleDataNeeds.Walk(new[] { bad, iob });
+
+        result.NeedsIob.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Not_and_sustained_with_null_child_contribute_no_needs()
+    {
+        var not = MakeRule(AlertConditionType.Not, """{}""");
+        var sustained = MakeRule(AlertConditionType.Sustained, """{"minutes":5}""");
+
+        var result = RuleDataNeeds.Walk(new[] { not, sustained });
+
+        result.Should().BeEquivalentTo(DataNeedsSet.None);
+    }
+
     private static AlertRuleSnapshot MakeRule(AlertConditionType type, string json) =>
         new(Id: Guid.NewGuid(),
             TenantId: Guid.NewGuid(),

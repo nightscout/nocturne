@@ -16,10 +16,13 @@ public interface ITenantOverviewService
     /// and active alert summary for every qualifying tenant of <paramref name="subjectId"/>.
     /// Per-tenant access is resolved by <see cref="MemberScopeResolver"/> from each membership's
     /// effective permissions, <paramref name="authType"/> and <paramref name="tokenScopes"/> — the
-    /// same resolution <c>MemberScopeMiddleware</c> applies per request.
+    /// same resolution <c>MemberScopeMiddleware</c> applies per request. A tenant whose
+    /// membership, or <paramref name="credentialLimitTo24Hours"/>, limits the caller to the last
+    /// 24 hours is read under that clamp.
     /// </summary>
     Task<TenantOverviewResponse> GetOverviewAsync(
         Guid subjectId, IReadOnlySet<string> tokenScopes, AuthType authType,
+        bool credentialLimitTo24Hours = false,
         CancellationToken ct = default);
 
     /// <summary>
@@ -39,4 +42,11 @@ public interface ITenantOverviewService
 /// A tenant the subject may read glucose for, with the scopes resolved for the
 /// caller's credential on that tenant.
 /// </summary>
-public sealed record GlucoseReadTenant(TenantEntity Tenant, IReadOnlySet<string> AllowedScopes);
+/// <param name="Tenant">The tenant.</param>
+/// <param name="AllowedScopes">What the caller may see there.</param>
+/// <param name="MembershipHistoryClamped">
+/// Whether the membership limits the caller to the last 24 hours, after the exemption in
+/// <see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>.
+/// </param>
+public sealed record GlucoseReadTenant(
+    TenantEntity Tenant, IReadOnlySet<string> AllowedScopes, bool MembershipHistoryClamped = false);

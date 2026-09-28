@@ -294,10 +294,11 @@ public class TrackerSuggestionService : ITrackerSuggestionService
                     completionReason
                 );
 
-                // Broadcast the completion
                 await _broadcastService.BroadcastTrackerUpdateAsync(
-                    "update",
-                    TrackerInstanceDto.FromEntity(completedInstance)
+                    "complete",
+                    TrackerInstanceDto.FromEntity(completedInstance),
+                    completedInstance.UserId,
+                    definition.Visibility
                 );
             }
         }
@@ -319,7 +320,9 @@ public class TrackerSuggestionService : ITrackerSuggestionService
         // Broadcast the new instance
         await _broadcastService.BroadcastTrackerUpdateAsync(
             "create",
-            TrackerInstanceDto.FromEntity(newInstance)
+            TrackerInstanceDto.FromEntity(newInstance),
+            newInstance.UserId,
+            definition.Visibility
         );
 
         return NotificationActionResult.Completed;

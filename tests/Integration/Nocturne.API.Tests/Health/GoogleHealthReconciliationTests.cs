@@ -40,6 +40,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await using var db = Context();
         await db.Database.EnsureCreatedAsync();
         var migrations = db.GetService<IMigrationsAssembly>();
+        Assert.Contains("20260913000000_AddGoogleHealthReconciliationStaging", migrations.Migrations.Keys);
+        Assert.Contains("20260913120000_SecureGoogleHealthReconciliationStaging", migrations.Migrations.Keys);
         var history = db.GetService<IHistoryRepository>();
         await db.Database.ExecuteSqlRawAsync(history.GetCreateScript());
         foreach (var migrationId in migrations.Migrations.Keys.Where(migrationId => !migrationId.Contains("GoogleHealthReconciliationStaging")))
@@ -250,7 +252,8 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
     private NocturneDbContext Context(DbCommandInterceptor? interceptor = null)
     {
-        var options = new DbContextOptionsBuilder<NocturneDbContext>().UseNpgsql(connectionString);
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(connectionString, options => options.UseNocturneMigrations());
         if (interceptor is not null) options.AddInterceptors(interceptor);
         return new NocturneDbContext(options.Options);
     }

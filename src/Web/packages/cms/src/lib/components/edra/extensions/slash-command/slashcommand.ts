@@ -1,4 +1,4 @@
-import { autoUpdate, computePosition, flip, offset, type Placement } from '@floating-ui/dom';
+import { autoUpdate, computePosition, flip, offset } from '@floating-ui/dom';
 import { type Editor, Extension } from '@tiptap/core';
 import { PluginKey } from '@tiptap/pm/state';
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion';
@@ -7,6 +7,14 @@ import SvelteRenderer from '../../svelte-renderer.ts';
 import { getGroups } from './groups.ts';
 
 const extensionName = 'slashCommand';
+
+declare module '@tiptap/core' {
+	interface Storage {
+		slashCommand: {
+			rect: Pick<DOMRect, 'width' | 'height' | 'left' | 'top' | 'right' | 'bottom'>;
+		};
+	}
+}
 
 interface PopupState {
 	element: HTMLElement | null;
@@ -137,7 +145,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 										};
 
 										computePosition(referenceElement, popup.element, {
-											placement: 'bottom-start' as Placement,
+											placement: 'bottom-start',
 											middleware: [
 												offset({ mainAxis: 8, crossAxis: 16 }),
 												flip({ fallbackPlacements: ['top-start', 'bottom-start'] })
@@ -176,7 +184,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 										};
 
 										computePosition(referenceElement, popup.element, {
-											placement: 'bottom-start' as Placement,
+											placement: 'bottom-start',
 											middleware: [
 												offset({ mainAxis: 8, crossAxis: 16 }),
 												flip({ fallbackPlacements: ['top-start', 'bottom-start'] })
@@ -188,7 +196,7 @@ export default (menuList: Component<any, any, ''>): Extension =>
 											}
 										});
 
-										(props.editor.storage as any)[extensionName].rect = rect;
+										props.editor.storage.slashCommand.rect = rect;
 									}
 								}
 							},

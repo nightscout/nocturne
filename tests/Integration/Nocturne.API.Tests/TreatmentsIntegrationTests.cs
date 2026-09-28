@@ -330,4 +330,42 @@ public class TreatmentsIntegrationTests : AspireIntegrationTestBase
     }
 
     #endregion
+
+    #region Trio lowercase id
+
+    [Fact]
+    public async Task TrioCarb_DeleteByFindId_ThenReupload_LeavesOneCarb()
+    {
+        var client = CreateAuthenticatedClient();
+        var createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var originalId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var replacementId = Guid.NewGuid().ToString().ToUpperInvariant();
+
+        object TrioCarb(string id, int carbs) => new[]
+        {
+            new Dictionary<string, object>
+            {
+                ["id"] = id, ["enteredBy"] = "Trio", ["eventType"] = "Carb Correction",
+                ["carbs"] = carbs, ["fat"] = 0, ["protein"] = 0, ["created_at"] = createdAt,
+            },
+        };
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", TrioCarb(originalId, 30)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var delete = await client.DeleteAsync($"/api/v1/treatments?find[id][$eq]={originalId}");
+        delete.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await delete.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("n").GetInt64().Should().Be(1);
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", TrioCarb(replacementId, 45)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var carbs = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/treatments?find[created_at][$eq]={createdAt}&find[carbs][$exists]=true");
+        carbs.GetArrayLength().Should().Be(1);
+        carbs[0].GetProperty("carbs").GetDouble().Should().Be(45);
+        carbs[0].GetProperty("id").GetString().Should().Be(replacementId);
+    }
+
+    #endregion
 }

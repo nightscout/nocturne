@@ -14,7 +14,7 @@
 import { useSearchParams } from "runed/kit";
 import { z } from "zod";
 import { getLocalTimeZone, today } from "@internationalized/date";
-import { getContext, onDestroy, setContext, untrack } from "svelte";
+import { getContext, setContext, untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import {
   dayCount as countDays,
@@ -54,6 +54,12 @@ export type DateRangeInput = {
   to?: string | null;
 };
 
+/** The last `days` calendar days, ending today. */
+function defaultRange(days: number): DateRangeInput {
+  const to = today(getLocalTimeZone());
+  return { days, from: to.subtract({ days: days - 1 }).toString(), to: to.toString() };
+}
+
 /**
  * Create reactive reports URL parameters with auto-adjustment for report defaults.
  *
@@ -76,18 +82,10 @@ export function useDateParams(defaultDays = 7) {
   // to this rather than to the layout's, so Reset on a 30-day report stays 30 days.
   let reportDefaultDays = $state(defaultDays);
 
-  // Compute initial defaults eagerly so memoizedInput is valid before effects run (SSR)
-  const _initEnd = today(getLocalTimeZone());
-  const _initStart = _initEnd.subtract({ days: defaultDays - 1 });
-
   // Stable memoized date range input - only changes when actual values change
   // This prevents downstream $derived statements from recreating queries
   // Initialized with computed defaults so SSR queries get valid date ranges
-  let memoizedInput = $state<DateRangeInput>({
-    days: defaultDays,
-    from: _initStart.toString(),
-    to: _initEnd.toString(),
-  });
+  let memoizedInput = $state<DateRangeInput>(defaultRange(defaultDays));
 
   // Auto-adjust to report's default if current params are defaults and differ
   // Use $effect.pre with guards to prevent infinite update cycles
@@ -159,21 +157,26 @@ export function useDateParams(defaultDays = 7) {
     const currentFrom = params.from;
     const currentTo = params.to;
 
+    // A URL carrying no range means this report's default. That covers Back to a
+    // bare link, and a seeding write dropped during hydration (before the router
+    // is ready). Copied through as blank, it would get the server's 7-day
+    // fallback under a page labelled with this report's range.
+    const next: DateRangeInput =
+      currentDays == null && !currentFrom && !currentTo
+        ? defaultRange(untrack(() => reportDefaultDays))
+        : {
+            days: currentDays ?? undefined,
+            from: currentFrom ?? undefined,
+            to: currentTo ?? undefined,
+          };
+
     // Read memoizedInput without tracking to avoid read-write cycle
     // that causes effect_update_depth_exceeded
     const prev = untrack(() => memoizedInput);
 
     // Only update if values actually changed (compare primitives, not objects)
-    if (
-      prev.days !== currentDays ||
-      prev.from !== currentFrom ||
-      prev.to !== currentTo
-    ) {
-      memoizedInput = {
-        days: currentDays ?? undefined,
-        from: currentFrom ?? undefined,
-        to: currentTo ?? undefined,
-      };
+    if (prev.days !== next.days || prev.from !== next.from || prev.to !== next.to) {
+      memoizedInput = next;
     }
   });
 
@@ -444,9 +447,13 @@ export function requireDateParamsContext(reportDefaultDays?: number): ReportsPar
   if (reportDefaultDays !== undefined) {
     const use = getContext<SharedRangeUse | undefined>(SHARED_RANGE_USE_KEY);
     if (use) {
-      const token = Symbol("shared-range-consumer");
-      use.add(token);
-      onDestroy(() => use.remove(token));
+      // Registered from an effect: a page initialised inside an async or block
+      // reaction (the actogram reports) may not write state during setup.
+      $effect.pre(() => {
+        const token = Symbol("shared-range-consumer");
+        use.add(token);
+        return () => use.remove(token);
+      });
     }
   }
 

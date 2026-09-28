@@ -671,6 +671,7 @@ public class TandemE2eSyncTests
         public ITreatmentPublisher Treatments => this;
         public IDevicePublisher Device => this;
         public IMetadataPublisher Metadata => this;
+        public int SkippedDeleted => 0;
 
         private static Task<bool> Record<T>(List<T> sink, IEnumerable<T> records)
         {
@@ -703,6 +704,15 @@ public class TandemE2eSyncTests
             Task.FromResult(true);
         public Task<DateTime?> GetLatestTreatmentTimestampAsync(string source, CancellationToken ct = default) =>
             Task.FromResult(latestTreatment);
+
+        public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(string source, DateTime from, DateTime to, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, DateTime>>(new Dictionary<string, DateTime>());
+
+        public Task<int?> PublishRecentTreatmentsAsync(IEnumerable<Treatment> treatments, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
+
+        public Task<int> DeleteTreatmentsAsync(string source, IReadOnlySet<string> legacyIds, CancellationToken ct = default) =>
+            Task.FromResult(0);
 
         public Task<bool> PublishDeviceStatusAsync(IEnumerable<DeviceStatus> deviceStatuses, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(DeviceStatuses, deviceStatuses);

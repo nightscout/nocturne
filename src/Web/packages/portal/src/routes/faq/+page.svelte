@@ -1,13 +1,11 @@
 <script lang="ts">
     import * as Accordion from "@nocturne/ui/ui/accordion";
     import { Button } from "@nocturne/ui/ui/button";
-    import { ArrowRight, HelpCircle, Download, RefreshCw, Code } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
 
     const faqCategories = [
         {
             title: "General",
-            icon: HelpCircle,
-            color: "bg-blue-500/15 text-blue-500",
             questions: [
                 {
                     question: "What is Nocturne?",
@@ -33,8 +31,6 @@
         },
         {
             title: "Installation",
-            icon: Download,
-            color: "bg-green-500/15 text-green-500",
             questions: [
                 {
                     question: "What are the system requirements?",
@@ -56,8 +52,6 @@
         },
         {
             title: "Migration",
-            icon: RefreshCw,
-            color: "bg-orange-500/15 text-orange-500",
             questions: [
                 {
                     question: "Can I migrate my existing Nightscout data?",
@@ -79,8 +73,6 @@
         },
         {
             title: "Technical",
-            icon: Code,
-            color: "bg-purple-500/15 text-purple-500",
             questions: [
                 {
                     question: "What technology stack does Nocturne use?",
@@ -104,39 +96,26 @@
 </script>
 
 <div class="max-w-[900px] mx-auto px-6">
-    <!-- Page heading -->
-    <div class="pt-20 pb-[60px] border-b border-border">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground mb-4">FAQ</div>
-        <h1 class="text-[clamp(2rem,4vw,3.2rem)] font-bold leading-[1.15] tracking-[-0.025em] text-foreground m-0 mb-4">
-            Common questions.<br />
-            <em class="text-glucose-in-range">Straight answers.</em>
-        </h1>
-        <p class="text-base leading-[1.65] text-muted-foreground max-w-[520px] m-0">
+    <div class="pt-20 pb-15">
+        <h1 class="text-headline font-bold text-foreground m-0 mb-4">Frequently asked questions</h1>
+        <p class="text-lead text-muted-foreground max-w-[560px] m-0">
             Answers to frequent questions about Nocturne, installation, migration,
             and the technology stack.
         </p>
     </div>
 
-    <!-- FAQ Categories -->
     <div class="flex flex-col">
-        {#each faqCategories as category, ci}
+        {#each faqCategories as category, ci (ci)}
             <section class="py-16 border-t border-border">
-                <div class="mb-8">
-                    <div class="font-brand text-[12px] font-bold tracking-[0.14em] uppercase text-muted-foreground">0{ci + 1} &middot; {category.title}</div>
-                </div>
+                <h2 class="text-subsection font-bold text-foreground m-0 mb-6">{category.title}</h2>
 
-                <Accordion.Root type="multiple" class="space-y-3">
-                    {#each category.questions as faq, index}
-                        <Accordion.Item
-                            value="{category.title}-{index}"
-                            class="rounded-lg border border-border/60 bg-card/50 px-6 overflow-hidden"
-                        >
-                            <Accordion.Trigger
-                                class="py-4 text-left font-medium hover:no-underline w-full"
-                            >
+                <Accordion.Root type="multiple">
+                    {#each category.questions as faq, index (index)}
+                        <Accordion.Item value="{category.title}-{index}">
+                            <Accordion.Trigger class="w-full">
                                 {faq.question}
                             </Accordion.Trigger>
-                            <Accordion.Content class="pb-4">
+                            <Accordion.Content>
                                 <p class="text-muted-foreground">{faq.answer}</p>
                             </Accordion.Content>
                         </Accordion.Item>
@@ -146,12 +125,11 @@
         {/each}
     </div>
 
-    <!-- Still Have Questions -->
     <section class="border-t border-border py-20">
-        <div class="font-mono text-[11px] tracking-[0.14em] uppercase text-muted-foreground">Still have questions?</div>
-        <h2 class="text-[clamp(1.4rem,2.5vw,2rem)] font-bold tracking-[-0.02em] text-foreground mt-3">Check the docs or ask the community.</h2>
+        <h2 class="text-subsection font-bold text-foreground m-0">Still have questions?</h2>
+        <p class="text-muted-foreground m-0 mt-3">Check the docs or ask the community.</p>
         <div class="flex flex-col sm:flex-row gap-4 mt-6">
-            <Button href="/docs" size="lg" class="gap-2">
+            <Button href="/docs" size="lg">
                 Browse documentation
                 <ArrowRight class="w-4 h-4" />
             </Button>

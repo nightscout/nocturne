@@ -6,7 +6,6 @@
     onback,
     onnext,
     oncomplete,
-    ondismiss,
   }: {
     currentStep: number;
     totalSteps: number;
@@ -14,7 +13,6 @@
     onback: () => void;
     onnext: () => void;
     oncomplete: () => void;
-    ondismiss: () => void;
   } = $props();
 
   const isFirst = $derived(currentStep === 0);

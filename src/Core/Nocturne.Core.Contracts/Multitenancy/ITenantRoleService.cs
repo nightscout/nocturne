@@ -43,6 +43,13 @@ public interface ITenantRoleService
     Task<List<string>> GetEffectivePermissionsAsync(Guid memberId, CancellationToken ct = default);
 
     /// <summary>
+    /// The permissions the roles in <paramref name="roleIds"/> confer on <paramref name="tenantId"/>.
+    /// Ids that name no role of the tenant contribute nothing.
+    /// </summary>
+    Task<List<string>> GetRolePermissionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> roleIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Checks that every id in <paramref name="roleIds"/> names a role of
     /// <paramref name="tenantId"/>, and that <paramref name="granterScopes"/> already holds every
     /// permission those roles confer.

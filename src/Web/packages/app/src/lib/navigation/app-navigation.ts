@@ -7,39 +7,38 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type IconComponent = any;
-import {
-  Home,
-  BarChart3,
-  PieChart,
-  Settings,
-  Clock,
-  User,
-  Syringe,
-  Apple,
-  Utensils,
-  Bell,
-  BellOff,
-  HeartHandshake,
-  Plug,
-  Calendar,
-  CheckCircle,
-  Terminal,
-  TestTube,
-  Palette,
-  Timer,
-  Layers,
-  ShieldCheck,
-  Building2,
-  Wrench,
-  HeartPulse,
-  ListChecks,
-  Users,
-  KeyRound,
-  PlayCircle,
-  History as HistoryIcon,
-} from "lucide-svelte";
+import Home from "@lucide/svelte/icons/house";
+import BarChart3 from "@lucide/svelte/icons/chart-column";
+import PieChart from "@lucide/svelte/icons/chart-pie";
+import Settings from "@lucide/svelte/icons/settings";
+import Clock from "@lucide/svelte/icons/clock";
+import User from "@lucide/svelte/icons/user";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Apple from "@lucide/svelte/icons/apple";
+import Utensils from "@lucide/svelte/icons/utensils";
+import Bell from "@lucide/svelte/icons/bell";
+import BellOff from "@lucide/svelte/icons/bell-off";
+import HeartHandshake from "@lucide/svelte/icons/heart-handshake";
+import Plug from "@lucide/svelte/icons/plug";
+import Calendar from "@lucide/svelte/icons/calendar";
+import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+import Terminal from "@lucide/svelte/icons/terminal";
+import TestTube from "@lucide/svelte/icons/test-tube";
+import Palette from "@lucide/svelte/icons/palette";
+import Languages from "@lucide/svelte/icons/languages";
+import Timer from "@lucide/svelte/icons/timer";
+import Layers from "@lucide/svelte/icons/layers";
+import ShieldCheck from "@lucide/svelte/icons/shield-check";
+import Building2 from "@lucide/svelte/icons/building-2";
+import Wrench from "@lucide/svelte/icons/wrench";
+import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+import ListChecks from "@lucide/svelte/icons/list-checks";
+import Users from "@lucide/svelte/icons/users";
+import KeyRound from "@lucide/svelte/icons/key-round";
+import PlayCircle from "@lucide/svelte/icons/circle-play";
+import HistoryIcon from "@lucide/svelte/icons/history";
 import { satisfiesScope } from "$lib/authorization/scopes";
-import { getSidebarReportItems } from "$lib/navigation/report-navigation";
+import { getSidebarReportItems } from "$lib/navigation/report-navigation.svelte";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export interface NavItem {
@@ -216,6 +215,11 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
           icon: HeartPulse,
         },
         { title: "Appearance", href: "/settings/appearance", icon: Palette },
+        {
+          title: "Translations",
+          href: "/settings/translations",
+          icon: Languages,
+        },
         { title: "Therapy", href: "/settings/profile", icon: Syringe },
         {
           title: "Data Quality",

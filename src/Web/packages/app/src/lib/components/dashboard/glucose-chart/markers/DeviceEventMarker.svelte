@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DeviceEventIcon } from "$lib/components/icons";
   import type { DeviceEventType } from "$lib/api";
+  import { getGlucoseChartContext, markerInk } from "../chart-context.svelte";
 
   interface Props {
     xPos: number;
@@ -13,6 +14,9 @@
 
   let { xPos, yPos, eventType, color, treatmentId, onMarkerClick }: Props =
     $props();
+
+  const chart = getGlucoseChartContext();
+  const ink = $derived(markerInk(chart, color));
 
   const handleClick = $derived(
     treatmentId && onMarkerClick
@@ -32,14 +36,14 @@
   <circle
     r="12"
     fill="var(--background)"
-    stroke={color}
+    stroke={ink}
     stroke-width="2"
     class="opacity-95 {handleClick ? 'hover:opacity-100 transition-opacity' : ''}"
   />
   <!-- Icon using foreignObject to embed Lucide component -->
   <foreignObject x="-10" y="-10" width="20" height="20">
     <div class="flex items-center justify-center w-full h-full">
-      <DeviceEventIcon {eventType} size={16} {color} />
+      <DeviceEventIcon {eventType} size={16} color={ink} />
     </div>
   </foreignObject>
 </g>

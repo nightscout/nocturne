@@ -10,7 +10,7 @@
   }: WithElementRef<HTMLAttributes<HTMLElement>> = $props();
 </script>
 
-<main
+<div
   bind:this={ref}
   data-slot="sidebar-inset"
   class={cn(
@@ -21,4 +21,4 @@
   {...restProps}
 >
   {@render children?.()}
-</main>
+</div>

@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { Globe } from "@lucide/svelte";
+  import Globe from "@lucide/svelte/icons/globe";
   import * as Select from "@nocturne/ui/ui/select";
   import {
     preferredLanguage,
     supportedLocales,
     getNativeLanguageLabel,
     setLanguage,
-    type SupportedLocale,
   } from "@nocturne/app/stores/appearance-store.svelte";
 
   interface Props {
@@ -21,8 +20,9 @@
   let { compact = false, onLanguageChange, class: className }: Props = $props();
 
   async function handleChange(value: string | undefined) {
-    if (!value) return;
-    await setLanguage(value as SupportedLocale, onLanguageChange);
+    const locale = supportedLocales.find((l) => l === value);
+    if (!locale) return;
+    await setLanguage(locale, onLanguageChange);
   }
 </script>
 
@@ -36,7 +36,7 @@
     {/if}
   </Select.Trigger>
   <Select.Content>
-    {#each supportedLocales as locale}
+    {#each supportedLocales as locale (locale)}
       <Select.Item value={locale}>
         {getNativeLanguageLabel(locale)}
       </Select.Item>

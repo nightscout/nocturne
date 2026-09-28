@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import * as Tabs from "$lib/components/ui/tabs";
   import { Switch } from "$lib/components/ui/switch";
@@ -7,13 +8,11 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    ScrollText,
-    Settings2,
-    Loader2,
-    Info,
-    X,
-  } from "lucide-svelte";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Info from "@lucide/svelte/icons/info";
+  import X from "@lucide/svelte/icons/x";
   import {
     getMutationAuditLog,
     getReadAccessAuditLog,
@@ -23,14 +22,11 @@
   import AuditMutationsTable from "$lib/components/audit/AuditMutationsTable.svelte";
   import AuditReadsTable from "$lib/components/audit/AuditReadsTable.svelte";
   import { localDayStart, localDayEnd } from "$lib/utils/timezone";
+  import { toIsoString } from "$lib/utils/api-date";
 
   // Permissions
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   const canManageAudit = $derived(
-    effectivePermissions.includes("audit.manage") ||
-      effectivePermissions.includes("*"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "audit.manage"),
   );
 
   // --- Config ---
@@ -99,18 +95,20 @@
   let mTo = $state(defaultTo);
   let mGlobalFilter = $state("");
 
+  // A cleared date input names no instant; "" fails the query's validation, as
+  // an Invalid Date did, rather than throwing from toISOString inside the derived.
   const mutationsQuery = $derived(
     getMutationAuditLog({
-      from: localDayStart(mFrom),
-      to: localDayEnd(mTo),
+      from: toIsoString(localDayStart(mFrom)) ?? "",
+      to: toIsoString(localDayEnd(mTo)) ?? "",
       limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
   );
   const mutationsResult = $derived(mutationsQuery.current);
-  const mutations = $derived((mutationsResult as any)?.data ?? []);
-  const mutationsTotal = $derived((mutationsResult as any)?.pagination?.total ?? 0);
+  const mutations = $derived(mutationsResult?.data ?? []);
+  const mutationsTotal = $derived(mutationsResult?.pagination?.total ?? 0);
 
   // --- Read access log server-side filters ---
   let rFrom = $state(defaultFrom);
@@ -119,16 +117,16 @@
 
   const readsQuery = $derived(
     getReadAccessAuditLog({
-      from: localDayStart(rFrom),
-      to: localDayEnd(rTo),
+      from: toIsoString(localDayStart(rFrom)) ?? "",
+      to: toIsoString(localDayEnd(rTo)) ?? "",
       limit: ROW_LIMIT,
       offset: 0,
       sort: "created_at_desc",
     }),
   );
   const readsResult = $derived(readsQuery.current);
-  const reads = $derived((readsResult as any)?.data ?? []);
-  const readsTotal = $derived((readsResult as any)?.pagination?.total ?? 0);
+  const reads = $derived(readsResult?.data ?? []);
+  const readsTotal = $derived(readsResult?.pagination?.total ?? 0);
 
   // --- Filter state helpers ---
   const mHasDateFilter = $derived(
@@ -265,14 +263,12 @@
           {#if mHasDateFilter}
             <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
               <span class="text-muted-foreground">Date range:</span>
-              <Badge variant="outline" class="gap-1">
+              <Badge
+                variant="outline"
+                onremove={resetMutationDateFilter}
+                removeLabel="Clear date range"
+              >
                 {mFrom} to {mTo}
-                <button
-                  onclick={resetMutationDateFilter}
-                  class="ml-1 hover:text-foreground"
-                >
-                  <X class="h-3 w-3" />
-                </button>
               </Badge>
             </div>
           {/if}
@@ -288,7 +284,7 @@
           />
         </Card.Content>
         {#if mutationsTotal > mutations.length}
-          <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+          <Card.Footer variant="muted" class="border-t pt-4">
             Showing the {mutations.length} most recent of {mutationsTotal} entries in
             this range. Narrow the dates to see the rest.
           </Card.Footer>
@@ -352,14 +348,12 @@
             {#if rHasDateFilter}
               <div class="mt-4 flex flex-wrap items-center gap-2 pt-4 border-t text-sm">
                 <span class="text-muted-foreground">Date range:</span>
-                <Badge variant="outline" class="gap-1">
+                <Badge
+                  variant="outline"
+                  onremove={resetReadDateFilter}
+                  removeLabel="Clear date range"
+                >
                   {rFrom} to {rTo}
-                  <button
-                    onclick={resetReadDateFilter}
-                    class="ml-1 hover:text-foreground"
-                  >
-                    <X class="h-3 w-3" />
-                  </button>
                 </Badge>
               </div>
             {/if}
@@ -375,7 +369,7 @@
             />
           </Card.Content>
           {#if readsTotal > reads.length}
-            <Card.Footer class="border-t pt-4 text-sm text-muted-foreground">
+            <Card.Footer variant="muted" class="border-t pt-4">
               Showing the {reads.length} most recent of {readsTotal} entries in this
               range. Narrow the dates to see the rest.
             </Card.Footer>

@@ -4,14 +4,33 @@ import {
   updateStatus,
   deleteAll as deleteAllRemote,
 } from "$lib/api/generated/coachMarks.generated.remote";
+import { errorStatus } from "$lib/forms/submit-error";
+import { isOneOf, isRecord } from "$lib/utils/type-guards";
 
 const LOCAL_STORAGE_KEY = "nocturne:coach-marks";
+
+const MARK_STATUSES: readonly MarkStatus[] = ["unseen", "seen", "dismissed", "completed"];
+
+const nullableString = (value: unknown): value is string | null =>
+  value === null || typeof value === "string";
+
+function isMarkState(value: unknown): value is MarkState {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.markKey === "string" &&
+    isOneOf(MARK_STATUSES, value.status) &&
+    nullableString(value.seenAt) &&
+    nullableString(value.completedAt)
+  );
+}
 
 function readLocal(): Map<string, MarkState> {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (!raw) return new Map();
-    const arr: MarkState[] = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
+    const arr = Array.isArray(parsed) ? parsed.filter(isMarkState) : [];
     return new Map(arr.map((s) => [s.markKey, s]));
   } catch {
     return new Map();
@@ -27,12 +46,7 @@ function writeLocal(states: Map<string, MarkState>): void {
 }
 
 function isAuthError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "status" in err &&
-    (err as { status: number }).status === 401
-  );
+  return errorStatus(err) === 401;
 }
 
 /**
@@ -64,7 +78,7 @@ export function createCoachMarkAdapter(localOnly = false): CoachMarkAdapter {
           (s): MarkState => ({
             id: s.id ?? "",
             markKey: s.markKey ?? "",
-            status: (s.status as MarkStatus) ?? "unseen",
+            status: MARK_STATUSES.find((status) => status === s.status) ?? "unseen",
             seenAt: s.seenAt ? String(s.seenAt) : null,
             completedAt: s.completedAt ? String(s.completedAt) : null,
           }),

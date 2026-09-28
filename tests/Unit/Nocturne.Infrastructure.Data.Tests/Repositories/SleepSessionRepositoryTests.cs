@@ -179,7 +179,7 @@ public class SleepSessionRepositoryTests : IDisposable
         result.Should().HaveCount(1);
         result[0].Stages.Should().HaveCount(2);
         result[0].Stages![0].Stage.Should().Be(SleepStageType.Light);
-        result[0].Stages[1].Stage.Should().Be(SleepStageType.Deep);
+        result[0].Stages![1].Stage.Should().Be(SleepStageType.Deep);
     }
 
     [Fact]

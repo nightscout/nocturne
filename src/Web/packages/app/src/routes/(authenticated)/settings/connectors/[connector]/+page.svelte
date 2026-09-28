@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Button } from "$lib/components/ui/button";
   import {
     Card,
@@ -9,7 +10,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { ChevronLeft } from "lucide-svelte";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ConnectorSetup from "$lib/components/connectors/ConnectorSetup.svelte";
 
   const connectorName = $derived(page.params.connector);
@@ -28,7 +29,7 @@
       variant="ghost"
       size="sm"
       href="/settings/connectors"
-      class="gap-1 -ml-2 mb-4"
+      class="-ml-2 mb-4"
     >
       <ChevronLeft class="h-4 w-4" />
       Back to connectors
@@ -42,7 +43,7 @@
     showCapabilities
     primaryAction="save-only"
     showEnvVarHints={page.data.isPlatformAdmin === true}
-    onCancel={() => goto("/settings/connectors")}
+    onCancel={() => goto(resolve("/settings/connectors"))}
   >
     {#snippet extras()}
       {#if isHomeAssistant}

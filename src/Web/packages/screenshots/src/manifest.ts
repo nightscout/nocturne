@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { Page } from '@playwright/test';
+import { stringField } from './json.js';
 import type { ArrangeContext, ScreenshotDefinition } from './types.js';
 
 /** Rich enough that the public view is worth a screenshot; still short of everything on offer. */
@@ -7,12 +8,13 @@ const SHARED_CATEGORIES = ['glucose.read', 'treatments.read', 'devices.read'];
 
 /** Turns the tenant's public link on, widens what it shows, and hands back the link to navigate to. */
 async function openPublicShare({ fetch }: ArrangeContext): Promise<Record<string, string>> {
-	const rotated = await fetch<{ url: string | null }>('/api/v4/share/rotate', { method: 'POST' });
+	const rotated = await fetch('/api/v4/share/rotate', { method: 'POST' });
 	await fetch('/api/v4/share/scopes', { method: 'PUT', body: { scopes: SHARED_CATEGORIES } });
 	await fetch('/api/v4/share/full-history', { method: 'PUT', body: { fullHistory: true } });
 
-	if (!rotated.url) throw new Error('rotating the share link returned no URL');
-	return { shareUrl: rotated.url };
+	const shareUrl = stringField(rotated, 'url');
+	if (!shareUrl) throw new Error('rotating the share link returned no URL');
+	return { shareUrl };
 }
 
 /**
@@ -30,9 +32,10 @@ async function inviteAGuest({ fetch }: ArrangeContext): Promise<Record<string, s
 }
 
 async function seededClockFace({ fetch }: ArrangeContext): Promise<Record<string, string>> {
-	const [face] = await fetch<{ id: string }[]>('/api/v4/clockfaces');
-	if (!face) throw new Error('the seeded tenant has no clock face');
-	return { clockId: face.id };
+	const faces = await fetch('/api/v4/clockfaces');
+	const clockId = stringField(Array.isArray(faces) ? faces[0] : undefined, 'id');
+	if (!clockId) throw new Error('the seeded tenant has no clock face');
+	return { clockId };
 }
 
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -72,15 +75,15 @@ function authenticatorCode(base32Secret: string): string {
 }
 
 async function enrolAuthenticator({ fetch }: ArrangeContext): Promise<Record<string, string>> {
-	const setup = await fetch<{ base32Secret: string; challengeToken: string }>(
-		'/api/auth/totp/setup',
-		{ method: 'POST' },
-	);
+	const setup = await fetch('/api/auth/totp/setup', { method: 'POST' });
+	const secret = stringField(setup, 'base32Secret');
+	const challengeToken = stringField(setup, 'challengeToken');
+	if (!secret || !challengeToken) throw new Error('TOTP setup returned no secret or challenge token');
 	await fetch('/api/auth/totp/verify-setup', {
 		method: 'POST',
 		body: {
-			challengeToken: setup.challengeToken,
-			code: authenticatorCode(setup.base32Secret),
+			challengeToken,
+			code: authenticatorCode(secret),
 			label: 'Authenticator app',
 		},
 	});

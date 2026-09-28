@@ -1,12 +1,20 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { goto } from "$app/navigation";
+	import { resolve } from "$app/paths";
 	import * as Card from "$lib/components/ui/card";
 	import { Button } from "$lib/components/ui/button";
 	import { Input } from "$lib/components/ui/input";
 	import { Label } from "$lib/components/ui/label";
 	import { Badge } from "$lib/components/ui/badge";
-	import { Link2, Link2Off, Plus, Star, Pencil, Save, X, Loader2 } from "lucide-svelte";
+	import Link2 from "@lucide/svelte/icons/link-2";
+	import Link2Off from "@lucide/svelte/icons/link-2-off";
+	import Plus from "@lucide/svelte/icons/plus";
+	import Star from "@lucide/svelte/icons/star";
+	import Pencil from "@lucide/svelte/icons/pencil";
+	import Save from "@lucide/svelte/icons/save";
+	import X from "@lucide/svelte/icons/x";
+	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import {
 		getLinks,
 		setDefault,
@@ -19,7 +27,7 @@
 	// Auth guard
 	$effect(() => {
 		if (!page.data.isAuthenticated) {
-			goto(`/auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`, {
+			goto(resolve(`/auth/login?returnUrl=${encodeURIComponent(page.url.pathname)}`), {
 				replaceState: true,
 			});
 		}
@@ -131,7 +139,7 @@
 	</div>
 
 	{#if actionError}
-		<Card.Root class="border-destructive">
+		<Card.Root variant="destructive">
 			<Card.Content class="pt-6">
 				<p class="text-sm text-destructive">{actionError}</p>
 			</Card.Content>

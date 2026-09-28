@@ -1,16 +1,16 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Item } from "$lib/components/ui/item";
   import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
-  import {
-    Check,
-    ChartLine,
-    Users,
-    Bell,
-    BookOpen,
-    Plug,
-    ArrowRight,
-    Globe,
-  } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import Users from "@lucide/svelte/icons/users";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import Plug from "@lucide/svelte/icons/plug";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import Globe from "@lucide/svelte/icons/globe";
 
   let {
     path,
@@ -81,28 +81,25 @@
     <!-- Celebration checkmark -->
     <div class="pulse-wrapper relative size-24">
       <div
-        class="size-24 rounded-full border-2 flex items-center justify-center relative"
-        style="border-color: var(--onb-accent); background: var(--onb-accent-dim);"
+        class="size-24 rounded-full border-2 flex items-center justify-center relative border-(--onb-accent) bg-(--onb-accent-dim)"
       >
-        <Check style="width: 40px; height: 40px; color: var(--onb-accent);" />
+        <Check class="size-10 text-(--onb-accent)" />
       </div>
     </div>
 
     <!-- Heading -->
     <h1
-      class="font-[Montserrat] font-[250] text-[52px] max-[820px]:text-[36px] leading-tight"
+      class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight"
     >
       {#if path === "migration"}
         Your data is <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           home.
         </em>
       {:else}
         You're <em
-          class="not-italic font-light"
-          style="color: var(--onb-accent);"
+          class="not-italic font-light text-(--onb-accent)"
         >
           in.
         </em>
@@ -110,7 +107,7 @@
     </h1>
 
     <!-- Lead paragraph -->
-    <p class="text-[17px] leading-relaxed text-muted-foreground max-w-130">
+    <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
       {#if path === "migration"}
         All your entries, treatments, and profiles are in Nocturne. Your
         existing uploaders keep working — you don't need to change them until
@@ -132,12 +129,11 @@
 
     <!-- Public access toggle -->
     <label class="flex items-start gap-3 cursor-pointer" class:opacity-50={isToggling}>
-      <input
-        type="checkbox"
+      <Checkbox
         checked={isPublic}
-        onclick={handlePublicToggle}
+        onCheckedChange={handlePublicToggle}
         disabled={isToggling}
-        class="mt-0.5 h-4 w-4 shrink-0 accent-(--onb-accent) cursor-pointer"
+        class="mt-0.5"
       />
       <div class="flex items-start gap-2">
         <Globe class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -151,15 +147,15 @@
 
   <!-- Right column -->
   <div class="flex flex-col gap-4">
-    <span class="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+    <span class="text-xs uppercase tracking-widest text-muted-foreground">
       A few next things
     </span>
 
     <div class="flex flex-col gap-3">
-      {#each nextSteps as step}
-        <button
-          class="group grid grid-cols-[34px_1fr_auto] gap-3 items-center p-3 rounded-xl border border-white/6 bg-white/3 transition-[border-color,background-color] duration-150 cursor-pointer hover:border-white/12 hover:bg-white/5"
-          type="button"
+      {#each nextSteps as step (step.title)}
+        <Item
+          variant="outline"
+          class="grid grid-cols-[34px_1fr_auto]"
           onclick={() => onNavigateWithCoach(step.coachUrl)}
         >
           <div
@@ -176,7 +172,7 @@
           >
             <ArrowRight class="h-4 w-4 text-muted-foreground" />
           </div>
-        </button>
+        </Item>
       {/each}
     </div>
   </div>

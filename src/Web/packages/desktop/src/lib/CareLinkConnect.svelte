@@ -13,9 +13,13 @@
   import { Textarea } from "@nocturne/ui/ui/textarea";
   import { Label } from "@nocturne/ui/ui/label";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
-  import { CheckCircle2, KeyRound, Link2, Loader2, RotateCcw } from "@lucide/svelte";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import { commandErrorMessage, commandErrorStatus } from "$lib/command-error";
 
-  type CommandError = { status?: number | null; message: string };
   type LinkInfo = { serverUrl: string };
   type CompleteResponse = {
     success: boolean;
@@ -36,17 +40,16 @@
   let pendingServer = $state<string | null>(null);
 
   function describeError(e: unknown): string {
-    const err = e as CommandError;
-    if (err?.status === 401) {
+    if (commandErrorStatus(e) === 401) {
       return "The link code has expired. Generate a fresh one in Nocturne and link again.";
     }
-    return err?.message ?? "Something went wrong.";
+    return commandErrorMessage(e) ?? "Something went wrong.";
   }
 
   /** A 401 means the short-lived link token is dead — go back to the link step. */
   function handleApiError(e: unknown) {
     error = describeError(e);
-    if ((e as CommandError)?.status === 401) {
+    if (commandErrorStatus(e) === 401) {
       phase = "link";
       serverUrl = null;
     }
@@ -114,7 +117,7 @@
       connectedUsername = res.username ?? null;
       phase = "done";
     } catch (e) {
-      const expired = (e as CommandError)?.status === 401;
+      const expired = commandErrorStatus(e) === 401;
       handleApiError(e);
       if (!expired) phase = "ready";
     }
@@ -211,7 +214,7 @@
         id="link-code"
         bind:value={linkCodeInput}
         rows={3}
-        class="font-mono text-xs break-all"
+        class="font-mono break-all"
         placeholder="nocturne-connect://link?server=…&token=…"
         disabled={busy}
       />
@@ -290,7 +293,7 @@
   <Card>
     <CardContent class="space-y-4 pt-6">
       <div class="flex items-start gap-2">
-        <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+        <CheckCircle2 class="mt-0.5 h-5 w-5 shrink-0 text-success" />
         <div class="text-sm">
           <p class="font-medium">CareLink connected.</p>
           <p class="text-muted-foreground">

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AlertTriangle, RefreshCw } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { Button } from "$lib/components/ui/button";
   import {
     Card,
@@ -118,15 +119,15 @@
     </div>
   {:else}
     <div class="container mx-auto max-w-7xl px-4 py-6">
-      <Card class="border-2 border-destructive">
+      <Card variant="destructive">
         <CardHeader>
-          <CardTitle class="flex items-center gap-2 text-destructive">
+          <CardTitle variant="destructive" class="flex items-center gap-2">
             <AlertTriangle class="h-5 w-5" />
             {errorTitle}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p class="text-destructive-foreground">{errorMessage}</p>
+          <p>{errorMessage}</p>
           {#if onRetry}
             <Button
               variant="outline"

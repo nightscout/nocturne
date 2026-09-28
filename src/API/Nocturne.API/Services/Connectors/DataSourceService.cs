@@ -54,10 +54,10 @@ public class DataSourceService : IDataSourceService
         _logger = logger;
     }
 
-    /// <param name="Handle">
-    /// Which handle the bucket's key names, or <see langword="null"/> when no contributing table
-    /// could tell.
-    /// </param>
+    /// <remarks>
+    /// <paramref name="Handle"/> is which handle the bucket's key names, or <see langword="null"/>
+    /// when no contributing table could tell.
+    /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
@@ -325,6 +325,22 @@ public class DataSourceService : IDataSourceService
             }
         }
 
+        void ApplyConnectorAndStatus(DataSourceInfo info, string key)
+        {
+            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
+            if (connectorMeta != null)
+            {
+                info.ConnectorId = connectorMeta.ConnectorId;
+                var connConfig = connectorConfigs.FirstOrDefault(c =>
+                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
+                if (connConfig?.LastSuccessfulSync != null)
+                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
+            }
+
+            var (activeMinutes, staleMinutes) = ResolveThresholds(key, thresholdOverrides);
+            ApplyStatus(info, now, activeMinutes, staleMinutes);
+        }
+
         foreach (var device in entryDevices)
         {
             var info = CreateDataSourceInfo(device.Device, device.DataSource, SourceHandle.Device);
@@ -341,18 +357,6 @@ public class DataSourceService : IDataSourceService
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
             }
 
-            // Set ConnectorId if this is a connector data source
-            var connectorKey = device.DataSource ?? device.Device;
-            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(connectorKey);
-            if (connectorMeta != null)
-            {
-                info.ConnectorId = connectorMeta.ConnectorId;
-                var connConfig = connectorConfigs.FirstOrDefault(c =>
-                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
-                if (connConfig?.LastSuccessfulSync != null)
-                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
-            }
-
             // Merge non-glucose stats
             var mergeKey = device.DataSource ?? device.Device;
             if (Claim(mergeKey) is { } ngStats)
@@ -364,9 +368,7 @@ public class DataSourceService : IDataSourceService
                 && Claim(device.Device) is { } ngDeviceStats)
                 MergeStats(info, ngDeviceStats);
 
-            // Apply status with resolved thresholds
-            var (activeMinutes, staleMinutes) = ResolveThresholds(connectorKey, thresholdOverrides);
-            ApplyStatus(info, now, activeMinutes, staleMinutes);
+            ApplyConnectorAndStatus(info, mergeKey);
 
             dataSources.Add(info);
         }
@@ -386,8 +388,7 @@ public class DataSourceService : IDataSourceService
                 if (Claim(dsDevice.Device) is { } ngStats)
                     MergeStats(info, ngStats);
 
-                var (activeMinutes, staleMinutes) = ResolveThresholds(dsDevice.Device, thresholdOverrides);
-                ApplyStatus(info, now, activeMinutes, staleMinutes);
+                ApplyConnectorAndStatus(info, dsDevice.DataSource ?? dsDevice.Device);
 
                 dataSources.Add(info);
             }
@@ -404,18 +405,7 @@ public class DataSourceService : IDataSourceService
             info.TotalEntries = stats.Count;
             info.EntriesLast24Hours = stats.CountLast24H;
 
-            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
-            if (connectorMeta != null)
-            {
-                info.ConnectorId = connectorMeta.ConnectorId;
-                var connConfig = connectorConfigs.FirstOrDefault(c =>
-                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
-                if (connConfig?.LastSuccessfulSync != null)
-                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
-            }
-
-            var (activeMinutes, staleMinutes) = ResolveThresholds(key, thresholdOverrides);
-            ApplyStatus(info, now, activeMinutes, staleMinutes);
+            ApplyConnectorAndStatus(info, key);
 
             dataSources.Add(info);
         }

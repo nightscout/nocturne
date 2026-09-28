@@ -27,7 +27,6 @@ public static class PatientRecordMapper
             Pronouns = model.Pronouns,
             AvatarUrl = model.AvatarUrl,
             Timezone = model.Timezone,
-            SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
         };
     }

@@ -1,14 +1,10 @@
 <script lang="ts">
   import { getChartContext } from "layerchart";
-  import { AlertReplayEventKind } from "$api-clients";
+  import { AlertReplayEventKind, type AlertReplayEvent } from "$api-clients";
   import { severityVar } from "./severity";
 
   interface Marker {
-    ev: {
-      ruleId?: string | null;
-      severity?: number | null;
-      kind?: string | null;
-    };
+    ev: AlertReplayEvent;
     tMs: number;
   }
 
@@ -20,7 +16,7 @@
   let { firedMarkers, currentDate }: Props = $props();
 
   const chartCtx = getChartContext();
-  const xScale = $derived(chartCtx.xScale as unknown as (d: Date) => number);
+  const xScale = $derived(chartCtx.xScale);
   const height = $derived(chartCtx.height);
 </script>
 

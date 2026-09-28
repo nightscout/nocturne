@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.V4;
@@ -413,7 +414,8 @@ public class DeviceStatusExtrasRepositoryCorrelationDeleteTests
     protected override string ExpectedScope => $"correlation_id={CorrelationId}";
 
     protected override void CreateRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext) =>
-        _repository = new DeviceStatusExtrasRepository(contextFactory, auditContext);
+        _repository = new DeviceStatusExtrasRepository(
+            contextFactory, auditContext, NullLogger<DeviceStatusExtrasRepository>.Instance);
 
     private DeviceStatusExtrasEntity NewRow(Guid correlationId) =>
         new()

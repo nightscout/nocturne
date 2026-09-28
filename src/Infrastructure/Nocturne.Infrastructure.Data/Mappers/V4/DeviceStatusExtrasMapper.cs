@@ -25,7 +25,6 @@ public static class DeviceStatusExtrasMapper
             ExtrasJson = model.Extras is { Count: > 0 }
                 ? JsonSerializer.Serialize(model.Extras)
                 : null,
-            SysCreatedAt = DateTime.UtcNow,
             SysUpdatedAt = DateTime.UtcNow,
         };
     }

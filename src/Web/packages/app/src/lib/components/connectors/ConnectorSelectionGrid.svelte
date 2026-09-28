@@ -6,12 +6,11 @@
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    AlertCircle,
-    CheckCircle,
-    ChevronRight,
-    Plug,
-  } from "lucide-svelte";
+  import { Item } from "$lib/components/ui/item";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Plug from "@lucide/svelte/icons/plug";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
@@ -30,7 +29,7 @@
 {#if isLoading}
   <SettingsPageSkeleton cardCount={2} />
 {:else if error}
-  <Card class="border-destructive">
+  <Card variant="destructive">
     <CardContent class="flex items-center gap-3 pt-6">
       <AlertCircle class="h-5 w-5 text-destructive" />
       <div>
@@ -48,16 +47,15 @@
       </p>
     </div>
     <div class="grid gap-3 @xl:grid-cols-2">
-      {#each servicesOverview.availableConnectors as connector}
-        <button
-          class="flex items-center gap-4 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors text-left group {connector.isConfigured
-            ? 'border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20'
-            : ''}"
+      {#each servicesOverview.availableConnectors as connector (connector.id)}
+        <Item
+          variant={connector.isConfigured ? "success" : "outline"}
+          size="lg"
           onclick={() => onSelect(connector)}
         >
           <div
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg {connector.isConfigured
-              ? 'bg-green-100 dark:bg-green-900/30'
+              ? 'bg-success/10'
               : 'bg-primary/10'}"
           >
             <AppLogo icon={connector.icon} invertMode />
@@ -66,9 +64,7 @@
             <div class="flex items-center gap-2 flex-wrap">
               <span class="font-medium">{connector.name}</span>
               {#if connector.isConfigured}
-                <Badge
-                  class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-                >
+                <Badge variant="success">
                   <CheckCircle class="h-3 w-3 mr-1" />
                   Configured
                 </Badge>
@@ -83,7 +79,7 @@
           <ChevronRight
             class="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors"
           />
-        </button>
+        </Item>
       {/each}
     </div>
   </div>

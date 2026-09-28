@@ -1,6 +1,7 @@
 using System.Net;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
@@ -55,6 +56,46 @@ public class BaseConnectorServiceTests
     public class TestConfig : BaseConnectorConfiguration
     {
         protected override void ValidateSourceSpecificConfiguration() { }
+    }
+
+    /// <summary>A connector whose run is <paramref name="run"/>, so a test can script what the run does.</summary>
+    private sealed class ScriptedConnectorService(
+        IConnectorPublisher publisher, Func<SyncResult> run)
+        : BaseConnectorService<TestConfig>(
+            new HttpClient(),
+            new ConnectorServerResolver<TestConfig>(null, null, null),
+            NullLogger<ScriptedConnectorService>.Instance,
+            publisher)
+    {
+        protected override string ConnectorSource => "test";
+        public override string ServiceName => "Test";
+
+        protected override Task<SyncResult> PerformSyncInternalAsync(
+            SyncRequest request, TestConfig config, CancellationToken cancellationToken)
+            => Task.FromResult(run());
+    }
+
+    /// <summary>
+    /// A user who deleted records and re-syncs them gets nothing back. The run has to say so rather
+    /// than report the fetched count as if every record landed.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_ReportsWhatThePublisherSkippedDuringTheRun_ApartFromItemsSynced()
+    {
+        var publisher = new Mock<IConnectorPublisher>();
+        publisher.SetupGet(p => p.IsAvailable).Returns(true);
+        var skippedSoFar = 3;
+        publisher.SetupGet(p => p.SkippedDeleted).Returns(() => skippedSoFar);
+        var service = new ScriptedConnectorService(publisher.Object, () =>
+        {
+            skippedSoFar += 4;
+            return new SyncResult { Success = true, ItemsSynced = { [SyncDataType.Glucose] = 10 } };
+        });
+
+        var result = await service.SyncDataAsync(new SyncRequest(), new TestConfig(), CancellationToken.None);
+
+        result.ItemsSkipped.Should().Be(4, "only what this run skipped counts, not the scope's earlier runs");
+        result.ItemsSynced[SyncDataType.Glucose].Should().Be(10);
     }
 
     [Fact]

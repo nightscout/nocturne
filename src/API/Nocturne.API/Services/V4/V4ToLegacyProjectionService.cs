@@ -153,28 +153,75 @@ public class V4ToLegacyProjectionService : IV4ToLegacyProjectionService
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Each table pages independently on a millisecond boundary; see <see cref="HistoryPage"/>.
+    /// </remarks>
     public async Task<IEnumerable<Treatment>> GetProjectedTreatmentsModifiedSinceAsync(
         long lastModifiedMills, int limit, CancellationToken ct = default)
     {
-        // Strictly-greater (not >=) so the cursor record AAPS already holds is not
-        // re-returned; an inclusive bound makes AAPS re-request the same page in a loop.
-        var threshold = DateTimeOffset.FromUnixTimeMilliseconds(lastModifiedMills).UtcDateTime;
-
-        var rows = await FetchAsync(
-            table => table.ModifiedSinceAsync(_dbContext, threshold, limit, ct));
+        var perTable = new List<(ILegacyTreatmentTable Table, int Order, IReadOnlyList<FetchedRecord> Rows)>();
+        foreach (var table in LegacyTreatmentTables.All)
+        {
+            var rows = await FetchSafe(
+                table, t => t.ModifiedSinceAsync(_dbContext, lastModifiedMills, limit, _logger, ct));
+            perTable.Add((table, LegacyTreatmentTables.OrderOf(table), rows));
+        }
 
         // The page is cut on raw row stamps and only then paired. Each type contributes its own
-        // oldest `limit` rows, so this merge holds the globally-oldest `limit`, and every row left
-        // behind is strictly newer than every row returned. Pairing before the cut breaks that: a
-        // meal carries its newer constituent's stamp, so it can sort past the cut while the cursor
-        // — max(srvModified) over the page — still advances beyond the older constituent's own row,
-        // which is then never fetched again. Pairing after the cut can only merge rows that were
-        // both delivered, so a pair split by the cut simply arrives as two treatments.
-        var page = rows.OrderBy(r => r.Modified).Take(limit).ToList();
+        // oldest rows, so this merge holds the globally-oldest `limit`, and every row left behind is
+        // strictly newer than every row returned. Pairing before the cut breaks that: a meal carries
+        // its newer constituent's stamp, so it can sort past the cut while the cursor (max(srvModified)
+        // over the page) still advances beyond the older constituent's own row, which is then never
+        // fetched again. Pairing after the cut can only merge rows that were both delivered, so a pair
+        // split by the cut simply arrives as two treatments.
+        var ordered = perTable
+            .SelectMany(p => p.Rows.Select(row => (Row: row, p.Order)))
+            .OrderBy(x => x.Row.Modified)
+            .ThenBy(x => x.Order)
+            .ThenBy(x => RecordId(x.Row))
+            .ToList();
+
+        var page = ordered.Take(limit).Select(x => x.Row).ToList();
+
+        if (page.Count > 0)
+            page = ExtendToMillisecondAsync(page, ordered);
+
         var treatments = await AssembleAsync(page, ct);
 
         return treatments.OrderBy(t => t.SrvModified ?? t.Mills);
     }
+
+    /// <summary>
+    /// Extends a merged page to the end of its last row's millisecond from the rows already fetched.
+    /// Every table's own page ends on a millisecond boundary, so the row that set the merged cut
+    /// carries its whole tie group into that page; the merge can still cut a group whose members
+    /// span tables, which is what this completes.
+    /// </summary>
+    private static List<FetchedRecord> ExtendToMillisecondAsync(
+        List<FetchedRecord> page,
+        IReadOnlyList<(FetchedRecord Row, int Order)> ordered)
+    {
+        var lastMills = HistoryPage.ToMilliseconds(page[^1].Modified!.Value);
+        var seen = page.Select(RecordId).ToHashSet();
+
+        foreach (var (row, _) in ordered)
+        {
+            if (row.Modified is { } modified
+                && HistoryPage.ToMilliseconds(modified) == lastMills
+                && seen.Add(RecordId(row)))
+            {
+                page.Add(row);
+            }
+        }
+
+        return page
+            .OrderBy(r => r.Modified)
+            .ThenBy(r => LegacyTreatmentTables.OrderOf(r.Table))
+            .ThenBy(RecordId)
+            .ToList();
+    }
+
+    private static Guid RecordId(FetchedRecord row) => ((IV4Record)row.Record).Id;
 
     /// <summary>
     /// Reads every record type through <paramref name="fetch"/>. Types are read sequentially: they

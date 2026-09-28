@@ -33,8 +33,8 @@ public abstract class ConnectorCredentialVerifier<TConfig> : IConnectorCredentia
 
         // One attempt, whatever the submitted budget says. A sync retries a provider that is
         // briefly unwell; a caller waiting on "test these credentials" wants an answer, and
-        // ProductionRetryDelayStrategy's backoff starts at two and a half minutes — at the
-        // default three attempts a retryable 503 would hold the request for seven and a half.
+        // ProductionRetryDelayStrategy's backoff starts at 30 seconds — at the default three
+        // attempts a retryable 503 would hold the request for a minute and a half.
         config.MaxRetryAttempts = 0;
 
         return await VerifyConfiguredAsync(config, ct);

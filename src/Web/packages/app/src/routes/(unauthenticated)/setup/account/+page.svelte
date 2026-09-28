@@ -1,11 +1,14 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
-  import { AlertTriangle, Loader2, UserPlus } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
   } from "@simplewebauthn/browser";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     setupOwnerOptions,
     setupOwnerComplete,
@@ -39,7 +42,7 @@
   // the user needs to see their recovery codes before navigating away.
   $effect(() => {
     if (isAuthenticated && !registrationComplete) {
-      goto("/setup", { replaceState: true, invalidateAll: true });
+      goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
     }
   });
 
@@ -50,9 +53,7 @@
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
     selectedProvider = providerId;
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    params.set("returnUrl", "/setup/account");
+    const params = new URLSearchParams({ provider: providerId, returnUrl: "/setup/account" });
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 
@@ -106,7 +107,7 @@
   }
 
   function handleContinueToSetup() {
-    goto("/setup", { replaceState: true, invalidateAll: true });
+    goto(resolve("/setup"), { replaceState: true, invalidateAll: true });
   }
 </script>
 

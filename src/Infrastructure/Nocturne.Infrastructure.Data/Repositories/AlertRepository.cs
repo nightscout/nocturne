@@ -181,6 +181,17 @@ public class AlertRepository : IAlertRepository
                 .SetProperty(d => d.Status, "expired"), ct);
     }
 
+    /// <inheritdoc/>
+    public virtual async Task DeleteExcursionMutesAsync(Guid tenantId, Guid excursionId, CancellationToken ct)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(ct);
+        context.TenantId = tenantId;
+
+        await context.AlertExcursionMutes
+            .Where(m => m.AlertExcursionId == excursionId)
+            .ExecuteDeleteAsync(ct);
+    }
+
     /// <summary>
     /// Counts the number of active alert excursions for a specific tenant.
     /// </summary>
@@ -202,6 +213,11 @@ public class AlertRepository : IAlertRepository
     /// <summary>
     /// Gets alert excursions that are currently in the hysteresis (recovery) period.
     /// </summary>
+    /// <remarks>
+    /// Selected by the rule's tracker state, which the tracker decides from, rather than by the
+    /// excursion's copy of the hysteresis start: a state from before that copy existed is in
+    /// hysteresis with no start on either row.
+    /// </remarks>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>A collection of hysteresis excursion snapshots.</returns>
     public virtual async Task<IReadOnlyList<HysteresisExcursionSnapshot>> GetExcursionsInHysteresisAsync(
@@ -217,11 +233,11 @@ public class AlertRepository : IAlertRepository
             await using var context = await _contextFactory.CreateDbContextAsync(ct);
             context.TenantId = tenantId;
 
-            var rows = await context.AlertExcursions
+            var rows = await context.AlertTrackerState
                 .AsNoTracking()
-                .Where(e => e.HysteresisStartedAt != null && e.EndedAt == null)
-                .Select(e => new HysteresisExcursionSnapshot(
-                    e.Id, e.TenantId, e.AlertRuleId, e.HysteresisStartedAt))
+                .Where(s => s.State == "hysteresis" && s.ActiveExcursionId != null)
+                .Select(s => new HysteresisExcursionSnapshot(
+                    s.ActiveExcursionId!.Value, s.TenantId, s.AlertRuleId, s.HysteresisStartedAt))
                 .ToListAsync(ct);
             results.AddRange(rows);
         }
@@ -415,35 +431,8 @@ public class AlertRepository : IAlertRepository
             .ToList();
     }
 
-    /// <summary>
-    /// Gets all enabled rules for signal loss detection.
-    /// </summary>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of signal loss rule snapshots.</returns>
-    public virtual async Task<IReadOnlyList<SignalLossRuleSnapshot>> GetEnabledSignalLossRulesAsync(
-        CancellationToken ct)
-    {
-        // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
-        var results = new List<SignalLossRuleSnapshot>();
-        foreach (var tenantId in await GetActiveTenantIdsAsync(ct))
-        {
-            await using var context = await _contextFactory.CreateDbContextAsync(ct);
-            context.TenantId = tenantId;
-
-            var rows = await context.AlertRules
-                .AsNoTracking()
-                .Where(r => r.IsEnabled && r.ConditionType == AlertConditionType.SignalLoss)
-                .Select(r => new SignalLossRuleSnapshot(r.Id, r.TenantId, r.ConditionParams))
-                .ToListAsync(ct);
-            results.AddRange(rows);
-        }
-
-        return results;
-    }
-
     /// <inheritdoc/>
-    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetEnabledRulesByConditionTypeAsync(
-        AlertConditionType conditionType, CancellationToken ct)
+    public virtual async Task<IReadOnlyList<AlertRuleSnapshot>> GetAllEnabledRulesAsync(CancellationToken ct)
     {
         // Cross-tenant scan: iterate active tenants so RLS scopes each query correctly.
         var results = new List<AlertRuleSnapshot>();
@@ -454,7 +443,8 @@ public class AlertRepository : IAlertRepository
 
             var rows = await context.AlertRules
                 .AsNoTracking()
-                .Where(r => r.IsEnabled && r.ConditionType == conditionType)
+                .Where(r => r.IsEnabled)
+                .OrderBy(r => r.SortOrder)
                 .Select(r => new AlertRuleSnapshot(
                     r.Id, r.TenantId, r.Name, r.ConditionType,
                     r.ConditionParams, r.Severity, r.ClientConfiguration, r.SortOrder,
@@ -464,26 +454,6 @@ public class AlertRepository : IAlertRepository
         }
 
         return results;
-    }
-
-    /// <summary>
-    /// Gets the most recent glucose trend rate for a specific tenant.
-    /// </summary>
-    /// <param name="tenantId">The unique identifier of the tenant.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The trend rate, or null if no readings exist.</returns>
-    public virtual async Task<double?> GetLatestTrendRateAsync(
-        Guid tenantId, CancellationToken ct)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(ct);
-        context.TenantId = tenantId;
-
-        return await context.SensorGlucose
-            .AsNoTracking()
-            .Where(sg => sg.TenantId == tenantId)
-            .OrderByDescending(sg => sg.Timestamp)
-            .Select(sg => sg.TrendRate)
-            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>

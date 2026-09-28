@@ -48,6 +48,19 @@ public class AlertTrackerStateEntity : ITenantScoped
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// When the active excursion entered hysteresis; null outside the "hysteresis" state.
+    /// </summary>
+    [Column("hysteresis_started_at")]
+    public DateTime? HysteresisStartedAt { get; set; }
+
+    /// <summary>
+    /// Idle after an auto-resolve closed an excursion whose condition still held; cleared by the
+    /// first evaluation that finds the condition false.
+    /// </summary>
+    [Column("awaiting_rearm")]
+    public bool AwaitingRearm { get; set; }
+
     // Navigation
 
     /// <summary>

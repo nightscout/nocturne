@@ -4,7 +4,7 @@
   import type { GoogleHealthStatus } from "$lib/api/generated/nocturne-api-client";
   import DataSourceRow, { type DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
   import { lastSeen } from "$lib/utils/formatting";
-  import { HeartPulse } from "lucide-svelte";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 
   let { connection }: { connection: GoogleHealthStatus } = $props();
   const status = $derived<DataSourceStatus>(

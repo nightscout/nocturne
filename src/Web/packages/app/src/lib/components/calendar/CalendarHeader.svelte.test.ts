@@ -127,36 +127,73 @@ describe("CalendarHeader", () => {
 		await expect.element(page.getByText("High")).toBeVisible();
 	});
 
-	it("shows profile mode explanation when in profile view", async () => {
-		render(CalendarHeader, {
-			viewDate: new Date(2025, 5, 15),
-			viewMode: "profile",
-			isCurrentMonth: true,
-			MONTH_NAMES,
-			previousMonth: () => {},
-			nextMonth: () => {},
-			goToToday: () => {},
-			setViewMode: () => {},
-		});
+	// The header is its own @container: the explanation needs @2xl (42rem) and the
+	// click hint @xl (36rem), both wider than the runner's default 414px viewport.
+	async function atWidth(width: number, body: () => Promise<void>) {
+		const original = [window.innerWidth, window.innerHeight] as const;
+		await page.viewport(width, 800);
+		try {
+			await body();
+		} finally {
+			await page.viewport(original[0], original[1]);
+		}
+	}
 
-		await expect.element(page.getByText("Daily glucose profile")).toBeVisible();
-		await expect.element(page.getByText("Green band = target range")).toBeVisible();
+	it("shows profile mode explanation when in profile view", async () => {
+		await atWidth(1024, async () => {
+			render(CalendarHeader, {
+				viewDate: new Date(2025, 5, 15),
+				viewMode: "profile",
+				isCurrentMonth: true,
+				MONTH_NAMES,
+				previousMonth: () => {},
+				nextMonth: () => {},
+				goToToday: () => {},
+				setViewMode: () => {},
+			});
+
+			await expect.element(page.getByText("Daily glucose profile")).toBeVisible();
+			await expect.element(page.getByText("Green band = target range")).toBeVisible();
+		});
 	});
 
 	it("shows click instruction", async () => {
-		render(CalendarHeader, {
-			viewDate: new Date(2025, 5, 15),
-			viewMode: "tir",
-			isCurrentMonth: true,
-			MONTH_NAMES,
-			previousMonth: () => {},
-			nextMonth: () => {},
-			goToToday: () => {},
-			setViewMode: () => {},
-		});
+		await atWidth(1024, async () => {
+			render(CalendarHeader, {
+				viewDate: new Date(2025, 5, 15),
+				viewMode: "tir",
+				isCurrentMonth: true,
+				MONTH_NAMES,
+				previousMonth: () => {},
+				nextMonth: () => {},
+				goToToday: () => {},
+				setViewMode: () => {},
+			});
 
-		await expect
-			.element(page.getByText("Click any day to view detailed report"))
-			.toBeVisible();
+			await expect
+				.element(page.getByText("Click any day to view detailed report"))
+				.toBeVisible();
+		});
+	});
+
+	it("hides the explanation and click instruction on a narrow header", async () => {
+		await atWidth(390, async () => {
+			render(CalendarHeader, {
+				viewDate: new Date(2025, 5, 15),
+				viewMode: "profile",
+				isCurrentMonth: true,
+				MONTH_NAMES,
+				previousMonth: () => {},
+				nextMonth: () => {},
+				goToToday: () => {},
+				setViewMode: () => {},
+			});
+
+			await expect.element(page.getByText("Calendar")).toBeVisible();
+			await expect.element(page.getByText("Daily glucose profile")).not.toBeVisible();
+			await expect
+				.element(page.getByText("Click any day to view detailed report"))
+				.not.toBeVisible();
+		});
 	});
 });

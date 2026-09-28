@@ -54,7 +54,7 @@ public class BasalInjectionControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<BasalInjection>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<BasalInjection>, WriteOrigin, CancellationToken>((b, _, _) => persisted = b.ToList())
-            .ReturnsAsync((IEnumerable<BasalInjection> b, WriteOrigin _, CancellationToken _) => b);
+            .ReturnsAsync((IEnumerable<BasalInjection> b, WriteOrigin _, CancellationToken _) => [.. b]);
 
         await CreateController().CreateBulk(
         [

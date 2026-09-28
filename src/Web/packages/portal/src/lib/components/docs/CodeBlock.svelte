@@ -15,7 +15,7 @@
         <CopyButton text={code} />
     </div>
     <pre
-        class="p-3 text-sm overflow-x-auto"
-        style={maxHeight ? `max-height: ${maxHeight}` : undefined}
+        class="p-3 text-sm overflow-x-auto max-h-(--code-max-h)"
+        style:--code-max-h={maxHeight}
     ><code>{code}</code></pre>
 </div>

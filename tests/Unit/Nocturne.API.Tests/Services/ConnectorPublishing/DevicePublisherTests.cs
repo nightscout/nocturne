@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -32,6 +33,13 @@ public class DevicePublisherTests
         _mockPumpSnapshotRepository = new Mock<IPumpSnapshotRepository>();
         _mockUploaderSnapshotRepository = new Mock<IUploaderSnapshotRepository>();
         _mockPatientDeviceStamper = new Mock<IPatientDeviceStamper>();
+        _mockDecomposer
+            .Setup(d => d.DecomposeAsync(
+                It.IsAny<DeviceStatus>(), It.IsAny<string?>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+        _mockDeviceEventRepository
+            .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<DeviceEvent>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
 
         _publisher = new DevicePublisher(
             _mockDecomposer.Object,
@@ -42,6 +50,7 @@ public class DevicePublisherTests
             Mock.Of<IPatientDeviceRepository>(),
             _mockPumpSnapshotRepository.Object,
             _mockUploaderSnapshotRepository.Object,
+            new PublishSkipTally(),
             NullLogger<DevicePublisher>.Instance
         );
     }

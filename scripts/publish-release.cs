@@ -160,6 +160,10 @@ static EnvVarGroups ParseAspireEnv(string aspireEnvPath, EnvVarMeta[] metadata)
         "WHATSAPP_APP_SECRET",
         "WHATSAPP_PHONE_NUMBER_ID",
         "WHATSAPP_VERIFY_TOKEN",
+        "RESEND_API_KEY",
+        "RESEND_FROM_ADDRESS",
+        "RESEND_FROM_NAME",
+        "RESEND_WEBHOOK_SECRET",
     };
 
     var seen = new HashSet<string>();

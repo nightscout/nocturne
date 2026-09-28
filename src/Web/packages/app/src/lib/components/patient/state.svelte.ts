@@ -137,11 +137,11 @@ export class DeviceListState {
   readonly createForm = patientRemote.createDevice;
   readonly updateForm = patientRemote.updateDevice;
 
-  get items(): PatientDevice[] { return (this.#devices.current ?? []) as PatientDevice[]; }
+  get items(): PatientDevice[] { return this.#devices.current ?? []; }
 
   /** Distinct (dataSource, device) combinations seen recently in unattributed readings. */
   get discoveredSources(): DiscoveredSource[] {
-    return (this.#discovered.current ?? []) as DiscoveredSource[];
+    return this.#discovered.current ?? [];
   }
 
   remove = async (id: string): Promise<void> => {
@@ -166,8 +166,8 @@ export class InsulinListState {
   readonly createForm = patientRemote.createInsulin;
   readonly updateForm = patientRemote.updateInsulin;
 
-  get items(): PatientInsulin[] { return (this.#insulins.current ?? []) as PatientInsulin[]; }
-  get catalog(): InsulinFormulation[] { return (this.#catalog.current ?? []) as InsulinFormulation[]; }
+  get items(): PatientInsulin[] { return this.#insulins.current ?? []; }
+  get catalog(): InsulinFormulation[] { return this.#catalog.current ?? []; }
 
   remove = async (id: string): Promise<void> => {
     await patientRemote.deleteInsulin(id);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Analytics;
 using Nocturne.Core.Models.Analytics;
@@ -46,7 +47,7 @@ public class SensorIntegrityController : ControllerBase
     /// <returns>The sensor-integrity report for the window.</returns>
     [HttpGet]
     [RemoteQuery]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     public async Task<ActionResult<SensorIntegrityReport>> Analyze(
         [FromQuery] DateTime startDate,
         [FromQuery] DateTime endDate,
@@ -59,14 +60,13 @@ public class SensorIntegrityController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         if (startDate == default || endDate == default)
-        {
-            return BadRequest(new { error = "startDate and endDate must be later than 0001-01-01." });
-        }
+            return Problem(detail: "startDate and endDate must be later than 0001-01-01.", statusCode: 400, title: "Bad Request");
 
         if (endDate <= startDate)
-        {
-            return BadRequest(new { error = "endDate must be after startDate." });
-        }
+            return Problem(detail: "endDate must be after startDate.", statusCode: 400, title: "Bad Request");
+
+        if (this.RejectDateSpan(startDate, endDate) is { } overlong)
+            return overlong;
 
         var hypoOptions = new HypoEventOptions
         {

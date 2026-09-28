@@ -2,15 +2,21 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import MealSuggestionRow from "./MealSuggestionRow.svelte";
+import type { SuggestedMealMatch } from "$lib/api";
 
-function make_suggestion(overrides: Record<string, any> = {}) {
+// The API serialises absent names and scores as null, which the generated type omits.
+type SuggestionOverrides = {
+	[K in keyof SuggestedMealMatch]?: SuggestedMealMatch[K] | null;
+};
+
+function make_suggestion(overrides: SuggestionOverrides = {}) {
 	return {
 		foodName: "Apple",
 		mealName: null,
 		carbs: 25,
 		matchScore: 0.85,
 		...overrides,
-	} as any;
+	} as SuggestedMealMatch;
 }
 
 describe("MealSuggestionRow", () => {

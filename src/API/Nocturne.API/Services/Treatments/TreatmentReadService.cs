@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Treatments;
@@ -167,16 +168,18 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Treatment>> CreateAsync(
+    public async Task<BulkWrite<Treatment>> CreateAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var results = new List<Treatment>();
+        var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
         {
             try
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+                skippedDeleted += result.SkippedDeleted;
                 var tempBasal = result.CreatedRecords
                     .OfType<Core.Models.V4.TempBasal>()
                     .FirstOrDefault();
@@ -200,7 +203,8 @@ public class TreatmentReadService : ITreatmentStore
             }
         }
 
-        return results;
+        _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted);
     }
 
     /// <inheritdoc />
@@ -208,6 +212,8 @@ public class TreatmentReadService : ITreatmentStore
     {
         var existing = await GetByIdAsync(id, ct);
         if (existing == null) return null;
+
+        TreatmentClientId.KeepStored(treatment, existing);
 
         // Re-key to the stored LegacyId so the decomposer upserts the existing record in place
         // rather than creating a duplicate when the client sends a derived ObjectId.

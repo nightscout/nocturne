@@ -5,15 +5,15 @@
   import * as Select from "$lib/components/ui/select";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import { Plus, X } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
   import {
     COLOR_OPTIONS,
     CUSTOM_COLOR_OPTION,
     DEFAULT_ELEMENT_COLOR,
-    ELEMENT_INFO,
+    elementInfo,
     FONT_OPTIONS,
     FONT_WEIGHT_OPTIONS,
-    type ClockElementType,
     type InternalElement,
   } from "$lib/clock-builder";
   import type { ClockElement } from "$lib/api";
@@ -28,6 +28,8 @@
 
   let { element, onUpdateStyle, onUpdateElement, onUpdateCustomStyle, onRemoveCustomStyle }: Props =
     $props();
+
+  const info = $derived(elementInfo(element.type));
 
   const colorOption = $derived(
     COLOR_OPTIONS.find((o) => o.value === element.style?.color)?.value ??
@@ -46,18 +48,14 @@
 
   <div class="space-y-2">
     <Label>
-      Size: {element.size ||
-        ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-        20}
+      Size: {element.size || info?.defaultSize || 20}
     </Label>
     <Slider
       type="single"
-      value={element.size ||
-        ELEMENT_INFO[element.type as ClockElementType]?.defaultSize ||
-        20}
+      value={element.size || info?.defaultSize || 20}
       onValueChange={(v: number) => onUpdateElement({ size: v })}
-      min={ELEMENT_INFO[element.type as ClockElementType]?.minSize ?? 10}
-      max={ELEMENT_INFO[element.type as ClockElementType]?.maxSize ?? 100}
+      min={info?.minSize ?? 10}
+      max={info?.maxSize ?? 100}
       step={1}
     />
   </div>
@@ -74,7 +72,7 @@
           ?.label ?? "System"}
       </Select.Trigger>
       <Select.Content>
-        {#each FONT_OPTIONS as opt}
+        {#each FONT_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
@@ -94,7 +92,7 @@
         )?.label ?? "Medium"}
       </Select.Trigger>
       <Select.Content>
-        {#each FONT_WEIGHT_OPTIONS as opt}
+        {#each FONT_WEIGHT_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
@@ -115,13 +113,14 @@
         {COLOR_OPTIONS.find((o) => o.value === colorOption)?.label ?? "Custom"}
       </Select.Trigger>
       <Select.Content>
-        {#each COLOR_OPTIONS as opt}
+        {#each COLOR_OPTIONS as opt (opt.value)}
           <Select.Item value={opt.value}>{opt.label}</Select.Item>
         {/each}
       </Select.Content>
     </Select.Root>
     {#if colorOption === CUSTOM_COLOR_OPTION}
       <div class="flex min-w-0 gap-2">
+        <!-- eslint-disable-next-line no-restricted-syntax -- native colour picker -->
         <input
           type="color"
           value={customColor}
@@ -168,7 +167,7 @@
     </p>
 
     {#if element.style?.custom}
-      {#each Object.entries(element.style.custom) as [key, value]}
+      {#each Object.entries(element.style.custom) as [key, value] (key)}
         <div class="flex min-w-0 items-center gap-2">
           <Input
             type="text"
@@ -222,11 +221,16 @@
         onclick={() => {
           const propInput = document.getElementById(
             `new-css-prop-${element._id}`
-          ) as HTMLInputElement;
+          );
           const valInput = document.getElementById(
             `new-css-val-${element._id}`
-          ) as HTMLInputElement;
-          if (propInput?.value && valInput?.value) {
+          );
+          if (
+            propInput instanceof HTMLInputElement &&
+            valInput instanceof HTMLInputElement &&
+            propInput.value &&
+            valInput.value
+          ) {
             onUpdateCustomStyle(propInput.value, valInput.value);
             propInput.value = "";
             valInput.value = "";

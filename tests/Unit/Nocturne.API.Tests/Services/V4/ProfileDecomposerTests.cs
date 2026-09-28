@@ -100,6 +100,7 @@ public class ProfileDecomposerTests
         repos.Written.Select(r => r.LegacyId).Should().OnlyContain(id => id == "profile1:Default");
         repos.Written.Should().HaveCount(5);
         result.CreatedRecords.Should().HaveCount(5);
+        result.SkippedDeleted.Should().Be(1, "the refused store is reported, not dropped silently");
     }
 
     /// <summary>
@@ -205,16 +206,20 @@ public class ProfileDecomposerTests
                     Calls.Add(records.Count);
                     PreserveFlags[typeof(TRecord)] = preserve;
                     var outcomes = new Dictionary<string, LegacyUpsert<TRecord>>(StringComparer.Ordinal);
+                    var skippedDeleted = 0;
                     foreach (var record in records)
                     {
                         if (refused.Contains(record.LegacyId!))
+                        {
+                            skippedDeleted++;
                             continue;
+                        }
                         if (storedCorrelationId is { } stored)
                             record.CorrelationId = stored;
                         Written.Add(record);
                         outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, Created: true);
                     }
-                    return outcomes;
+                    return new LegacyUpsertBatch<TRecord>(outcomes, skippedDeleted);
                 });
             return repo.Object;
         }

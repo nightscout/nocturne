@@ -2,10 +2,13 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount } from "svelte";
   import { Card, CardContent } from "@nocturne/ui/ui/card";
   import { Button } from "@nocturne/ui/ui/button";
-  import { Loader2, Monitor, Settings } from "@lucide/svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Settings from "@lucide/svelte/icons/settings";
   import GlucoseReadout from "$lib/GlucoseReadout.svelte";
   import type { Reading } from "$lib/glucose-types";
   import { preferences } from "$lib/preferences.svelte";
@@ -52,7 +55,7 @@
       variant="ghost"
       size="icon"
       class="ml-auto"
-      onclick={() => goto("/settings")}
+      onclick={() => goto(resolve("/settings"))}
       aria-label="Settings"
     >
       <Settings class="h-4 w-4" />
@@ -75,7 +78,7 @@
         <p class="text-muted-foreground text-sm">
           Connect a data source to start syncing your glucose.
         </p>
-        <Button size="sm" onclick={() => goto("/settings")}>Open Settings</Button>
+        <Button size="sm" onclick={() => goto(resolve("/settings"))}>Open Settings</Button>
       </CardContent>
     </Card>
   {/if}

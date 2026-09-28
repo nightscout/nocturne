@@ -34,9 +34,10 @@ public class GoogleHealthTests
     public void Staging_migration_is_discovered_by_the_runtime_context()
     {
         using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql("Host=localhost;Database=migration_discovery").Options);
+            .UseNpgsql("Host=localhost;Database=migration_discovery", options => options.UseNocturneMigrations()).Options);
 
         Assert.Contains("20260913000000_AddGoogleHealthReconciliationStaging", db.Database.GetMigrations());
+        Assert.Contains("20260913120000_SecureGoogleHealthReconciliationStaging", db.Database.GetMigrations());
     }
 
     [Fact]

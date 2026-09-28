@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Alerts;
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
@@ -35,8 +36,9 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
         IPatientDeviceStamper patientDeviceStamper,
         ICanonicalAlertEvaluator alertEvaluator,
         IAuditContext auditContext,
+        PublishSkipTally skips,
         ILogger<GlucosePublisher> logger)
-        : base(auditContext, logger)
+        : base(auditContext, skips, logger)
     {
         _entryService = entryService ?? throw new ArgumentNullException(nameof(entryService));
         _sensorGlucoseRepository = sensorGlucoseRepository ?? throw new ArgumentNullException(nameof(sensorGlucoseRepository));
@@ -60,7 +62,8 @@ internal sealed class GlucosePublisher : ConnectorPublisherBase, IGlucosePublish
             var entryList = entries.ToList();
             if (entryList.Count == 0) return true;
 
-            await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
+            var written = await _entryService.CreateEntriesAsync(entryList, origin, cancellationToken);
+            RecordSkippedDeleted(written.SkippedDeleted);
             await _alertEvaluator.EvaluateForEntriesAsync(entryList, cancellationToken);
             return true;
         }

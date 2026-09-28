@@ -8,6 +8,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Services;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Services;
 
 namespace Nocturne.API.Services.Analytics;
@@ -28,6 +29,7 @@ public class DataOverviewService : IDataOverviewService
     private readonly IStatisticsService _statisticsService;
     private readonly ICacheService _cacheService;
     private readonly ITenantAccessor _tenantAccessor;
+    private readonly ICategoryReadContext _categoryReadContext;
     private readonly ILogger<DataOverviewService> _logger;
 
     private string TenantCacheId =>
@@ -44,6 +46,9 @@ public class DataOverviewService : IDataOverviewService
     /// <param name="statisticsService">Statistics service for per-day metric aggregation.</param>
     /// <param name="cacheService">Cross-request cache for the eHbA1c timeline, keyed per tenant and year.</param>
     /// <param name="tenantAccessor">Resolves the current tenant for cache-key scoping.</param>
+    /// <param name="categoryReadContext">Says whether this request is history-clamped, in which
+    /// case the timeline cache is bypassed for the reason given on
+    /// <see cref="Nocturne.API.Services.Entries.EntryCacheAdapter"/>.</param>
     /// <param name="logger">The logger instance.</param>
     public DataOverviewService(
         ITenantDbContextFactory factory,
@@ -51,6 +56,7 @@ public class DataOverviewService : IDataOverviewService
         IStatisticsService statisticsService,
         ICacheService cacheService,
         ITenantAccessor tenantAccessor,
+        ICategoryReadContext categoryReadContext,
         ILogger<DataOverviewService> logger
     )
     {
@@ -59,6 +65,7 @@ public class DataOverviewService : IDataOverviewService
         _statisticsService = statisticsService;
         _cacheService = cacheService;
         _tenantAccessor = tenantAccessor;
+        _categoryReadContext = categoryReadContext;
         _logger = logger;
     }
 
@@ -161,17 +168,7 @@ public class DataOverviewService : IDataOverviewService
         // Run all queries sequentially — DbContext is not thread-safe
         foreach (var table in DataOverviewTables.All)
         {
-            var nonPrimaryIds = table.DedupRecordType is { } recordType
-                ? NonPrimaryRecordIds(context, recordType)
-                : null;
-
-            var timestamps = table.TimestampsInRange(
-                context,
-                startUtc,
-                endUtc,
-                dataSources,
-                nonPrimaryIds
-            );
+            var timestamps = table.TimestampsInRange(context, startUtc, endUtc, dataSources);
             if (timestamps is null)
                 continue;
 
@@ -263,26 +260,22 @@ public class DataOverviewService : IDataOverviewService
 
         var (startUtc, endUtc) = LocalYearBoundsUtc(year, tz);
 
-        // Hoist LinkedRecord subqueries — IQueryable construction is free
-        var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
-        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
-        var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
-        var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
-
         // --- Collect glucose readings by month (CGM + meter) ---
-        // Each source is queried independently so one failure doesn't prevent the others.
         var allGlucoseByMonth = new Dictionary<int, List<double>>();
 
-        // SensorGlucose (CGM)
-        await AccumulateMonthlyReadingsAsync(
+        // A failed SensorGlucose query withholds every period, for the reason given on
+        // <see cref="GetEHbA1cTimelineAsync"/>.
+        var sensorRead = await AccumulateMonthlyReadingsAsync(
             context.SensorGlucose
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npSensorGlucoseIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl }),
             r => r.Timestamp, r => r.Mgdl, allGlucoseByMonth, tz,
             "Failed to collect SensorGlucose for GRI year {Year}", year, cancellationToken);
+        if (!sensorRead)
+            return new GriTimelineResponse { Year = year };
 
         // MeterGlucose (finger sticks)
         await AccumulateMonthlyReadingsAsync(
@@ -302,7 +295,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, manualBolusByMonth, tz,
             "Failed to collect manual bolus totals for GRI year {Year}", year, cancellationToken);
@@ -314,7 +307,7 @@ public class DataOverviewService : IDataOverviewService
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Insulin > 0)
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin }),
             r => r.Timestamp, r => r.Insulin, algorithmBolusByMonth, tz,
             "Failed to collect algorithm bolus totals for GRI year {Year}", year, cancellationToken);
@@ -325,7 +318,7 @@ public class DataOverviewService : IDataOverviewService
             context.TempBasals
                 .Where(e => e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryTempBasalIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.TempBasal)
                 .Select(e => new { e.StartTimestamp, e.Rate, e.EndTimestamp }),
             r => r.StartTimestamp,
             r => r.Rate * (r.EndTimestamp.HasValue
@@ -340,7 +333,7 @@ public class DataOverviewService : IDataOverviewService
             context.CarbIntakes
                 .Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0)
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryCarbIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.CarbIntake)
                 .Select(e => new { e.Timestamp, e.Carbs }),
             r => r.Timestamp, r => r.Carbs, carbsByMonth, tz,
             "Failed to collect carb totals for GRI year {Year}", year, cancellationToken);
@@ -381,6 +374,12 @@ public class DataOverviewService : IDataOverviewService
     private static readonly double EHbA1cDailyDecay = Math.Pow((Math.Sqrt(5) - 1) / 2, 1.0 / 30.0);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A failed SensorGlucose query fails the request rather than falling back to MeterGlucose.
+    /// Fingersticks are taken at chosen moments, so their mean is not the CGM mean eHbA1c is
+    /// defined over, yet a few a day clear <see cref="EHbA1cMinimumReadings"/>. A tenant whose
+    /// SensorGlucose query succeeds empty is fingerstick-only and keeps its estimate.
+    /// </remarks>
     public async Task<EHbA1cTimelineResponse> GetEHbA1cTimelineAsync(
         int year,
         string[]? dataSources = null,
@@ -400,7 +399,10 @@ public class DataOverviewService : IDataOverviewService
 
         // Computed once per tenant/year/source combination and reused until it expires below —
         // only a cache miss (new day, first view, or expiry) triggers recomputation.
-        var cached = await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken);
+        var useCache = !_categoryReadContext.IsHistoryClamped;
+        var cached = useCache
+            ? await _cacheService.GetAsync<EHbA1cTimelineResponse>(cacheKey, cancellationToken)
+            : null;
         if (cached != null)
             return cached;
 
@@ -416,26 +418,18 @@ public class DataOverviewService : IDataOverviewService
         var lookbackStartUtc = TimeZoneInfo.ConvertTimeToUtc(localRangeStart, tz);
         var yearEndUtc = TimeZoneInfo.ConvertTimeToUtc(localYearEnd, tz);
 
-        var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
         var allReadings = new List<(DateTime Timestamp, double Mgdl)>();
 
-        // Each source is queried independently so one failure doesn't prevent the other.
-        try
-        {
-            var sensorReadings = await context
-                .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
-                .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
-                .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npSensorGlucoseIds.Contains(e.Id))
-                .Select(e => new { e.Timestamp, e.Mgdl })
-                .ToListAsync(cancellationToken);
-            allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to collect SensorGlucose for eHbA1c timeline {Year}", year);
-        }
+        var sensorReadings = await context
+            .SensorGlucose.Where(e => e.Timestamp >= lookbackStartUtc && e.Timestamp < yearEndUtc)
+            .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
+            .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
+            .ExcludeNonPrimary(context, RecordType.SensorGlucose)
+            .Select(e => new { e.Timestamp, e.Mgdl })
+            .ToListAsync(cancellationToken);
+        allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
 
+        var allSourcesRead = true;
         try
         {
             var meterReadings = await context
@@ -446,8 +440,9 @@ public class DataOverviewService : IDataOverviewService
                 .ToListAsync(cancellationToken);
             allReadings.AddRange(meterReadings.Select(r => (r.Timestamp, r.Mgdl)));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
+            allSourcesRead = false;
             _logger.LogWarning(ex, "Failed to collect MeterGlucose for eHbA1c timeline {Year}", year);
         }
 
@@ -473,11 +468,16 @@ public class DataOverviewService : IDataOverviewService
         var points = BuildEHbA1cPoints(dailySum, dailyCount, localRangeStart, EHbA1cWindowDays, year, localNow.Date);
         var response = new EHbA1cTimelineResponse { Year = year, Points = points };
 
+        // Caching a partial timeline would blank the missing source for the whole expiry below.
+        if (!allSourcesRead)
+            return response;
+
         var isCurrentYear = year == localNow.Year;
         // Completed years don't change (barring rare backfills), so cache them for a long time; the
         // current year is still accumulating days, so refresh it more often.
         var expiry = isCurrentYear ? DateTime.UtcNow.AddHours(1) : DateTime.UtcNow.AddDays(14);
-        await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
+        if (useCache)
+            await _cacheService.SetAsync(cacheKey, response, expiry, cancellationToken);
 
         return response;
     }
@@ -579,6 +579,13 @@ public class DataOverviewService : IDataOverviewService
     private static string SanitizeForLog(string value) => value.Replace("\r", "").Replace("\n", "");
 
     /// <summary>
+    /// True for anything but the caller's own cancellation, which must propagate; a cancellation
+    /// raised while the request is still live (e.g. a command timeout) is a failed source.
+    /// </summary>
+    private static bool IsSourceFailure(Exception ex, CancellationToken cancellationToken) =>
+        ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested;
+
+    /// <summary>
     /// The half-open UTC interval covering <paramref name="year"/> in <paramref name="tz"/>, so a
     /// year runs from local midnight to local midnight rather than from midnight UTC.
     /// </summary>
@@ -605,9 +612,9 @@ public class DataOverviewService : IDataOverviewService
 
     /// <summary>
     /// Materializes a timestamped/valued query and appends each reading to its month's bucket.
-    /// A query failure is logged and leaves the accumulator untouched (per-source isolation).
+    /// A query failure is logged, leaves the accumulator untouched and returns false.
     /// </summary>
-    private async Task AccumulateMonthlyReadingsAsync<T>(
+    private async Task<bool> AccumulateMonthlyReadingsAsync<T>(
         IQueryable<T> query,
         Func<T, DateTime> timestampSelector,
         Func<T, double> valueSelector,
@@ -630,10 +637,12 @@ public class DataOverviewService : IDataOverviewService
                 }
                 list.Add(valueSelector(row));
             }
+            return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, failureMessage, year);
+            return false;
         }
     }
 
@@ -664,7 +673,7 @@ public class DataOverviewService : IDataOverviewService
                 totalsByMonth[month] = existing + value;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, failureMessage, year);
         }
@@ -774,20 +783,6 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// The ids of records deduplication resolved to a non-primary member of a canonical group.
-    /// </summary>
-    private static IQueryable<Guid> NonPrimaryRecordIds(
-        NocturneDbContext context,
-        RecordType recordType
-    )
-    {
-        var key = RecordTypeKeys.Key(recordType);
-        return context
-            .LinkedRecords.Where(lr => lr.RecordType == key && !lr.IsPrimary)
-            .Select(lr => lr.RecordId);
-    }
-
-    /// <summary>
     /// Gets min and max from an IQueryable of nullable DateTimes (V4 entities), converting to mills.
     /// </summary>
     private async Task<(long? Min, long? Max)> GetMinMaxTimestamp(
@@ -812,7 +807,7 @@ public class DataOverviewService : IDataOverviewService
         {
             return (null, null);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to get min/max timestamp from table");
             return (null, null);
@@ -831,7 +826,7 @@ public class DataOverviewService : IDataOverviewService
         {
             return await dataSourceQuery.Distinct().ToListAsync(cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to get distinct data sources from table");
             return [];
@@ -839,8 +834,9 @@ public class DataOverviewService : IDataOverviewService
     }
 
     /// <summary>
-    /// Collects glucose averages from SensorGlucose and MeterGlucose.
-    /// Each source is queried independently so one failure doesn't prevent the others.
+    /// Collects glucose averages from SensorGlucose and MeterGlucose. A failed SensorGlucose query
+    /// withholds every average rather than falling back to MeterGlucose, for the reason given on
+    /// <see cref="GetEHbA1cTimelineAsync"/>.
     /// </summary>
     private async Task CollectGlucoseAverages(
         NocturneDbContext context,
@@ -859,21 +855,20 @@ public class DataOverviewService : IDataOverviewService
         // SensorGlucose (CGM) - V4 entity uses Timestamp
         try
         {
-            var npSensorGlucoseIds = NonPrimaryRecordIds(context, RecordType.SensorGlucose);
-
             var sensorReadings = await context
                 .SensorGlucose.Where(e => e.Timestamp >= startUtc && e.Timestamp < endUtc)
                 .Where(e => e.Mgdl > 0 && !double.IsNaN(e.Mgdl))
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !npSensorGlucoseIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.SensorGlucose)
                 .Select(e => new { e.Timestamp, e.Mgdl })
                 .ToListAsync(cancellationToken);
 
             allReadings.AddRange(sensorReadings.Select(r => (r.Timestamp, r.Mgdl)));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect glucose averages from SensorGlucose");
+            return;
         }
 
         // MeterGlucose (finger sticks) - V4 entity uses Timestamp
@@ -888,7 +883,7 @@ public class DataOverviewService : IDataOverviewService
 
             allReadings.AddRange(meterReadings.Select(r => (r.Timestamp, r.Mgdl)));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect glucose averages from MeterGlucose");
         }
@@ -949,8 +944,6 @@ public class DataOverviewService : IDataOverviewService
         CancellationToken cancellationToken
     )
     {
-        var nonPrimaryBolusIds = NonPrimaryRecordIds(context, RecordType.Bolus);
-
         // Manual bolus records — only user-initiated boluses count as bolus insulin
         try
         {
@@ -960,7 +953,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind != "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ToListAsync(cancellationToken);
 
@@ -983,7 +976,7 @@ public class DataOverviewService : IDataOverviewService
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect bolus insulin totals");
         }
@@ -997,7 +990,7 @@ public class DataOverviewService : IDataOverviewService
                 )
                 .Where(e => e.BolusKind == "Algorithm")
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryBolusIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.Bolus)
                 .Select(e => new { e.Timestamp, e.Insulin })
                 .ToListAsync(cancellationToken);
 
@@ -1022,7 +1015,7 @@ public class DataOverviewService : IDataOverviewService
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect basal insulin from algorithm boluses");
         }
@@ -1030,14 +1023,12 @@ public class DataOverviewService : IDataOverviewService
         // TempBasal records (pump basal delivery with rate x duration)
         try
         {
-            var nonPrimaryTempBasalIds = NonPrimaryRecordIds(context, RecordType.TempBasal);
-
             var tempBasalRecords = await context
                 .TempBasals.Where(e =>
                     e.StartTimestamp >= startUtc && e.StartTimestamp < endUtc && e.Rate > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryTempBasalIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.TempBasal)
                 .Select(e => new
                 {
                     e.StartTimestamp,
@@ -1084,7 +1075,7 @@ public class DataOverviewService : IDataOverviewService
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect basal insulin from TempBasals");
         }
@@ -1106,14 +1097,12 @@ public class DataOverviewService : IDataOverviewService
     {
         try
         {
-            var nonPrimaryCarbIds = NonPrimaryRecordIds(context, RecordType.CarbIntake);
-
             var carbRecords = await context
                 .CarbIntakes.Where(e =>
                     e.Timestamp >= startUtc && e.Timestamp < endUtc && e.Carbs > 0
                 )
                 .Where(e => !hasFilter || dataSources!.Contains(e.DataSource!))
-                .Where(e => !nonPrimaryCarbIds.Contains(e.Id))
+                .ExcludeNonPrimary(context, RecordType.CarbIntake)
                 .Select(e => new { e.Timestamp, e.Carbs })
                 .ToListAsync(cancellationToken);
 
@@ -1135,7 +1124,7 @@ public class DataOverviewService : IDataOverviewService
                 day.TotalCarbs = Math.Round(group.TotalCarbs, 1);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect carb totals");
         }
@@ -1182,7 +1171,7 @@ public class DataOverviewService : IDataOverviewService
                 day.Counts[dataType] = existing + group.Count;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (IsSourceFailure(ex, cancellationToken))
         {
             _logger.LogWarning(ex, "Failed to collect counts for {DataType}", dataType);
         }

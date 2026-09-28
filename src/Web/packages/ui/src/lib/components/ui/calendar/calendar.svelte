@@ -24,12 +24,8 @@
   }: WithoutChildrenOrChild<CalendarPrimitive.RootProps> = $props();
 </script>
 
-<!--
-Discriminated Unions + Destructing (required for bindable) do not
-get along, so we shut typescript up by casting `value` to `never`.
--->
-<CalendarPrimitive.Root
-  bind:value={value as never}
+<!-- eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bits-ui types value as a union keyed by `type`, which destructuring for $bindable splits apart -->
+<CalendarPrimitive.Root bind:value={value as never}
   bind:ref
   bind:placeholder
   {weekdayFormat}

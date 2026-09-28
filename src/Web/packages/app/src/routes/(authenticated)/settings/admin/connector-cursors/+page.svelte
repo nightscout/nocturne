@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     Card,
@@ -14,15 +16,13 @@
   import * as Select from "$lib/components/ui/select";
   import * as Alert from "$lib/components/ui/alert";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import {
-    RefreshCw,
-    Loader2,
-    AlertTriangle,
-    CheckCircle2,
-    XCircle,
-    Plug,
-    Building2,
-  } from "lucide-svelte";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import XCircle from "@lucide/svelte/icons/circle-x";
+  import Plug from "@lucide/svelte/icons/plug";
+  import Building2 from "@lucide/svelte/icons/building-2";
   import * as tenantRemote from "$api/generated/tenants.generated.remote";
   import {
     getTenantConnectors,
@@ -85,7 +85,7 @@
       tenants = (await tenantRemote.getAll().run()) ?? [];
     } catch (err) {
       console.error("Failed to load tenants:", err);
-      tenantsError = "Failed to load tenants.";
+      tenantsError = remoteErrorMessage(err, "Failed to load tenants.");
     } finally {
       tenantsLoading = false;
     }
@@ -112,7 +112,10 @@
       connectors = await getTenantConnectors(value).run();
     } catch (err) {
       console.error("Failed to load connectors:", err);
-      connectorsError = "Failed to load this tenant's connectors.";
+      connectorsError = remoteErrorMessage(
+        err,
+        "Failed to load this tenant's connectors."
+      );
     } finally {
       connectorsLoading = false;
     }
@@ -145,8 +148,10 @@
         return;
       }
     } catch (err) {
+      // Polling carries on through a failed tick. The warning shows from the
+      // first failure until another tenant is chosen or a new reset starts, even
+      // if later ticks succeed.
       console.error("Failed to poll reset job:", err);
-      // Keep polling through transient errors; surface persistent ones to the operator.
       resetError = "Lost contact with the reset job. Check the server logs.";
     }
     pollTimer = setTimeout(pollJob, 1500);
@@ -174,7 +179,10 @@
       await pollJob();
     } catch (err) {
       console.error("Cursor reset failed:", err);
-      resetError = "Failed to start the cursor reset. Check the server logs for details.";
+      resetError = describeSubmitError(
+        err,
+        "Failed to start the cursor reset. Check the server logs for details."
+      );
     } finally {
       resetting = false;
     }
@@ -189,7 +197,7 @@
       await pollJob();
     } catch (err) {
       console.error("Failed to cancel reset job:", err);
-      resetError = "Failed to cancel the reset job.";
+      resetError = describeSubmitError(err, "Failed to cancel the reset job.");
     } finally {
       cancelling = false;
     }
@@ -346,7 +354,7 @@
               {#if !jobDone}
                 <Loader2 class="h-4 w-4 animate-spin text-primary" />
               {:else if jobStatus.state === ConnectorResetJobState.Completed}
-                <CheckCircle2 class="h-4 w-4 text-green-600" />
+                <CheckCircle2 class="h-4 w-4 text-success" />
               {:else}
                 <AlertTriangle class="h-4 w-4 text-destructive" />
               {/if}
@@ -376,7 +384,7 @@
                 </div>
                 {#if progress}
                   {#if progress.state === ConnectorResetConnectorState.Succeeded}
-                    <span class="flex items-center gap-1 text-sm text-green-600">
+                    <span class="flex items-center gap-1 text-sm text-success">
                       <CheckCircle2 class="h-4 w-4" /> Reset
                     </span>
                   {:else if progress.state === ConnectorResetConnectorState.Failed}

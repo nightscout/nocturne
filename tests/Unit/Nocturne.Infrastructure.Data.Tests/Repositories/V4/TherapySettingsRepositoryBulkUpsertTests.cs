@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Logging;
+using Moq;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -26,16 +27,18 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
 
     private readonly NocturneDbContext _context;
     private readonly RecordingBroadcaster _broadcaster = new();
+    private readonly Mock<ILogger<TherapySettingsRepository>> _logger = new();
     private readonly TherapySettingsRepository _repository;
 
     public TherapySettingsRepositoryBulkUpsertTests()
     {
         _context = TestDbContextFactory.CreateInMemoryContext($"therapy_settings_bulk_upsert_{Guid.NewGuid()}");
         _context.TenantId = Tenant;
+        _logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         _repository = new TherapySettingsRepository(
             new TestTenantDbContextFactory(_context),
             new SystemAuditContext(),
-            NullLogger<TherapySettingsRepository>.Instance,
+            _logger.Object,
             _broadcaster);
     }
 
@@ -60,8 +63,8 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default"), Settings("p1:Weekend")], WriteOrigin.Live);
 
-        outcomes.Keys.Should().BeEquivalentTo(["p1:Default", "p1:Weekend"]);
-        outcomes.Values.Should().AllSatisfy(o => o.Created.Should().BeTrue());
+        outcomes.Outcomes.Keys.Should().BeEquivalentTo(["p1:Default", "p1:Weekend"]);
+        outcomes.Outcomes.Values.Should().AllSatisfy(o => o.Created.Should().BeTrue());
         _context.TherapySettings.Count().Should().Be(2);
         _broadcaster.Created.Should().HaveCount(2);
         _broadcaster.Updated.Should().BeEmpty();
@@ -71,13 +74,13 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
     public async Task BulkUpsert_UpdatesAStoredRowInPlace_AndWritesItsIdBack()
     {
         var first = await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default", dia: 3.0)], WriteOrigin.Live);
-        var storedId = first["p1:Default"].Record.Id;
+        var storedId = first.Outcomes["p1:Default"].Record.Id;
         var changed = Settings("p1:Default", dia: 4.5);
 
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync([changed], WriteOrigin.Live);
 
-        outcomes["p1:Default"].Created.Should().BeFalse();
-        outcomes["p1:Default"].Record.Id.Should().Be(storedId);
+        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
+        outcomes.Outcomes["p1:Default"].Record.Id.Should().Be(storedId);
         changed.Id.Should().Be(storedId, "the update path hands the caller the stored identity");
         _context.TherapySettings.Count().Should().Be(1);
         _context.TherapySettings.Single().Dia.Should().Be(4.5);
@@ -96,7 +99,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
 
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default")], WriteOrigin.Live);
 
-        outcomes["p1:Default"].Created.Should().BeFalse();
+        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
         _broadcaster.Created.Should().BeEmpty();
         _broadcaster.Updated.Should().BeEmpty();
     }
@@ -109,8 +112,8 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", dia: 5.0), Settings("p1:Weekend")], WriteOrigin.Live);
 
-        outcomes["p1:Default"].Created.Should().BeFalse();
-        outcomes["p1:Weekend"].Created.Should().BeTrue();
+        outcomes.Outcomes["p1:Default"].Created.Should().BeFalse();
+        outcomes.Outcomes["p1:Weekend"].Created.Should().BeTrue();
         _context.TherapySettings.Count().Should().Be(2);
         _context.TherapySettings.Single(t => t.LegacyId == "p1:Default").Dia.Should().Be(5.0);
     }
@@ -124,7 +127,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var preserving = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", correlationId: Guid.CreateVersion7())], WriteOrigin.Live,
             preserveStoredCorrelationId: true);
-        preserving["p1:Default"].Record.CorrelationId.Should().Be(stored);
+        preserving.Outcomes["p1:Default"].Record.CorrelationId.Should().Be(stored);
         StoredCorrelationId("p1:Default").Should().Be(stored);
 
         // A correlation id is bookkeeping the audit gate ignores, so this write changes nothing the
@@ -133,7 +136,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var fresh = Guid.CreateVersion7();
         var overwriting = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", correlationId: fresh)], WriteOrigin.Live);
-        overwriting["p1:Default"].Record.CorrelationId.Should().Be(fresh);
+        overwriting.Outcomes["p1:Default"].Record.CorrelationId.Should().Be(fresh);
         StoredCorrelationId("p1:Default").Should().Be(fresh, "a correlation-id-only change must be persisted");
         _broadcaster.Updated.Should().BeEmpty("a correlation-id-only change is not a material update");
     }
@@ -157,7 +160,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default", correlationId: minted)], WriteOrigin.Live, preserveStoredCorrelationId: true);
 
-        outcomes["p1:Default"].Record.CorrelationId.Should().Be(minted);
+        outcomes.Outcomes["p1:Default"].Record.CorrelationId.Should().Be(minted);
         StoredCorrelationId("p1:Default").Should().Be(minted, "the empty id self-heals on the row, not only in the answer");
     }
 
@@ -170,7 +173,7 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
     public async Task BulkUpsert_DropsARecordWhoseIdentityIsHeldByAUserTombstone()
     {
         var created = await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default")], WriteOrigin.Live);
-        var entity = _context.TherapySettings.Single(t => t.Id == created["p1:Default"].Record.Id);
+        var entity = _context.TherapySettings.Single(t => t.Id == created.Outcomes["p1:Default"].Record.Id);
         entity.DeletedAt = DateTime.UtcNow;
         _context.Entry(entity).Property("DeletedByUser").CurrentValue = true;
         await _context.SaveChangesAsync();
@@ -179,8 +182,36 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
         var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
             [Settings("p1:Default"), Settings("p1:Weekend")], WriteOrigin.Live);
 
-        outcomes.Keys.Should().BeEquivalentTo(["p1:Weekend"]);
+        outcomes.Outcomes.Keys.Should().BeEquivalentTo(["p1:Weekend"]);
+        outcomes.SkippedDeleted.Should().Be(1);
         _context.TherapySettings.IgnoreQueryFilters().Count().Should().Be(2, "the tombstone and the new sibling");
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task BulkUpsert_ReportsNothingSkipped_WhenNoRecordIsHeldByADeletion()
+    {
+        await _repository.BulkUpsertByLegacyIdAsync([Settings("p1:Default")], WriteOrigin.Live);
+
+        var outcomes = await _repository.BulkUpsertByLegacyIdAsync(
+            [Settings("p1:Default"), Settings("p1:Weekend")], WriteOrigin.Live);
+
+        outcomes.SkippedDeleted.Should().Be(0);
+        _logger.Verify(
+            l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
     }
 
     [Fact]
@@ -190,8 +221,8 @@ public class TherapySettingsRepositoryBulkUpsertTests : IDisposable
             [Settings("p1:Default", dia: 1.0), Settings("p1:Default", dia: 2.0), new TherapySettings { ProfileName = "loose" }],
             WriteOrigin.Live);
 
-        outcomes.Should().ContainSingle();
-        outcomes["p1:Default"].Record.Dia.Should().Be(2.0);
+        outcomes.Outcomes.Should().ContainSingle();
+        outcomes.Outcomes["p1:Default"].Record.Dia.Should().Be(2.0);
         _context.TherapySettings.Count().Should().Be(1);
     }
 

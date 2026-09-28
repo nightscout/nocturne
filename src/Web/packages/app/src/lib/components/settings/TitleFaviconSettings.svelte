@@ -10,7 +10,8 @@
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
-  import { Globe, Bell } from "lucide-svelte";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Bell from "@lucide/svelte/icons/bell";
   import { browser } from "$app/environment";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { getDefaultSettings } from "$lib/components/settings/constants";
@@ -127,7 +128,7 @@
             placeholder="e.g., Nocturne"
             value={settings.customPrefix}
             onchange={(e: Event & { currentTarget: HTMLInputElement }) => {
-              settings.customPrefix = (e.target as HTMLInputElement).value;
+              settings.customPrefix = e.currentTarget.value;
             }}
           />
           <p class="text-xs text-muted-foreground">

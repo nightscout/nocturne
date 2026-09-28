@@ -54,4 +54,20 @@ public static class SystemEventMapper
             CreatedAt = entity.CreatedAt,
         };
     }
+
+    /// <summary>
+    /// Update existing entity with data from domain model
+    /// </summary>
+    public static void UpdateEntity(SystemEventEntity entity, SystemEvent systemEvent)
+    {
+        entity.EventType = systemEvent.EventType.ToString();
+        entity.Category = systemEvent.Category.ToString();
+        entity.Code = systemEvent.Code;
+        entity.Description = systemEvent.Description;
+        entity.Mills = systemEvent.Mills;
+        entity.Source = systemEvent.Source;
+        entity.MetadataJson = systemEvent.Metadata != null
+            ? JsonSerializer.Serialize(systemEvent.Metadata)
+            : null;
+    }
 }

@@ -14,6 +14,10 @@ import { fileURLToPath } from "node:url";
  * rule flags those imperative call sites. Mutations use `command()`, which is
  * correctly awaited directly, so only `query()` exports are matched.
  *
+ * A call made synchronously in the callback passed to `$effect`, `$effect.pre` or
+ * `$derived.by`, before any `await` there, is in that reactive context, so `.then()`
+ * on it only consumes the result and is not flagged.
+ *
  * The set of query names is discovered by scanning the generated + hand-written
  * remote modules under `src/lib/api`. Any failure to scan yields an empty set,
  * which silently disables the rule rather than crashing the lint run.
@@ -54,73 +58,115 @@ function loadQueryNames() {
   return names;
 }
 
-const QUERY_NAMES = loadQueryNames();
+const FUNCTION_TYPES = new Set([
+  "FunctionExpression",
+  "ArrowFunctionExpression",
+  "FunctionDeclaration",
+]);
 
-/** @type {import("eslint").Rule.RuleModule} */
-const rule = {
-  meta: {
-    type: "problem",
-    docs: {
-      description:
-        "Remote query() functions called imperatively must use .run() (awaiting them outside a reactive context throws).",
+function nearestFunction(node) {
+  for (let n = node.parent; n; n = n.parent) {
+    if (FUNCTION_TYPES.has(n.type)) return n;
+  }
+  return null;
+}
+
+function isReactiveCallback(fn) {
+  const call = fn?.parent;
+  if (!call || call.type !== "CallExpression" || call.arguments[0] !== fn) return false;
+  const callee = call.callee;
+  if (callee.type === "Identifier") return callee.name === "$effect";
+  return (
+    callee.type === "MemberExpression" &&
+    callee.object.type === "Identifier" &&
+    callee.property.type === "Identifier" &&
+    ((callee.object.name === "$effect" && callee.property.name === "pre") ||
+      (callee.object.name === "$derived" && callee.property.name === "by"))
+  );
+}
+
+/**
+ * @param {Set<string>} queryNames
+ * @returns {import("eslint").Rule.RuleModule}
+ */
+export function createRule(queryNames) {
+  return {
+    meta: {
+      type: "problem",
+      docs: {
+        description:
+          "Remote query() functions called imperatively must use .run() (awaiting them outside a reactive context throws).",
+      },
+      schema: [],
+      messages: {
+        useRun:
+          "Remote query '{{name}}' is called imperatively — use {{name}}(...).run() (or .current / .refresh()). Awaiting it directly throws outside a reactive context; defer .run() out of render via queueMicrotask if needed.",
+      },
     },
-    schema: [],
-    messages: {
-      useRun:
-        "Remote query '{{name}}' is called imperatively — use {{name}}(...).run() (or .current / .refresh()). Awaiting it directly throws outside a reactive context; defer .run() out of render via queueMicrotask if needed.",
-    },
-  },
-  create(context) {
-    // Only flag identifiers imported from a remote module in this file.
-    const remoteQueryImports = new Set();
-    return {
-      ImportDeclaration(node) {
-        const source = String(node.source.value ?? "");
-        if (!source.includes("remote")) return;
-        for (const spec of node.specifiers) {
-          if (spec.type !== "ImportSpecifier") continue;
-          // The exported name is what the scan collected; the local name is what
-          // the call sites use. `import { list as listGrants }` differs in both.
-          const exported =
-            spec.imported.type === "Identifier"
-              ? spec.imported.name
-              : String(spec.imported.value);
-          if (QUERY_NAMES.has(exported)) {
-            remoteQueryImports.add(spec.local.name);
+    create(context) {
+      // Only flag identifiers imported from a remote module in this file.
+      const remoteQueryImports = new Set();
+      // End offsets of the awaits made directly in each function, in source order.
+      const awaitEnds = new Map();
+      return {
+        AwaitExpression(node) {
+          const fn = nearestFunction(node);
+          if (!fn) return;
+          if (!awaitEnds.has(fn)) awaitEnds.set(fn, []);
+          awaitEnds.get(fn).push(node.range[1]);
+        },
+        ImportDeclaration(node) {
+          const source = String(node.source.value ?? "");
+          if (!source.includes("remote")) return;
+          for (const spec of node.specifiers) {
+            if (spec.type !== "ImportSpecifier") continue;
+            // The exported name is what the scan collected; the local name is what
+            // the call sites use. `import { list as listGrants }` differs in both.
+            const exported =
+              spec.imported.type === "Identifier"
+                ? spec.imported.name
+                : String(spec.imported.value);
+            if (queryNames.has(exported)) {
+              remoteQueryImports.add(spec.local.name);
+            }
           }
-        }
-      },
-      CallExpression(node) {
-        if (node.callee.type !== "Identifier") return;
-        const name = node.callee.name;
-        if (!remoteQueryImports.has(name)) return;
+        },
+        CallExpression(node) {
+          if (node.callee.type !== "Identifier") return;
+          const name = node.callee.name;
+          if (!remoteQueryImports.has(name)) return;
 
-        const parent = node.parent;
-        // `getX(...).run()` / `.current` / `.refresh()` — the correct imperative form.
-        if (
-          parent &&
-          parent.type === "MemberExpression" &&
-          parent.object === node &&
-          parent.property.type === "Identifier" &&
-          SAFE_MEMBERS.has(parent.property.name)
-        ) {
-          return;
-        }
+          const parent = node.parent;
+          // `getX(...).run()` / `.current` / `.refresh()` — the correct imperative form.
+          if (
+            parent &&
+            parent.type === "MemberExpression" &&
+            parent.object === node &&
+            parent.property.type === "Identifier" &&
+            SAFE_MEMBERS.has(parent.property.name)
+          ) {
+            return;
+          }
 
-        const isAwaited = parent && parent.type === "AwaitExpression";
-        const isThenChain =
-          parent &&
-          parent.type === "MemberExpression" &&
-          parent.object === node &&
-          parent.property.type === "Identifier" &&
-          (parent.property.name === "then" || parent.property.name === "catch");
+          const isAwaited = parent && parent.type === "AwaitExpression";
+          const isThenChain =
+            parent &&
+            parent.type === "MemberExpression" &&
+            parent.object === node &&
+            parent.property.type === "Identifier" &&
+            (parent.property.name === "then" || parent.property.name === "catch");
 
-        if (isAwaited || isThenChain) {
+          if (!isAwaited && !isThenChain) return;
+
+          const fn = nearestFunction(node);
+          const afterAwait = (awaitEnds.get(fn) ?? []).some((end) => end <= node.range[0]);
+          if (isReactiveCallback(fn) && !afterAwait) return;
+
           context.report({ node, messageId: "useRun", data: { name } });
-        }
-      },
-    };
-  },
-};
+        },
+      };
+    },
+  };
+}
 
-export default rule;
+export default createRule(loadQueryNames());

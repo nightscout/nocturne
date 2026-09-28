@@ -60,6 +60,7 @@ public class MigrationController : ControllerBase
     [RemoteForm]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<MigrationJobInfo>> StartMigration(
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
@@ -84,8 +85,18 @@ public class MigrationController : ControllerBase
             }
         }
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
-        return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        try
+        {
+            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        }
+        catch (MigrationAlreadyRunningException ex)
+        {
+            return Problem(
+                detail: $"A migration is already running for this tenant (job {ex.JobId}).",
+                statusCode: 409,
+                title: "Conflict");
+        }
     }
 
     /// <summary>
@@ -95,6 +106,7 @@ public class MigrationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetHistory"])]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
@@ -122,8 +134,18 @@ public class MigrationController : ControllerBase
             NightscoutApiSecret = apiSecret,
         };
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
-        return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        try
+        {
+            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        }
+        catch (MigrationAlreadyRunningException ex)
+        {
+            return Problem(
+                detail: $"A migration is already running for this tenant (job {ex.JobId}).",
+                statusCode: 409,
+                title: "Conflict");
+        }
     }
 
     /// <inheritdoc cref="IMigrationJobService.GetStatusAsync"/>

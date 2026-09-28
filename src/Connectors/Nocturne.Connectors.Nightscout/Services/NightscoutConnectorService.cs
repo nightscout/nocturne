@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -8,6 +10,7 @@ using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Net;
 
 namespace Nocturne.Connectors.Nightscout.Services;
 
@@ -16,6 +19,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy;
     private readonly IRateLimitingStrategy _rateLimitingStrategy;
+    private readonly TimeProvider _timeProvider;
 
     // Starts as the startup defaults (from IConnectorRegistration); replaced with the
     // per-tenant config when AuthenticateWithConfigAsync runs at the start of a sync.
@@ -32,10 +36,12 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         IConnectorRegistration<TConfig> registration,
-        IConnectorPublisher? publisher = null
+        IConnectorPublisher? publisher = null,
+        TimeProvider? timeProvider = null
     )
         : base(httpClient, serverResolver, logger, publisher)
     {
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _retryDelayStrategy = retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
         _rateLimitingStrategy = rateLimitingStrategy ?? throw new ArgumentNullException(nameof(rateLimitingStrategy));
         _currentConfig = registration?.Defaults ?? throw new ArgumentNullException(nameof(registration));
@@ -55,10 +61,10 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         // Legacy no-config overload; uses whatever config the service was last primed
         // with (startup defaults until AuthenticateWithConfigAsync replaces it).
         // Per-tenant sync uses AuthenticateWithConfigAsync instead.
-        return await AuthenticateWithConfigAsync(_currentConfig);
+        return await AuthenticateWithConfigAsync(_currentConfig, CancellationToken.None);
     }
 
-    private async Task<bool> AuthenticateWithConfigAsync(TConfig config)
+    private async Task<bool> AuthenticateWithConfigAsync(TConfig config, CancellationToken cancellationToken)
     {
         _currentConfig = config;
         _resolvedBaseUrl = ConnectorUrl.ResolveBase(config.Url, "Nightscout");
@@ -68,7 +74,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             _logger.LogError(
                 "[{ConnectorSource}] API secret is not configured",
                 ConnectorSource);
-            TrackFailedRequest("API secret is not configured");
+            TrackFailedAuthentication(NightscoutMessages.ApiSecretMissing);
             return false;
         }
 
@@ -83,20 +89,19 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         {
             var headers = GetAuthHeaders();
             var response = await GetWithHeadersAsync(
-                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers);
+                $"{_resolvedBaseUrl}/api/v1/entries.json?count=1", headers, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync();
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                // Detect Cloudflare/WAF challenge pages that block server-to-server requests
                 if (IsWafChallengePage(response, body))
                 {
                     _logger.LogError(
                         "[{ConnectorSource}] Nightscout instance at {Url} is behind a WAF (e.g. Cloudflare) that is blocking API requests",
                         ConnectorSource,
                         _resolvedBaseUrl);
-                    TrackFailedRequest(
+                    TrackFailedAuthentication(
                         "Your Nightscout instance is behind a firewall (e.g. Cloudflare) that is blocking Nocturne from syncing. " +
                         "Please add a WAF bypass rule for API paths (e.g. /api/*) or allowlist the Nocturne server IP.");
                     return false;
@@ -107,7 +112,8 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ConnectorSource,
                     (int)response.StatusCode,
                     body);
-                TrackFailedRequest($"Nightscout auth check failed: HTTP {(int)response.StatusCode}");
+                TrackFailedAuthentication(NightscoutMessages.ForStatus(
+                    response.StatusCode, "the connection check", NightscoutRead.ConnectorProbe));
                 return false;
             }
 
@@ -117,9 +123,19 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                 ConnectorSource);
             return true;
         }
-        catch (Exception ex)
+        // A request that never got an answer says nothing about the credential, so it must not be
+        // reported as one. DNS, a refused connection, dropped packets and a client timeout all land
+        // here. OutboundRefusedException carries its own wording and names more than "unreachable"
+        // can. A cancellation the caller asked for is the run being withdrawn, not a failure.
+        catch (Exception ex) when (ex is not OperationCanceledException
+                                   || !cancellationToken.IsCancellationRequested)
         {
-            TrackFailedRequest($"Nightscout authentication failed: {ex.Message}");
+            TrackFailedAuthentication(ex switch
+            {
+                OutboundRefusedException => ex.Message,
+                HttpRequestException or OperationCanceledException => NightscoutMessages.Unreachable,
+                _ => NightscoutMessages.CheckFailed,
+            });
             _logger.LogError(ex,
                 "[{ConnectorSource}] Failed to connect to Nightscout instance at {Url}",
                 ConnectorSource,
@@ -143,14 +159,14 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
     protected override Task<bool> EnsureAuthenticatedAsync(
         TConfig config,
-        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config);
+        CancellationToken cancellationToken) => AuthenticateWithConfigAsync(config, cancellationToken);
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
         SyncRequest request,
         TConfig config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
 
@@ -207,11 +223,24 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? ResumeFrom(request.From, await CalculateTreatmentSinceTimestampAsync(config))
                     : request.From;
 
+                var now = _timeProvider.GetUtcNow().UtcDateTime;
+                var recent = openEnded && treatmentFrom is { } crawlFrom
+                    ? await RecentTreatmentsForAsync(crawlFrom, now)
+                    : null;
+
                 var outcome = await CrawlAndPublishAsync(
                     "Treatments", treatmentFrom, request.To,
-                    FetchTreatmentPagesAsync,
+                    (from, to) => FetchTreatmentPagesAsync(from, to, recent),
                     oldestOf: p => OldestCreatedAt(p, t => t.CreatedAt),
                     publishAsync: p => PublishTreatmentDataInBatchesAsync(p, config, cancellationToken));
+
+                if (recent is not null && outcome.Success)
+                {
+                    var reconciled = await ReconcileRecentTreatmentsAsync(recent, treatmentFrom!.Value, cancellationToken);
+                    outcome = new PagedCrawlOutcome(outcome.Count + reconciled.Count, reconciled.Success);
+                    if (reconciled.Success && recent.Full)
+                        await RecordFullReconcileAsync(now);
+                }
 
                 foreach (var treatmentType in treatmentTypes.Where(activeTypes.Contains))
                     RecordPublishOutcome(result, treatmentType, outcome.Count, outcome.Success);
@@ -304,7 +333,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -370,7 +398,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             return primary;
 
         var resume = await CrawlRangeAsync(
-            collection, null, mark.Value.AddMilliseconds(-1),
+            collection, null, mark.Value,
             pages, oldestOf, publishAsync, fullCrawl: true);
 
         return new PagedCrawlOutcome(primary.Count + resume.Count, resume.Success);
@@ -452,30 +480,52 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     }
 
     /// <summary>
+    ///     How many times <see cref="NightscoutConnectorConfiguration.MaxCount"/> a page may widen to,
+    ///     never past <see cref="NightscoutConnectorConfiguration.MaxPageSize"/>.
+    /// </summary>
+    private const int MaxPageWidening = 10;
+
+    /// <summary>
     ///     Streams a paginated Nightscout collection newest-first, one page per iteration,
-    ///     so callers never hold more than a page of a multi-year history in memory. Each
-    ///     full page steps the upper bound just below its oldest record; a short page is
-    ///     the end of the range.
+    ///     so callers never hold more than a page of a multi-year history in memory. Uploaders
+    ///     write several records at one millisecond, so each full page steps the upper bound to
+    ///     its oldest record inclusively, and a record served again is yielded once by id. A
+    ///     full page made entirely of that millisecond is fetched again at twice the count,
+    ///     up to <see cref="MaxPageWidening"/> times the page size. The crawl steps past it with a
+    ///     warning once the page cannot widen further, or when a widened page comes back short
+    ///     while still all at that millisecond, which is a source capping the count. An unwidened
+    ///     short page is the end of the range. Ids are remembered from the pages served since the
+    ///     bound entered its current second, since a bound can admit that whole second. A page
+    ///     whose oldest record is newer than anything its bound admits sorts differently in the
+    ///     source than it parses here, so the crawl warns and stops there rather than step through it.
     /// </summary>
     /// <param name="from">Optional inclusive lower bound.</param>
     /// <param name="to">Optional inclusive upper bound; anchored to now when both bounds are open.</param>
-    /// <param name="buildUrl">Builds the request URL for the given bounds.</param>
+    /// <param name="buildUrl">Builds the request URL for the given bounds and count.</param>
     /// <param name="oldestOf">Extracts the oldest record time from a page, or null when the page has no usable times.</param>
+    /// <param name="admittedThrough">The latest record time the URL built for a bound admits.</param>
+    /// <param name="collection">The Nightscout collection paged, for logging.</param>
     /// <param name="operationName">Operation label for fetch logging.</param>
     /// <param name="keep">Optional page filter; pagination still steps on the unfiltered page.</param>
     private async IAsyncEnumerable<T[]> FetchPagesAsync<T>(
         DateTime? from,
         DateTime? to,
-        Func<DateTime?, DateTime?, string> buildUrl,
+        Func<DateTime?, DateTime?, int, string> buildUrl,
         Func<T[], DateTime?> oldestOf,
+        Func<DateTime, DateTime> admittedThrough,
+        string collection,
         string operationName,
         Func<T[], T[]>? keep = null)
+        where T : ProcessableDocumentBase
     {
         var currentTo = AnchorUnboundedFetch(from, to);
+        var count = _currentConfig.MaxCount;
+        var widest = Math.Min(_currentConfig.MaxCount * MaxPageWidening, NightscoutConnectorConfiguration.MaxPageSize);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         while (true)
         {
-            var page = await FetchDataAsync<T[]>(buildUrl(from, currentTo), operationName);
+            var page = await FetchDataAsync<T[]>(buildUrl(from, currentTo, count), operationName);
 
             // FetchDataAsync reports failure (retries exhausted, non-retryable HTTP, bad JSON) as
             // null rather than throwing; <see cref="BaseConnectorService{TConfig}.FetchFailed"/> is
@@ -486,35 +536,63 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
             if (page.Length == 0)
                 yield break;
 
-            var kept = keep is null ? page : keep(page);
+            var fresh = page.Where(r => r.Id is not { Length: > 0 } id || seen.Add(id)).ToArray();
+            var kept = keep is null ? fresh : keep(fresh);
             if (kept.Length > 0)
                 yield return kept;
 
-            // Fewer than MaxCount means we've fetched everything in this range
-            if (page.Length < _currentConfig.MaxCount)
+            var widened = count > _currentConfig.MaxCount;
+            if (page.Length < count && !widened)
                 yield break;
 
             var oldestDate = oldestOf(page);
             if (!oldestDate.HasValue)
                 yield break;
 
-            // Avoid an infinite loop if the oldest date hasn't moved
-            if (currentTo.HasValue && oldestDate.Value >= currentTo.Value)
+            if (currentTo is { } bound && oldestDate.Value > admittedThrough(bound))
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] The oldest {Collection} record on a page, {Oldest:o}, is newer than the page's bound {Bound:o}; the source orders these records differently, so the crawl stops here",
+                    ConnectorSource, collection, oldestDate.Value, currentTo);
                 yield break;
+            }
 
-            // Next page: records older than the oldest we've seen
-            currentTo = oldestDate.Value.AddMilliseconds(-1);
+            if (currentTo is null || oldestDate.Value < currentTo.Value)
+            {
+                if (currentTo is null || SecondOf(oldestDate.Value) < SecondOf(currentTo.Value))
+                    seen = page.Where(r => r.Id is { Length: > 0 }).Select(r => r.Id!).ToHashSet(StringComparer.Ordinal);
+
+                currentTo = oldestDate.Value;
+                count = _currentConfig.MaxCount;
+            }
+            else if (page.Length == count && count < widest)
+            {
+                count = Math.Min(count * 2, widest);
+                continue;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "[{ConnectorSource}] {Returned} {Collection} records at {At:o} came back for {Count} asked; any more at that millisecond are skipped",
+                    ConnectorSource, page.Length, collection, currentTo.Value, count);
+                currentTo = currentTo.Value.AddMilliseconds(-1);
+                count = _currentConfig.MaxCount;
+            }
 
             if (from.HasValue && currentTo < from)
                 yield break;
 
             _logger.LogDebug(
-                "[{ConnectorSource}] Paginating {Operation}, next page before {Before:yyyy-MM-dd HH:mm:ss}",
+                "[{ConnectorSource}] Paginating {Operation}, next page up to {Before:yyyy-MM-dd HH:mm:ss.fff}",
                 ConnectorSource,
                 operationName,
                 currentTo);
         }
     }
+
+    private static DateTime SecondOf(DateTime at) => at.AddTicks(-(at.Ticks % TimeSpan.TicksPerSecond));
+
+    private static DateTime MillisecondOf(DateTime at) => at.AddTicks(-(at.Ticks % TimeSpan.TicksPerMillisecond));
 
     private static DateTime? OldestEntryTime(Entry[] page)
     {
@@ -577,23 +655,31 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         DateTime? to,
         string collection,
         Func<T, string?> createdAtOf,
-        string operationName)
+        string operationName,
+        Action<T[]>? observe = null)
+        where T : ProcessableDocumentBase
     {
         var anchoredTo = AnchorUnboundedFetch(from, to);
 
         return FetchPagesAsync<T>(
             from - MaxUtcOffset,
             anchoredTo + MaxUtcOffset,
-            (pageFrom, pageTo) => BuildCreatedAtUrl(collection, pageFrom, pageTo),
+            (pageFrom, pageTo, count) => BuildCreatedAtUrl(collection, pageFrom, pageTo, count),
             page => OldestWrittenCreatedAt(page, createdAtOf),
+            CreatedAtBoundAdmitsThrough,
+            collection,
             operationName,
-            page => page.Where(item => WithinWindow(createdAtOf(item), from, anchoredTo)).ToArray());
+            page =>
+            {
+                observe?.Invoke(page);
+                return page.Where(item => WithinWindow(createdAtOf(item), from, anchoredTo)).ToArray();
+            });
     }
 
     private async IAsyncEnumerable<Entry[]> FetchGlucosePagesAsync(DateTime? from, DateTime? to)
     {
         await foreach (var page in FetchPagesAsync<Entry>(
-            from, to, BuildEntriesUrl, OldestEntryTime, "FetchGlucosePages"))
+            from, to, BuildEntriesUrl, OldestEntryTime, bound => bound, "entries", "FetchGlucosePages"))
         {
             foreach (var entry in page)
                 entry.DataSource = ConnectorSource;
@@ -601,17 +687,270 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         }
     }
 
-    private async IAsyncEnumerable<Treatment[]> FetchTreatmentPagesAsync(DateTime? from, DateTime? to)
+    /// <param name="recent">
+    ///     Collects every page the read returns as it arrives, before the crawl's window is applied.
+    ///     A full reconcile reaches back to <see cref="RecentTreatments.ReadFrom"/> when that lies
+    ///     below <paramref name="from"/>; only records from <paramref name="from"/> on are yielded to
+    ///     publish.
+    /// </param>
+    private async IAsyncEnumerable<Treatment[]> FetchTreatmentPagesAsync(
+        DateTime? from, DateTime? to, RecentTreatments? recent = null)
     {
+        var readFrom = recent is { Full: true } && from > recent.ReadFrom ? recent.ReadFrom : from;
+
         await foreach (var page in FetchCreatedAtPagesAsync<Treatment>(
-            from, to, "treatments", t => t.CreatedAt, "FetchTreatments"))
+            readFrom, to, "treatments", t => t.CreatedAt, "FetchTreatments",
+            observe: raw =>
+            {
+                foreach (var treatment in raw)
+                    treatment.DataSource = ConnectorSource;
+                recent?.Collect(raw);
+            }))
         {
-            foreach (var treatment in page)
-                treatment.DataSource = ConnectorSource;
-            yield return page;
+            var kept = readFrom == from ? page : page.Where(t => WithinWindow(t.CreatedAt, from, to)).ToArray();
+            if (kept.Length > 0)
+                yield return kept;
         }
     }
 
+    /// <summary>
+    ///     How far below the crawl's resume point every catch-up reconciles. The crawl's read already
+    ///     reaches <see cref="MaxUtcOffset"/> below it for offset-written created_at values, so this
+    ///     window plus <see cref="ReconcileReadMargin"/> stays inside what it downloads anyway.
+    /// </summary>
+    private static readonly TimeSpan RecentReconcileWindow = TimeSpan.FromHours(12);
+
+    /// <summary>
+    ///     The window a full reconcile covers, reading this far back past the crawl when it must.
+    /// </summary>
+    private static readonly TimeSpan FullReconcileWindow = TimeSpan.FromHours(24);
+
+    /// <summary>How long after a full reconcile the next catch-up runs another.</summary>
+    private static readonly TimeSpan FullReconcileEvery = TimeSpan.FromHours(1);
+
+    /// <summary>
+    ///     The connector-metadata key the last full reconcile's time is kept under. It shares the
+    ///     per-collection timestamp map with the backfill low-water marks, the only durable
+    ///     per-connector timestamp store there is, and no collection is named this.
+    /// </summary>
+    private const string FullReconcileKey = "TreatmentsFullReconcile";
+
+    private Task<DateTime?> LastFullReconcileAsync() => GetBackfillLowWaterMarkAsync(FullReconcileKey);
+
+    private Task RecordFullReconcileAsync(DateTime at) => SetBackfillLowWaterMarkAsync(FullReconcileKey, at);
+
+    /// <summary>
+    ///     How much further back than the window the read reaches, and how far either side of a
+    ///     stored time a lookup searches beyond <see cref="MaxUtcOffset"/>. A row near the window's
+    ///     edge can have a stored time slightly off its created_at.
+    /// </summary>
+    private static readonly TimeSpan ReconcileReadMargin = TimeSpan.FromHours(1);
+
+    /// <summary>The most treatments one sync looks up by id; past this it deletes none.</summary>
+    private const int MaxLookupsPerSync = 10;
+
+    /// <summary>
+    ///     How many missing treatments a sync may delete whatever their share of the window, so a
+    ///     sparse window can lose one. Past this, missing more than a fifth of the window deletes
+    ///     none: that reads as a source answering short, not as edits.
+    /// </summary>
+    private const int FewMissing = 3;
+
+    /// <summary>
+    ///     Treatments a lookup found upstream although the read missed them, keyed by source URL and
+    ///     id. A treatment the read keeps missing is then looked up once rather than every sync.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, DateTime> ConfirmedPresent = new();
+
+    private static readonly TimeSpan ConfirmedPresentFor = TimeSpan.FromHours(6);
+
+    /// <summary>
+    ///     What a catch-up's treatment read returned from <see cref="ReadFrom"/> on, for
+    ///     <see cref="ReconcileRecentTreatmentsAsync"/>.
+    /// </summary>
+    /// <param name="Full">Whether this is the hourly full reconcile, which may extend the read.</param>
+    private sealed record RecentTreatments(DateTime WindowStart, bool Full)
+    {
+        public DateTime ReadFrom => WindowStart - ReconcileReadMargin;
+
+        public List<Treatment> Records { get; } = [];
+
+        public void Collect(IEnumerable<Treatment> page) =>
+            Records.AddRange(page.Where(t => ParseCreatedAt(t.CreatedAt) is not { } at || at.UtcDateTime >= ReadFrom));
+    }
+
+    /// <summary>
+    ///     This catch-up's reconcile window: <see cref="FullReconcileWindow"/> once
+    ///     <see cref="FullReconcileEvery"/> has passed since the last full one, otherwise
+    ///     <see cref="RecentReconcileWindow"/> below the crawl's resume point.
+    /// </summary>
+    private async Task<RecentTreatments> RecentTreatmentsForAsync(DateTime crawlFrom, DateTime now)
+    {
+        var lastFull = await LastFullReconcileAsync();
+        return lastFull is { } last && last <= now && now - last < FullReconcileEvery
+            ? new RecentTreatments(crawlFrom - RecentReconcileWindow, Full: false)
+            : new RecentTreatments(now - FullReconcileWindow, Full: true);
+    }
+
+    /// <summary>
+    ///     Catches up on what the event-time crawl cannot see, from the treatments the crawl's own read
+    ///     returned in the reconcile window. The crawl resumes from the newest stored event time, so
+    ///     it misses a treatment that reaches the source after a newer one. Trio edits that way, by
+    ///     deleting and re-uploading under the original event time; so do back-dated entries and
+    ///     offline phones. It also misses an edit made in place under the same id (Loop, AAPS,
+    ///     Careportal). Those are published again, under
+    ///     <see cref="ITreatmentPublisher.PublishRecentTreatmentsAsync"/>'s rule. Nightscout's v1 API
+    ///     hard-deletes and leaves no tombstone to page for. Stored rows the read did not return are
+    ///     therefore deleted once the source confirms them gone
+    ///     (<see cref="DeleteTreatmentsGoneUpstreamAsync"/>).
+    /// </summary>
+    /// <param name="crawledFrom">The crawl's own lower bound; it already published what lies above.</param>
+    /// <returns>How many treatments were written, not how many were compared.</returns>
+    private async Task<PagedCrawlOutcome> ReconcileRecentTreatmentsAsync(
+        RecentTreatments recent, DateTime crawledFrom, CancellationToken cancellationToken)
+    {
+        if (Publisher is not { IsAvailable: true } publisher || recent.Records.Count == 0)
+            return new PagedCrawlOutcome(0, true);
+
+        var identified = recent.Records.Where(t => t.Id is { Length: > 0 }).ToList();
+        var uncrawled = identified
+            .Where(t => ParseCreatedAt(t.CreatedAt) is { } at && at.UtcDateTime < crawledFrom)
+            .ToList();
+
+        var written = 0;
+        if (uncrawled.Count > 0)
+        {
+            if (await publisher.Treatments.PublishRecentTreatmentsAsync(
+                    uncrawled, ConnectorSource, await TreatmentPublishOriginAsync(), cancellationToken) is not { } count)
+                return new PagedCrawlOutcome(0, false);
+            written = count;
+        }
+
+        var read = new Dictionary<string, DateTime>();
+        foreach (var treatment in identified)
+        {
+            if (ParseCreatedAt(treatment.CreatedAt) is { } at)
+                read.TryAdd(treatment.Id!, at.UtcDateTime);
+        }
+
+        await DeleteTreatmentsGoneUpstreamAsync(publisher.Treatments, recent.WindowStart, read, cancellationToken);
+
+        return new PagedCrawlOutcome(written, true);
+    }
+
+    /// <summary>
+    ///     Deletes this connector's stored treatments from <paramref name="windowStart"/> on that
+    ///     <paramref name="read"/> lacks, once a lookup by id finds each one gone. The read alone
+    ///     proves nothing: the crawl can step past a crowded millisecond, and a stored time
+    ///     can differ from its created_at. The lookup is trusted only once it finds a treatment the
+    ///     read did return, so a source that cannot answer it deletes nothing. A failed lookup also
+    ///     deletes nothing and leaves the sync's result alone, as does more missing than
+    ///     <see cref="MaxLookupsPerSync"/> or <see cref="FewMissing"/> allow.
+    /// </summary>
+    /// <param name="read">The ids the read returned, each with its created_at.</param>
+    private async Task DeleteTreatmentsGoneUpstreamAsync(
+        ITreatmentPublisher treatments,
+        DateTime windowStart,
+        IReadOnlyDictionary<string, DateTime> read,
+        CancellationToken cancellationToken)
+    {
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var stored = await treatments.GetStoredTreatmentIdsAsync(ConnectorSource, windowStart, now, cancellationToken);
+        var candidates = stored
+            .Where(s => !read.ContainsKey(s.Key) && !IsConfirmedPresent(s.Key, now))
+            .ToList();
+
+        if (candidates.Count == 0)
+            return;
+
+        if (candidates.Count > MaxLookupsPerSync || (candidates.Count > FewMissing && candidates.Count * 5 > stored.Count))
+        {
+            _logger.LogWarning(
+                "[{ConnectorSource}] {Missing} of {Stored} stored treatments since {Since:u} are missing from the source; deleting none",
+                ConnectorSource, candidates.Count, stored.Count, windowStart);
+            return;
+        }
+
+        var gone = new HashSet<string>();
+        try
+        {
+            foreach (var kind in candidates.GroupBy(c => IsObjectId(c.Key)))
+            {
+                if (read.FirstOrDefault(r => IsObjectId(r.Key) == kind.Key) is not { Key: not null } canary)
+                    continue;
+
+                if (!await TreatmentExistsUpstreamAsync(canary.Key, canary.Value))
+                {
+                    _logger.LogWarning(
+                        "[{ConnectorSource}] The source could not find a treatment it had just returned by id; deleting none",
+                        ConnectorSource);
+                    return;
+                }
+
+                foreach (var (id, at) in kind)
+                {
+                    if (await TreatmentExistsUpstreamAsync(id, at))
+                        ConfirmedPresent[PresenceKey(id)] = now;
+                    else
+                        gone.Add(id);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex,
+                "[{ConnectorSource}] Looking treatments up by id failed; deleting none", ConnectorSource);
+            return;
+        }
+
+        if (gone.Count == 0)
+            return;
+
+        var deleted = await treatments.DeleteTreatmentsAsync(ConnectorSource, gone, cancellationToken);
+        _logger.LogInformation(
+            "[{ConnectorSource}] Deleted {Records} records of {Treatments} treatments the source no longer has",
+            ConnectorSource, deleted, gone.Count);
+    }
+
+    private string PresenceKey(string id) => $"{_resolvedBaseUrl}\n{id}";
+
+    private bool IsConfirmedPresent(string id, DateTime now)
+    {
+        foreach (var (key, at) in ConfirmedPresent)
+        {
+            if (now - at > ConfirmedPresentFor)
+                ConfirmedPresent.TryRemove(key, out _);
+        }
+
+        return ConfirmedPresent.ContainsKey(PresenceKey(id));
+    }
+
+    /// <summary>
+    ///     Looks a treatment up by the field its id was read from. A document carrying both an
+    ///     <c>_id</c> and an uploader's own <c>id</c> (Trio) is read under the latter. An id that is not
+    ///     an ObjectId is therefore looked up by <c>id</c>. Asking for it by <c>_id</c> is an error on
+    ///     Nightscout releases that cast the value to an ObjectId. An ObjectId-shaped id is looked up by
+    ///     <c>_id</c> and then by <c>id</c>. Neither field is indexed, so the lookup is bounded to the
+    ///     created_at range the treatment can sit in: <paramref name="at"/>, give or take
+    ///     <see cref="MaxUtcOffset"/> and <see cref="ReconcileReadMargin"/>.
+    /// </summary>
+    private async Task<bool> TreatmentExistsUpstreamAsync(string id, DateTime at)
+    {
+        var reach = MaxUtcOffset + ReconcileReadMargin;
+        return (IsObjectId(id) && await AnyAsync("_id")) || await AnyAsync("id");
+
+        async Task<bool> AnyAsync(string field)
+        {
+            const string operation = "LookUpTreatment";
+            var url = BuildCreatedAtUrl("treatments", at - reach, at + reach)
+                + $"&find[{field}]={Uri.EscapeDataString(id)}";
+
+            var found = await FetchDataAsync<Treatment[]>(url, operation) ?? throw FetchFailed(operation);
+            return found.Length > 0;
+        }
+    }
+
+    private static bool IsObjectId(string id) => id.Length == 24 && id.All(char.IsAsciiHexDigit);
     protected override async Task<IEnumerable<Profile>> FetchProfilesAsync()
     {
         var profiles = await FetchDataAsync<Profile[]>(
@@ -693,9 +1032,9 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return await DeserializeResponseAsync<T>(response);
     }
 
-    private string BuildEntriesUrl(DateTime? from, DateTime? to)
+    private string BuildEntriesUrl(DateTime? from, DateTime? to, int count)
     {
-        var url = $"/api/v1/entries.json?count={_currentConfig.MaxCount}";
+        var url = $"/api/v1/entries.json?count={count}";
 
         if (from.HasValue)
         {
@@ -712,15 +1051,35 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
         return url;
     }
 
-    private string BuildCreatedAtUrl(string collection, DateTime? from, DateTime? to)
+    private static bool IsWholeSecondBound(DateTime bound) => bound.Millisecond == 0;
+
+    /// <summary>The latest created_at the upper bound <see cref="BuildCreatedAtUrl"/> writes for <paramref name="bound"/> admits.</summary>
+    private static DateTime CreatedAtBoundAdmitsThrough(DateTime bound) =>
+        IsWholeSecondBound(bound)
+            ? SecondOf(bound).AddSeconds(1).AddTicks(-1)
+            : MillisecondOf(bound).AddMilliseconds(1).AddTicks(-1);
+
+    /// <remarks>
+    ///     The source compares created_at as a string. It writes it at millisecond precision
+    ///     ("...:00.000Z"), and legacy documents at whole seconds ("...:00Z"), which sorts above
+    ///     every millisecond of that second. The upper bound is written at millisecond precision so
+    ///     a record at the bound's own millisecond compares equal and is included, and at whole
+    ///     seconds when it falls on one, so both spellings of that instant are. Records it serves
+    ///     again above the instant are yielded once by <see cref="FetchPagesAsync{T}"/>.
+    /// </remarks>
+    private string BuildCreatedAtUrl(string collection, DateTime? from, DateTime? to, int? count = null)
     {
-        var url = $"/api/v1/{collection}.json?count={_currentConfig.MaxCount}";
+        var url = $"/api/v1/{collection}.json?count={count ?? _currentConfig.MaxCount}";
 
         if (from.HasValue)
             url += $"&find[created_at][$gte]={from.Value.ToUniversalTime():o}";
 
         if (to.HasValue)
-            url += $"&find[created_at][$lte]={to.Value.ToUniversalTime():o}";
+        {
+            var upper = to.Value.ToUniversalTime();
+            var format = IsWholeSecondBound(upper) ? "yyyy-MM-dd'T'HH:mm:ss'Z'" : "yyyy-MM-dd'T'HH:mm:ss.fff'Z'";
+            url += $"&find[created_at][$lte]={upper.ToString(format, CultureInfo.InvariantCulture)}";
+        }
 
         return url;
     }
@@ -784,6 +1143,7 @@ public class NightscoutConnectorService : NightscoutConnectorServiceBase<Nightsc
         IRetryDelayStrategy retryDelayStrategy,
         IRateLimitingStrategy rateLimitingStrategy,
         IConnectorRegistration<NightscoutConnectorConfiguration> registration,
-        IConnectorPublisher? publisher = null
-    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, registration, publisher) { }
+        IConnectorPublisher? publisher = null,
+        TimeProvider? timeProvider = null
+    ) : base(httpClient, serverResolver, logger, retryDelayStrategy, rateLimitingStrategy, registration, publisher, timeProvider) { }
 }

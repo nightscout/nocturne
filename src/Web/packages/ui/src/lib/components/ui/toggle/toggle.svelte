@@ -5,7 +5,7 @@
     toggleVariants,
     type ToggleVariant,
     type ToggleSize,
-  } from "./toggle-variants";
+  } from "./index.js";
 
   let {
     ref = $bindable(null),

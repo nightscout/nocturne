@@ -19,9 +19,11 @@ redirect-based browser flow or run on devices with limited input. The user autho
 on a separate device (phone, computer) by entering a short code.
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
+
   The code below uses raw HTTP requests to show the device flow end to end. Once you
   have an access token, you don't have to hand-write API calls; official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
+
 </Callout>
 
 ## 1. Register your app
@@ -52,9 +54,11 @@ on that Nocturne instance, you'll get the existing `client_id` back. Store the `
 you'll need it for every authorization request.
 
 <Callout type="info" title="Well-known apps">
+
   Popular diabetes apps (Trio, xDrip+, Loop, AAPS) are pre-registered on every Nocturne
   instance. Calling register with their <code>software_id</code> returns the existing
   <code>client_id</code> without creating a duplicate.
+
 </Callout>
 
 ## 2. Start device authorization
@@ -151,9 +155,11 @@ async function pollForToken(
 ```
 
 <Callout type="warning" title="Store tokens securely">
+
   The refresh token is long-lived and grants ongoing access. Store it in your
   platform's secure storage (Keychain on iOS, EncryptedSharedPreferences on Android,
   or an encrypted store on desktop). Never store tokens in plain text.
+
 </Callout>
 
 ## 5. Make API calls
@@ -198,9 +204,11 @@ const { access_token, refresh_token } = await refreshResponse.json();
 ```
 
 <Callout type="danger" title="Refresh tokens rotate">
+
   Each refresh returns a <strong>new</strong> refresh token and invalidates the old one.
   Always store the latest refresh token. If you replay an old refresh token,
   the entire grant is revoked for security and the user will need to re-authorize.
+
 </Callout>
 
 ## 7. Revoking access
@@ -230,6 +238,8 @@ Scopes control what your app can access. Request only what you need.
 A `readwrite` scope always implies `read`; you don't need to request both.
 
 <Callout type="info" title="Scope expansion">
+
   <code>health.read</code> and <code>health.readwrite</code> are convenience aliases.
   When you request them, the consent screen shows the individual scopes they expand to.
+
 </Callout>

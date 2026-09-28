@@ -71,7 +71,9 @@ Aspire will automatically:
 - Launch any configured data connectors
 - Set up service discovery, health checks, and a YARP gateway
 
-Once running, open the Aspire dashboard link from the console output to see all services. Access the app at `https://nocturne.localhost:1612`.
+Once running, access the app at `https://nocturne.localhost:1612`. `aspire describe` lists the services and `aspire logs <resource>` tails one. The Aspire dashboard is off by default; start with `Aspire__OptionalServices__AspireDashboard__Enabled=true aspire start` (or set `Aspire:OptionalServices:AspireDashboard:Enabled` in the AppHost appsettings) to get it.
+
+If .NET is installed outside the default location (e.g. Homebrew), set `DOTNET_ROOT` to the directory holding the real `dotnet` binary before `aspire start` (Homebrew: `export DOTNET_ROOT="$(brew --prefix dotnet)/libexec"`).
 
 In run mode the AppHost pins two host ports (main checkout; worktrees stay dynamic):
 
@@ -231,12 +233,13 @@ dotnet test --collect:"XPlat Code Coverage"
 
 ```bash
 # Create a new migration
-cd src/Infrastructure/Nocturne.Infrastructure.Data
-dotnet ef migrations add YourMigrationName
+dotnet ef migrations add YourMigrationName -p src/Infrastructure/Nocturne.Infrastructure.Data.Migrations -s src/API/Nocturne.API
 
 # Apply migrations
-dotnet ef database update
+dotnet ef database update -p src/Infrastructure/Nocturne.Infrastructure.Data.Migrations -s src/API/Nocturne.API
 ```
+
+The API loads the migrations project at runtime and applies pending migrations on startup. `dotnet watch` does not see that project, so after adding a migration restart the API: `aspire resource nocturne-api restart`.
 
 ## API Documentation
 

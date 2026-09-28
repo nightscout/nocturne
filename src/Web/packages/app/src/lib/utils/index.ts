@@ -1,14 +1,12 @@
 import { getLocalTimeZone, now, fromDate } from "@internationalized/date";
 
-import {
-  ArrowUp,
-  ArrowUpRight,
-  ArrowRight,
-  ArrowDown,
-  ArrowDownRight,
-  HelpCircle,
-  AlertTriangle,
-} from "lucide-svelte";
+import ArrowUp from "@lucide/svelte/icons/arrow-up";
+import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
+import ArrowRight from "@lucide/svelte/icons/arrow-right";
+import ArrowDown from "@lucide/svelte/icons/arrow-down";
+import ArrowDownRight from "@lucide/svelte/icons/arrow-down-right";
+import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
 import { canonicalDirection } from "@nocturne/ui/glucose";
 import { formatLocale } from "$lib/utils/formatting";
 import {

@@ -62,11 +62,11 @@ public class StatisticsServiceBenchmarks
     // --- CalculateAveragedStats (24-bucket grouping + per-bucket stats) ---
 
     [Benchmark(Description = "AveragedStats_1Day")]
-    public object AveragedStats_Day() => _service.CalculateAveragedStats(_dayEntries);
+    public object AveragedStats_Day() => _service.CalculateAveragedStats(_dayEntries, TimeZoneInfo.Utc);
 
     [Benchmark(Description = "AveragedStats_1Week")]
-    public object AveragedStats_Week() => _service.CalculateAveragedStats(_weekEntries);
+    public object AveragedStats_Week() => _service.CalculateAveragedStats(_weekEntries, TimeZoneInfo.Utc);
 
     [Benchmark(Description = "AveragedStats_90Days")]
-    public object AveragedStats_Quarter() => _service.CalculateAveragedStats(_quarterEntries);
+    public object AveragedStats_Quarter() => _service.CalculateAveragedStats(_quarterEntries, TimeZoneInfo.Utc);
 }

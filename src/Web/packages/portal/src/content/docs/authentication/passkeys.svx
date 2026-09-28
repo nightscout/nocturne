@@ -28,16 +28,20 @@ There are two ways in, both on the sign-in page:
   wanted, which usually means the passkey lives on a different device.
 
 <Callout type="info" title="Browser support">
+
   Passkeys need a browser that supports them. On a browser that doesn't, the sign-in screen
   says so and points you at a recovery code or a different browser instead, so an account is
   never stranded.
+
 </Callout>
 
 <Callout type="info" title="Running your own instance">
+
   A passkey is tied to one address: the **BASE_DOMAIN** you configured. A browser will only
   create or use one when the address in its bar is that host or a subdomain of it, so if
   passkeys are refused on an instance you run, check that setting matches the address people
   actually browse to and restart. See [Configuration](/docs/configuration).
+
 </Callout>
 
 ## The authenticator app step
@@ -51,8 +55,10 @@ enrolled an authenticator app, signing in with your passkey is followed by a pro
 current six-digit code. Both have to succeed.
 
 <Callout type="info" title="It applies to passkey sign-ins">
+
   The authenticator step follows a passkey. If you sign in through a social login provider
   instead, that provider handles any extra steps of its own, and Nocturne does not ask again.
+
 </Callout>
 
 ### Setting one up
@@ -73,9 +79,11 @@ code from your app. Open the app, read the six digits, type them in.
 <Screenshot id="totp-challenge" />
 
 <Callout type="warning" title="Keep a way back in">
+
   If you enrol an authenticator app, make sure you still have your recovery codes. Losing
   the phone that holds both your passkey and your authenticator app, with no recovery code
   saved, means losing the account.
+
 </Callout>
 
 ## Recovery codes

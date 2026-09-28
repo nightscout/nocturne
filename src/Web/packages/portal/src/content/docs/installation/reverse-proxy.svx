@@ -32,10 +32,12 @@ one is running it still holds host ports 80 and 443, and it will fight your prox
 for them.
 
 <Callout type="warning" title="The gateway speaks plain HTTP only">
+
   Nothing behind port 8080 terminates TLS. Point your proxy at
   <code>http://&lt;host&gt;:8080</code>. A browser opened directly at
   <code>https://&lt;host&gt;:8080</code>, or a <code>proxy_pass https://</code>
   aimed at it, will always fail the TLS handshake.
+
 </Callout>
 
 ## DNS and certificates
@@ -62,9 +64,11 @@ terminate all three.
   challenge, because HTTP-01 and TLS-ALPN-01 cannot issue them.
 
 <Callout type="tip" title="Wildcards are not the only option">
+
   A proxy that mints certificates per hostname on first request needs no wildcard
   and no DNS credentials. That is what the bundled Caddy does, and you can do the
   same, with one constraint, described under Caddy below.
+
 </Callout>
 
 ## The three headers
@@ -85,11 +89,13 @@ three:
 | `X-Forwarded-Host` | The original request host | Used ahead of `Host` when reconstructing the origin. |
 
 <Callout type="danger" title="nginx does not send these by default">
+
   nginx's default is <code>proxy_set_header Host $proxy_host</code> (the literal
   <code>proxy_pass</code> target, e.g. <code>192.168.1.10:8080</code>) and it
   sends no <code>X-Forwarded-*</code> headers at all. A stock
   <code>proxy_pass</code> with no <code>proxy_set_header</code> lines gets you a
   login page that loads and a login attempt that 403s.
+
 </Callout>
 
 ## nginx
@@ -252,6 +258,7 @@ it: without it, anyone who points DNS at your server can drive certificate
 issuance for arbitrary names.
 
 <Callout type="info" title="Share links need their own site block">
+
   The <code>ask</code> endpoint also authorizes a
   <code>&#123;token&#125;.share.example.com</code> host when the token resolves to an
   active share link, so on-demand issuance covers share links. A Caddy
@@ -260,6 +267,7 @@ issuance for arbitrary names.
   that hands out share links needs a <code>*.share.example.com</code> block
   with the same <code>tls &#123; on_demand &#125;</code> and
   <code>reverse_proxy</code> as the wildcard block above.
+
 </Callout>
 
 ## Client addresses and the exposed port
@@ -281,11 +289,13 @@ at the first address that is not on it, and the entries beyond it are silently
 left unread. Declare all of them, or none.
 
 <Callout type="warning" title="Do not leave port 8080 open to the world">
+
   A caller that reaches the gateway directly, bypassing your proxy, does get to
   choose its own <code>X-Forwarded-For</code>. Publish the port on the interface
   your proxy uses rather than all of them: in the override, change
   <code>"8080:5000"</code> to <code>"127.0.0.1:8080:5000"</code> when the proxy runs
   on the same host.
+
 </Callout>
 
 ## Troubleshooting
@@ -309,9 +319,11 @@ For a 502, nginx's `/var/log/nginx/error.log` is decisive:
 | `upstream prematurely closed connection` | Add `proxy_http_version 1.1`. |
 
 <Callout type="tip" title="Confirming the headers arrive">
+
   <code>docker compose logs gateway</code> records the host each request arrived
   on. If that shows your upstream address rather than your domain, your proxy is
   not forwarding <code>Host</code>. Fix that before looking anywhere else.
+
 </Callout>
 
 ## Next steps

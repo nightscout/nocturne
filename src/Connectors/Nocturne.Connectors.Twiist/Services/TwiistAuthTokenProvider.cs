@@ -30,8 +30,6 @@ public class TwiistAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 5;
 
-    protected override string ConnectorName => "Twiist";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         TwiistConnectorConfiguration config, CancellationToken cancellationToken)
     {

@@ -22,6 +22,16 @@ public interface IDeduplicationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves the primary flag of every group whose primary is among <paramref name="recordIds"/>
+    /// onto a surviving member. Reads show only a group's primary, so a soft-deleted primary
+    /// otherwise hides every other source's copy of the event with it.
+    /// </summary>
+    Task RepointPrimariesAwayFromAsync(
+        RecordType recordType,
+        IReadOnlyCollection<Guid> recordIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Get all records linked to a canonical group
     /// </summary>
     /// <param name="canonicalId">The canonical group ID</param>

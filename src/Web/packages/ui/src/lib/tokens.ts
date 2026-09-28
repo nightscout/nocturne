@@ -45,16 +45,15 @@ export function statusRgb(token: StatusToken): number {
  * to convert rather than carry a second spelling that can disagree.
  */
 export function oklchToHex(css: string): string {
-  const number = String.raw`(\d+(?:\.\d+)?)`;
-  const match = new RegExp(
-    String.raw`^oklch\(\s*${number}\s+${number}\s+${number}\s*\)$`,
-  ).exec(css.trim());
-  if (!match) {
+  const oklch = /^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*\)$/
+    .exec(css.trim())
+    ?.slice(1)
+    .map(Number);
+  if (!oklch || oklch.some(Number.isNaN)) {
     throw new Error(`Not an oklch() colour: ${css}`);
   }
-  const lightness = Number(match[1]);
-  const chroma = Number(match[2]);
-  const hue = (Number(match[3]) * Math.PI) / 180;
+  const [lightness, chroma, hueDegrees] = oklch;
+  const hue = (hueDegrees * Math.PI) / 180;
 
   const a = chroma * Math.cos(hue);
   const b = chroma * Math.sin(hue);

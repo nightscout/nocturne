@@ -1,10 +1,8 @@
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.EntityFrameworkCore;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.NocturneRemote.Configurations;
 using Nocturne.Connectors.NocturneRemote.Services;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 using System.Collections.Concurrent;
 
 namespace Nocturne.API.Services.BackgroundServices;
@@ -22,27 +20,26 @@ public class NocturneRemoteConnectorBackgroundService
 
     /// <param name="serviceProvider">Service provider used to create a DI scope per sync cycle.</param>
     /// <param name="budget">The process-wide budget.</param>
+    /// <param name="activeTenants">The active tenants every poller reads.</param>
     /// <param name="logger">Logger instance for this background service.</param>
     /// <param name="nudge">Delivers configuration writes for this connector.</param>
+    /// <param name="metrics">Connector sync instruments.</param>
+    /// <param name="runGuard">Refuses a sync for a key another run already holds.</param>
     public NocturneRemoteConnectorBackgroundService(
         IServiceProvider serviceProvider,
         ConnectorSyncBudget budget,
+        ActiveTenantSnapshot activeTenants,
         ILogger<NocturneRemoteConnectorBackgroundService> logger,
-        ConnectorPollerNudge? nudge = null
+        ConnectorPollerNudge? nudge = null,
+        ConnectorSyncMetrics? metrics = null,
+        TenantRunGuard? runGuard = null
     )
-        : base(serviceProvider, budget, logger, nudge) { }
+        : base(serviceProvider, budget, activeTenants, logger, nudge, metrics, runGuard) { }
 
     /// <inheritdoc />
     protected override async Task StartRealtimeListenersAsync(CancellationToken cancellationToken)
     {
-        using var scope = ServiceProvider.CreateScope();
-        var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var context = await factory.CreateDbContextAsync(cancellationToken);
-
-        var tenants = await context.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(cancellationToken);
+        var tenants = await ActiveTenants.GetAsync(cancellationToken);
 
         foreach (var tenant in tenants)
         {

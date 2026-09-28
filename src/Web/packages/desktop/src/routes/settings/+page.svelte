@@ -3,6 +3,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { getVersion } from "@tauri-apps/api/app";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { onMount, onDestroy } from "svelte";
   import {
     Card,
@@ -16,14 +17,16 @@
   import { Label } from "@nocturne/ui/ui/label";
   import * as Select from "@nocturne/ui/ui/select";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
-  import { ArrowLeft, Loader2, RotateCw, Settings as SettingsIcon } from "@lucide/svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RotateCw from "@lucide/svelte/icons/rotate-cw";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
   import type { GlucoseUnits } from "@nocturne/ui/glucose";
   import type { ClockFaceOption } from "$lib/glucose-types";
   import { preferences } from "$lib/preferences.svelte";
+  import { commandErrorMessage } from "$lib/command-error";
   import CareLinkConnect from "$lib/CareLinkConnect.svelte";
   import GlucoseCompanion from "$lib/GlucoseCompanion.svelte";
-
-  type CommandError = { message: string };
 
   // Matches the camelCase DeviceCapabilitySettings the `*_device_capabilities` Rust commands carry.
   type DeviceCapabilities = { notify: boolean; trayFlash: boolean };
@@ -55,7 +58,7 @@
   );
 
   function describeError(e: unknown): string {
-    return (e as CommandError)?.message ?? "Something went wrong.";
+    return commandErrorMessage(e) ?? "Something went wrong.";
   }
 
   async function refreshClocks() {
@@ -166,7 +169,7 @@
 
 <main class="mx-auto flex min-h-screen max-w-md flex-col gap-6 p-6">
   <header class="flex items-center gap-3">
-    <Button variant="ghost" size="icon" onclick={() => goto("/")} aria-label="Back">
+    <Button variant="ghost" size="icon" onclick={() => goto(resolve("/"))} aria-label="Back">
       <ArrowLeft class="h-4 w-4" />
     </Button>
     <div class="flex items-center gap-2">

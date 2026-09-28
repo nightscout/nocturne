@@ -12,7 +12,7 @@
     let { id, callouts = [], class: className = "" }: Props = $props();
 
     const themes: Theme[] = ["light", "dark"];
-    const entries = manifest as Manifest;
+    const entries: Manifest = manifest;
 
     // A stale id or anchor throws rather than degrading, so a capture that dropped
     // the screenshot fails the prerendered build instead of shipping a broken page.
@@ -63,16 +63,17 @@
             />
         {/each}
 
-        {#each chips as chip}
+        {#each chips as chip (chip.number)}
             <span
-                class="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5
+                class="absolute left-(--chip-left) top-(--chip-top) -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5
                        rounded-full border border-border/60 bg-background/90 px-2 py-1
                        text-xs font-medium shadow-sm backdrop-blur-sm"
-                style="left: {chip.left}%; top: {chip.top}%"
+                style:--chip-left="{chip.left}%"
+                style:--chip-top="{chip.top}%"
             >
                 <span
                     class="size-4 shrink-0 rounded-full bg-primary text-primary-foreground
-                           text-[10px] font-semibold flex items-center justify-center"
+                           text-2xs font-semibold flex items-center justify-center"
                 >
                     {chip.number}
                 </span>

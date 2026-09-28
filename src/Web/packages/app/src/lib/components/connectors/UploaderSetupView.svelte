@@ -13,26 +13,23 @@
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    AlertCircle,
-    CheckCircle,
-    ChevronLeft,
-    Check,
-    Copy,
-    Loader2,
-    Clock,
-    AlertTriangle,
-    X,
-    Shield,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import Check from "@lucide/svelte/icons/check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import X from "@lucide/svelte/icons/x";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
   import QRCode from "qrcode";
 
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
-  import { toast } from "svelte-sonner";
   import { describeSubmitError } from "$lib/forms/submit-error";
   interface Props {
     app: UploaderApp | null;
@@ -70,7 +67,7 @@
   let apiToken = $state<string | null>(null);
   let apiTokenLoading = $state(false);
   let apiTokenError = $state<string | null>(null);
-  let copiedField = $state<string | null>(null);
+  const copy = createCopyFeedback();
 
   async function generateApiToken() {
     if (!app || apiToken || apiTokenLoading) return;
@@ -90,17 +87,6 @@
     } finally {
       apiTokenLoading = false;
     }
-  }
-
-  async function copyField(text: string, field: string) {
-    if (!(await copyToClipboard(text))) {
-      toast.error("Couldn't copy to the clipboard. Copy it manually instead.");
-      return;
-    }
-    copiedField = field;
-    setTimeout(() => {
-      copiedField = null;
-    }, 2000);
   }
 
   // ── Connection polling ────────────────────────────────────────
@@ -242,7 +228,7 @@
   <Button
     variant="ghost"
     size="sm"
-    class="gap-1 -ml-2"
+    class="-ml-2"
     onclick={onBack}
   >
     <ChevronLeft class="h-4 w-4" />
@@ -263,14 +249,14 @@
       <!-- ── OAuth Device Flow (QR code + inline authorization) ── -->
       {#if deviceApproved}
         <!-- Approved — waiting for data -->
-        <Card.Root class="border-green-500/30">
+        <Card.Root variant="success">
           <Card.Content class="space-y-2 pt-6">
             <div class="flex items-center gap-3">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30">
-                <Check class="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/10">
+                <Check class="h-5 w-5 text-success" />
               </div>
               <div>
-                <p class="font-medium text-green-600">Device Authorized</p>
+                <p class="font-medium text-success">Device Authorized</p>
                 <p class="text-sm text-muted-foreground">
                   {app ? getUploaderName(app) : ''} is now connected. You can return to your device.
                 </p>
@@ -283,11 +269,11 @@
         {@const detected = isDetected(app?.id)}
         {@const ds = getDataSource(app?.id)}
         {#if detected && ds}
-          <Card.Root class="border-green-500/30">
+          <Card.Root variant="success">
             <Card.Content class="flex items-center gap-3 pt-6">
-              <CheckCircle class="h-5 w-5 text-green-500" />
+              <CheckCircle class="h-5 w-5 text-success" />
               <div>
-                <p class="font-medium text-green-600">Receiving Data</p>
+                <p class="font-medium text-success">Receiving Data</p>
                 <p class="text-sm text-muted-foreground">
                   {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
                 </p>
@@ -299,7 +285,7 @@
             <Button onclick={onConnected}>Continue to Dashboard</Button>
           </div>
         {:else}
-          <Card.Root class="border-muted">
+          <Card.Root>
             <Card.Content class="flex items-center gap-3 pt-6">
               <Clock class="h-5 w-5 text-muted-foreground" />
               <div>
@@ -341,9 +327,9 @@
           </Card.Header>
           <Card.Content class="space-y-4">
             {#if !deviceInfo.isKnown}
-              <div class="flex items-start gap-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900/50 dark:bg-yellow-900/20">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-400" />
-                <p class="text-sm text-yellow-800 dark:text-yellow-200">
+              <div class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <p class="text-sm text-warning">
                   This application is not in the Nocturne known app directory. Only approve if you trust it.
                 </p>
               </div>
@@ -459,7 +445,7 @@
                 placeholder="XXXX-YYYY"
                 maxlength={9}
                 autocomplete="off"
-                class="text-center text-lg tracking-widest uppercase"
+                variant="code"
                 bind:value={deviceCodeInput}
                 disabled={deviceLookupLoading}
               />
@@ -495,10 +481,10 @@
               <Button
                 variant="outline"
                 size="icon"
-                onclick={() => setupResponse?.baseUrl && copyField(setupResponse.baseUrl, 'url')}
+                onclick={() => setupResponse?.baseUrl && copy.copy(setupResponse.baseUrl, 'url')}
               >
-                {#if copiedField === 'url'}
-                  <Check class="h-4 w-4 text-green-500" />
+                {#if copy.isCopied('url')}
+                  <Check class="h-4 w-4 text-success" />
                 {:else}
                   <Copy class="h-4 w-4" />
                 {/if}
@@ -522,10 +508,10 @@
                 <Button
                   variant="outline"
                   size="icon"
-                  onclick={() => apiToken && copyField(apiToken, 'token')}
+                  onclick={() => apiToken && copy.copy(apiToken, 'token')}
                 >
-                  {#if copiedField === 'token'}
-                    <Check class="h-4 w-4 text-green-500" />
+                  {#if copy.isCopied('token')}
+                    <Check class="h-4 w-4 text-success" />
                   {:else}
                     <Copy class="h-4 w-4" />
                   {/if}
@@ -548,11 +534,11 @@
       {@const detected = isDetected(app?.id)}
       {@const ds = getDataSource(app?.id)}
       {#if detected && ds}
-        <Card.Root class="border-green-500/30">
+        <Card.Root variant="success">
           <Card.Content class="flex items-center gap-3 pt-6">
-            <CheckCircle class="h-5 w-5 text-green-500" />
+            <CheckCircle class="h-5 w-5 text-success" />
             <div>
-              <p class="font-medium text-green-600">Receiving Data</p>
+              <p class="font-medium text-success">Receiving Data</p>
               <p class="text-sm text-muted-foreground">
                 {app ? getUploaderName(app) : ''} is sending data. {ds.entriesLast24h ?? 0} entries in the last 24 hours.
               </p>
@@ -564,7 +550,7 @@
           <Button onclick={onConnected}>Continue to Dashboard</Button>
         </div>
       {:else}
-        <Card.Root class="border-muted">
+        <Card.Root>
           <Card.Content class="flex items-center gap-3 pt-6">
             <Clock class="h-5 w-5 text-muted-foreground" />
             <div>
@@ -578,7 +564,7 @@
       {/if}
     {/if}
   {:else}
-    <Card.Root class="border-destructive">
+    <Card.Root variant="destructive">
       <Card.Content class="flex items-center gap-3 pt-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
         <div>

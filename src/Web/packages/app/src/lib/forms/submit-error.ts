@@ -1,3 +1,5 @@
+import type { RustValidationIssue } from "$api-clients";
+import { parseIssues } from "$lib/api/error-body";
 import { recordApiFailure } from "$lib/support/api-failure-log";
 
 /** Fallback shown when a submission fails for a reason we can't safely surface. */
@@ -21,20 +23,41 @@ export function errorStatus(err: unknown): number | undefined {
   return undefined;
 }
 
+/** The `body` a thrown `HttpError` carries, when it has one. */
+function errorBody(err: unknown): object | undefined {
+  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
+
+  const { body } = err;
+  if (!body || typeof body !== "object") return undefined;
+
+  return body;
+}
+
 /**
  * The message a remote handler put in `error(status, message)`. SvelteKit
  * delivers it as `HttpError.body.message`.
  */
 export function errorMessage(err: unknown): string | undefined {
-  if (!err || typeof err !== "object" || !("body" in err)) return undefined;
-
-  const { body } = err;
-  if (!body || typeof body !== "object" || !("message" in body)) return undefined;
+  const body = errorBody(err);
+  if (body === undefined || !("message" in body)) return undefined;
 
   const { message } = body;
   if (typeof message !== "string" || message.trim() === "") return undefined;
 
   return message;
+}
+
+/**
+ * The structured validation issues a body carries, when every entry has the
+ * shape one declares.
+ */
+export function errorIssues(
+  err: unknown
+): RustValidationIssue[] | undefined {
+  const body = errorBody(err);
+  if (body === undefined || !("issues" in body)) return undefined;
+
+  return parseIssues(body.issues);
 }
 
 /**
@@ -49,28 +72,33 @@ export function errorMessage(err: unknown): string | undefined {
  * under a 400 — which is why every arm that forwards a body consults this,
  * rather than the non-4xx one alone.
  *
- * SvelteKit adds the last of these when a *query*'s transport answers non-2xx.
- * A command or form rejects with a plain `Error` carrying no body, so none of
- * these checks ever sees one.
+ * SvelteKit adds "failed to execute remote function" when a *query*'s
+ * transport answers non-2xx. A command or form rejects with a plain `Error`
+ * carrying no body, so none of these checks ever sees one. The codegen's raw
+ * fetch path, used for a form-encoded operation, writes "Request failed (NNN)"
+ * and carries it to `body.message` whenever the body names no reason of its
+ * own.
  *
  * Recognising the synthesized side is the only check that can be complete: these
  * strings are constants of a pinned client, of SvelteKit and of our own codegen,
  * whose 403 arm falls back to the status phrase. What a server may write is
  * unbounded and so cannot be matched positively.
  */
-const CLIENT_WRITTEN_REASONS = new Set([
-  "an unexpected server error occurred.",
-  "a server side error occurred.",
-  "forbidden",
-  "failed to execute remote function",
-]);
+const CLIENT_WRITTEN_REASONS: readonly RegExp[] = [
+  /^an unexpected server error occurred\.$/i,
+  /^a server side error occurred\.$/i,
+  /^forbidden$/i,
+  /^failed to execute remote function$/i,
+  /^request failed \(\d{3}\)$/i,
+];
 
 /** The body, when the server rather than the client wrote it. */
 function serverWrittenReason(err: unknown): string | undefined {
   const message = errorMessage(err);
   if (message === undefined) return undefined;
 
-  return CLIENT_WRITTEN_REASONS.has(message.trim().toLowerCase())
+  const trimmed = message.trim();
+  return CLIENT_WRITTEN_REASONS.some((reason) => reason.test(trimmed))
     ? undefined
     : message;
 }

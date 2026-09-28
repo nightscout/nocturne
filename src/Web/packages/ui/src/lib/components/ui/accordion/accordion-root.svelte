@@ -8,9 +8,9 @@
 	}: AccordionPrimitive.RootProps = $props();
 </script>
 
-<AccordionPrimitive.Root
+<!-- eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- bits-ui types value as a union keyed by `type`, which destructuring for $bindable splits apart -->
+<AccordionPrimitive.Root bind:value={value as never}
 	bind:ref
-	bind:value={value as never}
 	data-slot="accordion"
 	{...restProps}
 />

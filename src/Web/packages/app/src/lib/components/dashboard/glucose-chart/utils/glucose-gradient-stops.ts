@@ -53,8 +53,10 @@ export function continuousLineStops(
 	chartHeight: number
 ): GradientStop[] {
 	return GLUCOSE_SPECTRUM_ANCHORS.map(
-		(mgdl) =>
-			[offsetFor(mgdl, axisScale, chartHeight), getGlucoseColorContinuous(mgdl)] as GradientStop
+		(mgdl): GradientStop => [
+			offsetFor(mgdl, axisScale, chartHeight),
+			getGlucoseColorContinuous(mgdl)
+		]
 	);
 }
 
@@ -62,9 +64,9 @@ export function fillStopsFromLineStops(
 	lineStops: GradientStop[],
 	areaOpacity: number
 ): GradientStop[] {
-	return lineStops.map(([offset, color]) => {
+	return lineStops.map(([offset, color]): GradientStop => {
 		const pct = Math.round((1 - offset) * areaOpacity * 100);
-		return [offset, `color-mix(in lch, ${color} ${pct}%, transparent)`] as GradientStop;
+		return [offset, `color-mix(in lch, ${color} ${pct}%, transparent)`];
 	});
 }
 

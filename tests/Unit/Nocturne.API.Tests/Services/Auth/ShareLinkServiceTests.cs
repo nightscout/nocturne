@@ -465,12 +465,12 @@ public sealed class ShareLinkServiceTests : IDisposable
         await GiveTheOwnerPreferencesAsync(new UserDisplayPreferences { GlucoseUnits = "mmol" });
 
         var owner = await _db.TenantMembers.FirstAsync(m => m.SubjectId == TestDatabaseSeeder.TestSubjectId);
-        owner.RevokedAt = DateTime.UtcNow;
+        _db.TenantMembers.Remove(owner);
         await _db.SaveChangesAsync();
 
         var appearance = await _service.GetSharedAppearanceAsync(TenantId);
 
-        appearance.GlucoseUnits.Should().BeNull("a revoked member no longer speaks for the tenant");
+        appearance.GlucoseUnits.Should().BeNull("a removed member no longer speaks for the tenant");
     }
 
     [Fact]

@@ -81,9 +81,6 @@ public class SystemEventEntity : ITenantScoped
     /// <summary>
     /// Tenant this system event belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 }

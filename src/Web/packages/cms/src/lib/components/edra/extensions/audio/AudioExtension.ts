@@ -2,6 +2,7 @@ import { Node, nodeInputRule } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { toast } from 'svelte-sonner';
 import strings from '../../strings.ts';
+import { AUDIO_INPUT_REGEX } from '../media-input-rules.ts';
 
 export interface AudioOptions {
 	HTMLAttributes: Record<string, unknown>;
@@ -26,8 +27,6 @@ declare module '@tiptap/core' {
 	}
 }
 
-const AUDIO_INPUT_REGEX = /!\[(.+|:?)]\((\S+)(?:(?:\s+)["'](\S+)["'])?\)/;
-
 export const Audio = (onDrop?: (file: File) => Promise<string>) =>
 	Node.create<AudioOptions>({
 		name: 'audio',
@@ -44,7 +43,7 @@ export const Audio = (onDrop?: (file: File) => Promise<string>) =>
 			return {
 				src: {
 					default: null,
-					parseHTML: (el) => (el as HTMLSpanElement).getAttribute('src'),
+					parseHTML: (el) => el.getAttribute('src'),
 					renderHTML: (attrs) => ({ src: attrs.src })
 				}
 			};
@@ -53,7 +52,7 @@ export const Audio = (onDrop?: (file: File) => Promise<string>) =>
 			return [
 				{
 					tag: 'audio',
-					getAttrs: (el) => ({ src: (el as HTMLAudioElement).getAttribute('src') })
+					getAttrs: (el) => ({ src: el.getAttribute('src') })
 				}
 			];
 		},
@@ -90,7 +89,7 @@ export const Audio = (onDrop?: (file: File) => Promise<string>) =>
 					find: AUDIO_INPUT_REGEX,
 					type: this.type,
 					getAttributes: (match) => {
-						const [, , src] = match;
+						const [, , , src] = match;
 
 						return { src };
 					}

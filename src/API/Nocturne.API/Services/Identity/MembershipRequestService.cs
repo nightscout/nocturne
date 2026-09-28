@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Notifications;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.Identity;
@@ -157,6 +158,7 @@ public class MembershipRequestService : IMembershipRequestService
     public async Task<DecideMembershipRequestResult> ApproveRequestAsync(
         Guid requestId, Guid tenantId, List<Guid> roleIds,
         Guid decidedBySubjectId, IReadOnlyCollection<string> granterScopes,
+        bool limitTo24Hours = false,
         CancellationToken ct = default)
     {
         _dbContext.TenantId = tenantId;
@@ -165,6 +167,11 @@ public class MembershipRequestService : IMembershipRequestService
             tenantId, roleIds, granterScopes, ct);
         if (!roleGrant.Ok)
             return new DecideMembershipRequestResult(false, roleGrant.ErrorDescription);
+
+        if (limitTo24Hours
+            && MemberScopeResolver.IsExemptFromHistoryClamp(
+                await _tenantRoleService.GetRolePermissionsAsync(tenantId, roleIds, ct)))
+            return new DecideMembershipRequestResult(false, MemberScopeResolver.ExemptFromHistoryClampDetail);
 
         var request = await _dbContext.MembershipRequests
             .FirstOrDefaultAsync(r => r.Id == requestId, ct);
@@ -181,7 +188,8 @@ public class MembershipRequestService : IMembershipRequestService
         request.RoleIds = roleIds;
         await _dbContext.SaveChangesAsync(ct);
 
-        await _tenantService.AddMemberAsync(tenantId, request.SubjectId, roleIds, ct: ct);
+        await _tenantService.AddMemberAsync(
+            tenantId, request.SubjectId, roleIds, limitTo24Hours: limitTo24Hours, ct: ct);
 
         _logger.LogInformation(
             "MembershipRequestAudit: {Event} request_id={RequestId} tenant_id={TenantId} subject_id={SubjectId} decided_by={DecidedBy}",

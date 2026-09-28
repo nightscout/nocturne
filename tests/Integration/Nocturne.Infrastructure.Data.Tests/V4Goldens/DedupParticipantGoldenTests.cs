@@ -143,18 +143,17 @@ public class DedupParticipantGoldenTests
     }
 
     [Fact]
-    public async Task Note_WithinWindow_LinksIntoOneGroup_OnTimeAlone()
+    public async Task Note_WithinWindowAndSameText_LinksIntoOneGroup()
     {
         var tenant = Guid.NewGuid();
         using var scope = await _fx.BeginTenantScopeAsync(tenant);
         var repo = scope.ServiceProvider.GetRequiredService<INoteRepository>();
 
-        // Note dedup uses an empty MatchCriteria — records match on the ±30s time window + source alone.
         await repo.BulkCreateAsync(
             new[]
             {
-                new Note { Timestamp = T0, Text = "exercise", DataSource = "aaps", LegacyId = "n-a" },
-                new Note { Timestamp = T0.AddSeconds(10), Text = "walk", DataSource = "loop", LegacyId = "n-b" },
+                new Note { Timestamp = T0, Text = "evening walk", DataSource = "aaps", LegacyId = "n-a" },
+                new Note { Timestamp = T0.AddSeconds(10), Text = "evening  walk", DataSource = "loop", LegacyId = "n-b" },
             }, WriteOrigin.Live,
             CancellationToken.None);
 

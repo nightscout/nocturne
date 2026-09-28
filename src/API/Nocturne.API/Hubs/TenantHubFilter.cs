@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Hubs;
@@ -61,8 +62,7 @@ public class TenantHubFilter : IHubFilter
 
     private static void SetTenant(HubCallerContext callerContext, IServiceProvider services)
     {
-        if (callerContext.GetHttpContext()?.Items[TenantAwareHub.TenantContextKey]
-            is not TenantContext tenantContext)
+        if (callerContext.GetHttpContext()?.GetTenantContext() is not { } tenantContext)
         {
             return;
         }

@@ -73,12 +73,11 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
         DexcomConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
         if (!activeTypes.Contains(SyncDataType.Glucose))
         {
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
@@ -96,7 +95,6 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

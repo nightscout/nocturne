@@ -30,14 +30,16 @@ export const getDayInReviewData = query(
 
 		// Resolve the patient's timezone so the day boundaries are their day, not the server's
 		const timezone = await getPatientTimeZone();
-		const { start: dayStart, end: dayEnd } = getLocalDayBoundariesUtc(dateParam, timezone);
+		const { start, end } = getLocalDayBoundariesUtc(dateParam, timezone);
+		const dayStart = start.toISOString();
+		const dayEnd = end.toISOString();
 
 		// Fetch v4 data + APS snapshots for historical predictions
 		const [entriesResponse, bolusResponse, carbResponse, apsResponse] = await Promise.all([
 			apiClient.sensorGlucose.getAll(dayStart, dayEnd, 10000),
 			apiClient.bolus.getAll(dayStart, dayEnd, 1000),
 			apiClient.nutrition.getCarbIntakes(dayStart, dayEnd, 1000),
-			getApsSnapshots({ from: dayStart.getTime(), to: dayEnd.getTime(), limit: 1000, sort: 'timestamp_asc' }),
+			getApsSnapshots({ from: dayStart, to: dayEnd, limit: 1000, sort: 'timestamp_asc' }),
 		]);
 
 		const entries = entriesResponse.data ?? [];
@@ -79,8 +81,8 @@ export const getDayInReviewData = query(
 			insulinDelivery,
 			apsSnapshots,
 			dateRange: {
-				from: dayStart.toISOString(),
-				to: dayEnd.toISOString(),
+				from: dayStart,
+				to: dayEnd,
 			},
 		};
 	}

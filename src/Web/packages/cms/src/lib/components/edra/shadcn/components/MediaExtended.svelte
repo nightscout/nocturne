@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { Button, buttonVariants } from '@nocturne/ui/ui/button';
+	import { Button } from '@nocturne/ui/ui/button';
 	import * as DropdownMenu from '@nocturne/ui/ui/dropdown-menu';
+	import * as ToggleGroup from '@nocturne/ui/ui/toggle-group';
 	import { cn } from '@nocturne/ui/utils';
 	import AlignCenter from '@lucide/svelte/icons/text-align-center';
 	import AlignLeft from '@lucide/svelte/icons/text-align-start';
@@ -34,7 +35,9 @@
 	const minWidthPercent = 20;
 	const maxWidthPercent = 100;
 
-	let nodeRef = $state<HTMLElement>();
+	let contentRef = $state<HTMLElement>();
+	// NodeViewWrapper exposes no ref, so the wrapper is reached through its only child.
+	const nodeRef = $derived(contentRef?.parentElement ?? undefined);
 
 	let resizing = $state(false);
 	let resizingInitialWidthPercent = $state(0);
@@ -113,9 +116,6 @@
 	}
 
 	onMount(() => {
-		// Attach id to nodeRef
-		nodeRef = document.getElementById('resizable-container-media') as HTMLDivElement;
-
 		// Mouse events
 		window.addEventListener('mousemove', resize);
 		window.addEventListener('mouseup', endResize);
@@ -133,27 +133,24 @@
 </script>
 
 <NodeViewWrapper
-	id="resizable-container-media"
 	class={cn(
-		'relative my-4! flex flex-col rounded-md border border-transparent',
+		'relative my-4! flex w-(--media-width) flex-col rounded-md border border-transparent',
 		selected && 'ring-1',
 		node.attrs.align === 'left' && 'left-0 translate-x-0',
 		node.attrs.align === 'center' && 'left-1/2 -translate-x-1/2',
 		node.attrs.align === 'right' && 'left-full -translate-x-full'
 	)}
-	style={`width: ${node.attrs.width}`}
+	style={`--media-width: ${node.attrs.width}`}
 >
-	<div class={cn('group relative flex flex-col rounded-md', resizing && '')}>
+	<div bind:this={contentRef} class="group relative flex flex-col rounded-md">
 		{@render children()}
 		{#if node.attrs.title !== null && node.attrs.title.trim() !== ''}
+			<!-- eslint-disable-next-line no-restricted-syntax -- the caption is document content, drawn to match the rendered caption rather than a form field -->
 			<input
 				value={node.attrs.title}
 				type="text"
 				class="text-muted-foreground my-1 w-full bg-transparent text-center text-sm outline-none"
-				onchange={(e) => {
-					const target = e.target as HTMLInputElement;
-					updateAttributes({ title: target.value });
-				}}
+				onchange={(e) => updateAttributes({ title: e.currentTarget.value })}
 			/>
 		{/if}
 		{#if editor.isEditable}
@@ -161,8 +158,7 @@
 				role="button"
 				tabindex="0"
 				aria-label={strings.extension.media.back}
-				class="absolute inset-y-0 z-20 flex w-5 cursor-col-resize items-center justify-start p-2"
-				style="left: 0px"
+				class="absolute inset-y-0 left-0 z-20 flex w-5 cursor-col-resize items-center justify-start p-2"
 				onmousedown={(event: MouseEvent) => {
 					handleResizingPosition(event, 'left');
 				}}
@@ -179,8 +175,7 @@
 				role="button"
 				tabindex="0"
 				aria-label={strings.extension.media.back}
-				class="absolute inset-y-0 z-20 flex w-5 cursor-col-resize items-center justify-end p-2"
-				style="right: 0px"
+				class="absolute inset-y-0 right-0 z-20 flex w-5 cursor-col-resize items-center justify-end p-2"
 				onmousedown={(event: MouseEvent) => {
 					handleResizingPosition(event, 'right');
 				}}
@@ -199,41 +194,34 @@
 					openedMore && 'opacity-100'
 				)}
 			>
-				<Button
-					variant="ghost"
-					class={cn('size-6 p-0', node.attrs.align === 'left' && 'bg-muted')}
-					onclick={() => updateAttributes({ align: 'left' })}
-					title={strings.extension.media.alignLeft}
+				<ToggleGroup.Root
+					type="single"
+					size="icon-xs"
+					spacing={1}
+					bind:value={() => node.attrs.align, (align) => align && updateAttributes({ align })}
 				>
-					<AlignLeft class="size-4" />
-				</Button>
-				<Button
-					variant="ghost"
-					class={cn('size-6 p-0', node.attrs.align === 'center' && 'bg-muted')}
-					onclick={() => updateAttributes({ align: 'center' })}
-					title={strings.extension.media.alignCenter}
-				>
-					<AlignCenter class="size-4" />
-				</Button>
-				<Button
-					variant="ghost"
-					class={cn('size-6 p-0', node.attrs.align === 'right' && 'bg-muted')}
-					onclick={() => updateAttributes({ align: 'right' })}
-					title={strings.extension.media.alignRight}
-				>
-					<AlignRight class="size-4" />
-				</Button>
+					<ToggleGroup.Item value="left" title={strings.extension.media.alignLeft}>
+						<AlignLeft class="size-4" />
+					</ToggleGroup.Item>
+					<ToggleGroup.Item value="center" title={strings.extension.media.alignCenter}>
+						<AlignCenter class="size-4" />
+					</ToggleGroup.Item>
+					<ToggleGroup.Item value="right" title={strings.extension.media.alignRight}>
+						<AlignRight class="size-4" />
+					</ToggleGroup.Item>
+				</ToggleGroup.Root>
 				<DropdownMenu.Root
 					bind:open={openedMore}
 					onOpenChange={(value: boolean) => (openedMore = value)}
 				>
-					<DropdownMenu.Trigger
-						class={buttonVariants({ variant: 'ghost', class: 'size-6 p-0' })}
-						title={strings.extension.media.moreOptions}
-					>
-						<EllipsisVertical class="size-4" />
+					<DropdownMenu.Trigger title={strings.extension.media.moreOptions}>
+						{#snippet child({ props }: { props: Record<string, unknown> })}
+							<Button {...props} variant="ghost" size="icon-xs">
+								<EllipsisVertical class="size-4" />
+							</Button>
+						{/snippet}
 					</DropdownMenu.Trigger>
-					<DropdownMenu.Content align="start" alignOffset={-90} class="mt-1 overflow-auto text-sm">
+					<DropdownMenu.Content align="start" alignOffset={-90} class="mt-1 overflow-auto">
 						<DropdownMenu.Item
 							onclick={() => {
 								if (node.attrs.title === null || node.attrs.title.trim() === '')
@@ -267,7 +255,7 @@
 							onclick={() => {
 								deleteNode();
 							}}
-							class="text-destructive"
+							variant="destructive"
 						>
 							<Trash class="mr-1 size-4" />
 							{strings.extension.media.delete}

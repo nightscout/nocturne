@@ -153,9 +153,9 @@ public class TenantController : ControllerBase
         [FromBody] ProvisionRequest request, CancellationToken ct)
     {
         if (request.Credential is null && request.OidcIdentity is null)
-            return BadRequest(new { error = "Either Credential or OidcIdentity must be provided" });
+            return Problem(detail: "Either Credential or OidcIdentity must be provided", statusCode: 400, title: "Bad Request");
         if (request.Credential is not null && request.OidcIdentity is not null)
-            return BadRequest(new { error = "Provide either Credential or OidcIdentity, not both" });
+            return Problem(detail: "Provide either Credential or OidcIdentity, not both", statusCode: 400, title: "Bad Request");
 
         var result = await _tenantService.ProvisionWithOwnerAsync(
             request.Slug,
@@ -214,7 +214,13 @@ public class TenantController : ControllerBase
         {
             OidcLinkOutcome.Created => NoContent(),
             OidcLinkOutcome.AlreadyLinkedToSelf => NoContent(),
-            _ => BadRequest(new { error = outcome.ToString() })
+            // An external client branches on this code.
+            OidcLinkOutcome.AlreadyLinkedToOther => Problem(
+                detail: "This provider account is already linked to another Nocturne user.",
+                statusCode: 400,
+                title: "Bad Request",
+                extensions: new Dictionary<string, object?> { ["error"] = nameof(OidcLinkOutcome.AlreadyLinkedToOther) }),
+            _ => throw new InvalidOperationException($"Unexpected OidcLinkOutcome: {outcome}"),
         };
     }
 
@@ -232,7 +238,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemovePasskeyCredentialAsync(subjectId, credentialId);
-        return result == FactorRemovalResult.Removed ? NoContent() : BadRequest(new { error = result.ToString() });
+        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "Passkey");
     }
 
     /// <summary>Removes an OIDC identity from a member subject.</summary>
@@ -249,7 +255,7 @@ public class TenantController : ControllerBase
             return Forbid();
 
         var result = await subjectService.TryRemoveOidcIdentityAsync(subjectId, identityId);
-        return result == FactorRemovalResult.Removed ? NoContent() : BadRequest(new { error = result.ToString() });
+        return result == FactorRemovalResult.Removed ? NoContent() : FactorRemovalRefusal(result, "OIDC identity");
     }
 
     /// <summary>
@@ -295,6 +301,17 @@ public class TenantController : ControllerBase
 
         return Ok(issued);
     }
+
+    private ObjectResult FactorRemovalRefusal(FactorRemovalResult result, string factor) =>
+        Problem(
+            detail: result switch
+            {
+                FactorRemovalResult.NotFound => $"{factor} not found.",
+                FactorRemovalResult.LastPrimaryFactor => "Cannot remove the member's only remaining sign-in method.",
+                _ => throw new InvalidOperationException($"Unexpected FactorRemovalResult: {result}"),
+            },
+            statusCode: 400,
+            title: "Bad Request");
 
     /// <summary>
     /// Verifies the authenticated caller is a member of the specified tenant

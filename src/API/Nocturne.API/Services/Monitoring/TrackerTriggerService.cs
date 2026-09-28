@@ -129,7 +129,12 @@ public class TrackerTriggerService : IDeviceEventReactor
                 deviceEvent.EventType
             );
 
-            await _broadcast.BroadcastTrackerUpdateAsync("complete", TrackerInstanceDto.FromEntity(completed));
+            await _broadcast.BroadcastTrackerUpdateAsync(
+                "complete",
+                TrackerInstanceDto.FromEntity(completed),
+                definition.UserId,
+                definition.Visibility
+            );
         }
 
         var newInstance = await _trackerRepository.StartInstanceAsync(
@@ -148,7 +153,12 @@ public class TrackerTriggerService : IDeviceEventReactor
             deviceEvent.EventType
         );
 
-        await _broadcast.BroadcastTrackerUpdateAsync("create", TrackerInstanceDto.FromEntity(newInstance));
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "create",
+            TrackerInstanceDto.FromEntity(newInstance),
+            definition.UserId,
+            definition.Visibility
+        );
     }
 
     /// <summary>

@@ -78,12 +78,22 @@ public class ThreeWayParityTests
                     with
                 { NextExcursionOrdinal = nextExcursionOrdinal };
 
-                var response = RustAlertEngine.Evaluate(
-                    ToRustRule(rule),
-                    context,
-                    at,
-                    timers.GetValueOrDefault(rule.Id),
-                    tracker);
+                RustEvaluateResponse response;
+                try
+                {
+                    response = RustAlertEngine.Evaluate(
+                        ToRustRule(rule),
+                        context,
+                        at,
+                        timers.GetValueOrDefault(rule.Id),
+                        tracker);
+                }
+                catch (RustAlertEngineException ex) when (ex.Message.Contains("malformed condition_params for "))
+                {
+                    // The host skips a rule the engine cannot evaluate and keeps its state.
+                    rules.Add(new JsonObject { ["rule_id"] = rule.Id.ToString(), ["skipped"] = true });
+                    continue;
+                }
 
                 timers[rule.Id] = response.Timers ?? new Dictionary<string, DateTime>();
                 if (response.Tracker is not null)

@@ -189,121 +189,7 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<StateSpan> UpsertStateSpanAsync(
         StateSpan stateSpan,
         CancellationToken cancellationToken = default
-    )
-    {
-        StateSpanEntity? entity = null;
-        var isNew = false;
-
-        // Check for existing by originalId
-        if (!string.IsNullOrEmpty(stateSpan.OriginalId))
-        {
-            entity = await _context.StateSpans.FirstOrDefaultAsync(
-                s => s.OriginalId == stateSpan.OriginalId,
-                cancellationToken
-            );
-
-            if (entity == null)
-            {
-                var blocked = await FindBlockingSpanAsync(stateSpan.OriginalId, cancellationToken);
-                if (blocked != null)
-                    return StateSpanMapper.ToDomainModel(blocked);
-            }
-        }
-
-        if (entity != null)
-        {
-            StateSpanMapper.UpdateEntity(entity, stateSpan);
-        }
-        else
-        {
-            entity = StateSpanMapper.ToEntity(stateSpan);
-            _context.StateSpans.Add(entity);
-            isNew = true;
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        // For exclusive categories, close any existing open spans when a new one is inserted
-        if (isNew && ExclusiveCategories.Contains(entity.Category))
-        {
-            // Supersession closes a PRIOR open span when a newer one starts (a missed resume/switch).
-            // "Prior" is by start time, not insert order: a span that starts AFTER this one is not
-            // superseded by it. Without this bound, a span inserted out of order (historical backfill
-            // of a pump that reports newest-first) closes a later-starting open span at its own
-            // earlier start — inverting it (end < start), and clearing a genuinely active suspension.
-            var openSpansQuery = _context.StateSpans
-                .Where(s =>
-                    s.Category == entity.Category
-                    && s.EndTimestamp == null
-                    && s.Id != entity.Id
-                    && s.StartTimestamp <= entity.StartTimestamp);
-
-            // PumpMode mixes independent dimensions — Automatic/Manual loop mode vs Suspended
-            // delivery — which can legitimately overlap, so only the SAME state is mutually exclusive
-            // there. Other exclusive categories (Override, TemporaryTarget, Profile) supersede any
-            // open span regardless of state.
-            if (string.Equals(entity.Category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase))
-                openSpansQuery = openSpansQuery.Where(s => s.State == entity.State);
-
-            var openSpans = await openSpansQuery.ToListAsync(cancellationToken);
-
-            if (openSpans.Count > 0)
-            {
-                foreach (var openSpan in openSpans)
-                {
-                    openSpan.EndTimestamp = entity.StartTimestamp;
-                    openSpan.SupersededById = entity.Id;
-                    openSpan.UpdatedAt = DateTime.UtcNow;
-                }
-
-                await _context.SaveChangesAsync(cancellationToken);
-                _logger.LogDebug(
-                    "Superseded {Count} open {Category} span(s) with new span {NewSpanId}",
-                    openSpans.Count, entity.Category, entity.Id);
-            }
-        }
-
-        // Link new state spans to canonical groups for deduplication
-        if (isNew)
-        {
-            try
-            {
-                var dedupInputs = new List<DeduplicationInput>
-                {
-                    new(
-                        RecordId: entity.Id,
-                        Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                        DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
-                        Criteria: MatchCriteriaMapper.From(entity)
-                    )
-                };
-
-                await _deduplicationService.DeduplicateBatchAsync(RecordType.StateSpan, dedupInputs, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                // Don't fail the insert if deduplication fails
-                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "StateSpan", 1);
-            }
-        }
-
-        return StateSpanMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// The soft-deleted row, if any, that forbids re-creating <paramref name="originalId"/>.
-    /// State spans are keyed by <c>OriginalId</c> where the V4 tables are keyed by
-    /// <c>LegacyId</c>, so the lookup is local while the rule stays shared.
-    /// </summary>
-    /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
-    private Task<StateSpanEntity?> FindBlockingSpanAsync(
-        string originalId,
-        CancellationToken cancellationToken) =>
-        _context.StateSpans.AsNoTracking().IgnoreQueryFilters()
-            .Where(s => s.TenantId == _context.TenantId && s.OriginalId == originalId)
-            .WhereBlocksRecreation()
-            .OrderByDescending(s => s.DeletedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+    ) => (await UpsertBatchAsync([stateSpan], cancellationToken))[0];
 
     /// <summary>
     /// Bulk upsert state spans (for connector imports)
@@ -314,15 +200,176 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<int> BulkUpsertAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default
-    )
+    ) => (await UpsertBatchAsync(stateSpans.ToList(), cancellationToken)).Count;
+
+    /// <summary>
+    /// Upserts <paramref name="stateSpans"/> by <c>OriginalId</c> with one save, leaving the rows a
+    /// save per span in input order would: each span sees every earlier one, so a repeated
+    /// <c>OriginalId</c> updates the row its first occurrence inserted, and supersession runs in input
+    /// order rather than start order. Every row it loaded or added is detached afterwards so a long
+    /// connector sync does not pay change detection over every earlier batch; only those rows, since
+    /// the scoped context may also track entities the caller still holds.
+    /// </summary>
+    /// <returns>Per input span, the row it wrote or the soft-deleted row that blocked it.</returns>
+    private async Task<List<StateSpan>> UpsertBatchAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken)
     {
-        var count = 0;
-        foreach (var span in stateSpans)
+        if (stateSpans.Count == 0)
+            return [];
+
+        var governingRows = await LoadGoverningSpansAsync(stateSpans, cancellationToken);
+        var governingByOriginalId = governingRows
+            .GroupBy(s => s.OriginalId!)
+            .ToDictionary(g => g.Key, g => g.GoverningRow()!);
+        var loaded = new HashSet<StateSpanEntity>(governingRows, ReferenceEqualityComparer.Instance);
+        loaded.UnionWith(await LoadSupersedableSpansAsync(stateSpans, cancellationToken));
+
+        var written = new List<StateSpanEntity>(stateSpans.Count);
+        var inserted = new List<StateSpanEntity>();
+        foreach (var stateSpan in stateSpans)
         {
-            await UpsertStateSpanAsync(span, cancellationToken);
-            count++;
+            var hasOriginalId = !string.IsNullOrEmpty(stateSpan.OriginalId);
+            if (hasOriginalId && governingByOriginalId.TryGetValue(stateSpan.OriginalId!, out var governing))
+            {
+                if (governing.DeletedAt == null)
+                    StateSpanMapper.UpdateEntity(governing, stateSpan);
+                written.Add(governing);
+                continue;
+            }
+
+            var entity = StateSpanMapper.ToEntity(stateSpan);
+            _context.StateSpans.Add(entity);
+            SupersedeOpenSpans(entity, loaded);
+            loaded.Add(entity);
+            inserted.Add(entity);
+            written.Add(entity);
+            if (hasOriginalId)
+                governingByOriginalId[stateSpan.OriginalId!] = entity;
         }
-        return count;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        if (inserted.Count > 0)
+        {
+            try
+            {
+                var dedupInputs = inserted
+                    .Select(entity => new DeduplicationInput(
+                        RecordId: entity.Id,
+                        Mills: new DateTimeOffset(entity.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                        DataSource: entity.Source ?? DeduplicationInput.UnknownDataSource,
+                        Criteria: MatchCriteriaMapper.From(entity)))
+                    .ToList();
+
+                await _deduplicationService.DeduplicateBatchAsync(RecordType.StateSpan, dedupInputs, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Don't fail the insert if deduplication fails
+                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "StateSpan", inserted.Count);
+            }
+        }
+
+        var results = written.Select(StateSpanMapper.ToDomainModel).ToList();
+        foreach (var entity in loaded)
+            _context.Entry(entity).State = EntityState.Detached;
+
+        return results;
+    }
+
+    /// <summary>
+    /// Every row that can govern an <c>OriginalId</c> in the batch, latest delete first: the live row,
+    /// which the batch updates, or else the soft-deleted row that forbids re-creating it. State spans are keyed by
+    /// <c>OriginalId</c> where the V4 tables are keyed by <c>LegacyId</c>, so the lookup is local
+    /// while the rule stays shared.
+    /// </summary>
+    /// <seealso cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>
+    private async Task<List<StateSpanEntity>> LoadGoverningSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken)
+    {
+        var originalIds = stateSpans
+            .Select(s => s.OriginalId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList();
+        if (originalIds.Count == 0)
+            return [];
+
+        return await _context.StateSpans.IgnoreQueryFilters()
+            .Where(s => s.TenantId == _context.TenantId && originalIds.Contains(s.OriginalId))
+            .WhereBlocksRecreation()
+            .OrderByDescending(s => s.DeletedAt)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Every stored open span a new span in the batch could supersede, per
+    /// <see cref="SupersedeOpenSpans"/>. Spans the batch reopens by update are not here; they are
+    /// among the governing rows.
+    /// </summary>
+    private async Task<List<StateSpanEntity>> LoadSupersedableSpansAsync(
+        IReadOnlyList<StateSpan> stateSpans,
+        CancellationToken cancellationToken)
+    {
+        var categories = stateSpans
+            .Select(s => s.Category.ToString())
+            .Where(ExclusiveCategories.Contains)
+            .Distinct()
+            .ToList();
+        if (categories.Count == 0)
+            return [];
+
+        var latestStart = stateSpans.Max(s => s.StartTimestamp);
+        return await _context.StateSpans
+            .Where(s => categories.Contains(s.Category)
+                && s.EndTimestamp == null
+                && s.StartTimestamp <= latestStart)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// For an exclusive category, closes every open span in <paramref name="candidates"/> that
+    /// <paramref name="entity"/> supersedes.
+    /// </summary>
+    private void SupersedeOpenSpans(StateSpanEntity entity, IEnumerable<StateSpanEntity> candidates)
+    {
+        if (!ExclusiveCategories.Contains(entity.Category))
+            return;
+
+        // PumpMode mixes independent dimensions (Automatic/Manual loop mode vs Suspended
+        // delivery) which can legitimately overlap, so only the SAME state is mutually exclusive
+        // there. Other exclusive categories (Override, TemporaryTarget, Profile) supersede any
+        // open span regardless of state.
+        var sameStateOnly = string.Equals(
+            entity.Category, nameof(StateSpanCategory.PumpMode), StringComparison.OrdinalIgnoreCase);
+
+        var superseded = 0;
+        foreach (var open in candidates)
+        {
+            // Supersession closes a PRIOR open span when a newer one starts (a missed resume/switch).
+            // "Prior" is by start time, not insert order: a span that starts AFTER this one is not
+            // superseded by it. Without this bound, a span inserted out of order (historical backfill
+            // of a pump that reports newest-first) closes a later-starting open span at its own
+            // earlier start, inverting it (end < start) and clearing a genuinely active suspension.
+            if (open.DeletedAt != null
+                || open.EndTimestamp != null
+                || open.StartTimestamp > entity.StartTimestamp
+                || !string.Equals(open.Category, entity.Category, StringComparison.Ordinal)
+                || (sameStateOnly && !string.Equals(open.State, entity.State, StringComparison.Ordinal)))
+                continue;
+
+            open.EndTimestamp = entity.StartTimestamp;
+            open.SupersededById = entity.Id;
+            open.UpdatedAt = DateTime.UtcNow;
+            superseded++;
+        }
+
+        if (superseded > 0)
+            _logger.LogDebug(
+                "Superseded {Count} open {Category} span(s) with new span {NewSpanId}",
+                superseded, entity.Category, entity.Id);
     }
 
     /// <summary>
@@ -587,21 +634,6 @@ public class StateSpanRepository : IStateSpanRepository
     }
 
     /// <summary>
-    /// Create or update a state span from an Activity (upsert by originalId)
-    /// </summary>
-    /// <param name="stateSpan">The state span data to upsert.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The upserted activity state span.</returns>
-    public async Task<StateSpan> UpsertActivityAsStateSpanAsync(
-        StateSpan stateSpan,
-        CancellationToken cancellationToken = default
-    )
-    {
-        // Use the standard upsert method - Activity-specific logic is in the mapper
-        return await UpsertStateSpanAsync(stateSpan, cancellationToken);
-    }
-
-    /// <summary>
     /// Create multiple state spans from Activities
     /// </summary>
     /// <param name="stateSpans">The collection of activity state spans to create.</param>
@@ -610,16 +642,7 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default
-    )
-    {
-        var results = new List<StateSpan>();
-        foreach (var span in stateSpans)
-        {
-            var created = await UpsertActivityAsStateSpanAsync(span, cancellationToken);
-            results.Add(created);
-        }
-        return results;
-    }
+    ) => await UpsertBatchAsync(stateSpans.ToList(), cancellationToken);
 
     /// <summary>
     /// Update an existing Activity state span

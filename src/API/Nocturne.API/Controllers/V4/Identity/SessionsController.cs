@@ -138,7 +138,7 @@ public class SessionsController : ControllerBase
         var currentSessionId = await GetCurrentSessionIdAsync();
         if (currentSessionId is null)
         {
-            return BadRequest(new { error = "Current session could not be determined." });
+            return Problem(detail: "Current session could not be determined.", statusCode: 400, title: "Bad Request");
         }
 
         var revoked = await _refreshTokenService.RevokeOtherSessionsForSubjectAsync(

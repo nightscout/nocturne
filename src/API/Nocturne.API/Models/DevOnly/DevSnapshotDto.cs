@@ -161,7 +161,6 @@ public class TenantMemberEntityDto
     public DateTime? LastUsedAt { get; set; }
     public string? LastUsedIp { get; set; }
     public string? LastUsedUserAgent { get; set; }
-    public DateTime? RevokedAt { get; set; }
 }
 
 // ── TenantMemberRole ────────────────────────────────────────────────────

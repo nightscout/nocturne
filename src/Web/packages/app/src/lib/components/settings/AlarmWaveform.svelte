@@ -4,6 +4,7 @@
     duration: number;
   }
   /** Module-level cache for computed peaks (persists across component remounts) */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level cache; nothing renders from it
   const peaksCache = new Map<string, CachedSoundData>();
 </script>
 
@@ -32,8 +33,8 @@
     isPlaying = false,
     width = 200,
     height = 60,
-    color = "hsl(var(--muted-foreground) / 0.4)",
-    progressColor = "hsl(var(--primary))",
+    color = "color-mix(in oklch, var(--muted-foreground) 40%, transparent)",
+    progressColor = "var(--primary)",
     barWidth = 3,
   }: Props = $props();
 
@@ -545,18 +546,17 @@
 <svelte:window onresize={handleResize} />
 
 <div
-  class="waveform-container rounded-md overflow-hidden border bg-muted"
-  style="position: relative; width: {width}px; height: {height}px;"
+  class="waveform-container relative h-(--wave-h) w-(--wave-w) rounded-md overflow-hidden border bg-muted"
+  style:--wave-w="{width}px"
+  style:--wave-h="{height}px"
 >
   <canvas
     bind:this={canvasEl}
-    class="waveform-canvas"
-    style="position: absolute; top: 0; left: 0;"
+    class="waveform-canvas absolute top-0 left-0"
   ></canvas>
   <canvas
     bind:this={progressCanvasEl}
-    class="progress-canvas"
-    style="position: absolute; top: 0; left: 0; z-index: 1;"
+    class="progress-canvas absolute top-0 left-0 z-1"
   ></canvas>
 </div>
 

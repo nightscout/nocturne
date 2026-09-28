@@ -151,7 +151,7 @@ public class TreatmentService : ITreatmentService
     /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
     /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
     /// </remarks>
-    public async Task<IEnumerable<Treatment>> CreateTreatmentsAsync(
+    public async Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default)
     {
         var treatmentList = treatments.ToList();

@@ -752,7 +752,8 @@ public class CompressionLowDetectionSettings
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// Whether to exclude accepted compression lows from statistics calculations
+    /// Kept only so stored settings that carry it still deserialize. It has no effect: nothing
+    /// excludes accepted compression lows from the statistics.
     /// </summary>
     [JsonPropertyName("excludeFromStatistics")]
     public bool ExcludeFromStatistics { get; set; } = true;

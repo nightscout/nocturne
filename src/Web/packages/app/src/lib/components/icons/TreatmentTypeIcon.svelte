@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { IconProps } from "./types";
-  import Syringe from "lucide-svelte/icons/syringe";
-  import Utensils from "lucide-svelte/icons/utensils";
-  import Activity from "lucide-svelte/icons/activity";
-  import Smartphone from "lucide-svelte/icons/smartphone";
-  import HeartPulse from "lucide-svelte/icons/heart-pulse";
-  import Bell from "lucide-svelte/icons/bell";
-  import MessageSquare from "lucide-svelte/icons/message-square";
-  import HelpCircle from "lucide-svelte/icons/help-circle";
-  import Dog from "lucide-svelte/icons/dog";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+  import Bell from "@lucide/svelte/icons/bell";
+  import MessageSquare from "@lucide/svelte/icons/message-square";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
+  import Dog from "@lucide/svelte/icons/dog";
   import { TREATMENT_CATEGORIES } from "$lib/constants/treatment-categories";
 
   interface Props extends IconProps {
@@ -86,7 +86,7 @@
   Color is determined by the treatment category unless overridden.
 -->
 <IconComponent
-  class="{colorClass} {className}"
-  style={color ? `color: ${color}` : undefined}
+  class="{color ? 'text-(--icon-color)' : colorClass} {className}"
+  style={color ? `--icon-color: ${color}` : undefined}
   {...rest}
 />

@@ -204,11 +204,11 @@ public class DataSourceServiceDeleteConnectorDataTests : IDisposable
 
         // The dedup that guards bulk-create treats every user-deleted row as blocking, so the next
         // sync cannot re-import them.
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().Contain("bolus-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Should().Contain("carb-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Should().Contain("bgcheck-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Should().Contain("note-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(["aps-1"])).Should().Contain("aps-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Held.Should().Contain("bolus-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Held.Should().Contain("carb-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Held.Should().Contain("bgcheck-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Held.Should().Contain("note-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<ApsSnapshotEntity>(["aps-1"])).Held.Should().Contain("aps-1");
     }
 
     [Fact]

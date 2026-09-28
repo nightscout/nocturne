@@ -26,7 +26,10 @@ type TickScale = {
 export function hourTicks(scale: TickScale, spacing = 80): Date[] {
   if (typeof scale.ticks !== "function") return [];
 
-  const [start, end] = scale.range() as number[];
+  const [start, end] = scale.range();
+  if (typeof start !== "number" || typeof end !== "number") return [];
   const count = Math.max(2, Math.round(Math.abs(end - start) / spacing));
-  return (scale.ticks(count) as Date[]).filter((d) => +timeHour.floor(d) === +d);
+  return scale
+    .ticks(count)
+    .filter((d): d is Date => d instanceof Date && +timeHour.floor(d) === +d);
 }

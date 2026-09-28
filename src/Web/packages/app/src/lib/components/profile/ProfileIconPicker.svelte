@@ -1,41 +1,39 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
-  import { cn } from "$lib/utils";
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { PROFILE_ICONS } from "$lib/constants/profile-icons";
-  import {
-    User,
-    UserCircle,
-    Heart,
-    HeartPulse,
-    Activity,
-    Syringe,
-    Pill,
-    Droplet,
-    Target,
-    Sun,
-    Moon,
-    Sunrise,
-    Sunset,
-    Dumbbell,
-    Bike,
-    Footprints,
-    Utensils,
-    Coffee,
-    Cake,
-    Baby,
-    Briefcase,
-    Home,
-    Plane,
-    Zap,
-    Shield,
-    Star,
-    Sparkles,
-    Clock,
-    Calendar,
-    TrendingUp,
-    type Icon,
-  } from "lucide-svelte";
+  import type { Icon } from "@lucide/svelte";
+  import User from "@lucide/svelte/icons/user";
+  import UserCircle from "@lucide/svelte/icons/circle-user";
+  import Heart from "@lucide/svelte/icons/heart";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Pill from "@lucide/svelte/icons/pill";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import Target from "@lucide/svelte/icons/target";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
+  import Sunrise from "@lucide/svelte/icons/sunrise";
+  import Sunset from "@lucide/svelte/icons/sunset";
+  import Dumbbell from "@lucide/svelte/icons/dumbbell";
+  import Bike from "@lucide/svelte/icons/bike";
+  import Footprints from "@lucide/svelte/icons/footprints";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Coffee from "@lucide/svelte/icons/coffee";
+  import Cake from "@lucide/svelte/icons/cake";
+  import Baby from "@lucide/svelte/icons/baby";
+  import Briefcase from "@lucide/svelte/icons/briefcase";
+  import Home from "@lucide/svelte/icons/house";
+  import Plane from "@lucide/svelte/icons/plane";
+  import Zap from "@lucide/svelte/icons/zap";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Star from "@lucide/svelte/icons/star";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
 
   interface Props {
     selectedIcon: string;
@@ -93,31 +91,37 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger {disabled} class="w-full">
-    <Button variant="outline" class="w-full justify-start gap-2" {disabled}>
-      <CurrentIcon class="h-4 w-4" />
-      <span>{currentIconName}</span>
-    </Button>
+  <Popover.Trigger {disabled}>
+    {#snippet child({ props }: { props: Record<string, unknown> })}
+      <Button {...props} variant="outline" class="w-full justify-start">
+        <CurrentIcon class="h-4 w-4" />
+        <span>{currentIconName}</span>
+      </Button>
+    {/snippet}
   </Popover.Trigger>
   <Popover.Content class="w-80 p-3" align="start">
     <div class="space-y-2">
       <p class="text-sm font-medium">Select an icon</p>
-      <div class="grid grid-cols-6 gap-2">
-        {#each PROFILE_ICONS as icon}
+      <ToggleGroup.Root
+        type="single"
+        variant="outline"
+        spacing={1}
+        class="grid grid-cols-6"
+        value={selectedIcon}
+        onValueChange={(v: string) => v && selectIcon(v)}
+      >
+        {#each PROFILE_ICONS as icon (icon.id)}
           {@const IconComponent = iconComponents[icon.id] ?? User}
-          <button
-            type="button"
-            class={cn(
-              "flex h-9 w-9 items-center justify-center rounded-md border transition-colors hover:bg-accent",
-              selectedIcon === icon.id && "border-primary bg-primary/10"
-            )}
+          <ToggleGroup.Item
+            value={icon.id}
+            class="w-9"
             title={icon.name}
-            onclick={() => selectIcon(icon.id)}
+            aria-label={icon.name}
           >
             <IconComponent class="h-4 w-4" />
-          </button>
+          </ToggleGroup.Item>
         {/each}
-      </div>
+      </ToggleGroup.Root>
     </div>
   </Popover.Content>
 </Popover.Root>

@@ -168,4 +168,105 @@ public class TidepoolV4TreatmentMapperDecompositionBatchTests
         mappedBoluses[0].CorrelationId.Should().BeNull();
         mappedCarbs[0].CorrelationId.Should().BeNull();
     }
+
+    [Fact]
+    public void MapTreatments_TwoBolusesAtSameTimestamp_MapsBoth()
+    {
+        var timestamp = DateTime.UtcNow;
+        var boluses = new[]
+        {
+            new TidepoolBolus { Id = "b1", Normal = 3.0, Time = timestamp },
+            new TidepoolBolus { Id = "b2", Normal = 1.5, Time = timestamp },
+        };
+
+        var (mappedBoluses, _, _) = _mapper.MapTreatments(boluses, null);
+
+        mappedBoluses.Select(b => b.LegacyId).Should().BeEquivalentTo("tidepool_b1", "tidepool_b2");
+        mappedBoluses.Sum(b => b.Insulin).Should().Be(4.5);
+    }
+
+    [Theory]
+    [InlineData(1.0, 4.0, "tidepool_b2")]
+    [InlineData(4.0, 1.0, "tidepool_b1")]
+    public void MapTreatments_FoodAtTimeSharedByBoluses_CorrelatesWithLargestBolus(
+        double firstInsulin, double secondInsulin, string expectedLegacyId)
+    {
+        var timestamp = DateTime.UtcNow;
+        var boluses = new[]
+        {
+            new TidepoolBolus { Id = "b1", Normal = firstInsulin, Time = timestamp },
+            new TidepoolBolus { Id = "b2", Normal = secondInsulin, Time = timestamp },
+        };
+        var foods = new[]
+        {
+            new TidepoolFood
+            {
+                Id = "f1", Time = timestamp,
+                Nutrition = new TidepoolNutrition { Carbohydrate = new TidepoolCarbohydrate { Net = 40 } }
+            },
+        };
+
+        var (mappedBoluses, mappedCarbs, batches) = _mapper.MapTreatments(boluses, foods);
+
+        batches.Should().ContainSingle();
+        mappedCarbs.Single().CorrelationId.Should().Be(batches[0].Id);
+        mappedBoluses.Where(b => b.CorrelationId == batches[0].Id)
+            .Should().ContainSingle().Which.LegacyId.Should().Be(expectedLegacyId);
+        mappedBoluses.Where(b => b.CorrelationId is null).Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("b1", "b2")]
+    [InlineData("b2", "b1")]
+    public void MapTreatments_FoodAtTimeSharedByEqualBoluses_CorrelatesWithOrdinallyFirstId(
+        string firstId, string secondId)
+    {
+        var timestamp = DateTime.UtcNow;
+        var boluses = new[]
+        {
+            new TidepoolBolus { Id = firstId, Normal = 2.0, Time = timestamp },
+            new TidepoolBolus { Id = secondId, Normal = 2.0, Time = timestamp },
+        };
+        var foods = new[]
+        {
+            new TidepoolFood
+            {
+                Id = "f1", Time = timestamp,
+                Nutrition = new TidepoolNutrition { Carbohydrate = new TidepoolCarbohydrate { Net = 40 } }
+            },
+        };
+
+        var (mappedBoluses, _, batches) = _mapper.MapTreatments(boluses, foods);
+
+        mappedBoluses.Should().HaveCount(2);
+        mappedBoluses.Single(b => b.CorrelationId == batches.Single().Id).LegacyId.Should().Be("tidepool_b1");
+    }
+
+    [Fact]
+    public void MapTreatments_TwoFoodsAtSameTimeAsOneBolus_KeepsBothCarbIntakes()
+    {
+        var timestamp = DateTime.UtcNow;
+        var boluses = new[]
+        {
+            new TidepoolBolus { Id = "b1", Normal = 3.0, Time = timestamp },
+        };
+        var foods = new[]
+        {
+            new TidepoolFood
+            {
+                Id = "f1", Time = timestamp,
+                Nutrition = new TidepoolNutrition { Carbohydrate = new TidepoolCarbohydrate { Net = 40 } }
+            },
+            new TidepoolFood
+            {
+                Id = "f2", Time = timestamp,
+                Nutrition = new TidepoolNutrition { Carbohydrate = new TidepoolCarbohydrate { Net = 15 } }
+            },
+        };
+
+        var (mappedBoluses, mappedCarbs, _) = _mapper.MapTreatments(boluses, foods);
+
+        mappedBoluses.Should().ContainSingle();
+        mappedCarbs.Select(c => c.Carbs).Should().BeEquivalentTo(new[] { 40.0, 15.0 });
+    }
 }

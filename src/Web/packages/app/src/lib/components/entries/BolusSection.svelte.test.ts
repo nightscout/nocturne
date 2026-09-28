@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import BolusSection from "./BolusSection.svelte";
+import { BolusType } from "$lib/api/generated/nocturne-api-client";
 
 describe("BolusSection", () => {
 	it("renders section heading with icon", async () => {
@@ -35,7 +36,7 @@ describe("BolusSection", () => {
 
 	it("hides duration fields for Normal bolus type", async () => {
 		render(BolusSection, {
-			bolus: { bolusType: "Normal" as any },
+			bolus: { bolusType: BolusType.Normal },
 		});
 
 		await expect
@@ -48,7 +49,7 @@ describe("BolusSection", () => {
 
 	it("shows duration fields for Square bolus type", async () => {
 		render(BolusSection, {
-			bolus: { bolusType: "Square" as any },
+			bolus: { bolusType: BolusType.Square },
 		});
 
 		await expect.element(page.getByText("Duration (min)")).toBeVisible();
@@ -57,7 +58,7 @@ describe("BolusSection", () => {
 
 	it("shows duration fields for Dual bolus type", async () => {
 		render(BolusSection, {
-			bolus: { bolusType: "Dual" as any },
+			bolus: { bolusType: BolusType.Dual },
 		});
 
 		await expect.element(page.getByText("Duration (min)")).toBeVisible();

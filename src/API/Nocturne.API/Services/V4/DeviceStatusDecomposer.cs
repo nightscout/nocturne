@@ -38,13 +38,6 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    /// <param name="apsRepo">Repository for <see cref="V4Models.ApsSnapshot"/> records.</param>
-    /// <param name="pumpRepo">Repository for <see cref="V4Models.PumpSnapshot"/> records.</param>
-    /// <param name="uploaderRepo">Repository for <see cref="V4Models.UploaderSnapshot"/> records.</param>
-    /// <param name="extrasRepo">Repository for <see cref="V4Models.DeviceStatusExtras"/> records.</param>
-    /// <param name="stateSpanService">Service used to upsert override state spans extracted from device status.</param>
-    /// <param name="deviceService">Service that resolves or creates canonical device references.</param>
-    /// <param name="logger">Logger instance for this decomposer.</param>
     public DeviceStatusDecomposer(
         IApsSnapshotRepository apsRepo,
         IPumpSnapshotRepository pumpRepo,
@@ -84,27 +77,28 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
         NormalizeMills(ds);
 
         var legacyId = ds.Id;
+        var statusMills = ResolveStatusMills(ds);
 
         Guid? pumpDeviceId = null;
 
         if (ds.Pump != null)
         {
-            pumpDeviceId = await DecomposePumpAsync(ds, legacyId, source, result, origin, ct);
+            pumpDeviceId = await DecomposePumpAsync(ds, legacyId, source, statusMills, result, origin, ct);
         }
 
         if (ds.Cgm != null)
         {
-            await RegisterCgmDeviceAsync(ds, origin, ct);
+            await RegisterCgmDeviceAsync(ds, statusMills, ct);
         }
 
         if (MapToApsSnapshot(ds, legacyId, source, result.CorrelationId) is { } apsModel)
         {
-            await UpsertApsSnapshotAsync(ds, legacyId, apsModel, pumpDeviceId, result, origin, ct);
+            await UpsertApsSnapshotAsync(legacyId, apsModel, pumpDeviceId, statusMills, result, origin, ct);
         }
 
         if (ds.Uploader != null || ds.UploaderBattery.HasValue)
         {
-            await DecomposeUploaderAsync(ds, legacyId, source, result, origin, ct);
+            await DecomposeUploaderAsync(ds, legacyId, source, statusMills, result, origin, ct);
         }
 
         if (ds.Override is { Active: true })
@@ -127,7 +121,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     #region APS Decomposition
 
     private async Task UpsertApsSnapshotAsync(
-        DeviceStatus ds, string? legacyId, V4Models.ApsSnapshot model, Guid? pumpDeviceId,
+        string? legacyId, V4Models.ApsSnapshot model, Guid? pumpDeviceId, long statusMills,
         V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
         model.DeviceId = pumpDeviceId;
@@ -137,7 +131,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             beforeWrite: async existing =>
             {
                 model.PatientDeviceId =
-                    await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct)
+                    await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, statusMills, ct)
                     ?? existing?.PatientDeviceId;
             });
     }
@@ -162,7 +156,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// attribution to fall back to when the re-resolution comes back null.
     /// </summary>
     private async Task<V4Models.PumpSnapshot> BuildPumpSnapshotAsync(
-        DeviceStatus ds, string? legacyId, string? source, Guid? correlationId, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, string? source, long statusMills, Guid? correlationId, CancellationToken ct)
     {
         var model = MapToPumpSnapshot(ds, legacyId, source, correlationId);
 
@@ -170,22 +164,23 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             V4Models.DeviceCategory.InsulinPump,
             ds.Pump?.Manufacturer,
             PumpDeviceKey(ds),
-            ds.Mills, ct);
+            statusMills, ct);
 
         return model;
     }
 
     private async Task<Guid?> DecomposePumpAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, string? source, long statusMills,
+        V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var model = await BuildPumpSnapshotAsync(ds, legacyId, source, result.CorrelationId, ct);
+        var model = await BuildPumpSnapshotAsync(ds, legacyId, source, statusMills, result.CorrelationId, ct);
 
         var upserted = await UpsertByLegacyIdAsync(
             _pumpRepo, legacyId, model, result, origin, ct,
             beforeWrite: async existing =>
             {
                 model.PatientDeviceId =
-                    await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, ds.Mills, ct)
+                    await _deviceService.ResolvePatientDeviceAsync(model.DeviceId, statusMills, ct)
                     ?? existing?.PatientDeviceId;
             });
 
@@ -443,13 +438,13 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// sensor shows up as an in-use device. No-op unless the connector populated manufacturer +
     /// model/serial (<see cref="IDeviceService.ResolveAsync"/> returns null when either is missing).
     /// </summary>
-    private async Task RegisterCgmDeviceAsync(DeviceStatus ds, WriteOrigin origin, CancellationToken ct)
+    private async Task RegisterCgmDeviceAsync(DeviceStatus ds, long statusMills, CancellationToken ct)
     {
         await _deviceService.ResolveAsync(
             V4Models.DeviceCategory.CGM,
             ds.Cgm?.Manufacturer,
             ds.Cgm?.Serial ?? ds.Cgm?.Model,
-            ds.Mills, ct);
+            statusMills, ct);
     }
 
     #endregion
@@ -457,7 +452,7 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     #region Uploader Decomposition
 
     private async Task<V4Models.UploaderSnapshot> BuildUploaderSnapshotAsync(
-        DeviceStatus ds, string? legacyId, string? source, Guid? correlationId, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, string? source, long statusMills, Guid? correlationId, CancellationToken ct)
     {
         var model = MapToUploaderSnapshot(ds, legacyId, source, correlationId);
 
@@ -465,15 +460,16 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             V4Models.DeviceCategory.Uploader,
             ds.Uploader?.Name,
             ds.Uploader?.Type ?? "unknown",
-            ds.Mills, ct);
+            statusMills, ct);
 
         return model;
     }
 
     private async Task DecomposeUploaderAsync(
-        DeviceStatus ds, string? legacyId, string? source, V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
+        DeviceStatus ds, string? legacyId, string? source, long statusMills,
+        V4Models.DecompositionResult result, WriteOrigin origin, CancellationToken ct)
     {
-        var model = await BuildUploaderSnapshotAsync(ds, legacyId, source, result.CorrelationId, ct);
+        var model = await BuildUploaderSnapshotAsync(ds, legacyId, source, statusMills, result.CorrelationId, ct);
 
         await UpsertByLegacyIdAsync(_uploaderRepo, legacyId, model, result, origin, ct);
     }
@@ -485,14 +481,17 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     private static StateSpan BuildOverrideSpan(DeviceStatus ds, string? legacyId)
     {
         var timestamp = ResolveTimestamp(ds);
+        DateTime? end = ds.Override!.Duration is > 0
+            ? (ParseTimestampToDateTime(ds.Override.Timestamp) ?? timestamp)
+                .AddSeconds(ds.Override.Duration.Value)
+            : null;
         return new StateSpan
         {
             Category = StateSpanCategory.Override,
             State = OverrideState.Custom.ToString(),
             StartTimestamp = timestamp,
-            EndTimestamp = ds.Override!.Duration is > 0
-                ? timestamp.AddMinutes(ds.Override.Duration.Value)
-                : null,
+            // The span starts at the status time, so an end already past it cannot be stored as-is.
+            EndTimestamp = end > timestamp ? end : null,
             Source = ds.Device,
             OriginalId = legacyId,
             Metadata = BuildOverrideMetadata(ds.Override),
@@ -606,13 +605,14 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
             NormalizeMills(ds);
 
             var legacyId = ds.Id;
+            var statusMills = ResolveStatusMills(ds);
 
             Guid? pumpDeviceId = null;
 
             if (ds.Pump != null)
             {
-                var pumpModel = await BuildPumpSnapshotAsync(ds, legacyId, source, correlationId, ct);
-                pumpModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpModel.DeviceId, ds.Mills, ct);
+                var pumpModel = await BuildPumpSnapshotAsync(ds, legacyId, source, statusMills, correlationId, ct);
+                pumpModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpModel.DeviceId, statusMills, ct);
 
                 pumpDeviceId = pumpModel.DeviceId;
                 pumpList.Add(pumpModel);
@@ -620,19 +620,19 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
 
             if (ds.Cgm != null)
             {
-                await RegisterCgmDeviceAsync(ds, origin, ct);
+                await RegisterCgmDeviceAsync(ds, statusMills, ct);
             }
 
             if (MapToApsSnapshot(ds, legacyId, source, correlationId) is { } apsModel)
             {
                 apsModel.DeviceId = pumpDeviceId;
-                apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, ds.Mills, ct);
+                apsModel.PatientDeviceId = await _deviceService.ResolvePatientDeviceAsync(pumpDeviceId, statusMills, ct);
                 apsList.Add(apsModel);
             }
 
             if (ds.Uploader != null || ds.UploaderBattery.HasValue)
             {
-                uploaderList.Add(await BuildUploaderSnapshotAsync(ds, legacyId, source, correlationId, ct));
+                uploaderList.Add(await BuildUploaderSnapshotAsync(ds, legacyId, source, statusMills, correlationId, ct));
             }
 
             if (ds.Override is { Active: true })
@@ -871,36 +871,39 @@ public class DeviceStatusDecomposer : DecomposerBase, IDeviceStatusDecomposer, I
     /// <summary>
     /// Resolves the best available timestamp for a device status record.
     /// Priority: Mills (already normalized from date) > OpenAPS IOB time >
-    /// OpenAPS enacted/suggested timestamp > Loop predicted start date > Pump clock > CreatedAt > now.
+    /// OpenAPS enacted/suggested timestamp > Loop timestamp > Pump clock > CreatedAt >
+    /// Loop predicted start date > now.
     /// </summary>
     internal static DateTime ResolveTimestamp(DeviceStatus ds)
     {
         if (ds.Mills > 0)
             return DateTimeOffset.FromUnixTimeMilliseconds(ds.Mills).UtcDateTime;
 
-        // Try OpenAPS IOB time
         if (ParseTimestampToDateTime(ds.OpenAps?.Iob?.Time) is { } iobTime)
             return iobTime;
 
-        // Try OpenAPS enacted/suggested timestamp
         var command = ds.OpenAps?.Enacted ?? ds.OpenAps?.Suggested;
         if (ParseTimestampToDateTime(command?.Timestamp) is { } commandTime)
             return commandTime;
 
-        // Try Loop predicted start date
-        if (ParseTimestampToDateTime(ds.Loop?.Predicted?.StartDate) is { } loopTime)
+        if (ParseTimestampToDateTime(ds.Loop?.Timestamp) is { } loopTime)
             return loopTime;
 
-        // Try pump clock
         if (ParseTimestampToDateTime(ds.Pump?.Clock) is { } pumpTime)
             return pumpTime;
 
-        // Try CreatedAt
         if (ParseTimestampToDateTime(ds.CreatedAt) is { } createdTime)
             return createdTime;
 
+        // predicted.startDate is the latest reading's time, not the cycle's
+        if (ParseTimestampToDateTime(ds.Loop?.Predicted?.StartDate) is { } predictedTime)
+            return predictedTime;
+
         return DateTime.UtcNow;
     }
+
+    private static long ResolveStatusMills(DeviceStatus ds) =>
+        new DateTimeOffset(ResolveTimestamp(ds)).ToUnixTimeMilliseconds();
 
     private static DateTime? ParseTimestampToDateTime(string? timestamp)
     {

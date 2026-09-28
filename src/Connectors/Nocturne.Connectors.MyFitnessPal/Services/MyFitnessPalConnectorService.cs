@@ -82,7 +82,7 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         MyFitnessPalConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         // This override replaces the base's data-type dispatch, so the toggle it would have
         // honoured has to be checked here.
@@ -91,7 +91,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         {
             _logger.LogInformation(
                 "[{ConnectorSource}] Food sync is disabled; nothing to do", ConnectorSource);
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
@@ -115,7 +114,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
         {
             result.Success = false;
             result.Errors.Add("Failed to fetch diary data from MyFitnessPal");
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
         }
 
@@ -142,7 +140,6 @@ public class MyFitnessPalConnectorService : BaseConnectorService<MyFitnessPalCon
             }
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

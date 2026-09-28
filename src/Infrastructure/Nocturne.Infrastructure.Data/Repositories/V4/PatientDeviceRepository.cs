@@ -130,8 +130,6 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     /// <summary>
     /// Creates a new patient device record.
     /// </summary>
-    /// <param name="model">The patient device to create.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The created patient device record.</returns>
     public async Task<PatientDevice> CreateAsync(PatientDevice model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -145,9 +143,6 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     /// <summary>
     /// Updates an existing patient device record.
     /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated patient device record.</returns>
     public async Task<PatientDevice> UpdateAsync(Guid id, PatientDevice model, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -163,8 +158,6 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     /// <summary>
     /// Deletes a patient device record by its unique identifier.
     /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
     public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
@@ -210,10 +203,10 @@ public class PatientDeviceRepository : IPatientDeviceRepository
     }
 
     /// <inheritdoc />
-    public async Task<IEnumerable<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
+    public async Task<BulkRestoreResult<PatientDevice>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(ct);
-        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, ct)).Select(PatientDeviceMapper.ToDomainModel);
+        return (await ctx.RestoreDeletedAsync<PatientDeviceEntity>(ids, nameof(PatientDevice), ct)).Map(PatientDeviceMapper.ToDomainModel);
     }
 
     /// <inheritdoc />

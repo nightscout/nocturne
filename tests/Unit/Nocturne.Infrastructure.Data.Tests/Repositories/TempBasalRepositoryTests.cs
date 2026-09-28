@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.Core.Contracts.Audit;
@@ -203,5 +204,19 @@ public class TempBasalRepositoryTests : IDisposable
 
         result.Should().NotBeNull();
         result!.Rate.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void AbsentFromSource_OnPostgres_BindsTheKeptLegacyIdsAsOneArray()
+    {
+        using var context = OfflineDbContext.Create();
+        IReadOnlySet<string> keep = new HashSet<string> { "a", "b", "c" };
+
+        var sql = TempBasalRepository.AbsentFromSource(
+            context, "tandem-connector", DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, keep).ToQueryString();
+
+        sql.Should().MatchRegex(@"t\.legacy_id = ANY \(@\w+\)",
+            "one text[] parameter keeps one statement for every kept-id count");
+        sql.Should().NotContain("IN (");
     }
 }

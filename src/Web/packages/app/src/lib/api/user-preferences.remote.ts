@@ -1,7 +1,6 @@
 /** Remote functions for user preferences management */
 import { getRequestEvent, command } from "$app/server";
 import { z } from "zod";
-import type { UserDisplayPreferences } from "$lib/api";
 import { UserDisplayPreferencesSchema } from "$lib/api/generated/schemas";
 
 const updateLanguageSchema = z.object({
@@ -54,8 +53,7 @@ export const updateDisplayPreferences = command(
 
     try {
       return await locals.apiClient.userPreferences.updatePreferences({
-        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- z.fromJSONSchema infers unknown; UserDisplayPreferencesSchema validates the shape at runtime
-        preferences: preferences as UserDisplayPreferences,
+        preferences,
       });
     } catch (err) {
       console.error("Error updating display preferences:", err);

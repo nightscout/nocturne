@@ -67,6 +67,7 @@ const pageData: HarnessProps["data"] = {
   lastSignIn: null,
   dashboardSlugs: [],
   effectivePermissions: [],
+  limitTo24Hours: false,
   displayPreferences: [],
   displayLanguage: "en",
   serverPreferences: null,

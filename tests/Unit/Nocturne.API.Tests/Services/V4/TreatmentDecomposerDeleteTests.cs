@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Audit;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
+using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -88,6 +89,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         Mock.Of<IActiveProfileResolver>(),
         Mock.Of<IPatientInsulinRepository>(),
         auditContext,
+        Mock.Of<IDeduplicationService>(),
         NullLogger<TreatmentDecomposer>.Instance);
 
     /// <summary>One record of every type the sweep covers, plus a bolus outside the window.</summary>
@@ -184,13 +186,13 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
         await using var assertCtx = NewContext();
 
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().Contain("bolus-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Should().Contain("carb-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Should().Contain("bgcheck-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Should().Contain("note-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>(["devevent-1"])).Should().Contain("devevent-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>(["boluscalc-1"])).Should().Contain("boluscalc-1");
-        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Should().Contain("tempbasal-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Held.Should().Contain("bolus-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>(["carb-1"])).Held.Should().Contain("carb-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>(["bgcheck-1"])).Held.Should().Contain("bgcheck-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>(["note-1"])).Held.Should().Contain("note-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>(["devevent-1"])).Held.Should().Contain("devevent-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>(["boluscalc-1"])).Held.Should().Contain("boluscalc-1");
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Held.Should().Contain("tempbasal-1");
     }
 
     [Fact]
@@ -234,8 +236,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         var bolus = await assertCtx.Boluses.IgnoreQueryFilters().SingleAsync(b => b.LegacyId == "bolus-1");
         bolus.DeletedAt.Should().NotBeNull();
 
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Should().BeEmpty();
-        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>(["bolus-1"])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>(["tempbasal-1"])).Held.Should().BeEmpty();
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
     }
 
@@ -255,13 +257,13 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
         await using var assertCtx = NewContext();
 
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
-        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<CarbIntakeEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<BGCheckEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<NoteEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<DeviceEventEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusCalculationEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Held.Should().Contain(LegacyTreatmentId);
     }
 
     [Fact]
@@ -308,8 +310,8 @@ public class TreatmentDecomposerDeleteTests : IDisposable
             .SingleAsync(b => b.LegacyId == LegacyTreatmentId);
         bolus.DeletedAt.Should().NotBeNull();
 
-        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Should().BeEmpty();
-        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Held.Should().BeEmpty();
+        (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Held.Should().BeEmpty();
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
     }
 }

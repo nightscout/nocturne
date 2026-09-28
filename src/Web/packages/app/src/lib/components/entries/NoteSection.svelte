@@ -4,7 +4,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { FileText, X } from "lucide-svelte";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import X from "@lucide/svelte/icons/x";
 
   interface Props {
     note: Partial<Note>;
@@ -17,11 +18,11 @@
 <div class="space-y-3">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2 text-sm font-medium">
-      <FileText class="h-4 w-4 text-amber-500" />
+      <FileText class="h-4 w-4 text-muted-foreground" />
       Note
     </div>
     {#if onRemove}
-      <Button variant="ghost" size="icon" class="h-6 w-6" onclick={onRemove}>
+      <Button variant="ghost" size="icon-xs" onclick={onRemove}>
         <X class="h-3.5 w-3.5" />
       </Button>
     {/if}
@@ -45,7 +46,7 @@
         note.isAnnouncement = checked === true;
       }}
     />
-    <Label for="note-announcement" class="text-sm font-normal cursor-pointer">
+    <Label for="note-announcement" variant="option" class="cursor-pointer">
       Is Announcement
     </Label>
   </div>

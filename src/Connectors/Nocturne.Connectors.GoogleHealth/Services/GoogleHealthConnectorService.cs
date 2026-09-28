@@ -103,7 +103,7 @@ public sealed class GoogleHealthConnectorService(
         GoogleHealthConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow };
+        var result = new SyncResult();
         var tenantId = tenantAccessor.TenantId;
         var gate = coordinator.Gate(tenantId);
         await gate.WaitAsync(cancellationToken);
@@ -359,7 +359,6 @@ public sealed class GoogleHealthConnectorService(
     {
         result.Success = true;
         result.Message = message;
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -368,7 +367,6 @@ public sealed class GoogleHealthConnectorService(
         result.Success = false;
         result.Message = code;
         result.Errors.Add(code);
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 

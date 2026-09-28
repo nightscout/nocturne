@@ -7,12 +7,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Tabs from "$lib/components/ui/tabs";
-  import {
-    Shield,
-    Loader2,
-    AlertTriangle,
-    Bot,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Bot from "@lucide/svelte/icons/bot";
   import * as rolesRemote from "$lib/api/generated/roles.generated.remote";
   import * as oidcRemote from "$lib/api/generated/oidcProviderAdmins.generated.remote";
   import * as platformSettingsRemote from "$lib/api/generated/platformSettings.generated.remote";
@@ -25,6 +23,7 @@
     TenantRoleDto,
     OidcProviderResponse,
     PlatformSettingsSummary,
+    CreateOidcProviderRequest,
   } from "$api";
 
   // State
@@ -79,7 +78,7 @@
     }
   }
 
-  async function saveProvider(providerData: any) {
+  async function saveProvider(providerData: CreateOidcProviderRequest) {
     try {
       if (editingProvider?.id) {
         await oidcRemote.update({ id: editingProvider.id, request: providerData });
@@ -136,7 +135,7 @@
       platformSettings = platformSettingsList ?? [];
     } catch (err) {
       console.error("Failed to load admin data:", err);
-      error = "Failed to load admin data";
+      error = remoteErrorMessage(err, "Failed to load admin data");
     } finally {
       loading = false;
     }
@@ -191,7 +190,7 @@
       <Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
     </div>
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-6 text-center">
         <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
         <p class="text-destructive">{error}</p>
@@ -202,7 +201,7 @@
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class={oidcConfigManaged ? "grid w-full grid-cols-1" : "grid w-full grid-cols-2"}>
         {#if !oidcConfigManaged}
-          <Tabs.Trigger value="identity-providers" class="gap-2">
+          <Tabs.Trigger value="identity-providers">
             <Shield class="h-4 w-4" />
             Identity Providers
             {#if oidcProviders.length > 0}
@@ -210,7 +209,7 @@
             {/if}
           </Tabs.Trigger>
         {/if}
-        <Tabs.Trigger value="integrations" class="gap-2">
+        <Tabs.Trigger value="integrations">
           <Bot class="h-4 w-4" />
           Integrations
         </Tabs.Trigger>

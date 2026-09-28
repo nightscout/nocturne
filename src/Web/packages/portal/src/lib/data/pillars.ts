@@ -7,20 +7,17 @@ import { AVAILABLE_REPORT_COUNT } from "./reports";
  */
 export interface Pillar {
   n: number;
-  eyebrow: string;
   title: string;
-  accent: string;
   body: string;
   bullets: readonly string[];
+  /** A --feature-* token from app.css, as var(); the pillar sets it as --highlight. */
   color: string;
 }
 
 export const PILLARS: readonly Pillar[] = [
   {
     n: 1,
-    eyebrow: "Reports",
     title: "The reports your clinic asks for.",
-    accent: "Built in.",
     body:
       "Executive Summary. Glucose Profile (AGP). Glucose Distribution. Day in Review. Week to Week. " +
       "Insulin Delivery. Site Change Impact. Sleep. " +
@@ -30,13 +27,11 @@ export const PILLARS: readonly Pillar[] = [
       "AGP, insulin, and site-change reports laid out for printing",
       "Your own target range drawn alongside the clinical consensus bands",
     ],
-    color: "oklch(0.6 0.118 184.704)",
+    color: "var(--feature-reports)",
   },
   {
     n: 2,
-    eyebrow: "Connectors",
     title: "Plays nice with your gear.",
-    accent: "Right out of the box.",
     body:
       `${DATA_SOURCES.length} devices, apps, and services already wired in. Dexcom, Libre, Medtronic, Tandem, Omnipod, ` +
       "Loop, Trio, AndroidAPS, xDrip+, Nightscout, Home Assistant. If your kit is on the list, it works on day one.",
@@ -45,13 +40,11 @@ export const PILLARS: readonly Pillar[] = [
       "Pull your Nightscout history in and run both while you switch",
       "Every app that uploads to Nightscout uploads to Nocturne",
     ],
-    color: "oklch(0.72 0.16 150)",
+    color: "var(--feature-connectors)",
   },
   {
     n: 3,
-    eyebrow: "Alarms",
     title: "Tell Nocturne what to do.",
-    accent: "It will.",
     body:
       "Build alarms that fit your life. \"When I'm under 70 for ten minutes, message my partner on Telegram " +
       "and turn the bedroom lights on through Home Assistant.\" Point-and-click rules, no scripts required.",
@@ -60,13 +53,11 @@ export const PILLARS: readonly Pillar[] = [
       "Deliver by push, email, Discord, Slack, Telegram, WhatsApp, Home Assistant, or a webhook",
       "Snooze one alarm, or set quiet hours for the night",
     ],
-    color: "oklch(0.646 0.222 41.116)",
+    color: "var(--feature-alarms)",
   },
   {
     n: 4,
-    eyebrow: "Sign in",
     title: "No password to lose.",
-    accent: "Or to leak.",
     body:
       "Sign in with a passkey on your phone, or with Google, GitHub, or your own OpenID Connect provider. " +
       "Your health data stays on your server, and the Nocturne project never sees it.",
@@ -75,6 +66,6 @@ export const PILLARS: readonly Pillar[] = [
       "Google, GitHub, or any OpenID Connect provider",
       "Apps get their own scoped tokens, never your login",
     ],
-    color: "oklch(0.65 0.18 270)",
+    color: "var(--feature-sign-in)",
   },
 ] as const;

@@ -8,6 +8,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Models;
@@ -53,7 +54,10 @@ public class AlertRulesController : ControllerBase
     private readonly IAlertReferenceService _referenceService;
     private readonly IAlertDeliveryService _deliveryService;
     private readonly IRuleScopeClassifier _scopeClassifier;
+    private readonly IAlertRuleConditionValidator _conditionValidator;
     private readonly ISecretEncryptionService _encryption;
+    private readonly AlertRuleRearm _rearm;
+    private readonly AlertRuleRetirement _retirement;
     private readonly ILogger<AlertRulesController> _logger;
 
     /// <summary>
@@ -64,14 +68,20 @@ public class AlertRulesController : ControllerBase
         IAlertReferenceService referenceService,
         IAlertDeliveryService deliveryService,
         IRuleScopeClassifier scopeClassifier,
+        IAlertRuleConditionValidator conditionValidator,
         ISecretEncryptionService encryption,
+        AlertRuleRearm rearm,
+        AlertRuleRetirement retirement,
         ILogger<AlertRulesController> logger)
     {
         _contextFactory = contextFactory;
         _referenceService = referenceService;
         _deliveryService = deliveryService;
         _scopeClassifier = scopeClassifier;
+        _conditionValidator = conditionValidator;
         _encryption = encryption;
+        _rearm = rearm;
+        _retirement = retirement;
         _logger = logger;
     }
 
@@ -127,8 +137,10 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> CreateRule(
         [FromBody] CreateAlertRuleRequest request, CancellationToken ct)
     {
-        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
-            return badRequest;
+        var trees = CanonicalTrees.From(
+            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
+        if (RejectInvalidConditions(request.ConditionType, trees, request.AutoResolveEnabled) is { } invalid)
+            return invalid;
 
         // No cycle detection on create: the new id is server-generated, so the proposed tree
         // cannot reference an id it doesn't yet know. Cycles can only be introduced via PUT.
@@ -142,9 +154,7 @@ public class AlertRulesController : ControllerBase
 
         var tenantId = db.TenantId;
 
-        var conditionParamsJson = request.ConditionParams is not null
-            ? JsonSerializer.Serialize(request.ConditionParams)
-            : "{}";
+        var conditionParamsJson = trees.ConditionParams;
 
         var rule = new AlertRuleEntity
         {
@@ -160,12 +170,8 @@ public class AlertRulesController : ControllerBase
             Severity = request.Severity ?? AlertRuleSeverity.Warning,
             AllowThroughDnd = request.AllowThroughDnd,
             AutoResolveEnabled = request.AutoResolveEnabled,
-            AutoResolveParams = request.AutoResolveParams is not null
-                ? JsonSerializer.Serialize(request.AutoResolveParams)
-                : null,
-            ClientConfiguration = request.ClientConfiguration is not null
-                ? JsonSerializer.Serialize(request.ClientConfiguration)
-                : "{}",
+            AutoResolveParams = trees.AutoResolveParams,
+            ClientConfiguration = trees.ClientConfiguration ?? "{}",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -202,16 +208,7 @@ public class AlertRulesController : ControllerBase
     public async Task<ActionResult<AlertRuleResponse>> UpdateRule(
         Guid id, [FromBody] UpdateAlertRuleRequest request, CancellationToken ct)
     {
-        if (RejectPumpModeOnGenericStateSpan(request.ConditionType, request.ConditionParams) is { } badRequest)
-            return badRequest;
-
         await using var db = await _contextFactory.CreateAsync(ct);
-
-        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
-            return badChannel;
-
-        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
-            return badTracker;
 
         var rule = await db.AlertRules
             .Include(r => r.Channels)
@@ -220,8 +217,22 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
-        // Cycle detection runs after the existence check so a non-existent id always 404s
-        // rather than masking with a 400 when the proposed tree happens to walk a cycle.
+        var requested = CanonicalTrees.From(
+            request.ConditionType, request.ConditionParams, request.AutoResolveParams, request.ClientConfiguration);
+        var check = _conditionValidator.ValidateUpdate(
+            request.ConditionType, requested.ConditionParams, request.AutoResolveEnabled,
+            requested.AutoResolveParams, requested.ClientConfiguration,
+            new StoredConditionTrees(rule.ConditionType, rule.ConditionParams, rule.AutoResolveParams, rule.ClientConfiguration));
+        if (ConditionProblem(check.Issues) is { } invalid)
+            return invalid;
+        var trees = new CanonicalTrees(check.ConditionParams, check.AutoResolveParams, check.ClientConfiguration);
+
+        if (await ResolveAndValidateChannelsAsync(request.Channels, db, ct) is { } badChannel)
+            return badChannel;
+
+        if (await RejectInvalidTrackerAgeAsync(db, request.ConditionType, request.ConditionParams, ct) is { } badTracker)
+            return badTracker;
+
         var rootForCycle = TryDeserializeRoot(request.ConditionType, request.ConditionParams);
         if (rootForCycle is not null
             && await _referenceService.DetectCycleAsync(id, rootForCycle, ct))
@@ -231,26 +242,33 @@ public class AlertRulesController : ControllerBase
 
         var tenantId = db.TenantId;
 
-        var conditionParamsJson = request.ConditionParams is not null
-            ? JsonSerializer.Serialize(request.ConditionParams)
-            : "{}";
+        var conditionParamsJson = trees.ConditionParams;
+
+        // A tree equal as JSON keeps its stored text, so an edit that leaves it alone is not a
+        // new condition version.
+        var sameBody = ConditionTreeEquality.Same(rule.ConditionParams, conditionParamsJson);
+        var sameAutoResolve = ConditionTreeEquality.Same(rule.AutoResolveParams, trees.AutoResolveParams);
+        var conditionsChanged = rule.IsEnabled != request.IsEnabled
+            || rule.ConditionType != request.ConditionType
+            || !sameBody
+            || rule.AutoResolveEnabled != request.AutoResolveEnabled
+            || !sameAutoResolve;
 
         rule.Name = request.Name;
         rule.Description = request.Description;
         rule.ConditionType = request.ConditionType;
-        rule.ConditionParams = conditionParamsJson;
+        if (!sameBody)
+            rule.ConditionParams = conditionParamsJson;
         rule.ScopeClass = _scopeClassifier.Classify(request.ConditionType, conditionParamsJson);
+        var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = request.IsEnabled;
         rule.SortOrder = request.SortOrder;
         rule.Severity = request.Severity ?? AlertRuleSeverity.Warning;
         rule.AllowThroughDnd = request.AllowThroughDnd;
         rule.AutoResolveEnabled = request.AutoResolveEnabled;
-        rule.AutoResolveParams = request.AutoResolveParams is not null
-            ? JsonSerializer.Serialize(request.AutoResolveParams)
-            : null;
-        rule.ClientConfiguration = request.ClientConfiguration is not null
-            ? JsonSerializer.Serialize(request.ClientConfiguration)
-            : "{}";
+        if (!sameAutoResolve)
+            rule.AutoResolveParams = trees.AutoResolveParams;
+        rule.ClientConfiguration = trees.ClientConfiguration ?? "{}";
         rule.UpdatedAt = DateTime.UtcNow;
 
         if (request.Channels is not null)
@@ -271,6 +289,19 @@ public class AlertRulesController : ControllerBase
         }
 
         await db.SaveChangesAsync(ct);
+        if (wasEnabled && !request.IsEnabled)
+            await _retirement.CloseAsync([id], tenantId, CancellationToken.None);
+        // Once the save lands the clear must follow it: an edit retried after an abort changes
+        // nothing, so it would not clear the hold.
+        if (conditionsChanged)
+            await _rearm.ClearAsync([id], CancellationToken.None);
+
+        foreach (var field in check.Stripped)
+        {
+            _logger.LogWarning(
+                "Removed property {Field} from {Scope} condition {Path} of alert rule {AlertRuleId}: no condition kind reads it",
+                field.Field, field.Scope, field.Path, id);
+        }
 
         var updated = await db.AlertRules
             .AsNoTracking()
@@ -314,6 +345,11 @@ public class AlertRulesController : ControllerBase
             return Conflict(new ReferencingRulesResponse(referencing));
         }
 
+        // AlertRuleRetirement's remarks: a delete closes first. An abort here leaves the rule in
+        // place with its excursion closed.
+        if (rule.IsEnabled)
+            await _retirement.CloseAsync([id], db.TenantId, ct);
+
         db.AlertRules.Remove(rule);
         await db.SaveChangesAsync(ct);
 
@@ -339,9 +375,14 @@ public class AlertRulesController : ControllerBase
         if (rule is null)
             return NotFound();
 
+        var wasEnabled = rule.IsEnabled;
         rule.IsEnabled = !rule.IsEnabled;
         rule.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        // See UpdateRule: the clear follows a landed save.
+        if (wasEnabled)
+            await _retirement.CloseAsync([id], db.TenantId, CancellationToken.None);
+        await _rearm.ClearAsync([id], CancellationToken.None);
 
         return Ok(MapToResponse(rule));
     }
@@ -834,52 +875,52 @@ public class AlertRulesController : ControllerBase
     }
 
     /// <summary>
-    /// Returns a <c>400 BadRequest</c> when the rule contains a <c>state_span_active</c> leaf
-    /// with <see cref="StateSpanCategory.PumpMode"/> anywhere in the condition tree
-    /// (including nested under composite/not/sustained wrappers). Pump-mode rules must use
-    /// the dedicated <see cref="AlertConditionType.PumpState"/> type so the enricher loads
-    /// the correct snapshot and the legacy <c>pump_suspended</c> evaluator stays uncoupled
-    /// from the generic state-span dictionary. The runtime
-    /// <c>StateSpanActiveEvaluator</c> fails closed for this combination, so without an
-    /// upfront 400 the user gets a rule that silently never fires. Returns null when the
-    /// request is acceptable.
+    /// Returns a <c>400</c> validation problem when a condition tree the rule evaluates has a
+    /// problem (docs/alerts/engine-semantics.md §1.4). Each <c>errors</c> key is
+    /// <c>{scope}:{path}</c> and each value a reason code, suffixed <c>:{field}</c> when the
+    /// problem is on a field; the <c>issues</c> extension carries the same list structured.
     /// </summary>
-    private BadRequestObjectResult? RejectPumpModeOnGenericStateSpan(
-        AlertConditionType type, object? conditionParams)
+    private ActionResult? RejectInvalidConditions(AlertConditionType type, CanonicalTrees trees, bool autoResolveEnabled) =>
+        ConditionProblem(_conditionValidator.Validate(
+            type, trees.ConditionParams, autoResolveEnabled, trees.AutoResolveParams, trees.ClientConfiguration));
+
+    /// <inheritdoc cref="RejectInvalidConditions"/>
+    private ActionResult? ConditionProblem(IReadOnlyList<RustValidationIssue> issues)
     {
-        if (conditionParams is null)
+        if (issues.Count == 0)
             return null;
 
-        // Top-level state_span_active: deserialize and check directly. This path also covers
-        // requests where the wrapper deserialization below would no-op for unknown shapes.
-        if (type == AlertConditionType.StateSpanActive)
+        var errors = issues
+            .GroupBy(i => $"{i.Scope}:{i.Path}")
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(i => i.Field is null ? i.Reason : $"{i.Reason}:{i.Field}").ToArray());
+        var problem = new ValidationProblemDetails(errors)
         {
-            try
-            {
-                var json = JsonSerializer.Serialize(conditionParams);
-                var typed = JsonSerializer.Deserialize<StateSpanActiveCondition>(json, ReferenceJsonOptions);
-                if (typed is not null && typed.Category == StateSpanCategory.PumpMode)
-                {
-                    return BadRequest("state_span_active does not accept the PumpMode category — use pump_state instead.");
-                }
-            }
-            catch (JsonException)
-            {
-                // Malformed JSON falls through to the existing rule-shape validation paths.
-            }
-            return null;
-        }
+            Title = "The rule's conditions cannot be saved.",
+            Status = StatusCodes.Status400BadRequest,
+        };
+        problem.Extensions["issues"] = issues;
+        return ValidationProblem(problem);
+    }
 
-        // Composite/not/sustained: reuse the same deserialization the cycle detector uses,
-        // then walk every leaf via ConditionTreeWalker. Unknown/non-wrapper kinds yield a
-        // bare ConditionNode with no payload, so the walker no-ops harmlessly.
-        var root = TryDeserializeRoot(type, conditionParams);
-        if (root is not null && ConditionTreeWalker.ContainsPumpModeStateSpan(root))
-        {
-            return BadRequest("state_span_active does not accept the PumpMode category — use pump_state instead.");
-        }
-
-        return null;
+    /// <summary>
+    /// A request's condition trees serialised as they are stored, with timezone ids through
+    /// <see cref="ConditionTimeZones"/>. A null tree stays null, except the body, stored as <c>{}</c>.
+    /// </summary>
+    private sealed record CanonicalTrees(string ConditionParams, string? AutoResolveParams, string? ClientConfiguration)
+    {
+        public static CanonicalTrees From(
+            AlertConditionType type, object? conditionParams, object? autoResolveParams, object? clientConfiguration) =>
+            new(
+                ConditionTimeZones.CanonicaliseRule(
+                    type, conditionParams is not null ? JsonSerializer.Serialize(conditionParams) : "{}"),
+                autoResolveParams is not null
+                    ? ConditionTimeZones.CanonicaliseNode(JsonSerializer.Serialize(autoResolveParams))
+                    : null,
+                clientConfiguration is not null
+                    ? ConditionTimeZones.CanonicaliseClientConfiguration(JsonSerializer.Serialize(clientConfiguration))
+                    : null);
     }
 
     #endregion

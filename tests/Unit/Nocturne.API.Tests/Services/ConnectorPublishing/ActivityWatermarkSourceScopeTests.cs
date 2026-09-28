@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -114,6 +115,8 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             _context,
+            Mock.Of<IAuditContext>(),
+            new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);
     }
 

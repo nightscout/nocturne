@@ -13,6 +13,28 @@ public static class CorpusLocator
     public static string CorpusDirectory() =>
         Path.Combine(FindRepoRoot(), "tests", "Parity", "AlertEngineCorpus");
 
+    /// <summary>The replay scenarios' directory under <see cref="CorpusDirectory"/>.</summary>
+    public const string ReplaySubdirectory = "replay";
+
+    /// <summary>Replay scenario names, ordinal-sorted.</summary>
+    public static IReadOnlyList<string> EnumerateReplayScenarioNames() =>
+        Directory.EnumerateFiles(Path.Combine(CorpusDirectory(), ReplaySubdirectory), "*.json")
+            .Where(p => !p.EndsWith(".expected.json", StringComparison.Ordinal))
+            .Select(p => Path.GetFileNameWithoutExtension(p)!)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+
+    /// <summary>Loads one replay scenario plus its committed expected snapshot.</summary>
+    public static async Task<(ReplayScenarioFile Scenario, JsonNode Expected)> LoadReplayScenarioAsync(string name)
+    {
+        var dir = Path.Combine(CorpusDirectory(), ReplaySubdirectory);
+        var scenarioJson = await File.ReadAllTextAsync(Path.Combine(dir, $"{name}.json"));
+        var expectedJson = await File.ReadAllTextAsync(Path.Combine(dir, $"{name}.expected.json"));
+        var scenario = JsonSerializer.Deserialize<ReplayScenarioFile>(scenarioJson, CorpusJson.Options)
+            ?? throw new InvalidOperationException($"Failed to parse replay scenario '{name}'");
+        return (scenario, JsonNode.Parse(expectedJson)!);
+    }
+
     /// <summary>Scenario names (files without the <c>.expected.json</c> suffix), ordinal-sorted.</summary>
     public static IReadOnlyList<string> EnumerateScenarioNames() =>
         Directory.EnumerateFiles(CorpusDirectory(), "*.json")

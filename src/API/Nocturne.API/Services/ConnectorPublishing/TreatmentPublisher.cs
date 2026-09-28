@@ -1,4 +1,5 @@
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.Profiles.Resolvers;
@@ -6,9 +7,11 @@ using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.API.Services.V4;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -22,6 +25,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
 {
     private readonly ITenantDbContextFactory _contextFactory;
     private readonly ITreatmentService _treatmentService;
+    private readonly ITreatmentDecomposer _treatmentDecomposer;
+    private readonly ITreatmentCache _treatmentCache;
     private readonly IBolusRepository _bolusRepository;
     private readonly ICarbIntakeRepository _carbIntakeRepository;
     private readonly IBGCheckRepository _bgCheckRepository;
@@ -38,6 +43,8 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     public TreatmentPublisher(
         ITenantDbContextFactory contextFactory,
         ITreatmentService treatmentService,
+        ITreatmentDecomposer treatmentDecomposer,
+        ITreatmentCache treatmentCache,
         IBolusRepository bolusRepository,
         ICarbIntakeRepository carbIntakeRepository,
         IBGCheckRepository bgCheckRepository,
@@ -51,11 +58,14 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         ITherapySettingsResolver therapySettingsResolver,
         IPatientDeviceStamper patientDeviceStamper,
         IAuditContext auditContext,
+        PublishSkipTally skips,
         ILogger<TreatmentPublisher> logger)
-        : base(auditContext, logger)
+        : base(auditContext, skips, logger)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
         _treatmentService = treatmentService ?? throw new ArgumentNullException(nameof(treatmentService));
+        _treatmentDecomposer = treatmentDecomposer ?? throw new ArgumentNullException(nameof(treatmentDecomposer));
+        _treatmentCache = treatmentCache ?? throw new ArgumentNullException(nameof(treatmentCache));
         _bolusRepository = bolusRepository ?? throw new ArgumentNullException(nameof(bolusRepository));
         _carbIntakeRepository = carbIntakeRepository ?? throw new ArgumentNullException(nameof(carbIntakeRepository));
         _bgCheckRepository = bgCheckRepository ?? throw new ArgumentNullException(nameof(bgCheckRepository));
@@ -70,6 +80,11 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
         _patientDeviceStamper = patientDeviceStamper ?? throw new ArgumentNullException(nameof(patientDeviceStamper));
     }
 
+    /// <remarks>
+    /// Every row written carries the fingerprint of the treatment it came from
+    /// (<see cref="UpstreamFingerprintScope"/>), which <see cref="PublishRecentTreatmentsAsync"/>
+    /// compares against.
+    /// </remarks>
     public async Task<bool> PublishTreatmentsAsync(
         IEnumerable<Treatment> treatments,
         string source,
@@ -77,7 +92,17 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
     {
         try
         {
-            await _treatmentService.CreateTreatmentsAsync(treatments, cancellationToken);
+            var list = treatments.ToList();
+            var fingerprints = new Dictionary<(string? Source, string LegacyId), string?>();
+            foreach (var treatment in list)
+            {
+                if (treatment.Id is { Length: > 0 } id)
+                    fingerprints[(treatment.DataSource ?? source, id)] = TreatmentDecomposer.UpstreamFingerprint(treatment);
+            }
+
+            using var scope = UpstreamFingerprintScope.Open(fingerprints);
+            var written = await _treatmentService.CreateTreatmentsAsync(list, cancellationToken);
+            RecordSkippedDeleted(written.SkippedDeleted);
             return true;
         }
         catch (OperationCanceledException) { throw; }
@@ -236,6 +261,50 @@ internal sealed class TreatmentPublisher : ConnectorPublisherBase, ITreatmentPub
             () => _basalInjectionRepository.GetLatestTimestampAsync(source, cancellationToken),
             () => _noteRepository.GetLatestTimestampAsync(source, cancellationToken),
             () => _deviceEventRepository.GetLatestTimestampAsync(source, cancellationToken));
+
+    /// <inheritdoc />
+    /// <remarks>The conflict rule is <see cref="TreatmentDecomposer.SelectForRepublishAsync"/>'s.</remarks>
+    public async Task<int?> PublishRecentTreatmentsAsync(
+        IEnumerable<Treatment> treatments,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Treatment> selected;
+        try
+        {
+            using (PushSystemAudit())
+                selected = await _treatmentDecomposer.SelectForRepublishAsync(source, treatments.ToList(), cancellationToken);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to compare recent treatments with what is stored for {Source}", source);
+            return null;
+        }
+
+        if (selected.Count == 0)
+            return 0;
+
+        return await PublishTreatmentsAsync(selected, source, origin, cancellationToken) ? selected.Count : null;
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyDictionary<string, DateTime>> GetStoredTreatmentIdsAsync(
+        string source, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+        => _treatmentDecomposer.GetLegacyIdsFromSourceAsync(source, from, to, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<int> DeleteTreatmentsAsync(
+        string source, IReadOnlySet<string> legacyIds, CancellationToken cancellationToken = default)
+    {
+        int deleted;
+        using (PushSystemAudit())
+            deleted = await _treatmentDecomposer.DeleteFromSourceAsync(source, legacyIds, cancellationToken);
+
+        if (deleted > 0)
+            await _treatmentCache.InvalidateAsync(cancellationToken);
+        return deleted;
+    }
 
     // ── Patient Insulin resolution helpers ──────────────────────────────
 

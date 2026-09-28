@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -19,8 +20,9 @@ public class BasalInjectionRepository : SyncUpsertRepositoryBase<BasalInjection,
     public BasalInjectionRepository(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
+        ILogger<BasalInjectionRepository> logger,
         IV4RecordBroadcaster<BasalInjection>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 

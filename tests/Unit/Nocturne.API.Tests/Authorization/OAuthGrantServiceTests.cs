@@ -68,6 +68,7 @@ public class OAuthGrantServiceTests : IDisposable
             _db.ContextFactory,
             _mockClientService.Object,
             _guestSessionCache,
+            new GrantRevocationService(_guestSessionCache),
             _mockLogger.Object);
     }
 
@@ -206,84 +207,6 @@ public class OAuthGrantServiceTests : IDisposable
         var service = CreateService(db);
 
         (await service.GetGrantForSubjectAsync(grantId, _ownerSubjectId)).Should().BeNull();
-    }
-
-    // ---------------------------------------------------------------
-    // RevokeGrantAsync
-    // ---------------------------------------------------------------
-
-    [Fact]
-    public async Task RevokeGrantAsync_SetsRevokedAt()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        var entity = await db.OAuthGrants.FirstAsync(g => g.Id == grantId);
-        Assert.NotNull(entity.RevokedAt);
-    }
-
-    [Fact]
-    public async Task RevokeGrantAsync_EvictsTheCachedGuestSession()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        // A guest grant's SubjectId is the data owner, and DELETE /api/oauth/grants/{id} filters
-        // only on SubjectId — so the owner can revoke a guest link through this service without
-        // GuestLinkService being involved. Without eviction here the guest keeps reading health
-        // data until the cache entry expires.
-        _guestSessionCache.Set(
-            _testTenantId,
-            grantId,
-            new GuestSessionInfo(
-                grantId, _testTenantId, _ownerSubjectId, [], null, DateTime.UtcNow.AddHours(1)));
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        _guestSessionCache.TryGet(_testTenantId, grantId, out _).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task RevokeGrantAsync_CascadesToRefreshTokens()
-    {
-        using var db = CreateDbContext();
-        await SeedClientAsync(db);
-        await SeedSubjectAsync(db, _ownerSubjectId, "Owner");
-        var grantId = await SeedGrantAsync(db);
-
-        db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _testTenantId,
-            GrantId = grantId,
-            TokenHash = "test-hash-1",
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
-        });
-        db.OAuthRefreshTokens.Add(new OAuthRefreshTokenEntity
-        {
-            Id = Guid.CreateVersion7(),
-            TenantId = _testTenantId,
-            GrantId = grantId,
-            TokenHash = "test-hash-2",
-            IssuedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddDays(90),
-        });
-        await db.SaveChangesAsync();
-
-        var service = CreateService(db);
-        await service.RevokeGrantAsync(grantId);
-
-        var tokens = await db.OAuthRefreshTokens.Where(t => t.GrantId == grantId).ToListAsync();
-        Assert.All(tokens, t => Assert.NotNull(t.RevokedAt));
     }
 
     // ---------------------------------------------------------------

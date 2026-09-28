@@ -10,6 +10,7 @@
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import * as Sidebar from "$lib/components/ui/sidebar";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   const realtimeStore = tryGetRealtimeStore();
 
@@ -30,7 +31,10 @@
   const now = $derived(realtimeStore?.now ?? Date.now());
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
-  const isDisconnected = $derived(!(realtimeStore?.isConnected ?? false));
+  const connection = createConnectionIndicator(
+    () => realtimeStore?.connectionStatus ?? "idle"
+  );
+  const isDisconnected = $derived(connection.isDisconnected);
   // No reading yet: show the skeleton rather than rendering the 0 sentinel as a
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);
@@ -57,6 +61,13 @@
 
     lastScrollY = currentScrollY;
   }
+
+  // The layout's sticky banner strip reads this to sit flush under the header as it slides.
+  $effect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--mobile-header-offset", isVisible ? "3.5rem" : "0px");
+    return () => root.style.removeProperty("--mobile-header-offset");
+  });
 </script>
 
 <svelte:window onscroll={handleScroll} />

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Contracts.Entries;
 
@@ -101,8 +102,11 @@ public interface IEntryService
     /// the real-time broadcast so a historical import doesn't flood connected clients.
     /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created entries with assigned IDs</returns>
-    Task<IEnumerable<Entry>> CreateEntriesAsync(
+    /// <returns>
+    /// The accepted entries, carrying how many of their records were not written because the user
+    /// had deleted them.
+    /// </returns>
+    Task<BulkWrite<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
         WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default

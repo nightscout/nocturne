@@ -2,7 +2,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Plus, Trash2 } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
 
   interface ScheduleEntry {
     time: string;
@@ -42,7 +43,7 @@
     <p class="text-sm text-muted-foreground">No entries yet. Click Add to create one.</p>
   {:else}
     <div class="space-y-2">
-      {#each entries as entry, i}
+      {#each entries as entry, i (entry)}
         <div class="flex items-center gap-2">
           <Input
             type="time"

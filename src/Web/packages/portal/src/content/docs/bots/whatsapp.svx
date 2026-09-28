@@ -75,9 +75,11 @@ Then restart Nocturne. The verify token here must match the one you set in the M
 5. Under **Webhook fields**, subscribe to **messages**.
 
 <Callout type="warning" title="The verify tokens must match">
+
   Webhook verification fails unless the verify token in the Meta console is identical to the
   one saved in Nocturne. Save the credentials and restart <em>before</em> verifying the
   webhook.
+
 </Callout>
 
 ## 5. Test it
@@ -86,7 +88,9 @@ Then restart Nocturne. The verify token here must match the one you set in the M
 2. Send `bg` and confirm the latest reading comes back.
 
 <Callout type="info" title="The 24-hour window">
+
   Meta only lets a business send free-form messages within 24 hours of the user's last
   message. Alerts that fire outside that window may require an approved message template;
   see Meta's WhatsApp messaging documentation.
+
 </Callout>

@@ -117,14 +117,12 @@ export const duplicateContent = (editor: Editor, node: Node) => {
 };
 
 export const isURL = (str: string): boolean => {
-	let isUrl = true;
 	try {
 		new URL(str);
-		isUrl = true;
+		return true;
 	} catch {
-		isUrl = false;
+		return false;
 	}
-	return isUrl;
 };
 
 export const quickcolors = [

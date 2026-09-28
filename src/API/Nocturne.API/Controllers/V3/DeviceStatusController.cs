@@ -494,7 +494,7 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
 
         if (deviceStatuses.Count > 0)
         {
-            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.Mills));
+            SetHistoryCursorHeaders(deviceStatuses.Max(d => d.SrvModified ?? d.Mills));
         }
 
         var mappedData = deviceStatuses.Select(MapToV3Dto);

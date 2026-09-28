@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
-  import { Clock, RefreshCw, X } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import X from "@lucide/svelte/icons/x";
   import { formatSessionExpiry } from "$lib/stores/auth-store.svelte";
   import { refreshSession } from "../../../routes/(unauthenticated)/auth/auth.remote";
 
@@ -42,17 +44,12 @@
 
 {#if timeUntilExpiry > 0 && timeUntilExpiry < 300}
   <div
-    class="fixed bottom-4 right-4 z-50 max-w-sm animate-in slide-in-from-bottom-4"
+    class="fixed print:hidden bottom-4 right-4 z-50 max-w-sm animate-in slide-in-from-bottom-4"
   >
-    <Alert.Root
-      variant="default"
-      class="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/50"
-    >
-      <Clock class="h-4 w-4 text-yellow-600 dark:text-yellow-500" />
-      <Alert.Title class="text-yellow-800 dark:text-yellow-200">
-        Session Expiring
-      </Alert.Title>
-      <Alert.Description class="text-yellow-700 dark:text-yellow-300">
+    <Alert.Root variant="warning">
+      <Clock class="h-4 w-4" />
+      <Alert.Title>Session Expiring</Alert.Title>
+      <Alert.Description>
         Your session will expire in {formatSessionExpiry(timeUntilExpiry)}.
         Click refresh to extend your session.
       </Alert.Description>

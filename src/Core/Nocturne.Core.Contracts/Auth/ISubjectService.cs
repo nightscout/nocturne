@@ -56,19 +56,22 @@ public interface ISubjectService
 
     /// <summary>
     /// Atomically remove an OIDC identity from a subject, enforcing the primary-factor rule
-    /// (at least one primary factor — passkey or OIDC identity — must remain after removal).
+    /// (at least one factor counted by <see cref="CountPrimaryAuthFactorsAsync"/> must remain).
     /// The check and the delete run inside a serializable transaction to prevent TOCTOU races.
     /// </summary>
     Task<FactorRemovalResult> TryRemoveOidcIdentityAsync(Guid subjectId, Guid identityId);
 
     /// <summary>
     /// Atomically remove a passkey credential from a subject, enforcing the primary-factor rule
-    /// (at least one primary factor — passkey or OIDC identity — must remain after removal).
+    /// (at least one factor counted by <see cref="CountPrimaryAuthFactorsAsync"/> must remain).
     /// The check and the delete run inside a serializable transaction to prevent TOCTOU races.
     /// </summary>
     Task<FactorRemovalResult> TryRemovePasskeyCredentialAsync(Guid subjectId, Guid credentialId);
 
-    /// <summary>Returns the total number of primary authentication factors (passkeys + OIDC identities) for a subject.</summary>
+    /// <summary>
+    /// Returns the total number of primary authentication factors for a subject: passkeys plus
+    /// OIDC identities whose provider is enabled.
+    /// </summary>
     /// <param name="subjectId">Subject identifier.</param>
     Task<int> CountPrimaryAuthFactorsAsync(Guid subjectId);
 

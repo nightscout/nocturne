@@ -2,21 +2,20 @@
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Link2,
-    Plus,
-    Trash2,
-    Loader2,
-    Clock,
-    AlertTriangle,
-    Check,
-  } from "lucide-svelte";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Check from "@lucide/svelte/icons/check";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     getLinkedIdentities,
     unlinkIdentity,
   } from "$lib/api/generated/oidcs.generated.remote";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
+  import { isRecord } from "$lib/utils/type-guards";
   import { getProvidersInfo } from "$routes/(unauthenticated)/auth/auth.remote";
 
   interface Props {
@@ -47,7 +46,7 @@
   const canRemove = $derived(primaryAuthFactorCount > 1);
 
   const linkedProviderIds = $derived(
-    new Set(identities.map((i) => i.providerId).filter(Boolean) as string[])
+    new Set(identities.map((i) => i.providerId).filter((id): id is string => Boolean(id)))
   );
 
   const availableProviders = $derived(
@@ -72,6 +71,10 @@
     showRemoveDialog = true;
   }
 
+  function errorBodyCode(err: unknown): unknown {
+    return isRecord(err) && isRecord(err.body) ? err.body.error : undefined;
+  }
+
   async function handleRemove() {
     if (!removeTarget?.id) return;
     isRemoving = removeTarget.id;
@@ -83,9 +86,7 @@
       successMessage = "Sign-in method removed.";
       clearMessagesSoon();
     } catch (err) {
-      const status = (err as { status?: number })?.status;
-      const body = (err as { body?: { error?: string } })?.body;
-      if (status === 409 || body?.error === "last_factor") {
+      if (errorStatus(err) === 409 || errorBodyCode(err) === "last_factor") {
         errorMessage =
           "Cannot remove your only sign-in method. Add another first.";
       } else {
@@ -146,10 +147,10 @@
 
     {#if successMessage}
       <div
-        class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
       >
-        <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-        <p class="text-sm text-green-800 dark:text-green-200">
+        <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+        <p class="text-sm text-success">
           {successMessage}
         </p>
       </div>
@@ -204,9 +205,9 @@
           </div>
           <Button
             type="button"
-            variant="ghost"
+            variant="ghost-destructive"
             size="sm"
-            class="text-destructive hover:text-destructive shrink-0"
+            class="shrink-0"
             disabled={!canRemove || isRemoving === identity.id}
             title={!canRemove ? "This is your only sign-in method." : undefined}
             onclick={() => confirmRemove(identity)}

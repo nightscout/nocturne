@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The EF migrations of NocturneDbContext. No project references this one at compile time:
+         the API loads it from its output directory at runtime (NocturneMigrationsAssembly), so it
+         stays out of the dotnet watch workspace. -->
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Nocturne.Infrastructure.Data</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Infrastructure.Data.Tests" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Nocturne.Infrastructure.Data\Nocturne.Infrastructure.Data.csproj" />
+    </ItemGroup>
+</Project>

@@ -29,7 +29,7 @@ function setupFailure(err: unknown): TotpSetupFailure | undefined {
   // Own keys only: `in` would also answer to "toString" and "constructor",
   // which resolve to functions rather than copy.
   return body !== undefined && Object.hasOwn(SETUP_FAILURES, body)
-    ? (body as TotpSetupFailure)
+    ? Object.values(TotpSetupFailure).find((failure) => failure === body)
     : undefined;
 }
 

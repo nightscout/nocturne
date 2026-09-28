@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { remoteErrorMessage } from "$lib/api/remote-error";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Scale, Pencil, Loader2 } from "lucide-svelte";
+  import Scale from "@lucide/svelte/icons/scale";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import {
     CarbIntakeFoodInputMode,
     type TreatmentFood,
@@ -155,7 +158,7 @@
       showEditFoodDialog = true;
     } catch (err) {
       console.error("Failed to load food for editing:", err);
-      toast.error("Failed to load food");
+      toast.error(remoteErrorMessage(err, "Failed to load food"));
     } finally {
       isLoadingFood = false;
     }
@@ -253,8 +256,7 @@
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              class="h-8 w-8"
+              size="icon-sm"
               onclick={openEditFood}
               disabled={isLoadingFood}
               title="Edit food"

@@ -74,6 +74,24 @@ public static class TimeZoneHelper
     }
 
     /// <summary>
+    /// The IANA id of the zone a Windows id (e.g. <c>AUS Eastern Standard Time</c>) names, or
+    /// <paramref name="timezoneId"/> unchanged when it names no Windows zone. Consumers that read
+    /// the IANA database directly, such as the Rust alert engine, cannot resolve a Windows id.
+    /// </summary>
+    public static string ToIanaIdIfWindows(string timezoneId)
+    {
+        if (TimeZoneInfo.TryConvertWindowsIdToIanaId(timezoneId, out var ianaId))
+            return ianaId;
+
+        // A mis-cased Windows id resolves through the lookup's case-insensitive retry.
+        return TryGetTimeZoneInfoFromId(timezoneId, out var zone)
+            && !zone.HasIanaId
+            && TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out ianaId)
+                ? ianaId
+                : timezoneId;
+    }
+
+    /// <summary>
     /// Canonicalizes the casing of an <c>Etc/*</c> timezone ID (e.g. <c>ETC/GMT-2</c> → <c>Etc/GMT-2</c>).
     /// Etc zone names after the prefix are all-uppercase tokens (<c>GMT</c>, <c>GMT-2</c>, <c>UTC</c>,
     /// <c>UCT</c>, <c>GMT0</c>), so uppercasing the remainder yields the canonical IANA form for the

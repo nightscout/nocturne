@@ -37,5 +37,9 @@ export function useActogramReport(errorTitle: string, defaultDays = 14) {
     get days() {
       return days;
     },
+    /** Rows inside the picker's range; the rest of `days` is scroll-back padding. */
+    get rangeDayCount() {
+      return days.length - ACTOGRAM_PADDING_DAYS;
+    },
   };
 }

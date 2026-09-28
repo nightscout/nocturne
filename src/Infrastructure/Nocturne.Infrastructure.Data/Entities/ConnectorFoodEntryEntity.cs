@@ -13,9 +13,6 @@ public class ConnectorFoodEntryEntity : ITenantScoped, ISystemTimestamped
     /// <summary>
     /// Identifier of the tenant this food entry belongs to
     /// </summary>
-    /// <summary>
-    /// The unique identifier of the tenant this record belongs to.
-    /// </summary>
     [Column("tenant_id")]
     public Guid TenantId { get; set; }
 

@@ -86,7 +86,9 @@ const PRESENTATION: Record<string, Presentation> = {
   },
 };
 
-export const SDKS: Sdk[] = (manifest as SdkManifestEntry[]).map((entry) => {
+const MANIFEST: SdkManifestEntry[] = manifest;
+
+export const SDKS: Sdk[] = MANIFEST.map((entry) => {
   const p = PRESENTATION[entry.dir];
   return {
     ...entry,

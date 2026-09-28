@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Infrastructure.Data;
@@ -60,12 +61,21 @@ public class MemberScopeMiddleware
         var authContext = context.GetAuthContext();
 
         // Only process authenticated users with a resolved tenant
-        if (authContext is not { IsAuthenticated: true, TenantId: not null })
+        if (authContext is { IsAuthenticated: true, TenantId: { } tenantId })
         {
-            await _next(context);
-            return;
+            await ResolveAsync(context, authContext, tenantId);
+
+            // Outside ResolveAsync because its early returns (a guest, a credential with no
+            // membership) still carry the credential's own limit.
+            if (authContext.LimitTo24Hours)
+                context.ClampMemberHistory();
         }
 
+        await _next(context);
+    }
+
+    private async Task ResolveAsync(HttpContext context, AuthContext authContext, Guid tenantId)
+    {
         // InstanceKey: infrastructure auth, always superuser — no membership lookup needed.
         // PlatformAccess: a platform-admin tenant-access grant, pinned to this tenant and verified
         // by PlatformAccessCookieHandler — full superuser on the granted tenant, no membership.
@@ -78,20 +88,18 @@ public class MemberScopeMiddleware
             permissionTrie.Add(["*"]);
             context.SetPermissionTrie(permissionTrie);
 
-            await _next(context);
             return;
         }
 
         // Guest sessions get their scopes directly from the grant — no membership lookup
         if (authContext.AuthType == AuthType.Guest)
         {
-            var guestScopes = Scope.Normalize(authContext.Scopes);
+            var guestScopes = Scope.NormalizeGuest(authContext.Scopes);
             context.SetGrantedScopes((IReadOnlySet<string>)guestScopes);
             var guestPermissions = ScopeTranslator.ToPermissions(guestScopes);
             var guestTrie = new PermissionTrie();
             guestTrie.Add(guestPermissions);
             context.SetPermissionTrie(guestTrie);
-            await _next(context);
             return;
         }
 
@@ -104,7 +112,6 @@ public class MemberScopeMiddleware
         // unreachable outside Development.
         if (authContext.SubjectId is null)
         {
-            await _next(context);
             return;
         }
 
@@ -115,7 +122,7 @@ public class MemberScopeMiddleware
             .Include(tm => tm.MemberRoles)
                 .ThenInclude(mr => mr.TenantRole)
             .Where(tm => tm.SubjectId == authContext.SubjectId.Value
-                         && tm.TenantId == authContext.TenantId.Value)
+                         && tm.TenantId == tenantId)
             .FirstOrDefaultAsync();
 
         if (membership == null)
@@ -142,7 +149,6 @@ public class MemberScopeMiddleware
                 context.SetPermissionTrie(grantTrie);
             }
 
-            await _next(context);
             return;
         }
 
@@ -166,10 +172,8 @@ public class MemberScopeMiddleware
         memberTrie.Add(ScopeTranslator.ToPermissions(resolvedScopes));
         context.SetPermissionTrie(memberTrie);
 
-        // The narrower of the two wins. A credential may carry its own limit (a direct grant issued
-        // for a follower's phone), and overwriting rather than combining would let the membership
-        // widen a token that was deliberately restricted.
-        authContext.LimitTo24Hours = membership.LimitTo24Hours || authContext.LimitTo24Hours;
+        authContext.LimitTo24Hours = MemberScopeResolver.IsHistoryClamped(
+            authContext.LimitTo24Hours, membership.LimitTo24Hours, effectivePermissions);
 
         _logger.LogDebug(
             "Member {SubjectId} on tenant {TenantId} resolved with {PermCount} effective permissions (LimitTo24Hours={LimitTo24Hours})",
@@ -187,7 +191,6 @@ public class MemberScopeMiddleware
                 || (DateTime.UtcNow - membership.LastUsedAt.Value).TotalMinutes > 5))
         {
             var membershipId = membership.Id;
-            var tenantId = authContext.TenantId.Value;
             var ip = context.Connection.RemoteIpAddress?.ToString();
             var userAgent = context.Request.Headers.UserAgent.FirstOrDefault();
             var serviceScopeFactory = context.RequestServices.GetRequiredService<IServiceScopeFactory>();
@@ -220,7 +223,5 @@ public class MemberScopeMiddleware
                 }
             });
         }
-
-        await _next(context);
     }
 }

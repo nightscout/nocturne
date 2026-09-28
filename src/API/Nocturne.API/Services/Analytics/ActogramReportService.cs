@@ -16,15 +16,16 @@ namespace Nocturne.API.Services.Analytics;
 /// per-request scoped <c>NocturneDbContext</c>, and EF Core's
 /// <c>ConcurrencyDetector</c> rejects parallel operations on a single
 /// context with <c>InvalidOperationException</c>. Threshold resolution
-/// mirrors <c>ProfileLoadStage</c>: very-low/very-high are fixed, low/high
-/// come from the active profile at the requested end time, falling back to
-/// the consensus in-range band when no therapy settings exist yet.
+/// mirrors <c>ProfileLoadStage</c>: the clinical low/high band is fixed, and the
+/// active profile's personal target is carried separately in
+/// <see cref="ChartThresholdsDto.TargetLow"/>/<see cref="ChartThresholdsDto.TargetHigh"/>
+/// at the requested end time.
 /// </remarks>
 public sealed class ActogramReportService : IActogramReportService
 {
     // Match ProfileLoadStage so the actogram and dashboard agree on band edges.
-    private const double DefaultVeryLow = 54;
-    private const double DefaultVeryHigh = 250;
+    private const double DefaultVeryLow = GlucoseConstants.VeryLowMgdl;
+    private const double DefaultVeryHigh = GlucoseConstants.VeryHighMgdl;
     private const double DefaultLow = GlucoseConstants.TargetBottomMgdl;
     private const double DefaultHigh = GlucoseConstants.TargetTopMgdl;
 
@@ -224,9 +225,11 @@ public sealed class ActogramReportService : IActogramReportService
         return new ChartThresholdsDto
         {
             VeryLow = DefaultVeryLow,
-            Low = await _targetRangeResolver.GetLowBGTargetAsync(atMills, ct: ct),
-            High = await _targetRangeResolver.GetHighBGTargetAsync(atMills, ct: ct),
+            Low = DefaultLow,
+            High = DefaultHigh,
             VeryHigh = DefaultVeryHigh,
+            TargetLow = await _targetRangeResolver.GetLowBGTargetAsync(atMills, ct: ct),
+            TargetHigh = await _targetRangeResolver.GetHighBGTargetAsync(atMills, ct: ct),
         };
     }
 }

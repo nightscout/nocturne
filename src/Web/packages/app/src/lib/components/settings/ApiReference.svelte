@@ -1,8 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { satisfiesScope } from "$lib/authorization/scopes";
   import * as Card from "$lib/components/ui/card";
   import { Switch } from "$lib/components/ui/switch";
-  import { BookOpen, ExternalLink } from "lucide-svelte";
+  import BookOpen from "@lucide/svelte/icons/book-open";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import {
     getTenantSettings,
     setPublicDocs,
@@ -10,12 +12,8 @@
   import { retainQuery } from "$lib/api/retain-query.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
 
-  const effectivePermissions: string[] = $derived(
-    (page.data as any).effectivePermissions ?? [],
-  );
   const canManageSettings = $derived(
-    effectivePermissions.includes("*") ||
-      effectivePermissions.includes("tenant.settings"),
+    satisfiesScope(page.data.effectivePermissions ?? [], "tenant.settings"),
   );
 
   const settingsQuery = $derived(canManageSettings ? getTenantSettings() : null);
@@ -87,6 +85,7 @@
       <div class="border-t border-border px-5 py-4 @md:px-6">
         <a
           href="/scalar"
+          rel="external"
           class="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
         >
           Open the API reference

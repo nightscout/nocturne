@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Syringe, Utensils } from '@lucide/svelte';
+  import Syringe from '@lucide/svelte/icons/syringe';
+  import Utensils from '@lucide/svelte/icons/utensils';
   import { BasalDeliveryOrigin } from '../enums.js';
   import { bg, bgLabel, bgDelta, getDataSourceDisplayName } from '../utils/formatting.js';
   import GlucoseResponseChart from './GlucoseResponseChart.svelte';
@@ -146,7 +147,7 @@
     <!-- Header -->
     <div class="flex flex-col gap-1.5 p-6 pb-0">
       <div class="flex items-center gap-3">
-        <span class="text-3xl font-bold" style="color: {glucoseColor}">
+        <span class="text-3xl font-bold text-(--glucose-color)" style:--glucose-color={glucoseColor}>
           {bg(glucoseValue)}
         </span>
         <span class="text-sm text-muted-foreground">{bgLabel()}</span>

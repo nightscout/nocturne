@@ -21,11 +21,11 @@ public class ShareDataCategoriesGuardTests
     /// </summary>
     private static readonly IReadOnlySet<string> KnownHiddenTables = new HashSet<string>(StringComparer.Ordinal)
     {
-        "alert_condition_timers", "alert_custom_sounds", "alert_deliveries", "alert_excursions",
+        "alert_condition_timers", "alert_custom_sounds", "alert_deliveries", "alert_excursion_mutes", "alert_excursions",
         "alert_instances", "alert_invites", "alert_rule_channels", "alert_rules", "alert_tracker_state",
         "basal_schedules", "body_weights", "carb_ratio_schedules", "client_devices", "clock_faces", "coach_mark_states",
         "compression_low_suggestions", "connector_configurations", "data_source_metadata",
-        "dedup_reconcile_state", "devices", "discrepancy_analyses",
+        "dedup_reconcile_state", "device_clock_observations", "devices", "discrepancy_analyses",
         "discrepancy_details", "dnd_windows", "in_app_notifications", "lab_hba1c_results", "linked_records", "login_codes",
         "member_invites", "membership_requests",
         "mutation_audit_log", "notes", "oauth_authorization_codes", "oauth_clients", "oauth_device_codes",
@@ -35,8 +35,8 @@ public class ShareDataCategoriesGuardTests
         "state_spans", "system_events",
         "target_range_schedules", "tenant_alert_settings",
         "tenant_data_retention_config", "therapy_settings", "timezone_timeline", "tracker_definitions",
-        "tracker_instances", "tracker_notification_thresholds", "tracker_presets", "treatment_foods",
-        "user_food_favorites",
+        "tracker_instances", "tracker_notification_thresholds", "tracker_presets", "translation_drafts",
+        "treatment_foods", "user_food_favorites",
     };
 
     private static readonly Lazy<IReadOnlySet<string>> TenantScopedTables = new(() =>

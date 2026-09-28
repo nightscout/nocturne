@@ -3,16 +3,14 @@
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
-  import {
-    Monitor,
-    Smartphone,
-    Trash2,
-    Check,
-    AlertTriangle,
-    Clock,
-    LoaderCircle,
-    LogOut,
-  } from "lucide-svelte";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Clock from "@lucide/svelte/icons/clock";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import LogOut from "@lucide/svelte/icons/log-out";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list,
@@ -161,10 +159,10 @@
 
   {#if successMessage}
     <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
     >
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
-      <p class="text-sm text-green-800 dark:text-green-200">
+      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
+      <p class="text-sm text-success">
         {successMessage}
       </p>
     </div>
@@ -238,9 +236,9 @@
                 <Button
                   {...props}
                   type="button"
-                  variant="outline"
+                  variant="outline-destructive"
                   size="sm"
-                  class="text-destructive border-destructive/30 hover:bg-destructive/10 shrink-0"
+                  class="shrink-0"
                   disabled={isRevoking === session.sessionId}
                 >
                   {#if isRevoking === session.sessionId}

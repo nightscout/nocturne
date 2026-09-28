@@ -86,6 +86,10 @@ public static class MatchCriteriaMapper
     private static readonly Dictionary<string, StateSpanCategory> CategoriesByName =
         Enum.GetValues<StateSpanCategory>().ToDictionary(c => c.ToString(), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Criteria for a note, which matches on its time window alone.</summary>
-    public static MatchCriteria ForNote() => new();
+    /// <summary>
+    /// Criteria for a note. Whitespace runs collapse so a copy re-wrapped by another source still
+    /// matches; any other difference in the text is a different note.
+    /// </summary>
+    public static MatchCriteria From(NoteEntity entity) =>
+        new() { Text = string.Join(' ', entity.Text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)) };
 }

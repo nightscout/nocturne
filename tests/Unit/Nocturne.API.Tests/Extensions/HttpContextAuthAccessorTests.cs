@@ -113,6 +113,34 @@ public class HttpContextAuthAccessorTests
         context.IsShareAccess().Should().BeTrue();
     }
 
+    [Theory]
+    [InlineData(AuthType.OAuthAccessToken, true)]
+    [InlineData(AuthType.ApiKey, true)]
+    [InlineData(AuthType.DirectGrant, true)]
+    [InlineData(AuthType.Guest, true)]
+    [InlineData(AuthType.PlatformAccess, false)]
+    [InlineData(AuthType.SessionCookie, false)]
+    public void GetGrantId_answers_only_for_credentials_whose_token_id_is_a_grant(
+        AuthType authType, bool expected)
+    {
+        var context = new DefaultHttpContext();
+        var tokenId = Guid.CreateVersion7();
+        context.SetAuthContext(new AuthContext
+        {
+            IsAuthenticated = true,
+            AuthType = authType,
+            TokenId = tokenId,
+        });
+
+        context.GetGrantId().Should().Be(expected ? tokenId : null);
+    }
+
+    [Fact]
+    public void GetGrantId_is_null_without_an_auth_context()
+    {
+        new DefaultHttpContext().GetGrantId().Should().BeNull();
+    }
+
     [Fact]
     public void A_permission_trie_round_trips_and_answers_through_HasPermission()
     {

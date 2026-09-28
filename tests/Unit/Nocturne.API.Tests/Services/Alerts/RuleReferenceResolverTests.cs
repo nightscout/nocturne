@@ -51,6 +51,17 @@ public class RuleReferenceResolverTests
     }
 
     [Fact]
+    public void Alert_state_referencing_an_enabled_rule_outside_the_batch_kept()
+    {
+        var parentId = Guid.NewGuid();
+        var child = MakeRule(Guid.NewGuid(), AlertConditionType.AlertState,
+            $$"""{"alert_id":"{{parentId}}","state":"firing"}""");
+
+        RuleReferenceResolver.FilterEvaluable(new[] { child }, enabledIds: new HashSet<Guid> { parentId, child.Id })
+            .Should().ContainSingle().Which.Should().Be(child);
+    }
+
+    [Fact]
     public void Nested_alert_state_inside_composite_excludes_chain_when_unresolved()
     {
         var orphan = Guid.NewGuid();
@@ -117,6 +128,20 @@ public class RuleReferenceResolverTests
         var result = RuleReferenceResolver.FilterEvaluable(new[] { a, b, c });
 
         result.Select(r => r.Id).Should().Equal(a.Id, b.Id, c.Id);
+    }
+
+    [Theory]
+    [InlineData("""{"operator":"and"}""")]
+    [InlineData("""{"operator":"and","conditions":[null]}""")]
+    [InlineData("""{"operator":"and","conditions":[{"alert_state":{"state":"firing"}}]}""")]
+    [InlineData("""{"operator":"and","conditions":[{"type":"sustained","sustained":{"minutes":5}}]}""")]
+    public void Malformed_stored_composite_is_left_for_the_engine_to_skip(string json)
+    {
+        var bad = MakeRule(Guid.NewGuid(), AlertConditionType.Composite, json);
+        var ok = MakeRule(Guid.NewGuid(), AlertConditionType.Threshold, """{"direction":"above","value":180}""");
+
+        RuleReferenceResolver.FilterEvaluable(new[] { bad, ok })
+            .Should().Equal(bad, ok);
     }
 
     private static AlertRuleSnapshot MakeRule(Guid id, AlertConditionType type, string json) =>

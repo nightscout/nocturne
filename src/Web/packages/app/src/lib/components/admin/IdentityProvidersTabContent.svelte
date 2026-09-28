@@ -10,18 +10,26 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
-  import {
-    Plus,
-    Loader2,
-    AlertTriangle,
-    Shield,
-    ToggleRight,
-    ToggleLeft,
-    Pencil,
-    Trash2,
-  } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ToggleRight from "@lucide/svelte/icons/toggle-right";
+  import ToggleLeft from "@lucide/svelte/icons/toggle-left";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
   import type { OidcProviderResponse } from "$api";
+
+  interface Props {
+    oidcLoading: boolean;
+    oidcError: string | null;
+    oidcProviders: OidcProviderResponse[];
+    openCreateProviderDialog: () => void;
+    openEditProviderDialog: (provider: OidcProviderResponse) => void;
+    toggleProvider: (provider: OidcProviderResponse) => void;
+    deleteProvider: (provider: OidcProviderResponse) => void;
+  }
 
   let {
     oidcLoading,
@@ -31,15 +39,7 @@
     openEditProviderDialog,
     toggleProvider,
     deleteProvider,
-  } = $props<{
-    oidcLoading: boolean;
-    oidcError: string | null;
-    oidcProviders: OidcProviderResponse[];
-    openCreateProviderDialog: () => void;
-    openEditProviderDialog: (provider: OidcProviderResponse) => void;
-    toggleProvider: (provider: OidcProviderResponse) => void;
-    deleteProvider: (provider: OidcProviderResponse) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="identity-providers">
@@ -51,7 +51,7 @@
           Configure OpenID Connect providers for single sign-on.
         </CardDescription>
       </div>
-      <Button onclick={openCreateProviderDialog} class="gap-2">
+      <Button onclick={openCreateProviderDialog}>
         <Plus class="h-4 w-4" />
         Add Provider
       </Button>

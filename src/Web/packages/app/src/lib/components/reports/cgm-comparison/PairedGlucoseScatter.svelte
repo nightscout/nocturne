@@ -50,7 +50,8 @@
   }
 </script>
 
-<div class="h-80 w-full">
+<!-- Print fixes the box so the plot area (box less padding) is square and the identity line runs at 45°. -->
+<div class="h-80 w-full print:mx-auto print:h-[380px] print:w-[400px]">
   <Chart
     data={points}
     x="x"
@@ -82,7 +83,7 @@
             x={context.xScale(tick)}
             y={context.height + 14}
             text-anchor="middle"
-            class="fill-muted-foreground text-[10px]"
+            class="fill-muted-foreground text-2xs"
           >
             {bg(tick)}
           </text>
@@ -90,7 +91,7 @@
             x={-8}
             y={context.yScale(tick) + 3}
             text-anchor="end"
-            class="fill-muted-foreground text-[10px]"
+            class="fill-muted-foreground text-2xs"
           >
             {bg(tick)}
           </text>

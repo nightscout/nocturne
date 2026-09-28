@@ -1,0 +1,164 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- Fixture files are confined to a fresh mkdtemp directory. */
+import {
+  copyFile,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { wuchale } from "wuchale/vite";
+import toRuntime from "wuchale/runtime";
+import supportedLocales from "../../../supportedLocales.json";
+
+const require = createRequire(import.meta.url);
+const { po } = require("gettext-parser");
+const googleHealthReference = /google-health|GoogleHealthSourceRow/;
+const serverConnectorsReference = /ServerConnectorsCard/;
+const placeholderPattern = /(<\/?\d+\s*\/?>|\{[^}]+\})/g;
+const representativeCopy = [
+  "Google Health",
+  "Import recovery",
+  "Open connector reset",
+  "Save and connect",
+  "Refresh inventory",
+];
+
+function entries(catalog) {
+  return Object.values(catalog.translations).flatMap((group) =>
+    Object.values(group)
+  );
+}
+
+function placeholders(value) {
+  return [...(value.match(placeholderPattern) ?? [])].sort().join("|");
+}
+
+function isGoogleHealthEntry(entry) {
+  const reference = String(entry.comments?.reference ?? "");
+  return (
+    googleHealthReference.test(reference) ||
+    (serverConnectorsReference.test(reference) &&
+      /Google Health|Import steps, heart rate, weight, and sleep from Google Health/.test(
+        entry.msgid
+      ))
+  );
+}
+
+describe("Google Health production translations", () => {
+  let root;
+  let messageIds;
+  let expectedPlaceholders;
+
+  beforeAll(async () => {
+    root = await mkdtemp(
+      join(tmpdir(), "nocturne-google-health-translations-")
+    );
+    await mkdir(join(root, "locales"));
+    await writeFile(join(root, "package.json"), '{"type":"module"}');
+    for (const locale of supportedLocales) {
+      await copyFile(
+        new URL(`../../../locales/${locale}.po`, import.meta.url),
+        join(root, "locales", `${locale}.po`)
+      );
+    }
+    expectedPlaceholders = new Map(
+      entries(
+        po.parse(
+          await readFile(new URL("../../../locales/en.po", import.meta.url))
+        )
+      )
+        .filter(
+          (entry) =>
+            entry.msgid &&
+            isGoogleHealthEntry(entry)
+        )
+        .map((entry) => [entry.msgid, placeholders(entry.msgid)])
+    );
+    const configPath = join(root, "wuchale.config.js");
+    await writeFile(
+      configPath,
+      `
+      import { adapter } from ${JSON.stringify(pathToFileURL(require.resolve("@wuchale/svelte")).href)};
+      import { defineConfig, pofile } from ${JSON.stringify(pathToFileURL(require.resolve("wuchale")).href)};
+      export default defineConfig({
+        locales: ${JSON.stringify(supportedLocales)},
+        localesDir: "locales",
+        adapters: { main: adapter({
+          sourceLocale: "en",
+          loader: "sveltekit",
+          storage: pofile({ location: "locales/{locale}.po" }),
+          files: ["src/**/*.svelte"],
+        }) },
+      });
+    `
+    );
+    const plugin = wuchale({ configPath });
+    await plugin.configResolved({ env: { DEV: false } });
+    const fixture = representativeCopy
+      .map((copy) => `<span>${copy}</span>`)
+      .join("");
+    const { code } = await plugin.transform.handler(
+      fixture,
+      join(
+        root,
+        "src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte"
+      ),
+      { ssr: false }
+    );
+    messageIds = [...code.matchAll(/_w_runtime_\((\d+)\)/g)].map((match) =>
+      Number(match[1])
+    );
+    expect(messageIds).toHaveLength(representativeCopy.length);
+  });
+
+  afterAll(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+
+  it.each(supportedLocales)(
+    "keeps Google Health copy visible in %s",
+    async (locale) => {
+      const catalogUrl = pathToFileURL(
+        join(root, "locales/.wuchale", `main.0.${locale}.compiled.js`)
+      );
+      const catalog = await import(/* @vite-ignore */ catalogUrl.href);
+      const runtime = toRuntime(catalog, locale);
+      expect(
+        messageIds
+          .map((id) => runtime(id))
+          .every((text) => text.trim().length > 0)
+      ).toBe(true);
+    }
+  );
+
+  it.each(supportedLocales)(
+    "has no empty Google Health catalog entries in %s",
+    async (locale) => {
+      const catalog = po.parse(
+        await readFile(
+          new URL(`../../../locales/${locale}.po`, import.meta.url)
+        )
+      );
+      const missing = entries(catalog).filter(
+        (entry) =>
+          entry.msgid &&
+          isGoogleHealthEntry(entry) &&
+          !entry.msgstr?.[0]?.trim()
+      );
+      expect(missing).toEqual([]);
+      const mismatches = entries(catalog).filter(
+        (entry) =>
+          expectedPlaceholders.has(entry.msgid) &&
+          placeholders(entry.msgstr?.[0] ?? "") !==
+            expectedPlaceholders.get(entry.msgid)
+      );
+      expect(mismatches).toEqual([]);
+    }
+  );
+});

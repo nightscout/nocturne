@@ -640,7 +640,7 @@ export interface BrowserAlarmCapabilities {
  */
 export function getBrowserCapabilities(): BrowserAlarmCapabilities {
   return {
-    audio: typeof AudioContext !== 'undefined' || typeof (window as unknown as { webkitAudioContext: unknown }).webkitAudioContext !== 'undefined',
+    audio: typeof AudioContext !== 'undefined' || 'webkitAudioContext' in window,
     notifications: 'Notification' in window,
     notificationPermission: getNotificationPermission(),
     vibration: canVibrate(),
@@ -675,7 +675,7 @@ export interface CustomAlarmSound {
 }
 
 /** Storage for custom sounds - uses IndexedDB via a simple wrapper */
-let customSoundsCache: Map<string, CustomAlarmSound> = new Map();
+const customSoundsCache: Map<string, CustomAlarmSound> = new Map();
 let customSoundsLoaded = false;
 
 /**
@@ -729,7 +729,7 @@ async function saveCustomSounds(): Promise<void> {
       localStorage.setItem(CUSTOM_SOUNDS_STORAGE_KEY, JSON.stringify(sounds));
     } catch (err) {
       console.error('Failed to save custom sounds:', err);
-      throw new Error('Storage quota exceeded. Try removing some custom sounds.');
+      throw new Error('Storage quota exceeded. Try removing some custom sounds.', { cause: err });
     }
   }
 }
@@ -746,8 +746,8 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
 
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
+    request.onupgradeneeded = () => {
+      const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'id' });
       }
@@ -869,7 +869,10 @@ export async function getCustomSounds(): Promise<CustomAlarmSound[]> {
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('FileReader did not produce a data URL'));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });

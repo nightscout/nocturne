@@ -36,19 +36,26 @@ internal static class MigrationJobHarness
         public void SetTenant(TenantContext? tenant) => Context = tenant;
     }
 
-    public static ServiceProvider BuildProvider(HttpMessageHandler handler)
+    /// <param name="entryOutcome">What the entry decomposer reports for each page; empty when omitted.</param>
+    /// <param name="treatmentOutcome">What the treatment decomposer reports for each page; empty when omitted.</param>
+    public static ServiceProvider BuildProvider(
+        HttpMessageHandler handler,
+        Func<IReadOnlyList<Entry>, DecompositionResult>? entryOutcome = null,
+        Func<IReadOnlyList<Treatment>, DecompositionResult>? treatmentOutcome = null)
     {
         var database = $"migration-{Guid.NewGuid():N}";
 
         var entries = new Mock<IEntryDecomposer>();
         entries
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync((IReadOnlyList<Entry> page, WriteOrigin _, CancellationToken _) =>
+                entryOutcome?.Invoke(page) ?? new DecompositionResult());
 
         var treatments = new Mock<ITreatmentDecomposer>();
         treatments
             .Setup(d => d.DecomposeBatchAsync(It.IsAny<IReadOnlyList<Treatment>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new DecompositionResult());
+            .ReturnsAsync((IReadOnlyList<Treatment> page, WriteOrigin _, CancellationToken _) =>
+                treatmentOutcome?.Invoke(page) ?? new DecompositionResult());
 
         var deviceStatuses = new Mock<IDeviceStatusDecomposer>();
         deviceStatuses

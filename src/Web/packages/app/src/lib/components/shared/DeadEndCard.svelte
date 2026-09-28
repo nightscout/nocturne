@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ComponentType, Snippet } from "svelte";
+  import type { Component, Snippet } from "svelte";
   import * as Card from "$lib/components/ui/card";
 
   interface Props {
-    icon: ComponentType;
+    icon: Component;
     title: string;
     children: Snippet;
   }
@@ -19,7 +19,7 @@
       </div>
       <Card.Title>{title}</Card.Title>
     </Card.Header>
-    <Card.Content class="space-y-3 text-center text-sm text-muted-foreground">
+    <Card.Content variant="muted" class="space-y-3 text-center">
       {@render children()}
     </Card.Content>
   </Card.Root>

@@ -1,5 +1,6 @@
 using System.Reflection;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Core.Contracts.Connectors;
 
 namespace Nocturne.Connectors.Core.Extensions;
 
@@ -70,7 +71,7 @@ public class ConnectorRegistrationAttribute(
     ///     <c>ConnectorConfiguration.ConnectorName</c> lowered, and the id the tenant UI sends back
     ///     (e.g. "librelinkup"). Derived so the name and the key cannot drift apart.
     /// </summary>
-    public string ConnectorId { get; } = connectorName.ToLowerInvariant();
+    public string ConnectorId { get; } = ConnectorNames.Canonical(connectorName);
 
     /// <summary>
     ///     Service name constant (e.g., "ServiceNames.LibreConnector")
@@ -145,6 +146,14 @@ public class ConnectorRegistrationAttribute(
     ///     Real-time connectors use 60; batch connectors use 360.
     /// </summary>
     public int DefaultStaleThresholdMinutes { get; set; } = 60;
+
+    /// <summary>
+    ///     How often, in seconds, the sensor behind this connector produces a reading; 0 when its
+    ///     data has no fixed cadence. A connector that declares one is polled just after each reading
+    ///     is due rather than on a free-running interval, finding its newest reading by
+    ///     <see cref="DataSourceId"/>, which it must therefore declare too.
+    /// </summary>
+    public int SensorReadingIntervalSeconds { get; set; }
 
     /// <summary>
     ///     The name <paramref name="configType"/> answers to in messages, falling back to its type

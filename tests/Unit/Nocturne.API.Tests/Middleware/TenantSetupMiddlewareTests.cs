@@ -220,6 +220,74 @@ public class TenantSetupMiddlewareTests : IDisposable
     }
 
     [Fact]
+    public async Task WhenALockedOutOwnerHoldsOnlyADisabledProviderIdentity_Returns503WithRecoveryMode()
+    {
+        // Arrange — the tenant has a healthy passkey member, so an account whose only identity is
+        // on a disabled provider is an orphan rather than a configured member.
+        var healthySubjectId = Guid.CreateVersion7();
+        var lockedOutSubjectId = Guid.CreateVersion7();
+        var disabledProviderId = SeedOidcProvider(isEnabled: false);
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = healthySubjectId,
+            Name = "Healthy User",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.PasskeyCredentials.Add(new PasskeyCredentialEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = healthySubjectId,
+            CredentialId = System.Text.Encoding.UTF8.GetBytes("cred-1"),
+            PublicKey = [],
+            SignCount = 0,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = healthySubjectId,
+        });
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = lockedOutSubjectId,
+            Name = "Locked Out Owner",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = lockedOutSubjectId,
+            ProviderId = disabledProviderId,
+            OidcSubjectId = "google-123",
+            Issuer = "https://accounts.google.com",
+            LinkedAt = DateTime.UtcNow,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = lockedOutSubjectId,
+        });
+
+        await _dbContext.SaveChangesAsync();
+
+        var (mw, ctx) = Build();
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbFactory, _noInstanceKey);
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
+        ctx.Response.Body.Seek(0, SeekOrigin.Begin);
+        var body = await new StreamReader(ctx.Response.Body).ReadToEndAsync();
+        body.Should().Contain("recovery_mode_active");
+    }
+
+    [Fact]
     public async Task WhenOrphanedSubjectBelongsToDifferentTenant_PassesThrough()
     {
         // Arrange — this tenant is healthy, orphaned subject is on another tenant
@@ -439,7 +507,7 @@ public class TenantSetupMiddlewareTests : IDisposable
         ctx.Response.StatusCode.Should().NotBe(503);
     }
 
-    private Guid SeedOidcProvider(string name = "Google")
+    private Guid SeedOidcProvider(string name = "Google", bool isEnabled = true)
     {
         var providerId = Guid.CreateVersion7();
         _dbContext.Set<OidcProviderEntity>().Add(new OidcProviderEntity
@@ -448,6 +516,7 @@ public class TenantSetupMiddlewareTests : IDisposable
             Name = name,
             IssuerUrl = $"https://accounts.{name.ToLowerInvariant()}.com",
             ClientId = "test-client-id",
+            IsEnabled = isEnabled,
         });
         _dbContext.SaveChanges();
         return providerId;
@@ -494,6 +563,48 @@ public class TenantSetupMiddlewareTests : IDisposable
         // Assert
         nextCalled.Should().BeTrue("OIDC identity alone should satisfy the setup check");
         ctx.Response.StatusCode.Should().NotBe(503);
+    }
+
+    [Fact]
+    public async Task WhenTenantMembersOnlyOidcIdentityIsOnADisabledProvider_Returns503SetupRequired()
+    {
+        // Arrange — the identity cannot sign in, so the tenant is still at first-run setup
+        var subjectId = Guid.CreateVersion7();
+        var providerId = SeedOidcProvider(isEnabled: false);
+
+        _dbContext.Subjects.Add(new SubjectEntity
+        {
+            Id = subjectId,
+            Name = "Locked Out User",
+            IsActive = true,
+            IsSystemSubject = false,
+        });
+        _dbContext.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
+        {
+            Id = Guid.CreateVersion7(),
+            SubjectId = subjectId,
+            ProviderId = providerId,
+            OidcSubjectId = "google-123",
+            Issuer = "https://accounts.google.com",
+            LinkedAt = DateTime.UtcNow,
+        });
+        _dbContext.TenantMembers.Add(new TenantMemberEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = _tenantId,
+            SubjectId = subjectId,
+        });
+        await _dbContext.SaveChangesAsync();
+
+        var nextCalled = false;
+        var (mw, ctx) = Build(onNext: () => nextCalled = true);
+
+        // Act
+        await mw.InvokeAsync(ctx, _tenantAccessor.Object, _dbFactory, _noInstanceKey);
+
+        // Assert
+        ctx.Response.StatusCode.Should().Be(503);
+        nextCalled.Should().BeFalse("an identity on a disabled provider is not a sign-in method");
     }
 
     [Fact]

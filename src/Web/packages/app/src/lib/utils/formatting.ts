@@ -15,19 +15,10 @@ import {
   preferredLanguage,
   type GlucoseUnits,
 } from "$lib/stores/appearance-store.svelte";
-import type { Treatment } from "$lib/api";
+import type { OverallAverages, Treatment, TreatmentSummary } from "$lib/api";
 
 // Re-export for backward compatibility
-export type { GlucoseUnits, Treatment };
-
-// Local type definitions for treatment summaries
-export interface TreatmentSummary {
-  [key: string]: any;
-}
-
-export interface OverallAverages {
-  [key: string]: any;
-}
+export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };
 
 // =============================================================================
 // Glucose Conversion & Formatting
@@ -543,7 +534,7 @@ export function formatDateTimeCompact(date: Date | string | number | undefined):
  * @param insulin The insulin value.
  * @returns The formatted insulin string.
  */
-export function formatInsulinDisplay(insulin: number | undefined): string {
+export function formatInsulinDisplay(insulin: number | null | undefined): string {
   if (insulin === undefined || insulin === null) {
     return "N/A";
   }

@@ -173,7 +173,8 @@ public class StatisticsService : IStatisticsService
     /// <summary>
     /// Calculate Glycemic Risk Index (GRI) - composite risk score from 0-100
     /// Based on: Klonoff DC, et al. J Diabetes Sci Technol. 2023
-    /// Formula: GRI = (3.0 × VLow%) + (2.4 × Low%) + (1.6 × VHigh%) + (0.8 × High%)
+    /// Hypo component = VLow% + (0.8 × Low%), Hyper component = VHigh% + (0.5 × High%)
+    /// Formula: GRI = (3.0 × Hypo) + (1.6 × Hyper)
     /// </summary>
     /// <param name="timeInRange">Time in range metrics with percentage breakdowns</param>
     /// <returns>GRI with score, zone classification, and component breakdown</returns>
@@ -181,17 +182,16 @@ public class StatisticsService : IStatisticsService
     {
         var percentages = timeInRange.Percentages;
 
-        // GRI component weights per 2023 consensus
-        const double veryLowWeight = 3.0;
-        const double lowWeight = 2.4;
-        const double highWeight = 0.8;
-        const double veryHighWeight = 1.6;
+        // Consensus component definitions and their GRI weights
+        const double lowWeight = 0.8;
+        const double highWeight = 0.5;
+        const double hypoWeight = 3.0;
+        const double hyperWeight = 1.6;
 
-        var hypoComponent = (veryLowWeight * percentages.VeryLow) + (lowWeight * percentages.Low);
-        var hyperComponent =
-            (veryHighWeight * percentages.VeryHigh) + (highWeight * percentages.High);
+        var hypoComponent = percentages.VeryLow + (lowWeight * percentages.Low);
+        var hyperComponent = percentages.VeryHigh + (highWeight * percentages.High);
 
-        var gri = hypoComponent + hyperComponent;
+        var gri = (hypoWeight * hypoComponent) + (hyperWeight * hyperComponent);
 
         // Cap at 100
         gri = Math.Min(100, Math.Round(gri * 10) / 10);
@@ -775,7 +775,7 @@ public class StatisticsService : IStatisticsService
 
     private static bool IsPlausibleReading(SensorGlucose entry) => IsPlausibleReading(entry.Mgdl);
 
-    private static bool IsPlausibleReading(double mgdl) => mgdl > 0 && mgdl < 600;
+    private static bool IsPlausibleReading(double mgdl) => GlucoseStatistics.IsPlausibleReading(mgdl);
 
     #endregion
 
@@ -1151,31 +1151,6 @@ public class StatisticsService : IStatisticsService
     #region Time in Range
 
     /// <summary>
-    /// The mutually excluding zones <see cref="CalculateTimeInRange"/> counts against, listed in
-    /// the order it has always tested them: very-high before high, so a tenant who configures
-    /// <c>VeryHigh</c> below <c>TargetTop</c> keeps seeing the reading reported as very high.
-    /// <see cref="Target"/> is the remainder and is not reported from here — the target percentage
-    /// comes from the closed <c>TargetBottom</c>..<c>TargetTop</c> band, which overlaps
-    /// <see cref="Low"/> when the two are configured apart.
-    /// </summary>
-    private enum ExcludingZone
-    {
-        VeryLow,
-        Low,
-        VeryHigh,
-        High,
-        Target,
-    }
-
-    private static GlucoseZoneScale ExcludingZones(GlycemicThresholds thresholds) =>
-        new(
-            GlucoseZoneBound.Under(thresholds.VeryLow),
-            GlucoseZoneBound.Under(thresholds.Low),
-            GlucoseZoneBound.Over(thresholds.VeryHigh),
-            GlucoseZoneBound.Over(thresholds.TargetTop)
-        );
-
-    /// <summary>
     /// The zones the per-range statistics partition on, which are not <see cref="ExcludingZone"/>:
     /// <see cref="Low"/> is everything below <c>Low</c>, so it holds the very-low readings as well,
     /// and <see cref="High"/> is everything above <c>TargetTop</c>.
@@ -1194,26 +1169,56 @@ public class StatisticsService : IStatisticsService
         );
 
     /// <summary>
-    /// The hourly zone set, which splits the target band at 63 and 140 and hyperglycaemia at 200
-    /// rather than following the tenant's thresholds.
+    /// The per-hour consensus bands: the default <see cref="GlycemicThresholds"/>, never a tenant's,
+    /// with each edge on the side <see cref="CalculateTimeInRange"/> puts it (the target and
+    /// tight-target bands closed), and the target band split at the tight-target top so the six
+    /// partition the hour.
     /// </summary>
-    private enum ExtendedZone
+    private enum HourlyBand
     {
         VeryLow,
         Low,
-        Normal,
-        AboveTarget,
+        TightTarget,
+        AboveTightTarget,
         High,
         VeryHigh,
     }
 
-    private static readonly GlucoseZoneScale ExtendedZones = new(
-        GlucoseZoneBound.Under(GlucoseConstants.VeryLowMgdl),
-        GlucoseZoneBound.Under(63),
-        GlucoseZoneBound.Under(140),
-        GlucoseZoneBound.Under(GlucoseConstants.TargetTopMgdl),
-        GlucoseZoneBound.Under(200)
-    );
+    private static readonly GlycemicThresholds Consensus = new();
+
+    /// <inheritdoc/>
+    public GlycemicThresholds HourlyBandThresholds => CopyOfConsensus();
+
+    /// <summary>
+    /// A fresh copy of <see cref="Consensus"/>. The model is mutable and the instance is shared by
+    /// every tenant, so it never leaves the service itself.
+    /// </summary>
+    private static GlycemicThresholds CopyOfConsensus() =>
+        new()
+        {
+            VeryLow = Consensus.VeryLow,
+            Low = Consensus.Low,
+            TargetBottom = Consensus.TargetBottom,
+            TargetTop = Consensus.TargetTop,
+            TightTargetBottom = Consensus.TightTargetBottom,
+            TightTargetTop = Consensus.TightTargetTop,
+            High = Consensus.High,
+            VeryHigh = Consensus.VeryHigh,
+        };
+
+    /// <summary>The widest UTC offset any zone uses; a recorded offset beyond it is treated as none.</summary>
+    private const int MaxUtcOffsetMinutes = 14 * 60;
+
+    private static readonly GlucoseZoneScale HourlyBands = HourlyBandScale(Consensus);
+
+    private static GlucoseZoneScale HourlyBandScale(GlycemicThresholds consensus) =>
+        new(
+            GlucoseZoneBound.Under(consensus.VeryLow),
+            GlucoseZoneBound.Under(consensus.Low),
+            GlucoseZoneBound.UpTo(consensus.TightTargetTop),
+            GlucoseZoneBound.UpTo(consensus.TargetTop),
+            GlucoseZoneBound.UpTo(consensus.VeryHigh)
+        );
 
     /// <summary>
     /// Calculate time in range metrics
@@ -1232,7 +1237,11 @@ public class StatisticsService : IStatisticsService
         // from and the minutes derived from the entry timestamps line up with it.
         var entriesList = entries.Where(IsPlausibleReading).OrderBy(e => e.Mills).ToList();
 
-        var glucoseValues = ExtractGlucoseValues(entriesList).ToList();
+        // Every figure here counts instants: readings two uploaders posted of one moment were never
+        // two readings, so each instant counts once, as the reading GlucoseCadence.Instants
+        // chooses for it.
+        var instants = GlucoseCadence.Instants(entriesList, thresholds);
+        var glucoseValues = instants.Select(reading => reading.Mgdl).ToList();
         var totalReadings = glucoseValues.Count;
 
         if (totalReadings == 0)
@@ -1243,33 +1252,32 @@ public class StatisticsService : IStatisticsService
                 Durations = new TimeInRangeDurations(),
                 Episodes = new TimeInRangeEpisodes(),
                 RangeStats = new TimeInRangeDetailedStats(),
+                AverageDailyMinutes = new AverageDailyMinutes(),
             };
         }
 
         // The target and tight-target bands overlap each other, and overlap the excluding zones
         // whenever Low and TargetBottom are configured apart, so they are counted alongside the
         // scale rather than read off it.
-        var zones = ExcludingZones(thresholds);
+        var zones = GlucoseStatistics.ExcludingZones(thresholds);
         var zoneCounts = new int[zones.ZoneCount];
         var zoneMinutes = new double[zones.ZoneCount];
         int targetCount = 0, tightTargetCount = 0;
         double targetMinutes = 0, tightTargetMinutes = 0;
-        var readingMinutes = ReadingMinutes(entriesList);
+        var (instantMinutes, _) = GlucoseCadence.ReadingMinutes(instants);
         for (var i = 0; i < totalReadings; i++)
         {
             var v = glucoseValues[i];
-            var minutes = readingMinutes[i];
+            var minutes = instantMinutes[i];
 
             var zone = zones.Classify(v);
             zoneCounts[zone]++;
             zoneMinutes[zone] += minutes;
-
             if (v >= thresholds.TargetBottom && v <= thresholds.TargetTop)
             {
                 targetCount++;
                 targetMinutes += minutes;
             }
-
             if (v >= thresholds.TightTargetBottom && v <= thresholds.TightTargetTop)
             {
                 tightTargetCount++;
@@ -1305,7 +1313,7 @@ public class StatisticsService : IStatisticsService
                 zoneMinutes[(int)ExcludingZone.High] + zoneMinutes[(int)ExcludingZone.VeryHigh],
         };
 
-        var episodes = CalculateEpisodes(glucoseValues, thresholds);
+        var episodes = CalculateEpisodes(entriesList, thresholds);
 
         // Calculate per-range detailed statistics
         var rangeZones = RangeStatZones(thresholds);
@@ -1340,8 +1348,22 @@ public class StatisticsService : IStatisticsService
             Durations = durations,
             Episodes = episodes,
             RangeStats = rangeStats,
+            AverageDailyMinutes = AverageDailyMinutesFrom(percentages),
         };
     }
+
+    /// <summary>
+    /// The average minutes per day in each zone, from the percentages rather than the recorded
+    /// durations. Percentages sum to 100, so the three zones account for a whole day even when the
+    /// data has gaps; <see cref="TimeInRangeDurations"/> would not.
+    /// </summary>
+    private static AverageDailyMinutes AverageDailyMinutesFrom(TimeInRangePercentages percentages) =>
+        new()
+        {
+            Target = percentages.Target / 100.0 * 1440.0,
+            Low = (percentages.VeryLow + percentages.Low) / 100.0 * 1440.0,
+            High = (percentages.High + percentages.VeryHigh) / 100.0 * 1440.0,
+        };
 
     /// <inheritdoc/>
     public PersonalRangeTimeInRange? CalculatePersonalRangeTime(
@@ -1419,97 +1441,21 @@ public class StatisticsService : IStatisticsService
         };
     }
 
-    /// <summary>
-    /// A run of consecutive readings on the same side of target is one episode, counted against
-    /// the most extreme zone the run reached — so a rise through High into VeryHigh and back is
-    /// one very-high episode, not three. <see cref="ExcludingZone"/> lists the severe zone of each
-    /// side ahead of the milder one, so the most extreme zone of a run is the lowest-numbered.
-    /// </summary>
     private static TimeInRangeEpisodes CalculateEpisodes(
-        IList<double> glucoseValues,
+        IList<SensorGlucose> sortedEntries,
         GlycemicThresholds thresholds
     )
     {
-        var zones = ExcludingZones(thresholds);
-        var episodeCounts = new int[zones.ZoneCount];
-        var aboveRange = 0;
-        var side = 0;
-        var extreme = (int)ExcludingZone.Target;
-
-        foreach (var value in glucoseValues)
-        {
-            var zone = zones.Classify(value);
-            var zoneSide = Side(zone);
-
-            if (zoneSide != side)
-            {
-                CloseEpisode();
-                side = zoneSide;
-                extreme = zone;
-            }
-            else if (zone < extreme)
-            {
-                extreme = zone;
-            }
-        }
-
-        CloseEpisode();
-
+        var episodes = GlucoseEpisodeDetector.Detect(sortedEntries, thresholds);
         return new TimeInRangeEpisodes
         {
-            VeryLow = episodeCounts[(int)ExcludingZone.VeryLow],
-            Low = episodeCounts[(int)ExcludingZone.Low],
-            High = episodeCounts[(int)ExcludingZone.High],
-            VeryHigh = episodeCounts[(int)ExcludingZone.VeryHigh],
-            AboveRange = aboveRange,
+            VeryLow = episodes.Count(e => e.BelowRange && e.Severe),
+            Low = episodes.Count(e => e.BelowRange && !e.Severe),
+            High = episodes.Count(e => !e.BelowRange && !e.Severe),
+            VeryHigh = episodes.Count(e => !e.BelowRange && e.Severe),
+            AboveRange = episodes.Count(e => !e.BelowRange),
+            BelowRange = episodes.Count(e => e.BelowRange),
         };
-
-        void CloseEpisode()
-        {
-            if (side == 0)
-                return;
-
-            episodeCounts[extreme]++;
-            if (side > 0)
-                aboveRange++;
-        }
-
-        static int Side(int zone) =>
-            zone switch
-            {
-                (int)ExcludingZone.VeryLow or (int)ExcludingZone.Low => -1,
-                (int)ExcludingZone.VeryHigh or (int)ExcludingZone.High => 1,
-                _ => 0,
-            };
-    }
-
-    /// <summary>
-    /// The cadence assumed where nothing publishes one: a series showing no interval of its own,
-    /// or a device the catalogue carries no <see cref="CgmDeviceWindow.CadenceMinutes"/> for.
-    /// </summary>
-    private const double DefaultCadenceMinutes = 5;
-
-    /// <summary>
-    /// The minutes from each reading to the next, in series order; empty for a series of one.
-    /// </summary>
-    private static double[] ReadingIntervals(IList<SensorGlucose> sortedEntries)
-    {
-        var intervals = new double[Math.Max(sortedEntries.Count - 1, 0)];
-        for (var i = 1; i < sortedEntries.Count; i++)
-            intervals[i - 1] = (sortedEntries[i].Mills - sortedEntries[i - 1].Mills) / 60000.0;
-
-        return intervals;
-    }
-
-    /// <summary>
-    /// The cadence the series reports about itself: the median of its intervals, which a sensor
-    /// outage or a warmup cannot drag the way it would a mean. Intervals of no elapsed time are
-    /// excluded, and a series with none left falls back to <see cref="DefaultCadenceMinutes"/>.
-    /// </summary>
-    private static double SeriesCadenceMinutes(IEnumerable<double> intervals)
-    {
-        var elapsed = intervals.Where(interval => interval > 0).Order().ToList();
-        return elapsed.Count == 0 ? DefaultCadenceMinutes : GlucoseStatistics.Median(elapsed);
     }
 
     /// <summary>
@@ -1549,26 +1495,8 @@ public class StatisticsService : IStatisticsService
             {
                 var ordered = stream.OrderBy(reading => reading.Mills).ToList();
                 var count = credited is null ? ordered.Count : ordered.Count(credited);
-                return count * SeriesCadenceMinutes(ReadingIntervals(ordered));
+                return count * GlucoseCadence.SeriesCadenceMinutes(GlucoseCadence.ReadingIntervals(ordered));
             });
-
-    /// <summary>
-    /// The minutes each reading stands for: the gap to the next reading, capped at twice the
-    /// series' median gap so that a stretch the sensor did not cover is not credited to the zone
-    /// the last reading before it happened to be in. The final reading stands for one median gap.
-    /// </summary>
-    private static double[] ReadingMinutes(IList<SensorGlucose> sortedEntries)
-    {
-        var intervals = ReadingIntervals(sortedEntries);
-        var cadence = SeriesCadenceMinutes(intervals);
-
-        var minutes = new double[sortedEntries.Count];
-        for (var i = 0; i < intervals.Length; i++)
-            minutes[i] = Math.Min(intervals[i], cadence * 2);
-        minutes[^1] = cadence;
-
-        return minutes;
-    }
 
     #endregion
 
@@ -1642,82 +1570,284 @@ public class StatisticsService : IStatisticsService
     }
 
     /// <summary>
-    /// Calculate averaged statistics for each hour of the day (0-23)
-    /// Groups glucose readings by hour across multiple days and calculates BasicGlucoseStats for each hour
+    /// Distinct local days an hour needs readings on before
+    /// <see cref="CalculateHourlyPatterns"/> ranks it. Counted in days rather than readings alone so
+    /// that one day of dense data cannot pass as a pattern.
     /// </summary>
-    /// <param name="entries">Collection of glucose entries</param>
-    /// <returns>Collection of averaged statistics for each hour</returns>
-    public IEnumerable<AveragedStats> CalculateAveragedStats(IEnumerable<SensorGlucose> entries)
+    public const int HourlyPatternsMinimumDays = 5;
+
+    /// <summary>
+    /// Readings an hour needs in all before <see cref="CalculateHourlyPatterns"/> ranks it: five
+    /// days of a fifteen-minute sensor, so a sensor that drops out for most of each day does not
+    /// rank on a handful of values.
+    /// </summary>
+    public const int HourlyPatternsMinimumReadings = 20;
+
+    /// <summary>
+    /// Percentage points of time in range the best and worst ranked hours must differ by before
+    /// <see cref="CalculateHourlyPatterns"/> names either. Five points is the smallest step the
+    /// consensus time-in-range guidance treats as meaningful, about 72 minutes a day; below it the
+    /// ordering is noise, and the report would call 70.1% better than 70.0%.
+    /// </summary>
+    public const double HourlyPatternsMinimumSpread = 5;
+
+    /// <summary>
+    /// Distinct local days an hour needs a reading below range on before
+    /// <see cref="CalculateHourlyPatterns"/> lists it as most below range, so one low reading, or one
+    /// bad day at that hour, does not read as a pattern.
+    /// </summary>
+    public const int HourlyPatternsMinimumLowDays = 2;
+
+    private const int HourlyPatternsListLength = 3;
+
+    /// <inheritdoc/>
+    public IEnumerable<AveragedStats> CalculateAveragedStats(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? tenantTimeZone
+    )
     {
-        var entriesList = entries.ToList();
-
-        // Group entries by hour of day
-        var hourlyGroups = new Dictionary<int, List<SensorGlucose>>();
-
-        // Initialize all 24 hours
-        for (int hour = 0; hour < 24; hour++)
-        {
-            hourlyGroups[hour] = new List<SensorGlucose>(entriesList.Count / 24 + 1);
-        }
-
-        // Group entries by hour (only if we have entries)
-        if (entriesList.Any())
-        {
-            foreach (var entry in entriesList)
-            {
-                if (entry.Mills <= 0)
-                {
-                    continue; // Skip entries without valid timestamps
-                }
-
-                var dateTimeOffset = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
-                if (entry.UtcOffset.HasValue)
-                {
-                    dateTimeOffset = dateTimeOffset.ToOffset(
-                        TimeSpan.FromMinutes(entry.UtcOffset.Value)
-                    );
-                }
-
-                var hour = dateTimeOffset.Hour;
-                if (hour >= 0 && hour < 24)
-                {
-                    hourlyGroups[hour].Add(entry);
-                }
-            }
-        }
-
-        // Calculate statistics for each hour
-        var averagedStats = new List<AveragedStats>();
-
-        for (int hourIndex = 0; hourIndex < 24; hourIndex++)
-        {
-            var hourEntries = hourlyGroups[hourIndex];
-
-            // Extract glucose values and calculate basic stats
-            var glucoseValues = ExtractGlucoseValues(hourEntries).ToList();
-            var basicStats = CalculateBasicStats(glucoseValues);
-
-            // Calculate extended 7-range time in range percentages for this hour
-            var extendedTir = CalculateExtendedTimeInRange(glucoseValues);
-
-            var hourlyStats = new AveragedStats
-            {
-                Hour = hourIndex,
-                Count = basicStats.Count,
-                Mean = basicStats.Mean,
-                Median = basicStats.Median,
-                Min = basicStats.Min,
-                Max = basicStats.Max,
-                StandardDeviation = basicStats.StandardDeviation,
-                Percentiles = basicStats.Percentiles,
-                TimeInRange = extendedTir,
-            };
-
-            averagedStats.Add(hourlyStats);
-        }
-
-        return averagedStats;
+        var byHour = GroupByLocalHour(entries, tenantTimeZone);
+        return Enumerable.Range(0, 24).Select(hour => HourStats<AveragedStats>(hour, byHour[hour], out _)).ToList();
     }
+
+    /// <inheritdoc/>
+    public HourlyPatterns CalculateHourlyPatterns(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? tenantTimeZone
+    )
+    {
+        var byHour = GroupByLocalHour(entries, tenantTimeZone);
+        var hours = new List<HourlyPattern>(24);
+        var lowDays = new int[24];
+
+        for (var hour = 0; hour < 24; hour++)
+        {
+            var pattern = HourStats<HourlyPattern>(hour, byHour[hour], out var bands);
+            var total = byHour[hour].Count;
+            var below = bands[(int)HourlyBand.VeryLow] + bands[(int)HourlyBand.Low];
+            var above = bands[(int)HourlyBand.High] + bands[(int)HourlyBand.VeryHigh];
+
+            pattern.BelowRange = RoundedPercent(below, total);
+            pattern.AboveRange = RoundedPercent(above, total);
+            pattern.InRange = RoundedPercent(total - below - above, total);
+            pattern.MainExcursion = (below, above) switch
+            {
+                (0, 0) => HourlyExcursion.None,
+                _ when below > above => HourlyExcursion.Below,
+                _ when above > below => HourlyExcursion.Above,
+                _ => HourlyExcursion.Mixed,
+            };
+            pattern.IsRanked =
+                pattern.DayCount >= HourlyPatternsMinimumDays
+                && total >= HourlyPatternsMinimumReadings;
+            lowDays[hour] = byHour[hour]
+                .Where(r => r.Mgdl < Consensus.Low)
+                .Select(r => r.Day)
+                .Distinct()
+                .Count();
+
+            hours.Add(pattern);
+        }
+
+        // One order, best first. The hour only fixes where equal hours sit in it; which hours are
+        // named never depends on it (see SelectBestAndWorst).
+        var ranked = hours
+            .Where(h => h.IsRanked)
+            .OrderByDescending(h => h.InRange)
+            .ThenBy(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .ToList();
+
+        var (best, worst) = SelectBestAndWorst(ranked);
+
+        var belowCandidates = ranked
+            .Where(h => h.BelowRange > 0 && lowDays[h.Hour] >= HourlyPatternsMinimumLowDays)
+            .OrderByDescending(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .ToList();
+        var belowCount = Math.Min(HourlyPatternsListLength, belowCandidates.Count);
+        while (belowCount > 0
+            && belowCount < belowCandidates.Count
+            && belowCandidates[belowCount - 1].BelowRange == belowCandidates[belowCount].BelowRange)
+            belowCount--;
+        var mostBelow = belowCandidates.Take(belowCount).ToList();
+
+        return new HourlyPatterns
+        {
+            Comparison = hours.All(h => h.Count == 0) ? HourlyComparison.NoReadings
+                : ranked.Count < 2 ? HourlyComparison.TooLittleData
+                : best.Count == 0 && worst.Count == 0 ? HourlyComparison.CloseTogether
+                : HourlyComparison.Ranked,
+            Hours = hours,
+            BestHours = best,
+            WorstHours = worst,
+            MostBelowRangeHours = mostBelow,
+            RankedHourCount = ranked.Count,
+            MinimumDaysToRank = HourlyPatternsMinimumDays,
+            MinimumReadingsToRank = HourlyPatternsMinimumReadings,
+            MinimumSpreadToRank = HourlyPatternsMinimumSpread,
+            MinimumLowDaysToList = HourlyPatternsMinimumLowDays,
+            Thresholds = CopyOfConsensus(),
+            ClockBasis = tenantTimeZone is null ? HourlyClockBasis.ReadingOffsets : HourlyClockBasis.TenantTimeZone,
+            TimeZone = tenantTimeZone?.Id,
+        };
+    }
+
+    /// <summary>
+    /// The best hours from the head of <paramref name="ranked"/> and the worst from its tail, each
+    /// at most <see cref="HourlyPatternsListLength"/> and at most half the hours, so the two never
+    /// share an hour. From there the lists shrink from their inner ends until three rules hold:
+    /// <list type="bullet">
+    /// <item>No listed hour ties, on time in range and time below range, the first hour left off
+    /// its list; which of two equal hours makes the list would otherwise come down to the clock.</item>
+    /// <item>Every best hour beats the worst ranked hour, and every worst hour trails the best,
+    /// by at least <see cref="HourlyPatternsMinimumSpread"/>.</item>
+    /// <item>Every best hour beats every worst hour by at least the same spread. When they do not,
+    /// the longer list gives up its innermost hour, or both do when they are the same length.</item>
+    /// </list>
+    /// Either list may end up empty while the other is not: one hour well below 23 equal ones is
+    /// named worst with no best.
+    /// </summary>
+    private static (List<HourlyPattern> Best, List<HourlyPattern> Worst) SelectBestAndWorst(
+        List<HourlyPattern> ranked
+    )
+    {
+        var count = ranked.Count;
+        var bestCount = Math.Min(HourlyPatternsListLength, count / 2);
+        var worstCount = bestCount;
+
+        static bool Ties(HourlyPattern a, HourlyPattern b) =>
+            a.InRange == b.InRange && a.BelowRange == b.BelowRange;
+
+        HourlyPattern InnermostBest() => ranked[bestCount - 1];
+        HourlyPattern InnermostWorst() => ranked[count - worstCount];
+
+        bool changed;
+        do
+        {
+            changed = false;
+
+            if (bestCount > 0 && Ties(InnermostBest(), ranked[bestCount]))
+            {
+                bestCount--;
+                changed = true;
+            }
+            else if (worstCount > 0 && Ties(InnermostWorst(), ranked[count - worstCount - 1]))
+            {
+                worstCount--;
+                changed = true;
+            }
+            else if (bestCount > 0 && InnermostBest().InRange - ranked[^1].InRange < HourlyPatternsMinimumSpread)
+            {
+                bestCount--;
+                changed = true;
+            }
+            else if (worstCount > 0 && ranked[0].InRange - InnermostWorst().InRange < HourlyPatternsMinimumSpread)
+            {
+                worstCount--;
+                changed = true;
+            }
+            else if (bestCount > 0
+                && worstCount > 0
+                && InnermostBest().InRange - InnermostWorst().InRange < HourlyPatternsMinimumSpread)
+            {
+                if (bestCount > worstCount)
+                    bestCount--;
+                else if (worstCount > bestCount)
+                    worstCount--;
+                else
+                {
+                    bestCount--;
+                    worstCount--;
+                }
+                changed = true;
+            }
+        } while (changed);
+
+        var best = ranked.Take(bestCount).ToList();
+        var worst = ranked
+            .Skip(count - worstCount)
+            .OrderBy(h => h.InRange)
+            .ThenByDescending(h => h.BelowRange)
+            .ThenBy(h => h.Hour)
+            .ToList();
+
+        return (best, worst);
+    }
+
+    private readonly record struct LocalReading(double Mgdl, DateOnly Day);
+
+    /// <summary>
+    /// Plausible readings grouped by hour of the tenant's local clock. A reading's own
+    /// <c>UtcOffset</c> is ignored when <paramref name="tenantTimeZone"/> is given: it records the
+    /// uploader's offset, which differs between devices and would split one local hour across
+    /// several buckets. Without a timezone it is the only local clock there is, so each reading is
+    /// placed by its own offset, and on UTC when it has none.
+    /// <para>
+    /// On the day the clock falls back, the repeated hour receives both of its occurrences and so
+    /// carries double weight for that day; on the day it springs forward the skipped hour has no
+    /// readings.
+    /// </para>
+    /// </summary>
+    private static List<LocalReading>[] GroupByLocalHour(
+        IEnumerable<SensorGlucose> entries,
+        TimeZoneInfo? tenantTimeZone
+    )
+    {
+        var byHour = new List<LocalReading>[24];
+        for (var hour = 0; hour < 24; hour++)
+            byHour[hour] = [];
+
+        foreach (var entry in entries)
+        {
+            if (entry.Mills <= 0 || !IsPlausibleReading(entry))
+                continue;
+
+            var instant = DateTimeOffset.FromUnixTimeMilliseconds(entry.Mills);
+            var local = tenantTimeZone is not null
+                ? TimeZoneInfo.ConvertTime(instant, tenantTimeZone)
+                : instant.ToOffset(TimeSpan.FromMinutes(entry.UtcOffset is { } minutes && Math.Abs(minutes) <= MaxUtcOffsetMinutes ? minutes : 0));
+            byHour[local.Hour].Add(new LocalReading(entry.Mgdl, DateOnly.FromDateTime(local.DateTime)));
+        }
+
+        return byHour;
+    }
+
+    private T HourStats<T>(int hour, List<LocalReading> readings, out int[] bandCounts)
+        where T : AveragedStats, new()
+    {
+        var values = readings.Select(r => r.Mgdl).ToList();
+        var basicStats = CalculateBasicStats(values);
+        bandCounts = HourlyBands.Count(values);
+        var counts = bandCounts;
+
+        double Percent(HourlyBand band) => RoundedPercent(counts[(int)band], values.Count);
+
+        return new T
+        {
+            Hour = hour,
+            Count = basicStats.Count,
+            DayCount = readings.Select(r => r.Day).Distinct().Count(),
+            Mean = basicStats.Mean,
+            Median = basicStats.Median,
+            Min = basicStats.Min,
+            Max = basicStats.Max,
+            StandardDeviation = basicStats.StandardDeviation,
+            Percentiles = basicStats.Percentiles,
+            TimeInRange = new ExtendedTimeInRangePercentages
+            {
+                VeryLow = Percent(HourlyBand.VeryLow),
+                Low = Percent(HourlyBand.Low),
+                TightTarget = Percent(HourlyBand.TightTarget),
+                AboveTightTarget = Percent(HourlyBand.AboveTightTarget),
+                High = Percent(HourlyBand.High),
+                VeryHigh = Percent(HourlyBand.VeryHigh),
+            },
+        };
+    }
+
+    private static double RoundedPercent(int count, int total) =>
+        total == 0 ? 0 : Math.Round((double)count / total * 100, 1);
 
     /// <inheritdoc/>
     public IEnumerable<WeekdayGlucoseSlot> CalculateWeekdayAverages(
@@ -1757,35 +1887,6 @@ public class StatisticsService : IStatisticsService
             .ToList();
     }
 
-    /// <summary>
-    /// Calculate extended time in range percentages over the hourly zone set
-    /// Ranges: &lt;54, 54-63, 63-140, 140-180, 180-200, &gt;=200
-    /// </summary>
-    /// <param name="glucoseValues">Collection of glucose values in mg/dL</param>
-    /// <returns>Extended time in range percentages</returns>
-    private ExtendedTimeInRangePercentages CalculateExtendedTimeInRange(IList<double> glucoseValues)
-    {
-        if (glucoseValues.Count == 0)
-        {
-            return new ExtendedTimeInRangePercentages();
-        }
-
-        var total = glucoseValues.Count;
-        var counts = ExtendedZones.Count(glucoseValues);
-
-        double Percent(ExtendedZone zone) => Math.Round((double)counts[(int)zone] / total * 100, 1);
-
-        return new ExtendedTimeInRangePercentages
-        {
-            VeryLow = Percent(ExtendedZone.VeryLow),
-            Low = Percent(ExtendedZone.Low),
-            Normal = Percent(ExtendedZone.Normal),
-            AboveTarget = Percent(ExtendedZone.AboveTarget),
-            High = Percent(ExtendedZone.High),
-            VeryHigh = Percent(ExtendedZone.VeryHigh),
-        };
-    }
-
     #endregion
 
     #region Treatment Statistics
@@ -1796,13 +1897,18 @@ public class StatisticsService : IStatisticsService
     /// <param name="boluses">Collection of boluses</param>
     /// <param name="carbIntakes">Collection of carb intakes</param>
     /// <param name="foodsByCarbIntake">Optional lookup of treatment foods grouped by carb intake ID</param>
+    /// <param name="dayCount">Calendar days the collections cover, for the per-day averages</param>
     /// <returns>Treatment summary with totals and counts</returns>
     public TreatmentSummary CalculateTreatmentSummary(
         IEnumerable<Bolus> boluses,
         IEnumerable<CarbIntake> carbIntakes,
-        IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null
+        IReadOnlyDictionary<Guid, List<TreatmentFood>>? foodsByCarbIntake = null,
+        int dayCount = 1
     )
     {
+        var bolusList = boluses.ToList();
+        var carbIntakeList = carbIntakes.ToList();
+
         var summary = new TreatmentSummary
         {
             Totals = new TreatmentTotals { Food = new FoodTotals(), Insulin = new InsulinTotals() },
@@ -1810,14 +1916,14 @@ public class StatisticsService : IStatisticsService
         };
 
         // Aggregate insulin from boluses (all boluses are bolus insulin; basal comes from StateSpans)
-        foreach (var bolus in boluses)
+        foreach (var bolus in bolusList)
         {
             summary.TreatmentCount++;
             summary.Totals.Insulin.Bolus += bolus.Insulin;
         }
 
         // Aggregate macronutrients from carb intakes
-        foreach (var carbIntake in carbIntakes)
+        foreach (var carbIntake in carbIntakeList)
         {
             summary.TreatmentCount++;
 
@@ -1835,6 +1941,17 @@ public class StatisticsService : IStatisticsService
                 }
             }
         }
+
+        summary.BolusCount = bolusList.Count;
+        summary.CarbEntryCount = carbIntakeList.Count;
+        summary.AveragePerBolus =
+            summary.BolusCount > 0 ? summary.Totals.Insulin.Bolus / summary.BolusCount : 0;
+        summary.AverageCarbsPerEntry =
+            summary.CarbEntryCount > 0 ? summary.Totals.Food.Carbs / summary.CarbEntryCount : 0;
+
+        var days = dayCount > 0 ? dayCount : 1;
+        summary.DailyBoluses = (double)summary.BolusCount / days;
+        summary.DailyCarbs = summary.Totals.Food.Carbs / days;
 
         // Calculate carb to insulin ratio
         var totalInsulin = summary.Totals.Insulin.Bolus + summary.Totals.Insulin.Basal;
@@ -1970,9 +2087,9 @@ public class StatisticsService : IStatisticsService
         // Calculate day count (minimum 1 to avoid division by zero)
         var dayCount = Math.Max(1, (int)Math.Round((endDate - startDate).TotalDays));
 
-        // All Bolus records are bolus insulin; basal comes from StateSpans.
+        // All Bolus records are bolus insulin; basal comes from TempBasals.
         // This overload only has bolus data, so basal stats will be 0.
-        // Use the StateSpan overload for complete basal/bolus analysis.
+        // Use the TempBasal overload for complete basal/bolus analysis.
         double totalBolus = 0;
         int bolusCount = 0;
         int correctionBoluses = 0;
@@ -2043,11 +2160,12 @@ public class StatisticsService : IStatisticsService
         return new InsulinDeliveryStatistics
         {
             TotalBolus = Math.Round(totalBolus * 100) / 100,
-            TotalBasal = 0, // Basal requires StateSpans
+            TotalBasal = 0, // Basal requires TempBasals
             TotalInsulin = Math.Round(totalBolus * 100) / 100,
             TotalCarbs = Math.Round(totalCarbs * 10) / 10,
             BolusCount = bolusCount,
             BasalCount = 0,
+            InsulinEventCount = bolusCount,
             BasalPercent = 0,
             BolusPercent = totalBolus > 0 ? 100 : 0,
             Tdd = Math.Round(totalBolus / dayCount * 10) / 10,
@@ -2143,24 +2261,27 @@ public class StatisticsService : IStatisticsService
         // Start with bolus-based calculation (includes carb stats)
         var stats = CalculateBolusDeliveryStatistics(boluses, carbIntakes, startDate, endDate);
 
-        // Sum basal from TempBasals + algorithm boluses, splitting scheduled vs additional
+        // Delivered basal splits into scheduled and additional. A temp below the scheduled rate
+        // reduces the scheduled part only; a temp above it contributes the excess to additional.
+        // Additional never nets a below-schedule temp against a rising one.
         var tempBasalInsulin = 0.0;
         var scheduledBasalInsulin = 0.0;
         var additionalBasalInsulin = 0.0;
+        var tempBasalCount = 0;
         foreach (var (tb, effectiveEndMills) in ClipOverlappingTempBasals(tempBasals))
         {
             var insulin = GetTempBasalInsulin(tb, effectiveEndMills);
             if (insulin <= 0)
                 continue;
             tempBasalInsulin += insulin;
+            tempBasalCount++;
 
-            // Split into scheduled vs additional using ScheduledRate when available
             if (tb.ScheduledRate.HasValue)
             {
                 var durationHours = (effectiveEndMills - tb.StartMills) / (1000.0 * 60 * 60);
                 var scheduled = tb.ScheduledRate.Value * durationHours;
-                scheduledBasalInsulin += scheduled;
-                additionalBasalInsulin += insulin - scheduled;
+                scheduledBasalInsulin += Math.Min(insulin, scheduled);
+                additionalBasalInsulin += Math.Max(0, insulin - scheduled);
             }
             else if (tb.Origin == TempBasalOrigin.Scheduled)
             {
@@ -2212,6 +2333,8 @@ public class StatisticsService : IStatisticsService
         stats.MicroBolusInsulin = Math.Round(algorithmBolusInsulin * 100) / 100;
         stats.BasalInjectionInsulin = Math.Round(basalInjectionInsulin * 100) / 100;
         stats.BasalInjectionCount = basalInjectionCount;
+        stats.BasalCount = tempBasalCount + basalInjectionCount;
+        stats.InsulinEventCount = stats.BolusCount + stats.MicroBolusCount + stats.BasalCount;
 
         return stats;
     }
@@ -2773,10 +2896,6 @@ public class StatisticsService : IStatisticsService
     /// Master glucose analytics function that calculates comprehensive glucose metrics
     /// with sensor-specific optimizations
     /// </summary>
-    /// <param name="entries">Collection of glucose entries</param>
-    /// <param name="boluses">Collection of boluses</param>
-    /// <param name="carbIntakes">Collection of carb intakes</param>
-    /// <param name="config">Extended analysis configuration (optional)</param>
     /// <returns>Comprehensive glucose analytics</returns>
     public GlucoseAnalytics AnalyzeGlucoseData(
         IEnumerable<SensorGlucose> entries,
@@ -2862,8 +2981,8 @@ public class StatisticsService : IStatisticsService
         foreach (var stream in entries.GroupBy(CanonicalGlucoseStream.StreamKey, StringComparer.Ordinal))
         {
             var readings = stream.ToList();
-            var intervals = ReadingIntervals(readings);
-            var cadence = SeriesCadenceMinutes(intervals);
+            var intervals = GlucoseCadence.ReadingIntervals(readings);
+            var cadence = GlucoseCadence.SeriesCadenceMinutes(intervals);
 
             streamSpanMinutes += intervals.Sum();
 
@@ -2944,7 +3063,7 @@ public class StatisticsService : IStatisticsService
                     continue;
 
                 windows.Add((windowStart, windowEnd));
-                cadences[device.DeviceId] = device.CadenceMinutes ?? DefaultCadenceMinutes;
+                cadences[device.DeviceId] = device.CadenceMinutes ?? GlucoseCadence.DefaultCadenceMinutes;
             }
 
             var period = MergeWindows(windows);
@@ -3182,8 +3301,6 @@ public class StatisticsService : IStatisticsService
             {
                 AvgGlucoseBeforeChange = Math.Round(avgBefore, 1),
                 AvgGlucoseAfterChange = Math.Round(avgAfter, 1),
-                PercentImprovement =
-                    avgBefore > 0 ? Math.Round((avgBefore - avgAfter) / avgBefore * 100, 1) : 0,
                 TimeInRangeBeforeChange = Math.Round(tirBefore, 1),
                 TimeInRangeAfterChange = Math.Round(tirAfter, 1),
                 CvBeforeChange = Math.Round(cvBefore, 1),

@@ -2,20 +2,27 @@
 //! `tests/Parity/AlertEngineCorpus/` through the Rust engine and asserts an
 //! exact (semantic) match against the C#-generated `.expected.json` snapshot.
 
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "test code"
+)]
+
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
-use uuid::Uuid;
+use serde_json::{Value, json};
 
 use nocturne_alerts_core::context::SensorContext;
-use nocturne_alerts_core::engine::{EngineState, Rule, RuleOutcome, evaluate_tick};
-use nocturne_alerts_core::excursion::{CloseReason, TransitionType};
-use nocturne_alerts_core::model::ConditionKind;
-use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
+use nocturne_alerts_core::engine::{
+    EngineState, Rule, RuleOutcome, WireRule, evaluate_tick, format_instant,
+};
 
 // ---------------------------------------------------------------------------
 // Scenario wire format (ScenarioModels.cs)
@@ -24,27 +31,8 @@ use nocturne_alerts_core::sustained::{TimerOp, TimerOpKind};
 #[derive(Deserialize)]
 struct ScenarioFile {
     name: String,
-    rules: Vec<ScenarioRule>,
+    rules: Vec<WireRule>,
     ticks: Vec<ScenarioTick>,
-}
-
-fn default_confirmation_readings() -> i32 {
-    1
-}
-
-#[derive(Deserialize)]
-struct ScenarioRule {
-    id: Uuid,
-    condition_type: String,
-    condition_params: Value,
-    #[serde(default = "default_confirmation_readings")]
-    confirmation_readings: i32,
-    #[serde(default)]
-    hysteresis_minutes: i32,
-    #[serde(default)]
-    auto_resolve_enabled: bool,
-    #[serde(default)]
-    auto_resolve_params: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -64,116 +52,13 @@ fn corpus_dir() -> PathBuf {
         .expect("corpus directory exists")
 }
 
-fn fmt_at(at: DateTime<Utc>) -> String {
-    at.to_rfc3339_opts(SecondsFormat::Secs, true)
-}
-
-fn timer_op_json(op: &TimerOp) -> Value {
-    let mut o = Map::new();
-    o.insert(
-        "op".into(),
-        Value::String(
-            match op.kind {
-                TimerOpKind::Set => "set",
-                TimerOpKind::Clear => "clear",
-            }
-            .into(),
-        ),
-    );
-    o.insert("path".into(), Value::String(op.path.clone()));
-    if let Some(at) = op.at {
-        o.insert("at".into(), Value::String(fmt_at(at)));
-    }
-    Value::Object(o)
-}
-
-fn outcome_json(outcome: &RuleOutcome) -> Value {
-    let mut o = Map::new();
-    o.insert("rule_id".into(), Value::String(outcome.rule_id.to_string()));
-    if outcome.skipped {
-        o.insert("skipped".into(), Value::Bool(true));
-        return Value::Object(o);
-    }
-    o.insert("root".into(), Value::Bool(outcome.root.expect("root set")));
-    o.insert(
-        "leaves".into(),
-        Value::Array(
-            outcome
-                .leaves
-                .iter()
-                .map(|(leaf_id, value)| json!({ "leaf_id": leaf_id, "value": value }))
-                .collect(),
-        ),
-    );
-    let transition = outcome.transition.expect("transition set");
-    o.insert(
-        "transition".into(),
-        Value::String(
-            match transition.kind {
-                TransitionType::None => "none",
-                TransitionType::ExcursionOpened => "opened",
-                TransitionType::ExcursionContinues => "continues",
-                TransitionType::HysteresisStarted => "hysteresis_started",
-                TransitionType::HysteresisResumed => "hysteresis_resumed",
-                TransitionType::ExcursionClosed => "closed",
-            }
-            .into(),
-        ),
-    );
-    if let Some(reason) = transition.close_reason {
-        o.insert(
-            "close_reason".into(),
-            Value::String(
-                match reason {
-                    CloseReason::Hysteresis => "hysteresis",
-                    CloseReason::AutoResolve => "auto",
-                    CloseReason::Manual => "manual",
-                }
-                .into(),
-            ),
-        );
-    }
-    if let Some(tracker) = &outcome.tracker {
-        let mut t = Map::new();
-        t.insert("state".into(), Value::String(tracker.state.wire().into()));
-        t.insert(
-            "confirmation_count".into(),
-            Value::Number(tracker.confirmation_count.into()),
-        );
-        if let Some(excursion) = tracker.excursion {
-            t.insert("excursion".into(), Value::Number(excursion.into()));
-        }
-        o.insert("tracker".into(), Value::Object(t));
-    }
-    if outcome.auto_resolved {
-        o.insert("auto_resolved".into(), Value::Bool(true));
-    }
-    if !outcome.timer_ops.is_empty() {
-        o.insert(
-            "timer_ops".into(),
-            Value::Array(outcome.timer_ops.iter().map(timer_op_json).collect()),
-        );
-    }
-    Value::Object(o)
-}
-
 fn run_scenario(scenario: &ScenarioFile) -> Value {
     let rules: Vec<Rule> = scenario
         .rules
         .iter()
-        .map(|r| Rule {
-            id: r.id,
-            condition_type: ConditionKind::from_wire(&r.condition_type).unwrap_or_else(|| {
-                panic!(
-                    "scenario '{}': unknown condition_type '{}'",
-                    scenario.name, r.condition_type
-                )
-            }),
-            condition_params: r.condition_params.clone(),
-            confirmation_readings: r.confirmation_readings,
-            hysteresis_minutes: r.hysteresis_minutes,
-            auto_resolve_enabled: r.auto_resolve_enabled,
-            auto_resolve_params: r.auto_resolve_params.clone(),
+        .map(|r| {
+            Rule::try_from(r.clone())
+                .unwrap_or_else(|e| panic!("scenario '{}': {e}", scenario.name))
         })
         .collect();
 
@@ -184,8 +69,8 @@ fn run_scenario(scenario: &ScenarioFile) -> Value {
         .map(|tick| {
             let outcomes = evaluate_tick(&rules, &tick.context, tick.at, &mut state);
             json!({
-                "at": fmt_at(tick.at),
-                "rules": outcomes.iter().map(outcome_json).collect::<Vec<_>>(),
+                "at": format_instant(tick.at),
+                "rules": outcomes.iter().map(RuleOutcome::to_json).collect::<Vec<_>>(),
             })
         })
         .collect();

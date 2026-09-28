@@ -8,8 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.BGCheck
 /// </summary>
 [Table("bg_checks")]
-public class BGCheckEntity : V4TimeSeriesEntityBase
+public class BGCheckEntity : V4TimeSeriesEntityBase, IUpstreamFingerprinted
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("upstream_fingerprint")]
+    public string? UpstreamFingerprint { get; set; }
+
     /// <summary>
     /// Glucose value as entered by the user
     /// </summary>

@@ -28,20 +28,6 @@ public interface IOAuthClientService
     );
 
     /// <summary>
-    /// RFC 7591 Dynamic Client Registration. If the request specifies a known
-    /// software_id and a row already exists for the (tenant, software_id) pair,
-    /// returns that existing row (idempotent). Otherwise inserts a new row with
-    /// a freshly issued client_id.
-    /// </summary>
-    /// <param name="softwareId">RFC 7591 software_id (reverse-DNS), or null</param>
-    /// <param name="clientName">Display name for the consent screen</param>
-    /// <param name="clientUri">Homepage URI</param>
-    /// <param name="logoUri">Logo URI for the consent screen</param>
-    /// <param name="redirectUris">Allowed redirect URIs (already validated)</param>
-    /// <param name="scope">Space-delimited scope string</param>
-    /// <param name="createdFromIp">IP that performed the registration</param>
-    /// <param name="ct">Cancellation token</param>
-    /// <summary>
     /// Seed the bundled known-app directory into a tenant's oauth_clients.
     /// Called during tenant provisioning so well-known apps (Trio, xDrip+, etc.)
     /// have pre-verified client rows with is_known=true. Idempotent: existing
@@ -51,7 +37,7 @@ public interface IOAuthClientService
 
     /// <summary>
     /// RFC 7591 Dynamic Client Registration. Registers a new OAuth client or returns an existing
-    /// row for the same (tenant, software_id) pair. See <see cref="IOAuthClientService"/> for details.
+    /// row for the same (tenant, software_id) pair.
     /// </summary>
     /// <param name="softwareId">RFC 7591 software_id (reverse-DNS), or null for anonymous clients.</param>
     /// <param name="clientName">Display name shown on the consent screen.</param>

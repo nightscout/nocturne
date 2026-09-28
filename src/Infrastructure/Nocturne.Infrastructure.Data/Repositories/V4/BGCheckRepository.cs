@@ -25,25 +25,19 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<BGCheckRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BGCheckRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     public BGCheckRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,
         IV4RecordBroadcaster<BGCheck>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -155,7 +149,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
         }
     }
 }

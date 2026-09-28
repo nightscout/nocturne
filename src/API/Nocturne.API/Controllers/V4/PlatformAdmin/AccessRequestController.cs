@@ -97,7 +97,9 @@ public class AccessRequestController(
                     title: roleGrant.ErrorCode == RoleGrantValidation.ForeignRole ? "Bad Request" : "Forbidden");
             }
 
-            await tenantService.AddMemberAsync(tenantId, subjectId, request.RoleIds, request.DirectPermissions, ct: ct);
+            await tenantService.AddMemberAsync(
+                tenantId, subjectId, request.RoleIds, request.DirectPermissions,
+                limitTo24Hours: request.LimitTo24Hours, ct: ct);
 
             var ownerIds = await dbContext.TenantMembers
                 .OwnersOf(tenantId)
@@ -176,4 +178,9 @@ public class ApproveAccessRequestRequest
 {
     public List<Guid> RoleIds { get; set; } = [];
     public List<string>? DirectPermissions { get; set; }
+
+    /// <summary>
+    /// Restricts the new member's reads to the last 24 hours of data, as on a share or invite.
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }

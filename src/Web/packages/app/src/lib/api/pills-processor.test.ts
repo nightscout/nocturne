@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { AidAlgorithm, type ApsSnapshot } from "$lib/api/generated/nocturne-api-client";
+import type { DeviceStatus } from "$api/pills-processor";
 
 // The module graph for $lib/api transitively imports several $app/* modules
 // and @sveltejs/kit.  Mock them all before loading the module under test.
@@ -7,9 +9,9 @@ vi.mock("$app/navigation", () => ({}));
 vi.mock("$app/state", () => ({}));
 vi.mock("$app/server", () => ({
 	getRequestEvent: vi.fn(),
-	query: (fn: any) => fn,
-	command: (fn: any) => fn,
-	form: (fn: any) => fn,
+	query: <T>(fn: T) => fn,
+	command: <T>(fn: T) => fn,
+	form: <T>(fn: T) => fn,
 }));
 vi.mock("@sveltejs/kit", () => ({
 	error: vi.fn((status: number, msg: string) => { throw Object.assign(new Error(msg), { status }); }),
@@ -26,14 +28,14 @@ const MIN = 60_000;
 
 /** Build a minimal ApsSnapshot. mills defaults to `now` (injected via config). */
 function makeSnapshot(
-	overrides: Record<string, unknown> = {},
+	overrides: Partial<ApsSnapshot> = {},
 	now: number,
 	ageMins = 0
-) {
+): ApsSnapshot {
 	return {
 		id: crypto.randomUUID(),
 		mills: now - ageMins * MIN,
-		aidAlgorithm: "Trio",
+		aidAlgorithm: AidAlgorithm.Trio,
 		iob: 2.5,
 		basalIob: 1.2,
 		cob: 15,
@@ -43,10 +45,10 @@ function makeSnapshot(
 		enactedBolusVolume: undefined,
 		eventualBg: 120,
 		...overrides,
-	} as any;
+	};
 }
 
-const EMPTY: any[] = [];
+const EMPTY: never[] = [];
 const NOW = 1_700_000_000_000; // fixed reference timestamp
 
 // ---------------------------------------------------------------------------
@@ -69,25 +71,25 @@ describe("processPillsData – IOB from APS snapshot", () => {
 	});
 
 	it("labels Trio correctly", () => {
-		const snap = makeSnapshot({ aidAlgorithm: "Trio" }, NOW, 3);
+		const snap = makeSnapshot({ aidAlgorithm: AidAlgorithm.Trio }, NOW, 3);
 		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob!.source).toBe("Trio");
 	});
 
 	it("labels Loop correctly", () => {
-		const snap = makeSnapshot({ aidAlgorithm: "Loop" }, NOW, 3);
+		const snap = makeSnapshot({ aidAlgorithm: AidAlgorithm.Loop }, NOW, 3);
 		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob!.source).toBe("Loop");
 	});
 
 	it("labels OpenAps correctly", () => {
-		const snap = makeSnapshot({ aidAlgorithm: "OpenAps" }, NOW, 3);
+		const snap = makeSnapshot({ aidAlgorithm: AidAlgorithm.OpenAps }, NOW, 3);
 		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob!.source).toBe("OpenAPS");
 	});
 
 	it("labels AndroidAps correctly", () => {
-		const snap = makeSnapshot({ aidAlgorithm: "AndroidAps" }, NOW, 3);
+		const snap = makeSnapshot({ aidAlgorithm: AidAlgorithm.AndroidAps }, NOW, 3);
 		const result = processPillsData(EMPTY, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob!.source).toBe("AAPS");
 	});
@@ -120,10 +122,10 @@ describe("processPillsData – IOB from APS snapshot", () => {
 
 	it("prefers snapshot over legacy DeviceStatus", () => {
 		const snap = makeSnapshot({ iob: 2.72 }, NOW, 3);
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 2 * MIN,
 			loop: { iob: { iob: 9.99, timestamp: new Date(NOW - 2 * MIN).toISOString() } }
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob!.iob).toBe(2.72);
 	});
@@ -269,13 +271,13 @@ describe("processPillsData – Loop from APS snapshot", () => {
 
 	it("prefers snapshot loop over legacy DeviceStatus loop", () => {
 		const snap = makeSnapshot({ iob: 2.72 }, NOW, 3);
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 2 * MIN,
 			openaps: {
 				iob: { iob: 9.99 },
 				enacted: { rate: 0, duration: 0, timestamp: new Date(NOW - 2 * MIN).toISOString(), received: true }
 			}
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, [snap], EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.loop!.iob).toBe(2.72);
 	});
@@ -325,26 +327,26 @@ describe("processPillsData – Basal from APS snapshot", () => {
 
 describe("processPillsData – legacy DeviceStatus fallback when no snapshots", () => {
 	it("uses legacy Loop when no snapshots are provided", () => {
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 3 * MIN,
 			loop: {
 				timestamp: new Date(NOW - 3 * MIN).toISOString(),
 				iob: { iob: 1.5, timestamp: new Date(NOW - 3 * MIN).toISOString() },
 				cob: { cob: 8, timestamp: new Date(NOW - 3 * MIN).toISOString() },
 			}
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.loop).not.toBeNull();
 		expect(result.loop!.loopName).toBe("Loop");
 	});
 
 	it("uses legacy IOB when no snapshots are provided", () => {
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 3 * MIN,
 			openaps: {
 				iob: { iob: 1.5, timestamp: new Date(NOW - 3 * MIN).toISOString() }
 			}
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob).not.toBeNull();
 		expect(result.iob!.iob).toBe(1.5);
@@ -355,12 +357,12 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 	// undefined`, and the components guard on absence before calling `.toFixed`,
 	// so a null that survives the lift crashes the dashboard's render.
 	it("drops a null OpenAPS basaliob rather than carrying it into pill data", () => {
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 3 * MIN,
 			openaps: {
 				iob: { iob: 1.5, basaliob: null, activity: null }
 			}
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.iob).not.toBeNull();
 		expect(result.iob!.basalIob).toBeUndefined();
@@ -368,7 +370,7 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 	});
 
 	it("drops a null legacy Loop iob and cob rather than carrying them into pill data", () => {
-		const legacyStatus = [{
+		const legacyStatus: DeviceStatus[] = [{
 			mills: NOW - 3 * MIN,
 			loop: {
 				timestamp: new Date(NOW - 3 * MIN).toISOString(),
@@ -376,7 +378,7 @@ describe("processPillsData – legacy DeviceStatus fallback when no snapshots", 
 				cob: { cob: null },
 				enacted: { timestamp: new Date(NOW - 3 * MIN).toISOString(), rate: null, duration: null }
 			}
-		}] as any[];
+		}];
 		const result = processPillsData(legacyStatus, EMPTY, EMPTY, EMPTY, EMPTY, null, { now: NOW });
 		expect(result.loop).not.toBeNull();
 		expect(result.loop!.iob).toBeUndefined();

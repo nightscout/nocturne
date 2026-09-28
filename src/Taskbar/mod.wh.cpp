@@ -50,9 +50,8 @@ two coexist. Windows 11 only.
 */
 // ==/WindhawkModReadme==
 
-// The range and palette defaults in this block must equal GlucoseConstants.TargetBottomMgdl /
-// TargetTopMgdl, converted to the display unit selected here, and GlucoseConstants.StatusPalette;
-// GlucoseMirrorTests fails if any of them drift.
+// The unit, range and colour defaults in this block are the ones in settings-defaults.json, which
+// GlucoseMirrorTests holds against GlucoseConstants; edit the two together.
 // ==WindhawkModSettings==
 /*
 - dataPath: ""
@@ -163,17 +162,38 @@ using winrt::Windows::Foundation::Point;
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
+// Windhawk hands out the ==WindhawkModSettings== default when a setting is unset, so these apply
+// only to a value it cannot supply or the mod cannot parse — an absent key, or a colour a user
+// typed as something other than RRGGBB. The block is generated from settings-defaults.json and
+// GlucoseMirrorTests fails if it stops matching that file line for line.
+// ==SettingsDefaults==
+constexpr PCWSTR kDefaultUnit = L"mmol";
+constexpr double kDefaultRangeLow = 3.9;
+constexpr double kDefaultRangeHigh = 10.0;
+constexpr COLORREF kDefaultColorInRange = RGB(0x36, 0xC7, 0x6A);
+constexpr COLORREF kDefaultColorHigh = RGB(0xE6, 0xB8, 0x00);
+constexpr COLORREF kDefaultColorLow = RGB(0xE0, 0x53, 0x3D);
+constexpr COLORREF kDefaultColorPredicted = RGB(0x8A, 0xA0, 0xB4);
+constexpr COLORREF kDefaultTextColor = RGB(0xFF, 0xFF, 0xFF);
+// ==/SettingsDefaults==
+
+// The display-unit setting is an $options key ("mmol" or "mgdl"); this is the label it renders as.
+static PCWSTR UnitLabel(PCWSTR key) {
+    return (key && wcscmp(key, L"mgdl") == 0) ? L"mg/dL" : L"mmol/L";
+}
+
 struct Settings {
     std::vector<std::wstring> dataPaths;  // candidate summary JSON paths, tried freshest-wins
     int pollSeconds = 15;
     int staleAfterSeconds = 600;
-    std::wstring unit = L"mmol/L";  // display unit: "mmol/L" or "mg/dL"
-    double rangeLow = 3.9, rangeHigh = 10.0;  // target range, in the display unit
-    COLORREF colorInRange = 0, colorHigh = 0, colorLow = 0, colorPredicted = 0;
+    std::wstring unit = UnitLabel(kDefaultUnit);
+    double rangeLow = kDefaultRangeLow, rangeHigh = kDefaultRangeHigh;  // in the display unit
+    COLORREF colorInRange = kDefaultColorInRange, colorHigh = kDefaultColorHigh,
+             colorLow = kDefaultColorLow, colorPredicted = kDefaultColorPredicted;
     bool showBand = true, showCurrentValue = true, showTrendArrow = true, showIobCob = true;
     int sparkWidth = 120, sparkHeight = 26, lineThickness = 2, fontSize = 13;
     bool autoTextColor = true;
-    COLORREF textColor = 0;
+    COLORREF textColor = kDefaultTextColor;
     bool pulseOutOfRange = true;
     int borderThickness = 2;
     int rank = 20;  // left-to-right order among tiles in the shared host (lower = leftmost)
@@ -1222,9 +1242,8 @@ void LoadSettings() {
     int stale = Wh_GetIntSetting(L"staleAfterSeconds");
     g_settings.staleAfterSeconds = stale < 1 ? 1 : stale;
 
-    // Display unit: the $options key is "mmol" or "mgdl"; map to the format string.
     PCWSTR unit = Wh_GetStringSetting(L"unit");
-    g_settings.unit = (unit && wcscmp(unit, L"mgdl") == 0) ? L"mg/dL" : L"mmol/L";
+    g_settings.unit = UnitLabel(unit && *unit ? unit : kDefaultUnit);
     Wh_FreeStringSetting(unit);
 
     // Target range, expressed in the display unit (the summary carries no range).
@@ -1235,10 +1254,8 @@ void LoadSettings() {
         Wh_FreeStringSetting(s);
         return v;
     };
-    // Applied only when a setting is absent. Each duplicates a default from the settings block, and
-    // nothing enforces that the two still agree.
-    g_settings.rangeLow = getDouble(L"rangeLow", 3.9);
-    g_settings.rangeHigh = getDouble(L"rangeHigh", 10.0);
+    g_settings.rangeLow = getDouble(L"rangeLow", kDefaultRangeLow);
+    g_settings.rangeHigh = getDouble(L"rangeHigh", kDefaultRangeHigh);
 
     auto color = [](PCWSTR key, COLORREF def) {
         PCWSTR s = Wh_GetStringSetting(key);
@@ -1246,10 +1263,10 @@ void LoadSettings() {
         Wh_FreeStringSetting(s);
         return c;
     };
-    g_settings.colorInRange = color(L"style.colorInRange", RGB(0x36, 0xC7, 0x6A));
-    g_settings.colorHigh = color(L"style.colorHigh", RGB(0xE6, 0xB8, 0x00));
-    g_settings.colorLow = color(L"style.colorLow", RGB(0xE0, 0x53, 0x3D));
-    g_settings.colorPredicted = color(L"style.colorPredicted", RGB(0x8A, 0xA0, 0xB4));
+    g_settings.colorInRange = color(L"style.colorInRange", kDefaultColorInRange);
+    g_settings.colorHigh = color(L"style.colorHigh", kDefaultColorHigh);
+    g_settings.colorLow = color(L"style.colorLow", kDefaultColorLow);
+    g_settings.colorPredicted = color(L"style.colorPredicted", kDefaultColorPredicted);
     g_settings.showBand = Wh_GetIntSetting(L"style.showBand");
     g_settings.showCurrentValue = Wh_GetIntSetting(L"style.showCurrentValue");
     g_settings.showTrendArrow = Wh_GetIntSetting(L"style.showTrendArrow");
@@ -1259,7 +1276,7 @@ void LoadSettings() {
     g_settings.lineThickness = Wh_GetIntSetting(L"style.lineThickness");
     g_settings.fontSize = Wh_GetIntSetting(L"style.fontSize");
     g_settings.autoTextColor = Wh_GetIntSetting(L"style.autoTextColor");
-    g_settings.textColor = color(L"style.textColor", RGB(0xFF, 0xFF, 0xFF));
+    g_settings.textColor = color(L"style.textColor", kDefaultTextColor);
 
     g_settings.pulseOutOfRange = Wh_GetIntSetting(L"alert.pulseOutOfRange");
     g_settings.borderThickness = Wh_GetIntSetting(L"alert.borderThickness");

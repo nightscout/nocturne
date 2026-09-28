@@ -3,6 +3,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Glucose;
@@ -179,7 +180,7 @@ public class EntryService : IEntryService
     /// real-time <c>entries</c> broadcast per-type-batch, so this service no longer emits events directly.
     /// Entries with unrecognised types are silently filtered out.
     /// </remarks>
-    public async Task<IEnumerable<Entry>> CreateEntriesAsync(
+    public async Task<BulkWrite<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
         WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default)
@@ -191,9 +192,9 @@ public class EntryService : IEntryService
         if (validEntries.Count == 0)
             return [];
 
-        await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
+        var result = await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
-        return validEntries;
+        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted);
     }
 
     /// <inheritdoc />

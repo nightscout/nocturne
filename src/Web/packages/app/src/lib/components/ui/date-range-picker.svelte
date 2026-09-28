@@ -7,7 +7,7 @@
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
   import * as Popover from "$lib/components/ui/popover/index.js";
-  import { ChevronDown as ChevronDownIcon } from "lucide-svelte";
+  import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
 
   interface Props {
     showDaysPresets?: boolean;
@@ -192,7 +192,7 @@
   {#if showDaysPresets}
     <!-- Quick Day Selection (right) -->
     <div class="flex flex-wrap gap-2">
-      {#each [1, 3, 7, 14, 30, 90] as daysOption}
+      {#each [1, 3, 7, 14, 30, 90] as daysOption (daysOption)}
         <Button
           variant={selectedDays === daysOption ? "default" : "outline"}
           size="sm"

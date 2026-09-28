@@ -1,10 +1,12 @@
 using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Connectors.Core.Models;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Logging;
 
 namespace Nocturne.API.Services.ConnectorPublishing;
 
@@ -32,8 +34,9 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
         IPatientDeviceRepository patientDeviceRepository,
         IPumpSnapshotRepository pumpSnapshotRepository,
         IUploaderSnapshotRepository uploaderSnapshotRepository,
+        PublishSkipTally skips,
         ILogger<DevicePublisher> logger)
-        : base(auditContext, logger)
+        : base(auditContext, skips, logger)
     {
         _decomposer = decomposer ?? throw new ArgumentNullException(nameof(decomposer));
         _deviceEventRepository = deviceEventRepository ?? throw new ArgumentNullException(nameof(deviceEventRepository));
@@ -85,10 +88,14 @@ internal sealed class DevicePublisher : ConnectorPublisherBase, IDevicePublisher
     {
         try
         {
+            var skippedDeleted = 0;
             foreach (var ds in deviceStatuses)
             {
-                await _decomposer.DecomposeAsync(ds, source, origin, cancellationToken);
+                skippedDeleted += (await _decomposer.DecomposeAsync(ds, source, origin, cancellationToken)).SkippedDeleted;
             }
+
+            Logger.LogSkippedDeleted(nameof(DeviceStatus), skippedDeleted);
+            RecordSkippedDeleted(skippedDeleted);
             return true;
         }
         catch (OperationCanceledException) { throw; }

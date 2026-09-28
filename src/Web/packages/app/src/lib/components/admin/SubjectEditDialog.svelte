@@ -7,8 +7,21 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Badge } from "$lib/components/ui/badge";
-  import { Loader2, TriangleAlert } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import type { TenantRoleDto } from "$api";
+
+  interface Props {
+    open: boolean;
+    isNew: boolean;
+    subjectName: string;
+    subjectNotes: string;
+    selectedRoleIds: string[];
+    roles: TenantRoleDto[];
+    isSaving: boolean;
+    onSave: () => void;
+    onCancel: () => void;
+  }
 
   let {
     open = $bindable(false),
@@ -20,17 +33,7 @@
     isSaving = $bindable(false),
     onSave,
     onCancel,
-  } = $props<{
-    open: boolean;
-    isNew: boolean;
-    subjectName: string;
-    subjectNotes: string;
-    selectedRoleIds: string[];
-    roles: TenantRoleDto[];
-    isSaving: boolean;
-    onSave: () => void;
-    onCancel: () => void;
-  }>();
+  }: Props = $props();
 
   // Derived: check if admin role is selected (shows warning)
   const hasAdminRoleSelected = $derived(
@@ -104,7 +107,7 @@
             <p class="text-sm text-muted-foreground">No roles available</p>
           {:else}
             <!-- Show predefined roles first -->
-            {#each roles.filter((r: TenantRoleDto) => r.isSystem) as role}
+            {#each roles.filter((r: TenantRoleDto) => r.isSystem) as role (role.id)}
               <label class="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={selectedRoleIds.includes(role.name ?? "")}
@@ -112,7 +115,7 @@
                 />
                 <div class="flex-1">
                   <span class="text-sm font-medium">{role.name}</span>
-                  <Badge variant="secondary" class="text-xs ml-2">Predefined</Badge>
+                  <Badge variant="secondary" class="ml-2">Predefined</Badge>
                 </div>
               </label>
             {/each}
@@ -121,7 +124,7 @@
             {#if roles.filter((r: TenantRoleDto) => !r.isSystem).length > 0}
               <div class="pt-2 border-t">
                 <p class="text-xs text-muted-foreground mb-2">Custom Roles</p>
-                {#each roles.filter((r: TenantRoleDto) => !r.isSystem) as role}
+                {#each roles.filter((r: TenantRoleDto) => !r.isSystem) as role (role.id)}
                   <label class="flex items-center gap-2 cursor-pointer">
                     <Checkbox
                       checked={selectedRoleIds.includes(role.name ?? "")}

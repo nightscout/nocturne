@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
   import {
     Area,
     Spline,
-    Axis,
     Pattern,
     ChartClipPath,
     Highlight,
@@ -13,6 +13,8 @@
   import { curveStepAfter } from "d3";
   import { BasalDeliveryOrigin } from "$lib/api";
   import { getGlucoseChartContext } from "../chart-context.svelte";
+  import TrackAxis from "./TrackAxis.svelte";
+  import TrackLabel from "./TrackLabel.svelte";
 
   interface Props {
     onPointClick?: (time: Date) => void;
@@ -110,9 +112,11 @@
 {#if basalLayout}
   {@const basalScale = basalLayout.scale}
   {@const basalZero = basalLayout.zero}
-  {@const basalTrackTop = basalLayout.top}
   {@const basalAxisScale = basalLayout.axisScale}
 
+  <!-- The spans repeat the delivered rate the area already draws, and their
+       rate labels are too small to read on paper. -->
+  {#if !ctx.printing}
   <ChartClipPath>
     <!-- Temp basal span indicators (shown in basal track when basal is visible) -->
     {#each tempBasalSpans as span (span.id)}
@@ -135,7 +139,7 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-entry-basal font-medium"
         >
           {span.rate.toFixed(2)}U/h
         </text>
@@ -144,13 +148,14 @@
           x={labelX}
           y={labelY}
           dy="-0.355em"
-          class="text-[7px] fill-insulin-basal font-medium"
+          class="text-4xs fill-entry-basal font-medium"
         >
           {span.percent}%
         </text>
       {/if}
     {/each}
   </ChartClipPath>
+  {/if}
 
   <!-- Stale basal data indicator -->
   {#if staleBasalData}
@@ -159,7 +164,7 @@
       {@const staleWidth = chartCtx.xScale(staleBasalData.end) - staleLeft}
       {@const staleTop = chartCtx.yScale(basalScale(maxBasalRate))}
       {@const staleBottom = chartCtx.yScale(basalZero)}
-      <Pattern size={8} lines={{ rotate: -45, opacity: 0.1 }}>
+      <Pattern size={8} lines={{ rotate: -45, opacity: ctx.printing ? 0.3 : 0.1 }}>
         {#snippet children({ pattern }: { pattern: string })}
           <rect
             x={staleLeft}
@@ -173,17 +178,19 @@
     </ChartClipPath>
     <AnnotationLine
       x={staleBasalData.start}
-      class="stroke-yellow-500/50 stroke-1"
-      stroke-dasharray="2,2"
+      props={{ line: { class: "stroke-warning/50 stroke-1 print:stroke-foreground/60", dashArray: "2,2" } }}
     />
-    <AnnotationPoint
-      x={staleBasalData.start.getTime()}
-      y={basalScale(maxBasalRate)}
-      label="Last pump sync"
-      labelPlacement="bottom-right"
-      fill="yellow"
-      class="hover:bg-background hover:text-foreground"
-    />
+    <!-- On paper the callout would print over the mode lane; the chart key names the hatching instead. -->
+    {#if !ctx.printing}
+      <AnnotationPoint
+        x={staleBasalData.start.getTime()}
+        y={basalScale(maxBasalRate)}
+        label="Last pump sync"
+        labelPlacement="bottom-right"
+        fill="var(--warning)"
+        class="hover:bg-background hover:text-foreground"
+      />
+    {/if}
   {/if}
 
   <!-- Scheduled basal rate line -->
@@ -194,31 +201,14 @@
         x={(d) => new Date(d.timestamp ?? 0)}
         y={(d) => basalScale(d.rate ?? 0)}
         curve={curveStepAfter}
-        class="stroke-muted-foreground/50 stroke-1 fill-none"
-        stroke-dasharray="4,4"
+        class="stroke-muted-foreground/50 stroke-1 fill-none print:stroke-foreground/70"
+        stroke-dasharray={dashOf("insulin-scheduled-basal")}
       />
     </ChartClipPath>
   {/if}
 
-  <!-- Basal axis on right -->
-  <Axis
-    placement="right"
-    scale={basalAxisScale}
-    ticks={2}
-    tickLabelProps={{
-      class: "text-[9px] fill-muted-foreground",
-    }}
-  />
-
-  <!-- Basal track label -->
-  <text
-    x={4}
-    y={basalTrackTop + 12}
-    dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
-  >
-    BASAL
-  </text>
+  <TrackAxis scale={basalAxisScale} unit="U/h" />
+  <TrackLabel label="Basal" top={basalLayout.top} bottom={basalLayout.bottom} />
 
   <!-- Basal area - render each segment by origin with actual delivered rate -->
   {#if basalData.length > 0}
@@ -244,8 +234,8 @@
                     chartCtx.xScale(new Date(nextPoint.timestamp ?? 0)) - left,
                   height: Math.abs(bottom - top),
                 }}
-                <rect {...step} fill={fillColor} style="opacity: {opacity}" />
-                <rect {...step} fill={patternFill} style="opacity: {opacity}" />
+                <rect {...step} fill={fillColor} {opacity} />
+                <rect {...step} fill={patternFill} {opacity} />
               {/each}
             {/snippet}
           </Pattern>
@@ -259,8 +249,8 @@
             curve={curveStepAfter}
             fill={fillColor}
             stroke={strokeColor}
-            class="stroke-1"
-            style="opacity: {opacity}"
+            class="stroke-1 opacity-(--segment-opacity)"
+            style="--segment-opacity: {opacity}"
           />
         {/if}
       {/each}

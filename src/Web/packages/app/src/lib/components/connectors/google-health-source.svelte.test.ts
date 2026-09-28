@@ -30,7 +30,7 @@ vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 const connected: GoogleHealthStatus = {
   configured: true, connected: true, selectedTypes: ["steps", "sleep"],
-  previewRequired: false, lastSync: new Date("2026-09-06T09:00:00Z"),
+  previewRequired: false, lastSync: "2026-09-06T09:00:00Z",
 };
 
 describe("Google Health source presentation", () => {
@@ -49,7 +49,7 @@ describe("Google Health source presentation", () => {
     const dexcom = page.getByRole("button", { name: /Dexcom/ });
     await expect.element(google).toHaveTextContent("Active");
     expect(google.element().className).toBe(dexcom.element().className);
-    expect(google.element().className).toContain("border-green");
+    expect(google.element().className).toContain("border-success");
     await expect.element(google).toHaveTextContent("Last successful sync:");
     await expect.element(google).not.toHaveTextContent("0 records");
     await google.click();

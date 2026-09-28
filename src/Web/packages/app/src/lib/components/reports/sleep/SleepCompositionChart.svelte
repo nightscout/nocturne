@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
 <script lang="ts">
   /**
    * Stacked sleep-stage composition chart for the trends page: one bar per
@@ -7,10 +6,13 @@
    */
   import { formatShortDate, formatWeekdayLabel } from "$lib/utils/formatting";
   import { Chart, Svg, Axis, Tooltip } from "layerchart";
-  import { scaleBand, scaleLinear, type ScaleBand } from "d3-scale";
+  import { scaleBand, scaleLinear } from "d3-scale";
+  import { bandScale } from "$lib/components/charts/scale-guards";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { SLEEP_COMPOSITION_SEGMENTS } from "$lib/utils/sleep-stages";
+  import { SLEEP_COMPOSITION_SEGMENTS, laneTexture } from "$lib/utils/sleep-stages";
+  import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
   import { dayKeyFor, buildNightsByDayKey } from "$lib/utils/sleep-night-mapping";
   import { formatMinutesDuration } from "$lib/utils/duration";
   import type { SleepNightSummary, SleepStageReferenceRangeSet } from "$lib/api";
@@ -56,7 +58,7 @@
       const night = nightsByDayKey.get(dayKeyFor(date));
       let cumulative = 0;
       const segments: DaySegment[] = SLEEP_COMPOSITION_SEGMENTS.map((seg) => {
-        const minutes = (night?.[seg.key] as number | undefined) ?? 0;
+        const minutes = night?.[seg.key] ?? 0;
         const y0 = cumulative;
         cumulative += minutes;
         return { key: seg.key, label: seg.label, lane: seg.lane, minutes, y0, y1: cumulative };
@@ -140,7 +142,7 @@
 
 <div class="@container grid gap-6 @2xl:grid-cols-[2fr_1fr]">
   <div>
-    <div class="sleep-composition-chart h-72 w-full">
+    <div class="h-72 w-full">
       {#if dayRows.length > 0}
         <Chart
           data={dayRows}
@@ -153,7 +155,7 @@
           tooltipContext={{ mode: "manual" }}
         >
           {#snippet children({ context })}
-            {@const xBandScale = context.xScale as unknown as ScaleBand<string>}
+            {@const xBandScale = bandScale(context.xScale)}
             <Svg>
               <Axis
                 placement="left"
@@ -179,7 +181,7 @@
                       width={bandwidth}
                       height={Math.max(context.yScale(segment.y0) - context.yScale(segment.y1), 0)}
                       data-lane={segment.lane}
-                      class="fill-[var(--lane-color)]"
+                      class={["fill-lane", patternClass(laneTexture(segment.lane))]}
                       rx={2}
                     />
                   {/if}
@@ -216,7 +218,7 @@
 
             <Tooltip.Root>
               {#snippet children({ data })}
-                {@const row = data as DayRow}
+                {@const row: DayRow = data}
                 <Tooltip.Header
                   value={`${formatWeekdayLabel(row.date)}, ${formatShortDate(row.date)}`}
                 />
@@ -258,15 +260,10 @@
       {/if}
     </div>
 
-    <!-- Legend -->
-    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-      {#each visibleSegments as seg (seg.key)}
-        <span class="flex items-center gap-1.5">
-          <span class="size-2 rounded-full bg-[var(--lane-color)]" data-lane={seg.lane}></span>
-          {seg.label}
-        </span>
-      {/each}
-    </div>
+    <ChartKey
+      class="mt-3 justify-start"
+      items={visibleSegments.map((seg) => ({ texture: laneTexture(seg.lane), label: seg.label }))}
+    />
   </div>
 
   <!-- Stage composition reference panel -->
@@ -274,7 +271,7 @@
     {#each referenceRows as row (row.label)}
       <div class="space-y-1.5">
         <div class="flex items-center gap-2 text-sm">
-          <span class="size-2.5 shrink-0 rounded-full bg-[var(--lane-color)]" data-lane={row.lane}></span>
+          <span class="size-2.5 shrink-0 rounded-full bg-lane" data-lane={row.lane}></span>
           <span class="font-medium">{row.label}</span>
           <span class="ml-auto tabular-nums font-medium">
             {row.meanPct != null ? `${Math.round(row.meanPct)}%` : "—"}
@@ -283,15 +280,15 @@
         {#if row.band}
           <div class="relative h-1.5 w-full rounded-full bg-muted">
             <div
-              class="absolute h-full rounded-full bg-muted-foreground/25"
-              style:left="{Math.min(row.band.min, 100)}%"
-              style:width="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
+              class="absolute left-(--band-left) h-full w-(--band-w) rounded-full bg-muted-foreground/25"
+              style:--band-left="{Math.min(row.band.min, 100)}%"
+              style:--band-w="{Math.max(Math.min(row.band.max, 100) - Math.min(row.band.min, 100), 0)}%"
             ></div>
             {#if row.meanPct != null}
               <div
-                class="absolute top-1/2 h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--lane-color)]"
+                class="absolute top-1/2 left-(--mean-left) h-2.5 w-0.5 -translate-y-1/2 rounded-full bg-lane"
                 data-lane={row.lane}
-                style:left="{Math.min(Math.max(row.meanPct, 0), 100)}%"
+                style:--mean-left="{Math.min(Math.max(row.meanPct, 0), 100)}%"
               ></div>
             {/if}
           </div>

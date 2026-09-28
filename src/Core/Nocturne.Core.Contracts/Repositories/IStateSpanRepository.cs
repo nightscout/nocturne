@@ -210,16 +210,6 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Creates or updates an activity as a state span.
-    /// </summary>
-    /// <param name="stateSpan">The <see cref="StateSpan"/> representing the activity.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The persisted <see cref="StateSpan"/>.</returns>
-    Task<StateSpan> UpsertActivityAsStateSpanAsync(
-        StateSpan stateSpan,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Creates multiple activities as state spans.
     /// </summary>
     /// <param name="stateSpans">The state spans representing activities to create.</param>

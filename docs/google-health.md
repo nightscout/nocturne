@@ -53,10 +53,37 @@ by Google and covered by the granted scopes can be imported.
 - Each type is read page by page and written through its native Nocturne service.
   The maximum is 10,000 pages per type and operation; reaching the limit fails
   explicitly instead of reporting an incomplete history as complete.
+- The page-by-page reader and reconciliation staging are the same bounded import
+  path used by the connector integration; Google Health does not maintain a
+  second, competing chunking implementation. Each page is written before the
+  next one is requested, so large histories do not have to fit in one request or
+  one in-memory batch.
 - An empty result is not an error and is not converted into a zero measurement.
   Unsupported destinations are shown in the inventory but cannot be selected.
 - Disconnecting keeps imported data. Deleting imported Google data is a separate,
   confirmed action scoped to this connector and the current tenant.
+
+## Recovering a failed historical import
+
+The **Import recovery** card links platform administrators to **Settings ->
+Administration -> Reset Connector Cursors**. Select the tenant, enter the
+earliest date that should be re-read, and start the background reset. Google
+Health is a normal configured connector in that reset job, so the same bounded
+page reader, native writes and idempotency keys are used. A reset does not delete
+the existing health history; already imported rows are safely de-duplicated.
+Use the job progress to see whether Google Health succeeded or failed, and cancel
+the job before starting another reset if it is still running.
+
+## UI copy and translations
+
+The connector page and its shared source row use Wuchale PO catalogues, just like
+the rest of the application. When copy is added or moved, run the Wuchale
+extraction and keep every locale's `msgstr` non-empty; the lightweight
+`google-health-translations.test.js` check compiles representative production
+strings for every locale and verifies that `{0}` and `<0/>` placeholders are
+preserved. Product names such as **Google Health** and **eHbA1c** remain
+unchanged where the translation service would otherwise split or translate the
+name.
 
 Sleep uses the session's **end time**, as required by the
 [Google Health filter contract](https://developers.google.com/health/filters).

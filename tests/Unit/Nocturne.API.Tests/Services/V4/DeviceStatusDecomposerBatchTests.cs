@@ -42,16 +42,16 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
         // BulkCreateAsync returns the input records
         _apsRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.ApsSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.ApsSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.ApsSnapshot> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _pumpRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.PumpSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.PumpSnapshot> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _uploaderRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.UploaderSnapshot>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.UploaderSnapshot> records, WriteOrigin origin, CancellationToken _) => [.. records]);
         _extrasRepoMock
             .Setup(x => x.BulkCreateAsync(It.IsAny<IEnumerable<V4Models.DeviceStatusExtras>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => records);
+            .ReturnsAsync((IEnumerable<V4Models.DeviceStatusExtras> records, WriteOrigin origin, CancellationToken _) => [.. records]);
 
         _decomposer = new DeviceStatusDecomposer(
             _apsRepoMock.Object,
@@ -299,7 +299,7 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
                 {
                     Active = true,
                     Name = "Exercise",
-                    Duration = 60.0,
+                    Duration = 3600,
                     Multiplier = 1.5,
                 }
             }
@@ -314,7 +314,8 @@ public class DeviceStatusDecomposerBatchTests : IDisposable
                 It.Is<StateSpan>(ss =>
                     ss.Category == StateSpanCategory.Override
                     && ss.State == "Custom"
-                    && ss.OriginalId == "ds-override"),
+                    && ss.OriginalId == "ds-override"
+                    && ss.EndTimestamp == DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime.AddHours(1)),
                 It.IsAny<CancellationToken>()),
             Times.Once);
 

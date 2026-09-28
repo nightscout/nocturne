@@ -28,6 +28,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
     private readonly Mock<IJwtService> _mockJwtService;
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _dbContext;
+    private readonly Nocturne.Infrastructure.Data.Services.CategoryReadContext _categoryReadContext = new();
     private readonly AuthorizationService _authorizationService;
 
     private readonly Guid _testTenantId = Guid.CreateVersion7();
@@ -63,7 +64,8 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             new Mock<IRoleService>().Object,
             new Mock<IDirectGrantService>().Object,
             _mockJwtService.Object,
-            _dbContext
+            _dbContext,
+            _categoryReadContext
         );
     }
 
@@ -79,7 +81,8 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
         List<string>? scopes = null,
         DateTime? expiresAt = null,
         Guid? tenantId = null,
-        string? legacyTokenDigest = null)
+        string? legacyTokenDigest = null,
+        bool limitTo24Hours = false)
     {
         _dbContext.OAuthGrants.Add(new OAuthGrantEntity
         {
@@ -93,6 +96,7 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,
             ExpiresAt = expiresAt,
+            LimitTo24Hours = limitTo24Hours,
         });
         _dbContext.SaveChanges();
     }
@@ -149,6 +153,32 @@ public class AuthorizationServiceTokenExchangeTests : IDisposable
             It.IsAny<string?>(),
             It.IsAny<bool>(),
             _testTenantId,
+            It.IsAny<TimeSpan?>(),
+            It.IsAny<bool>(),
+            It.IsAny<Guid?>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateJwtFromAccessTokenAsync_NocToken_CarriesTheGrantsHistoryLimit(bool limitTo24Hours)
+    {
+        // A clamped grant traded for a JWT must stay clamped, or the exchange sheds the limit.
+        var token = "noc_followerphone";
+        SeedGrant(token, limitTo24Hours: limitTo24Hours);
+        SetupActiveSubject();
+        SetupMintedJwt();
+
+        await _authorizationService.GenerateJwtFromAccessTokenAsync(token);
+
+        _mockJwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string?>(),
+            limitTo24Hours,
+            It.IsAny<Guid?>(),
             It.IsAny<TimeSpan?>(),
             It.IsAny<bool>(),
             It.IsAny<Guid?>()), Times.Once);

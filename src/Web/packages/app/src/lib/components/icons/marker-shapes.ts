@@ -65,3 +65,6 @@ export const CARB_LABEL_Y = -MARKER_HEIGHT - 2;
 
 /** @see CARB_LABEL_Y */
 export const BOLUS_LABEL_Y = -MARKER_HEIGHT - 12;
+
+/** The bolus row on paper, lifted clear of the carb row's larger printed type. */
+export const PRINT_BOLUS_LABEL_Y = -MARKER_HEIGHT - 14;

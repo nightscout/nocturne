@@ -1,14 +1,17 @@
 <script lang="ts">
+  import { indexBy } from "$lib/utils/collections";
   import { formatClock } from "$lib/utils/formatting";
   import { PieChart, Text, Tooltip } from "layerchart";
   import type { Bolus, CarbIntake } from "$lib/api";
-  import { categoryPatternClass } from "$lib/components/charts/print/chart-print-patterns";
+  import { patternClass, type TextureKey } from "$lib/components/charts/print/chart-print-patterns";
   import { cn } from "$lib/utils";
+  import ChartKey, { type ChartKeyItem } from "$lib/components/charts/print/ChartKey.svelte";
 
   interface Props {
     boluses: Bolus[];
     scheduledBasal: number;
     additionalBasal: number;
+    totalInsulin: number;
     carbIntakes?: CarbIntake[];
     onBolusClick?: (bolus: Bolus) => void;
   }
@@ -17,6 +20,7 @@
     boluses,
     scheduledBasal,
     additionalBasal,
+    totalInsulin,
     carbIntakes = [],
     onBolusClick,
   }: Props = $props();
@@ -34,13 +38,9 @@
   );
 
   // Build correlation map for tooltip (bolus correlationId -> carb intake)
-  const carbByCorrelation = $derived.by(() => {
-    const map = new Map<string, CarbIntake>();
-    for (const c of carbIntakes) {
-      if (c.correlationId) map.set(c.correlationId, c);
-    }
-    return map;
-  });
+  const carbByCorrelation = $derived(
+    indexBy(carbIntakes, (c) => c.correlationId || null, (c) => c)
+  );
 
   // Segment data for the pie chart
   interface SegmentData {
@@ -55,13 +55,11 @@
     props?: { class: string };
   }
 
-  // Print-pattern slots: bolus, scheduled basal, additional basal are
-  // distinguished only by colour, so each gets a distinct mono texture. The
-  // base `transition-opacity` is merged in because per-datum props replace the
-  // chart-level arc class rather than merging it.
+  // The base `transition-opacity` is merged in because per-datum props replace
+  // the chart-level arc class rather than merging it.
   const baseArcClass = "transition-opacity";
-  function arcProps(slot: number): { class: string } {
-    return { class: cn(baseArcClass, categoryPatternClass(slot)) };
+  function arcProps(key: TextureKey): { class: string } {
+    return { class: cn(baseArcClass, patternClass(key)) };
   }
 
   const segmentData = $derived.by(() => {
@@ -82,7 +80,7 @@
         bolus: t,
         linkedCarbs: linkedCarb?.carbs ?? undefined,
         time: bolusTime,
-        props: arcProps(3),
+        props: arcProps("insulin-bolus"),
       });
     });
 
@@ -92,7 +90,7 @@
         label: "Scheduled Basal",
         value: scheduledBasal,
         color: "var(--insulin-scheduled-basal)",
-        props: arcProps(1),
+        props: arcProps("insulin-scheduled-basal"),
       });
     }
 
@@ -102,7 +100,7 @@
         label: "Additional Basal",
         value: additionalBasal,
         color: "var(--insulin-additional-basal)",
-        props: arcProps(2),
+        props: arcProps("insulin-temp-basal"),
       });
     }
 
@@ -112,7 +110,18 @@
   const totalBolus = $derived(
     bolusTreatments.reduce((sum, t) => sum + (t.insulin ?? 0), 0)
   );
-  const total = $derived(totalBolus + scheduledBasal + additionalBasal);
+
+  const keyItems = $derived(
+    (
+      [
+        { texture: "insulin-bolus", label: `Bolus ${totalBolus.toFixed(1)}U`, value: totalBolus },
+        { texture: "insulin-scheduled-basal", label: `Scheduled basal ${scheduledBasal.toFixed(1)}U`, value: scheduledBasal },
+        { texture: "insulin-temp-basal", label: `Additional basal ${additionalBasal.toFixed(1)}U`, value: additionalBasal },
+      ] satisfies (ChartKeyItem & { value: number })[]
+    )
+      .filter((item) => item.value > 0)
+      .map(({ value: _, ...item }) => item)
+  );
 
   function handleArcClick(
     _e: MouseEvent,
@@ -125,7 +134,7 @@
 </script>
 
 <div class="flex flex-col items-center">
-  {#if total > 0}
+  {#if totalInsulin > 0}
     <div class="h-[140px] w-[140px]">
       <PieChart
         data={segmentData}
@@ -152,7 +161,7 @@
             class="fill-muted-foreground tabular-nums text-xs"
           />
           <Text
-            value={`${total.toFixed(1)}U`}
+            value={`${totalInsulin.toFixed(1)}U`}
             textAnchor="middle"
             verticalAnchor="middle"
             dy={10}
@@ -162,7 +171,7 @@
         {#snippet tooltip(snippetProps)}
           <Tooltip.Root context={snippetProps.context}>
             {#snippet children({ data })}
-              {@const d = data as SegmentData}
+              {@const d: SegmentData = data}
               <div class="space-y-1 text-sm">
                 <div class="font-semibold">{d.label}</div>
                 <div class="tabular-nums">{d.value.toFixed(2)}U</div>
@@ -184,6 +193,7 @@
         {/snippet}
       </PieChart>
     </div>
+    <ChartKey class="mt-2" items={keyItems} />
   {:else}
     <div class="h-[140px] w-[140px] flex items-center justify-center">
       <div class="text-2xl font-bold text-muted-foreground">—</div>

@@ -47,10 +47,12 @@ The login screen offers two passkey paths:
   registered to that account.
 
 <Callout type="info" title="Browser support">
+
   Passkeys need a browser that supports WebAuthn. On a browser that doesn't, the login
   screen says so and points the user at a recovery code or a different browser. An
   authenticator app is no help there: it is a second step <em>after</em> a passkey, so it
   cannot get anyone in on its own. The recovery code is the one fallback that stands alone.
+
 </Callout>
 
 ### Social login (OIDC)
@@ -65,9 +67,11 @@ guide:
   Microsoft Entra ID, and anything else that speaks OpenID Connect
 
 <Callout type="tip" title="Providers are platform-wide">
+
   OIDC providers are configured once for the whole instance; every tenant shares the
   same set. You only register one callback URL with the provider regardless of how many
   tenants you run.
+
 </Callout>
 
 ### Authenticator app & recovery codes

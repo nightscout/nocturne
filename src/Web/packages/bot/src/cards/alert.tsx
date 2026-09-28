@@ -76,6 +76,14 @@ export function AcknowledgedCard(props: { detail: string }) {
   );
 }
 
+function status(excursion: ActiveExcursion): string {
+  if (excursion.acknowledgedAt) return "Acknowledged";
+  if (excursion.snoozedUntil) {
+    return `Snoozed until ${new Date(excursion.snoozedUntil).toLocaleTimeString()}`;
+  }
+  return "Firing";
+}
+
 export function ActiveAlertsCard(props: { excursions: ActiveExcursion[] }) {
   return (
     <Card title="Active alerts">
@@ -84,7 +92,7 @@ export function ActiveAlertsCard(props: { excursions: ActiveExcursion[] }) {
           <Field
             key={excursion.id}
             label={excursion.ruleName ?? "Alert"}
-            value={`${excursion.acknowledgedAt ? "Acknowledged" : "Firing"}, started ${
+            value={`${status(excursion)}, started ${
               excursion.startedAt
                 ? timeAgo(new Date(excursion.startedAt).getTime())
                 : "at an unknown time"

@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.CareLink.Configurations;
@@ -23,8 +25,6 @@ public class CareLinkAuthTokenProvider(
 {
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
-
-    protected override string ConnectorName => "CareLink";
 
     /// <summary>
     ///     Per-tenant state seeded by <see cref="InitializeFromSecrets"/>.
@@ -86,15 +86,26 @@ public class CareLinkAuthTokenProvider(
 
         if (!string.IsNullOrEmpty(refreshToken) && !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(tokenUrl))
         {
-            var refreshResult = await TryRefreshTokenAsync(refreshToken, clientId, tokenUrl, cancellationToken);
-            if (refreshResult != null)
+            var refresh = await TryRefreshTokenAsync(
+                refreshToken, clientId, tokenUrl, LoginAttempts(config), cancellationToken);
+
+            if (refresh.Outcome == RefreshOutcome.Success)
             {
-                var (token, expiresAt, newRefreshToken) = refreshResult.Value;
-                if (!string.IsNullOrEmpty(newRefreshToken))
-                    refreshToken = newRefreshToken;
-                return (token, expiresAt, BuildMetadata(refreshToken, clientId, tokenUrl, audience));
+                if (!string.IsNullOrEmpty(refresh.NewRefreshToken))
+                    refreshToken = refresh.NewRefreshToken;
+                return (refresh.Token, refresh.ExpiresAt, BuildMetadata(refreshToken, clientId, tokenUrl, audience));
             }
-            _logger.LogWarning("Refresh token failed, falling back to credential login");
+
+            // Replaying the member's password against Auth0 risks a CAPTCHA and lockout, so a token
+            // endpoint that is only unwell ends the acquisition here.
+            if (refresh.Outcome == RefreshOutcome.Unavailable)
+            {
+                _logger.LogWarning(
+                    "CareLink token refresh was unavailable and no credential login was attempted");
+                return (null, DateTime.MinValue, null);
+            }
+
+            _logger.LogWarning("Refresh token rejected, falling back to credential login");
         }
 
         // Credential login fallback
@@ -114,8 +125,8 @@ public class CareLinkAuthTokenProvider(
                     config.Username, attempt + 1, maxRetries);
 
                 using var authFlow = CreateAuthFlow();
-                var authResult = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
-                return (authResult, authResult == null);
+                var login = await authFlow.LoginAsync(config.Username, config.Password!, config.Server, cancellationToken);
+                return (login.Result, login.ShouldRetry);
             },
             _retryDelayStrategy, maxRetries, "CareLink credential login", cancellationToken);
 
@@ -151,9 +162,50 @@ public class CareLinkAuthTokenProvider(
         return metadata.Count > 0 ? metadata : null;
     }
 
-    private async Task<(string Token, DateTime ExpiresAt, string? NewRefreshToken)?> TryRefreshTokenAsync(
+    /// <summary>
+    /// What a refresh said about the token. Auth0 answers a revoked or expired refresh token with a 400
+    /// or a 403, so every failure a repeat cannot clear counts as <see cref="RefreshOutcome.Rejected"/>
+    /// and falls through to the password login, as before. Only a transient failure that outlasts the
+    /// retry budget ends as <see cref="RefreshOutcome.Unavailable"/>, which must not replay the password.
+    /// </summary>
+    private enum RefreshOutcome
+    {
+        Success,
+        Rejected,
+        Transient,
+        Unavailable,
+    }
+
+    private sealed record RefreshResult(
+        RefreshOutcome Outcome, string? Token, DateTime ExpiresAt, string? NewRefreshToken);
+
+    /// <summary>
+    /// Redeems the refresh token, retrying a transient token-endpoint failure on the same loop and
+    /// delay strategy as the credential login.
+    /// </summary>
+    private async Task<RefreshResult> TryRefreshTokenAsync(
+        string refreshToken, string clientId, string tokenUrl, int maxAttempts, CancellationToken ct)
+    {
+        var result = await ConnectorRetryLoop.RunAsync<RefreshResult>(
+            async (_, _) =>
+            {
+                var attempt = await AttemptRefreshAsync(refreshToken, clientId, tokenUrl, ct);
+                return attempt.Outcome == RefreshOutcome.Transient
+                    ? RetryStep<RefreshResult>.RetryAfterDelay
+                    : RetryStep<RefreshResult>.Complete(attempt);
+            },
+            _retryDelayStrategy,
+            maxAttempts,
+            _ => new RefreshResult(RefreshOutcome.Unavailable, null, DateTime.MinValue, null),
+            ct);
+
+        return result!;
+    }
+
+    private async Task<RefreshResult> AttemptRefreshAsync(
         string refreshToken, string clientId, string tokenUrl, CancellationToken ct)
     {
+        HttpResponseMessage response;
         try
         {
             using var content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -163,42 +215,55 @@ public class CareLinkAuthTokenProvider(
                 ["refresh_token"] = refreshToken,
             });
 
-            var response = await _httpClient.PostAsync(tokenUrl, content, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(ct);
-                _logger.LogWarning("Token refresh returned {StatusCode}: {Body}", response.StatusCode, body);
-                return null;
-            }
+            response = await _httpClient.PostAsync(tokenUrl, content, ct);
+        }
+        // A HttpClient timeout arrives as a cancellation that the caller did not ask for, so it is a
+        // transient failure; a real cancellation is left to propagate.
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("CareLink token refresh timed out");
+            return new RefreshResult(RefreshOutcome.Transient, null, DateTime.MinValue, null);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "CareLink token refresh could not reach the token endpoint");
+            return new RefreshResult(RefreshOutcome.Transient, null, DateTime.MinValue, null);
+        }
 
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning("Token refresh returned {StatusCode}: {Body}", response.StatusCode, body);
+
+            var outcome = response.IsRetryableError() ? RefreshOutcome.Transient : RefreshOutcome.Rejected;
+            return new RefreshResult(outcome, null, DateTime.MinValue, null);
+        }
+
+        try
+        {
             var json = await response.Content.ReadAsStringAsync(ct);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
-            var accessToken = root.GetProperty("access_token").GetString();
+            var accessToken = root.TryGetProperty("access_token", out var at) ? at.GetString() : null;
             var newRefreshToken = root.TryGetProperty("refresh_token", out var rt) ? rt.GetString() : null;
 
-            if (string.IsNullOrEmpty(accessToken)) return null;
+            if (string.IsNullOrEmpty(accessToken))
+                return new RefreshResult(RefreshOutcome.Rejected, null, DateTime.MinValue, null);
 
             var expiresAt = GetTokenExpiry(accessToken);
             _logger.LogInformation("CareLink token refreshed, expires at {ExpiresAt}", expiresAt);
-            return (accessToken, expiresAt, newRefreshToken);
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (HttpRequestException ex)
-        {
-            _logger.LogWarning(ex, "Token refresh failed with exception");
-            return null;
+            return new RefreshResult(RefreshOutcome.Success, accessToken, expiresAt, newRefreshToken);
         }
         catch (JsonException ex)
         {
-            _logger.LogWarning(ex, "Token refresh failed with exception");
-            return null;
+            _logger.LogWarning(ex, "CareLink token refresh response could not be parsed");
+            return new RefreshResult(RefreshOutcome.Rejected, null, DateTime.MinValue, null);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Token refresh failed with exception");
-            return null;
+            _logger.LogWarning(ex, "CareLink token refresh response was malformed");
+            return new RefreshResult(RefreshOutcome.Rejected, null, DateTime.MinValue, null);
         }
     }
 

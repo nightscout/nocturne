@@ -75,7 +75,7 @@ describe("glucose-chart mark registration", () => {
 		expect(labels).toContain("Lunch");
 		expect(labels).toContain("30g");
 		expect(labels).toContain("0.75U/h");
-		expect(labels).toContain("BASAL");
+		expect(labels).toContain("Basal");
 	});
 
 	it("keeps marker glyph geometry and classes", async () => {
@@ -160,7 +160,7 @@ describe("glucose-chart mark registration", () => {
 
 		// Labels alternate rate/percent across the spans.
 		const labels = Array.from(
-			container.querySelectorAll("text.fill-insulin-basal"),
+			container.querySelectorAll("text.fill-entry-basal"),
 		).map((t) => t.textContent?.trim());
 		expect(labels).toContain("0.75U/h");
 		expect(labels).toContain("120%");

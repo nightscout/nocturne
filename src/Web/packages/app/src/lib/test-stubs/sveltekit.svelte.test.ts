@@ -16,7 +16,7 @@ import {
  * config the imports above resolve to the real framework and prove nothing
  * about the stub.
  */
-function thrownBy(fn: () => never): any {
+function thrownBy(fn: () => never): unknown {
   try {
     fn();
   } catch (e) {
@@ -38,20 +38,20 @@ describe("@sveltejs/kit stub", () => {
   it("wraps a string body as the framework does", () => {
     const thrown = thrownBy(() => error(404, "Not found"));
 
-    expect(thrown.status).toBe(404);
-    expect(thrown.body).toEqual({ message: "Not found" });
+    expect(thrown).toHaveProperty("status", 404);
+    expect(thrown).toHaveProperty("body", { message: "Not found" });
   });
 
   it("passes an object body through untouched", () => {
     const thrown = thrownBy(() => error(400, { message: "Bad", details: "d" }));
 
-    expect(thrown.body).toEqual({ message: "Bad", details: "d" });
+    expect(thrown).toHaveProperty("body", { message: "Bad", details: "d" });
   });
 
   it("names the status when there is no body", () => {
     const thrown = thrownBy(() => error(500));
 
-    expect(thrown.body).toEqual({ message: "Error: 500" });
+    expect(thrown).toHaveProperty("body", { message: "Error: 500" });
   });
 
   it("throws a redirect that is not an Error", () => {
@@ -60,15 +60,15 @@ describe("@sveltejs/kit stub", () => {
     expect(thrown).not.toBeInstanceOf(Error);
     expect(isRedirect(thrown)).toBe(true);
     expect(isHttpError(thrown)).toBe(false);
-    expect(thrown.status).toBe(303);
-    expect(thrown.location).toBe("/login");
+    expect(thrown).toHaveProperty("status", 303);
+    expect(thrown).toHaveProperty("location", "/login");
   });
 
   it("throws a validation error carrying its issues", () => {
     const thrown = thrownBy(() => invalid("too short", { message: "taken" }));
 
     expect(isValidationError(thrown)).toBe(true);
-    expect(thrown.issues).toEqual([
+    expect(thrown).toHaveProperty("issues", [
       { message: "too short" },
       { message: "taken" },
     ]);

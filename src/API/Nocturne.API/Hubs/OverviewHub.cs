@@ -146,7 +146,7 @@ public class OverviewHub : Hub
                 subjectId, tokenScopes, authType, Context.ConnectionAborted);
 
             var tenantIds = new List<Guid>(tenants.Count);
-            foreach (var (tenant, _) in tenants)
+            foreach (var (tenant, _, _) in tenants)
             {
                 await Groups.AddToGroupAsync(
                     Context.ConnectionId,

@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Infrastructure.Data;
@@ -16,7 +18,8 @@ namespace Nocturne.API.Services.Auth;
 /// <para>
 /// Audit logging is non-blocking by design: any database exception is swallowed and logged as a
 /// warning so that a transient storage failure never prevents an authentication response from
-/// reaching the caller.
+/// reaching the caller. A row that fails to write is detached, so the caller's next save on the
+/// same context does not retry it.
 /// </para>
 /// </remarks>
 /// <seealso cref="IAuthAuditService"/>
@@ -54,9 +57,10 @@ public class AuthAuditService : IAuthAuditService
             _httpContextAccessor.HttpContext?.GetAuthContext(), subjectId);
         tenantId ??= _dbContext.TenantIdOrNull;
 
+        EntityEntry<AuthAuditLogEntity>? entry = null;
         try
         {
-            _dbContext.AuthAuditLog.Add(new AuthAuditLogEntity
+            entry = _dbContext.AuthAuditLog.Add(new AuthAuditLogEntity
             {
                 Id = Guid.CreateVersion7(),
                 EventType = eventType,
@@ -72,12 +76,12 @@ public class AuthAuditService : IAuthAuditService
                 DetailsJson = detailsJson,
                 RefreshTokenId = refreshTokenId,
                 TraceId = _auditContext.TraceId,
-                CreatedAt = DateTime.UtcNow,
             });
             await _dbContext.SaveChangesAsync();
         }
         catch (Exception ex)
         {
+            entry?.State = EntityState.Detached;
             // Audit logging must never block the main operation
             _logger.LogWarning(ex, "Failed to write auth audit log entry ({EventType})", eventType);
         }

@@ -27,15 +27,10 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, SensorGlucoseEntity>, ISensorGlucoseRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<SensorGlucoseRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SensorGlucoseRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations.</param>
-    /// <param name="logger">The logger instance.</param>
     public SensorGlucoseRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
@@ -44,10 +39,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         IV4RecordBroadcaster<SensorGlucose>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null
     )
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -97,17 +91,17 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         catch (OperationCanceledException) { throw; }
         catch (DbUpdateException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
         catch (TimeoutException ex)
         {
-            _logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
+            Logger.LogWarning(ex, "Canonical gate for the legacy entries projection failed; broadcasting unfiltered");
             return models;
         }
     }
@@ -150,6 +144,9 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// <param name="afterTimestamp">Keyset cursor timestamp. When paired with <paramref name="afterId"/>, replaces offset-based pagination.</param>
     /// <param name="afterId">Keyset cursor record ID (tiebreaker). When paired with <paramref name="afterTimestamp"/>, replaces offset-based pagination.</param>
     /// <param name="ct">The cancellation token.</param>
+    /// <param name="patientDeviceId">Matched against the registered patient-device link and combined
+    /// with <paramref name="device"/> when both are set. Last so positional callers ending at
+    /// <paramref name="ct"/> are unaffected.</param>
     /// <returns>A collection of sensor glucose records.</returns>
     public async Task<IEnumerable<SensorGlucose>> GetAsync(
         DateTime? from,
@@ -216,11 +213,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     }
 
     /// <inheritdoc />
-    public override async Task<IEnumerable<SensorGlucose>> BulkCreateAsync(
+    public override async Task<BulkWrite<SensorGlucose>> BulkCreateAsync(
         IEnumerable<SensorGlucose> recordsParam, WriteOrigin origin, CancellationToken ct = default)
     {
-        var written = (await base.BulkCreateAsync(recordsParam, origin, ct)).ToList();
-        await AdvanceTenantLastReadingAsync(written, ct);
+        var written = await base.BulkCreateAsync(recordsParam, origin, ct);
+        await AdvanceTenantLastReadingAsync([.. written], ct);
         return written;
     }
 
@@ -263,7 +260,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to advance tenant LastReadingAt");
+            Logger.LogWarning(ex, "Failed to advance tenant LastReadingAt");
         }
     }
 
@@ -367,7 +364,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "SensorGlucose", inserted.Count);
         }
     }
 

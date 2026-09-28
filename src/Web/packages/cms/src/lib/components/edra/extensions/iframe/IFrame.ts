@@ -1,4 +1,5 @@
 import { Node } from '@tiptap/core';
+import { safeFrameSrc } from './safe-src.ts';
 
 export interface IframeOptions {
 	allowFullscreen: boolean;
@@ -38,7 +39,9 @@ export default Node.create<IframeOptions>({
 	addAttributes() {
 		return {
 			src: {
-				default: null
+				default: null,
+				parseHTML: (element) => safeFrameSrc(element.getAttribute('src')),
+				renderHTML: (attributes) => ({ src: safeFrameSrc(attributes.src) })
 			},
 			frameborder: {
 				default: 0
@@ -68,7 +71,7 @@ export default Node.create<IframeOptions>({
 				(options: { src: string }) =>
 				({ tr, dispatch }) => {
 					const { selection } = tr;
-					const node = this.type.create(options);
+					const node = this.type.create({ ...options, src: safeFrameSrc(options.src) });
 
 					if (dispatch) {
 						tr.replaceRangeWith(selection.from, selection.to, node);

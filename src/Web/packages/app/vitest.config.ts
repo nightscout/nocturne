@@ -5,12 +5,14 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 export default defineConfig({
   plugins: [svelte()],
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "tools/**/*.test.js"],
     exclude: [
       "node_modules/**",
       "e2e/**",
       ".svelte-kit/**",
       "src/**/*.svelte.test.ts",
+      // SSR render tests need SvelteKit's virtual modules; they run under vitest.render.config.ts.
+      "src/**/*.render.test.ts",
     ],
     environment: "node",
     alias: {

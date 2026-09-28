@@ -6,18 +6,17 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
-  import {
-    Check,
-    ChevronDown,
-    ChevronUp,
-    Copy,
-    Loader2,
-  } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
+  import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
   import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { describeSubmitError } from "$lib/forms";
 
   interface Props {
@@ -53,7 +52,8 @@
   let allowMultipleUses = $state(false);
   let limitTo24Hours = $state(false);
   let createdInviteUrl = $state<string | null>(null);
-  let copiedInvite = $state(false);
+  let createdByName = $state<string | undefined>(undefined);
+  const copy = createCopyFeedback();
   let isCreatingInvite = $state(false);
   let errorMessage = $state<string | null>(null);
 
@@ -67,12 +67,9 @@
 
   async function copyInviteUrl() {
     if (createdInviteUrl) {
-      if (!(await copyToClipboard(createdInviteUrl))) {
-        errorMessage = "Couldn't copy the link to the clipboard. Copy it manually instead.";
-        return;
+      if (await copy.copy(createdInviteUrl)) {
+        errorMessage = null;
       }
-      copiedInvite = true;
-      setTimeout(() => (copiedInvite = false), 2000);
     }
   }
 
@@ -92,6 +89,7 @@
         limitTo24Hours,
       });
       if (result.inviteUrl) {
+        createdByName = result.createdByName;
         createdInviteUrl = result.inviteUrl.startsWith("http")
           ? result.inviteUrl
           : `${window.location.origin}${result.inviteUrl}`;
@@ -123,6 +121,7 @@
     allowMultipleUses = false;
     limitTo24Hours = false;
     createdInviteUrl = null;
+    createdByName = undefined;
     errorMessage = null;
   }
 </script>
@@ -139,12 +138,12 @@
     {#if createdInviteUrl}
       <div class="space-y-4">
         <div
-          class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+          class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
         >
           <Check
-            class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
+            class="mt-0.5 h-4 w-4 shrink-0 text-success"
           />
-          <p class="text-sm text-green-800 dark:text-green-200">
+          <p class="text-sm text-success">
             Invite link created. Share it with the new member.
           </p>
         </div>
@@ -158,16 +157,28 @@
             type="text"
             value={createdInviteUrl}
             readonly
-            class="font-mono text-sm"
+            class="font-mono"
           />
           <Button variant="outline" size="icon" onclick={copyInviteUrl}>
-            {#if copiedInvite}
-              <Check class="h-4 w-4 text-green-600" />
+            {#if copy.isCopied()}
+              <Check class="h-4 w-4 text-success" />
             {:else}
               <Copy class="h-4 w-4" />
             {/if}
           </Button>
         </div>
+
+        <CopyInvitationMessageButton
+          url={createdInviteUrl}
+          inviterName={createdByName}
+          onCopied={() => (errorMessage = null)}
+          onCopyFailed={() =>
+            (errorMessage = "Couldn't copy the message to the clipboard. Copy the link manually instead.")}
+        />
+
+        {#if errorMessage}
+          <p class="text-sm text-destructive">{errorMessage}</p>
+        {/if}
 
         <Button variant="outline" class="w-full" onclick={handleDone}>
           Done
@@ -237,13 +248,17 @@
           open={showInvitePermissions}
           onOpenChange={(open: boolean) => (showInvitePermissions = open)}
         >
-          <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-            {#if showInvitePermissions}
-              <ChevronUp class="h-4 w-4" />
-            {:else}
-              <ChevronDown class="h-4 w-4" />
-            {/if}
-            Direct Permissions (optional)
+          <Collapsible.Trigger>
+            {#snippet child({ props }: { props: Record<string, unknown> })}
+              <Button {...props} variant="subtle" size="inline" class="w-full justify-start">
+                {#if showInvitePermissions}
+                  <ChevronUp class="h-4 w-4" />
+                {:else}
+                  <ChevronDown class="h-4 w-4" />
+                {/if}
+                Direct Permissions (optional)
+              </Button>
+            {/snippet}
           </Collapsible.Trigger>
           <Collapsible.Content>
             <div class="mt-3">

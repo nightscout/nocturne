@@ -13,7 +13,7 @@ namespace Nocturne.API.Attributes;
 /// from either OAuth tokens or translated legacy permissions via <see cref="Scope"/>).
 /// </summary>
 /// <remarks>
-/// Scope satisfaction is evaluated by <see cref="Scope.Satisfies"/> which supports
+/// Scope satisfaction is evaluated by <see cref="Scope.Satisfies(IEnumerable{string}, string)"/> which supports
 /// hierarchical scope matching (e.g., <c>read</c> satisfies <c>read:entries</c>).
 /// The granted scopes are further refined by <see cref="Middleware.MemberScopeMiddleware"/>
 /// based on the user's tenant membership roles.

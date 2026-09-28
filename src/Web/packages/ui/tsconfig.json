@@ -5,6 +5,11 @@
     "moduleResolution": "bundler",
     "strict": true,
     "verbatimModuleSyntax": true,
+    // Dependencies ship .d.ts we cannot fix: bits-ui and layerchart declarations TypeScript
+    // reports as "too complex to represent", and layerchart imports a dagre.js it ships no
+    // types for. Dependencies that import undeclared modules are patched in pnpm-workspace.yaml
+    // instead, since those degrade the types consumers see.
+    "skipLibCheck": true,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
       "$lib": ["./src/lib"],

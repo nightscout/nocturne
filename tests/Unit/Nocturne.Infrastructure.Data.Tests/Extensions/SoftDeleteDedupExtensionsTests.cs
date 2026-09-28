@@ -45,7 +45,8 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     {
         SeedTempBasal("legacy-1", softDeleted: false);
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().Contain("legacy-1");
+        blocked.Held.Should().Contain("legacy-1");
+        blocked.DeletedByUser.Should().BeEmpty("a live row means the record is already stored");
     }
 
     [Fact]
@@ -53,7 +54,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     {
         SeedTempBasal("legacy-1", softDeleted: true, deletedByUser: false);
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().BeEmpty();
+        blocked.Held.Should().BeEmpty();
     }
 
     [Fact]
@@ -61,21 +62,34 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
     {
         SeedTempBasal("legacy-1", softDeleted: true, deletedByUser: true);
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
-        blocked.Should().Contain("legacy-1");
+        blocked.Held.Should().Contain("legacy-1");
+        blocked.DeletedByUser.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task UserTombstoneBesideLiveRow_IsNotCountedAsDeleted()
+    {
+        SeedTempBasal("legacy-1", softDeleted: true, deletedByUser: true);
+        SeedTempBasal("legacy-1", softDeleted: false);
+
+        var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-1" });
+
+        blocked.Held.Should().BeEquivalentTo(["legacy-1"]);
+        blocked.DeletedByUser.Should().BeEmpty();
     }
 
     [Fact]
     public async Task EmptyInput_ReturnsEmpty()
     {
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string>());
-        blocked.Should().BeEmpty();
+        blocked.Held.Should().BeEmpty();
     }
 
     [Fact]
     public async Task UnknownLegacyId_DoesNotBlock()
     {
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(new HashSet<string> { "legacy-unknown" });
-        blocked.Should().BeEmpty();
+        blocked.Held.Should().BeEmpty();
     }
 
     [Fact]
@@ -88,7 +102,8 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
         var blocked = await _ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(
             new HashSet<string> { "legacy-active", "legacy-system", "legacy-user", "legacy-unknown" });
 
-        blocked.Should().BeEquivalentTo(new[] { "legacy-active", "legacy-user" });
+        blocked.Held.Should().BeEquivalentTo(new[] { "legacy-active", "legacy-user" });
+        blocked.DeletedByUser.Should().ContainSingle();
     }
 
     private DeviceStatusExtrasEntity SeedDeviceStatusExtras(Guid correlationId, bool softDeleted, bool deletedByUser = false)
@@ -116,7 +131,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
 
         var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
 
-        blocked.Should().Contain(corrId);
+        blocked.Held.Should().Contain(corrId);
     }
 
     [Fact]
@@ -127,7 +142,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
 
         var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
 
-        blocked.Should().BeEmpty();
+        blocked.Held.Should().BeEmpty();
     }
 
     [Fact]
@@ -138,6 +153,7 @@ public class SoftDeleteDedupExtensionsTests : IDisposable
 
         var blocked = await _ctx.GetBlockingCorrelationIdsAsync(new HashSet<Guid> { corrId });
 
-        blocked.Should().Contain(corrId);
+        blocked.Held.Should().Contain(corrId);
+        blocked.DeletedByUser.Should().ContainSingle();
     }
 }

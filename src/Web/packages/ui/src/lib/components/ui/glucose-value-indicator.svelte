@@ -94,7 +94,7 @@
 </script>
 
 <!-- Horizontal layout with grid overlay on status text to prevent layout shift when syncing -->
-<div class="glucose-value-indicator inline-flex items-center gap-2 {className}">
+<div data-slot="glucose-value-indicator" class="inline-flex items-center gap-2 {className}">
   {#if isLoading}
     <!-- Loading skeleton -->
     <Skeleton class="rounded-lg {skeletonSizeClasses}" />

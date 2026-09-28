@@ -56,6 +56,41 @@ public static class MemberScopeResolver
     };
 
     /// <summary>
+    /// Whether a membership is exempt from its own <c>limit_to_24_hours</c> flag: an owner or a
+    /// <see cref="Scope.TenantSettings"/> holder runs the tenant, and clamping them would hide the
+    /// record they administer. The member editors refuse to set the flag on such a member and
+    /// <c>MemberScopeMiddleware</c> ignores it if a row holds it anyway. A credential's own limit
+    /// still applies, since that is a ceiling the holder chose for the token.
+    /// </summary>
+    /// <param name="effectivePermissions">Role permissions unioned with direct permissions.</param>
+    public static bool IsExemptFromHistoryClamp(IEnumerable<string> effectivePermissions) =>
+        Scope.Satisfies(Scope.NormalizeMemberPermissions(effectivePermissions), Scope.TenantSettings);
+
+    /// <summary>
+    /// Whether a credential presented on a membership may read only the last 24 hours. The narrower
+    /// of the two limits wins: a credential may carry its own (a direct grant issued for a
+    /// follower's phone), and the membership must not widen a token that was deliberately
+    /// restricted. The membership's own flag is ignored for a member
+    /// <see cref="IsExemptFromHistoryClamp"/> exempts.
+    /// </summary>
+    /// <param name="credentialLimitTo24Hours">The credential's own limit.</param>
+    /// <param name="membershipLimitTo24Hours">The membership's <c>limit_to_24_hours</c> flag.</param>
+    /// <param name="effectivePermissions">Role permissions unioned with direct permissions.</param>
+    public static bool IsHistoryClamped(
+        bool credentialLimitTo24Hours,
+        bool membershipLimitTo24Hours,
+        IEnumerable<string> effectivePermissions) =>
+        credentialLimitTo24Hours
+        || (membershipLimitTo24Hours && !IsExemptFromHistoryClamp(effectivePermissions));
+
+    /// <summary>
+    /// The refusal a member editor reads when asked to clamp a member
+    /// <see cref="IsExemptFromHistoryClamp"/> exempts.
+    /// </summary>
+    public const string ExemptFromHistoryClampDetail =
+        "An owner or a member who manages site settings cannot be limited to the last 24 hours.";
+
+    /// <summary>
     /// Resolves the scopes a membership grants on a credential.
     /// </summary>
     /// <param name="effectivePermissions">

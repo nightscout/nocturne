@@ -12,7 +12,9 @@ export default defineConfig({
   server: { fs: { strict: false } },
   // runed/kit imports `$app/*`, which esbuild's dep pre-bundler can't resolve —
   // the stubs below are vitest aliases, applied only in vite's own pipeline.
-  optimizeDeps: { exclude: ["runed/kit"] },
+  // Each @lucide/svelte/icons/* path is its own dep, found only when a test first renders
+  // it; pre-bundling one then reloads the page mid-run.
+  optimizeDeps: { exclude: ["runed/kit", "@lucide/svelte"] },
   test: {
     include: ["src/**/*.svelte.test.ts"],
     setupFiles: ["vitest-browser-svelte", "./vitest.browser.setup.ts"],

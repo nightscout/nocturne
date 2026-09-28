@@ -109,15 +109,16 @@ public class CareLinkAuthTokenProviderTests
     }
 
     /// <summary>
-    /// The credential login honours the connector's configured MaxRetryAttempts, which counts total
-    /// attempts and is clamped to one. Every login begins by fetching the discovery document, so the
-    /// number of discovery requests is the number of attempts.
+    /// The fake serves no login form, which is the WAF-block or changed-markup case: rebuilding the
+    /// login cannot clear it, so it makes a single attempt however large the configured budget is.
+    /// Every login begins by fetching the discovery document, so the number of discovery requests is
+    /// the number of attempts.
     /// </summary>
     [Theory]
     [InlineData(0, 1)]
     [InlineData(1, 1)]
-    [InlineData(3, 3)]
-    public async Task AcquireToken_MakesOneCredentialLoginPerConfiguredAttempt(
+    [InlineData(3, 1)]
+    public async Task AcquireToken_DoesNotRetryAnUnreachableLoginForm(
         int maxRetryAttempts, int expectedLogins)
     {
         var handler = new CareLinkFakeHandler();
@@ -133,7 +134,7 @@ public class CareLinkAuthTokenProviderTests
             },
             CancellationToken.None);
 
-        token.Should().BeNull("the fake serves no login form, so every attempt fails");
+        token.Should().BeNull("the fake serves no login form, so the login cannot complete");
         handler.Requests.Count(r => r.Url.Contains("/discover/", StringComparison.Ordinal))
             .Should().Be(expectedLogins);
     }
@@ -145,7 +146,7 @@ public class CareLinkAuthTokenProviderTests
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
-        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         return new TestableProvider(
             new HttpClient(handler),

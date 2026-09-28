@@ -136,8 +136,8 @@ public class DemoSessionControllerTests : IDisposable
     {
         var tenantId = SeedTenant(isDemo: true, withDemoMember: true);
 
-        // Mutate only the flag: the membership still matches on username and is still unrevoked,
-        // so nothing but the flag can account for the 404.
+        // Mutate only the flag: the membership still matches on username, so nothing but the
+        // flag can account for the 404.
         await using (var db = _db.CreateContext())
         {
             var subject = await db.Subjects.SingleAsync(s => s.IsDemoSubject);

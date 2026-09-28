@@ -10,5 +10,6 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// </summary>
 public interface IDeviceAttributedEntity : IV4Entity
 {
+    /// <summary>The patient device the record came from; null while unattributed.</summary>
     Guid? PatientDeviceId { get; set; }
 }

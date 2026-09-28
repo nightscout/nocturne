@@ -99,11 +99,12 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
     element.appendChild(dot);
 
     // completeOn event listener management (per key)
-    const completeOnCleanups: (() => void)[] = [];
-    const completeOnAttached = new Set<string>();
+    const completeOnListeners: { key: string; remove: () => void }[] = [];
+    const hasCompleteOnListener = (key: string) =>
+      completeOnListeners.some((listener) => listener.key === key);
 
     function attachCompleteOnListener(opts: CoachMarkOptions): void {
-      if (completeOnAttached.has(opts.key) || !opts.completeOn) return;
+      if (hasCompleteOnListener(opts.key) || !opts.completeOn) return;
 
       const { event, target } = opts.completeOn;
       let targetEl: HTMLElement | null = null;
@@ -123,8 +124,10 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
       };
 
       targetEl.addEventListener(event, handler, { once: true });
-      completeOnAttached.add(opts.key);
-      completeOnCleanups.push(() => targetEl!.removeEventListener(event, handler));
+      completeOnListeners.push({
+        key: opts.key,
+        remove: () => targetEl!.removeEventListener(event, handler),
+      });
     }
 
     // Visibility update interval
@@ -151,7 +154,7 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
         }
 
         // Lazily attach completeOn listener for each key
-        if (opts.completeOn && !completeOnAttached.has(opts.key) && status !== "completed" && status !== "dismissed") {
+        if (opts.completeOn && !hasCompleteOnListener(opts.key) && status !== "completed" && status !== "dismissed") {
           attachCompleteOnListener(opts);
         }
       }
@@ -177,7 +180,7 @@ export function coachmark(options: CoachMarkOptions | CoachMarkOptions[]) {
     // Cleanup
     return () => {
       clearInterval(interval);
-      for (const cleanup of completeOnCleanups) cleanup();
+      for (const { remove } of completeOnListeners) remove();
       for (const { unregister } of registrations) unregister();
       dot.remove();
     };

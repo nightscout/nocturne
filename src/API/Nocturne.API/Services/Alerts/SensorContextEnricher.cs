@@ -102,7 +102,7 @@ internal sealed class SensorContextEnricher : ISensorContextEnricher
         bool isReplay,
         CancellationToken ct)
     {
-        var needs = RuleDataNeeds.Walk(rules);
+        var needs = RuleDataNeeds.Walk(rules, _logger);
         var enriched = baseContext;
 
         if (needs.NeedsIob)

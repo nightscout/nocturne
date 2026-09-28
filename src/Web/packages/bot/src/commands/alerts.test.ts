@@ -405,7 +405,7 @@ describe("/alerts command", () => {
   const excursion = (id: string, ruleName: string): ActiveExcursion => ({
     id,
     ruleName,
-    startedAt: new Date(Date.now() - 3 * 60_000),
+    startedAt: new Date(Date.now() - 3 * 60_000).toISOString(),
   });
 
   it("lists every active excursion", async () => {

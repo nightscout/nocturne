@@ -1,9 +1,22 @@
 <script lang="ts">
-  import { Calendar, ChevronLeft, ChevronRight } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Button } from "$lib/components/ui/button";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
 
   type ViewMode = "tir" | "profile";
+
+  interface Props {
+    viewDate: Date;
+    viewMode: ViewMode;
+    isCurrentMonth: boolean;
+    MONTH_NAMES: string[];
+    previousMonth: () => void;
+    nextMonth: () => void;
+    goToToday: () => void;
+    setViewMode: (mode: ViewMode) => void;
+  }
 
   let {
     viewDate,
@@ -14,16 +27,7 @@
     nextMonth,
     goToToday,
     setViewMode,
-  } = $props<{
-    viewDate: Date;
-    viewMode: ViewMode;
-    isCurrentMonth: boolean;
-    MONTH_NAMES: string[];
-    previousMonth: () => void;
-    nextMonth: () => void;
-    goToToday: () => void;
-    setViewMode: (mode: ViewMode) => void;
-  }>();
+  }: Props = $props();
 
   const currentMonth = $derived(viewDate.getMonth());
   const currentYear = $derived(viewDate.getFullYear());
@@ -66,13 +70,14 @@
         type="single"
         value={viewMode}
         onValueChange={(value: string) =>
-          value && setViewMode(value as ViewMode)}
-        class="border rounded-md"
+          (value === "tir" || value === "profile") && setViewMode(value)}
+        variant="segmented"
+        size="xs"
       >
-        <ToggleGroup.Item value="tir" class="text-xs px-3">
+        <ToggleGroup.Item value="tir">
           TIR
         </ToggleGroup.Item>
-        <ToggleGroup.Item value="profile" class="text-xs px-3">
+        <ToggleGroup.Item value="profile">
           Profile
         </ToggleGroup.Item>
       </ToggleGroup.Root>

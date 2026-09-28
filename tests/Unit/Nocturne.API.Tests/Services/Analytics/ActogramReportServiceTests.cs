@@ -53,27 +53,31 @@ public class ActogramReportServiceTests
         result.Thresholds.Low.Should().Be(70);
         result.Thresholds.High.Should().Be(180);
         result.Thresholds.VeryHigh.Should().Be(250);
+        result.Thresholds.TargetLow.Should().BeNull();
+        result.Thresholds.TargetHigh.Should().BeNull();
         result.Thresholds.GlucoseYMax.Should().Be(300);
     }
 
     [Fact]
-    public async Task GetAsync_WithProfile_ResolvesThresholdsFromProfile()
+    public async Task GetAsync_WithProfile_KeepsClinicalBandsAndCarriesProfileTarget()
     {
         SetupEmpty();
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _targetRange
             .Setup(t => t.GetLowBGTargetAsync(EndMills, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(80.0);
+            .ReturnsAsync(95.0);
         _targetRange
             .Setup(t => t.GetHighBGTargetAsync(EndMills, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(160.0);
+            .ReturnsAsync(115.0);
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.Thresholds.Low.Should().Be(80.0);
-        result.Thresholds.High.Should().Be(160.0);
+        result.Thresholds.Low.Should().Be(70);
+        result.Thresholds.High.Should().Be(180);
         result.Thresholds.VeryLow.Should().Be(54);
         result.Thresholds.VeryHigh.Should().Be(250);
+        result.Thresholds.TargetLow.Should().Be(95.0);
+        result.Thresholds.TargetHigh.Should().Be(115.0);
     }
 
     [Fact]

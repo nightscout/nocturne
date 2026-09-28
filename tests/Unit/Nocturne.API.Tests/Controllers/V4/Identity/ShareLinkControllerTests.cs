@@ -6,6 +6,7 @@ using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.API.Models.Responses;
 using Nocturne.API.Services.Auth;
+using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data.Entities;
@@ -23,13 +24,18 @@ public sealed class ShareLinkControllerTests
     private readonly Mock<IShareLinkService> _service = new();
     private readonly Mock<IAuthAuditService> _audit = new();
 
-    private ShareLinkController BuildController(params string[] grantedScopes)
+    private ShareLinkController BuildController(params string[] grantedScopes) =>
+        BuildController(historyClamped: false, grantedScopes);
+
+    private ShareLinkController BuildController(bool historyClamped, params string[] grantedScopes)
     {
         var tenantAccessor = new Mock<ITenantAccessor>();
         tenantAccessor.SetupGet(t => t.TenantId).Returns(Guid.NewGuid());
 
         var httpContext = new DefaultHttpContext();
         httpContext.Items["GrantedScopes"] = (IReadOnlySet<string>)new HashSet<string>(grantedScopes);
+        if (historyClamped)
+            httpContext.RequestServices = TestRequestServices.HistoryClamped();
 
         return new ShareLinkController(_service.Object, tenantAccessor.Object, _audit.Object)
         {
@@ -57,6 +63,69 @@ public sealed class ShareLinkControllerTests
 
         result.Result.Should().BeOfType<ForbidResult>();
         _service.Verify(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    private static void ShouldRefuseTheHistoryCeiling(IActionResult? result)
+    {
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Be(
+            "You can see the last 24 hours only, so you cannot give anyone more history than that.");
+    }
+
+    private void ShareHasFullHistory(bool fullHistory) =>
+        _service.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShareLinkDto { Enabled = true, FullHistory = fullHistory });
+
+    [Fact]
+    public async Task SetShareLinkFullHistory_byAClampedCaller_isRefused()
+    {
+        var controller = BuildController(historyClamped: true, Scope.SharingManage);
+
+        var result = await controller.SetShareLinkFullHistory(
+            new SetShareFullHistoryRequest(true), CancellationToken.None);
+
+        ShouldRefuseTheHistoryCeiling(result.Result);
+        _service.Verify(s => s.SetFullHistoryAsync(
+            It.IsAny<Guid>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task SetShareLinkFullHistory_byAClampedCaller_mayStillNarrowTheShare()
+    {
+        _service.Setup(s => s.SetFullHistoryAsync(It.IsAny<Guid>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShareLinkDto { Enabled = true, FullHistory = false });
+        var controller = BuildController(historyClamped: true, Scope.SharingManage);
+
+        var result = await controller.SetShareLinkFullHistory(
+            new SetShareFullHistoryRequest(false), CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task RevealAndRotate_ofAFullHistoryShare_byAClampedCaller_areRefused()
+    {
+        ShareHasFullHistory(true);
+        var controller = BuildController(historyClamped: true, Scope.SharingManage);
+
+        ShouldRefuseTheHistoryCeiling((await controller.RevealShareLink(CancellationToken.None)).Result);
+        ShouldRefuseTheHistoryCeiling((await controller.RotateShareLink(CancellationToken.None)).Result);
+        _service.Verify(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _service.Verify(s => s.RotateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Reveal_ofA24HourShare_byAClampedCaller_isAllowed()
+    {
+        ShareHasFullHistory(false);
+        _service.Setup(s => s.RevealAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ShareLinkDto { Enabled = true, Url = null });
+        var controller = BuildController(historyClamped: true, Scope.SharingManage);
+
+        var result = await controller.RevealShareLink(CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Fact]

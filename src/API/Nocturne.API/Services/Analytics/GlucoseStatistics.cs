@@ -1,3 +1,5 @@
+using Nocturne.Core.Models;
+
 namespace Nocturne.API.Services.Analytics;
 
 /// <summary>
@@ -67,12 +69,46 @@ public static class GlucoseStatistics
     public static bool IsReading(double mgdl) => mgdl > 0 && !double.IsNaN(mgdl);
 
     /// <summary>
+    /// Whether a reading is admitted to the glucose statistics: a reading at all, and below
+    /// 600 mg/dL, above anything a CGM reports as a value.
+    /// </summary>
+    public static bool IsPlausibleReading(double mgdl) => IsReading(mgdl) && mgdl < 600;
+
+    /// <summary>
+    /// The <see cref="ExcludingZone"/> scale for <paramref name="thresholds"/>.
+    /// </summary>
+    internal static GlucoseZoneScale ExcludingZones(GlycemicThresholds thresholds) =>
+        new(
+            GlucoseZoneBound.Under(thresholds.VeryLow),
+            GlucoseZoneBound.Under(thresholds.Low),
+            GlucoseZoneBound.Over(thresholds.VeryHigh),
+            GlucoseZoneBound.Over(thresholds.TargetTop)
+        );
+
+    /// <summary>
     /// Estimated A1C as a percentage from mean glucose in mg/dL, by the ADAG regression
     /// <c>(mean + 46.7) / 28.7</c>. A mean of zero means there were no readings, and reports zero
     /// rather than the 1.6% the regression would give.
     /// </summary>
     public static double EstimatedA1C(double meanGlucose) =>
         meanGlucose == 0 ? 0 : (meanGlucose + 46.7) / 28.7;
+}
+
+/// <summary>
+/// The mutually excluding zones time in range and its episodes count against, listed in the order
+/// <see cref="StatisticsService.CalculateTimeInRange"/> has always tested them: very-high before
+/// high, so a tenant who configures <c>VeryHigh</c> below <c>TargetTop</c> keeps seeing the
+/// reading reported as very high. <see cref="Target"/> is the remainder and is not reported from
+/// here: the target percentage comes from the closed <c>TargetBottom</c>..<c>TargetTop</c> band,
+/// which overlaps <see cref="Low"/> when the two are configured apart.
+/// </summary>
+internal enum ExcludingZone
+{
+    VeryLow,
+    Low,
+    VeryHigh,
+    High,
+    Target,
 }
 
 /// <summary>

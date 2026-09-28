@@ -29,21 +29,34 @@ vi.mock("svelte-sonner", () => ({
 }));
 
 import { RealtimeStore } from "./realtime-store.svelte";
-import type { StorageEvent, SyncProgressEvent } from "$lib/websocket/types";
+import type {
+  StorageEvent,
+  SyncProgressEvent,
+  TrackerUpdateEvent,
+} from "$lib/websocket/types";
+import type { TrackerInstanceDto } from "$lib/api";
 
 /** The realtime/backfill entry points, which the class keeps private. */
 interface StoreInternals {
   handleCreate(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
   websocketClient: {
-    eventHandlers: { syncProgress?: (event: SyncProgressEvent) => void };
+    eventHandlers: {
+      syncProgress?: (event: SyncProgressEvent) => void;
+      trackerUpdate?: (event: TrackerUpdateEvent) => void;
+    };
   };
 }
 
 type TestStore = StoreInternals &
   Pick<
     RealtimeStore,
-    "currentReservoir" | "entries" | "direction" | "syncProgressByConnector" | "destroy"
+    | "currentReservoir"
+    | "entries"
+    | "direction"
+    | "syncProgressByConnector"
+    | "trackerInstances"
+    | "destroy"
   >;
 
 /** Store instance with an empty socket URL, so nothing connects. */
@@ -220,9 +233,7 @@ describe("RealtimeStore entry create batching", () => {
 
   it("keeps later creates first when timestamps are equal", async () => {
     const store = makeStore();
-    store.entries = [
-      { _id: "existing", type: "sgv", sgv: 90, mills: 1_000 },
-    ];
+    store.entries = [{ _id: "existing", type: "sgv", sgv: 90, mills: 1_000 }];
 
     store.handleCreate({
       colName: "entries",
@@ -291,7 +302,14 @@ describe("RealtimeStore sync progress", () => {
       const store = makeStore();
 
       emit(store, syncEvent("glooko", "Syncing", "FetchingData"));
-      emit(store, syncEvent("glooko", phase, phase === "Completed" ? "SyncComplete" : "SyncFailed"));
+      emit(
+        store,
+        syncEvent(
+          "glooko",
+          phase,
+          phase === "Completed" ? "SyncComplete" : "SyncFailed"
+        )
+      );
 
       // Still visible while the outcome lingers.
       vi.advanceTimersByTime(1_999);
@@ -326,6 +344,77 @@ describe("RealtimeStore sync progress", () => {
 
     expect(store.syncProgressByConnector.dexcom).toBeUndefined();
     expect(store.syncProgressByConnector.glooko?.phase).toBe("Syncing");
+
+    store.destroy();
+  });
+});
+
+describe("RealtimeStore tracker updates", () => {
+  function trackerInstance(
+    id: string,
+    overrides: Partial<TrackerInstanceDto> = {}
+  ): TrackerInstanceDto {
+    return {
+      id,
+      definitionId: "definition-1",
+      definitionName: "Infusion Site",
+      startedAt: "2026-09-20T08:00:00Z",
+      ageHours: 24,
+      isActive: true,
+      ...overrides,
+    };
+  }
+
+  function emit(store: TestStore, event: TrackerUpdateEvent): void {
+    store.websocketClient.eventHandlers.trackerUpdate?.(event);
+  }
+
+  it("applies an ack from another device to the stored instance", () => {
+    const store = makeStore();
+    store.trackerInstances = [
+      trackerInstance("site"),
+      trackerInstance("sensor"),
+    ];
+
+    const acked = trackerInstance("site", {
+      ageHours: 25,
+      lastAckedAt: "2026-09-21T09:00:00Z",
+      ackSnoozeMins: 30,
+    });
+    emit(store, { action: "ack", instance: acked });
+
+    expect(store.trackerInstances).toEqual([acked, trackerInstance("sensor")]);
+
+    store.destroy();
+  });
+
+  it("ignores an ack for an instance it does not hold", () => {
+    const store = makeStore();
+    store.trackerInstances = [trackerInstance("site")];
+
+    emit(store, { action: "ack", instance: trackerInstance("unknown") });
+
+    expect(store.trackerInstances).toEqual([trackerInstance("site")]);
+
+    store.destroy();
+  });
+
+  it("drops a completed instance from the active list", () => {
+    const store = makeStore();
+    store.trackerInstances = [
+      trackerInstance("site"),
+      trackerInstance("sensor"),
+    ];
+
+    emit(store, {
+      action: "complete",
+      instance: trackerInstance("site", {
+        completedAt: "2026-09-21T10:00:00Z",
+        isActive: false,
+      }),
+    });
+
+    expect(store.trackerInstances.map((i) => i.id)).toEqual(["sensor"]);
 
     store.destroy();
   });

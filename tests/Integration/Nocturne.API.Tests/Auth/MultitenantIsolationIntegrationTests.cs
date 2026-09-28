@@ -262,6 +262,25 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
+    public async Task CrossTenant_PendingGuestCode_NotReported()
+    {
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new { label = "Pending Probe" });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var anonymousA = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        using var anonymousB = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
+
+        var pendingA = await anonymousA.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+        var pendingB = await anonymousB.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+
+        pendingA.GetProperty("pending").GetBoolean().Should().BeTrue(
+            "an anonymous visitor to tenant A should learn that A has a code waiting");
+        pendingB.GetProperty("pending").GetBoolean().Should().BeFalse(
+            "a code created in tenant A must not be reported on tenant B");
+    }
+
+    [Fact]
     public async Task CrossTenant_DirectGrant_NotUsable()
     {
         // Arrange - create a direct grant token in tenant A
@@ -541,9 +560,9 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
-    public async Task RevokedMember_Token_IsDenied_OnOwnTenant()
+    public async Task RemovedMember_Token_IsDenied_OnOwnTenant()
     {
-        // Sanity: subject A is a member of tenant A and can write before revocation.
+        // Sanity: subject A is a member of tenant A and can write before removal.
         var now = DateTimeOffset.UtcNow;
         using (var before = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA))
         {
@@ -554,26 +573,26 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             ok.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
         }
 
-        // Revoke subject A's membership in tenant A. No app path soft-revokes today, so simulate it
-        // directly, the same way other tests toggle tenants.is_active.
+        // Remove subject A's membership in tenant A the way RemoveMemberAsync does, directly on the
+        // database so the removal does not depend on the member-management endpoints.
         var connStr = await GetPostgresConnectionStringAsync();
         await using (var conn = new NpgsqlConnection(connStr))
         {
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE tenant_members SET revoked_at = now() WHERE subject_id = @s AND tenant_id = @t;";
+            cmd.CommandText = "DELETE FROM tenant_members WHERE subject_id = @s AND tenant_id = @t;";
             cmd.Parameters.AddWithValue("s", _subjectAId);
             cmd.Parameters.AddWithValue("t", _tenantAId);
             await cmd.ExecuteNonQueryAsync();
         }
 
         // The same previously-valid token is now rejected for both read and write — the membership
-        // gate (via the RevokedAt query filter) no longer sees subject A as a member of tenant A.
+        // gate no longer sees subject A as a member of tenant A.
         using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
 
         var read = await client.GetAsync("/api/v1/entries/current");
         read.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "a revoked member must not authenticate, even with a previously-valid access token");
+            "a removed member must not authenticate, even with a previously-valid access token");
 
         var write = await client.PostAsJsonAsync("/api/v1/entries", new[]
         {
@@ -581,6 +600,6 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         });
         write.StatusCode.Should().BeOneOf(
             new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden },
-            "a revoked member must not be able to write");
+            "a removed member must not be able to write");
     }
 }

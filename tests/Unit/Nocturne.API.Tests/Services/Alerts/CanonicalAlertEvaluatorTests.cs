@@ -257,4 +257,19 @@ public class CanonicalAlertEvaluatorTests
         seen.TrendRate.Should().Be(-1.5m);
         seen.LastReadingAt.Should().Be(Reading);
     }
+
+    [Fact]
+    public async Task EvaluateAsync_ContainsAnUnexpectedFailureOfThePass()
+    {
+        // The pass runs inline in glucose ingestion; a fault in it must not fail the write
+        // that stored the reading.
+        LatestIs(Latest(Reading));
+        _orchestrator
+            .Setup(o => o.EvaluateAsync(It.IsAny<SensorContext>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new NullReferenceException());
+
+        var act = () => Evaluator(Tenant).EvaluateAsync();
+
+        await act.Should().NotThrowAsync();
+    }
 }

@@ -6,7 +6,8 @@
   import { Slider } from "$lib/components/ui/slider";
   import { Separator } from "$lib/components/ui/separator";
   import * as Popover from "$lib/components/ui/popover";
-  import { Settings, RotateCcw } from "lucide-svelte";
+  import Settings from "@lucide/svelte/icons/settings";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import type { ClockSettings } from "$lib/api";
 
   interface Props {
@@ -113,7 +114,7 @@
         variant="outline"
         size="sm"
         onclick={onReset}
-        class="w-full gap-2"
+        class="w-full"
       >
         <RotateCcw class="size-3" />
         Reset to default

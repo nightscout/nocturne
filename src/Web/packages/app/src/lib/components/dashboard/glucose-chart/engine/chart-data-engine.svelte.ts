@@ -1,10 +1,10 @@
 import { untrack } from "svelte";
 import {
-  type BasalPoint,
   BasalDeliveryOrigin,
   type DeviceEventType,
   type SystemEventType,
   type StateSpanCategory,
+  type ChartSpanKind,
   type TrackerCategory,
 } from "$lib/api";
 import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
@@ -25,9 +25,13 @@ import {
 } from "$lib/stores/appearance-store.svelte";
 import { mergeChartData } from "$lib/utils/chart-data-merge";
 import type { TransformedChartData } from "$lib/utils/chart-data-transform";
-import { getGlucoseColor } from "$lib/utils/chart-colors";
 import { stableBy } from "$lib/utils/stable-by";
-import { resolveGlucoseThresholds } from "$lib/constants/glucose-thresholds";
+import { distinct } from "$lib/utils/collections";
+import { mergeRealtimeGlucose } from "./merge-glucose";
+import {
+  resolveChartThresholds,
+  type ChartThresholds,
+} from "$lib/constants/glucose-thresholds";
 import { bisector } from "d3";
 
 // ===== Data Point Types =====
@@ -111,10 +115,13 @@ export interface TrackerMarkerData {
   [key: string]: unknown;
 }
 
-/** A state span (pump mode, override, profile, activity, temp basal, basal delivery) */
+/**
+ * A state span (pump mode, override, profile, activity, temp basal, basal
+ * delivery)
+ */
 export interface StateSpan {
   id?: string;
-  kind?: string;
+  kind?: ChartSpanKind;
   category?: StateSpanCategory;
   state?: string;
   startTime: Date;
@@ -146,7 +153,7 @@ export interface BasalDeliverySpan {
   startTime: Date;
   endTime: Date | null;
   rate?: number;
-  origin?: typeof BasalDeliveryOrigin[keyof typeof BasalDeliveryOrigin];
+  origin?: (typeof BasalDeliveryOrigin)[keyof typeof BasalDeliveryOrigin];
   fillColor: string;
   strokeColor: string;
   [key: string]: unknown;
@@ -164,6 +171,15 @@ export interface StaleBasalRange {
   end: Date;
 }
 
+const metadataString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const metadataNumber = (value: unknown): number | undefined =>
+  typeof value === "number" ? value : undefined;
+
+/** A basal series point with its colours resolved to CSS values */
+export type ChartBasalPoint = TransformedChartData["basalSeries"][number];
+
 /** Scheduled basal point for the dotted overlay */
 export interface ScheduledBasalPoint {
   timestamp?: number;
@@ -178,11 +194,11 @@ export const TREATMENT_PROXIMITY_MS = 5 * 60 * 1000;
 
 export interface ChartDataEngineOptions {
   /**
-   * Pass as a getter (`get dateRange() { … }`) wherever this can change while the
-   * engine lives: read into a plain object literal it is captured once, and the
-   * engine goes on fetching and drawing the window it was constructed with. A
-   * consumer that instead re-creates the engine per window — `{#key}` around an
-   * `{@const}` — may pass the value directly.
+   * Pass as a getter (`get dateRange() { … }`) wherever this can change while
+   * the engine lives: read into a plain object literal it is captured once, and
+   * the engine goes on fetching and drawing the window it was constructed with.
+   * A consumer that instead re-creates the engine per window — `{#key}` around
+   * an `{@const}` — may pass the value directly.
    */
   dateRange?: { from: Date | string; to: Date | string };
   focusHours?: number;
@@ -196,11 +212,11 @@ export interface ChartDataEngineOptions {
    * reach. `"buffer"` is `fullDataRange` — `dateRange` when one was named, the
    * 48-hour buffer otherwise — which is what `fullXDomain` spans and therefore
    * what anything rendering the mini overview needs, however it was fed.
-   * `"display"` is the visible window alone, for a consumer that renders nothing
-   * wider: the sidebar sparkline, the clock faces.
+   * `"display"` is the visible window alone, for a consumer that renders
+   * nothing wider: the sidebar sparkline, the clock faces.
    *
-   * Defaults to `"buffer"`: over-reaching costs points a chart declines to draw,
-   * where under-reaching silently drops points it is drawing.
+   * Defaults to `"buffer"`: over-reaching costs points a chart declines to
+   * draw, where under-reaching silently drops points it is drawing.
    */
   dataWindow?: "buffer" | "display";
   /** Fired once when `serverChartData` first becomes non-null. */
@@ -209,8 +225,14 @@ export interface ChartDataEngineOptions {
 
 /** All lookup functions for tooltip and inspection consumers */
 export interface SeriesFinders {
-  findSeriesValue: <T extends { time: Date }>(series: T[], time: Date) => T | undefined;
-  findBasalValue: <T extends { timestamp?: number }>(series: T[], time: Date) => T | undefined;
+  findSeriesValue: <T extends { time: Date }>(
+    series: T[],
+    time: Date
+  ) => T | undefined;
+  findBasalValue: <T extends { timestamp?: number }>(
+    series: T[],
+    time: Date
+  ) => T | undefined;
   findNearbyBolus: (time: Date) => BolusMarkerData | undefined;
   findNearbyCarbs: (time: Date) => CarbMarkerData | undefined;
   findNearbyDeviceEvent: (time: Date) => DeviceEventMarkerData | undefined;
@@ -257,7 +279,7 @@ export interface ChartDataEngine {
   readonly bgCheckMarkers: BgCheckMarkerData[];
   readonly iobData: SeriesPoint[];
   readonly cobData: SeriesPoint[];
-  readonly basalData: BasalPoint[];
+  readonly basalData: ChartBasalPoint[];
   readonly scheduledBasalData: ScheduledBasalPoint[];
   readonly maxIOB: number;
   readonly maxBasalRate: number;
@@ -268,15 +290,7 @@ export interface ChartDataEngine {
   readonly veryHighThreshold: number;
   readonly veryLowThreshold: number;
   readonly glucoseYMax: number;
-  readonly thresholds: {
-    low: number;
-    high: number;
-    veryLow: number;
-    veryHigh: number;
-    glucoseYMax: number;
-    targetLow: number | null;
-    targetHigh: number | null;
-  };
+  readonly thresholds: ChartThresholds;
   readonly medianGlucose: number;
 
   // State spans (processed / display-clipped)
@@ -300,6 +314,51 @@ export interface ChartDataEngine {
 
   // Series finders
   readonly finders: SeriesFinders;
+}
+
+// ===== Date helpers =====
+// Outside the factory: svelte/prefer-svelte-reactivity reports every Date built
+// inside an exported function, and none of these is ever mutated.
+
+function toDate(date: Date | string | undefined): Date {
+  if (!date) return new Date();
+  return date instanceof Date ? date : new Date(date);
+}
+
+function hoursEndingAt(endMs: number, hours: number): { from: Date; to: Date } {
+  return {
+    from: new Date(endMs - hours * 60 * 60 * 1000),
+    to: new Date(endMs),
+  };
+}
+
+function dateSpan(startMs: number, endMs: number): { start: Date; end: Date } {
+  return { start: new Date(startMs), end: new Date(endMs) };
+}
+
+function shiftDate(date: Date, ms: number): Date {
+  return new Date(date.getTime() + ms);
+}
+
+function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
+  spans: T[],
+  rangeStart: number,
+  rangeEnd: number
+) {
+  if (!spans) return [];
+  return spans
+    .filter((span) => {
+      const spanStart = span.startTime.getTime();
+      const spanEnd = span.endTime?.getTime() ?? rangeEnd;
+      return spanEnd > rangeStart && spanStart < rangeEnd;
+    })
+    .map((span) => ({
+      ...span,
+      displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
+      displayEnd: new Date(
+        Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
+      ),
+    }));
 }
 
 // ===== Factory =====
@@ -328,15 +387,6 @@ export function createChartDataEngine(
   let processedHistoricalPromise =
     $state<Promise<TransformedChartData | null> | null>(null);
 
-  // ---- Helpers ----
-  function normalizeDate(
-    date: Date | string | undefined,
-    fallback: Date
-  ): Date {
-    if (!date) return fallback;
-    return date instanceof Date ? date : new Date(date);
-  }
-
   // ---- Time ranges ----
   const nowMinute = $derived(Math.floor(realtimeStore.now / 60000) * 60000);
 
@@ -350,34 +400,31 @@ export function createChartDataEngine(
 
   const effectiveShowPredictions = $derived(
     (options.enablePredictions ?? true) &&
-    (predictionServiceAvailable || hasExternalPredictions)
+      (predictionServiceAvailable || hasExternalPredictions)
   );
 
-  const fullDataRange = $derived({
-    from: options.dateRange
-      ? normalizeDate(options.dateRange.from, new Date())
-      : new Date(nowMinute - GLUCOSE_CHART_FETCH_HOURS * 60 * 60 * 1000),
-    to: options.dateRange
-      ? normalizeDate(options.dateRange.to, new Date())
-      : new Date(nowMinute),
-  });
+  const fullDataRange = $derived(
+    options.dateRange
+      ? {
+          from: toDate(options.dateRange.from),
+          to: toDate(options.dateRange.to),
+        }
+      : hoursEndingAt(nowMinute, GLUCOSE_CHART_FETCH_HOURS)
+  );
 
-  const displayDateRange = $derived({
-    from: options.dateRange
-      ? normalizeDate(options.dateRange.from, new Date())
-      : new Date(nowMinute - lookbackHours * 60 * 60 * 1000),
-    to: options.dateRange
-      ? normalizeDate(options.dateRange.to, new Date())
-      : new Date(nowMinute),
-  });
+  const displayDateRange = $derived(
+    options.dateRange
+      ? {
+          from: toDate(options.dateRange.from),
+          to: toDate(options.dateRange.to),
+        }
+      : hoursEndingAt(nowMinute, lookbackHours)
+  );
 
   const displayDateRangeWithPredictions = $derived({
     from: displayDateRange.from,
     to: effectiveShowPredictions
-      ? new Date(
-        displayDateRange.to.getTime() +
-        predictionMinutes.current * 60 * 1000
-      )
+      ? shiftDate(displayDateRange.to, predictionMinutes.current * 60 * 1000)
       : displayDateRange.to,
   });
 
@@ -387,9 +434,7 @@ export function createChartDataEngine(
     from: fullDataRange.from,
     to:
       effectiveShowPredictions && predictionData
-        ? new Date(
-          fullDataRange.to.getTime() + predictionHours * 60 * 60 * 1000
-        )
+        ? shiftDate(fullDataRange.to, predictionHours * 60 * 60 * 1000)
         : fullDataRange.to,
   });
 
@@ -575,46 +620,7 @@ export function createChartDataEngine(
   // is re-executed on every read, not once per change. This is the most-read
   // series in the app, and a fresh array from it re-dirties the chart's entire
   // extent and scale chain, which reads it again. See the note on `stableBy`.
-  const mergeGlucose = stableBy(
-    (
-      chartData: TransformedChartData | null,
-      entries: typeof realtimeStore.entries,
-      fromMs: number,
-      toMs: number
-    ): GlucosePoint[] => {
-      const base = chartData?.glucoseData ?? [];
-      if (!chartData) return base as GlucosePoint[];
-
-      const thresholds = resolveGlucoseThresholds(chartData.thresholds);
-
-      const byMills = new Map<number, GlucosePoint>();
-      for (const p of base) byMills.set(p.time.getTime(), p);
-
-      for (const e of entries) {
-        if (
-          e.type !== "sgv" ||
-          e.mills == null ||
-          e.sgv == null ||
-          e.mills < fromMs ||
-          e.mills > toMs ||
-          byMills.has(e.mills)
-        ) {
-          continue;
-        }
-        byMills.set(e.mills, {
-          time: new Date(e.mills),
-          sgv: e.sgv,
-          direction: e.direction,
-          dataSource: e.data_source,
-          color: getGlucoseColor(e.sgv, thresholds),
-        });
-      }
-
-      return [...byMills.values()].sort(
-        (a, b) => a.time.getTime() - b.time.getTime()
-      ) as GlucosePoint[];
-    }
-  );
+  const mergeGlucose = stableBy(mergeRealtimeGlucose);
 
   const glucoseData = $derived(
     mergeGlucose(
@@ -626,28 +632,18 @@ export function createChartDataEngine(
   );
 
   // ---- Series derivations ----
-  const bolusMarkers = $derived(
-    (serverChartData?.bolusMarkers ?? []) as BolusMarkerData[]
-  );
-  const carbMarkers = $derived(
-    (serverChartData?.carbMarkers ?? []) as CarbMarkerData[]
-  );
+  const bolusMarkers = $derived(serverChartData?.bolusMarkers ?? []);
+  const carbMarkers = $derived(serverChartData?.carbMarkers ?? []);
   const deviceEventMarkers = $derived(
-    (serverChartData?.deviceEventMarkers ?? []) as DeviceEventMarkerData[]
+    serverChartData?.deviceEventMarkers ?? []
   );
   const basalInjectionMarkers = $derived(
-    (serverChartData?.basalInjectionMarkers ?? []) as BasalInjectionMarkerData[]
+    serverChartData?.basalInjectionMarkers ?? []
   );
-  const bgCheckMarkers = $derived(
-    (serverChartData?.bgCheckMarkers ?? []) as BgCheckMarkerData[]
-  );
-  const iobData = $derived(
-    (serverChartData?.iobSeries ?? []) as SeriesPoint[]
-  );
-  const cobData = $derived(
-    (serverChartData?.cobSeries ?? []) as SeriesPoint[]
-  );
-  const basalData = $derived((serverChartData?.basalSeries ?? []) as BasalPoint[]);
+  const bgCheckMarkers = $derived(serverChartData?.bgCheckMarkers ?? []);
+  const iobData = $derived(serverChartData?.iobSeries ?? []);
+  const cobData = $derived(serverChartData?.cobSeries ?? []);
+  const basalData = $derived(serverChartData?.basalSeries ?? []);
   const maxIOB = $derived(serverChartData?.maxIob ?? 3);
   const maxBasalRate = $derived(serverChartData?.maxBasalRate ?? 3.0);
 
@@ -659,22 +655,14 @@ export function createChartDataEngine(
   );
 
   // ---- Thresholds ----
-  // The tenant's own cut-points, with the shared fallback filling any the server
-  // omitted (it sends 0 when there is no profile yet).
   const resolvedThresholds = $derived(
-    resolveGlucoseThresholds(serverChartData?.thresholds)
+    resolveChartThresholds(serverChartData?.thresholds)
   );
   const lowThreshold = $derived(resolvedThresholds.low);
   const highThreshold = $derived(resolvedThresholds.high);
   const veryHighThreshold = $derived(resolvedThresholds.veryHigh);
   const veryLowThreshold = $derived(resolvedThresholds.veryLow);
-  const glucoseYMax = $derived(
-    serverChartData?.thresholds?.glucoseYMax || 300
-  );
-  // Personal target reference line; `??` (not `||`) so a legitimate 0 isn't
-  // dropped, and absent target (no profile) stays null rather than rendering.
-  const targetLow = $derived(serverChartData?.thresholds?.targetLow ?? null);
-  const targetHigh = $derived(serverChartData?.thresholds?.targetHigh ?? null);
+  const glucoseYMax = $derived(resolvedThresholds.glucoseYMax);
 
   const medianGlucose = $derived.by(() => {
     if (glucoseData.length === 0) return 100;
@@ -697,27 +685,6 @@ export function createChartDataEngine(
   const systemEvents = $derived(serverChartData?.systemEventMarkers ?? []);
   const trackerMarkers = $derived(serverChartData?.trackerMarkers ?? []);
 
-  function processSpans<T extends { startTime: Date; endTime?: Date | null }>(
-    spans: T[],
-    rangeStart: number,
-    rangeEnd: number
-  ) {
-    if (!spans) return [];
-    return spans
-      .filter((span) => {
-        const spanStart = span.startTime.getTime();
-        const spanEnd = span.endTime?.getTime() ?? rangeEnd;
-        return spanEnd > rangeStart && spanStart < rangeEnd;
-      })
-      .map((span) => ({
-        ...span,
-        displayStart: new Date(Math.max(span.startTime.getTime(), rangeStart)),
-        displayEnd: new Date(
-          Math.min(span.endTime?.getTime() ?? rangeEnd, rangeEnd)
-        ),
-      }));
-  }
-
   const processedStateSpans = $derived.by(() => {
     const rangeStart = fullDataRange.from.getTime();
     const rangeEnd = fullDataRange.to.getTime();
@@ -730,7 +697,7 @@ export function createChartDataEngine(
       (span) => ({
         ...span,
         profileName:
-          (span.metadata?.profileName as string) ?? span.state ?? "",
+          metadataString(span.metadata?.profileName) ?? span.state ?? "",
       })
     );
 
@@ -740,10 +707,10 @@ export function createChartDataEngine(
       (span) => ({
         ...span,
         rate:
-          (span.metadata?.rate as number) ??
-          (span.metadata?.absolute as number) ??
+          metadataNumber(span.metadata?.rate) ??
+          metadataNumber(span.metadata?.absolute) ??
           null,
-        percent: (span.metadata?.percent as number) ?? null,
+        percent: metadataNumber(span.metadata?.percent) ?? null,
       })
     );
 
@@ -774,19 +741,16 @@ export function createChartDataEngine(
   const displayProfileSpans = $derived(processedStateSpans.profile);
   const displayActivitySpans = $derived(processedStateSpans.activity);
   const displayTempBasalSpans = $derived(processedStateSpans.tempBasal);
-  const displayBasalDeliverySpans = $derived(
-    processedStateSpans.basalDelivery
-  );
+  const displayBasalDeliverySpans = $derived(processedStateSpans.basalDelivery);
   const displaySystemEvents = $derived(processedStateSpans.events);
 
   // ---- Tracker markers filtered to display range ----
   const displayTrackerMarkers = $derived.by(() => {
     const rangeStart = displayDateRange.from.getTime();
-    const predEnd = effectiveShowPredictions && predictionData
-      ? new Date(
-        displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
-      ).getTime()
-      : displayDateRange.to.getTime();
+    const predEnd =
+      effectiveShowPredictions && predictionData
+        ? displayDateRange.to.getTime() + predictionHours * 60 * 60 * 1000
+        : displayDateRange.to.getTime();
     return trackerMarkers
       .filter((m) => {
         const t = m.time.getTime();
@@ -817,10 +781,7 @@ export function createChartDataEngine(
       timeSinceLastUpdate > STALE_THRESHOLD_MS &&
       lastBasalSourceTime >= rangeStartTime
     ) {
-      return {
-        start: new Date(lastBasalSourceTime),
-        end: new Date(rangeEndTime),
-      };
+      return dateSpan(lastBasalSourceTime, rangeEndTime);
     }
     return null;
   });
@@ -835,15 +796,14 @@ export function createChartDataEngine(
     });
     if (activeSpan) return activeSpan.state ?? "Automatic";
     const sorted = [...displayPumpModeSpans].sort(
-      (a, b) =>
-        (b.endTime?.getTime() ?? now) - (a.endTime?.getTime() ?? now)
+      (a, b) => (b.endTime?.getTime() ?? now) - (a.endTime?.getTime() ?? now)
     );
     return sorted[0]?.state ?? "Automatic";
   });
 
-  const uniquePumpModes = $derived([
-    ...new Set(displayPumpModeSpans.map((s) => s.state ?? "")),
-  ]);
+  const uniquePumpModes = $derived(
+    distinct(displayPumpModeSpans.map((s) => s.state ?? ""))
+  );
 
   // ---- Series finders ----
   const bisectDate = bisector((d: { time: Date }) => d.time).left;
@@ -937,8 +897,7 @@ export function createChartDataEngine(
   function findNearbySystemEvent(time: Date) {
     return displaySystemEvents.find(
       (event) =>
-        Math.abs(event.time.getTime() - time.getTime()) <
-        TREATMENT_PROXIMITY_MS
+        Math.abs(event.time.getTime() - time.getTime()) < TREATMENT_PROXIMITY_MS
     );
   }
 
@@ -974,57 +933,129 @@ export function createChartDataEngine(
   };
 
   return {
-    get serverChartData() { return serverChartData; },
-    get glucoseData() { return glucoseData; },
-    get predictionData() { return predictionData; },
-    get predictionError() { return predictionError; },
-    get predictionServiceAvailable() { return predictionServiceAvailable; },
-    get effectiveShowPredictions() { return effectiveShowPredictions; },
-    get nowMinute() { return nowMinute; },
-    get lookbackHours() { return lookbackHours; },
-    get fullDataRange() { return fullDataRange; },
-    get displayDateRange() { return displayDateRange; },
-    get displayDateRangeWithPredictions() { return displayDateRangeWithPredictions; },
-    get fullXDomain() { return fullXDomain; },
-    get bolusMarkers() { return bolusMarkers; },
-    get carbMarkers() { return carbMarkers; },
-    get deviceEventMarkers() { return deviceEventMarkers; },
-    get basalInjectionMarkers() { return basalInjectionMarkers; },
-    get bgCheckMarkers() { return bgCheckMarkers; },
-    get iobData() { return iobData; },
-    get cobData() { return cobData; },
-    get basalData() { return basalData; },
-    get scheduledBasalData() { return scheduledBasalData; },
-    get maxIOB() { return maxIOB; },
-    get maxBasalRate() { return maxBasalRate; },
-    get lowThreshold() { return lowThreshold; },
-    get highThreshold() { return highThreshold; },
-    get veryHighThreshold() { return veryHighThreshold; },
-    get veryLowThreshold() { return veryLowThreshold; },
-    get glucoseYMax() { return glucoseYMax; },
-    get thresholds() {
-      return {
-        low: lowThreshold,
-        high: highThreshold,
-        veryLow: veryLowThreshold,
-        veryHigh: veryHighThreshold,
-        glucoseYMax,
-        targetLow,
-        targetHigh,
-      };
+    get serverChartData() {
+      return serverChartData;
     },
-    get medianGlucose() { return medianGlucose; },
-    get displayPumpModeSpans() { return displayPumpModeSpans; },
-    get displayOverrideSpans() { return displayOverrideSpans; },
-    get displayProfileSpans() { return displayProfileSpans; },
-    get displayActivitySpans() { return displayActivitySpans; },
-    get displayTempBasalSpans() { return displayTempBasalSpans; },
-    get displayBasalDeliverySpans() { return displayBasalDeliverySpans; },
-    get displaySystemEvents() { return displaySystemEvents; },
-    get displayTrackerMarkers() { return displayTrackerMarkers; },
-    get staleBasalData() { return staleBasalData; },
-    get currentPumpMode() { return currentPumpMode; },
-    get uniquePumpModes() { return uniquePumpModes; },
+    get glucoseData() {
+      return glucoseData;
+    },
+    get predictionData() {
+      return predictionData;
+    },
+    get predictionError() {
+      return predictionError;
+    },
+    get predictionServiceAvailable() {
+      return predictionServiceAvailable;
+    },
+    get effectiveShowPredictions() {
+      return effectiveShowPredictions;
+    },
+    get nowMinute() {
+      return nowMinute;
+    },
+    get lookbackHours() {
+      return lookbackHours;
+    },
+    get fullDataRange() {
+      return fullDataRange;
+    },
+    get displayDateRange() {
+      return displayDateRange;
+    },
+    get displayDateRangeWithPredictions() {
+      return displayDateRangeWithPredictions;
+    },
+    get fullXDomain() {
+      return fullXDomain;
+    },
+    get bolusMarkers() {
+      return bolusMarkers;
+    },
+    get carbMarkers() {
+      return carbMarkers;
+    },
+    get deviceEventMarkers() {
+      return deviceEventMarkers;
+    },
+    get basalInjectionMarkers() {
+      return basalInjectionMarkers;
+    },
+    get bgCheckMarkers() {
+      return bgCheckMarkers;
+    },
+    get iobData() {
+      return iobData;
+    },
+    get cobData() {
+      return cobData;
+    },
+    get basalData() {
+      return basalData;
+    },
+    get scheduledBasalData() {
+      return scheduledBasalData;
+    },
+    get maxIOB() {
+      return maxIOB;
+    },
+    get maxBasalRate() {
+      return maxBasalRate;
+    },
+    get lowThreshold() {
+      return lowThreshold;
+    },
+    get highThreshold() {
+      return highThreshold;
+    },
+    get veryHighThreshold() {
+      return veryHighThreshold;
+    },
+    get veryLowThreshold() {
+      return veryLowThreshold;
+    },
+    get glucoseYMax() {
+      return glucoseYMax;
+    },
+    get thresholds() {
+      return resolvedThresholds;
+    },
+    get medianGlucose() {
+      return medianGlucose;
+    },
+    get displayPumpModeSpans() {
+      return displayPumpModeSpans;
+    },
+    get displayOverrideSpans() {
+      return displayOverrideSpans;
+    },
+    get displayProfileSpans() {
+      return displayProfileSpans;
+    },
+    get displayActivitySpans() {
+      return displayActivitySpans;
+    },
+    get displayTempBasalSpans() {
+      return displayTempBasalSpans;
+    },
+    get displayBasalDeliverySpans() {
+      return displayBasalDeliverySpans;
+    },
+    get displaySystemEvents() {
+      return displaySystemEvents;
+    },
+    get displayTrackerMarkers() {
+      return displayTrackerMarkers;
+    },
+    get staleBasalData() {
+      return staleBasalData;
+    },
+    get currentPumpMode() {
+      return currentPumpMode;
+    },
+    get uniquePumpModes() {
+      return uniquePumpModes;
+    },
     finders,
   };
 }

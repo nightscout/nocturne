@@ -165,7 +165,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         // Set appropriate headers
         Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
-        Response.Headers["Cache-Control"] = "public, max-age=60";
+        Response.Headers["Cache-Control"] = "private, max-age=60";
 
         return Ok(entry.ToV3Response());
     }

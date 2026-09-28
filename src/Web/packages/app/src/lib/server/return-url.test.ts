@@ -20,6 +20,14 @@ describe("safeReturnUrl", () => {
     expect(safeReturnUrl("/path\\..\\..")).toBe("/");
   });
 
+  it("falls back for a whitespace-smuggled host", () => {
+    expect(safeReturnUrl("/\t/evil.test")).toBe("/");
+    expect(safeReturnUrl("/\n/evil.test")).toBe("/");
+    expect(safeReturnUrl("/\r/evil.test")).toBe("/");
+    expect(safeReturnUrl("/ /evil.test")).toBe("/");
+    expect(safeReturnUrl("/reports\u0000")).toBe("/");
+  });
+
   it("falls back for a relative path", () => {
     expect(safeReturnUrl("reports")).toBe("/");
   });

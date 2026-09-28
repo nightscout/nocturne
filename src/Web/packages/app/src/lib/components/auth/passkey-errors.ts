@@ -40,6 +40,10 @@ export function parseCeremonyOptions<T = Record<string, unknown>>(
     throw new CeremonyOptionsError("The passkey options were not an object");
   }
 
+  // The options are the WebAuthn JSON the API relays from its FIDO library and
+  // the browser validates in the ceremony itself; checking only that an object
+  // arrived is deliberate, so its shape is asserted here and nowhere else.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- see above
   return parsed as T;
 }
 

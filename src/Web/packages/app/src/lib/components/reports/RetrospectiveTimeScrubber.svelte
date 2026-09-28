@@ -1,7 +1,10 @@
 <script lang="ts">
   import { Slider } from "$lib/components/ui/slider";
   import { Button } from "$lib/components/ui/button";
-  import { Play, Pause, SkipBack, SkipForward } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
+  import Pause from "@lucide/svelte/icons/pause";
+  import SkipBack from "@lucide/svelte/icons/skip-back";
+  import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { onDestroy } from "svelte";
   import { time } from "$lib/utils/formatting";
 
@@ -235,7 +238,7 @@
 
   <!-- Time markers -->
   <div class="flex justify-between text-xs text-muted-foreground px-2">
-    {#each [0, 6, 12, 18, 24] as hour}
+    {#each [0, 6, 12, 18, 24] as hour (hour)}
       <span>
         {hour === 0
           ? "12a"

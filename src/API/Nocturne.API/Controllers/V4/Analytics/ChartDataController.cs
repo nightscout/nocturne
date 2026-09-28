@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Analytics;
@@ -80,6 +81,9 @@ public class ChartDataController : ControllerBase
         if (endTime <= startTime)
             return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
 
+        if (this.RejectDateSpan(startTime, endTime) is { } overlong)
+            return overlong;
+
         if (intervalMinutes < 1 || intervalMinutes > 60)
             return Problem(detail: "intervalMinutes must be between 1 and 60", statusCode: 400, title: "Bad Request");
 
@@ -106,7 +110,7 @@ public class ChartDataController : ControllerBase
     [HttpGet("basal-series")]
     [RemoteQuery]
     [RequireScope(Scope.TreatmentsRead)]
-    [ResponseCache(Duration = 60, VaryByQueryKeys = new[] { "*" })]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Client)]
     [ProducesResponseType(typeof(List<BasalPoint>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -119,6 +123,9 @@ public class ChartDataController : ControllerBase
     {
         if (endTime <= startTime)
             return Problem(detail: "endTime must be greater than startTime", statusCode: 400, title: "Bad Request");
+
+        if (this.RejectDateSpan(startTime, endTime) is { } overlong)
+            return overlong;
 
         var basalSeries = await _chartDataService.GetBasalSeriesAsync(startTime, endTime, cancellationToken);
 

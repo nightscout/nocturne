@@ -14,7 +14,6 @@ import { remoteErrorMessage } from "$lib/api/remote-error";
 import { SETTINGS_LOAD_FAILED } from "$lib/api/ui-settings-messages";
 import type {
   UISettingsConfiguration,
-  UserAlarmConfiguration as ApiUserAlarmConfiguration,
   DeviceSettings,
   AlgorithmSettings,
   FeatureSettings,
@@ -26,9 +25,12 @@ import type {
 import type { UserAlarmConfiguration } from "$lib/types/alarm-profile";
 import {
   createDefaultUserAlarmConfiguration,
+  fromApiAlarmConfiguration,
   normalizeAlarmPriority,
   normalizeAlarmType,
+  toApiAlarmConfiguration,
 } from "$lib/types/alarm-profile";
+import { isRecord } from "$lib/utils/type-guards";
 
 const SETTINGS_STORE_KEY = Symbol("settings-store");
 
@@ -118,7 +120,9 @@ export class SettingsStore {
 
       // Load alarm configuration from notifications or create default
       if (settings.notifications?.alarmConfiguration) {
-        this.alarmConfiguration = JSON.parse(JSON.stringify(settings.notifications.alarmConfiguration));
+        this.alarmConfiguration = fromApiAlarmConfiguration(
+          JSON.parse(JSON.stringify(settings.notifications.alarmConfiguration))
+        );
       } else {
         this.alarmConfiguration = createDefaultUserAlarmConfiguration();
       }
@@ -154,7 +158,7 @@ export class SettingsStore {
   getSettings(): UISettingsConfiguration {
     const notifications = this.notifications ? {
       ...this.notifications,
-      alarmConfiguration: this.alarmConfiguration as unknown as NotificationSettings["alarmConfiguration"],
+      alarmConfiguration: toApiAlarmConfiguration(this.alarmConfiguration),
     } : undefined;
 
     return {
@@ -222,22 +226,24 @@ export class SettingsStore {
       };
 
       const savedConfig = await getApiClient().uiSettings.saveAlarmConfiguration(
-        normalizedConfig as unknown as ApiUserAlarmConfiguration
+        toApiAlarmConfiguration(normalizedConfig)
       );
 
-      this.alarmConfiguration = savedConfig as unknown as UserAlarmConfiguration;
+      this.alarmConfiguration = fromApiAlarmConfiguration(savedConfig);
 
       if (this.notifications) {
-        this.notifications.alarmConfiguration = savedConfig as NotificationSettings["alarmConfiguration"];
+        this.notifications.alarmConfiguration = savedConfig;
       }
 
       this._hasChanges = false;
       return true;
     } catch (e) {
       if (e && typeof e === "object" && "errors" in e) {
-        const errors = (e as { errors?: Record<string, string[]> }).errors ?? {};
+        const errors = isRecord(e.errors) ? e.errors : {};
         const messages = Object.entries(errors)
-          .flatMap(([key, values]) => values.map((value) => `${key}: ${value}`))
+          .flatMap(([key, values]) =>
+            Array.isArray(values) ? values.map((value) => `${key}: ${value}`) : []
+          )
           .filter(Boolean);
         this.error = messages.length > 0 ? messages.join(" | ") : "Validation error";
       } else {

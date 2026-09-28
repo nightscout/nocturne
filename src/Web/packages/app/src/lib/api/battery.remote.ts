@@ -15,8 +15,8 @@ export const getBatteryReportData = query(
     const { locals } = getRequestEvent();
     const { apiClient } = locals;
 
-    const fromDate = new Date(props.from);
-    const toDate = new Date(props.to);
+    const fromDate = new Date(props.from).toISOString();
+    const toDate = new Date(props.to).toISOString();
 
     const [statistics, cycles, readings] = await Promise.all([
       apiClient.battery.getBatteryStatistics(

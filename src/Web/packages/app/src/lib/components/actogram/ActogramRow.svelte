@@ -1,10 +1,12 @@
-<script lang="ts">
+<script lang="ts" generics="T extends ActogramPoint">
   import type { Snippet } from 'svelte';
   import { Chart, Svg, Spline, Circle, Tooltip } from 'layerchart';
   import { scaleTime } from 'd3-scale';
-  import type { ScaleTime } from 'd3-scale';
+  import { timeScale } from '$lib/components/charts/scale-guards';
   import { curveMonotoneX } from 'd3';
+  import { FALLBACK_GLUCOSE_Y_MAX } from '$lib/constants/glucose-thresholds';
   import { bg, bgLabel, time } from '$lib/utils/formatting';
+  import { dashClass } from '$lib/components/charts/print/chart-print-patterns';
   import {
     MS_PER_HOUR,
     HOURS_PER_DAY,
@@ -16,16 +18,17 @@
     type GlucosePoint,
     type GlucoseThresholds,
     type RowDataPoint,
+    resolveTargetRange,
   } from './actogram';
 
   interface Props {
     day: Date;
-    data: RowDataPoint<ActogramPoint>[];
+    data: RowDataPoint<T>[];
     bgData: RowDataPoint<GlucosePoint>[];
     thresholds: GlucoseThresholds | undefined;
     height: number;
-    row: Snippet<[ActogramRowContext]>;
-    tooltipValue?: Snippet<[{ point: ActogramPoint; day: Date }]>;
+    row: Snippet<[ActogramRowContext<T>]>;
+    tooltipValue?: Snippet<[{ point: T; day: Date }]>;
   }
 
   let { day, data, bgData, thresholds, height, row, tooltipValue }: Props = $props();
@@ -46,21 +49,20 @@
   );
 </script>
 
-<div style:height="{height}px">
+<div class="h-(--row-h)" style:--row-h="{height}px">
 <Chart
   data={bgChartData}
   x="time"
   y="sgv"
   xScale={scaleTime()}
   xDomain={[day, xDomainEnd]}
-  yDomain={[0, thresholds?.glucoseYMax ?? 300]}
+  yDomain={[0, thresholds?.glucoseYMax ?? FALLBACK_GLUCOSE_Y_MAX]}
   padding={{ left: 0, top: 0, bottom: 0, right: 0 }}
   tooltipContext={{ mode: "manual" }}
 >
   {#snippet children({ context })}
-    {@const rowContext: ActogramRowContext = {
-      // LayerChart types xScale as AnyScale; we know it's ScaleTime because we pass scaleTime() above
-      xScale: context.xScale as unknown as ScaleTime<number, number>,
+    {@const rowContext: ActogramRowContext<T> = {
+      xScale: timeScale(context.xScale),
       width: context.width,
       height: context.height,
       data,
@@ -72,15 +74,31 @@
 
       <!-- BG overlay line (middle layer) -->
       {#if bgChartData.length > 1 && thresholds}
+        {@const target = resolveTargetRange(thresholds)}
+        <!-- The dots' range colour is lost in black and white; these limits carry it instead. -->
+        {#each [target.low, target.high] as limit (limit)}
+          <line
+            x1={0}
+            x2={context.width}
+            y1={context.yScale(limit)}
+            y2={context.yScale(limit)}
+            stroke="var(--muted-foreground)"
+            stroke-width={0.5}
+            stroke-opacity={0.7}
+            class="hidden [.chart-patterns-on_&]:inline {dashClass('target-range-limit')}"
+          />
+        {/each}
         <Spline
           data={bgChartData}
           x={(d) => d.time}
           y={(d) => d.sgv}
           curve={curveMonotoneX}
-          class="stroke-muted-foreground/50 fill-none"
+          class="stroke-muted-foreground/50 fill-none print:stroke-muted-foreground"
           strokeWidth={1.5}
         />
-        <!-- One data-mode Circle for the whole row, not a Circle per reading:
+        <!-- Paper drops the dots: their range colour prints as grey, and grey
+             dots read as the row's own marks. The target limits carry range.
+             One data-mode Circle for the whole row, not a Circle per reading:
              each layerchart mark registers with the chart and every
              registration re-runs the chart's mark deriveds, so N points cost
              O(N^2). Data mode renders all points from a single mark. -->
@@ -91,7 +109,7 @@
           cy={(d) => d.sgv}
           r={2}
           fill={(d) => d.color}
-          class="opacity-80"
+          class="opacity-80 print:hidden"
         />
       {/if}
 
@@ -121,7 +139,7 @@
           const hoursFromStart = (time.getTime() - day.getTime()) / MS_PER_HOUR;
           const nearestBg = findNearestPoint(bgData, hoursFromStart);
           const nearestData = findNearestPoint(data, hoursFromStart);
-          context.tooltip?.show(e, { time, bgPoint: nearestBg, dataPoint: nearestData } satisfies ActogramTooltipData);
+          context.tooltip?.show(e, { time, bgPoint: nearestBg, dataPoint: nearestData } satisfies ActogramTooltipData<T>);
         }}
         onpointerleave={() => context.tooltip?.hide()}
       />
@@ -131,7 +149,7 @@
       class="print:hidden bg-popover/95 text-popover-foreground rounded-lg border border-border px-2.5 py-1.5 shadow-xl"
     >
       {#snippet children({ data: tooltipData })}
-        {@const d = tooltipData as ActogramTooltipData}
+        {@const d: ActogramTooltipData<T> | undefined = tooltipData}
         {#if d}
           <div class="space-y-1 text-xs">
             <div class="font-medium tabular-nums">
@@ -139,7 +157,7 @@
             </div>
             {#if d.bgPoint}
               <div class="flex items-center gap-1.5">
-                <div class="size-2 rounded-full" style:background={d.bgPoint.point.color}></div>
+                <div class="size-2 rounded-full bg-(--dot)" style:--dot={d.bgPoint.point.color}></div>
                 <span class="text-muted-foreground">Glucose</span>
                 <span class="ml-auto font-mono font-medium tabular-nums">{bg(d.bgPoint.point.sgv)} {bgLabel()}</span>
               </div>

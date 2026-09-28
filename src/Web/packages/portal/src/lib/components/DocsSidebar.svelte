@@ -1,6 +1,19 @@
 <script lang="ts">
     import { page } from "$app/state";
-    import { Rocket, Download, Settings, Shield, Share2, Bell, Bot, Code2, KeyRound, Activity, LayoutGrid, Package, Utensils, ChevronRight, ChevronDown } from "@lucide/svelte";
+    import Rocket from "@lucide/svelte/icons/rocket";
+    import Download from "@lucide/svelte/icons/download";
+    import Settings from "@lucide/svelte/icons/settings";
+    import Shield from "@lucide/svelte/icons/shield";
+    import Share2 from "@lucide/svelte/icons/share-2";
+    import Bell from "@lucide/svelte/icons/bell";
+    import Bot from "@lucide/svelte/icons/bot";
+    import Code2 from "@lucide/svelte/icons/code-xml";
+    import KeyRound from "@lucide/svelte/icons/key-round";
+    import Activity from "@lucide/svelte/icons/activity";
+    import LayoutGrid from "@lucide/svelte/icons/layout-grid";
+    import Package from "@lucide/svelte/icons/package";
+    import Utensils from "@lucide/svelte/icons/utensils";
+    import ChevronRight from "@lucide/svelte/icons/chevron-right";
     import { DOCS_NAV_SECTIONS, type DocsSectionId } from "$lib/data/docs-nav";
     import { track } from "$lib/analytics";
 
@@ -24,32 +37,21 @@
     const isActive = (href: string) => {
         return page.url.pathname === href;
     };
-
-    const isSectionActive = (items: { href: string }[]) => {
-        return items.some((item) => page.url.pathname === item.href);
-    };
 </script>
 
 <nav class="space-y-6">
     {#each DOCS_NAV_SECTIONS as section (section.id)}
         {@const Icon = ICONS[section.id]}
         <div>
-            <div
-                class="flex items-center gap-2 text-sm font-semibold text-foreground mb-2"
-            >
+            <div class="flex items-center gap-2 text-sm font-semibold text-foreground mb-2">
                 <Icon class="w-4 h-4" />
                 {section.title}
-                {#if isSectionActive(section.items)}
-                    <ChevronDown class="w-3 h-3 ml-auto" />
-                {:else}
-                    <ChevronRight class="w-3 h-3 ml-auto" />
-                {/if}
             </div>
             <ul class="space-y-1 ml-6">
                 {#each section.items as item (item.href)}
                     <li>
-                        <a
-                            href={item.href}
+                        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a Pathname from docs-nav.ts, checked against the route manifest -->
+                        <a href={item.href}
                             onclick={() => track("Docs Nav", { section: section.id })}
                             class="flex items-center gap-2 py-1.5 text-sm transition-colors {isActive(item.href)
                                 ? 'text-primary font-medium'

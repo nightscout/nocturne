@@ -28,4 +28,10 @@ public interface ICanonicalGlucoseService
     /// caller, exactly as it did when consumers used the newest reading of a write batch.
     /// </summary>
     Task<SensorGlucose?> GetLatestAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Canonical readings timestamped at or after <paramref name="since"/>, newest first, under the
+    /// same source filtering as <see cref="GetLatestAsync"/>.
+    /// </summary>
+    Task<IReadOnlyList<SensorGlucose>> GetRecentAsync(DateTime since, CancellationToken ct = default);
 }

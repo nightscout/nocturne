@@ -110,13 +110,19 @@
       return getGlucoseColorContinuous(sgv);
     return getGlucoseColor(sgv, thresholds);
   }
+
+  // A tick on the track's top edge prints level with the swim lane's gutter label.
+  const printTicks = $derived.by(() => {
+    const [, top] = glucoseAxisScale.domain();
+    return glucoseAxisScale.ticks(5).filter((v) => v < top);
+  });
 </script>
 
 {#if showAxis}
   <Axis
     placement="left"
     scale={glucoseAxisScale}
-    ticks={5}
+    ticks={ctx.printing ? printTicks : 5}
     format={(v) => String(bg(v))}
     tickLabelProps={{ class: "text-xs fill-muted-foreground" }}
   />

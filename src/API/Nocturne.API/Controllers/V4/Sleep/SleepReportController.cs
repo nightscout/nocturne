@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
+using Nocturne.API.Controllers.V4.Base;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
@@ -80,7 +81,7 @@ public class SleepReportController : ControllerBase
     }
 
     /// <summary>
-    /// Get a multi-night trends report. Maximum date range is 90 days.
+    /// Get a multi-night trends report, over at most <see cref="V4ReadLimits.MaxAnalyticsSpanDays"/> days.
     /// When <paramref name="source"/> is omitted, sessions are deduplicated to one per
     /// calendar night (longest sleep wins; source priority as tie-breaker).
     /// </summary>
@@ -98,11 +99,8 @@ public class SleepReportController : ControllerBase
         [FromQuery] SleepSource? source = null,
         CancellationToken cancellationToken = default)
     {
-        if ((to - from).TotalDays > 90)
-            return Problem(
-                detail: "Date range must not exceed 90 days.",
-                statusCode: StatusCodes.Status400BadRequest,
-                title: "Bad Request");
+        if (this.RejectDateSpan(from, to, V4ReadLimits.MaxAnalyticsSpanDays) is { } overlong)
+            return overlong;
 
         // Query-bound dates arrive Kind=Unspecified when the client omits an offset;
         // Npgsql rejects those against timestamptz. Same normalization as StatisticsController.

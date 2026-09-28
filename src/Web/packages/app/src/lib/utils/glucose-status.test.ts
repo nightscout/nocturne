@@ -43,7 +43,6 @@ describe("glucoseStatusSortOrder", () => {
 
 describe("getGlucoseStatusClass", () => {
   it("falls back to the Unknown style for an unrecognized status string", () => {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- simulate a server enum value this client build doesn't know
     expect(getGlucoseStatusClass("SomethingNew" as GlucoseStatus)).toEqual(
       glucoseStatusStyles[GlucoseStatus.Unknown]
     );
@@ -90,7 +89,6 @@ describe("sortTenantsByUrgency", () => {
 
   it("ranks unrecognized and missing statuses like Unknown (last)", () => {
     const sorted = sortTenantsByUrgency([
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- simulate a server enum value this client build doesn't know
       tenant("mystery", "SomethingNew" as GlucoseStatus),
       tenant("nobody", undefined),
       tenant("ok", GlucoseStatus.InRange),

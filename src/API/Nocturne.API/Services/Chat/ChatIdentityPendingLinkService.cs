@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.API.Services.Chat;
 
@@ -84,35 +85,29 @@ public sealed class ChatIdentityPendingLinkService(
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);
 
-        // NpgsqlRetryingExecutionStrategy requires user-initiated transactions
-        // to be wrapped in strategy.ExecuteAsync so the entire block can be
-        // retried as a unit on transient failures.
-        var strategy = db.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        var consumed = await db.ExecuteInTransactionAsync<ChatIdentityPendingLinkEntity?>(async attemptCt =>
         {
-            await using var tx = await db.Database.BeginTransactionAsync(ct);
-
             var row = await db.ChatIdentityPendingLinks
-                .FirstOrDefaultAsync(p => p.Token == token, ct);
+                .FirstOrDefaultAsync(p => p.Token == token, attemptCt);
 
             if (row is null || row.ExpiresAt < DateTime.UtcNow)
-            {
-                await tx.RollbackAsync(ct);
                 return null;
-            }
 
             db.ChatIdentityPendingLinks.Remove(row);
-            await db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+            await db.SaveChangesAsync(attemptCt);
+            return row;
+        }, ct: ct);
 
+        if (consumed is not null)
+        {
             logger.LogInformation(
                 "Consumed pending link token for {Platform}:{PlatformUserId} source={Source}",
-                row.Platform,
-                row.PlatformUserId,
-                row.Source);
+                consumed.Platform,
+                consumed.PlatformUserId,
+                consumed.Source);
+        }
 
-            return row;
-        });
+        return consumed;
     }
 
     /// <summary>
