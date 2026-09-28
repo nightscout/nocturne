@@ -38,8 +38,7 @@
 
   const source: StepArtSource = $derived(STEP_ART[art]);
 
-  // The player resolves its pigment compositing once, at mount, so a theme
-  // change has to remount it.
+  // Left unset, Artwork reads the host surface once; passed, a theme change rebuilds its player.
   let surface = $state(hostSurface());
   $effect(() => watchSurface((next) => (surface = next)));
 
@@ -65,15 +64,13 @@
   });
 </script>
 
-{#key `${art}:${surface}`}
-  <Artwork
-    artwork={source.artwork}
-    icon={source.icon}
-    palette={source.palette}
-    {surface}
-    motion="auto"
-    {autoplay}
-    onready={handleReady}
-    class={className}
-  />
-{/key}
+<Artwork
+  artwork={source.artwork}
+  icon={source.icon}
+  palette={source.palette}
+  {surface}
+  motion="auto"
+  {autoplay}
+  onready={handleReady}
+  class={className}
+/>

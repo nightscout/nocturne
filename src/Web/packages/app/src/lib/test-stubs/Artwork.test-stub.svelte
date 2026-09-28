@@ -17,11 +17,13 @@
     autoplay,
     artwork,
     icon,
+    surface,
   }: {
     onready?: (player: typeof fakePlayer) => void | (() => void);
     autoplay?: string;
     artwork?: string;
     icon?: { name: string };
+    surface?: string;
   } = $props();
 
   $effect(() => untrack(() => onready?.(fakePlayer)));
@@ -31,4 +33,5 @@
   data-testid="artwork"
   data-artwork={artwork ?? icon?.name}
   data-autoplay={autoplay}
+  data-surface={surface}
 ></div>

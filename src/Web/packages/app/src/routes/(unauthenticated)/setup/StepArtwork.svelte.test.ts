@@ -2,10 +2,16 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const surfaceWatch = vi.hoisted(() => ({
+  onchange: undefined as ((surface: "light" | "dark") => void) | undefined,
+}));
 vi.mock("@nocturne/watercolour", async () => ({
   Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
-  watchSurface: () => () => {},
+  watchSurface: (onchange: (surface: "light" | "dark") => void) => {
+    surfaceWatch.onchange = onchange;
+    return () => {};
+  },
 }));
 
 import { fakePlayer } from "$lib/test-stubs/Artwork.test-stub.svelte";
@@ -55,5 +61,16 @@ describe("StepArtwork", () => {
 
     await expect.element(artwork()).toBeInTheDocument();
     expect(fakePlayer.seeks).toEqual([]);
+  });
+});
+
+describe("StepArtwork theme", () => {
+  it("hands the artwork the new surface when the theme changes", async () => {
+    render(StepArtwork, { art: "welcome" });
+    await expect.element(artwork()).toHaveAttribute("data-surface", "light");
+
+    surfaceWatch.onchange?.("dark");
+
+    await expect.element(artwork()).toHaveAttribute("data-surface", "dark");
   });
 });
