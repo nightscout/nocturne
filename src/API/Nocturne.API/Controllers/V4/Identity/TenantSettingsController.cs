@@ -91,7 +91,7 @@ public class TenantSettingsController : ControllerBase
     /// </summary>
     [DenyDemoSubject]
     [HttpPut("patient-relationship")]
-    [RemoteCommand(Invalidates = ["GetPatientRelationship", "GetPatientRecord"])]
+    [RemoteCommand(Invalidates = ["GetPatientRelationship", "PatientRecord_GetPatientRecord"])]
     [ProducesResponseType(typeof(PatientRelationshipDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
