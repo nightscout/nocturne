@@ -19,7 +19,7 @@ public static class TempBasalMapper
         return new TempBasalEntity
         {
             Id = model.Id == Guid.Empty ? Guid.CreateVersion7() : model.Id,
-            StartTimestamp = model.StartTimestamp,
+            Timestamp = model.StartTimestamp,
             EndTimestamp = model.EndTimestamp,
             UtcOffset = model.UtcOffset,
             Device = model.Device,
@@ -27,7 +27,6 @@ public static class TempBasalMapper
             DataSource = model.DataSource,
             CorrelationId = model.CorrelationId,
             LegacyId = model.LegacyId,
-            SysUpdatedAt = DateTime.UtcNow,
             Rate = model.Rate,
             ScheduledRate = model.ScheduledRate,
             Origin = model.Origin.ToString(),
@@ -55,7 +54,7 @@ public static class TempBasalMapper
         return new TempBasal
         {
             Id = entity.Id,
-            StartTimestamp = entity.StartTimestamp,
+            StartTimestamp = entity.Timestamp,
             EndTimestamp = entity.EndTimestamp,
             UtcOffset = entity.UtcOffset,
             Device = entity.Device,
@@ -91,7 +90,7 @@ public static class TempBasalMapper
     /// <param name="model">The domain model containing updated data.</param>
     public static void UpdateEntity(TempBasalEntity entity, TempBasal model)
     {
-        entity.StartTimestamp = model.StartTimestamp;
+        entity.Timestamp = model.StartTimestamp;
         entity.EndTimestamp = model.EndTimestamp;
         entity.UtcOffset = model.UtcOffset;
         entity.Device = model.Device;

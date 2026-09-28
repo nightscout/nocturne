@@ -14,10 +14,10 @@
 		triggerDetection as triggerCompressionLowDetection
 	} from '$api/generated/compressionLows.generated.remote';
 	import { contextResource } from '$lib/hooks/resource-context.svelte';
-	import ShieldCheck from 'lucide-svelte/icons/shield-check';
-	import Clock from 'lucide-svelte/icons/clock';
-	import ChevronRight from 'lucide-svelte/icons/chevron-right';
-	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import Clock from '@lucide/svelte/icons/clock';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import type { CompressionLowSuggestion } from '$lib/api';
 	import FigureStrip from '$lib/components/reports/FigureStrip.svelte';
 	import { setReportPrintMeta } from '$lib/components/reports/print/report-print.svelte';

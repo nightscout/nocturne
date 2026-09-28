@@ -5,16 +5,14 @@
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
-  import {
-    BatteryCharging,
-    BatteryFull,
-    BatteryLow,
-    BatteryMedium,
-    BatteryWarning,
-    Zap,
-    Wifi,
-    WifiOff,
-  } from "lucide-svelte";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
+  import Zap from "@lucide/svelte/icons/zap";
+  import Wifi from "@lucide/svelte/icons/wifi";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
   interface Props {

@@ -1,0 +1,80 @@
+name: Coverage comment
+
+# Posts the coverage report of a fork's pull request as the sticky comment. A same-repository pull
+# request gets it from tests.yml's coverage job directly (.github/scripts/coverage-comment.cjs is
+# shared).
+#
+# A pull request from a fork runs Tests with a read-only token, so that run can only upload the
+# report. This workflow runs afterwards in the base repository with a write token, and so never
+# checks out or runs anything from the pull request: it checks out the default branch for the
+# posting script, downloads the report artifact, treats it as text, and posts it only on the pull
+# request whose head is the commit Tests ran on.
+#
+# Workflow_run only fires for a workflow file on the default branch.
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.conclusion != 'cancelled'
+      && github.event.workflow_run.head_repository.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      # The default branch, never the pull request: only the posting script is used.
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Download the report
+        id: download
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: coverage-report
+          # Outside the workspace, so nothing in the artifact can land beside the checked-out script.
+          path: ${{ runner.temp }}/coverage-report
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Post or update the comment
+        if: steps.download.outcome == 'success'
+        uses: actions/github-script@v8
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const { owner, repo } = context.repo;
+            const report = path.join(process.env.RUNNER_TEMP, "coverage-report");
+
+            const prNumber = Number(fs.readFileSync(path.join(report, "pr-number"), "utf8").trim());
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed("the report's pr-number is not a pull request number");
+              return;
+            }
+
+            // The artifact comes from a run that may have executed a fork's code, so its pull
+            // request number is only trusted when that pull request's head is the commit the run
+            // tested.
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber });
+            if (pr.head.sha !== process.env.HEAD_SHA) {
+              core.setFailed(`PR #${prNumber} head is ${pr.head.sha}, not the tested ${process.env.HEAD_SHA}`);
+              return;
+            }
+
+            const post = require("./.github/scripts/coverage-comment.cjs");
+            await post({ github, context, prNumber, body: fs.readFileSync(path.join(report, "coverage.md"), "utf8") });

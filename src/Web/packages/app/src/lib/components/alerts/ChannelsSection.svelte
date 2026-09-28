@@ -3,7 +3,9 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { Plus, Bell, X } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Bell from "@lucide/svelte/icons/bell";
+  import X from "@lucide/svelte/icons/x";
   import { getLinkedPlatforms } from "$api/generated/linkedPlatforms.generated.remote";
   import { getChannelStatuses } from "$api/generated/systems.generated.remote";
   import { getCapabilityCatalog } from "$api/generated/clientDevices.generated.remote";

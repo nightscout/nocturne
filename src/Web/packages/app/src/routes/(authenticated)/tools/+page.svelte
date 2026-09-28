@@ -6,7 +6,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { Luggage } from "lucide-svelte";
+  import Luggage from "@lucide/svelte/icons/luggage";
 </script>
 
 <div class="@container container mx-auto p-6 max-w-5xl space-y-6">

@@ -6,7 +6,8 @@
   import { page } from "$app/state";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
-  import { X, Loader2 } from "lucide-svelte";
+  import X from "@lucide/svelte/icons/x";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { Button } from "$lib/components/ui/button";
   import { StateHistory } from "runed";
   import {

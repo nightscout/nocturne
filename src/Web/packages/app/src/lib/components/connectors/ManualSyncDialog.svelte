@@ -3,7 +3,10 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Item } from "$lib/components/ui/item";
-  import { Loader2, Download, CheckCircle, AlertCircle } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Download from "@lucide/svelte/icons/download";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import { EmptyState } from "$lib/components/shared";
   import type { SyncProgressEvent } from "$lib/websocket/types";
   import { formatSyncMessage } from "$lib/utils/sync-messages";

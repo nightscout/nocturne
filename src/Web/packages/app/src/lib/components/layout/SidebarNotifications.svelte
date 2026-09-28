@@ -1,7 +1,8 @@
 <script lang="ts">
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
-  import { Bell, ChevronRight } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { cn } from "$lib/utils";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { goto } from "$app/navigation";
@@ -11,7 +12,7 @@
     markAsRead,
     markAllAsRead,
   } from "$api/generated/notifications.generated.remote";
-  import { CheckCheck } from "lucide-svelte";
+  import CheckCheck from "@lucide/svelte/icons/check-check";
   import {
     NotificationUrgency,
     type InAppNotificationDto,

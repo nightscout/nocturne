@@ -188,6 +188,29 @@ public static class DirectionExtensions
     }
 
     /// <summary>
+    /// Gets the direction for a Dexcom trend number, the inverse of <see cref="ToTrendNumber"/> for
+    /// 1-9. Returns <see langword="false"/> for 0, which carries no direction, and for any number
+    /// outside the scale.
+    /// </summary>
+    public static bool TryFromTrendNumber(int trend, out Direction direction)
+    {
+        direction = trend switch
+        {
+            1 => Direction.DoubleUp,
+            2 => Direction.SingleUp,
+            3 => Direction.FortyFiveUp,
+            4 => Direction.Flat,
+            5 => Direction.FortyFiveDown,
+            6 => Direction.SingleDown,
+            7 => Direction.DoubleDown,
+            8 => Direction.NotComputable,
+            9 => Direction.RateOutOfRange,
+            _ => Direction.NONE,
+        };
+        return direction != Direction.NONE;
+    }
+
+    /// <summary>
     /// Parses a direction string to the corresponding Dexcom trend number (0-9).
     /// Accepts both spellings via <see cref="TryParse"/>.
     /// </summary>

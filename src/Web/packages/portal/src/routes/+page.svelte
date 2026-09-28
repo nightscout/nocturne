@@ -1,7 +1,8 @@
 <script lang="ts">
     import { Artwork } from "@nocturne/watercolour";
     import { Button } from "@nocturne/ui/ui/button";
-    import { ArrowRight, Play } from "@lucide/svelte";
+    import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import Play from "@lucide/svelte/icons/play";
     import { DEMO_ENABLED } from "$lib/config";
     import AuroraCanvas from "$lib/components/AuroraCanvas.svelte";
     import AuroraPool from "$lib/components/AuroraPool.svelte";

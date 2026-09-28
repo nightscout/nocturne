@@ -8,6 +8,7 @@ using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -51,7 +52,7 @@ internal static class EngineTestHarness
     public static (ManagedAlertEngine Engine, ServiceProvider Provider) BuildManagedEngine(
         ManualTimeProvider time,
         IConditionTimerStore timerStore,
-        InMemoryTrackerRepository trackerRepo,
+        IAlertTrackerRepository trackerRepo,
         AlertRuleEvaluationGate? gate = null)
     {
         var services = new ServiceCollection();
@@ -76,7 +77,7 @@ internal static class EngineTestHarness
     public static RustBackedAlertEngine BuildRustEngine(
         ManualTimeProvider time,
         IConditionTimerStore timerStore,
-        InMemoryTrackerRepository trackerRepo)
+        IAlertTrackerRepository trackerRepo)
     {
         return new RustBackedAlertEngine(
             timerStore,

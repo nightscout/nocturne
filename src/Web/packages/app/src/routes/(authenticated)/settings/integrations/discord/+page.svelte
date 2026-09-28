@@ -7,8 +7,15 @@
 	import { Input } from "$lib/components/ui/input";
 	import { Label } from "$lib/components/ui/label";
 	import { Badge } from "$lib/components/ui/badge";
+	import Link2 from "@lucide/svelte/icons/link-2";
+	import Link2Off from "@lucide/svelte/icons/link-2-off";
+	import Plus from "@lucide/svelte/icons/plus";
+	import Star from "@lucide/svelte/icons/star";
+	import Pencil from "@lucide/svelte/icons/pencil";
+	import Save from "@lucide/svelte/icons/save";
+	import X from "@lucide/svelte/icons/x";
+	import Loader2 from "@lucide/svelte/icons/loader-circle";
 	import { EmptyState } from "$lib/components/shared";
-	import { Link2, Link2Off, Plus, Star, Pencil, Save, X, Loader2 } from "lucide-svelte";
 	import {
 		getLinks,
 		setDefault,

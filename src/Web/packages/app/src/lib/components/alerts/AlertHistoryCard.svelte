@@ -11,7 +11,7 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { Clock } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
   import { EmptyState } from "$lib/components/shared";
   import { formatElapsedDuration } from "$lib/utils/duration";
 

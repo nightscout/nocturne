@@ -29,6 +29,7 @@ public class NightscoutTreatmentReconcileTests
     private const string LoopKept = "aaaaaaaaaaaaaaaaaaaaaaa1";
     private const string LoopGone = "aaaaaaaaaaaaaaaaaaaaaaa2";
     private const string MongoIdA = "bbbbbbbbbbbbbbbbbbbbbbb1";
+    private const string MongoIdB = "bbbbbbbbbbbbbbbbbbbbbbb2";
 
     private static readonly DateTimeOffset Now = new(2026, 3, 1, 12, 30, 0, TimeSpan.Zero);
     private static readonly DateTime StoredAt = Now.UtcDateTime.AddMinutes(-30);
@@ -174,8 +175,25 @@ public class NightscoutTreatmentReconcileTests
 
         result.Success.Should().BeTrue();
         harness.Crawled.Select(t => t.Id).Should().Equal(LoopKept);
-        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([TrioKept, LoopGone]);
+        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, LoopGone]);
         harness.Republished.Should().OnlyContain(t => t.DataSource == Source);
+    }
+
+    [Fact]
+    public async Task Carb_equivalents_sharing_trios_id_are_each_published_under_their_own_object_id()
+    {
+        var harness = new Harness
+        {
+            Upstream = [Trio(MongoIdA, TrioKept, Now.AddMinutes(-40)), Trio(MongoIdB, TrioKept, Now.AddMinutes(-30))],
+            Stored = [TrioKept],
+        };
+
+        await harness.SyncAsync();
+
+        harness.Republished.Select(t => t.Id).Should().BeEquivalentTo([MongoIdA, MongoIdB]);
+        harness.Republished.Should().OnlyContain(t => TreatmentClientId.Of(t) == TrioKept);
+        harness.Lookups.Should().BeEmpty("a row stored under the id the read carries is not missing");
+        harness.Deleted.Should().BeEmpty();
     }
 
     [Fact]
@@ -209,7 +227,7 @@ public class NightscoutTreatmentReconcileTests
 
         harness.TreatmentReads.Should().Be(1);
         harness.CrawlLowerBound.Should().Be(Now.UtcDateTime.AddMinutes(-15));
-        harness.Republished.Select(t => t.Id).Should().Equal(TrioKept);
+        harness.Republished.Select(t => t.Id).Should().Equal(MongoIdA);
         harness.FullReconcileRecorded.Should().BeEmpty();
     }
 

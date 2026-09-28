@@ -6,16 +6,14 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Check from "@lucide/svelte/icons/check";
+  import X from "@lucide/svelte/icons/x";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Clock from "@lucide/svelte/icons/clock";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import { EmptyState } from "$lib/components/shared";
-  import {
-    Trash2,
-    Check,
-    X,
-    AlertTriangle,
-    Clock,
-    LoaderCircle,
-    Pencil,
-  } from "lucide-svelte";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
 

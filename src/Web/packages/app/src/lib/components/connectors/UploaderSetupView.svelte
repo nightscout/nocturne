@@ -13,19 +13,17 @@
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    AlertCircle,
-    CheckCircle,
-    ChevronLeft,
-    Check,
-    Copy,
-    Loader2,
-    Clock,
-    AlertTriangle,
-    X,
-    Shield,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import Check from "@lucide/svelte/icons/check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import X from "@lucide/svelte/icons/x";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
   import QRCode from "qrcode";

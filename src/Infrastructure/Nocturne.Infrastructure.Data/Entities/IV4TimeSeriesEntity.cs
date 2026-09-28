@@ -5,9 +5,8 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// <see cref="Repositories.V4.V4RepositoryBase{TModel,TEntity}"/> filters, orders, and watermarks
 /// on. Extends <see cref="IV4Entity"/> (Id, LegacyId, TenantId, DeletedAt) and
 /// <see cref="ISourcedEntity"/> (data source, device) with the domain timestamp of
-/// <see cref="IObservationTimestamped"/>. Span-shaped types
-/// (e.g. TempBasal, which keys on StartTimestamp) deliberately do NOT implement this and stay off
-/// the shared base.
+/// <see cref="IObservationTimestamped"/>. A span-shaped type (TempBasal) maps its span start
+/// onto that timestamp.
 /// </summary>
 /// <remarks><inheritdoc cref="IOriginalIdentified" path="/remarks"/></remarks>
 public interface IV4TimeSeriesEntity : IV4Entity, ISourcedEntity, IObservationTimestamped;

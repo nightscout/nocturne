@@ -119,6 +119,26 @@ const typeRules = {
   }
 };
 
+// A barrel import makes Vite compile all ~3,600 icons for SSR; a per-icon path compiles one.
+const LUCIDE_ICON_HINT = 'Import each icon from its own file: `import Bell from "@lucide/svelte/icons/bell"`.';
+const iconImports = {
+  rules: {
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          { name: "lucide-svelte", message: `lucide-svelte is deprecated; use @lucide/svelte. ${LUCIDE_ICON_HINT}` },
+          { name: "@lucide/svelte", allowTypeImports: true, message: LUCIDE_ICON_HINT },
+          { name: "@lucide/svelte/icons", allowTypeImports: true, message: LUCIDE_ICON_HINT }
+        ],
+        patterns: [
+          { group: ["lucide-svelte/*"], message: `lucide-svelte is deprecated; use @lucide/svelte. ${LUCIDE_ICON_HINT}` }
+        ]
+      }
+    ]
+  }
+};
+
 // Tests read fixtures and sources under the repo and build patterns from their own
 // identifiers; neither path nor pattern comes from a request, so every finding here
 // was a false positive.
@@ -183,6 +203,7 @@ export function nodeConfig({ ignores = [] } = {}) {
     { languageOptions: { globals: { ...globals.node } } },
     { ignores: [...BUILD_OUTPUT, ...ignores] },
     typeRules,
+    iconImports,
     testFilePolicy
   );
 }
@@ -281,6 +302,7 @@ export function svelteConfig({
         ]
       : []),
     typeRules,
+    iconImports,
     testFilePolicy,
     {
       // Flat config replaces no-restricted-syntax's options wholesale, so every .svelte

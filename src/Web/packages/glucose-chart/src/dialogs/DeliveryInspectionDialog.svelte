@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { Activity, Syringe, Utensils, TriangleAlert } from '@lucide/svelte';
+  import Activity from '@lucide/svelte/icons/activity';
+  import Syringe from '@lucide/svelte/icons/syringe';
+  import Utensils from '@lucide/svelte/icons/utensils';
+  import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
   import { BasalDeliveryOrigin } from '../enums.js';
   import { bg, bgLabel, getDataSourceDisplayName } from '../utils/formatting.js';
   import GlucoseResponseChart from './GlucoseResponseChart.svelte';

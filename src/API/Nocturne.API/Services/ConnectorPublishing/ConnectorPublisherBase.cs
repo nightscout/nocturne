@@ -84,6 +84,48 @@ internal abstract class ConnectorPublisherBase
     }
 
     /// <summary>
+    /// Publishes the records of <paramref name="records"/> whose legacy id none of
+    /// <paramref name="heldBy"/> holds. Records without an id are dropped: nothing could tell them
+    /// apart from what is stored.
+    /// </summary>
+    /// <param name="heldBy">One lookup per table the record type decomposes into.</param>
+    /// <returns>How many were written, or null when a lookup or the write failed.</returns>
+    protected async Task<int?> PublishUnheldAsync<TRecord>(
+        IEnumerable<TRecord> records,
+        Func<TRecord, string?> legacyIdOf,
+        Func<List<TRecord>, Task<bool>> publish,
+        string source,
+        params Func<IReadOnlyCollection<string>, Task<IReadOnlySet<string>>>[] heldBy)
+    {
+        List<TRecord> unheld;
+        try
+        {
+            var identified = records.Where(r => legacyIdOf(r) is { Length: > 0 }).ToList();
+            var ids = identified.Select(r => legacyIdOf(r)!).ToHashSet(StringComparer.Ordinal);
+            var held = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var lookup in heldBy)
+            {
+                if (ids.Count > held.Count)
+                    held.UnionWith(await lookup(ids));
+            }
+
+            unheld = identified.Where(r => !held.Contains(legacyIdOf(r)!)).ToList();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to compare recent {RecordType} records with what is stored for {Source}",
+                typeof(TRecord).Name, source);
+            return null;
+        }
+
+        if (unheld.Count == 0)
+            return 0;
+
+        return await publish(unheld) ? unheld.Count : null;
+    }
+
+    /// <summary>
     /// The resume watermark for a connector sync whose legacy collection spans several stored record
     /// types: the latest timestamp any of them holds for THIS source. Source-scoping is required for
     /// multi-connector catch-up — a tenant-global latest mis-classifies a newly enabled connector's

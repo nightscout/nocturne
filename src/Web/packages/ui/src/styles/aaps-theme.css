@@ -32,6 +32,11 @@
   --glucose-very-low: oklch(0.55 0.25 29);   /* #FF0000 - AAPS red */
   --glucose-high: oklch(0.8 0.2 100);        /* #FFFF00 - AAPS yellow (high=warning) */
   --glucose-very-high: oklch(0.55 0.25 29);  /* #FF0000 - AAPS red */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.985 0.002 247.839);
 
   /* Insulin Types - AAPS blue (#3378C5) */
   --insulin: rgb(51, 120, 197);

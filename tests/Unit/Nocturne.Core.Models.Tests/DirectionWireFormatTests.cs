@@ -88,6 +88,33 @@ public class DirectionWireFormatTests
     }
 
     [Theory]
+    [InlineData(1, Direction.DoubleUp)]
+    [InlineData(2, Direction.SingleUp)]
+    [InlineData(3, Direction.FortyFiveUp)]
+    [InlineData(4, Direction.Flat)]
+    [InlineData(5, Direction.FortyFiveDown)]
+    [InlineData(6, Direction.SingleDown)]
+    [InlineData(7, Direction.DoubleDown)]
+    [InlineData(8, Direction.NotComputable)]
+    [InlineData(9, Direction.RateOutOfRange)]
+    public void TryFromTrendNumber_MapsEachNumberOnTheScale(int trend, Direction expected)
+    {
+        DirectionExtensions.TryFromTrendNumber(trend, out var direction).Should().BeTrue();
+        direction.Should().Be(expected);
+        direction.ToTrendNumber().Should().Be(trend);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(-1)]
+    public void TryFromTrendNumber_RejectsNumbersWithNoDirection(int trend)
+    {
+        DirectionExtensions.TryFromTrendNumber(trend, out var direction).Should().BeFalse();
+        direction.Should().Be(Direction.NONE);
+    }
+
+    [Theory]
     [InlineData(GlucoseDirection.None, Direction.NONE)]
     [InlineData(GlucoseDirection.DoubleUp, Direction.DoubleUp)]
     [InlineData(GlucoseDirection.SingleUp, Direction.SingleUp)]

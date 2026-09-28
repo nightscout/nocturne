@@ -163,7 +163,7 @@ public class TreatmentDecomposerDeleteTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
             LegacyId = legacyIdFor("tempbasal"),
-            StartTimestamp = Inside,
+            Timestamp = Inside,
             Rate = 0.8,
             Origin = "Algorithm"
         });

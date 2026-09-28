@@ -14,14 +14,12 @@
     SelectGroup,
     SelectLabel,
   } from "$lib/components/ui/select";
-  import {
-    Volume2,
-    VolumeX,
-    Vibrate,
-    TrendingUp,
-    Music,
-    Upload,
-  } from "lucide-svelte";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import VolumeX from "@lucide/svelte/icons/volume-x";
+  import Vibrate from "@lucide/svelte/icons/vibrate";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Music from "@lucide/svelte/icons/music";
+  import Upload from "@lucide/svelte/icons/upload";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,

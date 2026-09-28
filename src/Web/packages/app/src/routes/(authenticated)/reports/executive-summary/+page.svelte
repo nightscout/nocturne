@@ -9,17 +9,15 @@
   import { Button } from "$lib/components/ui/button";
   import FigureStrip from "$lib/components/reports/FigureStrip.svelte";
   import { Progress } from "$lib/components/ui/progress";
-  import {
-    Gauge,
-    Target,
-    TrendingUp,
-    Shield,
-    AlertTriangle,
-    Activity,
-    BarChart3,
-    Calendar,
-    BookOpen,
-  } from "lucide-svelte";
+  import Gauge from "@lucide/svelte/icons/gauge";
+  import Target from "@lucide/svelte/icons/target";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Shield from "@lucide/svelte/icons/shield";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Activity from "@lucide/svelte/icons/activity";
+  import BarChart3 from "@lucide/svelte/icons/chart-column";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import BookOpen from "@lucide/svelte/icons/book-open";
   import TIRStackedChart from "$lib/components/reports/TIRStackedChart.svelte";
   import ClinicalInsights from "$lib/components/reports/ClinicalInsights.svelte";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";

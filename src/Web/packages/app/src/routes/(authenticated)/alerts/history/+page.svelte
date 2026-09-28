@@ -12,7 +12,9 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import HistoryIcon from "@lucide/svelte/icons/history";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { EmptyState } from "$lib/components/shared";
   import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";

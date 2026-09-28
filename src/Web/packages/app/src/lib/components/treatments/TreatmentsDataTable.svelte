@@ -34,12 +34,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Table from "$lib/components/ui/table";
-  import {
-    ArrowUpDown,
-    ArrowUp,
-    ArrowDown,
-    Trash2,
-  } from "lucide-svelte";
+  import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { formatDateTimeCompact, bg, bgLabel } from "$lib/utils/formatting";
   import { ENTRY_CATEGORIES } from "$lib/constants/entry-categories";
   import DataTableToolbar from "./DataTableToolbar.svelte";

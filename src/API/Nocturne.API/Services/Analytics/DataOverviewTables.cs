@@ -181,7 +181,7 @@ internal static class DataOverviewTables
             RecordType.BGCheck),
         new DataOverviewTable<TempBasalEntity>(
             SyncDataType.TempBasals,
-            c => c.TempBasals, e => e.StartTimestamp, e => e.DataSource,
+            c => c.TempBasals, e => e.Timestamp, e => e.DataSource,
             RecordType.TempBasal),
     ];
 }

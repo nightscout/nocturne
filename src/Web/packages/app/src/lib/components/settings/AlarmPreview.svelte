@@ -11,7 +11,9 @@
     AlarmProfileConfiguration,
     EmergencyContactConfig,
   } from "$lib/types/alarm-profile";
-  import { Volume2, VolumeX, Square } from "lucide-svelte";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import VolumeX from "@lucide/svelte/icons/volume-x";
+  import Square from "@lucide/svelte/icons/square";
   import AlarmWaveform from "./AlarmWaveform.svelte";
   import AlarmActiveView from "./alarm-preview/AlarmActiveView.svelte";
   import EmergencyOverlay from "./alarm-preview/EmergencyOverlay.svelte";

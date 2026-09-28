@@ -251,7 +251,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
     }
 
     [Fact]
-    public async Task BulkUpsertByLegacyId_OverAUserTombstone_CreatesOnlyAnotherClientRecord()
+    public async Task SyncUpsertBulkCreate_OverAUserTombstone_CreatesOnlyAnotherClientRecord()
     {
         const string siteChange = """{"id":"{0}","enteredBy":"Trio","eventType":"Site Change","created_at":"2026-01-01T12:00:00.000Z"}""";
         await UploadAsync(siteChange.Replace("{0}", CarbId));
@@ -266,8 +266,8 @@ public class TreatmentClientIdRoundTripTests : IDisposable
             AdditionalProperties = new() { [TreatmentClientId.Field] = clientId },
         };
 
-        (await _deviceEventRepo.BulkUpsertByLegacyIdAsync([Record(CarbId)], WriteOrigin.Live)).SkippedDeleted.Should().Be(1);
-        (await _deviceEventRepo.BulkUpsertByLegacyIdAsync([Record(EditedCarbId)], WriteOrigin.Live)).SkippedDeleted.Should().Be(0);
+        (await _deviceEventRepo.BulkCreateAsync([Record(CarbId)], WriteOrigin.Live)).SkippedDeleted.Should().Be(1);
+        (await _deviceEventRepo.BulkCreateAsync([Record(EditedCarbId)], WriteOrigin.Live)).SkippedDeleted.Should().Be(0);
 
         var projected = (await _service.GetTreatmentsAsync(count: 10)).Should().ContainSingle().Subject;
         ClientIdOf(projected).Should().Be(EditedCarbId);

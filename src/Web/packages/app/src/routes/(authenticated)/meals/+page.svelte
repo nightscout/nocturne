@@ -3,7 +3,7 @@
   import { distinct, groupBy, toggled } from "$lib/utils/collections";
   import { startOfDay, toDayString } from "$lib/utils/date-range";
   import { formatLongDate } from "$lib/utils/formatting";
-  import { Calendar } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
   import type {
     MealEvent,
     TreatmentFood,

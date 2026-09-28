@@ -4,7 +4,7 @@
    * window. Factual log — it links a detection to a subsequent low, it does not assert causation.
    */
   import * as Table from "$lib/components/ui/table";
-  import Moon from "lucide-svelte/icons/moon";
+  import Moon from "@lucide/svelte/icons/moon";
   import type { SensorIntegrityHypoEvent } from "$lib/api";
   import { bg, bgLabel, formatDateTimeCompact } from "$lib/utils/formatting";
   import ConfidenceBadge from "./ConfidenceBadge.svelte";

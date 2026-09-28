@@ -5,7 +5,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { Eye } from "lucide-svelte";
+  import Eye from "@lucide/svelte/icons/eye";
   import type {
     AlarmProfileConfiguration,
     EmergencyContactConfig,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { DeadEndCard } from "$lib/components/shared";
   import { Button } from "$lib/components/ui/button";
-  import { PauseCircle } from "lucide-svelte";
+  import PauseCircle from "@lucide/svelte/icons/circle-pause";
 
   let { data } = $props();
 

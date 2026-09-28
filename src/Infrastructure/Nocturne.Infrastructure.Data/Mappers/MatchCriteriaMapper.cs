@@ -64,7 +64,7 @@ public static class MatchCriteriaMapper
             Rate = entity.Rate,
             RateTolerance = RateTolerance,
             Duration = entity.EndTimestamp.HasValue
-                ? entity.EndTimestamp.Value - entity.StartTimestamp
+                ? entity.EndTimestamp.Value - entity.Timestamp
                 : null
         };
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { ArrowUpRight } from "@lucide/svelte";
+    import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
     import { LINKS } from "$lib/data/links";
     import { track } from "$lib/analytics";
 

@@ -9,6 +9,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers.V3;
@@ -122,7 +123,7 @@ public class V3CursorETagTests
     }
 
     [Fact]
-    public async Task GetProfileHistory_ReturnsNewerProfilesAscending_AndSetsCursorHeaders()
+    public async Task GetProfileHistory_ReturnsThePage_AndSetsItsCursor()
     {
         var cursor = new DateTimeOffset(2024, 3, 26, 11, 55, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var older = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
@@ -130,13 +131,9 @@ public class V3CursorETagTests
 
         var projectionService = new Mock<IProfileProjectionService>();
         projectionService
-            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                // Projection returns newest-first
-                new Profile { Mills = newer },
-                new Profile { Mills = older },
-            });
+            .Setup(s => s.GetProfilesModifiedSinceAsync(cursor, 10, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ModifiedSincePage<Profile>(
+                [new Profile { SrvModified = older }, new Profile { SrvModified = newer }], newer));
 
         var controller = CreateProfileController(projectionService);
         var result = await controller.GetProfileHistory(cursor);
@@ -150,7 +147,7 @@ public class V3CursorETagTests
             .Should().BeAssignableTo<IEnumerable<Profile>>().Subject.ToList();
 
         // Ascending order matters: AAPS activates the LAST element of the page.
-        profiles.Select(p => p.Mills).Should().Equal(older, newer);
+        profiles.Select(p => p.SrvModified).Should().Equal(older, newer);
     }
 
     [Fact]
@@ -160,8 +157,8 @@ public class V3CursorETagTests
 
         var projectionService = new Mock<IProfileProjectionService>();
         projectionService
-            .Setup(s => s.GetProfilesAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Profile>());
+            .Setup(s => s.GetProfilesModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ModifiedSincePage<Profile>([], null));
 
         var controller = CreateProfileController(projectionService);
         await controller.GetProfileHistory(cursor);
@@ -176,10 +173,8 @@ public class V3CursorETagTests
 
         var foods = new Mock<IFoodRepository>();
         foods
-            .Setup(f => f.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Food>());
+            .Setup(f => f.GetFoodModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ModifiedSincePage<Food>([], null));
 
         var controller = CreateFoodController(foods);
         await controller.GetFoodHistory(cursor);
@@ -190,33 +185,26 @@ public class V3CursorETagTests
     }
 
     [Fact]
-    public async Task GetFoodHistory_ReturnsOnlyNewerFoods_AndAdvancesCursor()
+    public async Task GetFoodHistory_ReturnsThePage_AndAdvancesCursor()
     {
-        var cursor = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero);
-        var newer = cursor.AddMinutes(5);
+        var cursor = new DateTimeOffset(2024, 3, 26, 12, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var modified = cursor + 300_000;
 
         var foods = new Mock<IFoodRepository>();
         foods
-            .Setup(f => f.GetFoodWithAdvancedFilterAsync(
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string?>(), It.IsAny<string?>(),
-                It.IsAny<bool>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[]
-            {
-                new Food { Name = "old", CreatedAt = cursor.AddMinutes(-5).ToString("O") },
-                new Food { Name = "new", CreatedAt = newer.ToString("O") },
-            });
+            .Setup(f => f.GetFoodModifiedSinceAsync(cursor, 1000, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ModifiedSincePage<Food>([new Food { Name = "edited" }], modified));
 
         var controller = CreateFoodController(foods);
-        var result = await controller.GetFoodHistory(cursor.ToUnixTimeMilliseconds());
+        var result = await controller.GetFoodHistory(cursor);
 
-        controller.Response.Headers["ETag"].ToString()
-            .Should().Be($"W/\"{newer.ToUnixTimeMilliseconds()}\"");
+        controller.Response.Headers["ETag"].ToString().Should().Be($"W/\"{modified}\"");
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var resultProperty = okResult.Value!.GetType().GetProperty("result");
         var returned = resultProperty!.GetValue(okResult.Value)
             .Should().BeAssignableTo<IEnumerable<Food>>().Subject.ToList();
-        returned.Should().ContainSingle().Which.Name.Should().Be("new");
+        returned.Should().ContainSingle().Which.Name.Should().Be("edited");
     }
 
     [Fact]

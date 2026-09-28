@@ -10,7 +10,8 @@
     SelectItem,
     SelectTrigger,
   } from "$lib/components/ui/select";
-  import { Timer, RotateCcw } from "lucide-svelte";
+  import Timer from "@lucide/svelte/icons/timer";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
 
   interface Props {

@@ -6,7 +6,8 @@
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Droplet, X } from "lucide-svelte";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import X from "@lucide/svelte/icons/x";
 
   interface Props {
     bgCheck: Partial<BGCheck>;

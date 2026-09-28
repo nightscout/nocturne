@@ -31,7 +31,7 @@ public class StatisticsServiceHourlyDeliveryTests
         var result = _sut.CalculateHourlyInsulinDelivery(
             tempBasals, [], [], StartDate, EndDate);
 
-        result.DayCount.Should().Be(1);
+        result.DaysWithData.Should().Be(1);
         result.Hours[10].Basal.Should().Be(1.2);
         result.Hours[11].Basal.Should().Be(1.2);
         result.Hours[12].Basal.Should().Be(1.2);
@@ -104,7 +104,7 @@ public class StatisticsServiceHourlyDeliveryTests
         var result = _sut.CalculateHourlyInsulinDelivery(
             tempBasals, [], [], StartDate, EndDate);
 
-        result.DayCount.Should().Be(2, "only two days have delivery data");
+        result.DaysWithData.Should().Be(2, "only two days have delivery data");
         foreach (var hour in result.Hours)
         {
             hour.Basal.Should().Be(0.3, $"hour {hour.Hour} must show the flat rate, not a gap artifact");
@@ -156,7 +156,7 @@ public class StatisticsServiceHourlyDeliveryTests
         var result = _sut.CalculateHourlyInsulinDelivery(
             [], boluses, [], StartDate, EndDate);
 
-        result.DayCount.Should().Be(2);
+        result.DaysWithData.Should().Be(2);
         result.Hours[12].Bolus.Should().Be(3.0);
         result.Hours[12].Count.Should().Be(2);
     }
@@ -185,7 +185,7 @@ public class StatisticsServiceHourlyDeliveryTests
 
         result.Hours[12].ScheduledBasal.Should().Be(0.5, "basal averages over its 30 covered days");
         result.Hours[12].Bolus.Should().Be(3.0, "boluses average over their own 2 data days");
-        result.DayCount.Should().Be(30);
+        result.DaysWithData.Should().Be(30);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public class StatisticsServiceHourlyDeliveryTests
             [], [], [], StartDate, EndDate);
 
         result.Hours.Should().HaveCount(24);
-        result.DayCount.Should().Be(0);
+        result.DaysWithData.Should().Be(0);
         result.Hours.Should().OnlyContain(h => Math.Abs(h.Total) < 1e-9);
     }
 

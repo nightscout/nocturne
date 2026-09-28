@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Zap from "lucide-svelte/icons/zap";
+  import Zap from "@lucide/svelte/icons/zap";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

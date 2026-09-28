@@ -476,6 +476,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ITenantRoleService, TenantRoleService>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<ITenantOverviewService, TenantOverviewService>();
+        services.AddScoped<IGlucoseStatusClassifier, GlucoseStatusClassifier>();
         services.AddScoped<IInstanceSetupState, InstanceSetupState>();
         services.AddScoped<DemoTenantService>();
         services.AddScoped<ScalarAuthProvider>();
@@ -720,7 +721,6 @@ public static class ServiceRegistrationExtensions
         // definitions (and self-healing if a managed rule is ever lost).
         services.AddScoped<ITrackerAlertRuleSyncService, TrackerAlertRuleSyncService>();
         services.AddHostedService<TrackerAlertRuleBackfillService>();
-        services.AddScoped<ITrackerSuggestionService, TrackerSuggestionService>();
         services.AddScoped<IDeviceAgeService, DeviceAgeService>();
 
         // Device resolution
@@ -919,7 +919,6 @@ public static class ServiceRegistrationExtensions
 
         // Notification action handlers (scoped -- they may depend on scoped services)
         services.AddScoped<INotificationActionHandler, MealMatchActionHandler>();
-        services.AddScoped<INotificationActionHandler, TrackerSuggestionActionHandler>();
         services.AddScoped<INotificationActionHandler, AlertActionHandler>();
 
         return services;

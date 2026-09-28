@@ -28,6 +28,9 @@ env:
   DIFF_TABLE: screenshot-diff.md
   API_URL: http://localhost:1610
   GATEWAY_URL: https://nocturne.localhost:1612
+  # Dev auto-login would sign the sign-in and guest pages straight through, so the capture would
+  # photograph a signed-in browser where the docs show the sign-in screen.
+  NOCTURNE_DEV_AUTO_LOGIN: "false"
   BOOT_TIMEOUT_SECONDS: "900"
 
 jobs:

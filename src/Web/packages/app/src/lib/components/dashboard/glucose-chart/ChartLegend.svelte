@@ -14,8 +14,8 @@
     CarbsIcon,
   } from "$lib/components/icons";
   import { SystemEventType } from "$lib/api";
-  import Clock from "lucide-svelte/icons/clock";
-  import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import Clock from "@lucide/svelte/icons/clock";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { PrintMode } from "$lib/components/charts/print/print-mode.svelte";
 

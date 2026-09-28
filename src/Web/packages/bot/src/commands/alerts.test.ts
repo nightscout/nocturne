@@ -8,7 +8,7 @@ import type {
   DirectoryCandidate,
 } from "../types.js";
 import { encodeActionValue, encodeTenantKey } from "../lib/action-value.js";
-import { cardFields, cardTexts } from "../cards/card.test-utils.js";
+import { cardFields, cardTexts, cardTitle } from "../cards/card.test-utils.js";
 
 vi.mock("../lib/logger.js", () => ({
   createLogger: () => ({
@@ -58,8 +58,7 @@ const asDefault = (c: DirectoryCandidate): DirectoryCandidate => ({
 });
 
 interface ScopedAlerts {
-  acknowledge: Mock;
-  acknowledgeExcursion: Mock;
+  acknowledgeAsLinkedMember: Mock;
   getActiveAlerts: Mock;
 }
 
@@ -75,8 +74,11 @@ function createContext(
     let alerts = alertsBySlug.get(tenantSlug);
     if (!alerts) {
       alerts = {
-        acknowledge: vi.fn().mockResolvedValue(undefined),
-        acknowledgeExcursion: vi.fn().mockResolvedValue(undefined),
+        acknowledgeAsLinkedMember: vi.fn().mockResolvedValue({
+          outcome: "acknowledged",
+          acknowledgedBy: "Sam Tester",
+          alreadyAcknowledged: false,
+        }),
         getActiveAlerts: vi.fn().mockResolvedValue(activeAlerts),
       };
       alertsBySlug.set(tenantSlug, alerts);
@@ -87,7 +89,7 @@ function createContext(
   const context: BotRequestContext = {
     unscopedApi: {
       directory: { resolve },
-      alerts: { acknowledge: ambientAcknowledge },
+      alerts: { acknowledgeAsLinkedMember: ambientAcknowledge },
     } as unknown as BotApiClient,
     scopedApiFactory,
     resolvedTenantSlug: null,
@@ -151,6 +153,14 @@ function registerHandlers() {
 const postedText = (post: Mock, call = 0) =>
   cardTexts(post.mock.calls[call]?.[0]);
 
+/** The request that acknowledges as the tapping user's linked member. */
+const asLinkedMember = (excursionId: string | null) => ({
+  platform: "discord",
+  platformUserId: "discord-user-1",
+  excursionId,
+  acknowledgedBy: "Sam Tester",
+});
+
 describe("ack_alert action", () => {
   let handler: (event: ActionEvent) => Promise<void>;
 
@@ -165,15 +175,14 @@ describe("ack_alert action", () => {
     await runWithContext(ctx.context, () => handler(event));
 
     const alerts = ctx.alertsBySlug.get("work-clinic")!;
-    expect(alerts.acknowledgeExcursion).toHaveBeenCalledExactlyOnceWith(
-      EXCURSION,
-      { acknowledgedBy: "Sam Tester" },
+    expect(alerts.acknowledgeAsLinkedMember).toHaveBeenCalledExactlyOnceWith(
+      "link-work",
+      asLinkedMember(EXCURSION),
     );
-    expect(alerts.acknowledge).not.toHaveBeenCalled();
     expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledOnce();
     expect(postedText(post)).toContain(
-      "By Sam Tester. Any other active alerts are untouched.",
+      "Acknowledged for everyone by Sam Tester. Any other active alerts are untouched.",
     );
   });
 
@@ -184,12 +193,14 @@ describe("ack_alert action", () => {
     await runWithContext(ctx.context, () => handler(event));
 
     const alerts = ctx.alertsBySlug.get("work-clinic")!;
-    expect(alerts.acknowledge).toHaveBeenCalledExactlyOnceWith({
-      acknowledgedBy: "Sam Tester",
-    });
-    expect(alerts.acknowledgeExcursion).not.toHaveBeenCalled();
+    expect(alerts.acknowledgeAsLinkedMember).toHaveBeenCalledExactlyOnceWith(
+      "link-work",
+      asLinkedMember(null),
+    );
     expect(post).toHaveBeenCalledOnce();
-    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
+    expect(postedText(post)).toContain(
+      "All alerts acknowledged for everyone by Sam Tester.",
+    );
   });
 
   it("acknowledges the excursion named by a two-UUID value", async () => {
@@ -200,8 +211,8 @@ describe("ack_alert action", () => {
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
     expect(
-      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
-    ).toHaveBeenCalledExactlyOnceWith(EXCURSION, { acknowledgedBy: "Sam Tester" });
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeAsLinkedMember,
+    ).toHaveBeenCalledExactlyOnceWith("link-work", asLinkedMember(EXCURSION));
   });
 
   it("acknowledges through the client scoped to the alert's tenant", async () => {
@@ -224,10 +235,12 @@ describe("ack_alert action", () => {
 
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("home-clinic");
     expect(
-      ctx.alertsBySlug.get("home-clinic")!.acknowledge,
-    ).toHaveBeenCalledExactlyOnceWith({ acknowledgedBy: "Sam Tester" });
+      ctx.alertsBySlug.get("home-clinic")!.acknowledgeAsLinkedMember,
+    ).toHaveBeenCalledExactlyOnceWith("link-home", asLinkedMember(null));
     expect(post).toHaveBeenCalledOnce();
-    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
+    expect(postedText(post)).toContain(
+      "All alerts acknowledged for everyone by Sam Tester.",
+    );
   });
 
   it("tells an unlinked user to connect and calls no api", async () => {
@@ -289,7 +302,7 @@ describe("ack_alert action", () => {
     expect(ctx.alertsBySlug.has("home-clinic")).toBe(false);
     expect(post).toHaveBeenCalledOnce();
     expect(postedText(post)).toContain(
-      "By Sam Tester. Any other active alerts are untouched.",
+      "Acknowledged for everyone by Sam Tester. Any other active alerts are untouched.",
     );
   });
 
@@ -302,7 +315,9 @@ describe("ack_alert action", () => {
     expect(ctx.scopedApiFactory).toHaveBeenCalledExactlyOnceWith("work-clinic");
     expect(postEphemeral).not.toHaveBeenCalled();
     expect(post).toHaveBeenCalledOnce();
-    expect(postedText(post)).toContain("All alerts acknowledged by Sam Tester.");
+    expect(postedText(post)).toContain(
+      "All alerts acknowledged for everyone by Sam Tester.",
+    );
   });
 
   it("asks a multi-link user to choose when the button carries no tenant", async () => {
@@ -350,8 +365,7 @@ describe("ack_alert action", () => {
       await runWithContext(ctx.context, () => handler(event));
 
       const alerts = ctx.alertsBySlug.get("work-clinic");
-      expect(alerts?.acknowledge).toBeUndefined();
-      expect(alerts?.acknowledgeExcursion).toBeUndefined();
+      expect(alerts?.acknowledgeAsLinkedMember).toBeUndefined();
       expect(ctx.ambientAcknowledge).not.toHaveBeenCalled();
       expect(post).toHaveBeenCalledExactlyOnceWith(
         "Couldn't tell which alert this button is for. Nothing was acknowledged.",
@@ -366,7 +380,7 @@ describe("ack_alert action", () => {
       () =>
         ({
           alerts: {
-            acknowledgeExcursion: vi.fn().mockRejectedValue(new Error("503")),
+            acknowledgeAsLinkedMember: vi.fn().mockRejectedValue(new Error("503")),
           },
         }) as unknown as BotApiClient,
     );
@@ -379,6 +393,63 @@ describe("ack_alert action", () => {
     );
   });
 
+  it("says the alert was muted only for a member who cannot acknowledge for everyone", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+    await runWithContext(ctx.context, async () => {
+      ctx.scopedApiFactory("work-clinic");
+      ctx.alertsBySlug
+        .get("work-clinic")!
+        .acknowledgeAsLinkedMember.mockResolvedValue({ outcome: "muted" });
+      await handler(event);
+    });
+
+    expect(
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeAsLinkedMember,
+    ).toHaveBeenCalledExactlyOnceWith("link-work", asLinkedMember(EXCURSION));
+    expect(post).toHaveBeenCalledOnce();
+    expect(cardTitle(post.mock.calls[0]?.[0])).toBe("Alert muted for you");
+    expect(postedText(post)).toContain(
+      "Muted for Sam Tester only. Everyone else is still alerted, because acknowledging for everyone needs permission to manage alerts.",
+    );
+    expect(postedText(post)).not.toContain("Acknowledged for everyone");
+  });
+
+  it("credits whoever already acknowledged, not the member who tapped", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+    await runWithContext(ctx.context, async () => {
+      ctx.scopedApiFactory("work-clinic");
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeAsLinkedMember.mockResolvedValue({
+        outcome: "acknowledged",
+        acknowledgedBy: "Alex Owner",
+        alreadyAcknowledged: true,
+      });
+      await handler(event);
+    });
+
+    expect(cardTitle(post.mock.calls[0]?.[0])).toBe("Already acknowledged");
+    expect(postedText(post)).toContain(
+      "This alert was already acknowledged for everyone by Alex Owner.",
+    );
+    expect(postedText(post)).not.toContain("Sam Tester");
+  });
+
+  it("says an alert that already ended had nothing to acknowledge", async () => {
+    const ctx = createContext([HOME, WORK]);
+    const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
+    await runWithContext(ctx.context, async () => {
+      ctx.scopedApiFactory("work-clinic");
+      ctx.alertsBySlug
+        .get("work-clinic")!
+        .acknowledgeAsLinkedMember.mockResolvedValue({ outcome: "closed" });
+      await handler(event);
+    });
+
+    expect(cardTitle(post.mock.calls[0]?.[0])).toBe("Nothing to acknowledge");
+    expect(postedText(post)).toContain("This alert has already ended.");
+  });
+
   it("does not report a failure when only the confirmation cannot be posted", async () => {
     const ctx = createContext([HOME, WORK]);
     const { event, post } = createActionEvent(cardValue(WORK_TENANT, EXCURSION));
@@ -389,7 +460,7 @@ describe("ack_alert action", () => {
     ).resolves.toBeUndefined();
 
     expect(
-      ctx.alertsBySlug.get("work-clinic")!.acknowledgeExcursion,
+      ctx.alertsBySlug.get("work-clinic")!.acknowledgeAsLinkedMember,
     ).toHaveBeenCalledOnce();
     expect(post).toHaveBeenCalledOnce();
   });

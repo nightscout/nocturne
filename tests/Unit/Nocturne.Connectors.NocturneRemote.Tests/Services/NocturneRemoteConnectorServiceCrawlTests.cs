@@ -355,6 +355,73 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     /// <summary>
+    /// Each treatment type is read from its own endpoint, so one can fail for a day while its
+    /// siblings publish. Resuming it from the treatment family's newest record would let a sibling's
+    /// fresher data carry the bound past the day it still owes.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenOneTreatmentTypeLagsItsSiblings_ResumesItFromItsOwnWatermark()
+    {
+        var latestBolus = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+        var latestCarbs = new DateTime(2026, 5, 31, 23, 0, 0, DateTimeKind.Utc);
+        var glucoseFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(
+            handler,
+            latestTreatment: latestCarbs,
+            latestByType: new Dictionary<SyncDataType, DateTime>
+            {
+                [SyncDataType.Boluses] = latestBolus,
+                [SyncDataType.CarbIntake] = latestCarbs,
+            });
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest
+            {
+                From = glucoseFrom,
+                To = null,
+                DataTypes = [SyncDataType.Glucose, SyncDataType.Boluses, SyncDataType.CarbIntake],
+            },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.Boluses).Should()
+            .Contain($"from={latestBolus.AddMinutes(-5):o}",
+                "boluses resume from their own newest record, not the carbs that published past them");
+        handler.CrawlOf(NocturneRemoteConstants.CarbIntake).Should()
+            .Contain($"from={latestCarbs.AddMinutes(-5):o}");
+    }
+
+    /// <summary>
+    /// State spans are read from their own endpoint like every other type, so the glucose cursor
+    /// advancing past a range their crawl failed to read must not take them with it.
+    /// </summary>
+    [Fact]
+    public async Task SyncDataAsync_WhenStateSpansLagGlucose_ResumesThemFromTheirOwnWatermark()
+    {
+        var latestStateSpan = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc);
+        var glucoseFrom = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var handler = new RemoteFakeHandler();
+        var fixture = new ServiceFixture(handler, latestStateSpan: latestStateSpan);
+
+        await fixture.Service.SyncDataAsync(
+            new SyncRequest
+            {
+                From = glucoseFrom,
+                To = null,
+                DataTypes = [SyncDataType.Glucose, SyncDataType.StateSpans],
+            },
+            fixture.Config,
+            CancellationToken.None);
+
+        handler.CrawlOf(NocturneRemoteConstants.SensorGlucose).Should()
+            .Contain($"from={glucoseFrom:o}");
+        handler.CrawlOf(NocturneRemoteConstants.StateSpans).Should()
+            .Contain($"from={latestStateSpan.AddMinutes(-5):o}",
+                "state spans resume from their own newest record, not glucose's");
+    }
+
+    /// <summary>
     /// A caller's lower bound is never narrowed by a family's resume point. An explicit <c>from</c>
     /// with no <c>to</c> is a legitimate request shape and the one an admin repairing a months-old
     /// gap sends; answering it from the watermark fetches nothing and reports the run as a success
@@ -678,7 +745,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
             RemoteFakeHandler handler,
             NocturneRemoteConnectorConfiguration? config = null,
             DateTime? latestTreatment = null,
-            bool treatmentWatermarkFails = false)
+            bool treatmentWatermarkFails = false,
+            IReadOnlyDictionary<SyncDataType, DateTime>? latestByType = null,
+            DateTime? latestStateSpan = null)
         {
             Config = config ?? NewConfig();
 
@@ -694,10 +763,27 @@ public class NocturneRemoteConnectorServiceCrawlTests
             var treatments = new Mock<ITreatmentPublisher>();
             var watermark = treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(
                 It.IsAny<string>(), It.IsAny<CancellationToken>()));
+            var typeWatermark = treatments.Setup(p => p.GetLatestTreatmentTimestampAsync(
+                It.IsAny<SyncDataType>(), It.IsAny<string>(), It.IsAny<CancellationToken>()));
             if (treatmentWatermarkFails)
+            {
                 watermark.ThrowsAsync(new HttpRequestException("the API did not answer"));
+                typeWatermark.ThrowsAsync(new HttpRequestException("the API did not answer"));
+            }
             else
+            {
                 watermark.ReturnsAsync(latestTreatment);
+                typeWatermark.ReturnsAsync((SyncDataType type, string _, CancellationToken _) =>
+                    latestByType is not null && latestByType.TryGetValue(type, out var latest)
+                        ? latest
+                        : latestTreatment);
+            }
+
+            var metadata = new Mock<IMetadataPublisher>();
+            metadata
+                .Setup(p => p.GetLatestStateSpanTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(latestStateSpan);
+
             treatments
                 .Setup(p => p.PublishBolusesAsync(
                     It.IsAny<IEnumerable<Bolus>>(), It.IsAny<string>(),
@@ -711,7 +797,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
             publisher.Setup(p => p.Glucose).Returns(glucose.Object);
             publisher.Setup(p => p.Treatments).Returns(treatments.Object);
             publisher.Setup(p => p.Device).Returns(Mock.Of<IDevicePublisher>());
-            publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+            publisher.Setup(p => p.Metadata).Returns(metadata.Object);
 
             Service = new NocturneRemoteConnectorService(
                 new HttpClient(handler),

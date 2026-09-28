@@ -897,7 +897,7 @@ public class StatisticsController : ControllerBase
                     insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
                     insulinDelivery.Tdd =
                         Math.Round(
-                            totalWithProfile / Math.Max(1, insulinDelivery.DayCount) * 10
+                            totalWithProfile / insulinDelivery.WindowDays * 10
                         ) / 10;
                     insulinDelivery.BasalPercent =
                         totalWithProfile > 0
@@ -910,12 +910,6 @@ public class StatisticsController : ControllerBase
                             ) / 10
                             : 0;
                 }
-
-                // Keep treatment summary basal consistent
-                treatmentSummary.Totals.Insulin.Basal = insulinDelivery.TotalBasal;
-                treatmentSummary.Totals.Insulin.ScheduledBasal = insulinDelivery.ScheduledBasal;
-                treatmentSummary.Totals.Insulin.AdditionalBasal =
-                    insulinDelivery.AdditionalBasal;
             }
 
             // Compute GMI and reliability for this period

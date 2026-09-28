@@ -22,7 +22,7 @@
     "lint:ci": "eslint . --max-warnings 0 --report-unused-disable-directives-severity error"
   },
   "peerDependencies": {
-    "@lucide/svelte": ">=0.400.0",
+    "@lucide/svelte": "^1.14.0",
     "d3": ">=7.0.0",
     "layerchart": ">=2.0.0",
     "svelte": ">=5.0.0",

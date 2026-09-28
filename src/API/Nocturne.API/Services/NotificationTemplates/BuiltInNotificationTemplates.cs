@@ -78,15 +78,6 @@ public static class BuiltInNotificationTemplates
 
         registry.Register(new NotificationTemplate
         {
-            Type = "tracker.suggested_match",
-            Category = NotificationCategory.ActionRequired,
-            DefaultUrgency = NotificationUrgency.Info,
-            Icon = "refresh-cw",
-            Source = "tracker-service"
-        });
-
-        registry.Register(new NotificationTemplate
-        {
             Type = "glucose.compression_low_review",
             Category = NotificationCategory.ActionRequired,
             DefaultUrgency = NotificationUrgency.Info,

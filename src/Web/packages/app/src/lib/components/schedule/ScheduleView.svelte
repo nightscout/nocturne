@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Icon } from "lucide-svelte";
+  import type { Icon } from "@lucide/svelte";
   import type { Snippet } from "svelte";
   import {
     Card,
@@ -11,7 +11,8 @@
   import * as Table from "$lib/components/ui/table";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
-  import { Plus, Trash2 } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { MGDL_PER_MMOL } from "@nocturne/ui/glucose";
 

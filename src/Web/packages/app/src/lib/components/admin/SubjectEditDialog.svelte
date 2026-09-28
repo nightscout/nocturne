@@ -7,7 +7,8 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Badge } from "$lib/components/ui/badge";
-  import { Loader2, TriangleAlert } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import type { TenantRoleDto } from "$api";
 
   interface Props {

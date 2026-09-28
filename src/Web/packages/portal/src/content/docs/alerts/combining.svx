@@ -1,0 +1,125 @@
+---
+title: Combining conditions
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# Combining conditions
+
+One condition is often not enough. "Glucose below 100" alone would alert every
+time you are sitting happily at 95. "Glucose below 100 **and** falling fast" is a
+warning worth waking up for. This page covers the ways to combine conditions:
+**all of**, **any of**, **NOT**, and groups.
+
+The simulators on this page run Nocturne's real alert engine on made-up
+readings. Under the graph, each condition gets its own line showing when it was
+true; below those, **Whole rule is true** is the combined result, and
+**Alerting** is when the alert was sounding.
+
+## All of (AND)
+
+With **all of** at the top of the condition, the rule is true only while
+**every** row is true at the same moment. Each row is labelled **AND**.
+
+Here are two rules on the same afternoon, where glucose falls fast during
+exercise:
+
+- **Low**: glucose below 70 mg/dL (3.9 mmol/L).
+- **Falling toward low**: glucose below 100 mg/dL (5.5 mmol/L) **and** falling
+  at least 2 mg/dL (0.11 mmol/L) a minute.
+
+<AlertSimulator scenario="fast-fall" rules={["low", "falling-and-low"]} />
+
+"Falling toward low" alerts ten minutes before "Low", because it notices the
+speed as well as the number. Watch its two lights as it plays. "Below 100" stays
+on right through the low, but "falling at least 2" goes out as the fall levels
+off, and the rule stops with it. **All of** means the rule ends as soon as any
+one of its rows stops being true.
+
+Use **all of** to make a rule more specific: fewer alerts, each one more
+meaningful.
+
+## Any of (OR)
+
+With **any of** at the top, the rule is true while **at least one** row is true.
+Each row is labelled **OR**.
+
+**Any of** makes a rule broader, and it is easy to make it too broad. Here is the
+same pair of conditions with **any of** instead of **all of**:
+
+<AlertSimulator scenario="fast-fall" rules={["falling-any"]} />
+
+It alerts at the start of the fall, while glucose is still around 150, because
+"falling at least 2" is true on its own, and then keeps going for the rest of the
+afternoon because "below 100" is. Neither is what you would want to be woken up
+for.
+
+Use **any of** when different situations each deserve the same alert, as in the
+next example.
+
+## Groups
+
+A group is a set of rows with its own **all of** or **any of**, sitting inside
+the rule as a single row. Groups let you say things like "A, or both B and C".
+
+To make one, open the **...** menu on a row and choose **Wrap in AND group** or
+**Wrap in OR group**, then add more rows inside the group, or drag rows into it.
+
+<Screenshot id="alert-rule-nested-group" callouts={[{ anchor: 'group', label: 'A group' }]} />
+
+The rule in the picture alerts when glucose is below 70, **or** when it is both
+below 100 **and** falling at least 2 mg/dL a minute. It catches a slow drift
+into a low and a fast fall towards one:
+
+<AlertSimulator
+  scenario="fast-fall"
+  scenarios={["fast-fall", "overnight-low"]}
+  rules={["low", "low-or-falling"]}
+/>
+
+On the fast fall it alerts early and then keeps going through the low without a
+break: as the "falling toward it" group stops being true, "below 70" has already
+taken over. Switch to **Overnight low**, where glucose drifts down slowly: the
+fall is never fast enough, so the group never becomes true, and the rule behaves
+exactly like the plain low rule.
+
+## NOT
+
+**Wrap in NOT** turns a row into its opposite: the row is true whenever the
+condition inside it is false. It shows a **NOT** badge.
+
+NOT is most useful with time. "Glucose above 180 for at least 30 minutes,
+**and NOT** between 18:00 and 20:00" is a high alert that stays quiet through
+the rise you expect after dinner:
+
+<AlertSimulator scenario="meal-high" rules={["high-outside-dinner"]} />
+
+The light for the time condition shows the condition itself, the time being
+between 18:00 and 20:00. NOT uses the opposite, so the rule can only be true
+outside that window.
+
+<Callout type="warning" title="NOT over missing data is true">
+
+  Most conditions are simply not true when the data they need is missing. NOT
+  turns that into true. "NOT pump suspended" is true on a site where the pump
+  has never reported anything, and "NOT glucose below 70" is true while there is
+  no reading at all. Check what NOT will do when data is missing before relying
+  on it, and prefer the direct setting where there is one, such as "Pump
+  suspended: is not" rather than "NOT pump suspended: is".
+
+</Callout>
+
+## Things worth knowing
+
+- **A rule with one row is saved as that row.** The editor always shows a
+  group, but a rule with a single condition is stored as just that condition.
+  It behaves the same either way.
+- **Every row is checked every time, in any order.** A row with "for at least"
+  keeps its own clock whatever the rows around it are doing, so moving rows up
+  or down never changes when a rule alerts.
+- **Every condition in a rule sees the same moment.** The rule is checked when a
+  reading arrives, and every row looks at that same reading.

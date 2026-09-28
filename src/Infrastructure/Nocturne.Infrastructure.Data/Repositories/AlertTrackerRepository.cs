@@ -88,6 +88,7 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         CancellationToken ct = default)
     {
         var entity = await _context.AlertRules
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == alertRuleId, ct);
 
         return entity == null ? null : MapAlertRule(entity);

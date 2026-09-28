@@ -197,7 +197,7 @@ public class DataSourceServiceStatsTests : IDisposable
             Id = Guid.CreateVersion7(),
             TenantId = TenantId,
             DataSource = dataSource,
-            StartTimestamp = startTimestamp,
+            Timestamp = startTimestamp,
             Rate = 0.5,
             Origin = "pump",
         });

@@ -17,7 +17,10 @@
   import { Label } from "@nocturne/ui/ui/label";
   import * as Select from "@nocturne/ui/ui/select";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
-  import { ArrowLeft, Loader2, RotateCw, Settings as SettingsIcon } from "@lucide/svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RotateCw from "@lucide/svelte/icons/rotate-cw";
+  import SettingsIcon from "@lucide/svelte/icons/settings";
   import type { GlucoseUnits } from "@nocturne/ui/glucose";
   import type { ClockFaceOption } from "$lib/glucose-types";
   import { preferences } from "$lib/preferences.svelte";
@@ -239,7 +242,9 @@
         <div class="space-y-1">
           <Label for="capability-notify">Show a notification</Label>
           <p class="text-muted-foreground text-xs">
-            Show a Windows notification when an alert starts, with a button to acknowledge it.
+            Show a Windows notification when an alert starts, with a button to acknowledge it for
+            everyone. If your role cannot acknowledge alerts, the button reads Mute for me and stops
+            the alert only for you.
           </p>
         </div>
         <Switch

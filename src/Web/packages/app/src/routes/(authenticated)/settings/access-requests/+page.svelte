@@ -7,15 +7,13 @@
   import { Label } from "$lib/components/ui/label";
   import { EmptyState } from "$lib/components/shared";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import {
-    Loader2,
-    CheckCircle2,
-    XCircle,
-    Clock,
-    UserPlus,
-    ChevronDown,
-    ChevronUp,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import XCircle from "@lucide/svelte/icons/circle-x";
+  import Clock from "@lucide/svelte/icons/clock";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import {
     getPendingRequests,
     approve,

@@ -1,0 +1,99 @@
+---
+title: Alerts
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# Alerts
+
+Nocturne can tell you, or someone who looks out for you, when something needs
+attention: glucose going too low or too high, falling fast, the sensor going
+quiet, the loop stopping, a pump site getting old. You decide what counts as
+"needs attention" by writing **alert rules**.
+
+This section explains how rules work, what every condition means, and how to
+combine them, with examples you can run on this page.
+
+<Callout type="warning" title="Keep your device alarms switched on">
+
+  Nocturne's alerts are an extra layer, not a replacement for the alarms built
+  into your CGM app, pump or loop app. A Nocturne alert can only fire when
+  readings reach your Nocturne site, and it can only reach you when the way it
+  is delivered (your phone, a chat app, email) is working. Phones lose signal,
+  apps get closed, servers restart. Keep the alarms on the devices themselves
+  switched on.
+
+</Callout>
+
+<Callout type="info" title="Not medical advice">
+
+  The numbers on these pages (70 mg/dL, 15 minutes and so on) show how the
+  settings behave. They are not recommendations. Decide your own thresholds
+  with your diabetes care team.
+
+</Callout>
+
+## How an alert works
+
+Every alert comes from a rule, and every rule has three parts:
+
+1. **A condition**: what Nocturne watches for, such as "glucose below 70
+   mg/dL". A condition can be one check or several combined.
+2. **Channels**: where the alert goes, such as a notification in your
+   browser, a message in Discord or Telegram, or an email.
+3. **Settings for afterwards**: how urgent the alert is, whether it can
+   switch itself off, and what snoozing it does.
+
+Nocturne checks your rules every time a new reading arrives, which for most
+CGMs is every 5 minutes. Rules about time passing, like "no reading for 30
+minutes", are also checked every 30 seconds, because nothing arrives to trigger
+them.
+
+When a rule's condition becomes true, the alert **fires**: it is recorded,
+and it is sent to every channel on the rule. It stays open until the
+condition stops being true, it is closed another way (see
+[When an alert fires](/docs/alerts/when-an-alert-fires)), or the rule is
+switched off.
+
+Try it. Below is a rule that alerts when glucose is below 70 mg/dL (3.9
+mmol/L), run against an evening where glucose drifts down after midnight. Move
+across the graph, or scrub the bar under it, to see what the rule saw at each
+moment.
+
+<AlertSimulator scenario="overnight-low" rules={["low"]} />
+
+The marker on the graph is where the alert fired: the first reading below 70.
+The light beside the rule is on for as long as the rule is true, and goes out
+with the first reading back above 70.
+
+## The Alerts page
+
+Rules live under **Alerts** in the sidebar. The page lists every rule on your
+site, with a switch to turn each one off and a button to send a test alert.
+The tiles at the top count your active rules, the alerts sounding right now,
+and how many fired this week.
+
+<Screenshot id="alerts-configuration" />
+
+A new site may start with no rules at all. Press **New rule** to write one, or
+see [Example rules](/docs/alerts/recipes) for common starting points.
+
+## In this section
+
+- [Building a rule](/docs/alerts/building-rules): a tour of the rule editor.
+- [Conditions](/docs/alerts/conditions): every condition you can pick, what it
+  watches and when you would use it.
+- [Combining conditions](/docs/alerts/combining): "all of", "any of", NOT and
+  groups.
+- [Conditions that must last](/docs/alerts/sustained): the "for at least"
+  setting, and why it matters.
+- [When an alert fires](/docs/alerts/when-an-alert-fires): severity, clearing,
+  auto-resolve, acknowledging, snoozing, Do Not Disturb.
+- [Example rules](/docs/alerts/recipes): rules for common situations.
+- [Testing rules](/docs/alerts/testing): the replay tool, and a sandbox where
+  you can build any rule and run it.
+- [Email alerts](/docs/alerts/email): setting up email delivery.

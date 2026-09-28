@@ -8,9 +8,8 @@ using Xunit;
 namespace Nocturne.API.Tests.Services.Alerts.Evaluators;
 
 /// <summary>
-/// ForceEvalRunner must evaluate every leaf in the tree exactly once, regardless of any
-/// short-circuit logic the live composite evaluator would apply. The replay UI relies on
-/// per-leaf truth being recorded at every tick.
+/// ForceEvalRunner must evaluate every leaf in the tree exactly once, whatever its
+/// siblings return. The replay UI relies on per-leaf truth being recorded at every tick.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ForceEvalRunnerTests
@@ -29,7 +28,7 @@ public class ForceEvalRunnerTests
     /// <summary>
     /// Per-leaf counter evaluator. Returns whatever bool was queued under
     /// <see cref="ConditionType"/>; increments a counter every call so tests can
-    /// assert each leaf was touched exactly once (no short-circuit skip).
+    /// assert each leaf was touched exactly once.
     /// </summary>
     private sealed class CountingThresholdEvaluator : IConditionEvaluator
     {
@@ -52,8 +51,7 @@ public class ForceEvalRunnerTests
     [Fact]
     public async Task EvaluatesEveryLeaf_InAndTree_EvenWhenFirstIsFalse()
     {
-        // Build AND(a, b, c) where the live composite evaluator would short-circuit
-        // after a=false. Force-eval must still touch b and c.
+        // AND(a, b, c) with a=false: force-eval must still touch b and c.
         var a = Threshold("a");
         var b = Threshold("b");
         var c = Threshold("c");

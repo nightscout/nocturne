@@ -10,7 +10,9 @@
   import { RangeCalendar } from "$lib/components/ui/range-calendar";
   import { dayCount } from "$lib/utils/date-range";
   import { formatLocale, formatMediumDateRange } from "$lib/utils/formatting";
-  import { Calendar, Filter, RotateCcw } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Filter from "@lucide/svelte/icons/funnel";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
 
   interface Props {
     open?: boolean;

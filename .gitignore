@@ -20,6 +20,8 @@ appsettings.Development.json
 
 coveragereport/
 TestResults/
+# vitest --coverage output (src/Web/packages/*/coverage)
+src/Web/packages/*/coverage/
 .claude/settings.local.json
 .cursor
 .data

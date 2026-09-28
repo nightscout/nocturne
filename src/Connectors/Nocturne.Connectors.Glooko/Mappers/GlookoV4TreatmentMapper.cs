@@ -722,14 +722,14 @@ public class GlookoV4TreatmentMapper(string connectorSource, GlookoTimeMapper ti
     {
         if (string.IsNullOrWhiteSpace(timestamp)) return null;
 
-        if (!DateTime.TryParse(timestamp, out var parsedDate))
+        if (!UploaderTimestamp.TryParse(timestamp, out var parsedDate))
         {
             logger.LogWarning("Failed to parse V3 history timestamp: '{Timestamp}'", timestamp);
             return null;
         }
 
         // V3 histories timestamps are in the same fake-UTC format as V2
-        return _timeMapper.GetCorrectedGlookoTime(parsedDate.ToUniversalTime());
+        return _timeMapper.GetCorrectedGlookoTime(parsedDate.UtcDateTime);
     }
 
     /// <summary>

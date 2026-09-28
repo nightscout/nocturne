@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowUp } from "lucide-svelte";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import {
     directionArrowCount,
     directionGlyph,

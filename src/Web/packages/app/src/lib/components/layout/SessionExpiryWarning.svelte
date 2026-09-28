@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
-  import { Clock, RefreshCw, X } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import X from "@lucide/svelte/icons/x";
   import { formatSessionExpiry } from "$lib/stores/auth-store.svelte";
   import { refreshSession } from "../../../routes/(unauthenticated)/auth/auth.remote";
 

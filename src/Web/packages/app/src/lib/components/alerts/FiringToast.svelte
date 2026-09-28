@@ -9,7 +9,9 @@
   } from "$api/generated/alerts.generated.remote";
   import type { ActiveExcursionResponse } from "$api-clients";
   import { Button } from "$lib/components/ui/button";
-  import { Bell, BellOff, X } from "lucide-svelte";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import X from "@lucide/svelte/icons/x";
   import { severity } from "./severity";
   import { formatTimeSince } from "./alertTime";
   import { Now } from "$lib/hooks/now.svelte";

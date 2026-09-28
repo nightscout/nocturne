@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PlayCircle from "lucide-svelte/icons/play-circle";
+  import PlayCircle from "@lucide/svelte/icons/circle-play";
   import type { IconProps } from "./types";
 
   let { class: className = "", ...rest }: IconProps = $props();

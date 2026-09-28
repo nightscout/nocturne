@@ -1,6 +1,6 @@
 // Real-time data store using Svelte 5 Runes and WebSocket integration
 import { WebSocketClient } from "$lib/websocket/websocket-client.svelte";
-import { entryIdentity, unseenEntries } from "./entry-identity";
+import { entryIdentity, isSameEntry, unseenEntries } from "./entry-identity";
 import { markedRead } from "./notification-read";
 import { untilNow } from "$lib/utils/now";
 import { toDate } from "$lib/utils/formatting";
@@ -37,6 +37,7 @@ export interface DeviceStatus extends PillsDeviceStatus {
   uploader?: Record<string, unknown>;
 }
 import { NotificationUrgency } from "$lib/api";
+import { reachedStep } from "$lib/components/trackers/schedule";
 import {
   mergeEntryRecords,
   type EntryRecord,
@@ -54,11 +55,18 @@ import { isEntryDocument } from "$lib/websocket/payloads";
 import { isRecord } from "$lib/utils/type-guards";
 import { toIsoString } from "$lib/utils/api-date";
 
+/** The tracker levels loud enough for the notifications list; Info stays on the pill. */
+const TRACKER_NOTIFICATION_LEVELS: Partial<Record<NotificationUrgency, "warn" | "hazard" | "urgent">> = {
+  [NotificationUrgency.Warn]: "warn",
+  [NotificationUrgency.Hazard]: "hazard",
+  [NotificationUrgency.Urgent]: "urgent",
+};
+
 /**
  * Normalize a V4 SensorGlucose DTO (REST shape: `id` + `mgdl`, no `_id`/`sgv`) into the Entry
- * shape the store uses. `_id` is set to the reading's GUID — the value the API's realtime
- * broadcast also uses for `Entry._id` — so REST-backfilled and live-pushed copies of a reading
- * dedupe on `_id`.
+ * shape the store uses. `_id` is the reading's uuid, which is not the ObjectId-form `_id` the
+ * realtime broadcast carries, so REST-backfilled and live-pushed copies pair up through
+ * {@link isSameEntry}.
  */
 export function sensorGlucoseToEntry(sg: SensorGlucose): Entry {
   // `trend` is dropped: SensorGlucose names it (GlucoseTrend) where Entry holds
@@ -177,22 +185,21 @@ export class RealtimeStore {
     }
   );
 
-  /** Latest glucose data computations */
-  currentEntry = $derived.by(() => {
-    const sorted = [...this.entries].sort(
-      (a, b) => (b.mills || 0) - (a.mills || 0)
-    );
-    return sorted[0] || null;
-  });
+  /**
+   * Meter and calibration entries share the entries collection, but the current reading, its
+   * delta and its trend are the CGM's, matching the summary's `current` on `mills`.
+   */
+  private sensorReadingsNewestFirst = $derived(
+    this.entries
+      .filter((e) => e.type === "sgv")
+      .sort((a, b) => (b.mills || 0) - (a.mills || 0))
+  );
+
+  currentEntry = $derived(this.sensorReadingsNewestFirst[0] ?? null);
 
   demoMode = $derived(this.entries.some((e) => e.data_source === "demo-service"));
 
-  previousEntry = $derived.by(() => {
-    const sorted = [...this.entries].sort(
-      (a, b) => (b.mills || 0) - (a.mills || 0)
-    );
-    return sorted[1] || null;
-  });
+  previousEntry = $derived(this.sensorReadingsNewestFirst[1] ?? null);
 
   /** Current glucose values */
   currentBG = $derived(this.currentEntry?.sgv ?? this.currentEntry?.mgdl ?? 0);
@@ -259,39 +266,27 @@ export class RealtimeStore {
   trackerNotifications = $derived.by(() => {
     return this.trackerInstances
       .map((instance) => {
-        const def = this.trackerDefinitions.find((d) => d.id === instance.definitionId);
-        if (!def || !def.notificationThresholds) return null;
+        const step = reachedStep(instance, this.now);
+        const level = step?.urgency ? TRACKER_NOTIFICATION_LEVELS[step.urgency] : undefined;
+        if (!step || !level) return null;
 
-        // Compute age dynamically from startedAt and current time
-        // This ensures notifications update in real-time as time passes
         const age = instance.startedAt
           ? (this.now - (toDate(instance.startedAt)?.getTime() ?? this.now)) / (1000 * 60 * 60)
           : instance.ageHours ?? 0;
-
-        if (!age || age <= 0) return null;
-
-        // Determine level from notificationThresholds
-        let level: Lowercase<NotificationUrgency> | null = null;
-
-        // Sort thresholds by hours descending to find the highest triggered level
-        const sortedThresholds = [...def.notificationThresholds].sort(
-          (a, b) => (b.hours ?? 0) - (a.hours ?? 0)
-        );
-
-        for (const threshold of sortedThresholds) {
-          if (threshold.hours && age >= threshold.hours) {
-            const urgency = threshold.urgency;
-            if (urgency === NotificationUrgency.Urgent) { level = "urgent"; break; }
-            if (urgency === NotificationUrgency.Hazard) { level = "hazard"; break; }
-            if (urgency === NotificationUrgency.Warn) { level = "warn"; break; }
-            if (urgency === NotificationUrgency.Info) { level = "info"; break; }
-          }
-        }
-
-        if (!level || level === "info") return null;
-        return { ...instance, level, ageHours: age };
+        return {
+          ...instance,
+          level,
+          reachedDescription: step.description,
+          ageHours: age,
+        };
       })
-      .filter((n): n is TrackerInstanceDto & { level: "warn" | "hazard" | "urgent"; ageHours: number } => n !== null);
+      .filter(
+        (n): n is TrackerInstanceDto & {
+          level: "warn" | "hazard" | "urgent";
+          reachedDescription: string | undefined;
+          ageHours: number;
+        } => n !== null
+      );
   });
 
   constructor(config: WebSocketConfig) {
@@ -639,7 +634,7 @@ export class RealtimeStore {
     const { colName, doc } = event;
 
     if (colName === "entries" && this.isEntry(doc)) {
-      const index = this.entries.findIndex((entry) => entry._id === doc._id);
+      const index = this.entries.findIndex((entry) => isSameEntry(entry, doc));
       if (index !== -1) {
         this.entries = [
           ...this.entries.slice(0, index),
@@ -659,7 +654,7 @@ export class RealtimeStore {
 
     if (colName === "entries" && isEntryDocument(doc)) {
       this.pendingEntryCreates.delete(entryIdentity(doc));
-      this.entries = this.entries.filter((entry) => entry._id !== doc._id);
+      this.entries = this.entries.filter((entry) => !isSameEntry(entry, doc));
     }
   }
 

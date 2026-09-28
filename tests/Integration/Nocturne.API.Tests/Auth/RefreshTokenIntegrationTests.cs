@@ -13,14 +13,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// client binding, and revocation.
 /// </summary>
 [Trait("Category", "Integration")]
-public class RefreshTokenIntegrationTests : AspireIntegrationTestBase
+public class RefreshTokenIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public RefreshTokenIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

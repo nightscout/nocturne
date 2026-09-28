@@ -12,7 +12,8 @@
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
   import { Badge } from "$lib/components/ui/badge";
-  import { Bot, Trash2 } from "lucide-svelte";
+  import Bot from "@lucide/svelte/icons/bot";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { toast } from "svelte-sonner";
   import type { PlatformSettingsSummary } from "$api";
 

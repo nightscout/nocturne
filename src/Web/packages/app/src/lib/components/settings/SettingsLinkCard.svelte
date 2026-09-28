@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
-  import { ChevronRight } from "lucide-svelte";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import type { SettingsLink } from "./settings-links";
 
   let { link }: { link: SettingsLink } = $props();

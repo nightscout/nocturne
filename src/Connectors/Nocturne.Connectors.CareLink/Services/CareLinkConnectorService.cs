@@ -71,7 +71,7 @@ public class CareLinkConnectorService : BaseConnectorService<CareLinkConnectorCo
         var token = await _tokenProvider.GetValidTokenAsync(config);
         if (string.IsNullOrEmpty(token))
         {
-            TrackFailedRequest("Failed to obtain CareLink access token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return false;
         }
 

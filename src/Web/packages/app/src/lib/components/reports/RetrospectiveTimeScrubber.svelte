@@ -1,7 +1,10 @@
 <script lang="ts">
   import { Slider } from "$lib/components/ui/slider";
   import { Button } from "$lib/components/ui/button";
-  import { Play, Pause, SkipBack, SkipForward } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
+  import Pause from "@lucide/svelte/icons/pause";
+  import SkipBack from "@lucide/svelte/icons/skip-back";
+  import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { onDestroy } from "svelte";
   import { time } from "$lib/utils/formatting";
 

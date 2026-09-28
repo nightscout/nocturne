@@ -7,11 +7,9 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Item } from "$lib/components/ui/item";
-  import {
-    AlertCircle,
-    CheckCircle,
-    ChevronRight,
-  } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import CheckCircle from "@lucide/svelte/icons/circle-check-big";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { EmptyState } from "$lib/components/shared";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";

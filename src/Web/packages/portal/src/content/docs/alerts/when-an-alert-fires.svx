@@ -1,0 +1,161 @@
+---
+title: When an alert fires
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+  import AlertSimulator from '$lib/components/docs/alert-simulator/AlertSimulator.svelte';
+</script>
+
+# When an alert fires
+
+When a rule's condition becomes true, Nocturne opens an alert. This page
+covers what happens next: who is told, how the alert ends, and what
+acknowledging, snoozing and Do Not Disturb each do.
+
+## What happens straight away
+
+1. The alert is recorded in **Alerts > History**, with the time it started.
+2. Unless Do Not Disturb holds it back, it is sent to **every channel** on the
+   rule at once.
+3. In the Nocturne app, it shows as an active alert until it ends.
+
+Nocturne sends the alert **once**, when it fires. It does not repeat it on its
+own while the alert stays open. It sends it again only when a snooze runs out
+and the alert is still there. If you want someone else told when nobody
+responds, build that as its own rule; see
+[Example rules](/docs/alerts/recipes#tell-someone-else-if-nobody-responds).
+
+## How an alert ends
+
+An alert ends in one of four ways:
+
+| How | When |
+|-----|------|
+| **The condition stops being true** | At the next check where the condition is false: the next reading for glucose rules, or within 30 seconds for rules about time passing, such as signal loss. |
+| **Auto-resolve** | The rule's auto-resolve condition becomes true. See below. |
+| **Closed by hand** | Someone closes it from the app. |
+| **The rule is switched off** | Switching a rule off closes its open alert. |
+
+Once it has ended, the rule can fire again, and the next time is a new alert,
+sent again to every channel. A glucose level that hovers on the line can
+therefore alert, end and alert again a few readings apart. If that happens, a
+"for at least" setting on the rule (see
+[Conditions that must last](/docs/alerts/sustained)) is the usual fix.
+
+## Auto-resolve
+
+An alert already ends when its condition stops being true. Auto-resolve is for
+ending it **sooner**, while the condition still holds, because something else
+has happened that makes the alert no longer useful.
+
+Here are two high alerts, above 250 mg/dL (13.9 mmol/L), after a meal. The
+second has an auto-resolve condition: glucose falling at least 1 mg/dL (0.06
+mmol/L) a minute for at least 15 minutes.
+
+<AlertSimulator scenario="meal-high" rules={["high", "high-auto-resolve"]} />
+
+"High" stays on until glucose drops under 250. "High, until it is coming down"
+ends 15 minutes after the fall begins, while glucose is still above 250.
+
+After an auto-resolve, the rule waits before it can fire again: it stays quiet
+while its condition **and** the auto-resolve condition are both still true.
+As soon as either stops being true, the rule is back to normal. So if glucose
+stopped falling while still above 250, the auto-resolve condition would no
+longer hold, and the rule would alert again straight away. It does not wait for
+glucose to go back below 250 first.
+
+<Callout type="warning" title="Think about what auto-resolve hides">
+
+  Auto-resolve ends an alert while the thing it warns about is still true.
+  Choose an auto-resolve condition that really means the situation is being
+  dealt with, and test it with Replay (see
+  [Testing rules](/docs/alerts/testing)) before relying on it.
+
+</Callout>
+
+## Acknowledging
+
+When an alert card appears in the app, it offers:
+
+- **Snooze** for 5, 15, 30 or 60 minutes, covered below.
+- **Acknowledge**, which records that someone has seen the alert. It does
+  **not** end the alert: the alert stays open until its condition stops being
+  true. Acknowledging does stop rules that watch for "this alert is still
+  unacknowledged", which is how escalation to a second person is stopped.
+- **Mute for me** appears instead of Acknowledge for someone who does not have
+  permission to manage alerts, such as a family member with view access. It stops
+  the alert notifying **them**, and changes nothing for anyone else.
+- A button to open the rule's settings.
+- **X**, which only closes the card on this screen. It records nothing.
+
+## Snoozing
+
+A snooze silences an alert on every channel for the time you choose. The alert
+stays open. When the snooze runs out, if the alert is still there, it has not
+been acknowledged, and Do Not Disturb does not cover it, it is sent again.
+
+- An alert can be snoozed **3 times** by default. After that, snoozing it is
+  refused until the alert ends.
+- A snooze is not an acknowledgement. A rule watching for "unacknowledged" still
+  sees a snoozed alert as unacknowledged, so escalation carries on.
+
+### Smart snooze
+
+With **Smart snooze** switched on in the rule, a snooze that runs out is
+extended by a few minutes at a time (10 by default, set with **Extend by**)
+while the conditions you give under **Extend while** all hold. The usual use is
+a low alert: you have eaten something, and you do not want to be told again
+while glucose is climbing back.
+
+<Screenshot id="alert-rule-smart-snooze" />
+
+- Each extension counts towards the snooze limit, the same as snoozing by hand.
+- The conditions only use a glucose reading from the last 11 minutes. With no
+  reading that recent, glucose conditions are not true, the snooze is not
+  extended, and the alert is sent again.
+- With smart snooze on and **no** conditions, Nocturne only extends snoozes on
+  rules that compare glucose with a value, and only while glucose is clearly
+  heading back: for a low alert, up more than 4 mg/dL (0.2 mmol/L) in 5 minutes
+  or more than 10 mg/dL (0.6 mmol/L) in 10 minutes; for a high alert, down more
+  than 1 mg/dL in 5 minutes or more than 2 mg/dL in 10 minutes. Every other
+  alert is sent again when its snooze ends.
+
+## Do Not Disturb
+
+Do Not Disturb holds back alerts for a while. Open it from **Alerts > Do Not
+Disturb**.
+
+<Screenshot id="alerts-dnd" />
+
+- **Manual** turns it on now, optionally until a time you choose.
+- **Schedule** turns it on every day between two times: quiet hours. The times
+  use the time zone on your patient record, and can cross midnight.
+
+While Do Not Disturb is on:
+
+- **Critical** rules still reach you, always.
+- Rules with **Allow through Do Not Disturb** ticked still reach you.
+- Every other alert still **fires** and is recorded in history as silenced by
+  Do Not Disturb. It is just not sent.
+
+Some apps that connect to Nocturne can also hold back only low alerts, or only
+high alerts, for a while. A rule that watches for both lows and highs, or for
+something that is neither, is only held back by Do Not Disturb for everything.
+
+<Callout type="warning" title="Quiet hours are when lows happen">
+
+  Overnight is when people are least likely to notice a low on their own. If you
+  use quiet hours, make sure the rules that matter most at night are Critical, or
+  have **Allow through Do Not Disturb** ticked.
+
+</Callout>
+
+## History
+
+**Alerts > History** lists every alert that has fired: which rule, how serious
+it was, when it started and ended, how long it lasted, and whether someone
+acknowledged it. Test alerts are not listed.
+
+<Screenshot id="alerts-history" />

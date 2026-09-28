@@ -344,6 +344,76 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
+    public async Task GetProjectedTreatments_ReportsServerClockNotEventTime()
+    {
+        // A meal is created when its first constituent was and modified when its last one was, so
+        // srvCreated never runs ahead of srvModified.
+        var correlationId = Guid.CreateVersion7();
+        var eventTime = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        var mealBolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = correlationId,
+            Timestamp = eventTime,
+            Insulin = 4.0,
+            CreatedAt = eventTime.AddDays(2),
+            ModifiedAt = eventTime.AddDays(4),
+        };
+        var carb = new CarbIntake
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = correlationId,
+            Timestamp = eventTime,
+            Carbs = 30.0,
+            CreatedAt = eventTime.AddDays(1),
+            ModifiedAt = eventTime.AddDays(3),
+        };
+        var correction = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = eventTime.AddHours(1),
+            Insulin = 1.0,
+            CreatedAt = eventTime.AddDays(5),
+            ModifiedAt = eventTime.AddDays(6),
+        };
+        SetupBoluses(new[] { mealBolus, correction });
+        SetupCarbs(new[] { carb });
+
+        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+
+        var meal = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
+        meal.SrvCreated.Should().Be(ToMills(carb.CreatedAt));
+        meal.SrvModified.Should().Be(ToMills(mealBolus.ModifiedAt));
+
+        var single = result.Single(t => t.EventType == TreatmentTypes.CorrectionBolus);
+        single.SrvCreated.Should().Be(ToMills(correction.CreatedAt));
+        single.SrvModified.Should().Be(ToMills(correction.ModifiedAt));
+        single.Mills.Should().Be(ToMills(correction.Timestamp));
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_ReportsSrvCreatedAsTheRowCreationTime()
+    {
+        var bolus = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            Timestamp = Cursor.AddYears(-1),
+            Insulin = 1.0,
+        };
+        await AddModifiedAsync((bolus, Cursor.AddMinutes(1)));
+
+        var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
+
+        result.Should().ContainSingle();
+        result[0].SrvCreated.Should().Be(ToMills(bolus.SysCreatedAt));
+        result[0].SrvCreated.Should().NotBe(result[0].Mills);
+    }
+
+    private static long ToMills(DateTime value) =>
+        new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    [Fact]
     public async Task GetProjectedTreatmentsModifiedSince_ExcludesRecordAtCursor()
     {
         // AAPS passes the timestamp of the newest record it already holds as the cursor.

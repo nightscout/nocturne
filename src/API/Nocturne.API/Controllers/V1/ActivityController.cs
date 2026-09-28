@@ -101,7 +101,7 @@ public class ActivityController : ControllerBase
                 var latestActivity = activitiesList.FirstOrDefault();
                 if (latestActivity != null && !string.IsNullOrEmpty(latestActivity.CreatedAt))
                 {
-                    if (DateTime.TryParse(latestActivity.CreatedAt, out var createdDate))
+                    if (UploaderTimestamp.TryParse(latestActivity.CreatedAt, out var createdDate))
                     {
                         Response.Headers.Append("Last-Modified", createdDate.ToString("R"));
                     }

@@ -3,17 +3,15 @@
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Clock from "@lucide/svelte/icons/clock";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import LogOut from "@lucide/svelte/icons/log-out";
   import { EmptyState } from "$lib/components/shared";
-  import {
-    Monitor,
-    Smartphone,
-    Trash2,
-    Check,
-    AlertTriangle,
-    Clock,
-    LoaderCircle,
-    LogOut,
-  } from "lucide-svelte";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list,

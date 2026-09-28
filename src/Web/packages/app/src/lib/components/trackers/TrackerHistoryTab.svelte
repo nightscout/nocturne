@@ -7,6 +7,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
+  import History from "@lucide/svelte/icons/history";
   import { EmptyState } from "$lib/components/shared";
   import { CompletionReason, type TrackerInstanceDto } from "$api";
 
@@ -26,7 +27,7 @@
 </script>
 
 <Tabs.Content value="history">
-  <Card>
+  <Card data-testid="tracker-history">
     <CardHeader>
       <CardTitle>History</CardTitle>
       <CardDescription>Completed tracker instances</CardDescription>

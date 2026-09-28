@@ -4,7 +4,9 @@
   import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
-  import { ChevronDown, X, Check } from "lucide-svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import X from "@lucide/svelte/icons/x";
+  import Check from "@lucide/svelte/icons/check";
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
   import { cn } from "$lib/utils";

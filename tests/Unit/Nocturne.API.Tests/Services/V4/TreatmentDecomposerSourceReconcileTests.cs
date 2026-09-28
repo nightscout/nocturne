@@ -307,7 +307,7 @@ public class TreatmentDecomposerSourceReconcileTests : IDisposable
         _context.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, LegacyId = legacyId, DataSource = source,
-            Rate = 1, StartTimestamp = At, Origin = "Algorithm",
+            Rate = 1, Timestamp = At, Origin = "Algorithm",
         });
         await _context.SaveChangesAsync();
     }

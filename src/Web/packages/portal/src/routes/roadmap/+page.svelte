@@ -3,13 +3,11 @@
     import { getRoadmapData, type RoadmapMilestone } from "$lib/data/portal";
     import { Button } from "@nocturne/ui/ui/button";
     import MilestoneCard from "$lib/components/MilestoneCard.svelte";
-    import {
-        GitPullRequest,
-        ExternalLink,
-        AlertCircle,
-        Loader2,
-        RefreshCw,
-    } from "@lucide/svelte";
+    import GitPullRequest from "@lucide/svelte/icons/git-pull-request";
+    import ExternalLink from "@lucide/svelte/icons/external-link";
+    import AlertCircle from "@lucide/svelte/icons/circle-alert";
+    import Loader2 from "@lucide/svelte/icons/loader-circle";
+    import RefreshCw from "@lucide/svelte/icons/refresh-cw";
 
     let roadmapData = $state<RoadmapMilestone[]>([]);
     let loading = $state(true);

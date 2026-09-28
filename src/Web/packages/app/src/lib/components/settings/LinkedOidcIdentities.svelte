@@ -2,15 +2,13 @@
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Link2,
-    Plus,
-    Trash2,
-    Loader2,
-    Clock,
-    AlertTriangle,
-    Check,
-  } from "lucide-svelte";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Check from "@lucide/svelte/icons/check";
   import { EmptyState } from "$lib/components/shared";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { formatMediumDateTime } from "$lib/utils/formatting";

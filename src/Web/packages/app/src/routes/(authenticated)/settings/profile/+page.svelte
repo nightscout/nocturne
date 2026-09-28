@@ -11,20 +11,18 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  import User from "@lucide/svelte/icons/user";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Settings from "@lucide/svelte/icons/settings";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Lock from "@lucide/svelte/icons/lock";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import { EmptyState } from "$lib/components/shared";
   import { syringeArtwork } from "$lib/watercolour-icons";
-  import {
-    User,
-    Activity,
-    Droplet,
-    TrendingUp,
-    Clock,
-    Settings,
-    ChevronRight,
-    Lock,
-    Trash2,
-    RefreshCw,
-  } from "lucide-svelte";
   import * as Alert from "$lib/components/ui/alert";
   import { bgLabel } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";

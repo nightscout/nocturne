@@ -5,9 +5,9 @@
   import BatteryIcon from "./BatteryIcon.svelte";
   import ReservoirIcon from "./ReservoirIcon.svelte";
   import type { IconProps } from "./types";
-  import Calendar from "lucide-svelte/icons/calendar";
-  import Clock from "lucide-svelte/icons/clock";
-  import Activity from "lucide-svelte/icons/activity";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Activity from "@lucide/svelte/icons/activity";
 
   interface Props extends IconProps {
     category?: TrackerCategory;

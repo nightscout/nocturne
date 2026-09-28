@@ -1,0 +1,169 @@
+---
+title: Building a rule
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+  import Screenshot from '$lib/components/docs/Screenshot.svelte';
+</script>
+
+# Building a rule
+
+Open **Alerts** in the sidebar and press **New rule**, or pick an existing rule
+to change it. The editor is one page with a card for each part of the rule.
+Nothing takes effect until you press **Save** (or **Create** for a new rule).
+
+<Screenshot id="alert-rule-editor" />
+
+## Identity
+
+<Screenshot
+  id="alert-rule-identity"
+  callouts={[
+    { anchor: 'enabled', label: 'Enabled' },
+    { anchor: 'severity', label: 'Severity' },
+    { anchor: 'allow-dnd', label: 'Allow through Do Not Disturb' },
+  ]}
+/>
+
+- **Name** is what the alert says when it reaches you, so make it something
+  you will understand half asleep: "Low overnight", not "Rule 3".
+- **Description** is optional. Use it to note why the rule exists.
+- **Enabled** turns the rule on or off. A rule that is off is never checked,
+  and switching a rule off closes any alert it has open.
+- **Severity** says how urgent the alert is. It changes what happens when the
+  alert fires:
+
+| Severity | What it does |
+|----------|--------------|
+| **Critical** | Always gets through Do Not Disturb. Use it for the alerts that must never be silenced, such as an urgent low. |
+| **Warning** | The default. Silenced by Do Not Disturb unless you tick the box below. |
+| **Info** | Sent once and then marked as acknowledged straight away. It will not keep nagging. Use it for reminders, such as an old pump site. |
+
+- **Allow through Do Not Disturb** lets a Warning or Info rule reach you even
+  while Do Not Disturb is on. Critical rules always get through, so the box
+  makes no difference to them.
+
+## Condition
+
+The condition is what the rule watches for. It reads as a sentence: "Notify
+when **all of** / **any of** these are true", followed by one row per
+condition.
+
+<Screenshot
+  id="alert-rule-sustained-low"
+  callouts={[
+    { anchor: 'operator', label: 'all of / any of' },
+    { anchor: 'sustained', label: 'for at least' },
+  ]}
+/>
+
+Each row starts with a word saying how it joins the rows above it: **IF** for
+the first row, then **AND** or **OR** depending on the choice at the top. Then
+comes the thing being checked, with its settings.
+
+Press the add button under the rows to add a condition. Conditions are grouped
+by what they watch: glucose, insulin, carbs, your devices, what your pump or
+loop is doing, time, and other alerts.
+
+<Screenshot id="alert-rule-add-picker" />
+
+Every row has a menu (the **...** button at its end) with the ways you can
+change it:
+
+<Screenshot id="alert-rule-row-actions" />
+
+- **Wrap in AND group** and **Wrap in OR group** put the row inside a group of
+  its own, so you can build rules like "A, or both B and C". See
+  [Combining conditions](/docs/alerts/combining).
+- **Wrap in NOT** turns the row into its opposite.
+- **Make sustained** adds a "for at least N min" box: the condition then has
+  to stay true for that long before it counts. See
+  [Conditions that must last](/docs/alerts/sustained).
+- **Remove** deletes the row. Holding Shift while hovering a row also shows a
+  delete button.
+
+You can drag rows by the handle at their left to reorder them, or drop one onto
+a group to move it inside. The order of rows does not change what a rule does.
+
+Every condition, with what it means and when to use it, is on the
+[Conditions](/docs/alerts/conditions) page.
+
+<Callout type="info" title="Values are shown in your units">
+
+  Glucose values in the editor follow the unit you have chosen in your settings,
+  mg/dL or mmol/L. Nocturne stores them in mg/dL and converts when it shows
+  them, so a rule written in one unit reads correctly in the other.
+
+</Callout>
+
+## Channels
+
+Channels are where the alert goes. A rule can have several, and they are all
+sent at the same moment. A rule with no channels still fires and is still
+recorded in alert history; it just does not notify anyone.
+
+<Screenshot id="alert-rule-channels" />
+
+| Channel | Where the alert goes |
+|---------|----------------------|
+| **Browser Push** | A notification from your browser, even when no Nocturne tab is open. |
+| **In-App** | The Nocturne notification centre and the alert banner in the app. |
+| **Discord**, **Slack**, **Telegram**, **WhatsApp** | A direct message to a linked account, or a post in a channel or group the Nocturne bot has joined. See [Chat bots](/docs/bots). |
+| **Email** | An email to an address you choose. Needs email set up first; see [Email alerts](/docs/alerts/email). |
+| **Webhook** | A message sent to a web address you control, for connecting other systems. |
+| **Device** | An instruction sent to a device you have registered with Nocturne. |
+
+The channels on offer depend on what your site has set up. A chat channel only
+appears once that chat app is connected.
+
+## Auto-resolve
+
+Auto-resolve closes an alert when a second condition becomes true, even if the
+rule's own condition still holds. Most rules do not need it: an alert already
+closes by itself as soon as its condition stops being true.
+
+<Screenshot id="alert-rule-auto-resolve" />
+
+Auto-resolve is for "stop telling me once this has happened". For example: a
+high alert that should stop once glucose has been coming down steadily for 15
+minutes, even though it is still above the line. How it behaves, including what
+happens if things get worse again, is on
+[When an alert fires](/docs/alerts/when-an-alert-fires#auto-resolve).
+
+**Suggest** fills in a starting condition by turning your rule's condition
+around. Treat it as a draft. The exact opposite of your condition closes the
+alert at the same moment it would have closed anyway.
+
+## Smart snooze
+
+Snoozing silences an alert for a while. Smart snooze keeps extending that
+snooze, a few minutes at a time, while conditions you choose hold. The usual use
+is "I have treated this low; stay quiet while glucose is climbing back".
+
+<Screenshot id="alert-rule-smart-snooze" />
+
+Details, including the limit on how many times a snooze can be extended, are on
+[When an alert fires](/docs/alerts/when-an-alert-fires#snoozing).
+
+## Testing a rule
+
+The panel on the right has two ways to check a rule before you rely on it:
+
+- **Fire saved rule** sends a real test alert to every channel on the saved
+  rule, marked as a test. Use it to check the alert actually reaches the phone
+  or chat it should.
+- **Replay against history** runs the rule, including changes you have not
+  saved yet, against your own past readings, and shows when it would have
+  fired. Nothing is sent. See [Testing rules](/docs/alerts/testing).
+
+Under it, **Historic firings** lists the times this rule has really fired.
+Pick one to replay that day.
+
+<Callout type="tip" title="Test with a real alert once">
+
+  Replay proves the condition is right; only a real test alert proves the alert
+  reaches you. After creating or changing an important rule, press **Fire saved
+  rule** and check it arrives where you expect, including on a locked phone.
+
+</Callout>

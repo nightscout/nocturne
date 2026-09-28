@@ -1,7 +1,9 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Badge } from "$lib/components/ui/badge";
-  import { Activity, Syringe, AlertTriangle } from "lucide-svelte";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import { BasalDeliveryOrigin } from "$lib/api";
   import { bg, bgLabel, formatLocale, time } from "$lib/utils/formatting";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";

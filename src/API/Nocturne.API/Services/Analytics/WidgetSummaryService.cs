@@ -9,7 +9,9 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Core.Models.Widget;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Services;
 
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 
 namespace Nocturne.API.Services.Analytics;
@@ -31,6 +33,8 @@ public class WidgetSummaryService : IWidgetSummaryService
     private readonly IApsSnapshotRepository _apsSnapshots;
     private readonly ITrackerRepository _trackerRepository;
     private readonly INotificationV1Service _notificationService;
+    private readonly IGlucoseStatusClassifier _statusClassifier;
+    private readonly ITenantDbContextFactory _contextFactory;
     private readonly ILogger<WidgetSummaryService> _logger;
 
     /// <summary>
@@ -48,6 +52,8 @@ public class WidgetSummaryService : IWidgetSummaryService
         IApsSnapshotRepository apsSnapshots,
         ITrackerRepository trackerRepository,
         INotificationV1Service notificationService,
+        IGlucoseStatusClassifier statusClassifier,
+        ITenantDbContextFactory contextFactory,
         ILogger<WidgetSummaryService> logger
     )
     {
@@ -60,6 +66,8 @@ public class WidgetSummaryService : IWidgetSummaryService
         _apsSnapshots = apsSnapshots;
         _trackerRepository = trackerRepository;
         _notificationService = notificationService;
+        _statusClassifier = statusClassifier;
+        _contextFactory = contextFactory;
         _logger = logger;
     }
 
@@ -79,11 +87,13 @@ public class WidgetSummaryService : IWidgetSummaryService
 
         // Fetch data sequentially (EF Core DbContext is not thread-safe)
         var entryCount = hours > 0 ? (hours * 12) + 1 : 1; // 12 readings per hour (5-minute intervals)
-        var entries = (await _entryService.GetEntriesAsync(null, entryCount, 0, cancellationToken)).ToList();
+        // Meter and calibration entries are not CGM readings, so they never become the current reading.
+        var entries = (await _entryService.GetEntriesAsync("sgv", entryCount, 0, cancellationToken)).ToList();
         var trackerInstances = await _trackerRepository.GetActiveInstancesAsync(userId, cancellationToken);
 
         // Process glucose readings
         ProcessGlucoseReadings(response, entries, hours, currentTime);
+        await ClassifyCurrentReadingAsync(response, currentTime, cancellationToken);
 
         // Calculate IOB and COB using v4 types
         await CalculateIobCobAsync(response, cancellationToken);
@@ -134,6 +144,34 @@ public class WidgetSummaryService : IWidgetSummaryService
                 .ToList();
 
             response.History = historyEntries.Select(MapEntryToGlucoseReading).ToList();
+        }
+    }
+
+    private async Task ClassifyCurrentReadingAsync(
+        V4SummaryResponse response,
+        long currentTime,
+        CancellationToken cancellationToken
+    )
+    {
+        if (response.Current is not { } current)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await _contextFactory.CreateAsync(cancellationToken);
+            var thresholds = await _statusClassifier.ResolveThresholdsAsync(db, cancellationToken);
+            current.Status = _statusClassifier.Classify(
+                current.Sgv,
+                DateTimeOffset.FromUnixTimeMilliseconds(current.Mills).UtcDateTime,
+                lastReadingAt: null,
+                thresholds,
+                DateTimeOffset.FromUnixTimeMilliseconds(currentTime).UtcDateTime);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Error classifying current glucose for widget summary");
         }
     }
 

@@ -10,14 +10,14 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for DeviceStatus and Health endpoints using Aspire-orchestrated infrastructure.
+/// Integration tests for DeviceStatus and Health endpoints against the API running in-process on real PostgreSQL.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
+public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
 {
     public DeviceStatusIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -63,7 +63,7 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
         await client.PostAsJsonAsync("/api/v1/devicestatus", deviceStatus);
 
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/devicestatus?count=10");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -88,7 +88,7 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
         var id = created![0].Id;
 
         // Act - use find query to locate by created_at since there is no GET by ID endpoint
-        var response = await ApiClient.GetAsync($"/api/v1/devicestatus?count=50");
+        var response = await AuthenticatedClient.GetAsync($"/api/v1/devicestatus?count=50");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -124,7 +124,7 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Verify it no longer appears in the list
-        var listResponse = await ApiClient.GetAsync("/api/v1/devicestatus?count=50");
+        var listResponse = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=50");
         var content = await listResponse.Content.ReadAsStringAsync();
         var entries = JsonSerializer.Deserialize<DeviceStatus[]>(content);
 

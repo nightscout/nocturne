@@ -1,6 +1,6 @@
 <script lang="ts">
     import CopyButton from "./CopyButton.svelte";
-    import { RefreshCw } from "@lucide/svelte";
+    import RefreshCw from "@lucide/svelte/icons/refresh-cw";
     import { Button } from "@nocturne/ui/ui/button";
 
     interface Props {

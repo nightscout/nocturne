@@ -3,7 +3,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { AlertTriangle, Loader2 } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import type { PinInput } from "bits-ui";
 

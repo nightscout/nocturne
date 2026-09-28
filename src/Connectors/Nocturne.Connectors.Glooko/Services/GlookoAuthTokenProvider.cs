@@ -118,6 +118,7 @@ public class GlookoAuthTokenProvider(
         {
             // Status code only, no body: a Glooko sign-in failure echoes the submitted email back,
             // and a rejection is an expected outcome on the credential-verification path.
+            RecordLoginAnswer(response.StatusCode);
             var shouldRetry = response.IsRetryableError();
             if (shouldRetry)
                 _logger.LogWarning("Glooko authentication failed with retryable error: {StatusCode}",

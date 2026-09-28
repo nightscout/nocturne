@@ -12,8 +12,6 @@ public static class DeviceAttributionExtensions
 {
     /// <summary>
     /// Unattributed rows within the time window, newest first, capped at <paramref name="limit"/>.
-    /// Span-shaped types that key on a start timestamp (and so are not
-    /// <see cref="IV4TimeSeriesEntity"/>) window with <see cref="UnattributedNewestFirstAsync{TEntity}"/>.
     /// </summary>
     public static Task<List<TEntity>> GetUnattributedAsync<TEntity>(
         this NocturneDbContext ctx,

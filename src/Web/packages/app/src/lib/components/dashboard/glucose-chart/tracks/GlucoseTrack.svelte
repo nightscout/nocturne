@@ -10,7 +10,7 @@
   } from "layerchart";
   import { curveMonotoneX } from "d3";
   import { getGlucoseChartContext } from "../chart-context.svelte";
-  import type { GlucosePoint } from "../engine/chart-data-engine.svelte";
+  import type { GlucosePoint } from "../engine/chart-data-view.svelte";
   import { bg } from "$lib/utils/formatting";
   import {
     getGlucoseColor,

@@ -108,6 +108,23 @@ public class ConnectorAdminControllerTests
     }
 
     [Fact]
+    public async Task ResetTenantCursors_WhenFromIsInTheFuture_Returns400WithoutStartingAJob()
+    {
+        var jobService = new Mock<IConnectorCursorResetJobService>();
+        var controller = CreateController(Engine(CreateDb()), jobService.Object);
+
+        var result = await controller.ResetTenantCursors(
+            _targetTenantId,
+            new AdminResetCursorsRequest { From = DateTime.UtcNow.AddDays(1) },
+            CancellationToken.None);
+
+        var problem = result.Result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(400);
+        problem.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("'from'");
+        jobService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task ResetTenantCursors_UnknownTenant_Returns404()
     {
         var db = CreateDb();

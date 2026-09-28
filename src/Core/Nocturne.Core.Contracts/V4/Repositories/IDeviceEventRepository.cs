@@ -16,7 +16,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// <seealso cref="DeviceEvent"/>
 /// <seealso cref="DeviceEventType"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, IDeviceAttributionWriter
+public interface IDeviceEventRepository : ILegacyKeyedRepository<DeviceEvent>, IDeviceAttributionWriter, ISyncKeyedRepository<DeviceEvent>
 {
     /// <summary>
     /// Returns unattributed events (<c>PatientDeviceId == null</c>) of the given types within the time

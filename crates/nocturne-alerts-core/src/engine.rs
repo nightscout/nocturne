@@ -313,7 +313,7 @@ pub(crate) fn evaluate_body(
         .payload(rule.condition_type)
         .is_some_and(|p| eval_payload(p, wire, &mut env));
 
-    // Leaves evaluate alone, with no short-circuit, at the rule's root path;
+    // Leaves evaluate alone, at the rule's root path;
     // a leaf touches no timers.
     let leaves = log_leaves.then(|| {
         collect_leaves(body)

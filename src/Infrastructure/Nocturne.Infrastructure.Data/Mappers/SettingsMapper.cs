@@ -32,7 +32,6 @@ public static class SettingsMapper
             Version = settings.Version,
             IsActive = settings.IsActive,
             Notes = settings.Notes,
-            SysUpdatedAt = DateTime.UtcNow,
         };
     }
 

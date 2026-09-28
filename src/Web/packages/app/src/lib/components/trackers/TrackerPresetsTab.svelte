@@ -8,7 +8,9 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { Plus, Play, Trash2 } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Play from "@lucide/svelte/icons/play";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { EmptyState } from "$lib/components/shared";
   import type { TrackerDefinitionDto, TrackerPresetDto } from "$api";
 

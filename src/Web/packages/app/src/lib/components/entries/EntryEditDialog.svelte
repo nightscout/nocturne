@@ -19,16 +19,14 @@
   import NoteSection from "./NoteSection.svelte";
   import DeviceEventSection from "./DeviceEventSection.svelte";
   import BasalInjectionSection from "./BasalInjectionSection.svelte";
-  import {
-    Plus,
-    Trash2,
-    Loader2,
-    Syringe,
-    Apple,
-    Droplet,
-    FileText,
-    Smartphone,
-  } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
   import { getDataSourceDisplayName } from "$lib/utils/data-source-display";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";

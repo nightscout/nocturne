@@ -5,12 +5,10 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import {
-    Check,
-    ChevronsUpDown,
-    Star,
-    ChevronDown,
-  } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import Star from "@lucide/svelte/icons/star";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { cn } from "$lib/utils";
   import { tick } from "svelte";
   import { CategorySubcategoryCombobox } from "$lib/components/food";

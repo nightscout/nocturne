@@ -2,7 +2,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Button } from "$lib/components/ui/button";
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import { HelpCircle } from "lucide-svelte";
+  import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import { cn } from "$lib/utils";
 
   interface Props {

@@ -34,13 +34,15 @@
 	import IobCobTrack from '$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
 	import ThresholdRules from '$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
 	import ChartTooltip from '$lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
-	import Check from 'lucide-svelte/icons/check';
-	import X from 'lucide-svelte/icons/x';
-	import Clock from 'lucide-svelte/icons/clock';
-	import Trash2 from 'lucide-svelte/icons/trash-2';
-	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import { openDayInReview } from '$lib/components/dashboard/glucose-chart/day-in-review';
+	import Check from '@lucide/svelte/icons/check';
+	import X from '@lucide/svelte/icons/x';
+	import Clock from '@lucide/svelte/icons/clock';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import History from '@lucide/svelte/icons/history';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import { EmptyState } from '$lib/components/shared';
-	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import { bg, bgLabel, formatShortDate, time } from "$lib/utils/formatting";
 	import type { CompressionLowSuggestion } from '$lib/api';
 
@@ -584,7 +586,7 @@
 													<IobCobTrack />
 												{/snippet}
 												{#snippet overlays(_ctx)}
-													<ChartTooltip />
+													<ChartTooltip onTimeClick={openDayInReview} />
 												{/snippet}
 											</GlucoseChartShell>
 										</div>

@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Core.Contracts.Entries;
 
@@ -75,4 +76,14 @@ public interface IEntryStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total count of matching entries across all V4 repositories.</returns>
     Task<long> CountAsync(string? find = null, string? type = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Entries whose <c>srvModified</c> falls after <paramref name="cursorMills"/>, oldest
+    /// modification first, for the v3 <c>history/{lastModified}</c> endpoint. Readings a regular
+    /// read hides (demo rows, losing canonical streams) are withheld but still advance the cursor.
+    /// </summary>
+    /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
+    /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ModifiedSincePage<Entry>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
 }

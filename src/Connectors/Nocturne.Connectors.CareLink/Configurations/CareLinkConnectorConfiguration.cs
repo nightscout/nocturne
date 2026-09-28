@@ -13,7 +13,8 @@ namespace Nocturne.Connectors.CareLink.Configurations;
     SupportsManualSync = true,
     SupportedDataTypes = [SyncDataType.Glucose, SyncDataType.DeviceStatus, SyncDataType.Boluses, SyncDataType.CarbIntake, SyncDataType.TempBasals, SyncDataType.StateSpans, SyncDataType.DeviceEvents],
     DefaultActiveThresholdMinutes = 10,
-    DefaultStaleThresholdMinutes = 30
+    DefaultStaleThresholdMinutes = 30,
+    SensorReadingIntervalSeconds = 300
 )]
 public class CareLinkConnectorConfiguration : BaseConnectorConfiguration
 {

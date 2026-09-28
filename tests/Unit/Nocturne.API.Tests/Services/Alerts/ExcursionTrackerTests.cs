@@ -968,4 +968,93 @@ public class ExcursionTrackerTests
     }
 
     #endregion
+
+    #region Decisions made against a rule snapshot
+
+    private AlertRuleSnapshot SnapshotOf(AlertRule rule) => new(
+        rule.Id, Guid.NewGuid(), rule.Name, rule.ConditionType, rule.ConditionParams,
+        AlertRuleSeverity.Warning, "{}", 0, rule.AutoResolveEnabled, rule.AutoResolveParams);
+
+    private void SetupActive(Guid excursionId) =>
+        SetupTrackerState(new AlertTrackerState
+        {
+            AlertRuleId = _ruleId,
+            State = "active",
+            ActiveExcursionId = excursionId,
+        });
+
+    [Fact]
+    public async Task ForceClose_OfASnapshotWhoseRuleIsGone_WritesNothing()
+    {
+        SetupActive(Guid.NewGuid());
+        _mockRepo.Setup(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((AlertRule?)null);
+
+        var result = await _tracker.ForceCloseAsync(
+            SnapshotOf(_defaultRule), ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.None);
+        _mockRepo.Verify(x => x.CloseExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _mockRepo.Verify(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Theory]
+    [InlineData("enabled")]
+    [InlineData("type")]
+    [InlineData("body")]
+    [InlineData("autoResolveEnabled")]
+    [InlineData("autoResolve")]
+    public async Task ForceClose_OfASnapshotTheRuleNoLongerMatches_WritesNothing(string field)
+    {
+        var excursionId = Guid.NewGuid();
+        SetupActive(excursionId);
+        var snapshot = SnapshotOf(_defaultRule);
+        var edited = new AlertRule
+        {
+            Id = _ruleId,
+            Name = _defaultRule.Name,
+            IsEnabled = field != "enabled",
+            ConditionType = field == "type" ? AlertConditionType.Composite : _defaultRule.ConditionType,
+            ConditionParams = field == "body" ? """{"direction":"below","value":60}""" : _defaultRule.ConditionParams,
+            AutoResolveEnabled = field == "autoResolveEnabled",
+            AutoResolveParams = field == "autoResolve" ? """{"type":"threshold"}""" : null,
+        };
+        SetupRule(edited);
+
+        var result = await _tracker.ForceCloseAsync(snapshot, ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.None);
+        _mockRepo.Verify(x => x.UpsertTrackerStateAsync(It.IsAny<AlertTrackerState>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ForceClose_OfASnapshotTheRuleMatches_Closes()
+    {
+        var excursionId = Guid.NewGuid();
+        SetupActive(excursionId);
+        SetupRule();
+
+        var result = await _tracker.ForceCloseAsync(
+            SnapshotOf(_defaultRule), ExcursionCloseReason.AutoResolve, CancellationToken.None);
+
+        result.Should().Be(new ExcursionTransition(
+            ExcursionTransitionType.ExcursionClosed, excursionId, ExcursionCloseReason.AutoResolve));
+    }
+
+    [Fact]
+    public async Task ProcessEvaluation_OfASnapshotTheRuleNoLongerMatches_OpensNothing()
+    {
+        SetupTrackerState(null);
+        var snapshot = SnapshotOf(_defaultRule);
+        _mockRepo.SetupSequence(x => x.GetRuleAsync(_ruleId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AlertRule { Id = _ruleId, ConfirmationReadings = 1 })
+            .ReturnsAsync(new AlertRule { Id = _ruleId, ConfirmationReadings = 1, ConditionParams = "{\"edited\":true}" });
+
+        var result = await _tracker.ProcessEvaluationAsync(snapshot, true, null, CancellationToken.None);
+
+        result.Type.Should().Be(ExcursionTransitionType.None);
+        _mockRepo.Verify(x => x.CreateExcursionAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    #endregion
 }

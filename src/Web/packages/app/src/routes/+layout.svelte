@@ -1,5 +1,6 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
   import { getEngineHost } from "@nocturne/watercolour";
   import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
@@ -50,6 +51,12 @@
    */
   $effect(() => {
     void getEngineHost().warm();
+  });
+
+  // Children mount first, so this marks the whole page live. Server-rendered markup looks the
+  // same before it, but a click on it does nothing; a browser driver waits for this instead.
+  onMount(() => {
+    document.documentElement.dataset.hydrated = "";
   });
 </script>
 

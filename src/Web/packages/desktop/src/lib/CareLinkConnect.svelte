@@ -13,7 +13,11 @@
   import { Textarea } from "@nocturne/ui/ui/textarea";
   import { Label } from "@nocturne/ui/ui/label";
   import { Alert, AlertDescription } from "@nocturne/ui/ui/alert";
-  import { CheckCircle2, KeyRound, Link2, Loader2, RotateCcw } from "@lucide/svelte";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Link2 from "@lucide/svelte/icons/link-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { commandErrorMessage, commandErrorStatus } from "$lib/command-error";
 
   type LinkInfo = { serverUrl: string };

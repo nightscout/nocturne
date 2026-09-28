@@ -13,6 +13,7 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Serializers;
 using Nocturne.Core.Models.Extensions;
 using Nocturne.Core.Contracts.Entries;
 
@@ -866,11 +867,8 @@ public class EntriesController : ControllerBase
         }
     }
 
-    private static readonly JsonSerializerOptions EntryDeserializerOptions =
-        new() { PropertyNameCaseInsensitive = true };
-
     private static Entry? DeserializeEntry(JsonElement element) =>
-        JsonSerializer.Deserialize<Entry>(element.GetRawText(), EntryDeserializerOptions);
+        JsonSerializer.Deserialize<Entry>(element.GetRawText(), UploaderIdJsonModifier.CaseInsensitiveReadOptions);
 
     /// <summary>
     /// True when an entry carries meaningful glucose data, a usable timestamp, or a non-sgv type.

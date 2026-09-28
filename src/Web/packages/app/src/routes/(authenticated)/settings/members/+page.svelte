@@ -6,16 +6,14 @@
   import { flip } from "svelte/animate";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Users,
-    Check,
-    AlertTriangle,
-    Link,
-    ShieldAlert,
-    Globe,
-    Lock,
-    ScrollText,
-  } from "lucide-svelte";
+  import Users from "@lucide/svelte/icons/users";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Link from "@lucide/svelte/icons/link";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Lock from "@lucide/svelte/icons/lock";
+  import ScrollText from "@lucide/svelte/icons/scroll-text";
   import { EmptyState } from "$lib/components/shared";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";

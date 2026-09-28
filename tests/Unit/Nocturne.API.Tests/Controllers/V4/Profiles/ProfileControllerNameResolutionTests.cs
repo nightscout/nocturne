@@ -59,7 +59,7 @@ public class ProfileControllerNameResolutionTests
 
         result.Should().BeOfType<NoContentResult>();
         _therapyRepo.Verify(
-            r => r.UpdateAsync(lower.Id, It.Is<TherapySettings>(ts => ts.IsDefault), WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            r => r.SetDefaultAsync(lower.Id, It.IsAny<CancellationToken>()),
             Times.Once,
             "the exactly-named profile is the one activated, not the newer differently-cased row");
     }
@@ -74,7 +74,7 @@ public class ProfileControllerNameResolutionTests
 
         result.Should().BeOfType<NoContentResult>();
         _therapyRepo.Verify(
-            r => r.UpdateAsync(stored.Id, It.Is<TherapySettings>(ts => ts.IsDefault), WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            r => r.SetDefaultAsync(stored.Id, It.IsAny<CancellationToken>()),
             Times.Once,
             "a lone candidate is unambiguous, so the lenient calls this endpoint has always served still work");
     }
@@ -96,7 +96,7 @@ public class ProfileControllerNameResolutionTests
             .Which.Detail.Should().Contain("Default").And.Contain("default");
 
         _therapyRepo.Verify(
-            r => r.UpdateAsync(It.IsAny<Guid>(), It.IsAny<TherapySettings>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            r => r.SetDefaultAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

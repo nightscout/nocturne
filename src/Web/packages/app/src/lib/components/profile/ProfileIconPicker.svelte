@@ -3,39 +3,37 @@
   import * as Popover from "$lib/components/ui/popover";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { PROFILE_ICONS } from "$lib/constants/profile-icons";
-  import {
-    User,
-    UserCircle,
-    Heart,
-    HeartPulse,
-    Activity,
-    Syringe,
-    Pill,
-    Droplet,
-    Target,
-    Sun,
-    Moon,
-    Sunrise,
-    Sunset,
-    Dumbbell,
-    Bike,
-    Footprints,
-    Utensils,
-    Coffee,
-    Cake,
-    Baby,
-    Briefcase,
-    Home,
-    Plane,
-    Zap,
-    Shield,
-    Star,
-    Sparkles,
-    Clock,
-    Calendar,
-    TrendingUp,
-    type Icon,
-  } from "lucide-svelte";
+  import type { Icon } from "@lucide/svelte";
+  import User from "@lucide/svelte/icons/user";
+  import UserCircle from "@lucide/svelte/icons/circle-user";
+  import Heart from "@lucide/svelte/icons/heart";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Pill from "@lucide/svelte/icons/pill";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import Target from "@lucide/svelte/icons/target";
+  import Sun from "@lucide/svelte/icons/sun";
+  import Moon from "@lucide/svelte/icons/moon";
+  import Sunrise from "@lucide/svelte/icons/sunrise";
+  import Sunset from "@lucide/svelte/icons/sunset";
+  import Dumbbell from "@lucide/svelte/icons/dumbbell";
+  import Bike from "@lucide/svelte/icons/bike";
+  import Footprints from "@lucide/svelte/icons/footprints";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Coffee from "@lucide/svelte/icons/coffee";
+  import Cake from "@lucide/svelte/icons/cake";
+  import Baby from "@lucide/svelte/icons/baby";
+  import Briefcase from "@lucide/svelte/icons/briefcase";
+  import Home from "@lucide/svelte/icons/house";
+  import Plane from "@lucide/svelte/icons/plane";
+  import Zap from "@lucide/svelte/icons/zap";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Star from "@lucide/svelte/icons/star";
+  import Sparkles from "@lucide/svelte/icons/sparkles";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
 
   interface Props {
     selectedIcon: string;

@@ -11,6 +11,17 @@ public interface IDevicePublisher
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Publishes the device statuses a source may already have delivered that nothing stored holds yet
+    /// under their id. A held status is left as it is stored, and one the user deleted does not come back.
+    /// </summary>
+    /// <returns>How many were written, or null when the write failed.</returns>
+    Task<int?> PublishRecentDeviceStatusAsync(
+        IEnumerable<DeviceStatus> deviceStatuses,
+        string source,
+        WriteOrigin origin,
+        CancellationToken cancellationToken = default);
+
     Task<bool> PublishDeviceEventsAsync(
         IEnumerable<DeviceEvent> records,
         string source,

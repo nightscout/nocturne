@@ -72,6 +72,24 @@ public class UniqueIndexDeduplicationGuardTests
             + "still reports, because the exemption cannot match a create it also cannot read");
     }
 
+    /// <summary>
+    /// The concurrent unique build has no grandfathered offender to keep its pattern honest, and a
+    /// pattern that stopped matching would clear every migration using it.
+    /// </summary>
+    [Fact]
+    public void TheGuardSeesAConcurrentUniqueBuild()
+    {
+        const string up = """
+            ConcurrentIndexBuilder.BuildUnique(
+                migrationBuilder,
+                "ix_notes_tenant_source_sync_id",
+                "ON notes (tenant_id, data_source, sync_identifier) "
+                + "WHERE sync_identifier IS NOT NULL AND deleted_at IS NULL");
+            """;
+
+        UniqueIndexCreations(up).Select(x => x.Table).Should().Equal("notes");
+    }
+
     [Fact]
     public void EveryGrandfatheredMigrationStillExistsAndStillLacksDeduplication()
     {
@@ -128,7 +146,7 @@ public class UniqueIndexDeduplicationGuardTests
             foreach (Match match in regex.Matches(up))
                 yield return (match.Index, FluentTable(match.Groups[1].Value));
 
-        foreach (var regex in new[] { SqlUniqueIndex, SqlUniqueConstraint })
+        foreach (var regex in new[] { SqlUniqueIndex, SqlUniqueConstraint, BuilderUniqueIndex })
             foreach (Match match in regex.Matches(up))
                 yield return (match.Index, ResolveTable(match.Groups[1].Value));
     }
@@ -185,6 +203,13 @@ public class UniqueIndexDeduplicationGuardTests
     private static readonly Regex SqlUniqueIndex = new(
         @"CREATE\s+UNIQUE\s+INDEX(?:\s+CONCURRENTLY)?(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON\s+(?:ONLY\s+)?(\S+)",
         Sql);
+
+    /// <summary>
+    /// <c>ConcurrentIndexBuilder.BuildUnique</c>, whose table is the one its definition names after
+    /// <c>ON</c>; a <c>{table}</c> hole there resolves to <see cref="UnresolvedTable"/>.
+    /// </summary>
+    private static readonly Regex BuilderUniqueIndex = new(
+        @"ConcurrentIndexBuilder\.BuildUnique\s*\([^;]*?""ON\s+(?:ONLY\s+)?([^\s""]+)", Sql);
 
     private static readonly Regex SqlUniqueConstraint = new(
         @"ALTER\s+TABLE\s+(?:ONLY\s+)?(\S+)[^;]*?\bADD\s+CONSTRAINT\b[^;]*?\bUNIQUE\b", Sql);

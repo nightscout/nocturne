@@ -91,6 +91,9 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The restored record.</returns>
     /// <exception cref="KeyNotFoundException">If no soft-deleted record with the given ID exists.</exception>
+    /// <exception cref="RecreationBlockedException">
+    /// A live record already holds a unique key the restored one would take, so it stays deleted.
+    /// </exception>
     Task<T> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
@@ -99,8 +102,11 @@ public interface IV4Repository<T> where T : class, IV4Record
     /// <param name="ids">UUID v7 identifiers of the soft-deleted records.</param>
     /// <param name="origin">Whether this is a live write (broadcast) or a backfill import (silent).</param>
     /// <param name="ct">Cancellation token.</param>
-    /// <returns>The restored records (only those that were actually soft-deleted).</returns>
-    Task<IEnumerable<T>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default);
+    /// <returns>
+    /// The restored records (only those that were actually soft-deleted), and the ids left deleted
+    /// per <see cref="BulkRestoreResult{T}.Conflicts"/>.
+    /// </returns>
+    Task<BulkRestoreResult<T>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
     /// Retrieve soft-deleted records for the "trash" view, ordered by deletion date (newest first).

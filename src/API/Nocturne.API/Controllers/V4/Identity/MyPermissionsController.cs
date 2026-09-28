@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 
@@ -40,16 +41,20 @@ public class MyPermissionsController : ControllerBase
     /// <summary>
     /// Get the caller's effective granted scopes and history window for the current tenant.
     /// </summary>
-    /// <returns>The caller's granted scopes, and whether it may read only the last 24 hours.</returns>
+    /// <returns>
+    /// The caller's granted scopes, whether it may read only the last 24 hours, and whether the
+    /// demo-subject gate refuses it.
+    /// </returns>
     [HttpGet]
     [RemoteQuery]
     [ProducesResponseType(typeof(MyPermissionsResponse), StatusCodes.Status200OK)]
-    public ActionResult<MyPermissionsResponse> GetMyPermissions()
+    public async Task<ActionResult<MyPermissionsResponse>> GetMyPermissions()
     {
         return Ok(new MyPermissionsResponse
         {
             Scopes = HttpContext.GetGrantedScopes().ToList(),
             LimitTo24Hours = _categoryReadContext.IsHistoryClamped,
+            RefusedAsDemoSubject = await DenyDemoSubjectAttribute.RefusesAsync(HttpContext),
         });
     }
 }
@@ -67,4 +72,10 @@ public class MyPermissionsResponse
     /// without full history or a clamped member or credential.
     /// </summary>
     public bool LimitTo24Hours { get; set; }
+
+    /// <summary>
+    /// True when the caller is the demo tenant's shared visitor account, which every
+    /// <see cref="DenyDemoSubjectAttribute"/> endpoint refuses whatever <see cref="Scopes"/> grants.
+    /// </summary>
+    public bool RefusedAsDemoSubject { get; set; }
 }

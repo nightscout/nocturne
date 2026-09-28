@@ -6,7 +6,9 @@
   import { onMount } from "svelte";
   import { Card, CardContent } from "@nocturne/ui/ui/card";
   import { Button } from "@nocturne/ui/ui/button";
-  import { Loader2, Monitor, Settings } from "@lucide/svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Monitor from "@lucide/svelte/icons/monitor";
+  import Settings from "@lucide/svelte/icons/settings";
   import GlucoseReadout from "$lib/GlucoseReadout.svelte";
   import type { Reading } from "$lib/glucose-types";
   import { preferences } from "$lib/preferences.svelte";

@@ -16,21 +16,19 @@
   import { Progress } from "$lib/components/ui/progress";
   import * as Alert from "$lib/components/ui/alert";
   import { SkippedRecordsNote } from "$lib/components/shared";
-  import {
-    Import,
-    Loader2,
-    AlertTriangle,
-    CheckCircle2,
-    XCircle,
-    Play,
-    Square,
-    Clock,
-    Database,
-    Globe,
-    Server,
-    RefreshCw,
-    Info,
-  } from "lucide-svelte";
+  import Import from "@lucide/svelte/icons/import";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import XCircle from "@lucide/svelte/icons/circle-x";
+  import Play from "@lucide/svelte/icons/play";
+  import Square from "@lucide/svelte/icons/square";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Database from "@lucide/svelte/icons/database";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Server from "@lucide/svelte/icons/server";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import Info from "@lucide/svelte/icons/info";
   import { EmptyState } from "$lib/components/shared";
   import { databaseArtwork } from "$lib/watercolour-icons";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";

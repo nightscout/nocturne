@@ -156,13 +156,13 @@ public class DataOverviewServiceNonPrimarySqlTests : IDisposable
         _context.TempBasals.AddRange(
             new TempBasalEntity
             {
-                Id = Guid.NewGuid(), TenantId = TenantId, StartTimestamp = Nov10_2025_Noon,
+                Id = Guid.NewGuid(), TenantId = TenantId, Timestamp = Nov10_2025_Noon,
                 EndTimestamp = Nov10_2025_Noon.AddHours(1), Rate = 1.0, Origin = "Scheduled",
                 DataSource = "dexcom",
             },
             new TempBasalEntity
             {
-                Id = tempBasalDuplicate, TenantId = TenantId, StartTimestamp = Nov10_2025_Noon,
+                Id = tempBasalDuplicate, TenantId = TenantId, Timestamp = Nov10_2025_Noon,
                 EndTimestamp = Nov10_2025_Noon.AddHours(1), Rate = 2.0, Origin = "Scheduled",
                 DataSource = "glooko",
             });

@@ -49,7 +49,9 @@ public class ClockFaceEntity : ITenantScoped, ISystemTimestamped, IEntityCreated
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     /// <summary>
-    /// When this clock face was last updated
+    /// When this clock face was last updated.
+    /// NocturneDbContext stamps this alongside <see cref="SysUpdatedAt"/>, with the same
+    /// insert/modify split as <see cref="ISystemTimestamped.SysUpdatedAt"/>.
     /// </summary>
     [Column("updated_at")]
     public DateTime? UpdatedAt { get; set; }

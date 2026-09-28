@@ -90,7 +90,7 @@ internal sealed class DtoMappingStage(ITreatmentFoodService treatmentFoodService
             .ToList();
 
         var stepSeries = context.StepCountList
-            .Where(sc => sc.Metric > 0)
+            .Where(sc => sc.Metric > 0 && !sc.IsPossibleRunningTotal())
             .Select(sc => new StepBubbleDto { Time = sc.Mills, Steps = sc.Metric })
             .OrderBy(p => p.Time)
             .ToList();

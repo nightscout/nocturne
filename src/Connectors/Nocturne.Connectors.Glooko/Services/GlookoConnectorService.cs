@@ -74,7 +74,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         var token = await _tokenProvider.GetValidTokenAsync(context.Config);
         if (token == null)
         {
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return false;
         }
 
@@ -320,12 +320,7 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
             await ReportSyncMessageAsync(SyncMessageType.Authenticating, null, cancellationToken);
 
             if (!await AuthenticateWithConfigAsync(context))
-            {
-                result.Success = false;
-                result.Message = "Authentication failed";
-                result.Errors.Add("Authentication failed");
-                return result;
-            }
+                return AuthenticationFailedResult();
 
             var activeTypes = ResolveActiveTypes(request, config);
 
@@ -423,9 +418,12 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
     ///     <see cref="GlookoConstants.FullWalkRetryInterval"/>, not on every cycle, so a persistently
     ///     failing window cannot reinstate the per-cycle cost the schedule exists to remove.
     ///     <para>
-    ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run;
-    ///     a service without a cursor store has nowhere to remember a walk; a caller naming its own
-    ///     <paramref name="since"/> has already chosen. All three take the base window.
+    ///     SSV2 resumes every resource from its own cursor and ignores the bound on a scheduled run,
+    ///     and a caller naming its own <paramref name="since"/> has already chosen; both take the base
+    ///     window. A service without a cursor store has nowhere to remember a walk, so it resumes
+    ///     instead, from the oldest of the glucose and treatment resume points: every family is
+    ///     fetched inside the one window, and the base's glucose watermark alone would leave
+    ///     treatments that a failed chunk never published below every later run's bound.
     ///     </para>
     /// </remarks>
     public override async Task<SyncResult> SyncDataAsync(
@@ -434,8 +432,16 @@ public class GlookoConnectorService : BaseConnectorService<GlookoConnectorConfig
         DateTime? since = null,
         ISyncProgressReporter? progressReporter = null)
     {
-        if (since.HasValue || config.UseSsv2Sync || _cursorStore is null)
+        if (since.HasValue || config.UseSsv2Sync)
             return await base.SyncDataAsync(config, cancellationToken, since, progressReporter);
+
+        if (_cursorStore is null)
+        {
+            var resumeFrom = ResumeFrom(
+                await CalculateSinceTimestampAsync(config),
+                await CalculateTreatmentSinceTimestampAsync(config));
+            return await base.SyncDataAsync(config, cancellationToken, resumeFrom, progressReporter);
+        }
 
         var now = DateTime.UtcNow;
         var fullWalk = await IsFullWalkDueAsync(now, cancellationToken);

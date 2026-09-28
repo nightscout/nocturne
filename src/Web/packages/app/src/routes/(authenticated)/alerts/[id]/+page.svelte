@@ -35,16 +35,14 @@
   import * as Select from "$lib/components/ui/select";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import {
-    ArrowLeft,
-    Save,
-    Trash2,
-    Zap,
-    Loader2,
-    History as HistoryIcon,
-    PlayCircle,
-    CalendarDays,
-  } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Save from "@lucide/svelte/icons/save";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Zap from "@lucide/svelte/icons/zap";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import HistoryIcon from "@lucide/svelte/icons/history";
+  import PlayCircle from "@lucide/svelte/icons/circle-play";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
 
   import { EditorActionBar } from "$lib/components/layout";
   import { EmptyState } from "$lib/components/shared";
@@ -97,10 +95,10 @@
   const historyLoading = $derived(
     historyQuery !== null && historyQuery.current === undefined,
   );
-  const loading = $derived(
-    rulesQuery.current === undefined ||
-      (ruleQuery !== null && ruleQuery.current === undefined),
-  );
+  // Ready once the rule has seeded the editor, not when `ruleQuery.current` is set: the derived
+  // can re-run and hand the template a fresh query that never starts, while the seeding effect
+  // below has already read the loaded one (#1751).
+  const loading = $derived(rulesQuery.current === undefined || seededId !== ruleId);
 
   // Replay dialog state — opened either by the "Test alert" button (no preset)
   // or by clicking a historic firing (preset to that day).
@@ -343,7 +341,7 @@
         </Card>
       {:else}
         <!-- Identity -->
-        <Card>
+        <Card data-testid="alert-identity-card">
           <CardHeader class="flex flex-row items-start justify-between gap-4">
             <div class="space-y-1.5">
               <CardTitle>Identity</CardTitle>
@@ -357,6 +355,7 @@
               </Label>
               <Switch
                 id="rule-enabled"
+                data-testid="alert-enabled"
                 checked={editor.isEnabled}
                 onCheckedChange={(c: boolean) => {
                   editor.isEnabled = c;
@@ -399,7 +398,7 @@
                   if (parsed.success) editor.severity = parsed.data;
                 }}
               >
-                <Select.Trigger>{severityLabel(editor.severity)}</Select.Trigger>
+                <Select.Trigger data-testid="alert-severity">{severityLabel(editor.severity)}</Select.Trigger>
                 <Select.Content>
                   {#each severityOptions as o (o.value)}
                     <Select.Item value={o.value} label={o.label} />
@@ -407,7 +406,10 @@
                 </Select.Content>
               </Select.Root>
             </div>
-            <div class="flex items-start gap-2 rounded border bg-muted/30 p-3">
+            <div
+              class="flex items-start gap-2 rounded border bg-muted/30 p-3"
+              data-testid="alert-allow-dnd"
+            >
               <Checkbox
                 id="rule-allow-dnd"
                 checked={editor.allowThroughDnd}
@@ -429,7 +431,7 @@
         </Card>
 
         <!-- Condition tree -->
-        <Card>
+        <Card data-testid="alert-condition-card">
           <CardHeader>
             <CardTitle>Condition</CardTitle>
             <CardDescription>
@@ -445,7 +447,7 @@
         </Card>
 
         <!-- Channels -->
-        <Card>
+        <Card data-testid="alert-channels-card">
           <CardHeader>
             <CardTitle>Channels</CardTitle>
             <CardDescription>
@@ -461,7 +463,7 @@
         </Card>
 
         <!-- Auto-resolve -->
-        <Card>
+        <Card data-testid="alert-auto-resolve-card">
           <CardHeader>
             <CardTitle>Auto-resolve</CardTitle>
           </CardHeader>
@@ -476,7 +478,7 @@
         </Card>
 
         <!-- Smart snooze -->
-        <Card>
+        <Card data-testid="alert-smart-snooze-card">
           <CardHeader>
             <CardTitle>Smart snooze</CardTitle>
             <CardDescription>

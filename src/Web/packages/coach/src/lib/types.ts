@@ -49,6 +49,21 @@ export interface SequenceConfig {
   [name: string]: SequenceDefinition;
 }
 
+/** The part of a router's before-navigate event the provider needs; SvelteKit's `BeforeNavigate` fits. */
+export interface CoachNavigation {
+  type: string;
+  to: { url: URL } | null;
+  willUnload: boolean;
+  cancel: () => void;
+  complete: Promise<void>;
+}
+
+export interface CoachRouter {
+  /** Registers a callback run before every client-side navigation. Called once, at provider init. */
+  beforeNavigate(callback: (navigation: CoachNavigation) => void): void;
+  goto(url: URL): Promise<unknown>;
+}
+
 export interface CoachMarkProviderOptions {
   adapter: CoachMarkAdapter;
   sequences?: SequenceConfig;

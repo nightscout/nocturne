@@ -8,6 +8,12 @@
   --glucose-very-low: oklch(0.577 0.245 27.325);
   --glucose-high: oklch(0.65 0.18 270);
   --glucose-very-high: oklch(0.55 0.25 15);
+  /* Text on a glucose fill: whichever ink contrasts more with that fill. */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.985 0.002 247.839);
 
   /* The heatmap fades to a neutral endpoint from 72 to 54 mg/dL (4 to 3 mmol/L),
      then stays solid. Dark mode inverts the endpoint; print uses white paper. */
@@ -239,6 +245,11 @@
   --color-glucose-very-low: var(--glucose-very-low);
   --color-glucose-high: var(--glucose-high);
   --color-glucose-very-high: var(--glucose-very-high);
+  --color-glucose-very-low-foreground: var(--glucose-very-low-foreground);
+  --color-glucose-low-foreground: var(--glucose-low-foreground);
+  --color-glucose-in-range-foreground: var(--glucose-in-range-foreground);
+  --color-glucose-high-foreground: var(--glucose-high-foreground);
+  --color-glucose-very-high-foreground: var(--glucose-very-high-foreground);
 
   /* Sensor-integrity cluster confidence */
   --color-cluster-low: var(--cluster-low);

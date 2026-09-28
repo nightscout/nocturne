@@ -39,7 +39,7 @@ testids and will fail on the clip selector.
 
 ```bash
 # worktree root; the instance key doubles as the JWT signing key, so 32+ chars
-ASPIRE_CLI_START_TIMEOUT=900 env "Parameters__instance-key=<32+ chars>" aspire run --isolated
+ASPIRE_CLI_START_TIMEOUT=900 NOCTURNE_DEV_AUTO_LOGIN=false env "Parameters__instance-key=<32+ chars>" aspire run --isolated
 ```
 
 Ports are dynamic per worktree. Do not port-scan — a local MongoDB answers 200 and looks like a

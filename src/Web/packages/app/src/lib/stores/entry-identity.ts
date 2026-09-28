@@ -10,6 +10,16 @@ export function entryReadingIdentity(entry: Entry): string {
 }
 
 /**
+ * Whether two entries are the same reading, by `_id` or by reading. An entry backfilled from the
+ * V4 REST DTO carries the reading's uuid as `_id`, while a realtime event carries the legacy
+ * ObjectId form, so the ids alone cannot pair the two copies.
+ */
+export function isSameEntry(a: Entry, b: Entry): boolean {
+  if (typeof a._id === "string" && a._id === b._id) return true;
+  return typeof a.mills === "number" && entryReadingIdentity(a) === entryReadingIdentity(b);
+}
+
+/**
  * The pending entries that match neither a known entry nor an earlier pending
  * one, by `_id` or by reading.
  */

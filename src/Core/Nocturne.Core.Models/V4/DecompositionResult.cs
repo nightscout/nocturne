@@ -12,6 +12,10 @@ public class DecompositionResult
     /// <summary>
     /// Correlation ID linking all records produced from the same legacy record
     /// </summary>
+    /// <remarks>
+    /// A batch mints one per source record, never one per batch: the devicestatus projection,
+    /// meal pairing and Linked Records all group by it. A batch result carries its first record's.
+    /// </remarks>
     public Guid? CorrelationId { get; set; }
 
     /// <summary>

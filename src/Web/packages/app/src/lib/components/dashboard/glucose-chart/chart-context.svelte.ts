@@ -1,5 +1,5 @@
 import { Context } from "runed";
-import type { ChartDataEngine } from "./engine/chart-data-engine.svelte";
+import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
 import type { TrackLayout } from "./engine/track-layout";
 import type { PointInspection } from "./engine/point-inspection.svelte";
 

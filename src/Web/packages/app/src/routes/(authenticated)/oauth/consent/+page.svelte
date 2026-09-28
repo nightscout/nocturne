@@ -7,16 +7,14 @@
   import { Separator } from "$lib/components/ui/separator";
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
-  import {
-    Shield,
-    ShieldAlert,
-    AlertTriangle,
-    ExternalLink,
-    Check,
-    ShieldPlus,
-    Clock,
-    Loader2,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Check from "@lucide/svelte/icons/check";
+  import ShieldPlus from "@lucide/svelte/icons/shield-plus";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { consentForm, getClientInfo } from "../oauth.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
   import { retainQuery } from "$lib/api/retain-query.svelte";

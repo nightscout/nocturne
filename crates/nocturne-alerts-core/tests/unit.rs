@@ -301,6 +301,38 @@ fn sustained_missing_child_returns_false() {
     assert!(!eval_tree(&tree, &ctx));
 }
 
+#[test]
+fn sustained_timer_runs_behind_a_false_and_sibling() {
+    let tree = json!({
+        "type": "composite",
+        "composite": {"operator": "and", "conditions": [
+            {"type": "threshold", "threshold": {"direction": "below", "value": 70}},
+            {"type": "sustained", "sustained": {"minutes": 10, "child":
+                {"type": "threshold", "threshold": {"direction": "below", "value": 120}}}}
+        ]}
+    });
+    let node = Node::parse(&tree).expect("node parses");
+    let mut timers = TimerStore::new();
+    let at = |now: DateTime<Utc>, glucose: &str, timers: &mut TimerStore| {
+        let ctx = glucose_ctx(Some(glucose), Some("0"));
+        let mut env = Env::new(now, Uuid::nil(), &ctx, timers);
+        eval_node(Some(&node), "composite", &mut env)
+    };
+
+    // The first row is false, yet the sustained row starts its clock.
+    assert!(!at(base(), "100", &mut timers));
+    let path = "composite[1].sustained";
+    assert_eq!(
+        timers.snapshot_for_rule(Uuid::nil()).collect::<Vec<_>>(),
+        vec![(path, base())]
+    );
+    // Ten minutes on, with the first row now true, the rule holds at once.
+    assert!(at(base() + TimeDelta::minutes(10), "65", &mut timers));
+    // Both rows false: the clock clears although the first row is false.
+    assert!(!at(base() + TimeDelta::minutes(15), "150", &mut timers));
+    assert_eq!(timers.snapshot_for_rule(Uuid::nil()).count(), 0);
+}
+
 // ---------------------------------------------------------------------------
 // staleness / time_since cold-start conventions
 // ---------------------------------------------------------------------------

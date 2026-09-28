@@ -57,6 +57,12 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         var result = new SyncResult { Success = true };
         var activeTypes = ResolveActiveTypes(request, config);
 
+        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
+        {
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+            return AuthenticationFailedResult();
+        }
+
         try
         {
             var (pwdId, resolveError) = await ResolvePatientIdAsync(config, cancellationToken);
@@ -220,7 +226,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for overviews fetch", ConnectorSource);
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
@@ -272,7 +278,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for package fetch", ConnectorSource);
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 

@@ -4,7 +4,7 @@
 	import { Input } from '@nocturne/ui/ui/input';
 	import Check from '@lucide/svelte/icons/check';
 	import Copy from '@lucide/svelte/icons/copy';
-	import Edit from '@lucide/svelte/icons/edit';
+	import Edit from '@lucide/svelte/icons/square-pen';
 	import Trash from '@lucide/svelte/icons/trash';
 	import type { Editor } from '@tiptap/core';
 	import BubbleMenu from '../../components/BubbleMenu.svelte';

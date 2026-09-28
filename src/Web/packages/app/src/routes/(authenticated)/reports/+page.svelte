@@ -1,13 +1,11 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import {
-    Gauge,
-    AlertTriangle,
-    ArrowRight,
-    BarChart3,
-    Calendar,
-    ChevronRight,
-  } from "lucide-svelte";
+  import Gauge from "@lucide/svelte/icons/gauge";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import BarChart3 from "@lucide/svelte/icons/chart-column";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "$lib/components/ui/card";
   import { EmptyState } from "$lib/components/shared";
   import { page } from "$app/state";

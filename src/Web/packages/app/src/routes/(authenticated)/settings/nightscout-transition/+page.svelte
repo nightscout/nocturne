@@ -10,20 +10,18 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
+	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
+	import Activity from '@lucide/svelte/icons/activity';
+	import AlertCircle from '@lucide/svelte/icons/circle-alert';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import Loader2 from '@lucide/svelte/icons/loader-circle';
+	import Database from '@lucide/svelte/icons/database';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import Clock from '@lucide/svelte/icons/clock';
+	import BarChart3 from '@lucide/svelte/icons/chart-column';
 	import { EmptyState } from '$lib/components/shared';
 	import { databaseArtwork } from '$lib/watercolour-icons';
-	import {
-		ArrowRightLeft,
-		Activity,
-		AlertCircle,
-		CheckCircle2,
-		Loader2,
-		Database,
-		ShieldCheck,
-		ShieldAlert,
-		Clock,
-		BarChart3,
-	} from 'lucide-svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getTransitionStatus } from '$api/generated/nightscoutTransitions.generated.remote';

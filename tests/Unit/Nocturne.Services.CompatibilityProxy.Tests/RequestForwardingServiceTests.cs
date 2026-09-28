@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -101,5 +102,56 @@ public class RequestForwardingServiceTests
         Assert.Contains("[REDACTED]", filtered);
         Assert.DoesNotContain("api_secret", filtered);
         Assert.DoesNotContain("token", filtered);
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") });
+        }
+    }
+
+    [Theory]
+    [InlineData("https://ns.example", "/api/v1/entries.json?count=10", "https://ns.example/api/v1/entries.json?count=10")]
+    [InlineData("https://ns.example/nightscout", "/api/v1/entries.json?count=10", "https://ns.example/nightscout/api/v1/entries.json?count=10")]
+    [InlineData("https://ns.example/nightscout/", "/api/v1/entries.json", "https://ns.example/nightscout/api/v1/entries.json")]
+    [InlineData("https://ns.example/nightscout?token=synthetic-token", "/api/v1/status", "https://ns.example/nightscout/api/v1/status")]
+    [InlineData("ns.example/nightscout", "/api/v1/status", "https://ns.example/nightscout/api/v1/status")]
+    public async Task ForwardToNightscoutAsync_KeepsTheConfiguredSubPath(
+        string nightscoutUrl, string path, string expected)
+    {
+        var handler = new RecordingHandler();
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient("NightscoutClient"))
+            .Returns(() => new HttpClient(handler, disposeHandler: false));
+        var service = CreateService(nightscoutConfig: new NightscoutConnectorConfiguration { Url = nightscoutUrl });
+
+        var result = await service.ForwardToNightscoutAsync(new ClonedRequest { Method = "GET", Path = path });
+
+        Assert.NotNull(result);
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal(expected, handler.RequestUri?.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task ForwardToNightscoutAsync_DoesNotLeaveTheConfiguredBase()
+    {
+        var handler = new RecordingHandler();
+        _httpClientFactoryMock
+            .Setup(f => f.CreateClient("NightscoutClient"))
+            .Returns(() => new HttpClient(handler, disposeHandler: false));
+        var service = CreateService(nightscoutConfig: new NightscoutConnectorConfiguration { Url = "https://ns.example/nightscout" });
+
+        var result = await service.ForwardToNightscoutAsync(
+            new ClonedRequest { Method = "GET", Path = "/http://other.example/api/v1/status" });
+
+        Assert.NotNull(result);
+        Assert.False(result.IsSuccess);
+        Assert.Null(handler.RequestUri);
     }
 }

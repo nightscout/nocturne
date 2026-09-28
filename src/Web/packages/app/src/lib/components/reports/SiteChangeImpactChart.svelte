@@ -2,6 +2,7 @@
   import { AreaChart, Rule } from "layerchart";
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import ChartKey from "$lib/components/charts/print/ChartKey.svelte";
+  import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import { EmptyState } from "$lib/components/shared";
   import { bg, bgValue, bgLabel, bgRange } from "$lib/utils/formatting";
   import type {

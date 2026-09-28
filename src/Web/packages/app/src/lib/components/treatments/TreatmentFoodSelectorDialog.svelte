@@ -1,7 +1,7 @@
 <script lang="ts">
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
-  import { Loader2 } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Globe } from "lucide-svelte";
+  import Globe from "@lucide/svelte/icons/globe";
 
   const { slug, size = 20 }: { slug?: string | null; size?: number } = $props();
 

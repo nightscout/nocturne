@@ -2,7 +2,9 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Item } from "$lib/components/ui/item";
-  import { Activity, Syringe, Utensils } from "lucide-svelte";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
 
   type InspectionContext = "glucose" | "delivery" | "treatment";
 

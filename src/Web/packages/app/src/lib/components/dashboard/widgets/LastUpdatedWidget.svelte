@@ -1,13 +1,11 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import {
-    BatteryCharging,
-    BatteryFull,
-    BatteryLow,
-    BatteryMedium,
-    BatteryWarning,
-    Zap,
-  } from "lucide-svelte";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
+  import Zap from "@lucide/svelte/icons/zap";
   import { onMount } from "svelte";
   import { timeAgo } from "$lib/utils";
   import { time } from "$lib/utils/formatting";

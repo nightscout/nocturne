@@ -63,7 +63,9 @@ public class ConnectorConfigurationEntity : ITenantScoped, ISystemTimestamped
     public int SchemaVersion { get; set; } = 1;
 
     /// <summary>
-    /// When the configuration was last modified
+    /// When the configuration was last modified.
+    /// NocturneDbContext stamps this on insert, unconditionally: a value assigned before the insert
+    /// does not survive it. An update keeps whatever the caller assigns.
     /// </summary>
     [Column("last_modified")]
     public DateTimeOffset LastModified { get; set; }

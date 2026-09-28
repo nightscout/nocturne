@@ -5,7 +5,7 @@
     ScheduleEntry,
     ScheduleChangeInfo,
   } from "$lib/api/generated/nocturne-api-client";
-  import { History } from "lucide-svelte";
+  import History from "@lucide/svelte/icons/history";
   import { bg, bgLabel, formatNumericDate } from "$lib/utils/formatting";
 
   interface Props {

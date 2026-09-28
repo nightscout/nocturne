@@ -81,6 +81,12 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
             return result;
         }
 
+        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
+        {
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+            return AuthenticationFailedResult();
+        }
+
         try
         {
             var sensorGlucose = await FetchSensorGlucoseAsync(config, request.From);
@@ -108,7 +114,7 @@ public class DexcomConnectorService : BaseConnectorService<DexcomConnectorConfig
                 "[{ConnectorSource}] Failed to get valid session, authentication failed",
                 ConnectorSource
             );
-            TrackFailedRequest("Failed to get valid session");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 

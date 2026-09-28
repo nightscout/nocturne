@@ -88,7 +88,7 @@ Some trees cannot be evaluated: the C# evaluators throw on them, and the orchest
 per-rule catch skips the rule for that tick with its timers and tracker untouched (§7).
 The throw depends on what evaluation reaches, but a rule holding one is broken whether
 or not a given tick reaches it. So both engines reject these shapes **before evaluating
-anything**, anywhere in the tree, including behind a short-circuit, a `sustained` whose
+anything**, anywhere in the tree, including under a `sustained` whose
 `minutes <= 0`, or a leaf whose input is null this tick:
 
 | Reason code | Shape | C# throw site |
@@ -190,14 +190,14 @@ byte-for-byte:
 
 ### 2.4 Evaluation order
 
-`composite` evaluates children **in document order with short-circuit**: `and` stops at
-the first false child, `or` stops at the first true child. Children skipped by
-short-circuit are **not evaluated at all** — observable because a skipped `sustained`
-child neither sets nor clears its timer.
+`composite` evaluates **every child, in document order, with no short-circuit**, then
+combines the results: `and` is true when every child is, `or` when any is. A child is
+evaluated whatever an earlier sibling returned, so every `sustained` descendant sets or
+clears its timer on each evaluation of its parent: where a row sits among its siblings
+never changes when a rule becomes true. **[normative]**
 
-The replay path additionally force-evaluates **every leaf in isolation** (no
-short-circuit) to build the per-leaf transition log; leaves are evaluated with the
-**rule-root context path**, not their tree path (irrelevant for stateless leaves;
+The replay path additionally force-evaluates **every leaf in isolation** to build the per-leaf
+transition log; leaves are evaluated with the **rule-root context path**, not their tree path (irrelevant for stateless leaves;
 containers are never force-evaluated). A leaf evaluation that throws is recorded `false`.
 
 ---
@@ -244,8 +244,8 @@ below are non-strict/strict exactly as written.
 - **`composite`** — `{operator, conditions[]}`. Empty `conditions` ⇒ false (a missing
   list, missing operator or null slot cannot be evaluated, §1.4). Operator lowercased;
   only `and` / `or` are recognised, anything else ⇒ false.
-  Short-circuits (§2.4). A child of unknown kind evaluates false (which makes an `and`
-  false and leaves an `or` undecided).
+  Evaluates every child (§2.4). A child of unknown kind evaluates false (which makes an
+  `and` false and leaves an `or` to its other children).
 - **`not`** — `{child}`. Missing child ⇒ **false** (not true). Otherwise inverts the
   child. Consequence: `not` over an unknown/unregistered child kind ⇒ child false ⇒
   **not ⇒ true**. **[normative]**
@@ -455,7 +455,10 @@ the condition holds re-opens on the next evaluation, once.
 
 The host clears `AwaitingRearm` when a rule's condition, auto-resolve configuration or
 enablement changes: the hold was taken against the rule as it was when the auto-resolve
-closed it.
+closed it. For the same reason a host drops a tracker decision made against a rule whose
+condition, auto-resolve configuration or enablement changed after the evaluation read it:
+checked under the rule's transition lock, which the edit also takes, so an evaluation that
+loaded the rule before an edit cannot set a hold the edit cleared.
 
 State persisted before `AwaitingRearm` existed has none and reads as armed.
 
@@ -530,9 +533,9 @@ machine-checkable form is `tests/Parity/AlertEngineCorpus/replay/`.
   1. A rule whose body cannot be evaluated (§1.4), or whose `condition_params` is not a
      payload, is **skipped**: no leaf log, no firing change. Its `alert_state` children
      never see it fire.
-  2. Root truth `met` by the normal evaluators at the rule's root path (short-circuit,
-     shared timer store). The leaf log force-evaluates every leaf alone at the same root
-     path and records each leaf's first observation and every flip
+  2. Root truth `met` by the normal evaluators at the rule's root path (every child
+     evaluated, §2.4; shared timer store). The leaf log force-evaluates every leaf alone
+     at the same root path and records each leaf's first observation and every flip
      (`LeafTransitionPoint(atMs, value)`, unix ms).
   3. A rule awaiting re-arm (step 5) evaluates its enabled, evaluable auto-resolve tree at
      `auto_resolve`; when `met` is false or the tree is, it re-arms on this tick (§6.3).

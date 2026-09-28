@@ -22,16 +22,14 @@
     DialogTitle,
     DialogTrigger,
   } from "$lib/components/ui/dialog";
-  import {
-    Upload,
-    Trash2,
-    Play,
-    Square,
-    FileAudio,
-    AlertCircle,
-    Check,
-    Loader2,
-  } from "lucide-svelte";
+  import Upload from "@lucide/svelte/icons/upload";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Play from "@lucide/svelte/icons/play";
+  import Square from "@lucide/svelte/icons/square";
+  import FileAudio from "@lucide/svelte/icons/file-headphone";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Check from "@lucide/svelte/icons/check";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
 
   interface Props {
     onSoundSelected?: (soundId: string) => void;

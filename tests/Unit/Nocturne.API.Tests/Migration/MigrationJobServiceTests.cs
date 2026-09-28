@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +8,7 @@ using Nocturne.API.Services;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Infrastructure.Data;
+using Nocturne.Infrastructure.Data.Entities;
 
 namespace Nocturne.API.Tests.Migration;
 
@@ -170,10 +172,10 @@ public class MigrationJobServiceTests
 
     /// <summary>
     /// A second start while the tenant's job is still live is refused, and the refusal names the
-    /// running job; once that job reaches a terminal state the slot is free again.
+    /// running job.
     /// </summary>
     [Fact]
-    public async Task StartMigrationAsync_WhenTheTenantAlreadyHasALiveJob_IsRefusedUntilItFinishes()
+    public async Task StartMigrationAsync_WhenTheTenantAlreadyHasALiveJob_IsRefused()
     {
         var handler = new BlockingHandler();
         var service = new MigrationJobService(
@@ -183,18 +185,60 @@ public class MigrationJobServiceTests
             new TenantRunGuard());
         var tenant = Tenant(Guid.NewGuid());
 
-        var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+        try
+        {
+            var first = await service.StartMigrationAsync(ApiRequest(), tenant);
 
-        var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
-            () => service.StartMigrationAsync(ApiRequest(), tenant));
+            var refused = await Assert.ThrowsAsync<MigrationAlreadyRunningException>(
+                () => service.StartMigrationAsync(ApiRequest(), tenant));
 
-        refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
+            refused.JobId.Should().Be(first.Id, "the conflict points at the job that holds the slot");
+        }
+        finally
+        {
+            handler.Release();
+        }
+    }
 
-        handler.Release();
-        await WaitUntilTerminalAsync(service, tenant.TenantId, first.Id);
+    /// <summary>
+    /// Regression for #1707: a job reads terminal before its final record is written and its
+    /// lease released. The terminal persist is held open here, so the start is issued inside that
+    /// window every time rather than only when the scheduler happens to land there.
+    /// </summary>
+    [Fact]
+    public async Task StartMigrationAsync_WhenTheHolderAlreadyReadsTerminal_WaitsForTheSlotInsteadOfRefusing()
+    {
+        var handler = new BlockingHandler();
+        var terminalPersist = new TerminalPersistGate();
+        var service = new MigrationJobService(
+            NullLogger<MigrationJobService>.Instance,
+            MigrationJobHarness.BuildProvider(handler, interceptor: terminalPersist),
+            new ConfigurationBuilder().Build(),
+            new TenantRunGuard());
+        var tenant = Tenant(Guid.NewGuid());
 
-        var afterFinish = await service.StartMigrationAsync(ApiRequest(), tenant);
-        afterFinish.Id.Should().NotBe(first.Id, "the slot is free once the first job is terminal");
+        try
+        {
+            var first = await service.StartMigrationAsync(ApiRequest(), tenant);
+
+            handler.Release();
+            await terminalPersist.Reached.WaitAsync(TimeSpan.FromSeconds(10));
+
+            var status = await service.GetStatusAsync(tenant.TenantId, first.Id);
+            status.State.Should().Be(MigrationJobState.Failed, "the job has finished but still holds the slot");
+
+            var restart = service.StartMigrationAsync(ApiRequest(), tenant);
+            restart.IsCompleted.Should().BeFalse("the slot is held until the terminal record is written");
+
+            terminalPersist.Release();
+            var second = await restart.WaitAsync(TimeSpan.FromSeconds(10));
+
+            second.Id.Should().NotBe(first.Id);
+        }
+        finally
+        {
+            terminalPersist.Release();
+        }
     }
 
     [Fact]
@@ -214,21 +258,35 @@ public class MigrationJobServiceTests
         handler.Release();
     }
 
-    private static async Task WaitUntilTerminalAsync(
-        MigrationJobService service, Guid tenantId, Guid jobId)
+    /// <summary>
+    /// Holds the first save of a terminal <see cref="MigrationRunEntity"/> open until released,
+    /// pinning the job between reporting terminal and releasing its lease.
+    /// </summary>
+    private sealed class TerminalPersistGate : SaveChangesInterceptor
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (DateTime.UtcNow < deadline)
+        private readonly TaskCompletionSource _reached = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _armed = 1;
+
+        public Task Reached => _reached.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            var status = await service.GetStatusAsync(tenantId, jobId);
-            if (status.State is MigrationJobState.Completed or MigrationJobState.Failed
-                or MigrationJobState.Cancelled or MigrationJobState.Interrupted)
-                return;
+            var terminal = eventData.Context!.ChangeTracker.Entries<MigrationRunEntity>()
+                .Any(e => e.Entity.State is nameof(MigrationJobState.Completed)
+                    or nameof(MigrationJobState.Failed) or nameof(MigrationJobState.Cancelled));
 
-            await Task.Delay(20);
+            if (terminal && Interlocked.Exchange(ref _armed, 0) == 1)
+            {
+                _reached.TrySetResult();
+                await _released.Task;
+            }
+
+            return result;
         }
-
-        throw new TimeoutException($"Migration job {jobId} did not reach a terminal state");
     }
 
     /// <summary>Holds every source request until released, keeping the job in a live state.</summary>

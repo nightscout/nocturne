@@ -10,17 +10,15 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import ToggleLeft from "@lucide/svelte/icons/toggle-left";
+  import ToggleRight from "@lucide/svelte/icons/toggle-right";
   import { EmptyState } from "$lib/components/shared";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
-  import {
-    Plus,
-    Pencil,
-    Trash2,
-    Loader2,
-    AlertTriangle,
-    ToggleLeft,
-    ToggleRight,
-  } from "lucide-svelte";
   import type { OidcProviderResponse } from "$api";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
 
