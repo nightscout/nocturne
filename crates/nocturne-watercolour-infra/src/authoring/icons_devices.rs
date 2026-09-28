@@ -95,8 +95,8 @@ pub(super) fn cgm_sensor(style: &Style, palette: &Palette) -> Scene {
     )
 }
 
-/// A body wider than it is tall with a screen in it, and a tube that loops
-/// up out of its top to the infusion site. The tube is what separates it
+/// A body wider than it is tall with a screen in it, and a tube that trails
+/// out of its side to the infusion site. The tube is what separates it
 /// from a phone or a pager, so it is drawn at every size.
 pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(SQUARE);
@@ -104,13 +104,13 @@ pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
     let shadow = role(palette, PigmentRole::Shadow);
     let accent = role(palette, PigmentRole::Accent);
     let mut p = Painting::new(style.ticks(380));
-    let body = Shape::rounded_rect(0.1, 0.44, 0.66, 0.86, 0.08);
+    let body = Shape::rounded_rect(0.08, 0.26, 0.64, 0.68, 0.08);
     stencil_body(&mut p, &frame, style, &body, 0.012, base, 0.4, 0.0);
     p.glaze(0.36, 0.09).clear_mask(0.36);
-    let (top, bottom) = (0.53f32, 0.77);
+    let (top, bottom) = (0.35f32, 0.59);
     p.mask(
         0.38,
-        Shape::rounded_rect(0.18, 0.52, 0.47, 0.78, 0.03).polygon(&frame),
+        Shape::rounded_rect(0.16, 0.34, 0.45, 0.6, 0.03).polygon(&frame),
         0.006,
     );
     p.at(
@@ -127,14 +127,14 @@ pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
     if style.fine() {
         p.at(
             0.56,
-            lift(frame.line(0.23, 0.72, 0.33, 0.56), 0.025, 0.5, 0.6),
+            lift(frame.line(0.21, 0.54, 0.31, 0.38), 0.025, 0.5, 0.6),
         );
     }
     p.glaze(0.62, 0.08).clear_mask(0.62);
     p.at(
         0.62,
         brush(
-            vec![frame.pt(0.565, 0.65)],
+            vec![frame.pt(0.545, 0.47)],
             0.04,
             shadow,
             style.conc(0.85),
@@ -142,14 +142,19 @@ pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
             0.45,
         ),
     );
-    let (lx, rx, bend, rise) = (0.5f32, 0.84f32, 0.3f32, 0.15f32);
-    let (mid, half) = ((lx + rx) * 0.5, (rx - lx) * 0.5);
-    let tube: Vec<_> = std::iter::once((lx, 0.44))
-        .chain((0..=16).map(|i| {
-            let a = PI + i as f32 / 16.0 * PI;
-            (mid + half * a.cos(), bend + rise * a.sin())
-        }))
-        .chain(std::iter::once((rx, 0.44)))
+    // Out of the side and away in one bend, so it trails rather than
+    // closing over the top into a handle.
+    let [a, b, c, d] = [(0.64f32, 0.5f32), (0.8, 0.5), (0.62, 0.84), (0.82, 0.84)];
+    let tube: Vec<_> = (0..=16)
+        .map(|i| {
+            let t = i as f32 / 16.0;
+            let u = 1.0 - t;
+            let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+            (
+                w[0] * a.0 + w[1] * b.0 + w[2] * c.0 + w[3] * d.0,
+                w[0] * a.1 + w[1] * b.1 + w[2] * c.1 + w[3] * d.1,
+            )
+        })
         .map(|(x, y)| frame.pt(x, y))
         .collect();
     p.at(
@@ -166,7 +171,7 @@ pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
     p.at(
         0.74,
         brush(
-            vec![frame.pt(0.84, 0.5)],
+            vec![frame.pt(0.87, 0.84)],
             if style.fine() { 0.05 } else { 0.06 },
             accent,
             style.conc(0.8),
@@ -186,12 +191,12 @@ pub(super) fn insulin_pump(style: &Style, palette: &Palette) -> Scene {
 
 /// A half dial with ticks round its arc and a needle from the pivot: a
 /// reading on a scale, for choosing the units glucose is shown in. The needle
-/// is drawn last and darkest so the eye lands on it.
+/// is drawn last and darkest so the eye lands on it, and sits just left of
+/// upright: swung right it reads as a high reading.
 pub(super) fn glucose_gauge(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(SQUARE);
     let base = role(palette, PigmentRole::BaseWash);
     let shadow = role(palette, PigmentRole::Shadow);
-    let accent = role(palette, PigmentRole::Accent);
     let (cx, cy, r) = (0.5f32, 0.68f32, 0.4f32);
     let mut p = Painting::new(style.ticks(360));
     let dial = Shape(
@@ -220,26 +225,27 @@ pub(super) fn glucose_gauge(style: &Style, palette: &Palette) -> Scene {
                 ),
                 if style.fine() { 0.02 } else { 0.03 },
                 shadow,
-                style.conc(0.6),
+                style.conc(0.4),
                 style.water(0.22),
                 0.5,
             ),
         );
     }
-    let needle = PI + PI * 0.7;
+    p.glaze(0.62, 0.08);
+    let needle = PI + PI * 0.42;
     p.at(
         0.64,
         tapered(
             frame.line(
                 cx,
                 cy,
-                cx + needle.cos() * r * 0.78,
-                cy + needle.sin() * r * 0.78,
+                cx + needle.cos() * r * 0.54,
+                cy + needle.sin() * r * 0.54,
             ),
-            (0.036, 0.014),
-            accent,
-            style.conc(1.0),
-            style.water(0.3),
+            (0.04, 0.016),
+            shadow,
+            style.conc(1.6),
+            style.water(0.18),
             0.4,
         ),
     );

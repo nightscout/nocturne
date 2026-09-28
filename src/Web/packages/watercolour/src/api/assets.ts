@@ -66,7 +66,7 @@ export const DEFAULT_PALETTE: Record<string, PaletteId> = {
   'phone': 'slate',
   'cgm-sensor': 'water',
   'insulin-pump': 'slate',
-  'glucose-gauge': 'ember',
+  'glucose-gauge': 'slate',
   'ringing-bell': 'ember',
   'lucide-database': 'slate',
   'lucide-server': 'slate',

@@ -408,7 +408,7 @@
     },
     {
       "id": "glucose-gauge",
-      "palette": "ember",
+      "palette": "slate",
       "surfaces": [
         "light",
         "dark"
