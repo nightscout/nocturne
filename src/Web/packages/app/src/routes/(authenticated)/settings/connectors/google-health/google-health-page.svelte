@@ -305,6 +305,7 @@ onMount(() => {
           }
         }
       } catch {
+        // Polling failures intentionally use the generic notice; raw remote errors are not actionable here.
         if (!disposed) notice = "Import status is temporarily unavailable. Retrying.";
       } finally {
         if (!disposed) timer = setTimeout(pollStatus, 2000);

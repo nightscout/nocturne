@@ -379,8 +379,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         {
             var payload = point.GetProperty("sleep");
             var interval = payload.GetProperty("interval");
-            var start = DateTimeOffset.Parse(interval.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture);
-            var end = DateTimeOffset.Parse(interval.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture);
+            var start = DateTimeOffset.Parse(interval.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            var end = DateTimeOffset.Parse(interval.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
             if (end <= start) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
 
             var stages = new List<SleepStageInterval>();
@@ -389,8 +391,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 var ordinal = 0;
                 foreach (var stage in stageData.EnumerateArray())
                 {
-                    var stageStart = DateTimeOffset.Parse(stage.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture);
-                    var stageEnd = DateTimeOffset.Parse(stage.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture);
+                    var stageStart = DateTimeOffset.Parse(stage.GetProperty("startTime").GetString()!, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                    var stageEnd = DateTimeOffset.Parse(stage.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
                     if (stageStart < start || stageEnd > end || stageEnd <= stageStart)
                         throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
                     stages.Add(new SleepStageInterval
@@ -492,8 +496,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             var payload = point.GetProperty(type == "heart-rate" ? "heartRate" : type);
             var interval = type == "steps";
             var time = payload.GetProperty(interval ? "interval" : "sampleTime");
-            var start = DateTimeOffset.Parse(time.GetProperty(interval ? "startTime" : "physicalTime").GetString()!, CultureInfo.InvariantCulture);
-            long? end = interval ? DateTimeOffset.Parse(time.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture).ToUnixTimeMilliseconds() : null;
+            var start = DateTimeOffset.Parse(time.GetProperty(interval ? "startTime" : "physicalTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+            long? end = interval ? DateTimeOffset.Parse(time.GetProperty("endTime").GetString()!, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal).ToUnixTimeMilliseconds() : null;
             var valueName = type switch { "steps" => "count", "heart-rate" => "beatsPerMinute", "weight" => "weightGrams", _ => throw new GoogleHealthException("unsupported_type", stage: "data_parse", dataType: type) };
             var value = decimal.Parse(payload.GetProperty(valueName).ToString(), CultureInfo.InvariantCulture);
             if (value < 0 || (type != "steps" && value == 0) ||
