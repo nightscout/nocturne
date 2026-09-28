@@ -1,7 +1,10 @@
 import type { ArtworkId, PaletteId, Surface } from '../types';
 import { type BakedManifest, parseBakedManifest } from './baked';
 import { WatercolourError } from './errors';
+import { defaultPaletteFor, iconAssetId, sourcePalette } from './palette-defaults';
 import { paletteKey } from './scenes';
+
+export { DEFAULT_PALETTE, defaultPaletteFor } from './palette-defaults';
 
 export type AssetVariant = 'final' | 'final-small' | 'strip' | 'manifest';
 
@@ -20,75 +23,9 @@ const FILE_NAMES: Record<AssetVariant, string> = {
   manifest: 'strip.json',
 };
 
-/**
- * The palette each artwork ships baked with (`scripts/bake-manifest.json`).
- * The bundle carries one set per artwork, so any other palette falls back to
- * this one's assets rather than missing entirely.
- */
-export const DEFAULT_PALETTE: Record<string, PaletteId> = {
-  'crescent-moon': 'moonlight',
-  'alarm-bell': 'moonlight',
-  'linked-rings': 'dusk',
-  'report-pages': 'slate',
-  'magnifying-glass': 'water',
-  'confirmation-mark': 'moss',
-  'avatar-wash': 'water',
-  'tab-underline': 'ember',
-  'selection-edge': 'water',
-  'confirmation-background': 'moss',
-  'header-motif': 'moonlight',
-  'moonlit-shoreline': 'moonlight',
-  'distant-mountains': 'slate',
-  'connected-shores': 'water',
-  'overlapping-shapes': 'dusk',
-  'calendar': 'moonlight',
-  'clock': 'slate',
-  'stopwatch': 'slate',
-  'sunrise': 'ember',
-  'footprints': 'moss',
-  'apple': 'moss',
-  'pizza-slice': 'ember',
-  'spanner': 'slate',
-  'suitcase': 'dusk',
-  'paint-palette': 'dusk',
-  'key': 'ember',
-  'plug': 'slate',
-  'apartment': 'slate',
-  'world-globe': 'water',
-  'github-mark': 'slate',
-  'heart': 'ember',
-  'blood-drop': 'ember',
-  'heart-rate': 'ember',
-  'shield': 'water',
-  'people-group': 'dusk',
-  'exclamation-mark': 'ember',
-  'chat-bubble': 'water',
-  'phone': 'slate',
-  'cgm-sensor': 'water',
-  'insulin-pump': 'slate',
-  'glucose-gauge': 'slate',
-  'ringing-bell': 'ember',
-  'lucide-database': 'slate',
-  'lucide-server': 'slate',
-  'lucide-cpu': 'slate',
-  'lucide-fingerprint': 'water',
-  'lucide-battery': 'water',
-  'lucide-sprout': 'moss',
-  'lucide-scale': 'moss',
-  'lucide-syringe': 'ember',
-  'lucide-flag': 'ember',
-  'lucide-megaphone': 'ember',
-  'lucide-rocket': 'ember',
-  'lucide-book-open': 'moonlight',
-};
-
-export function defaultPaletteFor(id: ArtworkId | string): PaletteId {
-  return DEFAULT_PALETTE[id] ?? 'moonlight';
-}
-
 /** The bundled asset key for a baked Lucide icon: `assets/lucide-<name>/...`. */
 export function iconAssetKey(name: string, palette?: PaletteId, surface?: Surface): AssetKey {
-  return { id: `lucide-${name}`, palette, surface };
+  return { id: iconAssetId(name), palette, surface };
 }
 
 /**
@@ -115,7 +52,7 @@ export interface AssetKey {
 }
 
 function bundledPath(key: AssetKey, variant: AssetVariant): string {
-  const exact = `../../assets/${key.id}/${paletteKey(key.palette, key.surface)}/${FILE_NAMES[variant]}`;
+  const exact = `../../assets/${key.id}/${paletteKey(sourcePalette(key.id, key.palette), key.surface)}/${FILE_NAMES[variant]}`;
   if (exact in bundled) return exact;
   const fallback = `../../assets/${key.id}/${paletteKey(defaultPaletteFor(key.id), key.surface)}/${FILE_NAMES[variant]}`;
   return fallback in bundled ? fallback : exact;
@@ -137,7 +74,7 @@ export async function assetUrl(key: AssetKey, variant: AssetVariant, options: As
   if (explicit) return explicit;
   if (options.assetBaseUrl) {
     const base = options.assetBaseUrl.replace(/\/+$/, '');
-    return `${base}/${key.id}/${paletteKey(key.palette, key.surface)}/${FILE_NAMES[variant]}`;
+    return `${base}/${key.id}/${paletteKey(sourcePalette(key.id, key.palette), key.surface)}/${FILE_NAMES[variant]}`;
   }
   const loader = bundled[bundledPath(key, variant)];
   return loader ? loader() : undefined;
