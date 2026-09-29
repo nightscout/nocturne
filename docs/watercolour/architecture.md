@@ -255,11 +255,20 @@ watchdog Windows resets the display driver at:
   buffers) and refused with an `EngineError`. wgpu reports an oversized buffer
   as an uncaptured error after the fact, which would fault the device for
   every instance sharing it.
-- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), a few
-  tens of milliseconds at the 512^2 maximum on an integrated GPU.
+- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), one
+  compute pass each, a few tens of milliseconds at the 512^2 maximum on an
+  integrated GPU.
 - **The optics pass is dispatched in row bands** of at most 2^20 output pixels
   (`RENDER_PIXELS_PER_DISPATCH`), each its own submission, so a large canvas or
-  export raises the number of dispatches rather than the length of one.
+  export raises the number of dispatches rather than the length of one. A
+  presented frame is drawn in the same bands, scissored.
+- **Render paper is cached.** The render-resolution paper, generated on the
+  CPU, is kept as its GPU buffer in a cache the template engine shares with
+  every fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
+  (`PAPER_CACHE_BYTES`), so a remount at the same size skips generating it.
+- **GPU timestamps** (`GpuEngine::gpu_timings`, `stats().gpuTickMs` /
+  `gpuRenderMs`) are taken when the adapter offers `TIMESTAMP_QUERY`; a sample
+  starts only when the last one has been read back, so nothing waits on it.
 - **At most 32 submissions are in flight natively** (`MAX_IN_FLIGHT_SUBMISSIONS`):
   the 33rd blocks on the oldest, so an unattended replay (bake, tests) cannot
   pin unbounded driver memory. The browser paces its own queue.
