@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -314,6 +315,40 @@ struct RenderTarget {
     present_bind_group: wgpu::BindGroup,
 }
 
+/// GPU commands encoded since the engine was created or the counts were
+/// last reset: what the per-command overhead of a host scales with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CommandCounts {
+    pub passes: u64,
+    pub dispatches: u64,
+    /// Buffer-to-buffer copies and clears.
+    pub copies: u64,
+    pub submits: u64,
+}
+
+#[derive(Default)]
+struct CommandCounter {
+    passes: AtomicU64,
+    dispatches: AtomicU64,
+    copies: AtomicU64,
+    submits: AtomicU64,
+}
+
+impl CommandCounter {
+    fn add(counter: &AtomicU64, n: u64) {
+        counter.fetch_add(n, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> CommandCounts {
+        CommandCounts {
+            passes: self.passes.load(Ordering::Relaxed),
+            dispatches: self.dispatches.load(Ordering::Relaxed),
+            copies: self.copies.load(Ordering::Relaxed),
+            submits: self.submits.load(Ordering::Relaxed),
+        }
+    }
+}
+
 pub struct GpuEngine {
     ctx: GpuContext,
     params: SimParams,
@@ -327,6 +362,7 @@ pub struct GpuEngine {
     /// Submissions not yet known to have completed, oldest first; see
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`].
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
+    counter: CommandCounter,
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -568,6 +604,7 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
             in_flight: Mutex::new(VecDeque::new()),
+            counter: CommandCounter::default(),
         };
         (engine, validation)
     }
@@ -588,6 +625,7 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
+            counter: CommandCounter::default(),
         }
     }
 
@@ -606,6 +644,10 @@ impl GpuEngine {
             Some(l) => l.checkpoints.len() as u64 * l.layout.state_bytes(),
             None => 0,
         }
+    }
+
+    pub fn command_counts(&self) -> CommandCounts {
+        self.counter.get()
     }
 
     pub fn context(&self) -> &GpuContext {
@@ -672,6 +714,7 @@ impl GpuEngine {
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`] are pending.
     fn submit(&self, commands: wgpu::CommandBuffer) -> Result<(), EngineError> {
         self.ctx.check()?;
+        CommandCounter::add(&self.counter.submits, 1);
         let index = self.ctx.queue().submit([commands]);
         let oldest = {
             let mut pending = self.in_flight.lock().unwrap_or_else(|p| p.into_inner());
@@ -697,7 +740,9 @@ impl GpuEngine {
         let n = l.layout.n as u32;
         let f = std::mem::size_of::<f32>() as u64;
         let region = |elems: usize| (elems as u64) * f;
+        let c = &self.counter;
         let copy = |enc: &mut wgpu::CommandEncoder, from: usize, to: usize, elems: usize| {
+            CommandCounter::add(&c.copies, 1);
             enc.copy_buffer_to_buffer(
                 &l.scratch,
                 region(from),
@@ -707,6 +752,8 @@ impl GpuEngine {
             );
         };
         let dispatch = |enc: &mut wgpu::CommandEncoder, pipeline: &wgpu::ComputePipeline| {
+            CommandCounter::add(&c.passes, 1);
+            CommandCounter::add(&c.dispatches, 1);
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &l.bind_group, &[]);
@@ -719,6 +766,7 @@ impl GpuEngine {
         copy(enc, lay.scratch_v(), lay.v(), lay.n);
 
         dispatch(enc, &self.sim.divergence);
+        CommandCounter::add(&c.copies, 1);
         enc.clear_buffer(&l.scratch, region(lay.scratch_q()), Some(region(lay.n)));
         for i in 0..self.params.jacobi_iterations {
             dispatch(
@@ -731,6 +779,7 @@ impl GpuEngine {
             );
         }
         if self.params.jacobi_iterations % 2 == 1 {
+            CommandCounter::add(&c.copies, 1);
             enc.copy_buffer_to_buffer(
                 &l.scratch,
                 region(lay.scratch_q2()),
@@ -752,6 +801,8 @@ impl GpuEngine {
         if self.params.swirl_speed > 0.0 && l.maybe_wet {
             dispatch(enc, &self.sim.swirl_distance_h);
             dispatch(enc, &self.sim.swirl_distance_v);
+            CommandCounter::add(&c.passes, 1);
+            CommandCounter::add(&c.dispatches, 1);
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&self.sim.swirl_stream);
             pass.set_bind_group(0, &l.bind_group, &[]);
@@ -769,6 +820,8 @@ impl GpuEngine {
         dispatch(enc, &self.sim.capillary_wet);
         copy(enc, lay.scratch_s(), lay.s(), lay.n);
 
+        CommandCounter::add(&c.passes, 1);
+        CommandCounter::add(&c.dispatches, 1);
         let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
         pass.set_pipeline(&self.sim.clock);
         pass.set_bind_group(0, &l.bind_group, &[]);
@@ -1063,6 +1116,11 @@ impl GpuEngine {
             y_offset += rows;
         }
         Ok(())
+    }
+
+    /// The optics pass alone, with no readback or presentation; for timing.
+    pub fn render_without_readback(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
+        self.render_frame(width, height)
     }
 
     fn ensure_staging(&mut self) -> Result<(), EngineError> {

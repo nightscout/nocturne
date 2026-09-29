@@ -5,8 +5,12 @@
 //! reference and prints timings:
 //!
 //! ```text
-//! cargo run -p nocturne-watercolour-infra --example render_native --release -- <out_dir> [sim_resolution]
+//! cargo run -p nocturne-watercolour-infra --example render_native --release -- <out_dir> [sim_resolution] [--bench]
 //! ```
+//!
+//! `--bench` runs only the tick benchmark: GPU ms per tick with the sheet
+//! wet (swirl on), the commands encoded per tick, and the optics pass alone
+//! at a few output sizes, each the median of three runs.
 //!
 //! An optional `sim_resolution` (e.g. 384 or 512) overrides every scene's
 //! simulation grid so per-tick GPU cost can be compared across resolutions,
@@ -35,7 +39,7 @@ use nocturne_watercolour_core::domain::{
 };
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DetailLevel};
 use nocturne_watercolour_infra::export::{FrameSequence, PngExporter, srgb_to_linear};
-use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
+use nocturne_watercolour_infra::gpu::{CommandCounts, GpuContext, GpuEngine};
 
 const SEED: Seed = Seed(42);
 const REVEAL_FRAMES: u32 = 8;
@@ -315,13 +319,110 @@ fn shoreline_wide(gpu: GpuEngine, out_dir: &Path, resolution: u32, light: Rgb) -
     pb.into_simulator()
 }
 
+/// FNV-1a over `u32` words: a digest to confirm a change is bit-exact.
+fn fnv(words: impl Iterator<Item = u32>) -> u64 {
+    words.fold(0xcbf2_9ce4_8422_2325, |h, w| {
+        (h ^ u64::from(w)).wrapping_mul(0x0100_0000_01b3)
+    })
+}
+
+fn median(mut samples: Vec<f64>) -> f64 {
+    samples.sort_by(f64::total_cmp);
+    samples[samples.len() / 2]
+}
+
+fn per_tick(before: CommandCounts, after: CommandCounts, ticks: u32) -> String {
+    let t = u64::from(ticks);
+    format!(
+        "{:.2} passes, {:.2} dispatches, {:.2} copies, {:.3} submits",
+        (after.passes - before.passes) as f64 / t as f64,
+        (after.dispatches - before.dispatches) as f64 / t as f64,
+        (after.copies - before.copies) as f64 / t as f64,
+        (after.submits - before.submits) as f64 / t as f64,
+    )
+}
+
+/// GPU cost of the tick loop on a wet sheet: the catalogue `wash` played to
+/// 30% (every stroke down, swirl active), then `BENCH_TICKS` bare ticks per
+/// run.
+fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
+    const BENCH_TICKS: u32 = 192;
+    const RUNS: usize = 3;
+    let mut scene = ArtworkCatalogue::build("wash", SEED, Palette::water()).expect("wash");
+    scene.sim_resolution = SimResolution(resolution);
+    let mut pb = Playback::new(gpu, scene.clone(), DURATION_MS).expect("playback");
+    let warm = pb.total_ticks() * 3 / 10;
+    pb.advance_ticks(warm).expect("advance");
+    pb.simulator().sync().expect("sync");
+    let gpu = pb.simulator();
+    let mut tick_ms = Vec::new();
+    let mut counts = String::new();
+    for _ in 0..RUNS {
+        let before = gpu.command_counts();
+        let t = Instant::now();
+        gpu.step(BENCH_TICKS).expect("step");
+        gpu.sync().expect("sync");
+        tick_ms.push(t.elapsed().as_secs_f64() * 1000.0 / f64::from(BENCH_TICKS));
+        counts = per_tick(before, gpu.command_counts(), BENCH_TICKS);
+    }
+    println!(
+        "bench {resolution}^2 sim: {:.4} ms/tick median of {RUNS} (runs {:?}); per tick: {counts}",
+        median(tick_ms.clone()),
+        tick_ms
+            .iter()
+            .map(|v| (v * 1e4).round() / 1e4)
+            .collect::<Vec<_>>()
+    );
+    let grid = gpu.read_grid().expect("read grid");
+    let frame = gpu.render(256, 256).expect("render");
+    let state_bits = [
+        &grid.wet,
+        &grid.velocity_u,
+        &grid.velocity_v,
+        &grid.pressure,
+        &grid.saturation,
+        &grid.pigments_in_water,
+        &grid.pigments_deposited,
+    ]
+    .into_iter()
+    .flat_map(|v| v.iter().map(|f| f.to_bits()));
+    println!(
+        "bench {resolution}^2 sim: digest state {:016x} frame256 {:016x}",
+        fnv(state_bits.chain([grid.tick])),
+        fnv(frame.rgba.iter().map(|f| f.to_bits()))
+    );
+    for size in [256u32, 512, 1024] {
+        gpu.render_without_readback(size, size).expect("render");
+        gpu.sync().expect("sync");
+        let mut ms = Vec::new();
+        for _ in 0..RUNS {
+            let t = Instant::now();
+            for _ in 0..8 {
+                gpu.render_without_readback(size, size).expect("render");
+            }
+            gpu.sync().expect("sync");
+            ms.push(t.elapsed().as_secs_f64() * 1000.0 / 8.0);
+        }
+        println!(
+            "bench {resolution}^2 sim: optics {size}x{size} {:.3} ms/frame median (runs {:?})",
+            median(ms.clone()),
+            ms.iter()
+                .map(|v| (v * 1e3).round() / 1e3)
+                .collect::<Vec<_>>()
+        );
+    }
+    pb.into_simulator()
+}
+
 fn main() {
-    let mut args = std::env::args();
-    let out_dir: PathBuf = args
-        .nth(1)
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let bench = args.iter().any(|a| a == "--bench");
+    let mut positional = args.iter().filter(|a| !a.starts_with("--"));
+    let out_dir: PathBuf = positional
+        .next()
         .map(PathBuf::from)
-        .expect("usage: render_native <out_dir> [sim_resolution]");
-    let sim_resolution: Option<u32> = args
+        .expect("usage: render_native <out_dir> [sim_resolution] [--bench]");
+    let sim_resolution: Option<u32> = positional
         .next()
         .map(|a| a.parse().expect("sim_resolution must be an integer"));
     fs::create_dir_all(&out_dir).expect("create out dir");
@@ -341,6 +442,13 @@ fn main() {
         ctx.adapter_name(),
         ctx.backend()
     );
+
+    if bench {
+        for res in sim_resolution.map_or(vec![160, 256, 384], |r| vec![r]) {
+            gpu = tick_bench(gpu, res);
+        }
+        return;
+    }
 
     let light = hex(0xf7f5f0);
     let dark = hex(0x0f1420);

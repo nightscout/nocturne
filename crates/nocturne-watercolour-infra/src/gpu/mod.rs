@@ -9,6 +9,6 @@ mod layout;
 mod surface;
 
 pub use context::GpuContext;
-pub use engine::{CHECKPOINT_BUDGET_BYTES, GpuEngine};
+pub use engine::{CHECKPOINT_BUDGET_BYTES, CommandCounts, GpuEngine};
 pub use layout::StateLayout;
 pub use surface::PresentSurface;
