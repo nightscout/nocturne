@@ -1,7 +1,8 @@
-import { createArtworkPlayer, type ArtworkPlayer } from '../api/playback';
+import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
 
 export type PlayerReadyCallback = (player: ArtworkPlayer) => void | (() => void);
+export type PlayerStateCallback = (state: PlayerState) => void;
 
 /** Where a `contain` canvas sits within a container that does not match its aspect. */
 export type FitAnchor = 'center' | 'bottom-left';
@@ -164,7 +165,8 @@ function currentCanvas(frame: HTMLElement, canvas: HTMLCanvasElement): HTMLCanva
  * `contain` the box follows the artwork's aspect, centred), re-creates it
  * when a prop changes, and disposes it on unmount. `onready` fires once a
  * backend is drawing and its returned cleanup runs with the player's
- * disposal.
+ * disposal. `onstatechange` also reports a player that settles on `none`,
+ * which never fires `onready`.
  *
  * A frame with no area (under `display: none`, say) gets no player until it
  * first has one: a still would otherwise paint and release at 1x1 and only
@@ -176,6 +178,7 @@ export function mountPlayer(
   id: ArtworkId | undefined,
   options: MountOptions,
   onready?: PlayerReadyCallback,
+  onstatechange?: PlayerStateCallback,
 ): () => void {
   if (!options.icon && !id) throw new TypeError('Artwork requires either `artwork` or `icon`.');
   const dpr = componentDpr();
@@ -218,6 +221,7 @@ export function mountPlayer(
         unready = onready(created) ?? undefined;
       });
     }
+    if (onstatechange) created.on('statechange', () => onstatechange(created.state));
     player = created;
   };
 
