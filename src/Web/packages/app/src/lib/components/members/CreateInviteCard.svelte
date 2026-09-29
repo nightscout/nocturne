@@ -1,3 +1,12 @@
+<script module lang="ts">
+  /** An access level in plain words, granting one role. */
+  export interface InviteRoleChoice {
+    roleId: string;
+    label: string;
+    description: string;
+  }
+</script>
+
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
@@ -5,6 +14,7 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import * as RadioGroup from "$lib/components/ui/radio-group";
   import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
   import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -21,12 +31,18 @@
 
   interface Props {
     roles: TenantRoleDto[];
+    /**
+     * Offered as a single choice in place of the role checkboxes and direct permissions, for
+     * someone who should not need to know the roles by name.
+     */
+    roleChoices?: InviteRoleChoice[];
     onCreated: (url: string) => void;
     onCancel: () => void;
   }
 
   let {
     roles = [],
+    roleChoices,
     onCreated,
     onCancel,
   }: Props = $props();
@@ -196,6 +212,24 @@
           />
         </div>
 
+        {#if roleChoices}
+          <div class="space-y-2">
+            <Label id="invite-access-label">What can they do?</Label>
+            <RadioGroup.Root
+              class="gap-2"
+              aria-labelledby="invite-access-label"
+              value={inviteRoleIds[0]}
+              onValueChange={(value) => (inviteRoleIds = [value])}
+            >
+              {#each roleChoices as choice (choice.roleId)}
+                <RadioGroup.Card value={choice.roleId}>
+                  <span class="text-sm font-medium">{choice.label}</span>
+                  <span class="text-xs text-muted-foreground">{choice.description}</span>
+                </RadioGroup.Card>
+              {/each}
+            </RadioGroup.Root>
+          </div>
+        {:else}
         <!-- Role multi-select -->
         <div class="space-y-2" {@attach coachmark({
           key: "setup-invite.roles",
@@ -221,6 +255,7 @@
             {/each}
           </div>
         </div>
+        {/if}
 
         <div class="space-y-2">
           <Label for="invite-expiry">Link expires</Label>
@@ -243,6 +278,7 @@
           </p>
         </div>
 
+        {#if !roleChoices}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}
@@ -266,6 +302,7 @@
             </div>
           </Collapsible.Content>
         </Collapsible.Root>
+        {/if}
 
         <div
           class="flex items-start gap-2 rounded-md border p-3 bg-muted/30"
