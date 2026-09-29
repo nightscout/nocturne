@@ -2,6 +2,10 @@
   import type { TreatmentFood } from "$lib/api";
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
+  import { untrack } from "svelte";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
+  import { cubicOut } from "svelte/easing";
+  import { Artwork } from "@nocturne/watercolour";
 
   interface Props {
     /** Total carbs in the treatment */
@@ -105,12 +109,40 @@
   const chartWidthPercent = $derived(
     Math.max(MIN_WIDTH_PERCENT, Math.min(100, (totalCarbs / MAX_CARBS) * 100))
   );
+
+  // The wash paints once, whole, and is unveiled to the attributed share with a
+  // mask (--share, edged 0.75rem in from the wash's bleed). Seeking the reveal
+  // instead would hold a live GPU slot per meal row for as long as it is mounted.
+  const attributedShare = $derived(
+    totalCarbs > 0 ? Math.min(1, attributedCarbs / totalCarbs) : 0
+  );
+  const share = new Tween(untrack(() => attributedShare), { duration: 500, easing: cubicOut });
+
+  $effect(() => {
+    void share.set(attributedShare, prefersReducedMotion.current ? { duration: 0 } : undefined);
+  });
 </script>
 
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
-    {#key chartKey}
-      <div class="h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
+    <div class="relative isolate h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
+      {#if attributedShare > 0}
+        <div
+          class="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 opacity-60 dark:opacity-40 [mask-image:linear-gradient(to_right,#000_calc(0.75rem_+_var(--share)*(100%_-_1.5rem)),transparent_calc(1.5rem_+_var(--share)*(100%_-_1.5rem)))]"
+          style:--share={share.current}
+        >
+          <Artwork
+            artwork="wash"
+            palette="moss"
+            autoplay="never"
+            releaseAfterFinish
+            fit="fill"
+            class="size-full"
+          />
+        </div>
+      {/if}
+      {#key chartKey}
+        <div class="h-full">
         <BarChart
           data={chartData}
           orientation="horizontal"
@@ -137,7 +169,8 @@
             },
           }}
         />
-      </div>
-    {/key}
+        </div>
+      {/key}
+    </div>
   {/if}
 </div>

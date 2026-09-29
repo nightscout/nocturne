@@ -307,7 +307,7 @@
    * next refresh, taking its row's moment with it, so the toast confirms instead.
    */
   function markMatched(carbIntakeId: string) {
-    if (filterMode === "unattributed") toastSaved("Meal match accepted");
+    if (filterMode === "unattributed") toast.success("Meal match accepted");
     else matched = { carbIntakeId, count: matched.count + 1 };
   }
 

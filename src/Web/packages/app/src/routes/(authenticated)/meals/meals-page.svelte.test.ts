@@ -91,7 +91,7 @@ describe("meals page, accepting a match", () => {
     await accept();
 
     await expect.poll(() => toastSuccess.mock.calls.length).toBe(1);
-    expect(toastSuccess.mock.calls[0][1]).toMatchObject({ componentProps: { message: "Meal match accepted" } });
+    expect(toastSuccess).toHaveBeenCalledWith("Meal match accepted");
     await expect.element(page.getByText("No meals found in this range.")).toBeVisible();
   });
 });

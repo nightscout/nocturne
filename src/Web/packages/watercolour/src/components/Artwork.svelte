@@ -15,6 +15,7 @@
     quality,
     mode,
     autoplay,
+    releaseAfterFinish,
     fit,
     surface,
     position = 'relative',
@@ -42,6 +43,8 @@
     onready?: PlayerReadyCallback;
     /** Fires on every player state change, including settling on `none`, where `onready` never fires. */
     onstatechange?: PlayerStateCallback;
+    /** Live only: settle on the final frame, then free the engine slot and keep the pixels. For numerous stills, with `autoplay="never"` or reduced motion. */
+    releaseAfterFinish?: boolean;
     class?: string;
   } & ArtworkOptions = $props();
 
@@ -54,7 +57,7 @@
       frame,
       canvas,
       artwork,
-      { icon, palette, seed, intensity, durationMs, easing, tail, motion, quality, mode, autoplay, fit, surface, assetBaseUrl },
+      { icon, palette, seed, intensity, durationMs, easing, tail, motion, quality, mode, autoplay, releaseAfterFinish, fit, surface, assetBaseUrl },
       onready,
       onstatechange,
     );
