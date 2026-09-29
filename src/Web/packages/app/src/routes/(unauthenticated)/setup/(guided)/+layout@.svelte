@@ -84,7 +84,7 @@
           </Button>
         {:else if itemState === SetupHubItemState.Open}
           <Button variant="ghost" onclick={() => setAside(SetupHubItemState.NotForMe)}>
-            Not for me
+            {view.notForMeLabel ?? "Not for me"}
           </Button>
         {/if}
       </div>

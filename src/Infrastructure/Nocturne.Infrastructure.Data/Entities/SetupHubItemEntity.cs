@@ -26,6 +26,13 @@ public class SetupHubItemEntity : ITenantScoped, ISystemTimestamped
     [MaxLength(16)]
     public SetupHubItemState State { get; set; }
 
+    /// <summary>
+    /// For an item that reviews a record something else wrote, the record the owner confirmed.
+    /// Kept by id, so a newer record is not taken as confirmed.
+    /// </summary>
+    [Column("confirmed_record_id")]
+    public Guid? ConfirmedRecordId { get; set; }
+
     [Column("sys_created_at")]
     public DateTime SysCreatedAt { get; set; } = DateTime.UtcNow;
 

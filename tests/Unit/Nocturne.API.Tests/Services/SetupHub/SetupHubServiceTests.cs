@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Nocturne.Core.Constants;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Contracts.SetupHub;
@@ -136,6 +137,7 @@ public class SetupHubServiceTests
         _db.TherapySettings.Add(new TherapySettingsEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, ProfileName = "Default", Timestamp = DateTime.UtcNow,
+            DataSource = DataSources.ManualEntry,
         });
         _db.PatientRecords.Add(new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, DiabetesType = "Type1" });
         _db.Tenants.Single(t => t.Id == TenantId).ShareToken = "digest";

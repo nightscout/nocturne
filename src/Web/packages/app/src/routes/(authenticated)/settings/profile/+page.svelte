@@ -12,9 +12,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import User from "@lucide/svelte/icons/user";
-  import Activity from "@lucide/svelte/icons/activity";
-  import Droplet from "@lucide/svelte/icons/droplet";
-  import TrendingUp from "@lucide/svelte/icons/trending-up";
   import Clock from "@lucide/svelte/icons/clock";
   import Settings from "@lucide/svelte/icons/settings";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -24,7 +21,6 @@
   import { EmptyState } from "$lib/components/shared";
   import { syringeArtwork } from "$lib/watercolour-icons";
   import * as Alert from "$lib/components/ui/alert";
-  import { bgLabel } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import {
@@ -34,8 +30,7 @@
   } from "$api/generated/profiles.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
-  import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
+  import ProfileSchedules from "$lib/components/schedule/ProfileSchedules.svelte";
 
   type Summary = Awaited<ReturnType<typeof getProfileSummary>>;
 
@@ -422,46 +417,14 @@
           </CardContent>
         </Card>
 
-        <!-- Schedule Cards Grid -->
-        <div class="grid gap-4 @3xl:grid-cols-2">
-          {#if basal?.entries && basal.entries.length > 0}
-            <ScheduleView
-              title="Basal Rates"
-              description="Background insulin delivery rates"
-              unit="U/hr"
-              icon={Activity}
-              entries={basal.entries}
-            />
-          {/if}
-
-          {#if carbRatio?.entries && carbRatio.entries.length > 0}
-            <ScheduleView
-              title="Carb Ratios (I:C)"
-              description="Grams of carbs per unit of insulin"
-              unit="g/U"
-              icon={Droplet}
-              iconClass="text-success"
-              entries={carbRatio.entries}
-            />
-          {/if}
-
-          {#if sensitivity?.entries && sensitivity.entries.length > 0}
-            <ScheduleView
-              title="Insulin Sensitivity (ISF)"
-              description="BG drop per unit of insulin"
-              unit="{bgLabel()}/U"
-              icon={TrendingUp}
-              entries={sensitivity.entries}
-              sourceUnits="mg/dl"
-            />
-          {/if}
-
-          <TargetRangeCard
-            profileName={selectedProfileName}
-            schedule={targetRange}
-            readOnly={!!therapy.isExternallyManaged}
-          />
-        </div>
+        <ProfileSchedules
+          profileName={selectedProfileName}
+          {basal}
+          {carbRatio}
+          {sensitivity}
+          {targetRange}
+          readOnly={!!therapy.isExternallyManaged}
+        />
 
         <ConfirmDialog
           open={confirmingDelete}

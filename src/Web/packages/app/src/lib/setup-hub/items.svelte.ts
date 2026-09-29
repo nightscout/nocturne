@@ -26,6 +26,8 @@ export interface SetupHubItemView {
   settingsHref: string;
   title: string;
   description: (voice: PatientVoice) => string;
+  /** What the guided page's "Not for me" button says instead, where the item needs its own words. */
+  notForMeLabel?: string;
 }
 
 /**
@@ -85,6 +87,7 @@ export function setupHubItems(): Record<SetupHubItemKey, SetupHubItemView> {
           : voice.kind === "named"
             ? `Check the basal rates, carb ratios and targets ${voice.name}'s care team set.`
             : "Check the basal rates, carb ratios and targets the care team set.",
+      notForMeLabel: "I don't use these settings",
     },
     [SetupHubItemKey.Sharing]: {
       slug: "sharing",
