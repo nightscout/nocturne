@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { resolve } from "$app/paths";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import BellRing from "@lucide/svelte/icons/bell-ring";
@@ -8,6 +8,7 @@
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Switch } from "$lib/components/ui/switch";
@@ -31,11 +32,8 @@
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
   import { findChannelMeta } from "$lib/components/alerts/channelMeta";
   import { toChannelDef, toChannelRequest, type ChannelDef } from "$lib/components/alerts/types";
-  import {
-    getNotificationPermission,
-    requestNotificationPermission,
-    showNotification,
-  } from "$lib/audio/alarm-sounds";
+  import { getNotificationPermission, requestNotificationPermission } from "$lib/audio/alarm-sounds";
+  import { listenForAlertNotifications } from "$lib/stores/alert-notifications.svelte";
   import { getUnitLabel } from "$lib/utils/formatting";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
@@ -50,13 +48,21 @@
 
   let test = $state<AlertSetupTest | null>(null);
   let answer = $state<"asking" | "no" | "yes" | null>(null);
+  let acknowledged = $state(false);
   let busy = $state(false);
   let error = $state<string | undefined>(undefined);
   let permission = $state(getNotificationPermission());
 
+  // A test alert reaches this page the way a real alert reaches the app: as an alert on the
+  // owner's account that the page raises as a system notification.
+  onMount(listenForAlertNotifications);
+
+  const caregiver = $derived(status.routing === AlertRouting.ToYouAsCaregiver);
   const unitLabel = $derived(getUnitLabel(status.glucoseUnits === "mmol" ? "mmol" : "mg/dl"));
   const urgentLowOff = $derived(rules.find((r) => r.kind === StarterAlertKind.UrgentLow)?.isEnabled === false);
   const anyOn = $derived(rules.some((r) => r.isEnabled));
+  const needsClosedChannel = $derived(status.needsDeliveryWhileClosed && !status.deliversWhileClosed);
+  const needsAcknowledgement = $derived(!status.deliversWhileClosed && !status.needsDeliveryWhileClosed);
 
   function copyRules(from: AlertSetupStatus) {
     return (from.rules ?? []).map((r) => ({
@@ -86,7 +92,7 @@
   }
 
   function channelLabel(type: ChannelType | undefined): string {
-    if (type === ChannelType.InApp && !elsewhere) return "This device";
+    if (type === ChannelType.InApp) return "This device";
     return findChannelMeta(type)?.label ?? String(type);
   }
 
@@ -121,23 +127,12 @@
       await followTest(test.instanceId!);
     }, "We couldn't send a test alert.");
 
-  /** Follows the test until nothing is still sending, raising it here once this device's copy is sent. */
+  /** Follows the test's deliveries until none is still sending, for the troubleshooting list. */
   async function followTest(instanceId: string) {
-    let shown = false;
     for (let i = 0; i < 20; i++) {
       const current = await getSetupTestAlert(instanceId).run();
       if (test?.instanceId !== instanceId) return;
       test = current;
-      const here = current.deliveries?.find((d) => d.channelType === ChannelType.InApp);
-      if (!elsewhere && !shown && here?.status === "delivered") {
-        shown = true;
-        showNotification(
-          `Test alert: ${current.ruleName}`,
-          "This is how Nocturne alerts look on this device.",
-          "setup-test-alert",
-          false
-        );
-      }
       if (!current.deliveries?.some((d) => d.status === "pending")) return;
       await new Promise((r) => setTimeout(r, 1500));
     }
@@ -145,7 +140,10 @@
 
   const confirmArrived = () =>
     run(async () => {
-      status = await confirmSetupTestAlertReceived(test!.instanceId!);
+      status = await confirmSetupTestAlertReceived({
+        instanceId: test!.instanceId!,
+        request: { acknowledgedOpenPageOnly: acknowledged },
+      });
       answer = "yes";
       await getSetupHub().refresh();
     }, "We couldn't record that.");
@@ -167,20 +165,30 @@
   </Alert.Root>
 {:else}
   <div class="flex flex-col gap-8">
-    {#if status.routing === AlertRouting.ToYouAsCaregiver}
+    {#if caregiver}
       <p class="text-sm text-muted-foreground" data-testid="alerts-caregiver-note">
-        {#if voice.kind === "named"}
+        {#if voice.kind === "named" && status.deliversWhileClosed}
           Alerts about {voice.name}'s glucose come to you, including overnight.
-        {:else}
+        {:else if voice.kind === "named"}
+          Alerts about {voice.name}'s glucose come to you.
+        {:else if status.deliversWhileClosed}
           Alerts come to you, including overnight.
+        {:else}
+          Alerts come to you.
         {/if}
       </p>
     {/if}
 
     <section class="flex flex-col gap-3">
       <h2 class="text-base font-medium">When to alert</h2>
-      <p class="text-sm text-muted-foreground">
-        These are common starting points. Set them to what you and your care team agreed.
+      <p class="text-sm text-muted-foreground" data-testid="alerts-starting-points">
+        {#if voice.kind === "named"}
+          These are common starting points. Set them to what you and {voice.name}'s care team agreed.
+        {:else if caregiver}
+          These are common starting points. Set them to what you and the care team agreed.
+        {:else}
+          These are common starting points. Set them to what you and your care team agreed.
+        {/if}
       </p>
       <ul class="flex flex-col divide-y rounded-lg border">
         {#each rules as rule (rule.kind)}
@@ -216,9 +224,15 @@
 
     <section class="flex flex-col gap-3">
       <h2 class="text-base font-medium">Where alerts go</h2>
+      {#if caregiver}
+        <p class="text-sm text-muted-foreground" data-testid="alerts-caregiver-channel">
+          Alerts need to reach you while Nocturne is closed, so send them to an app such as Telegram,
+          WhatsApp or email.
+        </p>
+      {/if}
       {#if elsewhere}
-        <ChannelsSection bind:channels />
-        <Button variant="link" size="inline" class="self-start" onclick={() => (elsewhere = false)}>
+        <ChannelsSection bind:channels kinds={status.channelTypesOffered ?? []} />
+        <Button variant="link-underlined" size="inline" class="self-start" onclick={() => (elsewhere = false)}>
           Send to this device instead
         </Button>
       {:else}
@@ -226,12 +240,18 @@
           <BellRing class="mt-0.5 h-4 w-4 text-primary" />
           <div class="flex flex-col gap-0.5">
             <span class="text-sm font-medium">This device</span>
-            <span class="text-sm text-muted-foreground">
-              Notifications in this browser. They only arrive while Nocturne is open here.
-            </span>
+            <span class="text-sm text-muted-foreground">Notifications in this browser.</span>
           </div>
         </div>
-        <Button variant="link" size="inline" class="self-start" onclick={() => (elsewhere = true)}>
+        <Alert.Root variant="warning" data-testid="this-device-limit">
+          <TriangleAlert />
+          <Alert.Description>
+            Nocturne can't wake you with this. Browser notifications only show while a signed-in
+            Nocturne page is open and the device is awake. To be alerted overnight or when Nocturne
+            is closed, send alerts somewhere else.
+          </Alert.Description>
+        </Alert.Root>
+        <Button variant="link-underlined" size="inline" class="self-start" onclick={() => (elsewhere = true)}>
           Send somewhere else
         </Button>
       {/if}
@@ -245,8 +265,25 @@
         </p>
       {:else if answer === "asking" && test}
         <p class="text-base font-medium">Did it arrive?</p>
+        {#if needsClosedChannel}
+          <p class="text-sm text-muted-foreground" data-testid="alerts-needs-closed-channel">
+            To finish, send alerts somewhere that works while Nocturne is closed, then send another test.
+          </p>
+        {:else if needsAcknowledgement}
+          <div class="flex items-start gap-2">
+            <Checkbox id="acknowledge-open-page" bind:checked={acknowledged} />
+            <Label for="acknowledge-open-page" variant="option">
+              I understand these alerts only show while Nocturne is open and the device is awake.
+            </Label>
+          </div>
+        {/if}
         <div class="flex gap-2">
-          <Button disabled={busy} onclick={confirmArrived}>Yes</Button>
+          <Button
+            disabled={busy || needsClosedChannel || (needsAcknowledgement && !acknowledged)}
+            onclick={confirmArrived}
+          >
+            Yes
+          </Button>
           <Button variant="outline" disabled={busy} onclick={() => (answer = "no")}>No</Button>
         </div>
       {:else if answer === "no" && test}
@@ -319,7 +356,12 @@
               </li>
             {/each}
           </ul>
-          <p class="text-sm text-muted-foreground">They get urgent low alerts on their own account.</p>
+          <p class="text-sm text-muted-foreground" data-testid="alerts-member-limit">
+            They'll see your urgent low alerts, including your glucose value, in Nocturne on their own
+            account. Like this device, those only show while they have Nocturne open. Ask them to set
+            up their own way to be alerted, such as Telegram or WhatsApp, in
+            <a class="text-primary underline underline-offset-4" href={resolve("/(authenticated)/alerts")}>Alerts</a>.
+          </p>
         {:else}
           <p class="text-sm text-muted-foreground">
             Invite them from Sharing. Once they join, they appear here to add.

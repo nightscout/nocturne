@@ -9,7 +9,7 @@ const api = vi.hoisted(() => ({
   send: vi.fn(),
   confirm: vi.fn(),
   test: undefined as unknown,
-  notify: vi.fn(),
+  listen: vi.fn(),
   requestPermission: vi.fn(),
 }));
 
@@ -36,7 +36,9 @@ vi.mock("$api/generated/clientDevices.generated.remote", () => ({
 vi.mock("$lib/audio/alarm-sounds", () => ({
   getNotificationPermission: () => "default",
   requestNotificationPermission: api.requestPermission,
-  showNotification: api.notify,
+}));
+vi.mock("$lib/stores/alert-notifications.svelte", () => ({
+  listenForAlertNotifications: api.listen,
 }));
 
 import { AlertRouting, ChannelType, StarterAlertKind } from "$api";
@@ -55,6 +57,9 @@ function status(overrides: Partial<AlertSetupStatus> = {}): AlertSetupStatus {
     ],
     toThisDevice: true,
     channels: [],
+    channelTypesOffered: [ChannelType.TelegramDm, ChannelType.ResendEmail],
+    deliversWhileClosed: false,
+    needsDeliveryWhileClosed: false,
     verified: false,
     members: [],
     ...overrides,
@@ -76,7 +81,7 @@ describe("alerts guided page", () => {
     api.save.mockReset().mockImplementation(() => status({ saved: true }));
     api.send.mockReset().mockResolvedValue(sentTest);
     api.confirm.mockReset().mockImplementation(() => status({ saved: true, verified: true }));
-    api.notify.mockReset();
+    api.listen.mockReset().mockReturnValue(() => {});
     api.requestPermission.mockReset().mockResolvedValue("granted");
     api.test = sentTest;
   });
@@ -115,15 +120,20 @@ describe("alerts guided page", () => {
     await page.getByRole("button", { name: "Send a test alert" }).click();
 
     await expect.element(page.getByText("Did it arrive?")).toBeVisible();
+    expect(api.listen).toHaveBeenCalledOnce();
     expect(api.requestPermission).toHaveBeenCalled();
     expect(api.save).toHaveBeenCalledWith(expect.objectContaining({ channels: undefined }));
     expect(api.save.mock.calls[0][0].rules).toHaveLength(4);
-    await vi.waitFor(() => expect(api.notify).toHaveBeenCalledOnce());
     await expect.element(page.getByTestId("alerts-verified")).not.toBeInTheDocument();
+    await expect.element(page.getByRole("button", { name: "Yes" })).toBeDisabled();
 
+    await page.getByLabelText(/I understand these alerts only show while Nocturne is open/).click();
     await page.getByRole("button", { name: "Yes" }).click();
 
-    expect(api.confirm).toHaveBeenCalledWith(sentTest.instanceId);
+    expect(api.confirm).toHaveBeenCalledWith({
+      instanceId: sentTest.instanceId,
+      request: { acknowledgedOpenPageOnly: true },
+    });
     await expect.element(page.getByTestId("alerts-verified")).toBeVisible();
   });
 
@@ -146,9 +156,12 @@ describe("alerts guided page", () => {
     await expect.element(page.getByRole("button", { name: "Send another test" })).toBeVisible();
   });
 
-  it("puts other channels behind Send somewhere else", async () => {
+  it("warns that this device cannot wake anyone, and puts other channels behind Send somewhere else", async () => {
     render(AlertSetup, { status: status(), voice: self });
     await expect.element(page.getByTestId("this-device")).toBeVisible();
+    await expect
+      .element(page.getByTestId("this-device-limit"))
+      .toHaveTextContent(/Nocturne can't wake you with this/);
 
     await page.getByRole("button", { name: "Send somewhere else" }).click();
 
@@ -156,9 +169,39 @@ describe("alerts guided page", () => {
     await expect.element(page.getByTestId("this-device")).not.toBeInTheDocument();
   });
 
-  it("tells a caregiver the alerts about the patient come to them overnight too", async () => {
+  it("steers a caregiver to a destination that works while Nocturne is closed before it can be done", async () => {
+    api.save.mockImplementation(() =>
+      status({ saved: true, routing: AlertRouting.ToYouAsCaregiver, needsDeliveryWhileClosed: true })
+    );
     render(AlertSetup, {
-      status: status({ routing: AlertRouting.ToYouAsCaregiver }),
+      status: status({ routing: AlertRouting.ToYouAsCaregiver, toThisDevice: false, needsDeliveryWhileClosed: true }),
+      voice: { kind: "named", name: "Sam" },
+    });
+
+    await expect.element(page.getByRole("button", { name: "Add channel" })).toBeVisible();
+    await expect
+      .element(page.getByTestId("alerts-caregiver-note"))
+      .toHaveTextContent("Alerts about Sam's glucose come to you.");
+    await expect
+      .element(page.getByTestId("alerts-starting-points"))
+      .toHaveTextContent("Set them to what you and Sam's care team agreed.");
+
+    await page.getByRole("button", { name: "Send to this device instead" }).click();
+    await page.getByRole("button", { name: "Send a test alert" }).click();
+
+    await expect.element(page.getByTestId("alerts-needs-closed-channel")).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Yes" })).toBeDisabled();
+  });
+
+  it("says overnight only once a caregiver's alerts go somewhere that works while Nocturne is closed", async () => {
+    render(AlertSetup, {
+      status: status({
+        saved: true,
+        routing: AlertRouting.ToYouAsCaregiver,
+        toThisDevice: false,
+        needsDeliveryWhileClosed: true,
+        deliversWhileClosed: true,
+      }),
       voice: { kind: "named", name: "Sam" },
     });
 
@@ -182,5 +225,17 @@ describe("alerts guided page", () => {
 
     await expect.element(page.getByTestId("alerts-someone-else")).toBeVisible();
     await expect.element(page.getByRole("link", { name: "Go to Sharing" })).toBeVisible();
+  });
+
+  it("tells a patient what a member added to urgent lows sees, and that it needs Nocturne open", async () => {
+    render(AlertSetup, {
+      status: status({ saved: true, members: [{ subjectId: "m1", name: "Partner", alertedToUrgentLows: true }] }),
+      voice: self,
+    });
+
+    await expect.element(page.getByRole("switch", { name: "Partner" })).toBeChecked();
+    await expect
+      .element(page.getByTestId("alerts-member-limit"))
+      .toHaveTextContent(/including your glucose value.*only show while they have Nocturne open/);
   });
 });

@@ -44,7 +44,7 @@ import {
 } from "$lib/constants/entry-categories";
 import { toast } from "svelte-sonner";
 import * as alarmState from "$lib/stores/alarm-state.svelte";
-import { showNotification } from "$lib/audio/alarm-sounds";
+import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
 import {
@@ -742,19 +742,21 @@ export class RealtimeStore {
 
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
-    if (this.inAppNotifications.some((n) => n.id === notification.id)) return;
+    if (!this.addNotification(notification)) return;
+    raiseAlertNotification(notification);
+  }
+
+  /** Adds a notification not yet listed; false when it already was. */
+  private addNotification(notification: InAppNotificationDto): boolean {
+    if (this.inAppNotifications.some((n) => n.id === notification.id)) return false;
     this.inAppNotifications = [notification, ...this.inAppNotifications];
-    // An alert on this person's own account is the "this device" delivery the setup hub's
-    // Alerts item offers, so the browser raises it as a system notification.
-    if (notification.type === "alert.firing") {
-      showNotification(notification.title ?? "", notification.subtitle ?? "", `alert-${notification.id}`, false);
-    }
+    return true;
   }
 
   /** Handle notification archived from SignalR */
   private handleNotificationArchived(notification: InAppNotificationDto): void {
-    // Remove from active notifications
     this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
+    closeAlertNotification(notification);
   }
 
   /** Handle notification updated from SignalR */
@@ -767,8 +769,7 @@ export class RealtimeStore {
         ...this.inAppNotifications.slice(index + 1),
       ];
     } else {
-      // If not found, treat as create
-      this.handleNotificationCreated(notification);
+      this.addNotification(notification);
     }
   }
 
