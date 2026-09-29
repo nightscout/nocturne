@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Controllers.Authentication;
 using Nocturne.API.Multitenancy;
-using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
@@ -15,8 +14,9 @@ using Xunit;
 namespace Nocturne.API.Tests.Controllers;
 
 /// <summary>
-/// The session carries the preferences the web app renders with, so a member who has never chosen
-/// glucose units reads the tenant's default there.
+/// The session carries the tenant's default glucose units beside the member's own preferences,
+/// so a member who has chosen none reads the default and an inherited default is never taken for
+/// a saved choice.
 /// </summary>
 [Trait("Category", "Unit")]
 public class OidcControllerSessionTests
@@ -26,30 +26,29 @@ public class OidcControllerSessionTests
 
     private readonly Mock<IOidcAuthService> _authService = new();
     private readonly Mock<ITenantMemberService> _tenantMemberService = new();
-    private readonly Mock<IUnitsAndTimezoneService> _unitsAndTimezone = new(MockBehavior.Strict);
+    private readonly Mock<ITenantService> _tenants = new(MockBehavior.Strict);
 
     [Fact]
-    public async Task GetSession_GivesAMemberTheTenantDefaultUnits()
+    public async Task GetSession_CarriesTheTenantDefaultApartFromTheMembersOwnPreferences()
     {
         var own = new UserDisplayPreferences { TimeFormat = "24" };
-        _unitsAndTimezone.Setup(u => u.WithTenantDefaultsAsync(TenantId, own, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new UserDisplayPreferences { TimeFormat = "24", GlucoseUnits = "mmol" });
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(TenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mmol");
 
         var session = await GetSession(own, TenantId);
 
-        session.Preferences!.GlucoseUnits.Should().Be("mmol");
-        session.Preferences.TimeFormat.Should().Be("24");
+        session.DefaultGlucoseUnits.Should().Be("mmol");
+        session.Preferences.Should().BeSameAs(own);
+        session.Preferences!.GlucoseUnits.Should().BeNull();
     }
 
     [Fact]
     public async Task GetSession_ReadsNoTenantDefaultOutsideATenant()
     {
-        var own = new UserDisplayPreferences();
+        var session = await GetSession(new UserDisplayPreferences(), tenantId: null);
 
-        var session = await GetSession(own, tenantId: null);
-
-        session.Preferences.Should().BeSameAs(own);
-        _unitsAndTimezone.VerifyNoOtherCalls();
+        session.DefaultGlucoseUnits.Should().BeNull();
+        _tenants.VerifyNoOtherCalls();
     }
 
     private async Task<SessionInfo> GetSession(UserDisplayPreferences own, Guid? tenantId)
@@ -78,7 +77,7 @@ public class OidcControllerSessionTests
             TenantId = tenantId,
         };
 
-        var result = await controller.GetSession(_unitsAndTimezone.Object, CancellationToken.None);
+        var result = await controller.GetSession(_tenants.Object, CancellationToken.None);
         return result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<SessionInfo>().Subject;
     }
 }

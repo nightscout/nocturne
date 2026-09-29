@@ -139,6 +139,7 @@
   let migrationStartError = $state<string | undefined>(undefined);
   // The import starts after the units step, from the Nightscout connection saved before it.
   let nightscoutConnected = $state(false);
+  let navigating = false;
 
   // Until the step is answered here, it shows the tenant's stored answer.
   let chosenRelationship = $state<PatientRelationship | undefined>(undefined);
@@ -226,7 +227,7 @@
 
   function handleJumpToStep(index: number) {
     if (importBlocking) return;
-    if (!setupRequired) goToStep(index);
+    if (!setupRequired) void navigateTo(index);
     else if (index <= setupStepIndex) setupStepIndex = index;
   }
 
@@ -250,7 +251,29 @@
   }
 
   function handleNext() {
-    if (stepIndex < steps.length - 1) goToStep(stepIndex + 1);
+    if (stepIndex < steps.length - 1) return navigateTo(stepIndex + 1);
+  }
+
+  /**
+   * Moves forward or back, starting the Nightscout import on the way into its step by any route.
+   * A forward move from before the import lands on it rather than past it, so the import is
+   * always started and watched before the finish.
+   */
+  async function navigateTo(index: number) {
+    if (navigating) return;
+    const importIndex = steps.findIndex((s) => s.id === "import");
+    if (importIndex < 0 || index <= stepIndex || stepIndex >= importIndex || index < importIndex) {
+      goToStep(index);
+      return;
+    }
+
+    navigating = true;
+    try {
+      await startImportOnce();
+      goToStep(importIndex);
+    } finally {
+      navigating = false;
+    }
   }
 
   function handleWhoForSkip() {
@@ -284,30 +307,25 @@
     handleNext();
   }
 
-  // Leaving the units step is what starts a Nightscout import, answered or not.
-  async function leaveUnitsStep() {
-    if (path === "migration" && nightscoutConnected) await handleMigrationConnected();
-    else handleNext();
-  }
+  let unitsSaving = $state(false);
 
-  async function handleUnitsContinue() {
-    if (!units || !timezone) return;
+  // Skip saves too: the step shows a checked unit, and leaving without saving would put the app
+  // in mg/dL whatever was shown. Only a step that never loaded an answer leaves without one.
+  async function handleUnitsLeave() {
+    if (unitsSaving) return;
+    unitsSaving = true;
     try {
-      unitsError = undefined;
-      await setUnitsAndTimezone({ glucoseUnits: units, timezone });
-      applyPreferences({ glucoseUnits: units }, { refreshCookie: true });
+      if (units && timezone) {
+        unitsError = undefined;
+        await setUnitsAndTimezone({ glucoseUnits: units, timezone });
+        applyPreferences({ glucoseUnits: units }, { refreshCookie: true });
+      }
+      await handleNext();
     } catch (err) {
       unitsError = describeSubmitError(err, "We couldn't save your units and timezone.");
-      return;
+    } finally {
+      unitsSaving = false;
     }
-    await leaveUnitsStep();
-  }
-
-  async function handleUnitsSkip() {
-    chosenUnits = undefined;
-    chosenTimezone = undefined;
-    unitsError = undefined;
-    await leaveUnitsStep();
   }
 
   async function handleEnterDashboard() {
@@ -354,7 +372,8 @@
   // progress view, so it runs in the onboarding tenant's own request context.
   const MIGRATION_CONNECTOR = "nightscout";
 
-  async function handleMigrationConnected() {
+  async function startImportOnce() {
+    if (path !== "migration" || !nightscoutConnected || migrationJobId) return;
     try {
       migrationStartError = undefined;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
@@ -365,7 +384,6 @@
           ? "Your Nightscout connection isn't saved yet."
           : describeSubmitError(err, "Something went wrong while starting it.");
     }
-    handleNext();
   }
 
   // User info
@@ -672,10 +690,13 @@
                     <ArrowRight class="h-4 w-4" />
                   </Button>
                 {:else if currentStep?.id === "units"}
-                  <Button variant="ghost" onclick={handleUnitsSkip}>
+                  <Button variant="ghost" onclick={handleUnitsLeave} disabled={unitsSaving}>
                     Skip for now
                   </Button>
-                  <Button onclick={handleUnitsContinue} disabled={!units || !timezone}>
+                  <Button
+                    onclick={handleUnitsLeave}
+                    disabled={unitsSaving || !units || !timezone}
+                  >
                     Continue
                     <ArrowRight class="h-4 w-4" />
                   </Button>

@@ -14,6 +14,7 @@ import { load } from "./+layout.server";
 type LoadEvent = Parameters<typeof load>[0];
 
 interface Situation {
+  tenantDefaultUnits?: string;
   host: string;
   /** Scopes the API reports for the caller; a thrown value stands for a refused call. */
   reported?: string[] | Error;
@@ -50,7 +51,9 @@ function runLoad(situation: Situation) {
   });
 
   const locals = {
-    user: situation.memberPreferences ? { preferences: situation.memberPreferences } : null,
+    user: situation.memberPreferences
+      ? { preferences: situation.memberPreferences, defaultGlucoseUnits: situation.tenantDefaultUnits }
+      : null,
     isAuthenticated: situation.memberPreferences !== undefined,
     isPlatformAdmin: false,
     isShareHost: situation.isShareHost ?? false,
@@ -211,6 +214,20 @@ describe("root layout load", () => {
       serverPreferences: { glucoseUnits: "mg/dl" },
     });
     expect(getShareAppearance).not.toHaveBeenCalled();
+  });
+
+  // The tenant default renders a member's units until they choose, but only beneath anything
+  // they saved, and it is never reported back as their own server preferences.
+  it("renders a member with the tenant default units beneath their own", async () => {
+    const { data } = runLoad({
+      host: TENANT_HOST,
+      memberPreferences: { timeFormat: "24" },
+      tenantDefaultUnits: "mmol",
+    });
+
+    const loaded = await data;
+    expect(loaded.displayPreferences).toEqual([{ timeFormat: "24" }, { glucoseUnits: "mmol" }]);
+    expect(loaded.serverPreferences).toEqual({ timeFormat: "24" });
   });
 
   it("asks for no owner's appearance on behalf of an anonymous tenant-host visitor", async () => {

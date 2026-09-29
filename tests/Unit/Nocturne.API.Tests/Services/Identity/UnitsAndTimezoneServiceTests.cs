@@ -101,51 +101,6 @@ public class UnitsAndTimezoneServiceTests
         (await db.Subjects.SingleAsync(s => s.Id == MemberId)).Preferences.Should().BeNull();
     }
 
-    [Fact]
-    public async Task WithTenantDefaults_GivesAMemberWhoNeverChoseTheTenantDefault()
-    {
-        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
-
-        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences { TimeFormat = "12" });
-
-        member.GlucoseUnits.Should().Be("mmol");
-        member.TimeFormat.Should().Be("12");
-    }
-
-    [Fact]
-    public async Task WithTenantDefaults_KeepsAMembersOwnChoice()
-    {
-        await Service().SetAsync(TenantId, OwnerId, "mmol", "Europe/London");
-
-        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences { GlucoseUnits = "mg/dl" });
-
-        member.GlucoseUnits.Should().Be("mg/dl");
-    }
-
-    [Fact]
-    public async Task WithTenantDefaults_LeavesTheUnitsUnsetBeforeTheOwnerChooses()
-    {
-        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences());
-
-        member.GlucoseUnits.Should().BeNull();
-    }
-
-    // A tenant that saved its features before the explicit default existed holds "mg/dl" there
-    // from the old class default, which is no choice at all.
-    [Fact]
-    public async Task WithTenantDefaults_IgnoresTheLegacyFeaturesUnits()
-    {
-        await using (var db = Context())
-        {
-            await UiSettings(db).SaveSectionAsync(
-                "features", new FeatureSettings { Display = new DisplaySettings { Units = "mg/dl" } });
-        }
-
-        var member = await Service().WithTenantDefaultsAsync(TenantId, new UserDisplayPreferences());
-
-        member.GlucoseUnits.Should().BeNull();
-    }
-
     // v1/v3 status reads the tenant default, and is cached per tenant.
     [Fact]
     public async Task SetAsync_DropsTheTenantsCachedStatus()

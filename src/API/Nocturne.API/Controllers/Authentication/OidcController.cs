@@ -7,7 +7,6 @@ using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Multitenancy;
 using Nocturne.API.Services.Auth;
-using Nocturne.API.Services.Identity;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -627,7 +626,7 @@ public class OidcController : ControllerBase
     [AllowDuringSetup]
     [ProducesResponseType(typeof(SessionInfo), StatusCodes.Status200OK)]
     public async Task<ActionResult<SessionInfo>> GetSession(
-        [FromServices] IUnitsAndTimezoneService unitsAndTimezone, CancellationToken ct = default)
+        [FromServices] ITenantService tenants, CancellationToken ct = default)
     {
         var authContext = HttpContext.GetAuthContext();
         if (authContext == null || !authContext.IsAuthenticated)
@@ -662,9 +661,10 @@ public class OidcController : ControllerBase
                 Permissions = authContext.Permissions,
                 ExpiresAt = authContext.ExpiresAt,
                 PreferredLanguage = userInfo?.PreferredLanguage,
-                Preferences = userInfo?.Preferences is { } own && authContext.TenantId is { } tenantId
-                    ? await unitsAndTimezone.WithTenantDefaultsAsync(tenantId, own, ct)
-                    : userInfo?.Preferences,
+                Preferences = userInfo?.Preferences,
+                DefaultGlucoseUnits = authContext.TenantId is { } tenantId
+                    ? await tenants.GetDefaultGlucoseUnitsAsync(tenantId, ct)
+                    : null,
                 IsPlatformAdmin = authContext.IsPlatformAdmin,
                 IsPlatformAccessGrant = authContext.AuthType == AuthType.PlatformAccess,
                 AvatarUrl = userInfo?.AvatarUrl,
@@ -839,6 +839,14 @@ public class SessionInfo
     /// Used for server-side hydration so first paint matches the user's saved choices.
     /// </summary>
     public UserDisplayPreferences? Preferences { get; set; }
+
+    /// <summary>
+    /// The tenant's default glucose units ("mg/dl" or "mmol"), shown to a member who has chosen
+    /// none of their own. Kept apart from <see cref="Preferences"/> so an inherited default is
+    /// never taken for the member's own saved choice. Null outside a tenant or before the owner
+    /// chooses.
+    /// </summary>
+    public string? DefaultGlucoseUnits { get; set; }
 
     /// <summary>
     /// Whether this subject has platform-level admin access

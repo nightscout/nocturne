@@ -19,9 +19,11 @@ namespace Nocturne.API.Services.Identity;
 /// <remarks>
 /// One units answer sets the owner's own display units and the tenant default
 /// (<see cref="ITenantService.GetDefaultGlucoseUnitsAsync"/>), which a member who has never chosen
-/// their own reads until they do. The legacy <see cref="DisplaySettings.Units"/> is not that
-/// default: it held "mg/dl" for every tenant that ever saved its features, chosen or not. Therapy settings are entered in the editor's display units, so the owner's
-/// display units are also the unit the owner enters them in; a profile's stored
+/// their own reads until they do (the session carries it beside their own preferences). The
+/// legacy <see cref="DisplaySettings.Units"/> is not that default: it held "mg/dl" for every
+/// tenant that ever saved its features, chosen or not. Therapy settings are entered in the
+/// editor's display units, so the owner's display units are also the unit the owner enters them
+/// in; a profile's stored
 /// <c>TherapySettings.Units</c> is never rewritten, because it says what its numbers mean. The
 /// timezone is the patient's (<c>PatientRecord.Timezone</c>).
 /// </remarks>
@@ -35,14 +37,6 @@ public interface IUnitsAndTimezoneService
     /// </summary>
     Task<UnitsAndTimezoneDto> GetAsync(
         Guid ownerSubjectId, string? locale, bool readNightscout, CancellationToken ct = default);
-
-    /// <summary>
-    /// A member's own display preferences, with the tenant default units in place of units the
-    /// member has never chosen. The stored preferences are left as they are, so the member's
-    /// own later choice still wins.
-    /// </summary>
-    Task<UserDisplayPreferences> WithTenantDefaultsAsync(
-        Guid tenantId, UserDisplayPreferences own, CancellationToken ct = default);
 
     /// <summary>Saves the answer. <paramref name="glucoseUnits"/> is "mg/dl" or "mmol".</summary>
     Task<UnitsAndTimezoneDto> SetAsync(
@@ -90,13 +84,6 @@ public class UnitsAndTimezoneService(
             nightscout?.ProfileTimezone ?? record?.Timezone,
             nightscout,
             unavailable);
-    }
-
-    public async Task<UserDisplayPreferences> WithTenantDefaultsAsync(
-        Guid tenantId, UserDisplayPreferences own, CancellationToken ct = default)
-    {
-        own.GlucoseUnits ??= await tenants.GetDefaultGlucoseUnitsAsync(tenantId, ct);
-        return own;
     }
 
     public async Task<UnitsAndTimezoneDto> SetAsync(
