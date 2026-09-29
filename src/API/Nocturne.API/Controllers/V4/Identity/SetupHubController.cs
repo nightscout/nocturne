@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.SetupHub;
@@ -40,6 +41,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     /// </summary>
     [DenyDemoSubject]
     [HttpPut("items/{key}")]
+    [RequireScope(Scope.FullAccess)]
     [RemoteCommand(Invalidates = ["GetSetupHub"])]
     [ProducesResponseType(typeof(SetupHubStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -71,6 +73,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
 
     [DenyDemoSubject]
     [HttpPost("strip/dismiss")]
+    [RequireScope(Scope.FullAccess)]
     [RemoteCommand(Invalidates = ["GetSetupHub"])]
     [ProducesResponseType(typeof(SetupHubStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
