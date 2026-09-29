@@ -17,6 +17,7 @@
   import FoodEntryDetails from "$lib/components/treatments/FoodEntryDetails.svelte";
   import { getMealNameForTime } from "$lib/constants/meal-times";
   import { time } from "$lib/utils/formatting";
+  import { PaintedMoment } from "$lib/forms";
 
   interface MealsByDay {
     date: string;
@@ -44,6 +45,8 @@
     onAcceptSuggestion: (suggestion: SuggestedMealMatch) => void;
     onDismissSuggestion: (suggestion: SuggestedMealMatch) => void;
     onReviewSuggestion: (suggestion: SuggestedMealMatch) => void;
+    /** The meal a match was last accepted into, and how many accepts so far. */
+    matched?: { carbIntakeId: string; count: number };
   }
 
   let {
@@ -66,6 +69,7 @@
     onAcceptSuggestion,
     onDismissSuggestion,
     onReviewSuggestion,
+    matched = { carbIntakeId: "", count: 0 },
   }: Props = $props();
 
   function getMealLabel(meal: MealEvent): string {
@@ -234,7 +238,16 @@
                   </Table.Cell>
                   <Table.Cell class="py-3">
                     <div class="flex items-center gap-2">
-                      <Utensils class="h-4 w-4 text-muted-foreground" />
+                      <PaintedMoment
+                        count={matched.carbIntakeId && matched.carbIntakeId === meal.carbIntakes?.[0]?.id ? matched.count : 0}
+                        artwork="linked-rings"
+                        holdMs={2500}
+                        artClass="-m-1 size-6"
+                      >
+                        {#snippet idle()}
+                          <Utensils class="h-4 w-4 text-muted-foreground" />
+                        {/snippet}
+                      </PaintedMoment>
                       <div>
                         <div class="font-medium">{getMealLabel(meal)}</div>
                         {#if hasFoods}

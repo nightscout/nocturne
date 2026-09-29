@@ -299,6 +299,13 @@
     showReviewDialog = true;
   }
 
+  /** The meal a match was last accepted into; its row paints the link. */
+  let matched = $state({ carbIntakeId: "", count: 0 });
+
+  function markMatched(carbIntakeId: string) {
+    matched = { carbIntakeId, count: matched.count + 1 };
+  }
+
   async function handleQuickAccept(match: SuggestedMealMatch) {
     try {
       await acceptMatch({
@@ -307,7 +314,7 @@
         carbs: match.carbs ?? 0,
         timeOffsetMinutes: 0,
       });
-      toastSaved("Meal match accepted");
+      markMatched(match.carbIntakeId!);
       // Awaited so the row's pending state covers the refresh too, not just the
       // command; otherwise the row is clickable again before it disappears.
       await Promise.all([mealsQuery.refresh(), suggestionsQuery.refresh()]);
@@ -392,6 +399,7 @@
       onUnlinkFood={confirmUnlinkFood}
       onEditInsulin={openBolusDialog}
       onAcceptSuggestion={handleQuickAccept}
+      {matched}
       onDismissSuggestion={handleDismiss}
       onReviewSuggestion={openReviewDialog}
     />
@@ -448,6 +456,7 @@
   }}
   match={reviewMatch}
   onComplete={handleReviewComplete}
+  onAccepted={markMatched}
 />
 
 <ConfirmDialog
