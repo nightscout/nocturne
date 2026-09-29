@@ -198,6 +198,8 @@
     pagination_failed: "Nocturne could not retrieve every page.",
     internal_sync:
       "Nocturne could not complete the import. Check the server log for the technical code and stage.",
+    internal_sync_native_write:
+      "Nocturne downloaded the data, but could not store it locally. Retry the same range; if it persists, use the technical stage from the server log.",
   };
   const day = (value?: string | Date | null) =>
     value ? new Date(value).toISOString().slice(0, 10) : "";

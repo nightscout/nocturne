@@ -279,7 +279,15 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
             }
             else
             {
-                _state = ConnectorResetJobState.Completed;
+                // A reset is only completed when every connector reports success. Previously the
+                // job was marked Completed as soon as the fan-out returned, even when one or more
+                // connector results were failures; the UI then showed "2 / 2" and hid the fact
+                // that the requested data had not been re-imported.
+                var failed = result.Connectors.Any(connector => !connector.Result.Success) ||
+                             _connectors.Values.Any(connector => connector.State == ConnectorResetConnectorState.Failed);
+                _state = failed ? ConnectorResetJobState.Failed : ConnectorResetJobState.Completed;
+                if (failed)
+                    _errorMessage = "One or more connectors failed; review the connector details and retry the failed range.";
             }
         }
         catch (OperationCanceledException)
@@ -448,7 +456,7 @@ public enum ConnectorResetJobState
     Pending,
     /// <summary>Actively re-pulling connectors.</summary>
     Running,
-    /// <summary>Every connector has been processed (individual connectors may still have failed).</summary>
+    /// <summary>Every connector has been processed successfully.</summary>
     Completed,
     /// <summary>The job terminated due to an unrecoverable error before completing.</summary>
     Failed,

@@ -148,7 +148,8 @@ public class ConnectorCursorResetJobServiceTests
 
         var status = await WaitForTerminalAsync(service, info!.JobId);
 
-        status.State.Should().Be(ConnectorResetJobState.Completed);
+        status.State.Should().Be(ConnectorResetJobState.Failed);
+        status.ErrorMessage.Should().Contain("One or more connectors failed");
         status.CompletedConnectors.Should().Be(2);
         status.Connectors.Should().Contain(c =>
             c.ConnectorName == "nightscout" && c.State == ConnectorResetConnectorState.Succeeded);

@@ -45,30 +45,57 @@ by Google and covered by the granted scopes can be imported.
   Clearing the selection pauses imports without removing the connection or data.
 - **Save selection and import** queues a manual import. Leaving the page does not
   cancel the server-side operation. **Sync now** retries the current selection.
-- Every sync first refreshes the live window for today and then fetches one older
-  calendar month towards the requested start date (the explicit import date, or
-  the configured history window). Recent data therefore keeps arriving throughout
-  a multi-year backfill. If a historical month fails or hits the per-tenant timeout,
-  the next attempt automatically halves that window (for example 30, 15, 7, 3,
-  then 1 day) until it succeeds. Once the affected month is complete, the planner
-  returns to whole calendar months. Progress and the adaptive retry size survive
-  restarts because they are persisted after every successful step or failed
-  historical attempt. The connector overview shows the oldest synchronized date.
-- An older backfill never moves the live watermark backwards. The initial import
-  date is consumed once the backfill actually reaches it, not after a single sync.
-- Heart rate is aggregated to one average reading per UTC minute before it is
-  staged and written: Google Health reports near-continuous (often per-beat)
-  samples, which are far more than any report needs and would multiply row counts
-  and query time. The aggregate is stored like any other reading, so reports read
-  it directly with no extra computation at request time.
+- Automatic synchronization normally runs every 15 minutes. Every managed run
+  refreshes today's live window first, then imports one older calendar month
+  towards the requested start date. This keeps current data flowing while a
+  multi-year history is filled gradually. If a historical window is too large,
+  times out, is rate limited, or cannot be written locally, the next attempt
+  halves it automatically (for example 30, 15, 7, 3, then 1 day); once the
+  smaller window succeeds, whole calendar months are used again. The cursor and
+  retry size are persisted, so a restart resumes at the visible date instead of
+  starting over. The page reports the oldest synchronized date under
+  **Historical import progress**.
+- After the live portion succeeds, its watermark resumes with a five-minute
+  overlap. An older backfill never moves that watermark backwards. The explicit
+  import start date is consumed only after the backfill actually reaches it.
 - Each type is read page by page and written through its native Nocturne service.
   The maximum is 10,000 pages per type and operation; reaching the limit fails
   explicitly instead of reporting an incomplete history as complete.
+- The page-by-page reader and reconciliation staging are the same bounded import
+  path used by the connector integration; Google Health does not maintain a
+  second, competing chunking implementation. Each page is written before the
+  next one is requested, so large histories do not have to fit in one request or
+  one in-memory batch.
+- Heart rate is reduced to one average reading per UTC minute before it is
+  staged and written. Google Health commonly returns near-continuous samples;
+  minute buckets keep the native history and reports responsive while retaining
+  a deterministic, idempotent value for every minute.
 - An empty result is not an error and is not converted into a zero measurement.
   Unsupported destinations are shown in the inventory but cannot be selected.
 - Disconnecting keeps imported data. Deleting imported Google data is a separate,
   confirmed action scoped to this connector and the current tenant.
 
+## Recovering a failed historical import
+
+The **Import recovery** card links platform administrators to **Settings ->
+Administration -> Reset Connector Cursors**. Select the tenant, enter the
+earliest date that should be re-read, and start the background reset. Google
+Health is a normal configured connector in that reset job, so the same bounded
+page reader, native writes and idempotency keys are used. A reset does not delete
+the existing health history; already imported rows are safely de-duplicated.
+Use the job progress to see whether Google Health succeeded or failed, and cancel
+the job before starting another reset if it is still running.
+
+## UI copy and translations
+
+The connector page and its shared source row use Wuchale PO catalogues, just like
+the rest of the application. When copy is added or moved, run the Wuchale
+extraction and keep every locale's `msgstr` non-empty; the lightweight
+`google-health-translations.test.js` check compiles representative production
+strings for every locale and verifies that `{0}` and `<0/>` placeholders are
+preserved. Product names such as **Google Health** and **eHbA1c** remain
+unchanged where the translation service would otherwise split or translate the
+name.
 
 Sleep uses the session's **end time**, as required by the
 [Google Health filter contract](https://developers.google.com/health/filters).
@@ -76,6 +103,13 @@ The lower time boundary is inclusive and the upper boundary exclusive. A night
 starting before the requested range is included when it ends inside that range,
 with its stages intact. Local filtering and reconciliation use the same window.
 Use **Refresh inventory** to rescan availability after a failed inventory request.
+
+The settings page treats the server capability catalogue as authoritative. If a
+preview is partial (for example while Google is still scanning a large history),
+categories such as **Vitals** and **Body measurement** remain visible and the
+missing rows are labelled **Not scanned**. This is different from **No
+permission** or **Not yet supported**: it means the row can be selected, but the
+latest inventory response did not include a count yet.
 
 Completed types are reconciled within their requested windows. Native source
 identifiers support repeat imports and updates. Reconciliation is scoped to Google
@@ -91,6 +125,30 @@ without depending on websocket delivery. The percentage represents data-type
 stages, not record-count completion or estimated time remaining. Errors expose a
 technical code and, where applicable, HTTP status. Use those with the API-server
 log; do not share credentials or health data.
+
+Manual and scheduled imports share the connector's tenant-wide run guard. If a
+scheduled run already owns that slot, **Sync now** reports the request as
+already running and continues polling the server status instead of presenting a
+provider failure. A second import is never started just to satisfy the button
+press.
+
+Local storage failures are reported as `internal_sync_native_write:<data-type>`
+with a stage such as `native_write` or `native_reconciliation_complete`. This
+distinguishes a database/reconciliation problem from a Google permission or
+OAuth problem and causes the next historical attempt to use a smaller window.
+
+The inventory preview uses the same guard but waits only briefly for an active
+import. If the slot remains occupied, the page stops the spinner and explains
+that the inventory can be refreshed after the import completes. This prevents a
+long-running historical import from leaving the settings page in an indefinite
+“Scanning inventory” state.
+
+The heart-rate actogram is a presentation view, not the source of truth. The
+report query averages readings into one UTC-minute point in PostgreSQL before
+serializing the response. Raw heart-rate rows remain available to the health
+history and day-level views, so this optimisation reduces browser payload and
+chart work without discarding measurements. This directly addresses the high
+volume report case tracked in [Nightscout issue #1359](https://github.com/nightscout/nocturne/issues/1359).
 
 ## Verification limits
 

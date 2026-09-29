@@ -360,7 +360,7 @@
               {/if}
               <span class="font-medium">{jobStatus.state}</span>
               <span class="text-muted-foreground">
-                {jobStatus.completedConnectors} / {jobStatus.totalConnectors} connectors
+                {jobStatus.completedConnectors} / {jobStatus.totalConnectors} processed
               </span>
               {#if jobStatus.errorMessage}
                 <span class="text-destructive">{jobStatus.errorMessage}</span>

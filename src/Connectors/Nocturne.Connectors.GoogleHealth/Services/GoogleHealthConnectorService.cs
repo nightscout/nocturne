@@ -270,7 +270,7 @@ public sealed class GoogleHealthConnectorService(
         GoogleHealthConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow };
+        var result = new SyncResult();
         var tenantId = tenantAccessor.TenantId;
         var gate = coordinator.Gate(tenantId);
         await gate.WaitAsync(cancellationToken);
@@ -340,7 +340,7 @@ public sealed class GoogleHealthConnectorService(
                     throw;
                 }
                 catch (GoogleHealthException ex) when (ex.Message is
-                    "history_too_large" or "rate_limited" or "google_unavailable")
+                    "history_too_large" or "rate_limited" or "google_unavailable" or "internal_sync_native_write")
                 {
                     await TryReduceBackfillWindowAsync(window);
                     throw;
@@ -472,9 +472,12 @@ public sealed class GoogleHealthConnectorService(
         for (var index = 0; index < active.Length; index++)
         {
             var type = active[index];
-            var reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
+            var reconciliationRun = Guid.Empty;
+            var stage = "native_reconciliation_begin";
             try
             {
+                    reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
+                    stage = "google_read";
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
                     void PageRead(int pages)
                     {
@@ -485,9 +488,11 @@ public sealed class GoogleHealthConnectorService(
                         {
                             var unique = page.Where(session => !string.IsNullOrWhiteSpace(session.OriginalId))
                                 .DistinctBy(session => session.OriginalId, StringComparer.Ordinal).ToArray();
+                            stage = "native_reconciliation_stage";
                             await writer.StageReconciliationIdsAsync(
                                 reconciliationRun, type,
                                 unique.Select(session => session.OriginalId!).ToArray(), ct);
+                            stage = "native_write";
                             await writer.WriteAsync([], unique, config.BatchSize, ct);
                             result.ItemsSynced[SyncDataType.Sleep] =
                                 result.ItemsSynced.GetValueOrDefault(SyncDataType.Sleep) + unique.Length;
@@ -496,15 +501,19 @@ public sealed class GoogleHealthConnectorService(
                     {
                         // Google Health reports heart rate at near-continuous (often per-beat) cadence.
                         // Storing every sample is not useful for reports and multiplies row counts far
-                        // beyond what's needed, so the whole day's readings are aggregated to one
-                        // average-bpm value per UTC minute before staging and writing them.
-                        var raw = new List<GoogleHealthReading>();
+                        // beyond what's needed, so readings are aggregated to one average-bpm value
+                        // per UTC minute before staging and writing them. The accumulator is bounded
+                        // by the number of minutes in the current historical window, not by the raw
+                        // sample count, which keeps a dense multi-week import safe to retry.
+                        var buckets = new Dictionary<long, HeartRateBucket>();
                         await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
-                            raw.AddRange(page);
-                        var unique = AggregateHeartRatePerMinute(raw);
+                            AddHeartRateBuckets(buckets, page);
+                        var unique = MaterializeHeartRateBuckets(buckets);
+                        stage = "native_reconciliation_stage";
                         await writer.StageReconciliationIdsAsync(
                             reconciliationRun, type,
                             unique.Select(GoogleHealthClient.Key).ToArray(), ct);
+                        stage = "native_write";
                         await writer.WriteAsync(unique, [], config.BatchSize, ct);
                         AddCount(result, type, unique.Count);
                     }
@@ -512,28 +521,48 @@ public sealed class GoogleHealthConnectorService(
                         await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
                         {
                             var unique = page.DistinctBy(GoogleHealthClient.Key, StringComparer.Ordinal).ToArray();
+                            stage = "native_reconciliation_stage";
                             await writer.StageReconciliationIdsAsync(
                                 reconciliationRun, type,
                                 unique.Select(GoogleHealthClient.Key).ToArray(), ct);
+                            stage = "native_write";
                             await writer.WriteAsync(unique, [], config.BatchSize, ct);
                             AddCount(result, type, unique.Length);
                         }
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+                    stage = "native_reconciliation_complete";
                     await writer.CompleteReconciliationAsync(reconciliationRun, ct);
                     coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
             }
-            catch
+            catch (Exception ex)
             {
-                try
+                if (reconciliationRun != Guid.Empty)
                 {
-                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                    await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
+                    try
+                    {
+                        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        await writer.AbandonReconciliationAsync(reconciliationRun, cleanup.Token);
+                    }
+                    catch (Exception cleanupException)
+                    {
+                        logger.LogWarning(cleanupException, "Could not clean up Google Health staging run {RunId}", reconciliationRun);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Could not clean up Google Health staging run {RunId}", reconciliationRun);
-                }
-                throw;
+
+                // Provider failures already carry their safe public code. Anything else is a
+                // local failure (usually PostgreSQL/reconciliation) and must retain its stage and
+                // data type instead of being flattened to an unhelpful generic internal_sync.
+                if (ex is GoogleHealthException or OperationCanceledException)
+                    throw;
+                var code = stage.StartsWith("native_", StringComparison.Ordinal)
+                    ? "internal_sync_native_write"
+                    : "internal_sync";
+                throw new GoogleHealthException(
+                    code,
+                    stage: stage,
+                    dataType: type,
+                    providerReason: ex.GetType().Name,
+                    innerException: ex);
             }
         }
     }
@@ -575,27 +604,52 @@ public sealed class GoogleHealthConnectorService(
     ///     reading per UTC minute, keyed by a stable per-minute identifier so a re-import of the same
     ///     day updates the same aggregated record instead of accumulating duplicates.
     /// </summary>
-    private static List<GoogleHealthReading> AggregateHeartRatePerMinute(IReadOnlyList<GoogleHealthReading> readings)
+    private readonly record struct HeartRateBucket(
+        GoogleHealthReading Representative,
+        decimal Sum,
+        int Count);
+
+    private static void AddHeartRateBuckets(
+        IDictionary<long, HeartRateBucket> buckets,
+        IEnumerable<GoogleHealthReading> readings)
     {
         const long bucketMillis = 60_000L;
-        return readings
-            .GroupBy(reading => reading.Mills - (reading.Mills % bucketMillis))
-            .Select(bucket =>
+        foreach (var reading in readings)
+        {
+            var bucket = reading.Mills - (reading.Mills % bucketMillis);
+            if (buckets.TryGetValue(bucket, out var existing))
             {
-                var representative = bucket.OrderBy(reading => reading.Mills).First();
+                buckets[bucket] = existing with
+                {
+                    Sum = existing.Sum + reading.Value,
+                    Count = existing.Count + 1
+                };
+            }
+            else
+            {
+                buckets[bucket] = new HeartRateBucket(reading, reading.Value, 1);
+            }
+        }
+    }
+
+    private static List<GoogleHealthReading> MaterializeHeartRateBuckets(
+        IReadOnlyDictionary<long, HeartRateBucket> buckets) =>
+        buckets
+            .OrderBy(pair => pair.Key)
+            .Select(pair =>
+            {
+                var (bucket, aggregate) = (pair.Key, pair.Value);
                 return new GoogleHealthReading
                 {
-                    DataType = representative.DataType,
-                    OriginalId = $"minute:{bucket.Key}",
-                    Mills = bucket.Key,
-                    UtcOffsetMinutes = representative.UtcOffsetMinutes,
-                    Value = Math.Round(bucket.Average(reading => reading.Value), MidpointRounding.AwayFromZero),
-                    Unit = representative.Unit
+                    DataType = aggregate.Representative.DataType,
+                    OriginalId = $"minute:{bucket}",
+                    Mills = bucket,
+                    UtcOffsetMinutes = aggregate.Representative.UtcOffsetMinutes,
+                    Value = Math.Round(aggregate.Sum / aggregate.Count, MidpointRounding.AwayFromZero),
+                    Unit = aggregate.Representative.Unit
                 };
             })
-            .OrderBy(reading => reading.Mills)
             .ToList();
-    }
 
     private static void AddCount(SyncResult result, string type, int count) =>
         result.ItemsSynced[GoogleHealthClient.TryGetSyncDataType(type, out var dataType)
@@ -607,7 +661,6 @@ public sealed class GoogleHealthConnectorService(
     {
         result.Success = true;
         result.Message = message;
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -616,7 +669,6 @@ public sealed class GoogleHealthConnectorService(
         result.Success = false;
         result.Message = code;
         result.Errors.Add(code);
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -639,6 +691,10 @@ public static class GoogleHealthErrorCode
     public static (string? Code, string[] DataTypes) Decode(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return (null, []);
+        // ConnectorSyncService uses the same tenant-wide slot for scheduled and admin-triggered
+        // work. This is an expected overlap, not a user-visible Google failure.
+        if (value.Contains("already running", StringComparison.OrdinalIgnoreCase))
+            return (null, []);
         var separator = value.IndexOf(':');
         if (separator < 0) return (value, []);
         return (value[..separator], value[(separator + 1)..]

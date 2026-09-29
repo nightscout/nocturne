@@ -313,6 +313,35 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Native_storage_failure_keeps_stage_and_data_type_in_result()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            var path when path.Contains("/weight/") => Json(
+                """{"dataPoints":[{"name":"weight-1","weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"weightGrams":70000}}]}"""),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}")
+        });
+        fixture.Writer
+            .Setup(value => value.WriteAsync(
+                It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
+                It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+                It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+
+        var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { From = from, To = from.AddDays(1) },
+            fixture.Configuration(), CancellationToken.None);
+
+        Assert.False(result.Success);
+        Assert.Equal("internal_sync_native_write:weight", result.Message);
+        Assert.Contains(result.Errors, value => value == result.Message);
+        fixture.Writer.Verify(value => value.AbandonReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task Manual_backfill_consumes_the_import_start_date_once_backfill_reaches_the_floor()
     {
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch

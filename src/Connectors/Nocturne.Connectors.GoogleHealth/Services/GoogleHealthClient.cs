@@ -17,7 +17,8 @@ public sealed class GoogleHealthException(
     string? stage = null,
     string? dataType = null,
     string? providerReason = null,
-    int? providerStatus = null) : Exception(code)
+    int? providerStatus = null,
+    Exception? innerException = null) : Exception(code, innerException)
 {
     public TimeSpan? RetryAfter { get; } = retryAfter;
     public string? Stage { get; } = stage;
