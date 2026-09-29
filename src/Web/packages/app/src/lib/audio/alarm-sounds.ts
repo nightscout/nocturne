@@ -291,32 +291,40 @@ async function releaseWakeLock(): Promise<void> {
 }
 
 /**
- * Show a system notification
+ * Create a system notification that stays until the person interacts with it
+ * and focuses the page when clicked. `silent` leaves the sound to the caller,
+ * as an alarm with its own sound does. Null when notifications are not allowed.
  */
-function showNotification(title: string, body: string, tag: string = 'alarm'): Notification | null {
+export function createSystemNotification(
+  title: string,
+  body: string,
+  tag: string,
+  silent: boolean,
+): Notification | null {
   if (!canShowNotifications()) {
     return null;
   }
 
-  // Close any existing alarm notification
-  if (activeNotification) {
-    activeNotification.close();
-  }
-
-  activeNotification = new Notification(title, {
+  const notification = new Notification(title, {
     body,
     tag, // Replaces existing notifications with same tag
-    icon: '/images/logo-128.png', // Nocturne app icon
-    badge: '/images/logo-64.png',
-    requireInteraction: true, // Notification stays until user interacts
-    silent: true, // We're handling our own sound
+    icon: '/favicon.png',
+    requireInteraction: true,
+    silent,
   });
-
-  activeNotification.onclick = () => {
+  notification.onclick = () => {
     window.focus();
-    activeNotification?.close();
+    notification.close();
   };
+  return notification;
+}
 
+/**
+ * Show the alarm's system notification, replacing the one before it.
+ */
+function showNotification(title: string, body: string, tag: string = 'alarm'): Notification | null {
+  activeNotification?.close();
+  activeNotification = createSystemNotification(title, body, tag, true);
   return activeNotification;
 }
 

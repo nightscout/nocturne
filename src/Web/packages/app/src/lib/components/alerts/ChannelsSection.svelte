@@ -25,11 +25,14 @@
     channels: ChannelDef[];
     /** The rule's severity, forwarded to the device editor's hardware warning. */
     severity?: AlertRuleSeverity;
+    /** Narrows the kinds that may be added to these; every kind the API offers when omitted. */
+    kinds?: ChannelType[];
   }
 
   let {
     channels = $bindable(),
     severity = AlertRuleSeverity.Warning,
+    kinds,
   }: Props = $props();
 
   const linkedPlatformsQuery = getLinkedPlatforms();
@@ -72,7 +75,9 @@
   // Every entry is listed but disabled until the API has answered, so the menu never
   // silently shrinks to nothing while the query is in flight or after it fails.
   const channelOptions = $derived(
-    statusPending || statusFailed ? CHANNEL_META : CHANNEL_META.filter(isOffered),
+    (statusPending || statusFailed ? CHANNEL_META : CHANNEL_META.filter(isOffered)).filter(
+      (o) => !kinds || kinds.includes(o.type),
+    ),
   );
 
   function addChannel(opt: ChannelMetaEntry): void {

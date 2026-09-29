@@ -189,7 +189,7 @@ internal sealed class AlertDeliveryService(
         }
     }
 
-    public async Task TestFireAsync(
+    public async Task<Guid> TestFireAsync(
         Guid alertRuleId,
         IReadOnlyList<AlertRuleChannelSnapshot> channels,
         AlertPayload payload,
@@ -268,7 +268,7 @@ internal sealed class AlertDeliveryService(
                 IsTest = true,
             });
             await db.SaveChangesAsync(ct);
-            return;
+            return instance.Id;
         }
 
         var payloadJson = JsonSerializer.Serialize(payload);
@@ -307,6 +307,8 @@ internal sealed class AlertDeliveryService(
                 await MarkFailedAsync(delivery.Id, ex.Message, ct);
             }
         }
+
+        return instance.Id;
     }
 
     public async Task TestFireDryRunAsync(

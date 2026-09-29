@@ -1236,6 +1236,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasFilter("managed_by IS NOT NULL");
 
         modelBuilder
+            .Entity<AlertRuleEntity>()
+            .Property(r => r.StarterKind)
+            .HasConversion<string>();
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .HasIndex(r => new { r.StarterKind, r.TenantId })
+            .IsUnique()
+            .HasFilter("starter_kind IS NOT NULL")
+            .HasDatabaseName("ix_alert_rules_starter_kind_tenant");
+
+        modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()
             .HasIndex(t => t.TrackerDefinitionId)
             .HasDatabaseName("ix_tracker_notification_thresholds_definition_id");
