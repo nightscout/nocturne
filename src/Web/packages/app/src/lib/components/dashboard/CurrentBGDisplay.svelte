@@ -137,7 +137,7 @@
        token's tone and the digits their contrast. Cropped to the wash's interior so its dried edge
        falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
   {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light brightness-150 contrast-160 grayscale">
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-soft-light">
       <Artwork
         artwork="wash"
         palette="slate"
@@ -231,3 +231,10 @@
   completionEventType={completingCompletionEventType}
   onClose={handleCompletionDialogClose}
 />
+
+<style>
+  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  .wash-grain {
+    filter: grayscale(1) brightness(1.5) contrast(1.6);
+  }
+</style>

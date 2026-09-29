@@ -192,7 +192,7 @@
           style:--paint-w="{paintBox.width}px"
           style:--paint-h="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply brightness-300 contrast-160 grayscale">
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-multiply">
             <Artwork
               artwork="wash"
               palette="slate"
@@ -209,3 +209,10 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  .wash-grain {
+    filter: grayscale(1) brightness(3) contrast(1.6);
+  }
+</style>
