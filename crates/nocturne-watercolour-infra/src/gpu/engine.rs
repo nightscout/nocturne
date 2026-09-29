@@ -1870,8 +1870,10 @@ impl GpuEngine {
             })
     }
 
+    /// Zero when the budget is below one checkpoint: a playback then holds
+    /// none, not even tick 0's, and a backwards seek reloads the scene.
     fn checkpoint_capacity_for(&self, layout: &StateLayout) -> usize {
-        ((self.checkpoint_budget / layout.state_bytes().max(1)) as usize).clamp(1, MAX_CHECKPOINTS)
+        ((self.checkpoint_budget / layout.state_bytes().max(1)) as usize).min(MAX_CHECKPOINTS)
     }
 }
 

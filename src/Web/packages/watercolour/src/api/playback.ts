@@ -71,7 +71,7 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
    * Live only: GPU memory this instance may spend on seek checkpoints.
    * Absent keeps the engine's default, or none past tick 0 for a
    * `releaseAfterFinish` player, which nothing can seek once it has let go;
-   * 0 leaves it with the single checkpoint at tick 0, so a backwards seek
+   * 0 leaves it with no checkpoint, so a backwards seek
    * replays from the start instead of restoring a nearer state.
    */
   checkpointBudgetBytes?: number;
@@ -155,7 +155,7 @@ function forgetLive(instance: WasmInstance): void {
 /**
  * The budget handed to the engine. The engine reads 0 as "its default", so
  * the documented 0 goes over as one byte, which is below any checkpoint and
- * leaves only the one at tick 0.
+ * leaves the instance none.
  */
 export function checkpointBudget(options: Pick<PlayerOptions, 'checkpointBudgetBytes' | 'releaseAfterFinish'>): number | undefined {
   const bytes = options.checkpointBudgetBytes ?? (options.releaseAfterFinish ? 0 : undefined);

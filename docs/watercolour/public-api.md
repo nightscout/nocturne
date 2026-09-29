@@ -45,9 +45,8 @@ a hold on the finished frame; both are gone.
 `checkpointBudgetBytes` (live only) is the GPU memory the instance may spend on
 seek checkpoints. Absent keeps the engine's 48 MB default, except on a
 `releaseAfterFinish` player, which nothing can seek once it has let go and so
-keeps only tick 0's; `0` leaves it the single checkpoint at tick 0, so a
-backwards `seek` reloads and replays from the start rather than restoring a
-nearer state. A player nothing ever seeks - every drop outside a seeking
+keeps none; `0` leaves it no checkpoint, so a backwards `seek` reloads the
+scene and replays from the start rather than restoring a nearer state. A player nothing ever seeks - every drop outside a seeking
 scrubber - should pass it.
 
 ### Player methods and state
@@ -487,8 +486,6 @@ and a simulation grid sized from the canvas's backing long edge (capped at 512 f
 drop, about four times the tick cost of 256, affordable because a drop holds one
 checkpoint and two pigments). One surface is one instance, and it runs for well
 under a second. A drop is never seeked unless a scrubber pins it with
-`progress`, so it takes `checkpointBudgetBytes: 1` and holds the single checkpoint
-at tick 0. Measured on the former showcase with sixteen surfaces held open at 512, that is
-about 7 MB of checkpoint memory per instance against 25 MB before.
+`progress`, so it takes `checkpointBudgetBytes: 1` and holds no checkpoint.
 
 Production keeps a live cap of four drop surfaces.

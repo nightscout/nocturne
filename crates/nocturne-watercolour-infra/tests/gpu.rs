@@ -267,6 +267,27 @@ fn checkpoint_capacity_is_bounded_and_releasable() {
     assert!(gpu.snapshot().unwrap().is_some());
 }
 
+/// A budget below one checkpoint holds none, not even tick 0's; a backwards
+/// seek reloads the scene and replays, landing on the straight run's state.
+#[test]
+fn a_budget_below_one_checkpoint_holds_none_and_still_seeks_exactly() {
+    let (Some(budgeted), Some(unbudgeted)) = (gpu(), gpu()) else {
+        return;
+    };
+    let scene = small_scene("wash");
+    let mut pb = Playback::new(budgeted.with_checkpoint_budget(1), scene.clone(), 1000.0).unwrap();
+    assert!(pb.checkpoint_ticks().is_empty());
+    pb.advance_ticks(100).unwrap();
+    assert!(pb.checkpoint_ticks().is_empty());
+    assert_eq!(pb.simulator().checkpoint_bytes(), 0);
+    pb.seek_tick(40).unwrap();
+    let seeked = pb.simulator().read_grid().unwrap();
+
+    let mut straight = Playback::new(unbudgeted, scene, 1000.0).unwrap();
+    straight.advance_ticks(40).unwrap();
+    assert_eq!(seeked, straight.simulator().read_grid().unwrap());
+}
+
 /// A playback's strokes, ticks and checkpoint copies go out together: a
 /// submission per sixteen ticks, plus one ahead of each upload into the state
 /// (`Dry`, `Settle`, the mask), plus the batch a readback flushes.

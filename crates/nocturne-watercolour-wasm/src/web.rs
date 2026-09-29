@@ -158,8 +158,8 @@ impl WatercolourEngine {
     /// paint_wall_fraction)`, so the tail covers the settling after the pen
     /// leaves the paper. `checkpoint_budget_bytes` (absent or 0 = the
     /// engine's [`BROWSER_CHECKPOINT_BUDGET_BYTES`]) is this instance's own
-    /// seek-checkpoint budget; anything below one checkpoint still keeps the
-    /// one at tick 0, so `seek` falls back to replaying from the start.
+    /// seek-checkpoint budget; below one checkpoint it keeps none, so `seek`
+    /// falls back to reloading the scene and replaying from the start.
     #[wasm_bindgen(js_name = createInstance)]
     pub fn create_instance(
         &self,

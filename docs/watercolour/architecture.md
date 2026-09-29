@@ -226,7 +226,8 @@ per-row edge table rather than panicking.
 Checkpoints are taken at tick 0, at every event tick and every `every_ticks`
 (32). When the backend's capacity is full the oldest periodic non-event
 checkpoint is released, and if none remain no more are taken. Capacity is
-`clamp(budget / checkpoint_bytes, 1, 64)`:
+`min(budget / checkpoint_bytes, 64)` on the GPU (`clamp(.., 1, 64)` on the CPU
+reference, which always keeps tick 0's):
 
 - Native budget 256 MB (`nocturne-watercolour-core`): a checkpoint is
   `(10 + 2*pigments) * cells * 4` bytes - 25 MB at 512^2 with 8 pigments
@@ -238,7 +239,8 @@ checkpoint is released, and if none remain no more are taken. Capacity is
 
 The budget is per instance: `createInstance` takes it as a fifth argument, and
 paint drops (`DropSurface`) pass 1 byte unless a scrubber is driving
-them, so an unscrubbed drop holds the single tick-0 checkpoint and nothing else.
+them, so an unscrubbed drop holds no checkpoint; nor does a
+`releaseAfterFinish` player, which nothing can seek once it has let go.
 
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint
 precedes the seek target. Seeking restores the nearest checkpoint at or before
