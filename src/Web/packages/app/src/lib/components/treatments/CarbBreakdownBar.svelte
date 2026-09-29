@@ -179,8 +179,10 @@
         </div>
       {/key}
       {#if paintBox}
-        <!-- A grey wash soft-lit over the attributed bars: the paint takes each bar's own hue, and
-             the crop keeps only the wash's interior so no dried edge floats inside the bar. -->
+        <!-- A grey wash multiplied over the attributed bars, so the paint takes each bar's own hue.
+             Multiply, where the glucose tile soft-lights: on a bar this light and this small a
+             soft-light wash vanishes, and there is no text over it to lose contrast. Cropped to the
+             wash's interior so no dried edge floats inside the bar. -->
         <div
           aria-hidden="true"
           data-carb-wash
@@ -190,7 +192,7 @@
           style:width="{paintBox.width}px"
           style:height="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light [filter:grayscale(1)_brightness(1.5)_contrast(1.6)]">
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(3)_contrast(1.6)]">
             <Artwork
               artwork="wash"
               palette="slate"
