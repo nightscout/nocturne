@@ -50,6 +50,19 @@ public class SetupHubServiceTests
         Id = Guid.CreateVersion7(), TenantId = tenantId, Timestamp = DateTime.UtcNow, Mgdl = 110,
     };
 
+    /// <summary>What makes the Devices item work: a CGM on record and the insulin question answered.</summary>
+    private void AddCgmAndInsulin()
+    {
+        _db.PatientDevices.Add(new PatientDeviceEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
+        });
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, InsulinCategory = "RapidActing", Name = "Humalog",
+        });
+    }
+
     private void Enrol()
     {
         _db.Tenants.Single(t => t.Id == TenantId).SetupHubEnrolledAt = DateTime.UtcNow;
@@ -128,10 +141,7 @@ public class SetupHubServiceTests
     {
         _db.SensorGlucose.Add(Reading(TenantId));
         _db.AlertRules.Add(new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Low" });
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         _db.TherapySettings.Add(new TherapySettingsEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, ProfileName = "Default", Timestamp = DateTime.UtcNow,
@@ -180,10 +190,7 @@ public class SetupHubServiceTests
     public async Task NotForMe_GivesWayToDone_WhenTheThingStartsWorking()
     {
         await Service.SetStateAsync(SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None);
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
         var hub = await Service.GetAsync(CancellationToken.None);
@@ -195,10 +202,7 @@ public class SetupHubServiceTests
     public async Task SetState_RefusesDone_ADoneItem_AndAnUnlistedItem()
     {
         _db.SensorGlucose.Add(Reading(TenantId));
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
         await Service.Invoking(s => s.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.Done, CancellationToken.None))

@@ -433,6 +433,13 @@ public class V4WriteScopeGatingTests
             // only the connector_food_entries status, which is the food category.
             ["MealMatchingController.AcceptMatch"] = Scope.TreatmentsReadWrite,
             ["MealMatchingController.DismissMatch"] = Scope.FoodReadWrite,
+
+            // The setup hub's Devices item writes the same tables as PatientRecordController above,
+            // plus a tracker definition, which TrackersController gates on alerts.readwrite.
+            ["SetupDevicesController.ConfirmSetupDevice"] = Scope.DevicesReadWrite,
+            ["SetupDevicesController.AddSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.SetTakesNoInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.AddSetupTracker"] = Scope.AlertsReadWrite,
         };
 
     [Fact]
