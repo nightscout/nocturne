@@ -9,7 +9,7 @@
   import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
   import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
   import { Artwork } from "@nocturne/watercolour";
-  import { batteryArtwork, sensorArtwork } from "$lib/watercolour-icons";
+  import { batteryArtwork } from "$lib/watercolour-icons";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { tick } from "svelte";
   import {
@@ -154,8 +154,8 @@
         />
       {:else}
         <Artwork
-          icon={sensorArtwork}
-          palette="slate"
+          artwork="cgm-sensor"
+          palette="water"
           motion="auto"
           autoplay="once"
           class="size-56"

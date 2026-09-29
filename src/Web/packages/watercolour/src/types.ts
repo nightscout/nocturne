@@ -37,7 +37,11 @@ export type ArtworkId =
   | 'people-group'
   | 'exclamation-mark'
   | 'chat-bubble'
-  | 'phone';
+  | 'phone'
+  | 'cgm-sensor'
+  | 'insulin-pump'
+  | 'glucose-gauge'
+  | 'ringing-bell';
 
 export type PaletteId = 'moonlight' | 'water' | 'dusk' | 'ember' | 'moss' | 'slate';
 
@@ -176,6 +180,10 @@ export const ARTWORK_IDS: readonly ArtworkId[] = [
   'exclamation-mark',
   'chat-bubble',
   'phone',
+  'cgm-sensor',
+  'insulin-pump',
+  'glucose-gauge',
+  'ringing-bell',
 ];
 
 export const PALETTE_IDS: readonly PaletteId[] = ['moonlight', 'water', 'dusk', 'ember', 'moss', 'slate'];
@@ -241,6 +249,10 @@ export const ARTWORK_ASPECT: Readonly<Record<ArtworkId, number>> = {
   'exclamation-mark': 1,
   'chat-bubble': 1,
   'phone': 1,
+  'cgm-sensor': 1,
+  'insulin-pump': 1,
+  'glucose-gauge': 1,
+  'ringing-bell': 1,
 };
 
 export function artworkAspect(id: ArtworkId): number {

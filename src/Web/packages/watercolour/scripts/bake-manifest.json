@@ -387,6 +387,46 @@
       "stripHeight": 160
     },
     {
+      "id": "cgm-sensor",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "insulin-pump",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "glucose-gauge",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "ringing-bell",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
       "id": "lucide:database",
       "palette": "slate",
       "surfaces": [
