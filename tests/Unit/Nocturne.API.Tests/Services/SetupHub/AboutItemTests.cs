@@ -35,22 +35,33 @@ public class AboutItemTests
         _db.PatientRecords.Add(new PatientRecordEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, PreferredName = "Sam", Timezone = "Pacific/Auckland",
-            DiagnosisDate = new DateOnly(2020, 1, 1),
         });
         await _db.SaveChangesAsync();
 
         (await StateAsync()).Should().Be(SetupHubItemState.Open);
     }
 
-    [Fact]
-    public async Task IsDone_OnceADiabetesTypeIsSaved()
+    [Theory]
+    [InlineData(nameof(PatientRecordEntity.DiabetesType))]
+    [InlineData(nameof(PatientRecordEntity.DateOfBirth))]
+    [InlineData(nameof(PatientRecordEntity.DiagnosisDate))]
+    [InlineData(nameof(PatientRecordEntity.Sex))]
+    [InlineData(nameof(PatientRecordEntity.Pronouns))]
+    public async Task IsDone_OnceAnyClinicalFieldIsSaved(string field)
     {
         var record = new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = TenantId };
         _db.PatientRecords.Add(record);
         await _db.SaveChangesAsync();
         (await StateAsync()).Should().Be(SetupHubItemState.Open);
 
-        record.DiabetesType = "Type1";
+        switch (field)
+        {
+            case nameof(PatientRecordEntity.DiabetesType): record.DiabetesType = "Type1"; break;
+            case nameof(PatientRecordEntity.DateOfBirth): record.DateOfBirth = new DateOnly(1990, 5, 1); break;
+            case nameof(PatientRecordEntity.DiagnosisDate): record.DiagnosisDate = new DateOnly(2020, 1, 1); break;
+            case nameof(PatientRecordEntity.Sex): record.Sex = "Female"; break;
+            default: record.Pronouns = "they/them"; break;
+        }
         await _db.SaveChangesAsync();
 
         (await StateAsync()).Should().Be(SetupHubItemState.Done);

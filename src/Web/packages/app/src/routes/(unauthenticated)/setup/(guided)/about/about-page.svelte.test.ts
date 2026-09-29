@@ -86,15 +86,20 @@ describe("About the patient", () => {
 
     await expect
       .element(page.getByTestId("about-intro"))
-      .toHaveTextContent(/Only your diabetes type is needed/);
+      .toHaveTextContent(/Everything here is optional/);
   });
 
-  it("asks for the diabetes type before saving, then saves the record as shown and returns to the hub", async () => {
+  it("saves without a diabetes type and returns to the hub", async () => {
     render(AboutPage);
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect.element(page.getByText("Diabetes type is required")).toBeVisible();
-    expect(state.submitted).not.toHaveBeenCalled();
+
+    await expect.poll(() => state.goto.mock.calls.length).toBe(1);
+    expect(state.submitted.mock.calls[0][0].diabetesType || undefined).toBeUndefined();
+  });
+
+  it("saves the record as shown and returns to the hub", async () => {
+    render(AboutPage);
 
     await page.getByLabelText("Diabetes Type").click();
     await page.getByRole("option", { name: "Type 1" }).click();
