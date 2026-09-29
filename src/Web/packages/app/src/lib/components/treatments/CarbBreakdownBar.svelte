@@ -3,8 +3,6 @@
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
   import { untrack } from "svelte";
-  import { Tween, prefersReducedMotion } from "svelte/motion";
-  import { cubicOut } from "svelte/easing";
   import { Artwork } from "@nocturne/watercolour";
 
   interface Props {
@@ -110,39 +108,48 @@
     Math.max(MIN_WIDTH_PERCENT, Math.min(100, (totalCarbs / MAX_CARBS) * 100))
   );
 
-  // The wash paints once, whole, and is unveiled to the attributed share with a
-  // mask (--share, edged 0.75rem in from the wash's bleed). Seeking the reveal
-  // instead would hold a live GPU slot per meal row for as long as it is mounted.
-  const attributedShare = $derived(
-    totalCarbs > 0 ? Math.min(1, attributedCarbs / totalCarbs) : 0
-  );
-  const share = new Tween(untrack(() => attributedShare), { duration: 500, easing: cubicOut });
+  // The attributed bars are read back off the rendered chart: layerchart nices
+  // the x domain, so their extent cannot be derived from the carbs alone.
+  let chartEl = $state<HTMLDivElement>();
+  let paintBox = $state<{ left: number; top: number; width: number; height: number }>();
 
   $effect(() => {
-    void share.set(attributedShare, prefersReducedMotion.current ? { duration: 0 } : undefined);
+    const el = chartEl;
+    if (!el) return;
+    const measure = () => {
+      const host = el.getBoundingClientRect();
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      for (const rect of el.querySelectorAll("rect")) {
+        if (!colorPalette.includes(rect.getAttribute("fill") ?? "")) continue;
+        const box = rect.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0) continue;
+        left = Math.min(left, box.left);
+        top = Math.min(top, box.top);
+        right = Math.max(right, box.right);
+        bottom = Math.max(bottom, box.bottom);
+      }
+      const next = right > left
+        ? { left: left - host.left, top: top - host.top, width: right - left, height: bottom - top }
+        : undefined;
+      if (JSON.stringify(next) !== JSON.stringify(untrack(() => paintBox))) paintBox = next;
+    };
+    measure();
+    const mutations = new MutationObserver(measure);
+    mutations.observe(el, { subtree: true, childList: true, attributes: true });
+    const resizes = new ResizeObserver(measure);
+    resizes.observe(el);
+    return () => {
+      mutations.disconnect();
+      resizes.disconnect();
+    };
   });
 </script>
 
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
     <div class="relative isolate h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
-      {#if attributedShare > 0}
-        <div
-          class="pointer-events-none absolute -inset-x-3 -inset-y-2 -z-10 opacity-60 dark:opacity-40 [mask-image:linear-gradient(to_right,#000_calc(0.75rem_+_var(--share)*(100%_-_1.5rem)),transparent_calc(1.5rem_+_var(--share)*(100%_-_1.5rem)))]"
-          style:--share={share.current}
-        >
-          <Artwork
-            artwork="wash"
-            palette="moss"
-            autoplay="never"
-            releaseAfterFinish
-            fit="fill"
-            class="size-full"
-          />
-        </div>
-      {/if}
       {#key chartKey}
-        <div class="h-full">
+        <div bind:this={chartEl} class="h-full">
         <BarChart
           data={chartData}
           orientation="horizontal"
@@ -171,6 +178,31 @@
         />
         </div>
       {/key}
+      {#if paintBox}
+        <!-- A grey wash multiplied over the attributed bars: the paint takes each bar's own hue, and
+             the crop keeps only the wash's interior so no dried edge floats inside the bar. -->
+        <div
+          aria-hidden="true"
+          data-carb-wash
+          class="pointer-events-none absolute overflow-hidden"
+          style:left="{paintBox.left}px"
+          style:top="{paintBox.top}px"
+          style:width="{paintBox.width}px"
+          style:height="{paintBox.height}px"
+        >
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.3)_contrast(1.3)]">
+            <Artwork
+              artwork="wash"
+              palette="slate"
+              surface="light"
+              autoplay="never"
+              releaseAfterFinish
+              fit="fill"
+              class="size-full"
+            />
+          </div>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
