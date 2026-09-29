@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IconNode } from '../types';
 import { EngineHost } from './engine-host';
-import { type PlayerState, autoplayAction, checkpointBudget, createArtworkPlayer, iconStaticBackend } from './playback';
+import { type PlayerState, SMALL_STILL_EDGE, autoplayAction, checkpointBudget, createArtworkPlayer, iconStaticBackend, stillVariant } from './playback';
 import { Scheduler } from './scheduler';
 
 const clock: IconNode[] = [
@@ -145,5 +145,17 @@ describe('checkpointBudget', () => {
 
   it('sends a documented 0 as one byte, since the engine reads 0 as its default', () => {
     expect(checkpointBudget({ checkpointBudgetBytes: 0 })).toBe(1);
+  });
+});
+
+describe('stillVariant', () => {
+  it('draws the 128 px final up to its own size, so it is never enlarged', () => {
+    expect(stillVariant(64, true)).toBe('final-small');
+    expect(stillVariant(SMALL_STILL_EDGE, true)).toBe('final-small');
+    expect(stillVariant(SMALL_STILL_EDGE + 1, true)).toBe('final');
+  });
+
+  it('falls back to the full final where there is no small one', () => {
+    expect(stillVariant(64, false)).toBe('final');
   });
 });

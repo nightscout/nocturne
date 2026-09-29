@@ -152,7 +152,7 @@ curves and both colour directions - is in
 |---|---|---|---|
 | `live` | WebGPU via the wasm engine, presented straight to the canvas | `navigator.gpu`, an adapter, a free slot under `maxLiveInstances` (default 4) | Preferred when available and motion is not reduced |
 | `baked` | 2D canvas, cross-fading two frames of a PNG strip | the strip + manifest asset (bundled or `assetBaseUrl`) | No usable GPU or the instance cap is reached |
-| `static` | 2D canvas, the finished PNG drawn once | the final asset | Reduced motion (first choice), or nothing else works |
+| `static` | 2D canvas, the finished still drawn once: `final-128` up to 128 device px on the long edge, else `final-512` | the final asset | Reduced motion (first choice), or nothing else works |
 | `none` | nothing | - | No GPU and no asset; `error` fires with a typed code |
 
 Explicit modes fall down the same chain when unavailable (`live` -> `baked` ->

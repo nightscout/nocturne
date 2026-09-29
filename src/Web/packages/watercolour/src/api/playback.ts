@@ -1,7 +1,7 @@
 import type { ArtworkAutoplay, ArtworkOptions, DetailLevel, Surface } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
-import { type AssetKey, type AssetOptions, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
-import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, loadStrip, parseBakedManifest, sharedStill } from './baked';
+import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
+import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
 import { type Capabilities, detectCapabilities } from './capabilities';
 import { type EngineHost, type EngineLease, type WasmInstance, getEngineHost } from './engine-host';
 import { WatercolourError, toWatercolourError } from './errors';
@@ -580,7 +580,7 @@ class BakedBackend implements Backend {
     options: PlayerOptions,
   ): Promise<BakedBackend> {
     const manifest = await loadManifest(urls.manifest);
-    const strip = await loadStrip(urls.strip, manifest);
+    const strip = await sharedStrip(urls.strip, manifest);
     const target = acquire2d(canvas);
     return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing);
   }
@@ -662,8 +662,8 @@ class BakedBackend implements Backend {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    // The strip is borrowed from `sharedStrip` and outlives this backend.
     this.handle.dispose();
-    this.strip.bitmap.close();
   }
 
   private applySize(): void {
@@ -703,6 +703,18 @@ class BakedBackend implements Backend {
   }
 }
 
+/**
+ * The long edge, in device pixels, up to which the static rung draws the
+ * 128 px final instead of the 512 px one. At or below it the small file is
+ * never enlarged, and a 32 px avatar decodes 64 KB of pixels instead of 1 MB.
+ */
+export const SMALL_STILL_EDGE = 128;
+
+/** Which final a canvas this many device pixels on its long edge draws. */
+export function stillVariant(longEdgeDevicePx: number, hasSmall: boolean): 'final' | 'final-small' {
+  return hasSmall && longEdgeDevicePx <= SMALL_STILL_EDGE ? 'final-small' : 'final';
+}
+
 class StaticBackend implements Backend {
   readonly mode = 'static' as const;
   readonly playing = false;
@@ -711,10 +723,17 @@ class StaticBackend implements Backend {
   readonly easedProgress = 1;
   private disposed = false;
 
-  static async create(canvas: HTMLCanvasElement, url: string, size: PixelSize, callbacks: BackendCallbacks): Promise<StaticBackend> {
+  /** `larger` resolves the full-size final, for a small still resized past {@link SMALL_STILL_EDGE}. */
+  static async create(
+    canvas: HTMLCanvasElement,
+    url: string,
+    size: PixelSize,
+    callbacks: BackendCallbacks,
+    larger?: () => Promise<string>,
+  ): Promise<StaticBackend> {
     const image = await sharedStill(url);
     const target = acquire2d(canvas);
-    const backend = new StaticBackend(target.canvas, target.ctx, image, size);
+    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger);
     queueMicrotask(() => callbacks.onFinished());
     return backend;
   }
@@ -722,8 +741,9 @@ class StaticBackend implements Backend {
   private constructor(
     readonly canvas: HTMLCanvasElement,
     private readonly ctx: CanvasRenderingContext2D,
-    private readonly image: ImageBitmap,
+    private image: ImageBitmap,
     private size: PixelSize,
+    private larger: (() => Promise<string>) | undefined,
   ) {
     this.draw();
   }
@@ -737,6 +757,18 @@ class StaticBackend implements Backend {
   resize(size: PixelSize): void {
     this.size = size;
     this.draw();
+    const larger = this.larger;
+    if (!larger || Math.max(size.width, size.height) <= SMALL_STILL_EDGE) return;
+    this.larger = undefined;
+    void larger()
+      .then(sharedStill)
+      .then((image) => {
+        this.image = image;
+        this.draw();
+      })
+      .catch(() => {
+        // The small still stays up, enlarged; nothing better to draw.
+      });
   }
 
   dispose(): void {
@@ -1051,7 +1083,7 @@ class Player implements ArtworkPlayer {
     return bakedServesEdge(Math.max(this.size.width, this.size.height));
   }
 
-  private assetOk(variant: 'strip' | 'manifest' | 'final'): boolean {
+  private assetOk(variant: AssetVariant): boolean {
     const key = this.assetKey();
     if (key) return assetAvailable(key, variant, this.options);
     return Boolean(this.options.assets?.[variant]);
@@ -1134,13 +1166,20 @@ class Player implements ArtworkPlayer {
         if (iconStaticBackend(this.icon, this.assetOk('final')) === 'svg') {
           return IconSvgBackend.create(this.currentCanvas, this.icon!, this.size, callbacks);
         }
-        return this.resolveUrls(['final']).then(([final]) => StaticBackend.create(this.currentCanvas, final, this.size, callbacks));
+        return this.createStatic(callbacks);
       case 'none':
         return Promise.reject(new WatercolourError('AssetMissing', 'no asset available for this artwork'));
     }
   }
 
-  private async resolveUrls<const V extends readonly ('manifest' | 'strip' | 'final')[]>(variants: V): Promise<string[]> {
+  private async createStatic(callbacks: BackendCallbacks): Promise<Backend> {
+    const variant = stillVariant(Math.max(this.size.width, this.size.height), this.assetOk('final-small'));
+    const [url] = await this.resolveUrls([variant]);
+    const larger = variant === 'final-small' ? () => this.resolveUrls(['final']).then(([full]) => full!) : undefined;
+    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger);
+  }
+
+  private async resolveUrls<const V extends readonly AssetVariant[]>(variants: V): Promise<string[]> {
     return Promise.all(
       variants.map(async (variant) => {
         const key = this.assetKey();
