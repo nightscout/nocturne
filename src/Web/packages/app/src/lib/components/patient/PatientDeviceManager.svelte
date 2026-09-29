@@ -36,7 +36,6 @@
   } from "./labels";
   import { DeviceListState } from "./state.svelte";
   import { EmptyState } from "$lib/components/shared";
-  import { sensorArtwork } from "$lib/watercolour-icons";
 
   interface Props {
     /** "inline" = wizard-style card forms, "dialog" = settings-style dialog CRUD */
@@ -316,7 +315,7 @@
 
   {#if deviceList.items.length === 0}
     <EmptyState
-      art={sensorArtwork}
+      art="cgm-sensor"
       variant="outline"
       title="No devices added yet"
       body="Add your first device to get started."
