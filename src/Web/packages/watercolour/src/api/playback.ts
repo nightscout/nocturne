@@ -8,6 +8,7 @@ import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
 import { type ArtworkRef, type IconRef, type SceneSource, authoredSceneJson, iconSvg, isArtworkRef, isIconRef, parseSceneDocument, resolveSceneJson } from './scenes';
 import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
+import { type ViewportWait, waitNearViewport } from './viewport';
 
 export type PlayerEvent = 'ready' | 'finished' | 'fallback' | 'error' | 'statechange';
 
@@ -128,7 +129,8 @@ interface Backend {
   pause(): void;
   reset(): void;
   seek(progress: number): void;
-  finish(): void;
+  /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
+  finish(sliced?: boolean): void;
   resize(size: PixelSize): void;
   dispose(): void;
   exportPng?(width: number, height: number): Promise<Uint8Array>;
@@ -198,10 +200,22 @@ export function invertEasing(easing: (t: number) => number, y: number): number {
   return (lo + hi) / 2;
 }
 
+/**
+ * Main-thread time a sliced finish may take out of one frame. A still's whole
+ * run in one task is tens of milliseconds on a desktop GPU and several times
+ * that on a phone; spread over frames it never holds the thread longer.
+ */
+export const SETTLE_FRAME_BUDGET_MS = 6;
+
+/** Ticks per engine call while settling; small, so the budget is kept to within a few ticks. */
+const SETTLE_SLICE_TICKS = 4;
+
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
   private isPlaying = false;
+  /** Running to the end a slice per frame; nothing is presented until it gets there. */
+  private settling = false;
   private handle: SchedulerHandle;
   private disposed = false;
   private released = false;
@@ -222,7 +236,7 @@ class LiveBackend implements Backend {
     scheduler: Scheduler,
     callbacks: BackendCallbacks,
     options: PlayerOptions,
-    onFreed: () => void = () => {},
+    endTurn?: () => void,
   ): Promise<LiveBackend> {
     try {
       const lease = await host.acquire();
@@ -266,7 +280,7 @@ class LiveBackend implements Backend {
           options.easing,
           resolvedDetail,
           durationMs,
-          onFreed,
+          endTurn,
         );
       } catch (error) {
         instance.dispose();
@@ -274,7 +288,7 @@ class LiveBackend implements Backend {
       }
     } catch (error) {
       host.release();
-      onFreed();
+      endTurn?.();
       throw toWatercolourError(error);
     }
   }
@@ -290,14 +304,19 @@ class LiveBackend implements Backend {
     easing: ((t: number) => number) | undefined,
     resolvedDetail: DetailLevel,
     durationMs: number,
-    private readonly onFreed: () => void,
+    /**
+     * Set for a still: ends its live turn once the instance is freed. A still
+     * is ticked on screen or off, because the turn it holds blocks every
+     * later still; it waited to be near the viewport before taking one.
+     */
+    private readonly endTurn: (() => void) | undefined,
   ) {
     this.releaseAfterFinish = releaseAfterFinish;
     this.easing = easing;
     this.resolvedDetail = resolvedDetail;
     this.durationMs = durationMs;
     this.handle = scheduler.register({
-      element: canvas,
+      element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
       render: () => this.render(),
     });
@@ -345,7 +364,7 @@ class LiveBackend implements Backend {
   }
 
   play(): void {
-    if (this.disposed || this.released || this.finished) return;
+    if (this.disposed || this.released || this.settling || this.finished) return;
     this.instance.play();
     this.isPlaying = true;
     this.handle.setActive(true);
@@ -358,12 +377,14 @@ class LiveBackend implements Backend {
   }
 
   reset(): void {
+    this.settling = false;
     if (this.easing) this.elapsedMs = 0;
     this.step(() => this.instance.reset());
     this.isPlaying = false;
   }
 
   seek(progress: number): void {
+    this.settling = false;
     const p = Math.min(1, Math.max(0, progress));
     if (this.easing) {
       // `seek` takes the artistic (eased) progress the caller sees, so drive
@@ -376,15 +397,21 @@ class LiveBackend implements Backend {
     this.isPlaying = this.guarded(() => this.instance.isPlaying(), false);
   }
 
-  finish(): void {
+  finish(sliced = false): void {
     if (this.disposed || this.released) return;
     if (this.easing) this.elapsedMs = this.durationMs;
-    this.step(() => this.instance.finishImmediately());
     this.isPlaying = false;
+    if (sliced && this.instance.advanceTicks) {
+      this.instance.pause();
+      this.settling = true;
+      this.handle.setActive(true);
+      return;
+    }
+    this.settling = false;
+    this.step(() => this.instance.finishImmediately());
     this.callbacks.onFinished();
-    // Presented now rather than on the scheduler's next visible frame, so an
-    // off-screen still (an avatar below the fold) does not hold its slot
-    // until it is scrolled to.
+    // Presented now rather than on the scheduler's next visible frame, so a
+    // host finishing an off-screen still does not leave it holding its slot.
     if (this.releaseAfterFinish) this.render();
   }
 
@@ -430,11 +457,15 @@ class LiveBackend implements Backend {
         // Already freed by a device loss; nothing left to release.
       }
       this.host.release();
-      this.onFreed();
+      this.endTurn?.();
     }
   }
 
   private tick(dt: number): void {
+    if (this.settling) {
+      this.settle();
+      return;
+    }
     if (!this.isPlaying || this.disposed || this.released) return;
     if (this.easing) {
       this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
@@ -444,8 +475,21 @@ class LiveBackend implements Backend {
     }
   }
 
+  /** The steps `finishImmediately` takes, a few at a time within {@link SETTLE_FRAME_BUDGET_MS}. */
+  private settle(): void {
+    const started = performance.now();
+    let done = false;
+    this.step(() => {
+      do done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
+      while (!done && performance.now() - started < SETTLE_FRAME_BUDGET_MS);
+    });
+    if (!done || !this.settling) return;
+    this.settling = false;
+    this.callbacks.onFinished();
+  }
+
   private render(): void {
-    if (this.disposed || this.released) return;
+    if (this.disposed || this.released || this.settling) return;
     if (this.dirty) {
       this.dirty = false;
       try {
@@ -478,7 +522,7 @@ class LiveBackend implements Backend {
       // Already freed by a device loss; nothing left to release.
     }
     this.host.release();
-    this.onFreed();
+    this.endTurn?.();
   }
 
   private step(action: () => void): void {
@@ -508,6 +552,7 @@ class LiveBackend implements Backend {
   private fault(error: WatercolourError): void {
     if (this.disposed || this.released) return;
     this.isPlaying = false;
+    this.settling = false;
     this.callbacks.onFault(error);
   }
 }
@@ -810,6 +855,7 @@ class Player implements ArtworkPlayer {
   private error: WatercolourError | undefined;
   private fallbackReason: string | undefined;
   private currentCanvas: HTMLCanvasElement;
+  private viewportWait: ViewportWait | undefined;
   private readonly listeners = new Map<PlayerEvent, Set<Listener>>();
   private readonly durationMs: number;
   private readonly host: EngineHost;
@@ -925,12 +971,18 @@ class Player implements ArtworkPlayer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.viewportWait?.cancel();
     this.backend?.dispose();
     this.backend = undefined;
     this.listeners.clear();
   }
 
   private async init(): Promise<void> {
+    // Nothing below the fold is simulated or decoded, and no live slot is
+    // taken for it, until it comes near the viewport.
+    this.viewportWait = waitNearViewport(this.currentCanvas);
+    await this.viewportWait.ready;
+    if (this.disposed) return;
     const capabilities = await (this.options.capabilities ?? detectCapabilities)();
     if (this.disposed) return;
     this.motion = resolveMotion(this.options.motion ?? 'auto', capabilities.reducedMotion);
@@ -1038,7 +1090,7 @@ class Player implements ArtworkPlayer {
   private autoplay(): void {
     if (!this.backend) return;
     const action = this.autoplayAction(this.options.releaseAfterFinish);
-    if (action === 'finish') this.backend.finish();
+    if (action === 'finish') this.backend.finish(true);
     else if (action === 'play') this.backend.play();
   }
 
@@ -1056,8 +1108,8 @@ class Player implements ArtworkPlayer {
     };
     switch (mode) {
       case 'live': {
-        const create = (onFreed?: () => void) =>
-          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, onFreed);
+        const create = (endTurn?: () => void) =>
+          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, endTurn);
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.

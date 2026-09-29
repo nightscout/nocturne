@@ -20,9 +20,12 @@ export interface WasmInstance {
   play(): void;
   pause(): void;
   reset(): void;
-  advanceByElapsed(seconds: number): void;
-  /** Linear progress-to-tick drive; callers apply their own easing first. */
-  advanceToProgress(progress: number): void;
+  /** Whether the simulation moved; an older build returns nothing. */
+  advanceByElapsed(seconds: number): boolean | void;
+  /** Linear progress-to-tick drive; callers apply their own easing first. Returns as `advanceByElapsed`. */
+  advanceToProgress(progress: number): boolean | void;
+  /** Runs up to `ticks` more steps toward the end; `true` once finished. Absent from older builds. */
+  advanceTicks?(ticks: number): boolean;
   setProgressCurve(curve: 'frontLoaded' | 'linear' | 'reveal'): void;
   seekProgress(progress: number): void;
   finishImmediately(): void;
