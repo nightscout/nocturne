@@ -51,6 +51,11 @@ const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
 
+/// Zero words in a row that an upload into a zero-filled buffer leaves out.
+/// A loaded state is mostly fields that start at zero (water, velocity,
+/// pigment), so only the paper, the mask and the header go over.
+const SKIPPED_ZERO_RUN: usize = 1024;
+
 /// GPU bytes of render-resolution paper an engine and its forks keep after
 /// the instance that made them is gone. A remount at the same size (a tab
 /// switch, a re-hover, a list of same-seed accents) then skips generating
@@ -197,6 +202,52 @@ struct StrokeUniform {
     water: f32,
     strength: f32,
     splat_out: f32,
+    rect_x: u32,
+    rect_y: u32,
+    rect_w: u32,
+    rect_h: u32,
+}
+
+/// The rows and columns of a stamp that hold a non-zero coverage bit, with
+/// that rect's coverage row-major: all an apply pass needs to see, since a
+/// zero-coverage cell leaves the grid as it was.
+struct StampRect {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    coverage: Vec<f32>,
+}
+
+impl StampRect {
+    fn of(stamp: &paint::Stamp) -> Option<StampRect> {
+        let width = stamp.width as usize;
+        let (mut x0, mut x1, mut y0, mut y1) = (usize::MAX, 0, usize::MAX, 0);
+        for (y, row) in stamp.coverage.chunks_exact(width.max(1)).enumerate() {
+            let Some(first) = row.iter().position(|c| c.to_bits() != 0) else {
+                continue;
+            };
+            let last = row.iter().rposition(|c| c.to_bits() != 0).unwrap_or(first);
+            x0 = x0.min(first);
+            x1 = x1.max(last + 1);
+            y0 = y0.min(y);
+            y1 = y + 1;
+        }
+        if y0 == usize::MAX {
+            return None;
+        }
+        let mut coverage = Vec::with_capacity((x1 - x0) * (y1 - y0));
+        for y in y0..y1 {
+            coverage.extend_from_slice(&stamp.coverage[y * width + x0..y * width + x1]);
+        }
+        Some(StampRect {
+            x: x0 as u32,
+            y: y0 as u32,
+            w: (x1 - x0) as u32,
+            h: (y1 - y0) as u32,
+            coverage,
+        })
+    }
 }
 
 #[repr(C)]
@@ -874,6 +925,41 @@ impl GpuEngine {
         self.ctx.queue().write_buffer(buffer, offset, data);
     }
 
+    /// Uploads `data` into a buffer that is still zero-filled, leaving out
+    /// its runs of zero words.
+    fn write_into_zeroed(&self, buffer: &wgpu::Buffer, data: &[f32]) {
+        let f = std::mem::size_of::<f32>();
+        let mut start = 0;
+        let mut i = 0;
+        while i < data.len() {
+            if data[i].to_bits() != 0 {
+                i += 1;
+                continue;
+            }
+            let run = i;
+            while i < data.len() && data[i].to_bits() == 0 {
+                i += 1;
+            }
+            if i - run >= SKIPPED_ZERO_RUN {
+                if run > start {
+                    self.write_buffer(
+                        buffer,
+                        (start * f) as u64,
+                        bytemuck::cast_slice(&data[start..run]),
+                    );
+                }
+                start = i;
+            }
+        }
+        if start < data.len() {
+            self.write_buffer(
+                buffer,
+                (start * f) as u64,
+                bytemuck::cast_slice(&data[start..]),
+            );
+        }
+    }
+
     /// Encodes one tick into `pass`: the same pass order as `sim::step`.
     /// Every dispatch in a compute pass is its own usage scope, so each one
     /// sees the storage writes of the one before; where the CPU swaps
@@ -949,7 +1035,11 @@ impl GpuEngine {
         Ok(())
     }
 
-    fn dispatch_apply(&self, pipeline: &wgpu::ComputePipeline) -> Result<(), EngineError> {
+    fn dispatch_apply(
+        &self,
+        pipeline: &wgpu::ComputePipeline,
+        cells: u32,
+    ) -> Result<(), EngineError> {
         let l = self.loaded()?;
         let mut enc = self
             .ctx
@@ -961,18 +1051,35 @@ impl GpuEngine {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(l.layout.n as u32), 1, 1);
+            pass.dispatch_workgroups(groups(cells), 1, 1);
         }
         CommandCounter::add(&self.counter.passes, 1);
         CommandCounter::add(&self.counter.dispatches, 1);
         self.submit(enc.finish())
     }
 
-    fn upload_stamp(&self, stamp: &paint::Stamp, stroke: StrokeUniform) -> Result<(), EngineError> {
+    /// Uploads the stamp's non-zero rect and applies `pipeline` over it; a
+    /// stamp with no coverage changes nothing and is skipped.
+    fn apply_stamp(
+        &self,
+        pipeline: &wgpu::ComputePipeline,
+        stamp: &paint::Stamp,
+        stroke: StrokeUniform,
+    ) -> Result<(), EngineError> {
+        let Some(rect) = StampRect::of(stamp) else {
+            return Ok(());
+        };
         let l = self.loaded()?;
-        self.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&stamp.coverage));
+        let stroke = StrokeUniform {
+            rect_x: rect.x,
+            rect_y: rect.y,
+            rect_w: rect.w,
+            rect_h: rect.h,
+            ..stroke
+        };
+        self.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&rect.coverage));
         self.write_buffer(&l.stroke, 0, bytemuck::bytes_of(&stroke));
-        Ok(())
+        self.dispatch_apply(pipeline, rect.w * rect.h)
     }
 
     /// Reads the whole state back; used by tests and the CPU comparison.
@@ -1723,7 +1830,7 @@ impl Simulator for GpuEngine {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
 
-        self.write_buffer(&state, 0, bytemuck::cast_slice(&layout.pack(&grid)));
+        self.write_into_zeroed(&state, &layout.pack(&grid));
         self.write_buffer(
             &params,
             0,
@@ -1847,7 +1954,8 @@ impl Simulator for GpuEngine {
             Operation::Brush(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
                 let flow = paint::stroke_flow(&s.path, s.span, aspect, s.water, self.params.flow);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_brush,
                     &stamp,
                     StrokeUniform {
                         kind: 0,
@@ -1858,14 +1966,15 @@ impl Simulator for GpuEngine {
                         water: s.water,
                         strength: 0.0,
                         splat_out: flow.splat_out,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_brush)
+                )
             }
             Operation::Water(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
                 let flow = paint::stroke_flow(&s.path, s.span, aspect, s.water, self.params.flow);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_water,
                     &stamp,
                     StrokeUniform {
                         kind: 1,
@@ -1876,13 +1985,14 @@ impl Simulator for GpuEngine {
                         water: s.water,
                         strength: 0.0,
                         splat_out: flow.splat_out,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_water)
+                )
             }
             Operation::Lift(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_lift,
                     &stamp,
                     StrokeUniform {
                         kind: 2,
@@ -1893,9 +2003,9 @@ impl Simulator for GpuEngine {
                         water: 0.0,
                         strength: s.strength,
                         splat_out: 0.0,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_lift)
+                )
             }
             Operation::Dry { rate } => {
                 let off = self.loaded()?.layout.dry_rate();
@@ -1905,7 +2015,10 @@ impl Simulator for GpuEngine {
                 let off = self.loaded()?.layout.settle_share();
                 self.write_state_region(off, &[share.clamp(0.0, MAX_SETTLE_SHARE)])
             }
-            Operation::DryAll => self.dispatch_apply(&self.sim.dry_all),
+            Operation::DryAll => {
+                let n = self.loaded()?.layout.n as u32;
+                self.dispatch_apply(&self.sim.dry_all, n)
+            }
             Operation::SetMask(mask) => {
                 let field = paint::rasterize_mask_aspect(mask, w, h, aspect);
                 let off = self.loaded()?.layout.m();

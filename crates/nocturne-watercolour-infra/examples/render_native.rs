@@ -402,9 +402,14 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
     const RUNS: usize = 3;
     let mut scene = ArtworkCatalogue::build("wash", SEED, Palette::water()).expect("wash");
     scene.sim_resolution = SimResolution(resolution);
+    let loading = gpu.command_counts();
     let mut pb = Playback::new(gpu, scene.clone(), DURATION_MS).expect("playback");
     let warm = pb.total_ticks() * 3 / 10;
     let before = pb.simulator().command_counts();
+    println!(
+        "bench {resolution}^2 sim: load {} KB uploaded",
+        (before.uploaded_bytes - loading.uploaded_bytes) / 1024
+    );
     pb.advance_ticks(warm).expect("advance");
     pb.simulator().sync().expect("sync");
     let after = pb.simulator().command_counts();

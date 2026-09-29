@@ -76,6 +76,11 @@ struct Stroke {
     water: f32,
     strength: f32,
     splat_out: f32,
+    // The grid rect the stamp covers; `stamp` holds only that rect, row-major.
+    rect_x: u32,
+    rect_y: u32,
+    rect_w: u32,
+    rect_h: u32,
 };
 
 struct PigmentCoef {
