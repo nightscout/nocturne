@@ -67,7 +67,7 @@ vi.mock("$lib/components/connectors/ConnectorSetup.svelte", emptyStub);
 vi.mock("$lib/components/connectors/UploaderSetupView.svelte", emptyStub);
 
 import { startFromConnector } from "$api/generated/migrations.generated.remote";
-import SetupPage from "./+page@.svelte";
+import SetupPage from "./SetupWizard.svelte";
 
 const freshCard = () =>
   page.getByRole("radio", { name: /Start with a blank slate/ });

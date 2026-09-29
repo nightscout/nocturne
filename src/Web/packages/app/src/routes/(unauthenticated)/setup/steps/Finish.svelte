@@ -8,7 +8,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import { Item } from "$lib/components/ui/item";
-  import ChartLine from "@lucide/svelte/icons/chart-line";
   import Users from "@lucide/svelte/icons/users";
   import Bell from "@lucide/svelte/icons/bell";
   import BookOpen from "@lucide/svelte/icons/book-open";
@@ -21,14 +20,15 @@
     source,
     importResult,
     voice,
-    onEnterDashboard,
+    onContinue,
     onNavigateWithCoach,
   }: {
     path: "fresh" | "migration";
     source: SourceResult;
     importResult: ImportResult;
     voice: PatientVoice;
-    onEnterDashboard: () => void;
+    /** Leaves the core for the setup hub. */
+    onContinue: () => void;
     onNavigateWithCoach: (url: string) => void;
   } = $props();
 
@@ -133,15 +133,9 @@
     </p>
 
     <div class="flex flex-row flex-wrap items-center gap-3">
-      <Button onclick={onEnterDashboard}>
-        <ChartLine class="mr-2 h-4 w-4" />
-        {#if voice.kind === "self"}
-          Open your dashboard
-        {:else if voice.kind === "named"}
-          Open {voice.name}'s dashboard
-        {:else}
-          Open the dashboard
-        {/if}
+      <Button onclick={onContinue}>
+        Continue setting up
+        <ArrowRight class="ml-2 h-4 w-4" />
       </Button>
       <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
     </div>

@@ -1,6 +1,6 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import Finish, { type ImportResult, type SourceResult } from "./Finish.svelte";
 import { PatientRelationship } from "$api";
@@ -21,7 +21,7 @@ function renderFinish(
     source,
     importResult,
     voice,
-    onEnterDashboard: noop,
+    onContinue: noop,
     onNavigateWithCoach: noop,
   });
 }
@@ -74,10 +74,10 @@ describe("Finish", () => {
   });
 
   it.each([
-    [PatientRelationship.Self, "Your data is home.", /your uploaders keep\s+sending/, "Open your dashboard"],
-    [PatientRelationship.Caregiver, "Sam's data is home.", /Sam's uploaders keep\s+sending/, "Open Sam's dashboard"],
-    [undefined, "The data is home.", /its uploaders keep\s+sending/, "Open the dashboard"],
-  ])("words a complete import for %s", async (relationship, heading, body, button) => {
+    [PatientRelationship.Self, "Your data is home.", /your uploaders keep\s+sending/],
+    [PatientRelationship.Caregiver, "Sam's data is home.", /Sam's uploaders keep\s+sending/],
+    [undefined, "The data is home.", /its uploaders keep\s+sending/],
+  ])("words a complete import for %s", async (relationship, heading, body) => {
     renderFinish("migration", {
       importResult: "complete",
       voice: patientVoice({ relationship, patientName: "Sam" }),
@@ -85,7 +85,22 @@ describe("Finish", () => {
 
     await expect.element(page.getByRole("heading", { name: heading })).toBeVisible();
     await expect.element(page.getByText(body)).toBeVisible();
-    await expect.element(page.getByRole("button", { name: button })).toBeVisible();
+  });
+
+  it("ends the core by continuing to the setup hub", async () => {
+    const onContinue = vi.fn();
+    render(Finish, {
+      path: "fresh",
+      source: null,
+      importResult: null,
+      voice: patientVoice(null),
+      onContinue,
+      onNavigateWithCoach: noop,
+    });
+
+    await page.getByRole("button", { name: "Continue setting up" }).click();
+
+    expect(onContinue).toHaveBeenCalledOnce();
   });
 
   it("offers no public share link", async () => {
