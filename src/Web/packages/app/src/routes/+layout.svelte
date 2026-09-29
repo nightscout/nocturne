@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
   import { getEngineHost } from "@nocturne/watercolour";
+  import { illustrations } from "$lib/stores/illustrations.svelte";
   import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
   import * as alarmState from "$lib/stores/alarm-state.svelte";
@@ -40,6 +41,9 @@
     language: data.displayLanguage,
   }));
 
+  // Top level, so the preference is in the library before any child mounts.
+  illustrations.init();
+
   /**
    * The first engine acquire blocks the main thread for a few hundred ms while
    * the wasm loads and WebGPU hands over a device. Paid on a pointer-enter it
@@ -47,10 +51,15 @@
    * settled within 90 ms of the hover or it falls back to a still.
    *
    * Resolves false where there is no GPU, which needs no handling: that is the
-   * case the baked and static paths exist for.
+   * case the baked and static paths exist for. Skipped where nothing would use
+   * the engine (`still`, `off`) or the user asked to save data; a route that
+   * wants live artwork then boots the engine on demand.
    */
   $effect(() => {
-    void getEngineHost().warm();
+    if (illustrations.current !== "animated") return;
+    const connection: { saveData?: boolean } | undefined = Reflect.get(navigator, "connection");
+    if (connection?.saveData) return;
+    void getEngineHost().warmWhenIdle();
   });
 
   // Children mount first, so this marks the whole page live. Server-rendered markup looks the
