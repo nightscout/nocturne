@@ -197,6 +197,25 @@ describe('a live still under reduced motion', () => {
     expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
   });
 
+  it('holds on to its instance until the finished frame is actually presented', async () => {
+    const instance = fakeInstance(4);
+    const { scheduler, frame } = manualScheduler();
+    const render = instance.render;
+    let swapchain = false;
+    instance.render = () => (swapchain ? render() : false);
+    const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
+    await still.ready;
+
+    frame();
+    expect(instance.calls).toEqual(['ticks:4']);
+    expect(still.state.released).toBe(false);
+
+    swapchain = true;
+    frame();
+    expect(instance.calls.slice(1)).toEqual(['render@4', 'dispose']);
+    expect(still.state.released).toBe(true);
+  });
+
   it('still finishes in one call when the host asks for it outright', async () => {
     const instance = fakeInstance(40);
     const { scheduler } = manualScheduler();

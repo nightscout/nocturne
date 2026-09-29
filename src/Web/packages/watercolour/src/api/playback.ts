@@ -513,13 +513,16 @@ class LiveBackend implements Backend {
   private render(): void {
     if (this.disposed || this.released || this.settling) return;
     if (this.dirty) {
-      this.dirty = false;
+      let presented: boolean | void;
       try {
-        this.instance.render();
+        presented = this.instance.render();
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
       }
+      // No swapchain texture this frame; a still released now would keep a blank canvas.
+      if (presented === false) return;
+      this.dirty = false;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
