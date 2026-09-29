@@ -250,6 +250,7 @@ public sealed class GoogleHealthService(
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             var storedError = GoogleHealthErrorCode.Decode(stored?.LastErrorMessage);
+            var backfillProgress = BackfillProgress(stored?.Configuration.RootElement);
             var missingScopes = selected
                 .Where(type => session is not null &&
                     !session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
@@ -271,6 +272,8 @@ public sealed class GoogleHealthService(
                 AccessTokenExpiresAt = session?.AccessTokenExpiresAt,
                 LastAttempt = AsOffset(stored?.LastSyncAttempt),
                 LastSync = AsOffset(stored?.LastSuccessfulSync),
+                BackfillSyncedThrough = backfillProgress.SyncedThrough,
+                BackfillComplete = backfillProgress.Complete,
                 ErrorCode = selected.Length != settings.DataTypes.Length
                     ? "unsupported_type"
                     : missingScopes.Length > 0 ? "partial_consent" : storedError.Code,
@@ -649,6 +652,21 @@ public sealed class GoogleHealthService(
     private static DateTimeOffset? AsOffset(DateTime? value) => value is null
         ? null
         : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
+
+    private static (DateTimeOffset? SyncedThrough, bool Complete) BackfillProgress(JsonElement? configuration)
+    {
+        if (configuration is not { ValueKind: JsonValueKind.Object } root)
+            return (null, false);
+        DateTimeOffset? syncedThrough = null;
+        if (root.TryGetProperty("backfillCursorDate", out var cursor) &&
+            cursor.ValueKind == JsonValueKind.String &&
+            DateTimeOffset.TryParse(cursor.GetString(), CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
+            syncedThrough = parsed;
+        var complete = root.TryGetProperty("backfillComplete", out var completed) &&
+            completed.ValueKind == JsonValueKind.True;
+        return (syncedThrough, complete);
+    }
 
     private static string[] SelectedTypes(GoogleHealthConnectorConfiguration configuration)
     {

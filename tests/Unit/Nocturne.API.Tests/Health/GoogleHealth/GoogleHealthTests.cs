@@ -235,6 +235,29 @@ public class GoogleHealthTests
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
     }
 
+    [Fact]
+    public async Task Status_exposes_persisted_historical_import_progress()
+    {
+        var store = new TestConnectorStore();
+        store.SetConfiguration("""
+            {
+              "clientId":"synthetic.apps.googleusercontent.com",
+              "callbackUrl":"https://example.test:8450/settings/connectors/google-health/callback",
+              "syncBodyWeight":true,
+              "historyDays":7,
+              "backfillCursorDate":"2025-06-01T00:00:00Z",
+              "backfillFloorDate":"2020-01-01T00:00:00Z",
+              "backfillComplete":false
+            }
+            """);
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+
+        var status = await service.StatusAsync(default);
+
+        Assert.Equal(new DateTimeOffset(2025, 6, 1, 0, 0, 0, TimeSpan.Zero), status.BackfillSyncedThrough);
+        Assert.False(status.BackfillComplete);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

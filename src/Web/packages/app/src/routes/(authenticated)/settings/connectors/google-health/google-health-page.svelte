@@ -476,6 +476,21 @@
       </p>
     </div>{/if}
 
+  {#if status?.connected && status.backfillSyncedThrough}<div
+      role="status"
+      class="rounded-lg border p-4"
+    >
+      <p class="font-medium">Historical import progress</p>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Synchronized back through {day(status.backfillSyncedThrough)}.
+        {#if status.backfillComplete}
+          The requested history is complete.
+        {:else}
+          Each sync refreshes today and imports one older calendar month.
+        {/if}
+      </p>
+    </div>{/if}
+
   <Card>
     <CardHeader>
       <CardTitle>Connection</CardTitle><CardDescription>
