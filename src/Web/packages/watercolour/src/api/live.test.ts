@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineHost } from './engine-host';
-import { type PlayerOptions, createArtworkPlayer } from './playback';
+import { MAX_UNPRESENTED_RENDERS, type PlayerOptions, createArtworkPlayer } from './playback';
 import { Scheduler } from './scheduler';
 import type { WasmModule } from './wasm-types';
 
@@ -221,6 +221,29 @@ describe('a live still under reduced motion', () => {
     frame();
     expect(instance.calls.slice(1)).toEqual(['render@4', 'dispose']);
     expect(still.state.released).toBe(true);
+  });
+
+  it('lets go of a canvas that never gets a texture, so the stills behind it run', async () => {
+    const first = fakeInstance(4);
+    const second = fakeInstance(4);
+    first.render = () => (first.calls.push('render:none'), false);
+    const { scheduler, frame } = manualScheduler();
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    const a = player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await idle();
+
+    for (let i = 0; i < MAX_UNPRESENTED_RENDERS + 4 && !b.state.released; i++) {
+      frame();
+      await idle();
+    }
+
+    expect(first.calls.filter((c) => c === 'render:none')).toHaveLength(MAX_UNPRESENTED_RENDERS);
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(a.state.released).toBe(true);
+    expect(second.calls.slice(-2)).toEqual(['render@4', 'dispose']);
+    expect(b.state.released).toBe(true);
   });
 
   it('still finishes in one call when the host asks for it outright', async () => {

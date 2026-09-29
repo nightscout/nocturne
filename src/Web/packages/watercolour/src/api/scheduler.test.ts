@@ -193,6 +193,21 @@ describe('Scheduler', () => {
     expect(visibility).toEqual([false, true]);
   });
 
+  it('holds a wait for budget while the tab is hidden and answers it on the first frame after', async () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    fake.setVisibility('hidden');
+    let answered = false;
+    void scheduler.whenBudget().then(() => (answered = true));
+    expect(fake.queued).toBe(0);
+
+    fake.setVisibility('visible');
+    expect(fake.queued).toBe(1);
+    fake.frame();
+    await Promise.resolve();
+    expect(answered).toBe(true);
+  });
+
   it('estimates the frame interval from the spacing of frames, discounting late ones', () => {
     const fake = fakeEnv();
     const scheduler = new Scheduler(fake.env);
