@@ -113,6 +113,7 @@
         iconClass="text-glucose-in-range"
         entries={draft}
         onchange={(entries) => (draft = entries)}
+        range
         step={displayUnits === "mmol" ? 0.1 : 1}
         min={displayUnits === "mmol" ? 0.1 : 1}
       />

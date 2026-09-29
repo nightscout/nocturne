@@ -5,10 +5,12 @@
   import TrendingUp from "@lucide/svelte/icons/trending-up";
   import { Button } from "$lib/components/ui/button";
   import { FormError } from "$lib/forms";
-  import { describeSubmitError } from "$lib/forms/submit-error";
+  import { resolve } from "$app/paths";
+  import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
   import { enterTherapySettings } from "$api/generated/setupTherapies.generated.remote";
-  import { TherapyGlucoseField, type WrongUnitRule } from "$api";
+  import { SetupHubItemKey, TherapyGlucoseField, type WrongUnitRule } from "$api";
+  import { setupHubItems } from "$lib/setup-hub/items.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel } from "$lib/utils/formatting";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
@@ -18,9 +20,15 @@
     /** The server's wrong-unit checks; only the owner's units are applied. */
     rules: WrongUnitRule[];
     onsaved: () => void | Promise<void>;
+    /** A profile arrived while the form was being filled in, so nothing was saved. */
+    onconflict: () => void | Promise<void>;
   }
 
-  let { voice, rules, onsaved }: Props = $props();
+  let { voice, rules, onsaved, onconflict }: Props = $props();
+
+  const devicesHref = resolve("/(unauthenticated)/setup/(guided)/[item]", {
+    item: setupHubItems()[SetupHubItemKey.Devices].slug,
+  });
 
   // Every block starts with its time and nothing else: no value is ever suggested.
   let basal = $state<{ time?: string; value?: number }[]>([{ time: "00:00" }]);
@@ -63,7 +71,8 @@
       });
       await onsaved();
     } catch (err) {
-      error = describeSubmitError(err, "We couldn't save these settings.");
+      if (errorStatus(err) === 409) await onconflict();
+      else error = describeSubmitError(err, "We couldn't save these settings.");
     } finally {
       saving = false;
     }
@@ -101,8 +110,22 @@
       </p>
     {/if}
     <p class="text-muted-foreground">
-      This is optional, and you can leave out any schedule you don't use. Glucose values here
-      are in {unitLabel}, the unit chosen during setup.
+      This is optional. Glucose values here are in {unitLabel}, the unit chosen during setup.
+    </p>
+    <p class="text-muted-foreground" data-testid="therapy-defaults">
+      {#if voice.kind === "self"}
+        Any schedule left out uses Nocturne's built-in default instead. If you use any of these
+        settings, enter your insulin sensitivity and target range as well.
+      {:else if voice.kind === "named"}
+        Any schedule left out uses Nocturne's built-in default instead. If {voice.name} uses any
+        of these settings, enter {voice.name}'s insulin sensitivity and target range as well.
+      {:else}
+        Any schedule left out uses Nocturne's built-in default instead. If any of these settings
+        are in use, enter the insulin sensitivity and target range as well.
+      {/if}
+      How long insulin acts comes from the insulin set in
+      <a class="underline underline-offset-2" href={devicesHref}>Devices</a>, or 3 hours if none is
+      set.
     </p>
   </div>
 

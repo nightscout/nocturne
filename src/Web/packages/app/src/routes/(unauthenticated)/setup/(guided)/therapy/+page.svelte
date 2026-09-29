@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import Check from "@lucide/svelte/icons/check";
+  import Info from "@lucide/svelte/icons/info";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
@@ -27,7 +28,10 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const app = $derived(review?.sourceName ?? undefined);
 
+  const profileHref = resolve("/(authenticated)/settings/profile");
+
   let mismatch = $state(false);
+  let conflicted = $state(false);
   let confirming = $state(false);
   let error = $state<string | undefined>(undefined);
 
@@ -57,9 +61,26 @@
 {:else if !review}
   <p class="animate-pulse text-sm text-muted-foreground">Loading therapy settings...</p>
 {:else if review.source === TherapySource.None}
-  <TherapyEntry {voice} rules={review.wrongUnitRules ?? []} onsaved={backToHub} />
+  <TherapyEntry
+    {voice}
+    rules={review.wrongUnitRules ?? []}
+    onsaved={backToHub}
+    onconflict={async () => {
+      conflicted = true;
+      await reviewQuery.refresh();
+    }}
+  />
 {:else}
   <div class="@container flex flex-col gap-6" data-testid="therapy-review" data-source={review.source}>
+    {#if conflicted}
+      <Alert.Root variant="info" data-testid="therapy-conflict">
+        <Info />
+        <Alert.Description>
+          Therapy settings arrived while you were filling in the form, so what you typed was not
+          saved. Here is what arrived.
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
     <div class="flex flex-col gap-2 text-sm leading-relaxed">
       {#if review.source === TherapySource.Synced}
         <p class="text-base font-medium">
@@ -111,30 +132,46 @@
     {#if mismatch}
       <Alert.Root variant="warning" data-testid="therapy-mismatch">
         <RefreshCw />
-        <Alert.Title>Change it in the app, not here</Alert.Title>
+        <Alert.Title>Where to fix it</Alert.Title>
         <Alert.Description>
-          {#if review.source === TherapySource.Synced && app}
-            If something here doesn't match, change it in {app}. {app} sends these settings to
-            Nocturne, so a change made here would be overwritten the next time it syncs.
-          {:else if review.source === TherapySource.Synced}
-            If something here doesn't match, change it in the app that sends these settings. A
-            change made here would be overwritten the next time that app syncs.
-          {:else if voice.kind === "named"}
-            If something here doesn't match, change it in the app {voice.name} uses now. When that
-            app sends its settings to Nocturne, they replace these.
-          {:else if voice.kind === "self"}
-            If something here doesn't match, change it in the app you use now. When that app
-            sends its settings to Nocturne, they replace these.
-          {:else}
-            If something here doesn't match, change it in the app in use now. When that app sends
-            its settings to Nocturne, they replace these.
+          <p>
+            {#if review.source === TherapySource.Synced && app}
+              If something here doesn't match, change it in {app}. If {app} sends its settings
+              again, they replace these, so a change made here would not last.
+            {:else if review.source === TherapySource.Synced}
+              If something here doesn't match, change it in the app that sent these settings. If
+              that app sends its settings again, they replace these.
+            {:else if voice.kind === "named"}
+              If something here doesn't match, change it in the app {voice.name} uses now. If that
+              app sends its settings to Nocturne, they replace these.
+            {:else if voice.kind === "self"}
+              If something here doesn't match, change it in the app you use now. If that app sends
+              its settings to Nocturne, they replace these.
+            {:else}
+              If something here doesn't match, change it in the app in use now. If that app sends
+              its settings to Nocturne, they replace these.
+            {/if}
+          </p>
+          {#if review.source === TherapySource.Imported || !app}
+            <p>
+              {#if voice.kind === "self"}
+                If no app sends your settings to Nocturne, update them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+              {:else if voice.kind === "named"}
+                If no app sends {voice.name}'s settings to Nocturne, update them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+              {:else}
+                If no app sends these settings to Nocturne, update them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+              {/if}
+            </p>
           {/if}
         </Alert.Description>
       </Alert.Root>
     {/if}
 
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <Button variant="link" size="inline" href={resolve("/(authenticated)/settings/profile")}>
+      <Button variant="link" size="inline" href={profileHref}>
         Open the full profile page
         <ArrowRight class="h-4 w-4" />
       </Button>

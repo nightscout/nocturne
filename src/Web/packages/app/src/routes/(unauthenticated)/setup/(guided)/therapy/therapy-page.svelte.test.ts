@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { remoteCommand, remoteQuery } from "$lib/test-stubs/remote-resource";
 import type { TherapyReview } from "$api";
 
+// $state, so a refresh after a conflict re-renders with the profile that arrived.
+let reviewState = $state<unknown>(undefined);
+
 const therapy = vi.hoisted(() => ({
-  review: undefined as unknown,
   confirm: vi.fn(),
   enter: vi.fn(),
 }));
 vi.mock("$api/generated/setupTherapies.generated.remote", () => ({
-  getTherapyReview: () => remoteQuery(() => therapy.review),
+  getTherapyReview: () => remoteQuery(() => reviewState),
   confirmTherapySettings: remoteCommand(therapy.confirm),
   enterTherapySettings: remoteCommand(therapy.enter),
 }));
@@ -71,7 +73,7 @@ beforeEach(() => {
 
 describe("therapy settings, nothing yet", () => {
   beforeEach(() => {
-    therapy.review = reviewOf(TherapySource.None);
+    reviewState = reviewOf(TherapySource.None);
   });
 
   it("says what the values feed and that Nocturne never suggests doses", async () => {
@@ -146,6 +148,52 @@ describe("therapy settings, nothing yet", () => {
     await expect.element(page.getByText(/This looks like a value in/).nth(1)).toBeVisible();
   });
 
+  it("says what a schedule left out falls back to, and where insulin action comes from", async () => {
+    render(TherapyPage);
+
+    await expect
+      .element(page.getByTestId("therapy-defaults"))
+      .toHaveTextContent(
+        "Any schedule left out uses Nocturne's built-in default instead. If you use any of these settings, enter your insulin sensitivity and target range as well. How long insulin acts comes from the insulin set in Devices, or 3 hours if none is set."
+      );
+    await expect.element(page.getByTestId("therapy-defaults").getByRole("link", { name: "Devices" })).toBeVisible();
+  });
+
+  it("keeps both target fields when a block's low and high are cleared", async () => {
+    render(TherapyPage);
+    const low = page.getByRole("spinbutton", { name: "Low from 00:00" });
+    const high = page.getByRole("spinbutton", { name: "High from 00:00" });
+
+    await userEvent.fill(low, "5");
+    await userEvent.fill(high, "7");
+    await userEvent.tab();
+    await userEvent.clear(low);
+    await userEvent.clear(high);
+    await userEvent.tab();
+
+    await expect.element(low).toBeVisible();
+    await expect.element(high).toBeVisible();
+  });
+
+  it("shows the profile that arrived when saving finds one already there", async () => {
+    therapy.enter.mockImplementation(async () => {
+      reviewState = reviewOf(TherapySource.Synced, { sourceName: "Loop" });
+      throw Object.assign(new Error("A therapy profile already exists."), { status: 409 });
+    });
+    render(TherapyPage);
+
+    await userEvent.fill(page.getByRole("spinbutton", { name: "Basal rates from 00:00" }), "0.8");
+    await userEvent.tab();
+    await page.getByRole("button", { name: "Save these settings" }).click();
+
+    await expect.element(page.getByText("This is what Nocturne received from Loop.")).toBeVisible();
+    await expect
+      .element(page.getByTestId("therapy-conflict"))
+      .toHaveTextContent("so what you typed was not saved. Here is what arrived.");
+    await expect.element(page.getByText(/already exists/)).not.toBeInTheDocument();
+    expect(hubRefresh).not.toHaveBeenCalled();
+  });
+
   it("saves what was typed, in the owner's units, blanks left blank", async () => {
     render(TherapyPage);
 
@@ -168,7 +216,7 @@ describe("therapy settings, nothing yet", () => {
 
 describe("therapy settings, synced from an app", () => {
   beforeEach(() => {
-    therapy.review = reviewOf(TherapySource.Synced, { sourceName: "Loop" });
+    reviewState = reviewOf(TherapySource.Synced, { sourceName: "Loop" });
   });
 
   it("shows what arrived from the app, read-only, in the owner's units", async () => {
@@ -197,11 +245,26 @@ describe("therapy settings, synced from an app", () => {
 
     await expect
       .element(page.getByTestId("therapy-mismatch"))
-      .toHaveTextContent(/change it in Loop\. Loop sends these settings to Nocturne, so a change made here would be overwritten the next time it syncs\./);
+      .toHaveTextContent(/change it in Loop\. If Loop sends its settings again, they replace these, so a change made here would not last\./);
+    await expect.element(page.getByTestId("therapy-mismatch")).not.toHaveTextContent(/profile page/);
+  });
+
+  it("points a synced profile with no app named to the profile page", async () => {
+    reviewState = reviewOf(TherapySource.Synced);
+    render(TherapyPage);
+
+    await page.getByRole("button", { name: "Something doesn't match" }).click();
+
+    await expect
+      .element(page.getByTestId("therapy-mismatch"))
+      .toHaveTextContent("If no app sends your settings to Nocturne, update them on the profile page.");
+    await expect
+      .element(page.getByTestId("therapy-mismatch").getByRole("link", { name: "profile page" }))
+      .toHaveAttribute("href", "/(authenticated)/settings/profile");
   });
 
   it("offers nothing to confirm once confirmed", async () => {
-    therapy.review = reviewOf(TherapySource.Synced, { sourceName: "Loop", confirmed: true });
+    reviewState = reviewOf(TherapySource.Synced, { sourceName: "Loop", confirmed: true });
     render(TherapyPage);
 
     await expect.element(page.getByText("This is what Nocturne received from Loop.")).toBeVisible();
@@ -212,7 +275,7 @@ describe("therapy settings, synced from an app", () => {
 describe("therapy settings, imported from Nightscout", () => {
   it("dates the import and nudges a check against the current app or care-team plan", async () => {
     tenant.relationship = { relationship: "Caregiver", patientName: "Sam" };
-    therapy.review = reviewOf(TherapySource.Imported, { lastUpdated: "2026-03-01T08:00:00Z" });
+    reviewState = reviewOf(TherapySource.Imported, { lastUpdated: "2026-03-01T08:00:00Z" });
     render(TherapyPage);
 
     await expect.element(page.getByText("This is what Nocturne imported from your Nightscout site.")).toBeVisible();
@@ -223,12 +286,17 @@ describe("therapy settings, imported from Nightscout", () => {
         "Check these against Sam's app today, or the plan Sam's care team gave you."
       );
     await expect.element(page.getByRole("button", { name: "This matches my app" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Something doesn't match" }).click();
+    await expect
+      .element(page.getByTestId("therapy-mismatch"))
+      .toHaveTextContent("If no app sends Sam's settings to Nocturne, update them on the profile page.");
   });
 });
 
 describe("therapy settings, entered here", () => {
   it("shows the entered values with a way to the profile page and nothing to confirm", async () => {
-    therapy.review = reviewOf(TherapySource.Entered);
+    reviewState = reviewOf(TherapySource.Entered);
     render(TherapyPage);
 
     await expect.element(page.getByText("These are the settings you entered.")).toBeVisible();

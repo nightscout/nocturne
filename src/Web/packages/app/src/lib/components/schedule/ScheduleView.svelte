@@ -185,11 +185,15 @@
 {#snippet numberField(
   value: number | undefined,
   label: string,
-  set: (value: number | undefined) => void
+  set: (value: number | undefined) => void,
+  prefix?: string
 )}
   {@const note = value === undefined ? undefined : warning?.(value)}
-  <Table.Cell class="text-right align-top">
+  <div class="flex flex-col items-end">
     <div class="flex items-center justify-end gap-1.5">
+      {#if prefix}
+        <span class="text-xs text-muted-foreground">{prefix}</span>
+      {/if}
       <Input
         type="number"
         {step}
@@ -202,9 +206,9 @@
       <span class="text-xs text-muted-foreground" data-testid="field-unit">{unit}</span>
     </div>
     {#if note}
-      <p class="ml-auto mt-1 max-w-56 whitespace-normal text-left text-xs text-warning">{note}</p>
+      <p class="mt-1 max-w-56 whitespace-normal text-left text-xs text-warning">{note}</p>
     {/if}
-  </Table.Cell>
+  </div>
 {/snippet}
 
 {#if editable}
@@ -235,12 +239,9 @@
       <Table.Header>
         <Table.Row>
           <Table.Head>Start Time</Table.Head>
-          {#if isRange}
-            <Table.Head class="text-right">Low ({unit})</Table.Head>
-            <Table.Head class="text-right">High ({unit})</Table.Head>
-          {:else}
-            <Table.Head class="text-right">{unit}</Table.Head>
-          {/if}
+          <Table.Head class="text-right">
+            {isRange ? `Low and high (${unit})` : unit}
+          </Table.Head>
           <Table.Head class="w-10"></Table.Head>
         </Table.Row>
       </Table.Header>
@@ -256,12 +257,17 @@
                   updateEntryTime(i, e.currentTarget.value)}
               />
             </Table.Cell>
-            {#if isRange}
-              {@render numberField(entry.low, `Low from ${entry.time}`, (v) => updateEntryLow(i, v))}
-              {@render numberField(entry.high, `High from ${entry.time}`, (v) => updateEntryHigh(i, v))}
-            {:else}
-              {@render numberField(entry.value, `${title} from ${entry.time}`, (v) => updateEntryValue(i, v))}
-            {/if}
+            <Table.Cell class="align-top">
+              {#if isRange}
+                <!-- Wraps to one field per line on a narrow screen, each keeping its unit. -->
+                <div class="flex flex-wrap justify-end gap-2">
+                  {@render numberField(entry.low, `Low from ${entry.time}`, (v) => updateEntryLow(i, v), "Low")}
+                  {@render numberField(entry.high, `High from ${entry.time}`, (v) => updateEntryHigh(i, v), "High")}
+                </div>
+              {:else}
+                {@render numberField(entry.value, `${title} from ${entry.time}`, (v) => updateEntryValue(i, v))}
+              {/if}
+            </Table.Cell>
             <Table.Cell>
               <Button
                 variant="ghost-destructive"
@@ -275,7 +281,7 @@
           </Table.Row>
         {:else}
           <Table.Row>
-            <Table.Cell variant="muted" colspan={isRange ? 4 : 3} class="text-center py-4">
+            <Table.Cell variant="muted" colspan={3} class="text-center py-4">
               No time blocks configured. Click "Add Time Block" to get started.
             </Table.Cell>
           </Table.Row>
