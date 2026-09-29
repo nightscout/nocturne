@@ -23,7 +23,7 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const complete = $derived(hub !== undefined && hub.openCount === 0);
 
-  /** How long the finished painting and its wash hold before the card collapses. */
+  /** How long the wash over the finished painting holds before the card collapses. */
   const WASH_MS = 3200;
 
   // The stop this tab last showed, so the painting moves on from it when an item was resolved
@@ -40,17 +40,36 @@
     }
   }
 
-  // Only a hub finished since it was last seen open earns the wash; one opened already finished
-  // starts collapsed.
+  // Only a hub finished since it was last seen open earns the finish; one opened already finished
+  // starts collapsed. The finish paints the last stages, then washes, then collapses.
   let sawOpen = seen !== undefined && seen < HUB_PAINTING_STOPS;
+  let finishing = $state(false);
   let washing = $state(false);
   $effect(() => {
     if (!hub) return;
     if (!complete) sawOpen = true;
     else if (sawOpen) {
       sawOpen = false;
-      washing = true;
+      finishing = true;
     }
+  });
+
+  // Kept as state rather than acted on in the callback, since the painting may report the last
+  // stop before the finish has been noticed.
+  let paintedStop = $state<number | undefined>(undefined);
+  const handlePainted = (at: number) => (paintedStop = at);
+  $effect(() => {
+    if (!finishing || (paintedStop ?? 0) < HUB_PAINTING_STOPS) return;
+    finishing = false;
+    washing = true;
+  });
+
+  /** A painting that never reports (no backend came up) still gets its wash after this long. */
+  const PAINT_LIMIT_MS = 12000;
+  $effect(() => {
+    if (!finishing) return;
+    const timer = setTimeout(() => handlePainted(HUB_PAINTING_STOPS), PAINT_LIMIT_MS);
+    return () => clearTimeout(timer);
   });
   $effect(() => {
     if (!washing) return;
@@ -79,7 +98,7 @@
   {/snippet}
 
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-6">
-    {#if complete && !washing}
+    {#if complete && !finishing && !washing}
       <Card.Root variant="success" size="sm" data-testid="hub-all-set">
         <div class="flex items-center gap-4">
           <CircleCheck class="h-6 w-6 shrink-0 text-success" />
@@ -97,7 +116,12 @@
           <ConfirmationBackground palette="moss" />
         {/if}
         <div class="relative px-6 pt-6">
-          <HubPainting stop={stop ?? seen ?? 1} from={seen} class="aspect-[3/1] w-full" />
+          <HubPainting
+            stop={stop ?? seen ?? 0.5}
+            from={seen}
+            onpainted={handlePainted}
+            class="aspect-[3/1] w-full"
+          />
         </div>
         <div class="relative flex flex-col gap-2 px-6 pb-6">
           <h1 class="font-brand font-hairline text-3xl leading-tight md:text-4xl">
