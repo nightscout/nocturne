@@ -145,6 +145,12 @@ function pixelSize(width: number, height: number, dpr: number): PixelSize {
   };
 }
 
+/** DEV only: drops a freed instance from the audit list, which otherwise holds every instance the page ever made. */
+function forgetLive(instance: WasmInstance): void {
+  if (!import.meta.env.DEV || typeof window === 'undefined' || !window.__watercolourLive) return;
+  window.__watercolourLive = window.__watercolourLive.filter((entry) => entry.instance !== instance);
+}
+
 /**
  * The budget handed to the engine. The engine reads 0 as "its default", so
  * the documented 0 goes over as one byte, which is below any checkpoint and
@@ -455,6 +461,7 @@ class LiveBackend implements Backend {
     if (!this.released) {
       this.unsubscribeLost();
       this.handle.dispose();
+      forgetLive(this.instance);
       try {
         this.instance.dispose();
       } catch {
@@ -521,6 +528,7 @@ class LiveBackend implements Backend {
     this.released = true;
     this.unsubscribeLost();
     this.handle.dispose();
+    forgetLive(this.instance);
     try {
       this.instance.dispose();
     } catch {

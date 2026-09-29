@@ -142,6 +142,7 @@ describe('a live still under reduced motion', () => {
     expect(instance.calls.at(-1)).toBe('dispose');
     expect(finished).toBe(1);
     expect(still.state).toMatchObject({ finished: true, released: true });
+    expect((window as Window).__watercolourLive).toEqual([]);
   });
 
   it('still finishes in one call when the host asks for it outright', async () => {
