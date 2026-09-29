@@ -76,6 +76,17 @@ struct Stroke {
     water: f32,
     strength: f32,
     splat_out: f32,
+    // The grid rect the stamp covers, stored row-major.
+    rect_x: u32,
+    rect_y: u32,
+    rect_w: u32,
+    rect_h: u32,
+    // Where this stroke's rect starts in `stamp`, which holds the rects of
+    // every stroke in a batch back to back.
+    stamp_offset: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
 };
 
 struct PigmentCoef {

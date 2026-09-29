@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EngineHost } from './engine-host';
+import { EngineHost, answeringAdapterRequest } from './engine-host';
 import type { WasmEngine, WasmModule } from './wasm-types';
 
 const gpu = async () => ({ webgpu: true, adapter: true, reducedMotion: false, offscreenCanvas: false });
@@ -122,5 +122,67 @@ describe('EngineHost.stillTurn', () => {
     endFirst();
     await second;
     expect(order).toEqual(['first', 'second']);
+  });
+});
+
+describe('the adapter the capability probe was handed', () => {
+  function stubGpu() {
+    const asked: unknown[] = [];
+    const gpu = {
+      requestAdapter: (options?: unknown) => {
+        asked.push(options);
+        return Promise.resolve('fresh adapter');
+      },
+    };
+    vi.stubGlobal('navigator', { gpu });
+    return { gpu, asked };
+  }
+
+  it('answers the engine`s own request, once, and then gets out of the way', async () => {
+    const { gpu, asked } = stubGpu();
+    const own = gpu.requestAdapter;
+    const got: unknown[] = [];
+    const engine = await answeringAdapterRequest('probed adapter', async () => {
+      got.push(await (navigator as unknown as { gpu: typeof gpu }).gpu.requestAdapter({ powerPreference: 'high-performance' }));
+      got.push(await (navigator as unknown as { gpu: typeof gpu }).gpu.requestAdapter());
+      return 'engine';
+    });
+    expect(engine).toBe('engine');
+    expect(got).toEqual(['probed adapter', 'fresh adapter']);
+    expect(asked).toEqual([undefined]);
+    expect(gpu.requestAdapter).toBe(own);
+    vi.unstubAllGlobals();
+  });
+
+  it('puts the browser`s method back when the engine fails', async () => {
+    const { gpu } = stubGpu();
+    const own = gpu.requestAdapter;
+    await expect(answeringAdapterRequest('probed adapter', () => Promise.reject(new Error('no device')))).rejects.toThrow('no device');
+    expect(gpu.requestAdapter).toBe(own);
+    vi.unstubAllGlobals();
+  });
+
+  it('is handed to the engine the host creates', async () => {
+    const browser = stubGpu().gpu;
+    const seen: unknown[] = [];
+    const { module } = fakeModule();
+    const create = module.WatercolourEngine.create;
+    module.WatercolourEngine.create = async () => {
+      seen.push(await browser.requestAdapter());
+      return create();
+    };
+    let adapter: unknown = 'probed adapter';
+    const host = new EngineHost({
+      loadModule: async () => module,
+      capabilities: gpu,
+      probedAdapter: () => {
+        const a = adapter;
+        adapter = undefined;
+        return a;
+      },
+    });
+    await host.acquire();
+    expect(seen).toEqual(['probed adapter']);
+    vi.unstubAllGlobals();
   });
 });

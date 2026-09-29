@@ -7,7 +7,7 @@ import { type EngineHost, type EngineLease, type WasmInstance, getEngineHost } f
 import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
 import { getPresentation } from './presentation';
-import { type ArtworkRef, type IconRef, type SceneSource, authoredSceneJson, iconSvg, isArtworkRef, isIconRef, parseSceneDocument, resolveSceneJson } from './scenes';
+import { type ArtworkRef, type IconRef, type InstanceArgs, type SceneSource, authoredSceneJson, createRefInstance, iconSvg, isArtworkRef, isIconRef, parseSceneDocument } from './scenes';
 import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 import { type ViewportWait, waitNearViewport } from './viewport';
 
@@ -71,7 +71,7 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
    * Live only: GPU memory this instance may spend on seek checkpoints.
    * Absent keeps the engine's default, or none past tick 0 for a
    * `releaseAfterFinish` player, which nothing can seek once it has let go;
-   * 0 leaves it with the single checkpoint at tick 0, so a backwards seek
+   * 0 leaves it with no checkpoint, so a backwards seek
    * replays from the start instead of restoring a nearer state.
    */
   checkpointBudgetBytes?: number;
@@ -155,7 +155,7 @@ function forgetLive(instance: WasmInstance): void {
 /**
  * The budget handed to the engine. The engine reads 0 as "its default", so
  * the documented 0 goes over as one byte, which is below any checkpoint and
- * leaves only the one at tick 0.
+ * leaves the instance none.
  */
 export function checkpointBudget(options: Pick<PlayerOptions, 'checkpointBudgetBytes' | 'releaseAfterFinish'>): number | undefined {
   const bytes = options.checkpointBudgetBytes ?? (options.releaseAfterFinish ? 0 : undefined);
@@ -254,27 +254,20 @@ class LiveBackend implements Backend {
       // at every size. An explicit `detail`/`simResolution` option wins.
       const longEdge = Math.max(size.width, size.height);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
-      const engineAuthored = isArtworkRef(source) || isIconRef(source);
-      const sceneJson = engineAuthored
-        ? resolveSceneJson(lease.module, source, {
-            detail: resolvedDetail,
-            simResolution: options.simResolution,
-          })
-        : authoredSceneJson(source, lease.module);
-      // The engine writes its own documents at the version it reads, and a
-      // full parse of one only to read that field is main-thread time per
-      // artwork; a caller's document still gets the typed version error.
-      if (!engineAuthored) parseSceneDocument(sceneJson);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
       // phase does NOT get.
-      const instance = lease.engine.createInstance(
-        sceneJson,
-        durationMs,
-        0,
-        1 - (options.tail ?? DEFAULT_TAIL),
-        checkpointBudget(options),
-      );
+      const instanceArgs: InstanceArgs = [durationMs, 0, 1 - (options.tail ?? DEFAULT_TAIL), checkpointBudget(options)];
+      let instance: WasmInstance;
+      if (isArtworkRef(source) || isIconRef(source)) {
+        instance = createRefInstance(lease.engine, lease.module, source, { detail: resolvedDetail, simResolution: options.simResolution }, instanceArgs);
+      } else {
+        const sceneJson = authoredSceneJson(source, lease.module);
+        // A caller's document gets the typed version error; the engine's own
+        // are written at the version it reads.
+        parseSceneDocument(sceneJson);
+        instance = lease.engine.createInstance(sceneJson, ...instanceArgs);
+      }
       if (options.easing) instance.setProgressCurve('linear');
       try {
         const target = acquireWebgpu(canvas);

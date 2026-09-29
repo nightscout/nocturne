@@ -54,9 +54,10 @@ Until then the GPU renders non-square scenes in the square metric (stretched gra
 stamps); stamps are CPU-rasterised on both backends, so no shader changes are involved.
 
 Checkpoints are GPU buffer copies under a 256 MB budget
-(`clamp(budget / state_bytes, 1, 64)`: 10 at 512² × 8 pigments, 54 at 256² × 4);
+(`min(budget / state_bytes, 64)`: 10 at 512² × 8 pigments, 54 at 256² × 4, none
+below one);
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint precedes the
-target. Ticks are encoded in batches of up to 64 per command buffer.
+target. Ticks are encoded in batches of up to 16 per command buffer.
 
 ### Which rules run in shaders
 

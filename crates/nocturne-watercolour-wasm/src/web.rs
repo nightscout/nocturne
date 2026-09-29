@@ -13,13 +13,14 @@ use nocturne_watercolour_core::application::playback::DEFAULT_PAINT_WALL_FRACTIO
 use nocturne_watercolour_core::application::{
     EngineError, Exporter, Playback, PlaybackState, ProgressCurve,
 };
-use nocturne_watercolour_core::domain::{Image, Seed};
+use nocturne_watercolour_core::domain::{Image, Scene, Seed};
 use nocturne_watercolour_infra::document::parse_scene_json;
 use nocturne_watercolour_infra::export::PngExporter;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine, PresentSurface};
 use wasm_bindgen::prelude::*;
 
 use crate::scene_tools::{self, BakedManifest, Surface};
+use nocturne_watercolour_infra::authoring::DetailLevel;
 
 const DEFAULT_MAX_LIVE_INSTANCES: u32 = 4;
 
@@ -158,8 +159,8 @@ impl WatercolourEngine {
     /// paint_wall_fraction)`, so the tail covers the settling after the pen
     /// leaves the paper. `checkpoint_budget_bytes` (absent or 0 = the
     /// engine's [`BROWSER_CHECKPOINT_BUDGET_BYTES`]) is this instance's own
-    /// seek-checkpoint budget; anything below one checkpoint still keeps the
-    /// one at tick 0, so `seek` falls back to replaying from the start.
+    /// seek-checkpoint budget; below one checkpoint it keeps none, so `seek`
+    /// falls back to reloading the scene and replaying from the start.
     #[wasm_bindgen(js_name = createInstance)]
     pub fn create_instance(
         &self,
@@ -169,6 +170,99 @@ impl WatercolourEngine {
         paint_wall_fraction: f64,
         checkpoint_budget_bytes: Option<f64>,
     ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = parse_scene_json(scene_json).map_err(|e| js_err("InvalidScene", e))?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// `createInstance` for a catalogue artwork: `catalogueScene`'s
+    /// arguments, then `createInstance`'s after the document. The scene is
+    /// authored straight into the playback and never crosses as JSON.
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(js_name = createCatalogueInstance)]
+    pub fn create_catalogue_instance(
+        &self,
+        artwork_id: &str,
+        seed: f64,
+        palette: &str,
+        intensity: f32,
+        detail: &str,
+        surface: &str,
+        sim_resolution: f64,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = catalogue_scene_value(
+            artwork_id,
+            seed,
+            palette,
+            intensity,
+            detail,
+            surface,
+            sim_resolution,
+        )?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// `createInstance` for a Lucide icon: `iconScene`'s arguments, then
+    /// `createInstance`'s after the document, with no JSON in between.
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(js_name = createIconInstance)]
+    pub fn create_icon_instance(
+        &self,
+        elements_json: &str,
+        name: &str,
+        seed: f64,
+        palette: &str,
+        intensity: f32,
+        detail: &str,
+        surface: &str,
+        sim_resolution: f64,
+        hints_json: &str,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = icon_scene_value(
+            elements_json,
+            name,
+            seed,
+            palette,
+            intensity,
+            detail,
+            surface,
+            sim_resolution,
+            hints_json,
+        )?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// Refuses a new instance on a lost or faulted device or past the cap,
+    /// before any scene is authored or parsed for it.
+    fn admit(&self) -> Result<(), JsError> {
         guard_device(&self.ctx)?;
         if self.shared.live.get() >= self.shared.max_live.get() {
             return Err(js_err(
@@ -179,7 +273,17 @@ impl WatercolourEngine {
                 ),
             ));
         }
-        let mut scene = parse_scene_json(scene_json).map_err(|e| js_err("InvalidScene", e))?;
+        Ok(())
+    }
+
+    fn instance(
+        &self,
+        mut scene: Scene,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
         if settle_fraction.is_finite() && settle_fraction > 0.0 {
             scene_tools::apply_settle_fraction(&mut scene, settle_fraction as f32);
         }
@@ -278,26 +382,87 @@ pub fn catalogue_scene(
     surface: &str,
     sim_resolution: f64,
 ) -> Result<String, JsError> {
-    let seed = Seed(if seed.is_finite() {
+    scene_tools::catalogue_scene_json_with_resolution(
+        artwork_id,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+}
+
+fn seed_arg(seed: f64) -> Seed {
+    Seed(if seed.is_finite() {
         seed.max(0.0) as u64
     } else {
         0
-    });
-    let detail = scene_tools::parse_detail(detail).ok_or_else(|| {
+    })
+}
+
+fn detail_arg(detail: &str) -> Result<DetailLevel, JsError> {
+    scene_tools::parse_detail(detail).ok_or_else(|| {
         js_err(
             "InvalidDetail",
             format!("{detail:?} is not small|medium|large|extralarge"),
         )
-    })?;
-    let surface = Surface::parse(surface)
-        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))?;
-    let sim = if sim_resolution.is_finite() && sim_resolution > 0.0 {
-        Some(sim_resolution as u32)
-    } else {
-        None
-    };
-    scene_tools::catalogue_scene_json_with_resolution(
-        artwork_id, seed, palette, intensity, detail, surface, sim,
+    })
+}
+
+fn surface_arg(surface: &str) -> Result<Surface, JsError> {
+    Surface::parse(surface)
+        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))
+}
+
+fn sim_arg(sim_resolution: f64) -> Option<u32> {
+    (sim_resolution.is_finite() && sim_resolution > 0.0).then_some(sim_resolution as u32)
+}
+
+fn catalogue_scene_value(
+    artwork_id: &str,
+    seed: f64,
+    palette: &str,
+    intensity: f32,
+    detail: &str,
+    surface: &str,
+    sim_resolution: f64,
+) -> Result<Scene, JsError> {
+    scene_tools::catalogue_scene_with_resolution(
+        artwork_id,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn icon_scene_value(
+    elements_json: &str,
+    name: &str,
+    seed: f64,
+    palette: &str,
+    intensity: f32,
+    detail: &str,
+    surface: &str,
+    sim_resolution: f64,
+    hints_json: &str,
+) -> Result<Scene, JsError> {
+    scene_tools::icon_scene(
+        elements_json,
+        name,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+        hints_json,
     )
     .map_err(|e| JsError::new(&e.to_string()))
 }
@@ -325,33 +490,15 @@ pub fn icon_scene(
     sim_resolution: f64,
     hints_json: &str,
 ) -> Result<String, JsError> {
-    let seed = Seed(if seed.is_finite() {
-        seed.max(0.0) as u64
-    } else {
-        0
-    });
-    let detail = scene_tools::parse_detail(detail).ok_or_else(|| {
-        js_err(
-            "InvalidDetail",
-            format!("{detail:?} is not small|medium|large|extralarge"),
-        )
-    })?;
-    let surface = Surface::parse(surface)
-        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))?;
-    let sim = if sim_resolution.is_finite() && sim_resolution > 0.0 {
-        Some(sim_resolution as u32)
-    } else {
-        None
-    };
     scene_tools::icon_scene_json(
         elements_json,
         name,
-        seed,
+        seed_arg(seed),
         palette,
         intensity,
-        detail,
-        surface,
-        sim,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
         hints_json,
     )
     .map_err(|e| JsError::new(&e.to_string()))

@@ -10,6 +10,6 @@ mod surface;
 mod timer;
 
 pub use context::GpuContext;
-pub use engine::{CHECKPOINT_BUDGET_BYTES, CommandCounts, GpuEngine, GpuTimings};
+pub use engine::{BLUR_MAX_RADIUS, CHECKPOINT_BUDGET_BYTES, CommandCounts, GpuEngine, GpuTimings};
 pub use layout::StateLayout;
 pub use surface::PresentSurface;

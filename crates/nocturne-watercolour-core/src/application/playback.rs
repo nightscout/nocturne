@@ -451,11 +451,34 @@ impl<S: Simulator> Playback<S> {
         Ok(())
     }
 
+    /// Ticks from the current one that can run as one `Simulator::step`: up
+    /// to `target`, the next event, or the next tick a periodic checkpoint
+    /// could be taken at, whichever comes first. A backend encodes a step as
+    /// one batch, where one tick at a time is a submission each.
+    fn run_length(&self, target: u32) -> u32 {
+        let next_event = self
+            .scene
+            .timeline
+            .events
+            .iter()
+            .map(|e| e.at_tick)
+            .filter(|&t| t > self.tick)
+            .min()
+            .unwrap_or(u32::MAX);
+        let mut stop = target.min(next_event);
+        if self.sim.checkpoint_capacity() > 0 {
+            let every = self.policy.every_ticks;
+            stop = stop.min((self.tick / every + 1).saturating_mul(every));
+        }
+        stop - self.tick
+    }
+
     fn run_to(&mut self, target: u32) -> Result<(), EngineError> {
         while self.tick < target {
             self.apply_events_at(self.tick)?;
-            self.sim.tick()?;
-            self.tick += 1;
+            let ticks = self.run_length(target);
+            self.sim.step(ticks)?;
+            self.tick += ticks;
             if self.tick < self.total_ticks() {
                 let at_event = self.scene.timeline.events_at(self.tick).next().is_some();
                 let periodic = self.tick.is_multiple_of(self.policy.every_ticks);
@@ -626,6 +649,76 @@ mod tests {
             frames > 60,
             "a budget of 4 cannot finish 400 ticks in {frames} frames"
         );
+    }
+
+    /// Records the step sizes a playback asks for.
+    struct Steps {
+        inner: CpuEngine,
+        steps: Vec<u32>,
+        capacity: usize,
+    }
+
+    impl Simulator for Steps {
+        fn load(&mut self, scene: &Scene) -> Result<(), EngineError> {
+            self.inner.load(scene)
+        }
+        fn apply(&mut self, op: &Operation, seed: crate::domain::Seed) -> Result<(), EngineError> {
+            self.inner.apply(op, seed)
+        }
+        fn tick(&mut self) -> Result<(), EngineError> {
+            self.step(1)
+        }
+        fn step(&mut self, ticks: u32) -> Result<(), EngineError> {
+            self.steps.push(ticks);
+            self.inner.step(ticks)
+        }
+        fn snapshot(&mut self) -> Result<Option<CheckpointId>, EngineError> {
+            self.inner.snapshot()
+        }
+        fn restore(&mut self, id: CheckpointId) -> Result<(), EngineError> {
+            self.inner.restore(id)
+        }
+        fn release(&mut self, id: CheckpointId) {
+            self.inner.release(id)
+        }
+        fn checkpoint_capacity(&self) -> usize {
+            self.capacity.min(self.inner.checkpoint_capacity())
+        }
+    }
+
+    /// Ticks between events run as one step, broken only where a periodic
+    /// checkpoint may be taken, and not there when none can be.
+    #[test]
+    fn a_run_between_events_is_one_step() {
+        for (capacity, expected) in [
+            (
+                usize::MAX,
+                vec![32, 32, 32, 32, 32, 32, 8, 24, 32, 32, 32, 32, 32, 16],
+            ),
+            (0, vec![200, 200]),
+        ] {
+            let sim = Steps {
+                inner: CpuEngine::default(),
+                steps: Vec::new(),
+                capacity,
+            };
+            let mut pb = Playback::new(sim, budget_scene(), 1000.0).unwrap();
+            pb.finish_immediately().unwrap();
+            assert_eq!(pb.simulator().steps, expected, "capacity {capacity}");
+            assert_eq!(pb.state(), PlaybackState::Finished);
+        }
+    }
+
+    /// A batched run lands on the same state as one tick at a time.
+    #[test]
+    fn a_batched_run_matches_ticking_one_at_a_time() {
+        let mut batched = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
+        batched.finish_immediately().unwrap();
+        let mut single = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
+        while single.current_tick() < single.total_ticks() {
+            single.advance_ticks(1).unwrap();
+        }
+        assert_eq!(batched.simulator().grid(), single.simulator().grid());
     }
 
     #[test]

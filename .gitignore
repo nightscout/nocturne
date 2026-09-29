@@ -74,6 +74,9 @@ src/Web/packages/app/src/lib/api/api-client.generated.ts
 
 # wasm-bindgen output for the watercolour engine (pnpm --filter @nocturne/watercolour build:wasm)
 src/Web/packages/watercolour/src/wasm/
+# watercolour bench build and results
+src/Web/packages/watercolour/bench/dist/
+src/Web/packages/watercolour/bench/results/
 
 docs/plans/
 

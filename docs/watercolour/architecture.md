@@ -5,7 +5,7 @@ inward: domain and application live in `nocturne-watercolour-core` with **zero
 dependencies**, infrastructure (wgpu/WGSL, serde documents, export, catalogue)
 depends on core, and the wasm adapter depends on infra. On the web side the
 wasm crate is the adapter and the TypeScript API plus Svelte components plus
-the showcase are the presentation layer.
+are the presentation layer.
 
 ```
 domain (pure data + functions)
@@ -16,7 +16,7 @@ infrastructure (GpuEngine/WGSL, scene documents, export, catalogue)   <- nocturn
    ^
 web adapter (wasm-bindgen)                            <- nocturne-watercolour-wasm
    ^
-presentation (TS API, Svelte components, showcase)    <- @nocturne/watercolour + showcase
+presentation (TS API, Svelte components)    <- @nocturne/watercolour
 ```
 
 ## Layers
@@ -27,7 +27,7 @@ presentation (TS API, Svelte components, showcase)    <- @nocturne/watercolour +
 | Application | `core/src/application/` | The ports a backend implements, the reference `CpuEngine` (ports implemented with domain code), the `Playback` controller, command-style use cases, the `Reveal` timeline builder, and the `choreography` timeline transform. Callers supply elapsed time; nothing here schedules. |
 | Infrastructure | `infra/src/` | `gpu` (wgpu/WGSL `Simulator` + `Renderer`), `document` (serde `SceneDocumentV1`), `export` (PNG, frame sequences), `authoring` (artwork catalogue, Lucide icon authoring in `svg.rs`). Everything platform-specific lives here so core stays `std`-only. |
 | Web adapter | `wasm/src/` | `web.rs`: the wasm-bindgen surface (one shared `WatercolourEngine`, per-scene `SceneInstance`); `scene_tools.rs`: platform-neutral scene construction, intensity, strip stitching, the baked manifest. |
-| Presentation | `src/Web/packages/watercolour/` | `src/api/*.ts` (player, capabilities, engine host, scheduler, mode resolution, baked/static assets, scene documents), `src/components/*.svelte`, baked assets in `assets/`, wasm output in `src/wasm/`. The showcase app (`watercolour-showcase`) renders the components across its routes. |
+| Presentation | `src/Web/packages/watercolour/` | `src/api/*.ts` (player, capabilities, engine host, scheduler, mode resolution, baked/static assets, scene documents), `src/components/*.svelte`, baked assets in `assets/`, wasm output in `src/wasm/`. |
 
 ## Ports and use cases
 
@@ -177,16 +177,18 @@ returns for the engine to load.
 
 | Shader | Entry points | Rule (CPU reference) | Deviation from CPU reference |
 |---|---|---|---|
-| `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
-| `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project`, `project_q2` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (`project_q2` reads the correction from `q2` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
+| `velocity.wgsl` | `velocity_divergence` | Curtis UpdateVelocities (`sim::pass_velocity`) and the divergence of `pass_divergence`, per 16x16 tile with a one-cell ring in workgroup memory | none |
+| `pressure.wgsl` | `jacobi_pair_a`, `jacobi_pair_b`, `jacobi_a`, `jacobi_b`, `project`, `project_q2` | Curtis RelaxDivergence (`pass_jacobi` x 8 ping-pong, two iterations per tiled dispatch, `pass_project`) | none (`project_q2` reads the correction from `q2` when the dispatch count is odd) |
+| `flow.wgsl` | `blur` (or `blur_h`, `blur_v` past `BLUR_MAX_RADIUS`), `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
 | `transfer.wgsl` | `transfer`, `transfer_g_scratch` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
 | `render.wgsl` | `presence_taps`, `render`, `fs_render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; each tap position's presence and inside share computed once per frame by `presence_taps`), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
 
-Stamps and masks are rasterised on the CPU by the shared `domain::paint` code
-and uploaded as a coverage field, so both backends see identical geometry. Shared
+Stamps and masks are rasterised on the CPU by the shared `domain::paint` code,
+so both backends see identical geometry. A mask goes over as a field; a stamp as
+the rect holding its non-zero coverage, which the apply pass is dispatched over
+(a zero-coverage cell is left as it was). Shared
 constants in the shaders (`DRAIN_DEPTH`, `ALPHA_SOFTNESS`, `LUMINOUS_*`, ...)
 mirror the `pub const`s in `domain::sim`, `domain::paint` and `domain::optics`;
 tunable parameters travel in the `Params` uniform.
@@ -224,7 +226,8 @@ per-row edge table rather than panicking.
 Checkpoints are taken at tick 0, at every event tick and every `every_ticks`
 (32). When the backend's capacity is full the oldest periodic non-event
 checkpoint is released, and if none remain no more are taken. Capacity is
-`clamp(budget / checkpoint_bytes, 1, 64)`:
+`min(budget / checkpoint_bytes, 64)` on the GPU (`clamp(.., 1, 64)` on the CPU
+reference, which always keeps tick 0's):
 
 - Native budget 256 MB (`nocturne-watercolour-core`): a checkpoint is
   `(10 + 2*pigments) * cells * 4` bytes - 25 MB at 512^2 with 8 pigments
@@ -235,8 +238,9 @@ checkpoint is released, and if none remain no more are taken. Capacity is
   44 MB per live instance.
 
 The budget is per instance: `createInstance` takes it as a fifth argument, and
-paint drops (`DropSurface`) pass 1 byte unless the showcase scrubber is driving
-them, so an unscrubbed drop holds the single tick-0 checkpoint and nothing else.
+paint drops (`DropSurface`) pass 1 byte unless a scrubber is driving
+them, so an unscrubbed drop holds no checkpoint; nor does a
+`releaseAfterFinish` player, which nothing can seek once it has let go.
 
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint
 precedes the seek target. Seeking restores the nearest checkpoint at or before
@@ -255,9 +259,15 @@ watchdog Windows resets the display driver at:
   buffers) and refused with an `EngineError`. wgpu reports an oversized buffer
   as an uncaptured error after the fact, which would fault the device for
   every instance sharing it.
-- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), one
-  compute pass each, a few tens of milliseconds at the 512^2 maximum on an
-  integrated GPU.
+- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), a few
+  tens of milliseconds at the 512^2 maximum on an integrated GPU. `Playback`
+  steps from one event or periodic-checkpoint tick to the next in one call, and
+  the engine keeps what it encodes (ticks, applies, checkpoint copies) in one
+  open batch, submitted when it holds sixteen ticks, ahead of an upload into
+  the state (`Dry`, `Settle`, a mask), or with the first band of the next
+  present. Each apply in a batch has its own stroke uniform (a dynamic offset)
+  and its own region of the stamp arena, since every upload lands before the
+  batch runs.
 - **The optics pass is dispatched in row bands** of at most 2^20 output pixels
   (`RENDER_PIXELS_PER_DISPATCH`), each its own submission, so a large canvas or
   export raises the number of dispatches rather than the length of one. A
@@ -266,6 +276,15 @@ watchdog Windows resets the display driver at:
   CPU, is kept as its GPU buffer in a cache the template engine shares with
   every fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
   (`PAPER_CACHE_BYTES`), so a remount at the same size skips generating it.
+- **Buffers are pooled.** A scene's state, scratch, stamp, uniforms,
+  checkpoints and render buffers go, when it is replaced or its engine is
+  dropped, to a pool the template engine shares with every fork, and the next
+  scene of the same shape takes them (a reused state is cleared where its upload
+  skips zeros, a reused scratch cleared whole, both inside the batch). The pool
+  holds at most 16 MB (`BUFFER_POOL_BYTES`); past that the oldest are
+  destroyed, since a dropped buffer's memory otherwise waits for the browser's
+  garbage collector. A released checkpoint the open batch may still copy into
+  joins the pool only once the batch is submitted or dropped.
 - **GPU timestamps** (`GpuEngine::gpu_timings`, `stats().gpuTickMs` /
   `gpuRenderMs`) are taken when the adapter offers `TIMESTAMP_QUERY`; a sample
   starts only when the last one has been read back, so nothing waits on it.

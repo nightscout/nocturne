@@ -122,6 +122,13 @@ instead of a catalogue id. Its arguments are the element list JSON, the icon
 `simResolution` as `catalogueScene`, and the hints JSON (`""` keeps the
 defaults).
 
+A live player does not take either document: `createCatalogueInstance` and
+`createIconInstance` on the engine take the same arguments followed by
+`createInstance`'s, and author the scene straight into the playback, so it never
+crosses to JavaScript as JSON. `createInstance` with the document plays the same
+scene to the bit (tested); a build without the direct constructors is driven
+through the document.
+
 **The element list** is the vanilla `lucide` package's `IconNode` shape: a
 `[tag, attrs]` pair per element in a 24-grid stroke-drawn icon. The authoring
 layer parses `path`, `circle`, `rect`, `line`, `ellipse`, `polyline` and

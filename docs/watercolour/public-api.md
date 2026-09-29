@@ -45,9 +45,8 @@ a hold on the finished frame; both are gone.
 `checkpointBudgetBytes` (live only) is the GPU memory the instance may spend on
 seek checkpoints. Absent keeps the engine's 48 MB default, except on a
 `releaseAfterFinish` player, which nothing can seek once it has let go and so
-keeps only tick 0's; `0` leaves it the single checkpoint at tick 0, so a
-backwards `seek` reloads and replays from the start rather than restoring a
-nearer state. A player nothing ever seeks - every drop outside the showcase
+keeps none; `0` leaves it no checkpoint, so a backwards `seek` reloads the
+scene and replays from the start rather than restoring a nearer state. A player nothing ever seeks - every drop outside a seeking
 scrubber - should pass it.
 
 ### Player methods and state
@@ -297,7 +296,7 @@ when nothing fits is nothing drawn.
 
 The catalogue marks this replaced were sized from the surface's short edge, so a
 squarish card got a disc wider than itself - the three surfaces on which that
-blobbed (245x205, 330x330, 403x142) are fixtures on the showcase page.
+blobbed (245x205, 330x330, 403x142) were fixtures on the former showcase.
 
 ### How the stroke is painted
 
@@ -325,7 +324,7 @@ flick and lands with the stroke.
 | `deposit` | What it does |
 |---|---|
 | `wet` (default) | Charges the paper with water along the path first, drops the pigment into it, and adds a darker drop of the shadow pigment at the head. Blooms with a soft edge and granulates. |
-| `stamp` | The pigment stroke alone. Flatter; kept for comparison on the showcase scrubber. |
+| `stamp` | The pigment stroke alone. Flatter; kept for comparison. |
 
 Droplets are flicked, not washed: little water and higher concentration, so they
 dry with an edge.
@@ -390,7 +389,7 @@ request stays live and the player shows the settled frame at once.
 `revealMs` (420 ms by default) is the hover clock, with the settle running 1.45x
 that; the engine's 3 s default reads as a hang on a card. `progress` pins the stroke
 at a point of its settle with the player paused, which is how the two deposits are
-compared at the same instant on the showcase scrubber.
+compared at the same instant.
 
 ### Colour
 
@@ -486,12 +485,7 @@ The live instance costs what any live artwork costs: a device, 50-90 ms to creat
 and a simulation grid sized from the canvas's backing long edge (capped at 512 for a
 drop, about four times the tick cost of 256, affordable because a drop holds one
 checkpoint and two pigments). One surface is one instance, and it runs for well
-under a second. A drop is never seeked unless the showcase scrubber pins it with
-`progress`, so it takes `checkpointBudgetBytes: 1` and holds the single checkpoint
-at tick 0. Measured on the showcase with sixteen surfaces held open at 512, that is
-about 7 MB of checkpoint memory per instance against 25 MB before.
+under a second. A drop is never seeked unless a scrubber pins it with
+`progress`, so it takes `checkpointBudgetBytes: 1` and holds no checkpoint.
 
-`/drops` in the showcase is the working reference: the two deposits side by side on
-a scrubber, the feature cards, buttons and rows, and the three surfaces that blobbed
-in both themes. The page raises the live cap so every surface can be held open at
-once; production keeps the cap of four.
+Production keeps a live cap of four drop surfaces.

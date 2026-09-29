@@ -266,7 +266,7 @@ fn finished_frame<E: Simulator + Renderer>(engine: E, scene: &Scene) -> (E, Imag
     (pb.into_simulator(), image, run_ms)
 }
 
-/// The showcase hero at a given simulation resolution, to 900x506: the
+/// The former showcase hero at a given simulation resolution, to 900x506: the
 /// coordinator compares the edge quality across resolutions. `size_hint` is
 /// set to the output aspect so paper grain and stamps are measured in it.
 fn shoreline_wide(gpu: GpuEngine, out_dir: &Path, resolution: u32, light: Rgb) -> GpuEngine {
@@ -402,10 +402,30 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
     const RUNS: usize = 3;
     let mut scene = ArtworkCatalogue::build("wash", SEED, Palette::water()).expect("wash");
     scene.sim_resolution = SimResolution(resolution);
+    let loading = gpu.command_counts();
     let mut pb = Playback::new(gpu, scene.clone(), DURATION_MS).expect("playback");
     let warm = pb.total_ticks() * 3 / 10;
+    let before = pb.simulator().command_counts();
+    println!(
+        "bench {resolution}^2 sim: load {} KB uploaded",
+        (before.uploaded_bytes - loading.uploaded_bytes) / 1024
+    );
     pb.advance_ticks(warm).expect("advance");
     pb.simulator().sync().expect("sync");
+    let after = pb.simulator().command_counts();
+    println!(
+        "bench {resolution}^2 sim: playback to 30% ({warm} ticks, {} events): {} submits, {} passes, {} copies, {} KB uploaded",
+        scene
+            .timeline
+            .events
+            .iter()
+            .filter(|e| e.at_tick < warm)
+            .count(),
+        after.submits - before.submits,
+        after.passes - before.passes,
+        after.copies - before.copies,
+        (after.uploaded_bytes - before.uploaded_bytes) / 1024,
+    );
     let gpu = pb.simulator();
     let mut tick_ms = Vec::new();
     let mut stamped = Vec::new();

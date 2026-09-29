@@ -51,12 +51,34 @@ const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
 
+/// `BLUR_MAX_RADIUS` in `flow.wgsl`: the widest blur the one-dispatch `blur`
+/// holds in workgroup memory; a wider one runs as `blur_h` then `blur_v`.
+pub const BLUR_MAX_RADIUS: u32 = 8;
+
+/// Stroke uniforms one batch can hold (see [`Pending`]), each at its own
+/// dynamic offset; a batch with more events is submitted and a new one begun.
+const STROKE_SLOTS: u32 = 64;
+
+/// Zero words in a row that an upload into a zero-filled buffer leaves out.
+/// A loaded state is mostly fields that start at zero (water, velocity,
+/// pigment), so only the paper, the mask and the header go over.
+const SKIPPED_ZERO_RUN: usize = 1024;
+
 /// GPU bytes of render-resolution paper an engine and its forks keep after
 /// the instance that made them is gone. A remount at the same size (a tab
 /// switch, a re-hover, a list of same-seed accents) then skips generating
 /// the paper on the CPU, the main-thread cost of a first present; eight
 /// megabytes is two 1024^2 canvases or thirty-two 256^2 ones.
 const PAPER_CACHE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// GPU bytes of buffers a scene leaves behind (state, scratch, stamp,
+/// checkpoints, render buffers) that an engine and its forks keep for the
+/// next scene of the same shape instead of allocating again. Stills run one
+/// after another (a list of avatars), each at the last one's grid size, so
+/// each takes the last one's buffers; past the budget the oldest are
+/// destroyed, since a dropped buffer's memory otherwise waits for the
+/// browser's garbage collector.
+const BUFFER_POOL_BYTES: u64 = 16 * 1024 * 1024;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -197,6 +219,55 @@ struct StrokeUniform {
     water: f32,
     strength: f32,
     splat_out: f32,
+    rect_x: u32,
+    rect_y: u32,
+    rect_w: u32,
+    rect_h: u32,
+    /// Word offset of this stroke's rect in the stamp arena.
+    stamp_offset: u32,
+    _pad: [u32; 3],
+}
+
+/// The rows and columns of a stamp that hold a non-zero coverage bit, with
+/// that rect's coverage row-major: all an apply pass needs to see, since a
+/// zero-coverage cell leaves the grid as it was.
+struct StampRect {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    coverage: Vec<f32>,
+}
+
+impl StampRect {
+    fn of(stamp: &paint::Stamp) -> Option<StampRect> {
+        let width = stamp.width as usize;
+        let (mut x0, mut x1, mut y0, mut y1) = (usize::MAX, 0, usize::MAX, 0);
+        for (y, row) in stamp.coverage.chunks_exact(width.max(1)).enumerate() {
+            let Some(first) = row.iter().position(|c| c.to_bits() != 0) else {
+                continue;
+            };
+            let last = row.iter().rposition(|c| c.to_bits() != 0).unwrap_or(first);
+            x0 = x0.min(first);
+            x1 = x1.max(last + 1);
+            y0 = y0.min(y);
+            y1 = y + 1;
+        }
+        if y0 == usize::MAX {
+            return None;
+        }
+        let mut coverage = Vec::with_capacity((x1 - x0) * (y1 - y0));
+        for y in y0..y1 {
+            coverage.extend_from_slice(&stamp.coverage[y * width + x0..y * width + x1]);
+        }
+        Some(StampRect {
+            x: x0 as u32,
+            y: y0 as u32,
+            w: (x1 - x0) as u32,
+            h: (y1 - y0) as u32,
+            coverage,
+        })
+    }
 }
 
 #[repr(C)]
@@ -241,14 +312,16 @@ struct RenderUniform {
 #[derive(Clone)]
 struct SimPipelines {
     layout: wgpu::BindGroupLayout,
-    velocity: wgpu::ComputePipeline,
-    divergence: wgpu::ComputePipeline,
+    velocity_divergence: wgpu::ComputePipeline,
     jacobi_a: wgpu::ComputePipeline,
     jacobi_b: wgpu::ComputePipeline,
+    jacobi_pair_a: wgpu::ComputePipeline,
+    jacobi_pair_b: wgpu::ComputePipeline,
     project: wgpu::ComputePipeline,
     project_q2: wgpu::ComputePipeline,
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
+    blur: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
     swirl_distance_h: wgpu::ComputePipeline,
     swirl_distance_v: wgpu::ComputePipeline,
@@ -321,6 +394,9 @@ impl PaperKey {
 /// Least recently used first; see [`PAPER_CACHE_BYTES`].
 type PaperCache = Arc<Mutex<VecDeque<(PaperKey, wgpu::Buffer)>>>;
 
+/// Oldest first; see [`BUFFER_POOL_BYTES`].
+type BufferPool = Arc<Mutex<VecDeque<wgpu::Buffer>>>;
+
 struct Loaded {
     width: u32,
     height: u32,
@@ -328,8 +404,11 @@ struct Loaded {
     paper: Paper,
     paper_sim: PaperField,
     state: wgpu::Buffer,
+    scratch: wgpu::Buffer,
     stamp: wgpu::Buffer,
+    params: wgpu::Buffer,
     stroke: wgpu::Buffer,
+    pigments: wgpu::Buffer,
     optics: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     checkpoints: HashMap<CheckpointId, wgpu::Buffer>,
@@ -362,6 +441,24 @@ struct Readback {
     bind_group: wgpu::BindGroup,
 }
 
+/// What the simulation encodes between two points something reads the
+/// state (a present, a readback, an upload into `state`): ticks, applies
+/// and checkpoint copies, submitted as one command buffer. Each apply's
+/// stamp rect and stroke uniform get their own region of the stamp arena
+/// and of the stroke buffer, since every upload lands before the batch runs.
+struct Pending {
+    enc: wgpu::CommandEncoder,
+    ticks: u32,
+    stamp_words: usize,
+    strokes: u32,
+    /// The tick timer's resolve is in `enc`; its map is requested once the
+    /// batch is submitted.
+    tick_sample: bool,
+    /// Released checkpoints `enc` may still copy into; pooled once it is
+    /// submitted or dropped, so no other scene can take one first.
+    retired: Vec<wgpu::Buffer>,
+}
+
 /// GPU commands encoded since the engine was created or the counts were
 /// last reset: what the per-command overhead of a host scales with.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -371,6 +468,8 @@ pub struct CommandCounts {
     /// Buffer-to-buffer copies and clears.
     pub copies: u64,
     pub submits: u64,
+    /// Bytes handed to `write_buffer`.
+    pub uploaded_bytes: u64,
 }
 
 #[derive(Default)]
@@ -379,6 +478,7 @@ struct CommandCounter {
     dispatches: AtomicU64,
     copies: AtomicU64,
     submits: AtomicU64,
+    uploaded_bytes: AtomicU64,
 }
 
 impl CommandCounter {
@@ -392,6 +492,7 @@ impl CommandCounter {
             dispatches: self.dispatches.load(Ordering::Relaxed),
             copies: self.copies.load(Ordering::Relaxed),
             submits: self.submits.load(Ordering::Relaxed),
+            uploaded_bytes: self.uploaded_bytes.load(Ordering::Relaxed),
         }
     }
 }
@@ -453,8 +554,10 @@ pub struct GpuEngine {
     /// Submissions not yet known to have completed, oldest first; see
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`].
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
+    pending: Mutex<Option<Pending>>,
     counter: CommandCounter,
     paper_cache: PaperCache,
+    pool: BufferPool,
     timers: Option<Timers>,
 }
 
@@ -568,7 +671,16 @@ impl GpuEngine {
                 storage_entry(1, false),
                 storage_entry(2, false),
                 storage_entry(3, true),
-                uniform_entry(4),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
                 storage_entry(5, true),
             ],
         });
@@ -588,14 +700,16 @@ impl GpuEngine {
             })
         };
         let sim = SimPipelines {
-            velocity: make("velocity"),
-            divergence: make("divergence"),
+            velocity_divergence: make("velocity_divergence"),
             jacobi_a: make("jacobi_a"),
             jacobi_b: make("jacobi_b"),
+            jacobi_pair_a: make("jacobi_pair_a"),
+            jacobi_pair_b: make("jacobi_pair_b"),
             project: make("project"),
             project_q2: make("project_q2"),
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
+            blur: make("blur"),
             advect: make("advect"),
             swirl_distance_h: make("swirl_distance_h"),
             swirl_distance_v: make("swirl_distance_v"),
@@ -717,8 +831,10 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
             in_flight: Mutex::new(VecDeque::new()),
+            pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::default(),
+            pool: Arc::default(),
             timers,
         };
         (engine, validation)
@@ -740,8 +856,10 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
+            pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::clone(&self.paper_cache),
+            pool: Arc::clone(&self.pool),
             timers: Timers::new(&self.ctx),
         }
     }
@@ -787,6 +905,7 @@ impl GpuEngine {
 
     /// Blocks until every submitted command has finished; used for timing.
     pub fn sync(&self) -> Result<(), EngineError> {
+        self.flush()?;
         self.ctx.wait_idle()
     }
 
@@ -865,48 +984,229 @@ impl GpuEngine {
         Ok(())
     }
 
+    /// Runs `f` on the open batch, beginning one if there is none.
+    fn with_pending<R>(&self, f: impl FnOnce(&mut Pending) -> R) -> R {
+        let mut slot = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        let pending = slot.get_or_insert_with(|| Pending {
+            enc: self
+                .ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("batch"),
+                }),
+            ticks: 0,
+            stamp_words: 0,
+            strokes: 0,
+            tick_sample: false,
+            retired: Vec::new(),
+        });
+        f(pending)
+    }
+
+    fn take_pending(&self) -> Option<Pending> {
+        self.pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+    }
+
+    /// Submits the open batch, if any.
+    pub fn flush(&self) -> Result<(), EngineError> {
+        match self.take_pending() {
+            Some(pending) => self.submit_batch(pending.enc, pending.tick_sample, pending.retired),
+            None => Ok(()),
+        }
+    }
+
+    /// Drops the open batch unsent.
+    fn discard_pending(&self) {
+        if let Some(pending) = self.take_pending() {
+            self.recycle(pending.retired);
+        }
+    }
+
+    /// Submits `enc`, then requests the tick sample it resolved, if any, and
+    /// pools the buffers it was the last to use.
+    fn submit_batch(
+        &self,
+        enc: wgpu::CommandEncoder,
+        tick_sample: bool,
+        retired: Vec<wgpu::Buffer>,
+    ) -> Result<(), EngineError> {
+        let submitted = self.submit(enc.finish());
+        self.recycle(retired);
+        submitted?;
+        if tick_sample && let Some(t) = &self.timers {
+            t.tick.request();
+        }
+        Ok(())
+    }
+
+    /// A buffer of `size` and `usage` from the pool, or a new one; `true`
+    /// when new, and so still zero-filled.
+    fn pooled(
+        &self,
+        label: &str,
+        size: u64,
+        usage: wgpu::BufferUsages,
+    ) -> Result<(wgpu::Buffer, bool), EngineError> {
+        let size = size.max(16);
+        {
+            let mut pool = self.pool.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(at) = pool
+                .iter()
+                .position(|b| b.size() == size && b.usage() == usage)
+                && let Some(buffer) = pool.remove(at)
+            {
+                return Ok((buffer, false));
+            }
+        }
+        Ok((self.buffer(label, size, usage)?, true))
+    }
+
+    /// Hands buffers nothing unsubmitted uses any more to the pool,
+    /// destroying the oldest past [`BUFFER_POOL_BYTES`].
+    fn recycle(&self, buffers: impl IntoIterator<Item = wgpu::Buffer>) {
+        let mut pool = self.pool.lock().unwrap_or_else(|p| p.into_inner());
+        for buffer in buffers {
+            if buffer.size() > BUFFER_POOL_BYTES {
+                buffer.destroy();
+            } else {
+                pool.push_back(buffer);
+            }
+        }
+        let mut total: u64 = pool.iter().map(|b| b.size()).sum();
+        while total > BUFFER_POOL_BYTES {
+            match pool.pop_front() {
+                Some(evicted) => {
+                    total -= evicted.size();
+                    evicted.destroy();
+                }
+                None => break,
+            }
+        }
+    }
+
+    /// Pools every buffer a scene owns but the shared render paper.
+    fn recycle_loaded(&self, l: Loaded) {
+        let mut buffers = vec![
+            l.state, l.scratch, l.stamp, l.params, l.stroke, l.pigments, l.optics,
+        ];
+        buffers.extend(l.checkpoints.into_values());
+        if let Some(target) = l.render_cache {
+            buffers.push(target.uniform);
+            buffers.push(target.presence);
+        }
+        self.recycle(buffers);
+    }
+
+    /// Byte offset of stroke slot `slot` in the stroke buffer.
+    fn stroke_offset(&self, slot: u32) -> u32 {
+        slot * self.ctx.limits().min_uniform_buffer_offset_alignment
+    }
+
+    fn write_buffer(&self, buffer: &wgpu::Buffer, offset: u64, data: &[u8]) {
+        CommandCounter::add(&self.counter.uploaded_bytes, data.len() as u64);
+        self.ctx.queue().write_buffer(buffer, offset, data);
+    }
+
+    /// Uploads `data` leaving out its runs of zero words, which a new
+    /// (`zeroed`) buffer already holds and a pooled one is cleared to in the
+    /// batch: an upload lands before the batch, and the spans are disjoint.
+    fn write_skipping_zeros(&self, buffer: &wgpu::Buffer, data: &[f32], zeroed: bool) {
+        let f = std::mem::size_of::<f32>();
+        let mut start = 0;
+        let mut i = 0;
+        while i < data.len() {
+            if data[i].to_bits() != 0 {
+                i += 1;
+                continue;
+            }
+            let run = i;
+            while i < data.len() && data[i].to_bits() == 0 {
+                i += 1;
+            }
+            if i - run >= SKIPPED_ZERO_RUN {
+                if !zeroed {
+                    self.with_pending(|p| {
+                        p.enc
+                            .clear_buffer(buffer, (run * f) as u64, Some(((i - run) * f) as u64))
+                    });
+                }
+                if run > start {
+                    self.write_buffer(
+                        buffer,
+                        (start * f) as u64,
+                        bytemuck::cast_slice(&data[start..run]),
+                    );
+                }
+                start = i;
+            }
+        }
+        if start < data.len() {
+            self.write_buffer(
+                buffer,
+                (start * f) as u64,
+                bytemuck::cast_slice(&data[start..]),
+            );
+        }
+    }
+
     /// Encodes one tick into `pass`: the same pass order as `sim::step`.
     /// Every dispatch in a compute pass is its own usage scope, so each one
     /// sees the storage writes of the one before; where the CPU swaps
     /// vectors, the next reader takes the field from `scratch` instead (see
     /// `common.wgsl`), so a tick needs no copies.
     fn encode_tick(&self, pass: &mut wgpu::ComputePass<'_>, l: &Loaded) {
-        let cells = groups(l.layout.n as u32);
+        let cells = (groups(l.layout.n as u32), 1);
+        // One workgroup per 16x16 tile, for the tiled passes (`velocity_divergence`,
+        // `jacobi_pair_*`, `blur`).
+        let tiles = (l.width.div_ceil(16), l.height.div_ceil(16));
         let mut dispatches = 0;
-        let mut dispatch = |pipeline: &wgpu::ComputePipeline, groups: u32| {
+        let mut dispatch = |pipeline: &wgpu::ComputePipeline, (x, y): (u32, u32)| {
             pass.set_pipeline(pipeline);
-            pass.dispatch_workgroups(groups, 1, 1);
+            pass.dispatch_workgroups(x, y, 1);
             dispatches += 1;
         };
         let sim = &self.sim;
 
-        dispatch(&sim.velocity, cells);
-        dispatch(&sim.divergence, cells);
-        for i in 0..self.params.jacobi_iterations {
+        dispatch(&sim.velocity_divergence, tiles);
+        // The correction alternates between q and q2, and a pair of
+        // iterations moves it once, as a single iteration does.
+        let mut in_q = true;
+        for _ in 0..self.params.jacobi_iterations / 2 {
             dispatch(
-                if i % 2 == 0 {
-                    &sim.jacobi_a
+                if in_q {
+                    &sim.jacobi_pair_a
                 } else {
-                    &sim.jacobi_b
+                    &sim.jacobi_pair_b
                 },
-                cells,
+                tiles,
             );
+            in_q = !in_q;
         }
         if self.params.jacobi_iterations % 2 == 1 {
-            dispatch(&sim.project_q2, cells);
-        } else {
-            dispatch(&sim.project, cells);
+            dispatch(if in_q { &sim.jacobi_a } else { &sim.jacobi_b }, cells);
+            in_q = !in_q;
         }
+        dispatch(if in_q { &sim.project } else { &sim.project_q2 }, cells);
 
-        dispatch(&sim.blur_h, cells);
-        dispatch(&sim.blur_v, cells);
+        if self.params.blur_radius <= BLUR_MAX_RADIUS {
+            dispatch(&sim.blur, tiles);
+        } else {
+            dispatch(&sim.blur_h, cells);
+            dispatch(&sim.blur_v, cells);
+        }
         dispatch(&sim.advect, cells);
 
         let mut g_in_scratch = true;
         if self.params.swirl_speed > 0.0 && l.maybe_wet {
             dispatch(&sim.swirl_distance_h, cells);
             dispatch(&sim.swirl_distance_v, cells);
-            dispatch(&sim.swirl_stream, groups(l.layout.corner_count() as u32));
+            dispatch(
+                &sim.swirl_stream,
+                (groups(l.layout.corner_count() as u32), 1),
+            );
             for _ in 0..l.swirl_substeps {
                 dispatch(
                     if g_in_scratch {
@@ -930,9 +1230,12 @@ impl GpuEngine {
         CommandCounter::add(&self.counter.dispatches, dispatches);
     }
 
+    /// Writes into `state` directly, so the batch encoded so far is submitted
+    /// first: an upload lands ahead of any command buffer not yet submitted.
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
+        self.flush()?;
         let l = self.loaded()?;
-        self.ctx.queue().write_buffer(
+        self.write_buffer(
             &l.state,
             (offset_elems * std::mem::size_of::<f32>()) as u64,
             bytemuck::cast_slice(data),
@@ -940,36 +1243,84 @@ impl GpuEngine {
         Ok(())
     }
 
-    fn dispatch_apply(&self, pipeline: &wgpu::ComputePipeline) -> Result<(), EngineError> {
+    /// Encodes `pipeline` over `cells` into the batch, reading stroke slot
+    /// `slot`.
+    fn dispatch_apply(
+        &self,
+        pipeline: &wgpu::ComputePipeline,
+        cells: u32,
+        slot: u32,
+    ) -> Result<(), EngineError> {
         let l = self.loaded()?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("apply"),
-            });
-        {
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        let offset = self.stroke_offset(slot);
+        self.with_pending(|p| {
+            let mut pass = p
+                .enc
+                .begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(l.layout.n as u32), 1, 1);
-        }
+            pass.set_bind_group(0, &l.bind_group, &[offset]);
+            pass.dispatch_workgroups(groups(cells), 1, 1);
+        });
         CommandCounter::add(&self.counter.passes, 1);
         CommandCounter::add(&self.counter.dispatches, 1);
-        self.submit(enc.finish())
+        Ok(())
     }
 
-    fn upload_stamp(&self, stamp: &paint::Stamp, stroke: StrokeUniform) -> Result<(), EngineError> {
+    /// Uploads the stamp's non-zero rect and applies `pipeline` over it; a
+    /// stamp with no coverage changes nothing and is skipped.
+    fn apply_stamp(
+        &self,
+        pipeline: &wgpu::ComputePipeline,
+        stamp: &paint::Stamp,
+        stroke: StrokeUniform,
+    ) -> Result<(), EngineError> {
+        let Some(rect) = StampRect::of(stamp) else {
+            return Ok(());
+        };
+        let arena = self.loaded()?.layout.n;
+        let words = rect.coverage.len();
+        let full = self
+            .pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .is_some_and(|p| p.stamp_words + words > arena || p.strokes >= STROKE_SLOTS);
+        if full {
+            self.flush()?;
+        }
+        let (offset, slot) = self.with_pending(|p| {
+            let at = (p.stamp_words, p.strokes);
+            p.stamp_words += words;
+            p.strokes += 1;
+            at
+        });
         let l = self.loaded()?;
-        let q = self.ctx.queue();
-        q.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&stamp.coverage));
-        q.write_buffer(&l.stroke, 0, bytemuck::bytes_of(&stroke));
-        Ok(())
+        let stroke = StrokeUniform {
+            rect_x: rect.x,
+            rect_y: rect.y,
+            rect_w: rect.w,
+            rect_h: rect.h,
+            stamp_offset: offset as u32,
+            ..stroke
+        };
+        let f = std::mem::size_of::<f32>();
+        self.write_buffer(
+            &l.stamp,
+            (offset * f) as u64,
+            bytemuck::cast_slice(&rect.coverage),
+        );
+        self.write_buffer(
+            &l.stroke,
+            u64::from(self.stroke_offset(slot)),
+            bytemuck::bytes_of(&stroke),
+        );
+        self.dispatch_apply(pipeline, rect.w * rect.h, slot)
     }
 
     /// Reads the whole state back; used by tests and the CPU comparison.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_grid(&self) -> Result<SimulationGrid, EngineError> {
+        self.flush()?;
         let l = self.loaded()?;
         let bytes = l.layout.state_bytes();
         let staging = self.buffer(
@@ -1072,7 +1423,7 @@ impl GpuEngine {
             (paper, aspect, pixel_scale)
         };
         let (paper, aspect, pixel_scale) = needs;
-        let uniform = self.buffer(
+        let (uniform, _) = self.pooled(
             "render-params",
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -1088,7 +1439,7 @@ impl GpuEngine {
                 l.layout.pigment_count as u64,
             )
         };
-        let presence = self.buffer(
+        let (presence, _) = self.pooled(
             "render-presence",
             presence_len * pigments * 8,
             wgpu::BufferUsages::STORAGE,
@@ -1143,7 +1494,7 @@ impl GpuEngine {
                 },
             ],
         });
-        self.loaded_mut()?.render_cache = Some(RenderTarget {
+        let replaced = self.loaded_mut()?.render_cache.replace(RenderTarget {
             width,
             height,
             pixel_scale,
@@ -1155,6 +1506,9 @@ impl GpuEngine {
             present_bind_group,
             readback: None,
         });
+        if let Some(old) = replaced {
+            self.recycle([old.uniform, old.presence]);
+        }
         Ok(())
     }
 
@@ -1184,9 +1538,7 @@ impl GpuEngine {
             (field.height.len() * std::mem::size_of::<f32>()) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        self.ctx
-            .queue()
-            .write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
+        self.write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
         if buffer.size() <= PAPER_CACHE_BYTES {
             let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
             cache.push_back((key, buffer.clone()));
@@ -1331,6 +1683,7 @@ impl GpuEngine {
         if width == 0 || height == 0 {
             return Err(EngineError::new("zero output size"));
         }
+        self.flush()?;
         self.ensure_render_target(width, height)?;
         self.ensure_readback()?;
         if let Some(t) = self.timers.as_mut() {
@@ -1348,9 +1701,7 @@ impl GpuEngine {
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
             let uniform = self.render_uniform(l, width, height, y_offset, false);
-            self.ctx
-                .queue()
-                .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
+            self.write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
             let mut enc =
                 self.ctx
                     .device()
@@ -1409,19 +1760,25 @@ impl GpuEngine {
         let l = self.loaded()?;
         let target = self.render_target()?;
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
-        self.ctx
-            .queue()
-            .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
+        self.write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
         let band_rows = render_band_rows(width, height);
+        // The simulation batch goes out with the first band.
+        let mut batch = self.take_pending();
         let mut y_offset = 0;
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
-            let mut enc =
-                self.ctx
-                    .device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("present"),
-                    });
+            let (mut enc, tick_sample, retired) = match batch.take() {
+                Some(p) => (p.enc, p.tick_sample, p.retired),
+                None => (
+                    self.ctx
+                        .device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("present"),
+                        }),
+                    false,
+                    Vec::new(),
+                ),
+            };
             if y_offset == 0 {
                 self.encode_presence(&mut enc, l, target, timer);
             }
@@ -1454,7 +1811,7 @@ impl GpuEngine {
             if let Some(t) = timer.filter(|_| last) {
                 t.resolve(&mut enc);
             }
-            self.submit(enc.finish())?;
+            self.submit_batch(enc, tick_sample, retired)?;
             y_offset += rows;
         }
         if let Some(t) = timer {
@@ -1636,8 +1993,10 @@ impl GpuEngine {
             })
     }
 
+    /// Zero when the budget is below one checkpoint: a playback then holds
+    /// none, not even tick 0's, and a backwards seek reloads the scene.
     fn checkpoint_capacity_for(&self, layout: &StateLayout) -> usize {
-        ((self.checkpoint_budget / layout.state_bytes().max(1)) as usize).clamp(1, MAX_CHECKPOINTS)
+        ((self.checkpoint_budget / layout.state_bytes().max(1)) as usize).min(MAX_CHECKPOINTS)
     }
 }
 
@@ -1680,50 +2039,55 @@ impl Simulator for GpuEngine {
         let layout = StateLayout::new(res, res, pigment_count);
         let f = std::mem::size_of::<f32>() as u64;
 
-        self.loaded = None;
-        let state = self.buffer(
+        self.discard_pending();
+        if let Some(previous) = self.loaded.take() {
+            self.recycle_loaded(previous);
+        }
+        let (state, state_zeroed) = self.pooled(
             "state",
             layout.state_bytes(),
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         )?;
-        let scratch = self.buffer(
+        let (scratch, scratch_zeroed) = self.pooled(
             "scratch",
             layout.scratch_len() as u64 * f,
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         )?;
-        let stamp = self.buffer(
+        if !scratch_zeroed {
+            self.with_pending(|p| p.enc.clear_buffer(&scratch, 0, None));
+        }
+        let (stamp, _) = self.pooled(
             "stamp",
             layout.n as u64 * f,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        let params = self.buffer(
+        let (params, _) = self.pooled(
             "params",
             std::mem::size_of::<ParamsUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let stroke = self.buffer(
+        let (stroke, _) = self.pooled(
             "stroke",
-            std::mem::size_of::<StrokeUniform>() as u64,
+            u64::from(self.stroke_offset(STROKE_SLOTS)),
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let pigments = self.buffer(
+        let (pigments, _) = self.pooled(
             "pigments",
             (MAX_PIGMENTS * std::mem::size_of::<PigmentCoefUniform>()) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        let optics = self.buffer(
+        let (optics, _) = self.pooled(
             "optics",
             (MAX_PIGMENTS * 3 * 16) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
 
-        let q = self.ctx.queue();
-        q.write_buffer(&state, 0, bytemuck::cast_slice(&layout.pack(&grid)));
-        q.write_buffer(
+        self.write_skipping_zeros(&state, &layout.pack(&grid), state_zeroed);
+        self.write_buffer(
             &params,
             0,
             bytemuck::bytes_of(&ParamsUniform::new(
@@ -1743,48 +2107,54 @@ impl Simulator for GpuEngine {
                 _pad: 0.0,
             })
             .collect();
-        q.write_buffer(&pigments, 0, bytemuck::cast_slice(&coefs));
+        self.write_buffer(&pigments, 0, bytemuck::cast_slice(&coefs));
         let mut optics_data: Vec<[f32; 4]> = Vec::with_capacity(pigment_count * 3);
         for p in scene.palette.pigments() {
             optics_data.push([p.k.0[0], p.k.0[1], p.k.0[2], 0.0]);
             optics_data.push([p.s.0[0], p.s.0[1], p.s.0[2], 0.0]);
             optics_data.push([p.granulation, 0.0, 0.0, 0.0]);
         }
-        q.write_buffer(&optics, 0, bytemuck::cast_slice(&optics_data));
+        self.write_buffer(&optics, 0, bytemuck::cast_slice(&optics_data));
 
-        let bind_group = self
-            .ctx
-            .device()
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("watercolour-sim"),
-                layout: &self.sim.layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: state.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: scratch.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: stamp.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: stroke.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: pigments.as_entire_binding(),
-                    },
-                ],
-            });
+        let bind_group =
+            self.ctx
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("watercolour-sim"),
+                    layout: &self.sim.layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: params.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: state.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: scratch.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: stamp.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &stroke,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(
+                                    std::mem::size_of::<StrokeUniform>() as u64
+                                ),
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: pigments.as_entire_binding(),
+                        },
+                    ],
+                });
 
         self.loaded = Some(Loaded {
             width: res,
@@ -1793,8 +2163,11 @@ impl Simulator for GpuEngine {
             paper: scene.paper,
             paper_sim,
             state,
+            scratch,
             stamp,
+            params,
             stroke,
+            pigments,
             optics,
             bind_group,
             checkpoints: HashMap::new(),
@@ -1846,7 +2219,8 @@ impl Simulator for GpuEngine {
             Operation::Brush(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
                 let flow = paint::stroke_flow(&s.path, s.span, aspect, s.water, self.params.flow);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_brush,
                     &stamp,
                     StrokeUniform {
                         kind: 0,
@@ -1857,14 +2231,15 @@ impl Simulator for GpuEngine {
                         water: s.water,
                         strength: 0.0,
                         splat_out: flow.splat_out,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_brush)
+                )
             }
             Operation::Water(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
                 let flow = paint::stroke_flow(&s.path, s.span, aspect, s.water, self.params.flow);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_water,
                     &stamp,
                     StrokeUniform {
                         kind: 1,
@@ -1875,13 +2250,14 @@ impl Simulator for GpuEngine {
                         water: s.water,
                         strength: 0.0,
                         splat_out: flow.splat_out,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_water)
+                )
             }
             Operation::Lift(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
-                self.upload_stamp(
+                self.apply_stamp(
+                    &self.sim.apply_lift,
                     &stamp,
                     StrokeUniform {
                         kind: 2,
@@ -1892,9 +2268,9 @@ impl Simulator for GpuEngine {
                         water: 0.0,
                         strength: s.strength,
                         splat_out: 0.0,
+                        ..StrokeUniform::zeroed()
                     },
-                )?;
-                self.dispatch_apply(&self.sim.apply_lift)
+                )
             }
             Operation::Dry { rate } => {
                 let off = self.loaded()?.layout.dry_rate();
@@ -1904,7 +2280,10 @@ impl Simulator for GpuEngine {
                 let off = self.loaded()?.layout.settle_share();
                 self.write_state_region(off, &[share.clamp(0.0, MAX_SETTLE_SHARE)])
             }
-            Operation::DryAll => self.dispatch_apply(&self.sim.dry_all),
+            Operation::DryAll => {
+                let n = self.loaded()?.layout.n as u32;
+                self.dispatch_apply(&self.sim.dry_all, n, 0)
+            }
             Operation::SetMask(mask) => {
                 let field = paint::rasterize_mask_aspect(mask, w, h, aspect);
                 let off = self.loaded()?.layout.m();
@@ -1928,45 +2307,48 @@ impl Simulator for GpuEngine {
         if ticks == 0 {
             return Ok(());
         }
+        let sample_free = !self.with_pending(|p| p.tick_sample);
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            if t.tick.idle() {
+            if t.tick.idle() && sample_free {
                 t.sampled_ticks = ticks;
             }
         }
-        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|t| t.idle());
+        let timer = self
+            .timers
+            .as_ref()
+            .map(|t| &t.tick)
+            .filter(|t| t.idle() && sample_free);
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
-            let batch = remaining.min(TICKS_PER_SUBMIT);
-            let (first, last) = (remaining == ticks, remaining == batch);
-            let mut enc =
-                self.ctx
-                    .device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            let full = self.with_pending(|p| {
+                let batch = remaining.min(TICKS_PER_SUBMIT - p.ticks);
+                let (first, last) = (remaining == ticks, remaining == batch);
+                {
+                    let mut pass = p.enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("ticks"),
+                        timestamp_writes: timer
+                            .filter(|_| first || last)
+                            .map(|t| t.compute_writes(first, last)),
                     });
-            {
-                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("ticks"),
-                    timestamp_writes: timer
-                        .filter(|_| first || last)
-                        .map(|t| t.compute_writes(first, last)),
-                });
-                CommandCounter::add(&self.counter.passes, 1);
-                pass.set_bind_group(0, &l.bind_group, &[]);
-                for _ in 0..batch {
-                    self.encode_tick(&mut pass, l);
+                    CommandCounter::add(&self.counter.passes, 1);
+                    pass.set_bind_group(0, &l.bind_group, &[0]);
+                    for _ in 0..batch {
+                        self.encode_tick(&mut pass, l);
+                    }
                 }
+                if let Some(t) = timer.filter(|_| last) {
+                    t.resolve(&mut p.enc);
+                    p.tick_sample = true;
+                }
+                p.ticks += batch;
+                remaining -= batch;
+                p.ticks >= TICKS_PER_SUBMIT
+            });
+            if full {
+                self.flush()?;
             }
-            if let Some(t) = timer.filter(|_| last) {
-                t.resolve(&mut enc);
-            }
-            self.submit(enc.finish())?;
-            remaining -= batch;
-        }
-        if let Some(t) = timer {
-            t.request();
         }
         Ok(())
     }
@@ -1978,19 +2360,13 @@ impl Simulator for GpuEngine {
             return Ok(None);
         }
         let bytes = l.layout.state_bytes();
-        let copy = self.buffer(
+        let (copy, _) = self.pooled(
             "checkpoint",
             bytes,
             wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
         )?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("snapshot"),
-            });
-        enc.copy_buffer_to_buffer(&l.state, 0, &copy, 0, bytes);
-        self.submit(enc.finish())?;
+        self.with_pending(|p| p.enc.copy_buffer_to_buffer(&l.state, 0, &copy, 0, bytes));
+        CommandCounter::add(&self.counter.copies, 1);
         let id = CheckpointId(self.next_checkpoint);
         self.next_checkpoint += 1;
         self.loaded_mut()?.checkpoints.insert(id, copy);
@@ -2003,21 +2379,26 @@ impl Simulator for GpuEngine {
             .checkpoints
             .get(&id)
             .ok_or_else(|| EngineError::new(format!("unknown checkpoint {id:?}")))?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("restore"),
-            });
-        enc.copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes());
-        self.submit(enc.finish())?;
+        self.with_pending(|p| {
+            p.enc
+                .copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes())
+        });
+        CommandCounter::add(&self.counter.copies, 1);
         self.loaded_mut()?.maybe_wet = true;
         Ok(())
     }
 
     fn release(&mut self, id: CheckpointId) {
-        if let Some(l) = self.loaded.as_mut() {
-            l.checkpoints.remove(&id);
+        let Some(buffer) = self.loaded.as_mut().and_then(|l| l.checkpoints.remove(&id)) else {
+            return;
+        };
+        let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        match pending.as_mut() {
+            Some(p) => p.retired.push(buffer),
+            None => {
+                drop(pending);
+                self.recycle([buffer]);
+            }
         }
     }
 
@@ -2041,6 +2422,17 @@ impl Renderer for GpuEngine {
             height,
             rgba: floats.to_vec(),
         })
+    }
+}
+
+/// Pools the scene's buffers for the next engine on the device; an unsent
+/// batch is dropped with the scene it was for.
+impl Drop for GpuEngine {
+    fn drop(&mut self) {
+        self.discard_pending();
+        if let Some(l) = self.loaded.take() {
+            self.recycle_loaded(l);
+        }
     }
 }
 
