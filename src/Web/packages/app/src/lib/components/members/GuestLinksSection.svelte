@@ -7,6 +7,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -423,6 +424,7 @@
           >
             <Card.Root>
               <Card.Content class="flex items-center gap-4 py-3">
+                <UserAvatar name={link.label || "Untitled"} />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-sm truncate">
