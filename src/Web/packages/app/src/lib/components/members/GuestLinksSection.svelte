@@ -11,10 +11,9 @@
   import { EmptyState } from "$lib/components/shared";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
-  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
+  import CopyButton from "$lib/components/members/CopyButton.svelte";
+  import { Artwork } from "@nocturne/watercolour";
   import Clock from "@lucide/svelte/icons/clock";
-  import Copy from "@lucide/svelte/icons/copy";
-  import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Link from "@lucide/svelte/icons/link";
@@ -57,7 +56,6 @@
   let createError = $state<string | null>(null);
   let createdCode = $state<string | null>(null);
   let createdUrl = $state<string | null>(null);
-  const copy = createCopyFeedback();
 
   function statusLabel(status: GuestLinkStatus | undefined): string {
     switch (status) {
@@ -170,10 +168,6 @@
     }
   }
 
-  async function copyText(text: string, type: "code" | "url") {
-    await copy.copy(text, type);
-  }
-
   /**
    * Run a guest-link mutation and pull the updated list. The commands' declared
    * GetGuestLinks invalidation refreshes `getGuestLinks(undefined)`, which is a
@@ -280,6 +274,13 @@
         <Card.Content>
           {#if createdCode || createdUrl}
             <div class="space-y-4">
+              <Artwork
+                artwork="key"
+                palette="ember"
+                motion="auto"
+                autoplay="once"
+                class="mx-auto size-32"
+              />
               <SuccessBanner>Guest link created successfully.</SuccessBanner>
 
               {#if createdCode}
@@ -291,18 +292,11 @@
                     >
                       {createdCode}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="icon"
+                    <CopyButton
+                      text={createdCode}
+                      label="Copy code"
                       class="shrink-0 self-center"
-                      onclick={() => copyText(createdCode!, "code")}
-                    >
-                      {#if copy.isCopied("code")}
-                        <Check class="h-4 w-4 text-success" />
-                      {:else}
-                        <Copy class="h-4 w-4" />
-                      {/if}
-                    </Button>
+                    />
                   </div>
                 </div>
               {/if}
@@ -317,18 +311,11 @@
                       readonly
                       class="font-mono"
                     />
-                    <Button
-                      variant="outline"
-                      size="icon"
+                    <CopyButton
+                      text={createdUrl}
+                      label="Copy link"
                       class="shrink-0"
-                      onclick={() => copyText(createdUrl!, "url")}
-                    >
-                      {#if copy.isCopied("url")}
-                        <Check class="h-4 w-4 text-success" />
-                      {:else}
-                        <Copy class="h-4 w-4" />
-                      {/if}
-                    </Button>
+                    />
                   </div>
                 </div>
               {/if}

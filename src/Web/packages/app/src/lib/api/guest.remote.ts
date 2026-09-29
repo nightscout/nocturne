@@ -3,6 +3,7 @@ import { invalid, redirect } from "@sveltejs/kit";
 import { z } from "zod";
 import { RATE_LIMITED_ERROR } from "$lib/forms/submit-error";
 import { safeReturnUrl } from "$lib/server/return-url";
+import { withWelcome } from "$lib/components/members/welcome";
 import {
   classifyActivationError,
   type ActivationFailure,
@@ -44,6 +45,6 @@ export const activateGuestCode = form(
 
     if (failure) invalid(issue.code(FAILURE_MESSAGES[failure]));
 
-    redirect(303, safeReturnUrl(data.returnUrl));
+    redirect(303, withWelcome(safeReturnUrl(data.returnUrl)));
   }
 );
