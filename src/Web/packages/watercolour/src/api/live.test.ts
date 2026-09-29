@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EngineHost } from './engine-host';
-import { type PlayerOptions, createArtworkPlayer } from './playback';
+import { MAX_UNPRESENTED_RENDERS, type PlayerOptions, createArtworkPlayer } from './playback';
 import { Scheduler } from './scheduler';
 import type { WasmModule } from './wasm-types';
 
@@ -53,9 +53,9 @@ function fakeInstance(total: number) {
   return instance;
 }
 
-function fakeHost(instance: ReturnType<typeof fakeInstance>): EngineHost {
+function fakeHost(...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   const engine = {
-    createInstance: () => instance,
+    createInstance: () => instances.shift(),
     onDeviceLost() {},
     stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }),
     maxLiveInstances: 4,
@@ -73,6 +73,7 @@ const gpu = async () => ({ webgpu: true, adapter: true, reducedMotion: false, of
 function manualScheduler() {
   const frames = new Map<number, (time: number) => void>();
   let clock = 0;
+  let vsync = 0;
   let handle = 0;
   const scheduler = new Scheduler({
     requestAnimationFrame: (cb) => {
@@ -84,14 +85,23 @@ function manualScheduler() {
   });
   return {
     scheduler,
+    /** Main-thread time an engine call takes. */
+    spend(ms: number) {
+      clock += ms;
+    },
+    /** The next display frame, 16 ms after the last; later if the work before it ran past that. */
     frame() {
-      clock += 16;
+      vsync += 16;
+      clock = Math.max(clock, vsync);
       const pending = Array.from(frames.values());
       frames.clear();
       for (const cb of pending) cb(clock);
     },
   };
 }
+
+/** Lets a player's startup run to where it waits on the scheduler. */
+const idle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const canvas = () => ({ width: 64, height: 64, clientWidth: 64, clientHeight: 64 }) as unknown as HTMLCanvasElement;
 
@@ -119,21 +129,24 @@ afterEach(() => {
 
 describe('a live still under reduced motion', () => {
   it('runs its timeline a budgeted slice per frame, then presents once and lets go', async () => {
-    // Each engine call takes 4 ms of the 6 ms budget, so a frame runs two.
-    let now = 0;
-    vi.spyOn(performance, 'now').mockImplementation(() => (now += 4));
+    // A tick costs 1 ms of a 10 ms budget; each call is sized from the last.
     const instance = fakeInstance(40);
-    const { scheduler, frame } = manualScheduler();
+    const { scheduler, frame, spend } = manualScheduler();
+    const advance = instance.advanceTicks;
+    instance.advanceTicks = (ticks) => (spend(ticks), advance(ticks));
     const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
-    await still.ready;
     let finished = 0;
     still.on('finished', () => (finished += 1));
-
-    expect(still.state.mode).toBe('live');
+    await idle();
     expect(instance.calls).toEqual([]);
 
+    // It is let in by a frame and starts on what that frame has left.
     frame();
-    expect(instance.calls).toEqual(['ticks:4', 'ticks:4']);
+    await still.ready;
+    expect(still.state.mode).toBe('live');
+    expect(instance.calls).toEqual(['ticks:4', 'ticks:6']);
+    frame();
+    expect(instance.calls.slice(2)).toEqual(['ticks:8', 'ticks:2']);
 
     for (let i = 0; i < 10 && !instance.calls.includes('dispose'); i++) frame();
 
@@ -143,6 +156,94 @@ describe('a live still under reduced motion', () => {
     expect(finished).toBe(1);
     expect(still.state).toMatchObject({ finished: true, released: true });
     expect((window as Window).__watercolourLive).toEqual([]);
+  });
+
+  it('hands its turn to the next still inside the frame it finished in', async () => {
+    const first = fakeInstance(8);
+    const second = fakeInstance(8);
+    const { scheduler, frame, spend } = manualScheduler();
+    for (const instance of [first, second]) {
+      const advance = instance.advanceTicks;
+      instance.advanceTicks = (ticks) => (spend(1), advance(ticks));
+    }
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await idle();
+
+    frame();
+    await b.ready;
+
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
+    expect(b.state).toMatchObject({ finished: true, released: true });
+  });
+
+  it('leaves the next still for the next frame when the budget is spent', async () => {
+    const first = fakeInstance(4);
+    const second = fakeInstance(8);
+    const { scheduler, frame, spend } = manualScheduler();
+    const advance = first.advanceTicks;
+    first.advanceTicks = (ticks) => (spend(10), advance(ticks));
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    const a = player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await idle();
+
+    frame();
+    await a.ready;
+    await idle();
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(second.calls).toEqual([]);
+
+    frame();
+    await b.ready;
+    expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
+  });
+
+  it('holds on to its instance until the finished frame is actually presented', async () => {
+    const instance = fakeInstance(4);
+    const { scheduler, frame } = manualScheduler();
+    const render = instance.render;
+    let swapchain = false;
+    instance.render = () => (swapchain ? render() : false);
+    const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
+    await idle();
+
+    frame();
+    await still.ready;
+    expect(instance.calls).toEqual(['ticks:4']);
+    expect(still.state.released).toBe(false);
+
+    swapchain = true;
+    frame();
+    expect(instance.calls.slice(1)).toEqual(['render@4', 'dispose']);
+    expect(still.state.released).toBe(true);
+  });
+
+  it('lets go of a canvas that never gets a texture, so the stills behind it run', async () => {
+    const first = fakeInstance(4);
+    const second = fakeInstance(4);
+    first.render = () => (first.calls.push('render:none'), false);
+    const { scheduler, frame } = manualScheduler();
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    const a = player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await idle();
+
+    for (let i = 0; i < MAX_UNPRESENTED_RENDERS + 4 && !b.state.released; i++) {
+      frame();
+      await idle();
+    }
+
+    expect(first.calls.filter((c) => c === 'render:none')).toHaveLength(MAX_UNPRESENTED_RENDERS);
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(a.state.released).toBe(true);
+    expect(second.calls.slice(-2)).toEqual(['render@4', 'dispose']);
+    expect(b.state.released).toBe(true);
   });
 
   it('still finishes in one call when the host asks for it outright', async () => {

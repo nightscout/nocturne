@@ -208,18 +208,16 @@ export function invertEasing(easing: (t: number) => number, y: number): number {
 }
 
 /**
- * Main-thread time a sliced finish may take out of one frame. A still's whole
- * run in one task is tens of milliseconds on a desktop GPU and several times
- * that on a phone; spread over frames it never holds the thread longer.
+ * Presents in a row that may find no swapchain texture before a frame counts
+ * as drawn anyway. A still holds the one still turn until it presents, so a
+ * canvas that never gets a texture would otherwise block every still after it.
  */
-export const SETTLE_FRAME_BUDGET_MS = 6;
-
-/** Ticks per engine call while settling; small, so the budget is kept to within a few ticks. */
-const SETTLE_SLICE_TICKS = 4;
+export const MAX_UNPRESENTED_RENDERS = 30;
 
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
+  private unpresented = 0;
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
@@ -231,6 +229,7 @@ class LiveBackend implements Backend {
   private readonly easing?: (t: number) => number;
   private readonly resolvedDetail: DetailLevel;
   private readonly durationMs: number;
+  private readonly scheduler: Scheduler;
   /** Wall-clock progress holder while `easing` drives `advanceToProgress`. */
   private elapsedMs = 0;
 
@@ -319,6 +318,7 @@ class LiveBackend implements Backend {
     this.easing = easing;
     this.resolvedDetail = resolvedDetail;
     this.durationMs = durationMs;
+    this.scheduler = scheduler;
     this.handle = scheduler.register({
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
@@ -409,6 +409,7 @@ class LiveBackend implements Backend {
       this.instance.pause();
       this.settling = true;
       this.handle.setActive(true);
+      this.settle(false);
       return;
     }
     this.settling = false;
@@ -468,7 +469,7 @@ class LiveBackend implements Backend {
 
   private tick(dt: number): void {
     if (this.settling) {
-      this.settle();
+      this.settle(true);
       return;
     }
     if (!this.isPlaying || this.disposed || this.released) return;
@@ -480,30 +481,57 @@ class LiveBackend implements Backend {
     }
   }
 
-  /** The steps `finishImmediately` takes, a few at a time within {@link SETTLE_FRAME_BUDGET_MS}. */
-  private settle(): void {
-    const started = performance.now();
+  /**
+   * The steps `finishImmediately` takes, in calls `Scheduler.slices` sizes to
+   * what the scheduler's frame budget has left. A still's whole run in one
+   * task is tens of milliseconds on a desktop GPU and several times that on a
+   * phone.
+   *
+   * Outside the frame callback it runs only on budget the frame left over: a
+   * still handed its turn there starts at once rather than a frame later. In
+   * the frame it runs at least one call, so work that took the whole budget
+   * before it does not stall it.
+   */
+  private settle(inFrame: boolean): void {
+    const { scheduler } = this;
+    const gpuTickMs = this.host.stats()?.gpuTickMs;
     let done = false;
     this.step(() => {
-      do done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
-      while (!done && performance.now() - started < SETTLE_FRAME_BUDGET_MS);
-      return true;
+      let ran = false;
+      while (!done) {
+        const remaining = scheduler.budgetRemainingMs();
+        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs) : 0;
+        if (ticks === 0) {
+          if (ran || !inFrame) break;
+          ticks = 1;
+        }
+        const started = scheduler.now();
+        done = this.instance.advanceTicks!(ticks);
+        scheduler.slices.record(ticks, scheduler.now() - started);
+        ran = true;
+      }
+      return ran;
     });
     if (!done || !this.settling) return;
     this.settling = false;
     this.callbacks.onFinished();
+    if (!inFrame) this.render();
   }
 
   private render(): void {
     if (this.disposed || this.released || this.settling) return;
     if (this.dirty) {
-      this.dirty = false;
+      let presented: boolean | void;
       try {
-        this.instance.render();
+        presented = this.instance.render();
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
       }
+      // No swapchain texture this frame; a still released now would keep a blank canvas.
+      if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
+      this.unpresented = 0;
+      this.dirty = false;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -1162,15 +1190,17 @@ class Player implements ArtworkPlayer {
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
-        return this.host.stillTurn().then((endTurn) => {
-          if (this.disposed) {
-            endTurn();
-            throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
-          }
-          return create(endTurn).catch((error: unknown) => {
+        // Creating the instance is a long task's worth on a slow phone; it waits for a frame
+        // with budget rather than joining the task that finished the still before it.
+        return this.host.stillTurn().then(async (endTurn) => {
+          try {
+            await this.scheduler.whenBudget();
+            if (this.disposed) throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+            return await create(endTurn);
+          } catch (error) {
             endTurn();
             throw error;
-          });
+          }
         });
       }
       case 'baked':

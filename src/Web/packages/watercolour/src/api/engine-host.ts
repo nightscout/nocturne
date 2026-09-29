@@ -129,7 +129,13 @@ export class EngineHost {
    * Stills mount in bursts - a member list's avatars - and each resolves its
    * mode before any has taken a slot, so unqueued they claim the whole cap at
    * once and starve whatever else mounts beside them. One at a time they hold
-   * a single slot for a few milliseconds each.
+   * a single slot.
+   *
+   * A still settles over several frames and holds its turn until it releases.
+   * That costs no throughput: the stills share one frame budget, and a turn
+   * handed over inside a frame starts on what that frame has left (see
+   * `LiveBackend.settle`), so running them side by side would only split the
+   * same budget between them.
    */
   stillTurn(): Promise<() => void> {
     let end!: () => void;
