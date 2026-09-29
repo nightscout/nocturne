@@ -291,9 +291,15 @@ async function releaseWakeLock(): Promise<void> {
 }
 
 /**
- * Show a system notification
+ * Show a system notification. `silent` leaves the sound to the caller, as an
+ * alarm with its own sound does.
  */
-function showNotification(title: string, body: string, tag: string = 'alarm'): Notification | null {
+export function showNotification(
+  title: string,
+  body: string,
+  tag: string = 'alarm',
+  silent: boolean = true,
+): Notification | null {
   if (!canShowNotifications()) {
     return null;
   }
@@ -309,7 +315,7 @@ function showNotification(title: string, body: string, tag: string = 'alarm'): N
     icon: '/images/logo-128.png', // Nocturne app icon
     badge: '/images/logo-64.png',
     requireInteraction: true, // Notification stays until user interacts
-    silent: true, // We're handling our own sound
+    silent,
   });
 
   activeNotification.onclick = () => {

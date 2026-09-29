@@ -44,6 +44,7 @@ import {
 } from "$lib/constants/entry-categories";
 import { toast } from "svelte-sonner";
 import * as alarmState from "$lib/stores/alarm-state.svelte";
+import { showNotification } from "$lib/audio/alarm-sounds";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
 import {
@@ -741,9 +742,12 @@ export class RealtimeStore {
 
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
-    // Add if not already present
-    if (!this.inAppNotifications.some((n) => n.id === notification.id)) {
-      this.inAppNotifications = [notification, ...this.inAppNotifications];
+    if (this.inAppNotifications.some((n) => n.id === notification.id)) return;
+    this.inAppNotifications = [notification, ...this.inAppNotifications];
+    // An alert on this person's own account is the "this device" delivery the setup hub's
+    // Alerts item offers, so the browser raises it as a system notification.
+    if (notification.type === "alert.firing") {
+      showNotification(notification.title ?? "", notification.subtitle ?? "", `alert-${notification.id}`, false);
     }
   }
 
