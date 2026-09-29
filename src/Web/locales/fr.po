@@ -26101,6 +26101,10 @@ msgid "Synchronized back through {0}."
 msgstr "Synchronisé jusqu’au {0}."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}. <0/>"
+msgstr "Synchronisé jusqu’au {0}. <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "The requested history is complete."
 msgstr "L’historique demandé est terminé."
 

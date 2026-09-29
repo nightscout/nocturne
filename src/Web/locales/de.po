@@ -26098,6 +26098,10 @@ msgid "Synchronized back through {0}."
 msgstr "Synchronisiert zurück bis {0}."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}. <0/>"
+msgstr "Synchronisiert zurück bis {0}. <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "The requested history is complete."
 msgstr "Der angeforderte Zeitraum ist vollständig."
 
