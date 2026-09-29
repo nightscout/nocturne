@@ -73,6 +73,7 @@ const gpu = async () => ({ webgpu: true, adapter: true, reducedMotion: false, of
 function manualScheduler() {
   const frames = new Map<number, (time: number) => void>();
   let clock = 0;
+  let vsync = 0;
   let handle = 0;
   const scheduler = new Scheduler({
     requestAnimationFrame: (cb) => {
@@ -88,8 +89,10 @@ function manualScheduler() {
     spend(ms: number) {
       clock += ms;
     },
+    /** The next display frame, 16 ms after the last; later if the work before it ran past that. */
     frame() {
-      clock += 16;
+      vsync += 16;
+      clock = Math.max(clock, vsync);
       const pending = Array.from(frames.values());
       frames.clear();
       for (const cb of pending) cb(clock);
@@ -123,11 +126,11 @@ afterEach(() => {
 
 describe('a live still under reduced motion', () => {
   it('runs its timeline a budgeted slice per frame, then presents once and lets go', async () => {
-    // Each engine call takes 4 ms of a 60 Hz frame's 10 ms budget, so a frame runs three.
+    // A tick costs 1 ms of a 10 ms budget (9.6 ms once 16 ms frames are measured); each call is sized from the last.
     const instance = fakeInstance(40);
     const { scheduler, frame, spend } = manualScheduler();
     const advance = instance.advanceTicks;
-    instance.advanceTicks = (ticks) => (spend(4), advance(ticks));
+    instance.advanceTicks = (ticks) => (spend(ticks), advance(ticks));
     const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
     await still.ready;
     let finished = 0;
@@ -137,7 +140,9 @@ describe('a live still under reduced motion', () => {
     expect(instance.calls).toEqual([]);
 
     frame();
-    expect(instance.calls).toEqual(['ticks:4', 'ticks:4', 'ticks:4']);
+    expect(instance.calls).toEqual(['ticks:4', 'ticks:6']);
+    frame();
+    expect(instance.calls.slice(2)).toEqual(['ticks:9']);
 
     for (let i = 0; i < 10 && !instance.calls.includes('dispose'); i++) frame();
 
@@ -167,16 +172,16 @@ describe('a live still under reduced motion', () => {
     await b.ready;
 
     expect(first.calls.at(-1)).toBe('dispose');
-    expect(second.calls).toEqual(['ticks:4', 'ticks:4', 'render@8', 'dispose']);
+    expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
     expect(b.state).toMatchObject({ finished: true, released: true });
   });
 
   it('leaves the next still for the next frame when the budget is spent', async () => {
-    const first = fakeInstance(8);
+    const first = fakeInstance(4);
     const second = fakeInstance(8);
     const { scheduler, frame, spend } = manualScheduler();
     const advance = first.advanceTicks;
-    first.advanceTicks = (ticks) => (spend(6), advance(ticks));
+    first.advanceTicks = (ticks) => (spend(10), advance(ticks));
     const engineHost = fakeHost(first, second);
     const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
     const a = player(first, scheduler, options);
@@ -189,7 +194,7 @@ describe('a live still under reduced motion', () => {
     expect(second.calls).toEqual([]);
 
     frame();
-    expect(second.calls).toEqual(['ticks:4', 'ticks:4', 'render@8', 'dispose']);
+    expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
   });
 
   it('still finishes in one call when the host asks for it outright', async () => {

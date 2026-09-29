@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAME_SECONDS, Scheduler, type SchedulerEnv, frameBudgetMs } from './scheduler';
+import { FIRST_SLICE_TICKS, MAX_FRAME_SECONDS, MAX_SLICE_TICKS, Scheduler, type SchedulerEnv, SlicePacer, frameBudgetMs, sliceTicks } from './scheduler';
 
 type Listener = () => void;
 
@@ -224,5 +224,47 @@ describe('frameBudgetMs', () => {
     expect(frameBudgetMs(1000 / 120)).toBe(5);
     expect(frameBudgetMs(1000 / 240)).toBe(4);
     expect(frameBudgetMs(1000 / 30)).toBe(12);
+  });
+});
+
+describe('sliceTicks', () => {
+  it('fits one call to the budget at the measured rate', () => {
+    expect(sliceTicks(10, undefined)).toBe(FIRST_SLICE_TICKS);
+    expect(sliceTicks(10, 0.5)).toBe(20);
+    expect(sliceTicks(10, 0.001)).toBe(MAX_SLICE_TICKS);
+    expect(sliceTicks(10, 0)).toBe(MAX_SLICE_TICKS);
+    expect(sliceTicks(10, 25)).toBe(0);
+    expect(sliceTicks(0, 1)).toBe(0);
+  });
+});
+
+describe('SlicePacer', () => {
+  it('shrinks the next call after a slow one', () => {
+    const pacer = new SlicePacer();
+    expect(pacer.next(10, 10)).toBe(4);
+    pacer.record(4, 20);
+    expect(pacer.next(10, 10)).toBe(2);
+    pacer.record(2, 100);
+    expect(pacer.next(10, 10)).toBe(0);
+  });
+
+  it('grows the next call after a fast one, smoothing a single outlier', () => {
+    const pacer = new SlicePacer();
+    pacer.record(4, 2);
+    expect(pacer.next(10, 10)).toBe(20);
+    pacer.record(20, 40);
+    // 0.5 ms a tick eased 30% toward 2 ms: 0.95 ms.
+    expect(pacer.next(10, 10)).toBe(10);
+  });
+
+  it('caps the ticks a frame queues by their GPU time', () => {
+    const pacer = new SlicePacer();
+    pacer.record(4, 0.4);
+    expect(pacer.next(10, 10, 0.5)).toBe(16);
+    pacer.record(16, 1.6);
+    expect(pacer.next(8, 10, 0.5)).toBe(0);
+    pacer.beginFrame();
+    expect(pacer.next(10, 10, 0.5)).toBe(20);
+    expect(pacer.next(10, 10, 50)).toBe(1);
   });
 });

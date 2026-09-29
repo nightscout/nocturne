@@ -207,9 +207,6 @@ export function invertEasing(easing: (t: number) => number, y: number): number {
   return (lo + hi) / 2;
 }
 
-/** Ticks per engine call while settling; small, so the budget is kept to within a few ticks. */
-const SETTLE_SLICE_TICKS = 4;
-
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
@@ -477,8 +474,8 @@ class LiveBackend implements Backend {
   }
 
   /**
-   * The steps `finishImmediately` takes, a few at a time within what the
-   * scheduler's frame budget has left. A still's whole run in one task is tens
+   * The steps `finishImmediately` takes, in calls `Scheduler.slices` sizes to
+   * what the scheduler's frame budget has left. A still's whole run in one task is tens
    * of milliseconds on a desktop GPU and several times that on a phone.
    *
    * Outside the frame callback it runs only on budget the frame left over: a
@@ -487,11 +484,22 @@ class LiveBackend implements Backend {
    * before it does not stall it.
    */
   private settle(inFrame: boolean): void {
+    const { scheduler } = this;
+    const gpuTickMs = this.host.stats()?.gpuTickMs;
     let done = false;
     this.step(() => {
       let ran = false;
-      while (!done && (this.scheduler.budgetRemainingMs() > 0 || (inFrame && !ran))) {
-        done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
+      while (!done) {
+        const remaining = scheduler.budgetRemainingMs();
+        if (remaining <= 0 && (ran || !inFrame)) break;
+        let ticks = scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs);
+        if (ticks === 0) {
+          if (ran || !inFrame) break;
+          ticks = 1;
+        }
+        const started = scheduler.now();
+        done = this.instance.advanceTicks!(ticks);
+        scheduler.slices.record(ticks, scheduler.now() - started);
         ran = true;
       }
       return ran;

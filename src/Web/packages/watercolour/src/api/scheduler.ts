@@ -52,6 +52,49 @@ export function frameBudgetMs(frameIntervalMs: number): number {
   return Math.min(12, Math.max(4, frameIntervalMs * 0.6));
 }
 
+/** Ticks the first sliced call runs, before any call has been timed. */
+export const FIRST_SLICE_TICKS = 4;
+/** Most ticks one sliced call runs, which bounds what a stale estimate can cost. */
+export const MAX_SLICE_TICKS = 64;
+
+/** Ticks one call can run in `budgetMs` at `msPerTick`; 0 when not even one fits. */
+export function sliceTicks(budgetMs: number, msPerTick: number | undefined): number {
+  if (msPerTick === undefined) return FIRST_SLICE_TICKS;
+  return Math.max(0, Math.min(MAX_SLICE_TICKS, Math.floor(budgetMs / Math.max(msPerTick, 1e-3))));
+}
+
+/**
+ * Sizes sliced engine calls from how long recent ones took. One call cannot
+ * be split, so a fixed tick count that is cheap on a desktop can hold a slow
+ * phone's thread for a hundred milliseconds. The estimate is shared: stills
+ * run the same engine at similar sizes, so each starts from the last one's rate.
+ *
+ * A call returns once its GPU work is queued, not done, so the ticks a frame
+ * queues are also capped by the GPU time they were last measured at.
+ */
+export class SlicePacer {
+  private msPerTick: number | undefined;
+  private frameTicks = 0;
+
+  beginFrame(): void {
+    this.frameTicks = 0;
+  }
+
+  /** Ticks for the next call: 0 once the budget left fits none, or this frame's GPU share is queued. */
+  next(remainingMs: number, budgetMs: number, gpuTickMs?: number | null): number {
+    const ticks = sliceTicks(Math.max(0, remainingMs), this.msPerTick);
+    if (!gpuTickMs || gpuTickMs <= 0) return ticks;
+    const gpuLeft = Math.floor(budgetMs / gpuTickMs) - this.frameTicks;
+    return Math.min(ticks, this.frameTicks === 0 ? Math.max(1, gpuLeft) : Math.max(0, gpuLeft));
+  }
+
+  record(ticks: number, ms: number): void {
+    this.frameTicks += ticks;
+    const sample = ms / ticks;
+    this.msPerTick = this.msPerTick === undefined ? sample : this.msPerTick + 0.3 * (sample - this.msPerTick);
+  }
+}
+
 interface Entry {
   target: SchedulerTarget;
   active: boolean;
@@ -72,6 +115,7 @@ function browserEnv(): SchedulerEnv {
 export class Scheduler {
   private readonly env: SchedulerEnv;
   private readonly entries = new Set<Entry>();
+  readonly slices = new SlicePacer();
   private frameHandle: number | undefined;
   /** `setActive(true)` from inside a tick must not queue a second loop; the frame reschedules itself. */
   private inFrame = false;
@@ -213,6 +257,7 @@ export class Scheduler {
     this.lastTime = time;
     const started = this.env.now();
     this.frameStartedAt = started;
+    this.slices.beginFrame();
     this.inFrame = true;
     try {
       for (const entry of Array.from(this.entries)) {
