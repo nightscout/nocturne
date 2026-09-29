@@ -297,7 +297,6 @@ fn coverage_upto(chain: Option<&Chain<'_>>, target: StampTarget<'_>, t_end: f32)
     coverage
 }
 
-/// A cell rectangle, `x0..x1` by `y0..y1`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Rect {
     x0: u32,
@@ -462,7 +461,7 @@ impl<'a> Chain<'a> {
         let s = self.segs[si];
         if s.t0 >= t_end {
             Walk::Skip
-        } else if t_end >= 1.0 || s.t1 <= t_end {
+        } else if t_end >= 1.0 || t_end.is_nan() || s.t1 <= t_end {
             Walk::Full
         } else {
             let frac = (t_end - s.t0) / (s.t1 - s.t0).max(1e-12);
@@ -630,7 +629,7 @@ impl<'a> Chain<'a> {
             }
             lo
         };
-        if abx * abx + aby * aby < 1e-12 || abx == 0.0 {
+        if abx * abx + aby * aby < DEGENERATE_LEN2 || abx == 0.0 {
             if settled(x0) { (x0, x1) } else { (x0, x0) }
         } else if abx > 0.0 {
             (x0, first(&|x| !settled(x)))
@@ -694,8 +693,7 @@ impl<'a> Chain<'a> {
     /// wherever it walks both unclipped, or reaches a cell behind the start's
     /// clip point. Where every segment does, the difference is exactly zero,
     /// so only the cells where some segment differs are walked, the shared
-    /// segments once for both terms: a span costs about its own length
-    /// rather than the path's prefix.
+    /// segments once for both terms.
     fn span_coverage(&self, start: f32, end: f32) -> Vec<f32> {
         let full = Rect::new(0, self.width, 0, self.height);
         let mut out = vec![0.0f32; full.width() * full.height()];
@@ -763,12 +761,16 @@ fn falloff(x: f32, inner: f32) -> f32 {
     }
 }
 
+/// Below this squared length a segment is a point: `distance_to_segment` pins
+/// its parameter to 0, and `Chain::behind` must agree or its rows stop matching.
+const DEGENERATE_LEN2: f32 = 1e-12;
+
 /// Distance from `(px, py)` to segment `ab` and the parameter along it.
 fn distance_to_segment(px: f32, py: f32, a: Point, b: Point) -> (f32, f32) {
     let abx = b.x - a.x;
     let aby = b.y - a.y;
     let len2 = abx * abx + aby * aby;
-    let t = if len2 < 1e-12 {
+    let t = if len2 < DEGENERATE_LEN2 {
         0.0
     } else {
         (((px - a.x) * abx + (py - a.y) * aby) / len2).clamp(0.0, 1.0)
@@ -1292,8 +1294,8 @@ mod tests {
         assert!(s.coverage.iter().all(|&c| c == 0.0));
     }
 
-    /// The span walk before it skipped the shared prefix: two full
-    /// `cov_upto` walks, subtracted.
+    /// Two full `cov_upto` walks, subtracted: the definition `span_coverage`
+    /// must match bit for bit.
     #[allow(clippy::too_many_arguments)]
     fn reference_upto(
         path: &[Point],
