@@ -430,7 +430,7 @@ describe("Google Health connector page", () => {
       status({
         configured: true,
         connected: true,
-        backfillSyncedThrough: new Date("2025-06-01T00:00:00Z"),
+        backfillSyncedThrough: "2025-06-01T00:00:00.000Z",
         backfillComplete: false,
       })
     );
