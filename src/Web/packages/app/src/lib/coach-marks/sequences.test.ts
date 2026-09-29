@@ -1,86 +1,140 @@
-import { describe, it, expect } from "vitest";
-import { sequences } from "./sequences";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { ONBOARDING_CORE_GATE, sequences } from "./sequences";
 
-describe("Coach mark sequences", () => {
-	it("defines the onboarding sequence", () => {
-		expect(sequences.onboarding).toBeDefined();
-		expect(sequences.onboarding.priority).toBe(100);
-		expect(sequences.onboarding.steps.length).toBeGreaterThan(0);
-	});
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
-	it("onboarding steps cover key setup areas", () => {
-		const steps = sequences.onboarding.steps;
-		expect(steps).toContain("onboarding.patient-details");
-		expect(steps).toContain("onboarding.devices");
-		expect(steps).toContain("onboarding.alerts");
-		expect(steps).toContain("onboarding.sharing");
-	});
+/** Keys attached with no sequence around them. Each one is eligible on every page load. */
+const STANDALONE_KEYS: readonly string[] = [];
 
-	it("dashboard-discovery requires onboarding as prerequisite", () => {
-		expect(sequences["dashboard-discovery"].prerequisite).toBe("onboarding");
-	});
+interface Attachment {
+  file: string;
+  /** The literal `key:` of each option object in the call; null for one that is not a literal. */
+  keys: (string | null)[];
+}
 
-	it("feature-intro requires onboarding as prerequisite", () => {
-		expect(sequences["feature-intro"].prerequisite).toBe("onboarding");
-	});
+/** The text of the call starting at `open` (a `(`), skipping over parens inside string literals. */
+function callBody(source: string, open: number): string {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < source.length; i++) {
+    const c = source[i];
+    if (quote) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+    } else if (c === '"' || c === "'" || c === "`") quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")" && --depth === 0) return source.slice(open + 1, i);
+  }
+  throw new Error("unterminated coachmark( call");
+}
 
-	it("power-user requires onboarding as prerequisite", () => {
-		expect(sequences["power-user"].prerequisite).toBe("onboarding");
-	});
+export function findAttachments(source: string, file: string): Attachment[] {
+  const attachments: Attachment[] = [];
+  for (const match of source.matchAll(/\bcoachmark\(/g)) {
+    const body = callBody(source, match.index + match[0].length - 1);
+    const keys = [...body.matchAll(/\bkey:\s*(?:"([^"]*)"|'([^']*)'|(\S))/g)].map(
+      ([, double, single]) => double ?? single ?? null,
+    );
+    attachments.push({ file, keys: keys.length > 0 ? keys : [null] });
+  }
+  return attachments;
+}
 
-	it("quick-tour has highest priority", () => {
-		expect(sequences["quick-tour"].priority).toBe(200);
-	});
+function scanApp(): Attachment[] {
+  return readdirSync(SRC, { recursive: true, encoding: "utf8" })
+    .filter((path) => /\.(svelte|ts)$/.test(path) && !/\.test\.|[\\/]generated[\\/]/.test(path))
+    .flatMap((path) => findAttachments(readFileSync(join(SRC, path), "utf8"), relative(SRC, join(SRC, path))));
+}
 
-	it("quick-tour has no prerequisite", () => {
-		expect(sequences["quick-tour"]).not.toHaveProperty("prerequisite");
-	});
+const attachments = scanApp();
+const attachedKeys = new Set(attachments.flatMap((a) => a.keys));
+const sequenceSteps = Object.values(sequences).flatMap((seq) => seq.steps);
 
-	it("setup-alerts completes onboarding.alerts key", () => {
-		expect(sequences["setup-alerts"].completesKeys).toContain("onboarding.alerts");
-	});
+describe("coach mark keys and their attachment sites", () => {
+  it("finds the attachment sites it guards", () => {
+    expect(attachments.length).toBeGreaterThan(0);
+    expect(sequenceSteps.length).toBeGreaterThan(0);
+  });
 
-	it("setup-reports completes dashboard-discovery.reports key", () => {
-		expect(sequences["setup-reports"].completesKeys).toContain("dashboard-discovery.reports");
-	});
+  it("reads a key from every attachment", () => {
+    const unreadable = attachments.filter((a) => a.keys.includes(null)).map((a) => a.file);
+    expect(unreadable, "coachmark() calls without a string-literal key").toEqual([]);
+  });
 
-	it("setup-connectors completes power-user.connectors key", () => {
-		expect(sequences["setup-connectors"].completesKeys).toContain("power-user.connectors");
-	});
+  it("attaches every step of every sequence somewhere in the app", () => {
+    const unattached = sequenceSteps.filter((key) => !attachedKeys.has(key));
+    expect(unattached).toEqual([]);
+  });
 
-	it("setup-invite completes onboarding.sharing key", () => {
-		expect(sequences["setup-invite"].completesKeys).toContain("onboarding.sharing");
-	});
+  it("attaches no key outside a sequence unless it is declared standalone", () => {
+    const steps = new Set(sequenceSteps);
+    const stray = [...attachedKeys].filter(
+      (key) => key !== null && !steps.has(key) && !STANDALONE_KEYS.includes(key),
+    );
+    expect(stray).toEqual([]);
+  });
 
-	it("all sequences have positive priority", () => {
-		for (const [name, seq] of Object.entries(sequences)) {
-			expect(seq.priority, `${name} should have positive priority`).toBeGreaterThan(0);
-		}
-	});
+  it("attaches the whole quick tour on the dashboard, the one page it runs on", () => {
+    const dashboard = new Set(
+      attachments
+        .filter((a) => a.file === join("routes", "(authenticated)", "+page.svelte"))
+        .flatMap((a) => a.keys),
+    );
+    expect(sequences["quick-tour"].steps.filter((key) => !dashboard.has(key))).toEqual([]);
+  });
+});
 
-	it("all sequences have at least one step", () => {
-		for (const [name, seq] of Object.entries(sequences)) {
-			expect(seq.steps.length, `${name} should have at least one step`).toBeGreaterThan(0);
-		}
-	});
+describe("the attachment scan", () => {
+  it("reports a sequence key nothing attaches", () => {
+    const found = findAttachments(
+      `<div {@attach coachmark({ key: "tour.one", title: "a (b" })}></div>
+       <div {@attach coachmark([{ key: 'tour.two', title: "x" }, { key: "tour.three" }])}></div>`,
+      "fixture.svelte",
+    ).flatMap((a) => a.keys);
 
-	it("step keys follow dotted naming convention", () => {
-		for (const [name, seq] of Object.entries(sequences)) {
-			for (const step of seq.steps) {
-				expect(step, `step in ${name} should be dotted`).toMatch(/^[\w-]+\.[\w-]+$/);
-			}
-		}
-	});
+    expect(found).toEqual(["tour.one", "tour.two", "tour.three"]);
+    expect(["tour.one", "tour.four"].filter((key) => !found.includes(key))).toEqual(["tour.four"]);
+  });
 
-	it("priority ordering is logical (onboarding > dashboard > feature > power-user)", () => {
-		expect(sequences.onboarding.priority).toBeGreaterThan(
-			sequences["dashboard-discovery"].priority,
-		);
-		expect(sequences["dashboard-discovery"].priority).toBeGreaterThan(
-			sequences["feature-intro"].priority,
-		);
-		expect(sequences["feature-intro"].priority).toBeGreaterThan(
-			sequences["power-user"].priority,
-		);
-	});
+  it("flags a key it cannot read", () => {
+    const found = findAttachments(`coachmark({ key: someKey, title: "t" })`, "fixture.ts");
+    expect(found[0].keys).toEqual([null]);
+  });
+});
+
+describe("coach mark sequences", () => {
+  it("retires the first-run setup sequences the setup hub replaced", () => {
+    for (const retired of [
+      "onboarding",
+      "setup-invite",
+      "setup-alerts",
+      "setup-reports",
+      "setup-connectors",
+    ]) {
+      expect(sequences, retired).not.toHaveProperty(retired);
+    }
+  });
+
+  it("gates every discovery tour on the onboarding core, not on a sequence", () => {
+    for (const [name, seq] of Object.entries(sequences)) {
+      if (name === "quick-tour") continue;
+      expect(seq.prerequisite, name).toBe(ONBOARDING_CORE_GATE);
+    }
+    expect(sequences).not.toHaveProperty(ONBOARDING_CORE_GATE);
+  });
+
+  it("lets the quick tour run straight after the core", () => {
+    expect(sequences["quick-tour"]).not.toHaveProperty("prerequisite");
+  });
+
+  it("names steps within their own sequence", () => {
+    for (const [name, seq] of Object.entries(sequences)) {
+      for (const step of seq.steps) {
+        expect(step).toMatch(new RegExp(`^${name}\\.[\\w-]+$`));
+      }
+    }
+  });
 });

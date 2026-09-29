@@ -32,7 +32,6 @@
   } from "$api/generated/profiles.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import { coachmark } from "@nocturne/coach";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
   import TargetRangeCard from "$lib/components/schedule/TargetRangeCard.svelte";
 
@@ -197,8 +196,7 @@
   {@const carbRatio = selectedProfileName ? getCarbRatioForProfile(data, selectedProfileName) : null}
   {@const sensitivity = selectedProfileName ? getSensitivityForProfile(data, selectedProfileName) : null}
   {@const targetRange = selectedProfileName ? getTargetRangeForProfile(data, selectedProfileName) : null}
-  {@const profileConfigured = (data?.basalSchedules ?? []).length > 0}
-  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6" {@attach coachmark({ key: "onboarding.therapy-profile", title: "Automatically synced", description: "Your basal rates, carb ratios, and sensitivity factors are imported from your uploader (AAPS, Loop, xDrip+). No manual entry needed.", completedWhen: () => profileConfigured })}>
+  <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
     <!-- Header -->
     <div class="flex flex-wrap items-start justify-between gap-2">
       <div class="flex items-center gap-3">

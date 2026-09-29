@@ -22,7 +22,7 @@ function renderFinish(
     importResult,
     voice,
     onContinue: noop,
-    onNavigateWithCoach: noop,
+    onTakeTour: noop,
   });
 }
 
@@ -35,7 +35,6 @@ describe("Finish", () => {
       .toBeVisible();
     await expect.element(page.getByText(/CGM is connected/)).not.toBeInTheDocument();
     await expect.element(page.getByText(/target range/)).not.toBeInTheDocument();
-    await expect.element(page.getByText("Connect a data source")).toBeVisible();
   });
 
   it("says a saved connector has yet to sync", async () => {
@@ -95,12 +94,30 @@ describe("Finish", () => {
       importResult: null,
       voice: patientVoice(null),
       onContinue,
-      onNavigateWithCoach: noop,
+      onTakeTour: noop,
     });
 
     await page.getByRole("button", { name: "Continue setting up" }).click();
 
     expect(onContinue).toHaveBeenCalledOnce();
+  });
+
+  it("offers the quick tour and none of the retired setup guides", async () => {
+    const onTakeTour = vi.fn();
+    render(Finish, {
+      path: "migration",
+      source: null,
+      importResult: "complete",
+      voice: patientVoice(null),
+      onContinue: noop,
+      onTakeTour,
+    });
+
+    await page.getByRole("button", { name: "Take the 60-second tour" }).click();
+
+    expect(onTakeTour).toHaveBeenCalledOnce();
+    await expect.element(page.getByText("A few next things")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Your first report")).not.toBeInTheDocument();
   });
 
   it("offers no public share link", async () => {

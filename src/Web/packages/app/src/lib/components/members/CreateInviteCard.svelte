@@ -13,7 +13,6 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
-  import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
@@ -148,11 +147,7 @@
           </p>
         </div>
 
-        <div class="flex gap-2" {@attach coachmark({
-          key: "setup-invite.copy-link",
-          title: "Send the link",
-          description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
-        })}>
+        <div class="flex gap-2">
           <Input
             type="text"
             value={createdInviteUrl}
@@ -197,11 +192,7 @@
         </div>
 
         <!-- Role multi-select -->
-        <div class="space-y-2" {@attach coachmark({
-          key: "setup-invite.roles",
-          title: "Choose their access",
-          description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
-        })}>
+        <div class="space-y-2">
           <Label>Roles</Label>
           <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}
