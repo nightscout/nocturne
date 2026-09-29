@@ -134,7 +134,7 @@
                             </Button>
                         {/if}
                     </div>
-                    <HeaderMotif class="hidden self-end @3xl:block"/>
+                    <HeaderMotif class="hidden self-end lg:block"/>
                 </div>
 
                 <div class="flex items-center gap-2">
