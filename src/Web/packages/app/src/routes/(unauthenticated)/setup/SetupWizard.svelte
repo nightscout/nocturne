@@ -269,7 +269,7 @@
 
     navigating = true;
     try {
-      await startImportOnce();
+      await startImport();
       goToStep(importIndex);
     } finally {
       navigating = false;
@@ -333,9 +333,16 @@
     await goto(resolve("/"), { invalidateAll: true });
   }
 
-  // The core ends on the setup hub, which /setup serves once onboarding is complete.
+  // The core ends on the setup hub, which /setup serves only once the server has recorded the
+  // core as complete; until then /setup is still the core, so a failure stays here to be retried.
+  let continueFailed = $state(false);
   async function handleContinueToHub() {
-    await markSetupComplete();
+    continueFailed = false;
+    const result = await markSetupComplete().catch(() => undefined);
+    if (!result?.completed) {
+      continueFailed = true;
+      return;
+    }
     await goto(resolve("/setup"), { invalidateAll: true });
   }
 
@@ -378,8 +385,10 @@
   // progress view, so it runs in the onboarding tenant's own request context.
   const MIGRATION_CONNECTOR = "nightscout";
 
-  async function startImportOnce() {
-    if (path !== "migration" || !nightscoutConnected || migrationJobId) return;
+  // startOrResumeMigration reuses a job still in flight or one this session completed, so a
+  // failed job is replaced rather than watched again.
+  async function startImport() {
+    if (path !== "migration" || !nightscoutConnected) return;
     try {
       migrationStartError = undefined;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
@@ -516,6 +525,7 @@
             <NightscoutConnect
               onComplete={() => {
                 nightscoutConnected = true;
+                migrationStartError = undefined;
                 handleNext();
               }}
             />
@@ -622,6 +632,7 @@
               {importResult}
               {voice}
               onContinue={handleContinueToHub}
+              {continueFailed}
               onNavigateWithCoach={handleNavigateWithCoach}
             />
           {/if}

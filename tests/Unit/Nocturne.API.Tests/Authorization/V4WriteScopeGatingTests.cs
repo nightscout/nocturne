@@ -404,6 +404,10 @@ public class V4WriteScopeGatingTests
             // The actions accept either member-personal capability scope; device.notify is the one
             // asserted, and neither is satisfiable by a read-only credential.
             ["ClientDevicesController"] = Scope.DeviceNotify,
+
+            // setup_hub_items and the tenant's strip dismissal are the owner's onboarding state, not
+            // a data category; the hub is owner-only like the onboarding answers it follows on from.
+            ["SetupHubController"] = Scope.FullAccess,
         };
 
     /// <summary>

@@ -103,6 +103,24 @@ describe("Finish", () => {
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
+  it("says setup could not be finished and offers to try again", async () => {
+    const onContinue = vi.fn();
+    render(Finish, {
+      path: "fresh",
+      source: null,
+      importResult: null,
+      voice: patientVoice(null),
+      onContinue,
+      continueFailed: true,
+      onNavigateWithCoach: noop,
+    });
+
+    await expect.element(page.getByTestId("finish-failed")).toHaveTextContent(/couldn't finish setup/);
+    await page.getByRole("button", { name: "Try again" }).click();
+
+    expect(onContinue).toHaveBeenCalledOnce();
+  });
+
   it("offers no public share link", async () => {
     renderFinish("fresh");
 

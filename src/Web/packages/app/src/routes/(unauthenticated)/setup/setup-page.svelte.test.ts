@@ -6,13 +6,18 @@ import { remoteQuery } from "$lib/test-stubs/remote-resource";
 // Only the wizard's own navigation is under test; every step body it can reach is stood down.
 const { markSetupComplete } = vi.hoisted(() => ({ markSetupComplete: vi.fn() }));
 vi.mock("./setup.remote", () => ({ markSetupComplete }));
+vi.mock("$app/navigation", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  goto: vi.fn(() => Promise.resolve()),
+}));
 vi.mock("@nocturne/watercolour", async () => ({
   Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
   hostSurface: () => "light",
   watchSurface: () => () => {},
 }));
+const migrationHistory = vi.hoisted(() => ({ jobs: [] as { id: string; state: MigrationJobState }[] }));
 vi.mock("$api/generated/migrations.generated.remote", () => ({
-  getHistory: () => remoteQuery(() => []),
+  getHistory: () => remoteQuery(() => migrationHistory.jobs),
   startFromConnector: vi.fn(),
 }));
 const relationship = vi.hoisted(() => ({
@@ -67,6 +72,8 @@ vi.mock("$lib/components/connectors/ConnectorSetup.svelte", emptyStub);
 vi.mock("$lib/components/connectors/UploaderSetupView.svelte", emptyStub);
 
 import { startFromConnector } from "$api/generated/migrations.generated.remote";
+import { goto } from "$app/navigation";
+import { MigrationJobState } from "$api";
 import SetupPage from "./SetupWizard.svelte";
 
 const freshCard = () =>
@@ -93,6 +100,7 @@ async function skipToDataSource() {
 }
 
 beforeEach(() => {
+  migrationHistory.jobs = [];
   relationship.stored = {};
   relationship.set.mockReset().mockImplementation(async (answer) => answer);
   unitsAnswer.stored = { glucoseUnits: "mmol" };
@@ -359,6 +367,28 @@ describe("setup import step", () => {
     await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
   });
 
+  // /setup is still the core until the server records it complete, so going there would land
+  // back on this step with nothing to show for the click.
+  it("stays on the finish to retry when completing setup is not recorded", async () => {
+    vi.mocked(goto).mockClear();
+    markSetupComplete.mockReset().mockResolvedValueOnce({ success: true, completed: false });
+    await reachImport();
+    await page.getByRole("button", { name: "Stub: settle" }).click();
+    await continueButton().click();
+    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
+
+    await continueButton().click();
+
+    await expect.poll(() => markSetupComplete.mock.calls.length).toBe(1);
+    expect(goto).not.toHaveBeenCalled();
+    await expect.element(page.getByText("Step 06 / 06")).toBeVisible();
+
+    markSetupComplete.mockResolvedValueOnce({ success: true, completed: true });
+    await continueButton().click();
+
+    await expect.poll(() => vi.mocked(goto).mock.calls.at(-1)?.[0]).toBe("/setup");
+  });
+
   it("words a refused start as a connection that isn't saved", async () => {
     vi.mocked(startFromConnector).mockRejectedValueOnce({
       status: 400,
@@ -543,19 +573,39 @@ describe("setup units step", () => {
     await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
   });
 
-  it("resumes the same import after going back", async () => {
+  it("does not restart an import still running after going back", async () => {
     vi.mocked(startFromConnector).mockClear();
     vi.mocked(startFromConnector).mockResolvedValueOnce({ id: "job-1" });
     await reachUnitsFromNightscout();
 
     await continueButton().click();
     await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    migrationHistory.jobs = [{ id: "job-1", state: MigrationJobState.Running }];
     await page.getByRole("button", { name: "Stub: settle" }).click();
     await page.getByRole("button", { name: "Back" }).click();
     await continueButton().click();
 
     await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
     expect(startFromConnector).toHaveBeenCalledOnce();
+  });
+
+  it("starts a new import after a failed one is reconnected", async () => {
+    vi.mocked(startFromConnector).mockClear();
+    vi.mocked(startFromConnector).mockResolvedValueOnce({ id: "job-failed" });
+    await reachUnitsFromNightscout();
+
+    await continueButton().click();
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    migrationHistory.jobs = [{ id: "job-failed", state: MigrationJobState.Failed }];
+    await page.getByRole("button", { name: "Stub: settle" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+    await page.getByRole("button", { name: "Stub: complete" }).click();
+    await expect.element(unitsHeading()).toBeVisible();
+    await continueButton().click();
+
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    expect(startFromConnector).toHaveBeenCalledTimes(2);
   });
 
   it("starts the import and shows it when the sidebar jumps past it", async () => {

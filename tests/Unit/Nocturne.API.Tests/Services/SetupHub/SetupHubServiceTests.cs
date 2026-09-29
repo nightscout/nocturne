@@ -183,6 +183,39 @@ public class SetupHubServiceTests
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Open);
     }
 
+    private MemberInviteEntity Invite(DateTime expiresAt, DateTime? revokedAt = null, int useCount = 0) => new()
+    {
+        Id = Guid.CreateVersion7(), TenantId = TenantId, CreatedBySubjectId = Guid.CreateVersion7(),
+        TokenHash = Guid.NewGuid().ToString("N"), ExpiresAt = expiresAt, RevokedAt = revokedAt, UseCount = useCount,
+    };
+
+    private async Task<SetupHubItemState> SharingStateAsync() =>
+        (await Service.GetAsync(CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.Sharing).State;
+
+    [Fact]
+    public async Task Sharing_IgnoresARevokedOrLapsedInviteNobodyUsed()
+    {
+        _db.MemberInvites.AddRange(
+            Invite(DateTime.UtcNow.AddDays(7), revokedAt: DateTime.UtcNow),
+            Invite(DateTime.UtcNow.AddDays(-1)));
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Open);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Sharing_IsDoneByAnOpenInvite_OrOneSomeoneAccepted(bool accepted)
+    {
+        _db.MemberInvites.Add(accepted
+            ? Invite(DateTime.UtcNow.AddDays(-1), useCount: 1)
+            : Invite(DateTime.UtcNow.AddDays(7)));
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Done);
+    }
+
     [Fact]
     public async Task Alerts_IsDone_OnceATestOfAnEnabledRuleIsConfirmedReceived()
     {

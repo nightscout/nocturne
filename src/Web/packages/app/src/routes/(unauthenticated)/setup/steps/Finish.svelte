@@ -7,6 +7,8 @@
 
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import * as Alert from "$lib/components/ui/alert";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { Item } from "$lib/components/ui/item";
   import Users from "@lucide/svelte/icons/users";
   import Bell from "@lucide/svelte/icons/bell";
@@ -21,6 +23,7 @@
     importResult,
     voice,
     onContinue,
+    continueFailed = false,
     onNavigateWithCoach,
   }: {
     path: "fresh" | "migration";
@@ -29,6 +32,8 @@
     voice: PatientVoice;
     /** Leaves the core for the setup hub. */
     onContinue: () => void;
+    /** The last continue could not record the finished setup, so it is offered again. */
+    continueFailed?: boolean;
     onNavigateWithCoach: (url: string) => void;
   } = $props();
 
@@ -132,9 +137,24 @@
       {/if}
     </p>
 
+    {#if continueFailed}
+      <Alert.Root variant="warning" data-testid="finish-failed">
+        <TriangleAlert />
+        <Alert.Title>We couldn't finish setup</Alert.Title>
+        <Alert.Description>
+          Nocturne didn't record that setup is finished, so it can't move on yet. Check your
+          connection and try again.
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
+
     <div class="flex flex-row flex-wrap items-center gap-3">
       <Button onclick={onContinue}>
-        Continue setting up
+        {#if continueFailed}
+          Try again
+        {:else}
+          Continue setting up
+        {/if}
         <ArrowRight class="ml-2 h-4 w-4" />
       </Button>
       <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>

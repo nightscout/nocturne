@@ -15,6 +15,7 @@ describe("hubPaintingStop", () => {
     [3, 3],
     [4, 2],
     [5, 1],
+    [6, 0.5],
   ])("paints one stage per resolved item: %i open shows stop %i", (open, stop) => {
     expect(hubPaintingStop(open)).toBe(stop);
   });
@@ -24,8 +25,13 @@ describe("hubPaintingStop", () => {
     expect(hubPaintingStop(1)).toBeLessThan(HUB_PAINTING_STOPS);
   });
 
-  it("never shows blank paper, even with every item open", () => {
-    expect(hubPaintingStop(6)).toBe(1);
+  it("shows half the first stage rather than blank paper with every item open", () => {
+    expect(hubPaintingStop(6)).toBe(0.5);
+  });
+
+  it("advances a whole stop for the first item a six-item hub resolves", () => {
+    expect(hubPaintingStop(5) - hubPaintingStop(6)).toBeGreaterThan(0);
+    expect(Number.isInteger(hubPaintingStop(5))).toBe(true);
   });
 });
 
