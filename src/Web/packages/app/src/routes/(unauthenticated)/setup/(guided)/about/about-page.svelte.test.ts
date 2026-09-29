@@ -66,7 +66,7 @@ import AboutPage from "./+page.svelte";
 beforeEach(() => {
   vi.clearAllMocks();
   state.record = { id: "rec-1", preferredName: "Sam", timezone: "Pacific/Auckland" };
-  state.relationship = { relationship: "Parent", patientName: "Sam" };
+  state.relationship = { relationship: "Caregiver", patientName: "Sam" };
 });
 
 describe("About the patient", () => {
