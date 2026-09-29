@@ -516,7 +516,7 @@
           </div>
         </div>
 
-        <div class="flex-1 px-4 py-3 md:px-5 max-lg:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-32">
+        <div class="flex-1 px-4 py-3 md:px-5 max-lg:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-44">
           <StepArtwork
             art={activeStep?.art ?? "welcome"}
             progress={artProgress}

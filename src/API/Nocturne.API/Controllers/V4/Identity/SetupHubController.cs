@@ -78,6 +78,7 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
     [RemoteCommand(Invalidates = ["GetSetupHub"])]
     [ProducesResponseType(typeof(SetupHubStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SetupHubStatus>> ConfirmAboutSetupItem(CancellationToken ct)
     {
@@ -87,6 +88,10 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         try
         {
             return Ok(await setupHub.ConfirmAboutAsync(ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
         }
         catch (InvalidOperationException ex)
         {
