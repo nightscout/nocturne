@@ -746,6 +746,7 @@ public static class ServiceRegistrationExtensions
         services.AddScoped<ISetupHubItem, AlertsItem>();
         services.AddScoped<ISetupHubItem, DevicesItem>();
         services.AddScoped<ISetupHubItem, TherapyItem>();
+        services.AddScoped<ITherapySetupService, TherapySetupService>();
         services.AddScoped<ISetupHubItem, SharingItem>();
         services.AddScoped<ISetupHubItem, AboutItem>();
 
