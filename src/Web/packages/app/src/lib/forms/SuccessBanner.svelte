@@ -11,9 +11,16 @@
    */
   let {
     icon,
+    wash = true,
     class: className,
     children,
-  }: { icon?: IconArtworkSource; class?: string; children: Snippet } = $props();
+  }: {
+    icon?: IconArtworkSource;
+    /** False for a removal, revocation or denial: those are not celebrated with paint. */
+    wash?: boolean;
+    class?: string;
+    children: Snippet;
+  } = $props();
 </script>
 
 <div
@@ -24,7 +31,9 @@
     className,
   )}
 >
-  <ConfirmationBackground palette="moss" motion="auto" fit="fill" class="-z-10" />
+  {#if wash}
+    <ConfirmationBackground palette="moss" motion="auto" fit="fill" class="-z-10" />
+  {/if}
   {#if icon}
     <Artwork {icon} motion="auto" autoplay="once" class="-my-2 size-10 shrink-0" />
   {/if}

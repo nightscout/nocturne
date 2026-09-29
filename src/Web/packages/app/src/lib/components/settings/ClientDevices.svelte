@@ -47,7 +47,7 @@
   let isSaving = $state<string | null>(null);
   let isRevoking = $state<string | null>(null);
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   function clearMessages() {
     setTimeout(() => {
@@ -72,7 +72,7 @@
     errorMessage = null;
     try {
       await rename({ id, request: { label: editLabel.trim() || null } });
-      successMessage = "Device renamed.";
+      successMessage = { text: "Device renamed.", wash: true };
       editingId = null;
       clearMessages();
     } catch (err) {
@@ -88,7 +88,7 @@
     errorMessage = null;
     try {
       await revoke(id);
-      successMessage = "Device revoked.";
+      successMessage = { text: "Device revoked.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to revoke device. Please try again.");
@@ -118,7 +118,7 @@
   {/if}
 
   {#if successMessage}
-    <SuccessBanner>{successMessage}</SuccessBanner>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   {#if devices.length === 0}

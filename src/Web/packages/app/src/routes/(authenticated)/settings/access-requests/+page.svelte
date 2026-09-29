@@ -58,7 +58,7 @@
   // Loading states
   let approvingId = $state<string | null>(null);
   let denyingId = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
   let errorMessage = $state<string | null>(null);
 
   function formatRelativeTime(dateInput: string | Date): string {
@@ -95,7 +95,7 @@
           limitTo24Hours: limitTo24Hours[subjectId] ?? false,
         },
       });
-      successMessage = "Access request approved.";
+      successMessage = { text: "Access request approved.", wash: true };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
@@ -110,7 +110,7 @@
     errorMessage = null;
     try {
       await deny(subjectId);
-      successMessage = "Access request denied.";
+      successMessage = { text: "Access request denied.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
@@ -148,7 +148,7 @@
   {/if}
 
   {#if successMessage}
-    <SuccessBanner>{successMessage}</SuccessBanner>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   {#if requests.length === 0}

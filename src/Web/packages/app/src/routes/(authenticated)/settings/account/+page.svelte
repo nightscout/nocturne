@@ -66,7 +66,7 @@
   const recoveryQuery = getRecoveryStatus();
 
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<{ text: string; icon?: IconArtworkSource } | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean; icon?: IconArtworkSource } | null>(null);
 
   // Passkey add flow
   let isRegistering = $state(false);
@@ -120,10 +120,10 @@
   $effect(() => {
     const linked = page.url.searchParams.get("linked");
     if (linked === "success") {
-      successMessage = { text: "Account linked successfully." };
+      successMessage = { text: "Account linked successfully.", wash: true };
       clearMessages();
     } else if (linked === "already") {
-      successMessage = { text: "This account was already linked." };
+      successMessage = { text: "This account was already linked.", wash: false };
       clearMessages();
     }
     if (linked && typeof window !== "undefined") {
@@ -187,7 +187,7 @@
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
-      successMessage = { text: "Passkey added successfully.", icon: fingerprintArtwork };
+      successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
@@ -218,7 +218,7 @@
 
     try {
       await removeCredential(removeTarget.id);
-      successMessage = { text: "Passkey removed." };
+      successMessage = { text: "Passkey removed.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
@@ -304,7 +304,7 @@
       totpQrDataUrl = null;
       totpVerifyCode = "";
       totpLabel = "";
-      successMessage = { text: "Authenticator app added successfully." };
+      successMessage = { text: "Authenticator app added successfully.", wash: true };
       clearMessages();
     } catch (err) {
       totpSetupError = describeTotpSetupError(err);
@@ -326,7 +326,7 @@
 
     try {
       await totpRemoveCredential(totpRemoveTarget.id);
-      successMessage = { text: "Authenticator removed." };
+      successMessage = { text: "Authenticator removed.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
@@ -336,8 +336,12 @@
     }
   }
 
+  let clearTimer: ReturnType<typeof setTimeout> | undefined;
+
+  // Restarted per message, so an earlier message's timer cannot cut a newer one short.
   function clearMessages() {
-    setTimeout(() => {
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => {
       successMessage = null;
       errorMessage = null;
     }, 3000);
@@ -375,7 +379,7 @@
     {/if}
 
     {#if successMessage}
-      <SuccessBanner icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
+      <SuccessBanner wash={successMessage.wash} icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
     {/if}
 
     {#if isSecurityLoading}
