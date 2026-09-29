@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Card from "$lib/components/ui/card";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
@@ -58,7 +59,7 @@
   // Loading states
   let approvingId = $state<string | null>(null);
   let denyingId = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
   let errorMessage = $state<string | null>(null);
 
   function formatRelativeTime(dateInput: string | Date): string {
@@ -95,7 +96,7 @@
           limitTo24Hours: limitTo24Hours[subjectId] ?? false,
         },
       });
-      successMessage = "Access request approved.";
+      successMessage = { text: "Access request approved.", wash: true };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
@@ -110,7 +111,7 @@
     errorMessage = null;
     try {
       await deny(subjectId);
-      successMessage = "Access request denied.";
+      successMessage = { text: "Access request denied.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
@@ -148,16 +149,7 @@
   {/if}
 
   {#if successMessage}
-    <div
-      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-    >
-      <CheckCircle2
-        class="mt-0.5 h-4 w-4 shrink-0 text-success"
-      />
-      <p class="text-sm text-success">
-        {successMessage}
-      </p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   {#if requests.length === 0}

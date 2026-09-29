@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { formatDayTime } from "$lib/utils/formatting";
   import { page } from "$app/state";
   import { satisfiesScope } from "$lib/authorization/scopes";
@@ -279,16 +280,7 @@
         <Card.Content>
           {#if createdCode || createdUrl}
             <div class="space-y-4">
-              <div
-                class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-              >
-                <Check
-                  class="mt-0.5 h-4 w-4 shrink-0 text-success"
-                />
-                <p class="text-sm text-success">
-                  Guest link created successfully.
-                </p>
-              </div>
+              <SuccessBanner>Guest link created successfully.</SuccessBanner>
 
               {#if createdCode}
                 <div class="space-y-1.5">

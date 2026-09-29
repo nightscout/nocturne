@@ -5,7 +5,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { toast } from "svelte-sonner";
-  import { useToastSubmission } from "$lib/forms";
+  import { toastSaved, useToastSubmission } from "$lib/forms";
   import { getFoodEntry, acceptMatch, dismissMatch } from "$api/generated/mealMatchings.generated.remote";
   import type {
     InAppNotificationDto,
@@ -149,7 +149,7 @@
         carbs,
         timeOffsetMinutes,
       });
-      toast.success("Meal match accepted");
+      toastSaved("Meal match accepted");
       onComplete?.();
       resetAndClose();
     });

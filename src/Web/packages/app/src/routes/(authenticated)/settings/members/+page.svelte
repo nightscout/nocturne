@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { page } from "$app/state";
   import { satisfiesScope } from "$lib/authorization/scopes";
   import { describeSubmitError } from "$lib/forms";
@@ -7,7 +8,6 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import Users from "@lucide/svelte/icons/users";
-  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Link from "@lucide/svelte/icons/link";
   import ShieldAlert from "@lucide/svelte/icons/shield-alert";
@@ -100,7 +100,7 @@
   // --- UI state ---
   let showCreateInvite = $state(false);
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   // --- Member edit state ---
   let expandedMember = $state<string | null>(null);
@@ -139,7 +139,7 @@
           request: { directPermissions: permissions },
         }),
       ]);
-      successMessage = "Member updated successfully.";
+      successMessage = { text: "Member updated successfully.", wash: true };
       expandedMember = null;
       clearMessages();
     } catch (e) {
@@ -157,7 +157,7 @@
       // The approved requester becomes a member; GetMembers is on another
       // controller so ApproveRequest's Invalidates cannot name it.
       await membersQuery.refresh();
-      successMessage = "Membership request approved.";
+      successMessage = { text: "Membership request approved.", wash: true };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to approve request. Please try again.");
@@ -169,7 +169,7 @@
     errorMessage = null;
     try {
       await denyRequest(requestId);
-      successMessage = "Membership request denied.";
+      successMessage = { text: "Membership request denied.", wash: false };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to deny request. Please try again.");
@@ -225,10 +225,7 @@
   {/if}
 
   {#if successMessage}
-    <div class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3">
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-      <p class="text-sm text-success">{successMessage}</p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   <!-- Public access -->
@@ -293,7 +290,7 @@
                 errorMessage = null;
                 try {
                   await removeMember(member.subjectId);
-                  successMessage = "Member removed successfully.";
+                  successMessage = { text: "Member removed successfully.", wash: false };
                   clearMessages();
                 } catch (e) {
                   errorMessage = describeSubmitError(e, "Failed to remove member. Please try again.");
@@ -311,10 +308,6 @@
         {#if showCreateInvite}
           <CreateInviteCard
             roles={allRoles}
-            onCreated={() => {
-              successMessage = "Invite link created. Share it with the new member.";
-              clearMessages();
-            }}
             onCancel={() => (showCreateInvite = false)}
           />
         {:else}
@@ -346,7 +339,7 @@
             errorMessage = null;
             try {
               await revokeInvite(inviteId);
-              successMessage = "Invite revoked successfully.";
+              successMessage = { text: "Invite revoked successfully.", wash: false };
               clearMessages();
             } catch (err) {
               errorMessage = describeSubmitError(

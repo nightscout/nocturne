@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Dialog from "$lib/components/ui/dialog";
@@ -19,7 +20,6 @@
   import Users from "@lucide/svelte/icons/users";
   import Lock from "@lucide/svelte/icons/lock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import Check from "@lucide/svelte/icons/check";
   import {
     getRoles,
     createRole,
@@ -67,7 +67,7 @@
 
   // Messages
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   function clearMessages() {
     setTimeout(() => {
@@ -111,7 +111,7 @@
         description: createDescription.trim() || undefined,
         permissions: createPermissions,
       });
-      successMessage = "Role created successfully.";
+      successMessage = { text: "Role created successfully.", wash: true };
       resetCreateForm();
       clearMessages();
     } catch (err) {
@@ -134,7 +134,7 @@
           permissions: editPermissions,
         },
       });
-      successMessage = "Role updated successfully.";
+      successMessage = { text: "Role updated successfully.", wash: true };
       isEditOpen = false;
       clearMessages();
     } catch (err) {
@@ -150,7 +150,7 @@
     errorMessage = null;
     try {
       await deleteRole(deleteId);
-      successMessage = "Role deleted successfully.";
+      successMessage = { text: "Role deleted successfully.", wash: false };
       isDeleteOpen = false;
       clearMessages();
     } catch (err) {
@@ -182,10 +182,7 @@
   {/if}
 
   {#if successMessage}
-    <div class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3">
-      <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-      <p class="text-sm text-success">{successMessage}</p>
-    </div>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   <div class="space-y-2.5">

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -8,7 +9,6 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
-  import Check from "@lucide/svelte/icons/check";
   import { EmptyState } from "$lib/components/shared";
   import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { formatMediumDateTime } from "$lib/utils/formatting";
@@ -148,14 +148,7 @@
     {/if}
 
     {#if successMessage}
-      <div
-        class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
-      >
-        <Check class="mt-0.5 h-4 w-4 shrink-0 text-success" />
-        <p class="text-sm text-success">
-          {successMessage}
-        </p>
-      </div>
+      <SuccessBanner wash={false}>{successMessage}</SuccessBanner>
     {/if}
 
     {#if isLoading}

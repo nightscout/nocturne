@@ -27,9 +27,7 @@
   id="clinical-form"
   class="@container"
   bind:this={formEl}
-  {...clinical.guard.enhance(async () => {
-    await clinical.weight.save();
-  })}
+  {...clinical.guard.enhance(() => clinical.weight.save())}
 >
   <!-- Hidden fields for read-only record data -->
   {#if clinical.record?.id}
