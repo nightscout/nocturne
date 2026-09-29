@@ -79,4 +79,11 @@ describe("packing list page", () => {
     await expect.element(page.getByText("1/2 packed")).toBeVisible();
     await expect.poll(() => header.element().querySelectorAll("canvas").length).toBe(1);
   });
+
+  it("pins the header so the suitcase stays in view while ticking", async () => {
+    render(PackingListPage, {});
+
+    const header = page.getByTestId("packing-header").element();
+    expect(getComputedStyle(header).position).toBe("sticky");
+  });
 });

@@ -141,47 +141,62 @@
   }
 </script>
 
-<div class="container mx-auto p-6 max-w-2xl space-y-5">
-  <!-- Header -->
-  <div class="flex flex-col gap-3">
-    <Button variant="ghost" size="sm" href="/tools/packing" class="-ml-2 w-fit">
-      <ArrowLeft class="h-4 w-4" />
-      Back to calculator
-    </Button>
-    <div class="relative -mx-3 flex items-center gap-4 rounded-xl px-3 py-2" data-testid="packing-header">
-      {#if complete}
-        <ConfirmationBackground />
-      {/if}
-      {#if showSuitcase}
-        <!-- Reduced motion keeps the baked strip: each seek draws one still frame, so progress shows without animating. -->
-        <Artwork
-          artwork="suitcase"
-          palette="dusk"
-          autoplay="never"
-          mode={prefersReducedMotion.current ? "baked" : "auto"}
-          onready={followPacking}
-          onstatechange={followMode}
-          class="size-20 shrink-0"
-        />
-      {/if}
-      <div class="relative flex flex-1 items-center justify-between gap-2">
-        <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
-          {#if !showSuitcase}
-            <ListChecks class="h-6 w-6" data-testid="packing-icon" />
-          {/if}
-          Packing List
-        </h1>
-        {#if complete}
-          <span class="text-sm font-medium">All packed</span>
-        {:else if totalCount > 0}
-          <span class="text-sm text-muted-foreground tabular-nums">
-            {totalChecked}/{totalCount} packed
-          </span>
-        {/if}
-      </div>
-    </div>
-  </div>
+<div class="container mx-auto p-6 max-w-2xl lg:max-w-4xl space-y-5">
+  <Button variant="ghost" size="sm" href="/tools/packing" class="-ml-2 w-fit">
+    <ArrowLeft class="h-4 w-4" />
+    Back to calculator
+  </Button>
 
+  <!-- The suitcase paints as items are ticked, so the header stays in view for the whole list: a
+       full-bleed bar on small screens, a side column with a larger suitcase from lg. -->
+  <div class="space-y-5 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-8 lg:space-y-0">
+    <div
+      class="sticky top-0 z-10 -mx-6 space-y-2 border-b bg-background/95 px-6 py-2 backdrop-blur lg:top-6 lg:mx-0 lg:space-y-3 lg:border-b-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
+      data-testid="packing-header"
+    >
+      <div class="relative -mx-3 flex items-center gap-4 rounded-xl px-3 py-1 lg:mx-0 lg:flex-col lg:items-start lg:gap-3 lg:p-0">
+        {#if complete}
+          <ConfirmationBackground />
+        {/if}
+        {#if showSuitcase}
+          <!-- Reduced motion keeps the baked strip: each seek draws one still frame, so progress shows without animating. -->
+          <Artwork
+            artwork="suitcase"
+            palette="dusk"
+            autoplay="never"
+            mode={prefersReducedMotion.current ? "baked" : "auto"}
+            onready={followPacking}
+            onstatechange={followMode}
+            class="size-16 shrink-0 lg:size-48 lg:self-center"
+          />
+        {/if}
+        <div class="relative flex flex-1 items-center justify-between gap-2 lg:w-full lg:flex-none">
+          <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+            {#if !showSuitcase}
+              <ListChecks class="h-6 w-6" data-testid="packing-icon" />
+            {/if}
+            Packing List
+          </h1>
+          {#if complete}
+            <span class="text-sm font-medium">All packed</span>
+          {:else if totalCount > 0}
+            <span class="text-sm text-muted-foreground tabular-nums">
+              {totalChecked}/{totalCount} packed
+            </span>
+          {/if}
+        </div>
+      </div>
+      {#if totalCount > 0}
+        <div class="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            class="h-full w-(--progress) rounded-full bg-primary transition-all duration-300"
+            style:--progress="{(totalChecked / totalCount) * 100}%"
+          ></div>
+        </div>
+      {/if}
+    </div>
+
+    <div class="space-y-5">
   {#if items.length === 0}
     <EmptyState art="suitcase" variant="card" title="No items in this list">
       {#snippet action()}
@@ -189,16 +204,6 @@
       {/snippet}
     </EmptyState>
   {:else}
-    <!-- Progress bar -->
-    {#if totalCount > 0}
-      <div class="h-2 rounded-full bg-muted overflow-hidden">
-        <div
-          class="h-full w-(--progress) rounded-full bg-primary transition-all duration-300"
-          style:--progress="{(totalChecked / totalCount) * 100}%"
-        ></div>
-      </div>
-    {/if}
-
     <!-- Grouped checklist -->
     {#each Object.entries(grouped) as [category, categoryItems] (category)}
       <Card>
@@ -346,4 +351,6 @@
       </Button>
     {/if}
   {/if}
+    </div>
+  </div>
 </div>
