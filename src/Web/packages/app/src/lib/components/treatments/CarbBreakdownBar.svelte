@@ -179,7 +179,7 @@
         </div>
       {/key}
       {#if paintBox}
-        <!-- A grey wash multiplied over the attributed bars: the paint takes each bar's own hue, and
+        <!-- A grey wash soft-lit over the attributed bars: the paint takes each bar's own hue, and
              the crop keeps only the wash's interior so no dried edge floats inside the bar. -->
         <div
           aria-hidden="true"
@@ -190,7 +190,7 @@
           style:width="{paintBox.width}px"
           style:height="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.7)_contrast(1.25)]">
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light [filter:grayscale(1)_brightness(1.5)_contrast(1.6)]">
             <Artwork
               artwork="wash"
               palette="slate"

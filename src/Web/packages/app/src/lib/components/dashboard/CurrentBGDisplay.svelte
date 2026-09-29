@@ -132,11 +132,12 @@
 </script>
 
 {#snippet rangeWash()}
-  <!-- A grey wash multiplied over the range fill, so the tile keeps the range token's own hue and
-       gains the paper's variation. Cropped to the wash's interior so its dried edge falls outside
-       the tile. Keyed on the variant: a new range repaints, a new reading in the same range does not. -->
+  <!-- A grey wash soft-lit over the range fill: the tile keeps the range token's own hue in every
+       theme, and soft-light (not multiply) lightens as much as it darkens, so the tile keeps the
+       token's tone and the digits their contrast. Cropped to the wash's interior so its dried edge
+       falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
   {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.8)_contrast(1.25)]">
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light [filter:grayscale(1)_brightness(1.5)_contrast(1.6)]">
       <Artwork
         artwork="wash"
         palette="slate"
