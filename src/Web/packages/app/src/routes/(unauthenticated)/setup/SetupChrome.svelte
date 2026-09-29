@@ -70,7 +70,7 @@
       target="_blank"
       rel="noopener noreferrer"
     >
-      <AppLogo class="max-h-12" icon="github" />
+      <AppLogo class="size-4" icon="github" />
       Source
     </a>
   </footer>
