@@ -247,6 +247,7 @@
                         {#snippet idle()}
                           <Utensils class="h-4 w-4 text-muted-foreground" />
                         {/snippet}
+                        <span class="sr-only">Meal match accepted</span>
                       </PaintedMoment>
                       <div>
                         <div class="font-medium">{getMealLabel(meal)}</div>

@@ -302,8 +302,13 @@
   /** The meal a match was last accepted into; its row paints the link. */
   let matched = $state({ carbIntakeId: "", count: 0 });
 
+  /**
+   * Under the unattributed filter the accepted meal leaves the list on the
+   * next refresh, taking its row's moment with it, so the toast confirms instead.
+   */
   function markMatched(carbIntakeId: string) {
-    matched = { carbIntakeId, count: matched.count + 1 };
+    if (filterMode === "unattributed") toastSaved("Meal match accepted");
+    else matched = { carbIntakeId, count: matched.count + 1 };
   }
 
   async function handleQuickAccept(match: SuggestedMealMatch) {
