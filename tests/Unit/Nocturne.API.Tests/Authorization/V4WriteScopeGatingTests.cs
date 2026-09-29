@@ -339,6 +339,7 @@ public class V4WriteScopeGatingTests
             // schedules are the therapy category (therapy.read on the read side); v1 and v3 profile
             // writes require therapy.readwrite.
             ["ProfileController"] = Scope.TherapyReadWrite,
+            ["SetupTherapyController"] = Scope.TherapyReadWrite,
 
             // treatments: carb_intakes sits under treatments.read, POST /meals also writes a bolus,
             // and treatment_foods is keyed by carb intake (the food catalog is only read).

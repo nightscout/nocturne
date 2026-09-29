@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
+using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.SetupHub;
@@ -12,15 +13,18 @@ using Nocturne.Core.Models.SetupHub;
 namespace Nocturne.API.Controllers.V4.Identity;
 
 /// <summary>
-/// The setup hub's therapy settings item. Owner-only, like the rest of the hub.
+/// The setup hub's therapy settings item. Owner-only, like the rest of the hub; the owner's full
+/// access also carries the therapy write scope its writes declare.
 /// </summary>
 [ApiController]
 [Tags("Identity")]
 [Route("api/v4/setup-hub/therapy")]
 [Produces("application/json")]
 [Authorize]
-public class SetupTherapyController(ITherapySetupService therapy) : ControllerBase
+public class SetupTherapyController(ITherapySetupService therapy) : ControllerBase, IWriteScopedController
 {
+    public string WriteScope => Scope.TherapyReadWrite;
+
     [HttpGet]
     [RemoteQuery]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
@@ -35,8 +39,9 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     }
 
     [DenyDemoSubject]
+    [RequireDeclaredWriteScope]
     [HttpPost("confirm")]
-    [RemoteCommand(Invalidates = ["GetTherapyReview", "GetSetupHub"])]
+    [RemoteCommand(Invalidates = ["GetTherapyReview"])]
     [ProducesResponseType(typeof(TherapyReview), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -56,8 +61,9 @@ public class SetupTherapyController(ITherapySetupService therapy) : ControllerBa
     }
 
     [DenyDemoSubject]
+    [RequireDeclaredWriteScope]
     [HttpPost("entry")]
-    [RemoteCommand(Invalidates = ["GetTherapyReview", "GetSetupHub", "GetProfileSummary", "GetTherapySettings"])]
+    [RemoteCommand(Invalidates = ["GetTherapyReview"])]
     [ProducesResponseType(typeof(TherapyReview), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
