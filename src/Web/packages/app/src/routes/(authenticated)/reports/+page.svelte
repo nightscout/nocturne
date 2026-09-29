@@ -24,7 +24,6 @@
   import ReportsSkeleton from "$lib/components/reports/ReportsSkeleton.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { coachmark } from "@nocturne/coach";
 
   // Get shared date params from context (set by reports layout)
   // Default: 14 days is standard for reports overview
@@ -244,12 +243,6 @@
     <section
       class="grid gap-x-12 gap-y-10 @3xl:grid-cols-2"
       aria-label="All reports"
-      {@attach coachmark({
-        key: "setup-reports.categories",
-        title: "Start with Executive Summary",
-        description: "It combines your key metrics into a single page — great for clinic visits or sharing with your endo.",
-        completeOn: { event: "click" },
-      })}
     >
       {#each categories as category (category.id)}
         {@const CategoryIcon = category.icon}

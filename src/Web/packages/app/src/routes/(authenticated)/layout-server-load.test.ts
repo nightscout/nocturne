@@ -362,3 +362,28 @@ describe("(authenticated) layout load — realtime data", () => {
     expect(data.canViewRealtimeData).toBe(false);
   });
 });
+
+describe("(authenticated) layout load — the onboarding core gate on the coach tours", () => {
+  const onboardingComplete = async (situation: Situation) =>
+    ((await runLoad(situation)) as { onboardingComplete: boolean }).onboardingComplete;
+
+  it("opens once the tenant's core is confirmed complete", async () => {
+    await expect(
+      onboardingComplete({
+        host: `acme.${BASE}`,
+        status: { status: "ok", tenantSlug: "acme" },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe(true);
+  });
+
+  it("stays shut on a share host, which never checks the core", async () => {
+    await expect(
+      onboardingComplete({
+        host: `k7m2q9x4r3wt.share.${BASE}`,
+        status: { status: "ok", tenantSlug: "acme", anonymousReadAccess: true },
+        authStatus: { onboardingCompleted: true },
+      })
+    ).resolves.toBe(false);
+  });
+});

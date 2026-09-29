@@ -9,11 +9,6 @@
   import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
   import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
-  import { Item } from "$lib/components/ui/item";
-  import Users from "@lucide/svelte/icons/users";
-  import Bell from "@lucide/svelte/icons/bell";
-  import BookOpen from "@lucide/svelte/icons/book-open";
-  import Plug from "@lucide/svelte/icons/plug";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
@@ -24,7 +19,7 @@
     voice,
     onContinue,
     continueFailed = false,
-    onNavigateWithCoach,
+    onTakeTour,
   }: {
     path: "fresh" | "migration";
     source: SourceResult;
@@ -34,52 +29,11 @@
     onContinue: () => void;
     /** The last continue could not record the finished setup, so it is offered again. */
     continueFailed?: boolean;
-    onNavigateWithCoach: (url: string) => void;
+    onTakeTour: () => void;
   } = $props();
-
-  const hasData = $derived(
-    path === "migration" ? importResult === "complete" || importResult === "partial" : source !== null
-  );
-
-  const nextSteps = $derived([
-    {
-      icon: Users,
-      title: "Invite a caretaker",
-      subtitle: "Add follower access with one link",
-      coachUrl: "/settings/members?coach=setup-invite",
-    },
-    {
-      icon: Bell,
-      title: "Alerts",
-      subtitle: "Set up alerts",
-      coachUrl: "/alerts?coach=setup-alerts",
-    },
-    path === "migration" && hasData
-      ? {
-          icon: BookOpen,
-          title: "Your first report",
-          subtitle:
-            voice.kind === "self"
-              ? "Generate an AGP for your next clinic visit"
-              : voice.kind === "named"
-                ? `Generate an AGP for ${voice.name}'s next clinic visit`
-                : "Generate an AGP for the next clinic visit",
-          coachUrl: "/reports?coach=setup-reports",
-        }
-      : {
-          icon: Plug,
-          title: hasData ? "Connect another source" : "Connect a data source",
-          subtitle: hasData
-            ? "Add another device or service"
-            : "Choose a CGM, pump, or phone app",
-          coachUrl: "/settings/connectors?coach=setup-connectors",
-        },
-  ]);
 </script>
 
-<div
-  class="grid grid-cols-[1.1fr_0.9fr] max-[820px]:grid-cols-1 gap-10 items-start px-4 py-8"
->
+<div class="px-4 py-8">
   <div class="flex flex-col gap-8">
     <h1
       class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight text-foreground"
@@ -157,38 +111,7 @@
         {/if}
         <ArrowRight class="ml-2 h-4 w-4" />
       </Button>
-      <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
-    </div>
-  </div>
-
-  <div class="flex flex-col gap-4">
-    <span class="text-xs uppercase tracking-widest text-muted-foreground">
-      A few next things
-    </span>
-
-    <div class="flex flex-col gap-3">
-      {#each nextSteps as step (step.title)}
-        <Item
-          variant="outline"
-          class="grid grid-cols-[auto_1fr_auto]"
-          onclick={() => onNavigateWithCoach(step.coachUrl)}
-        >
-          <div
-            class="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
-          >
-            <step.icon class="h-4.5 w-4.5" />
-          </div>
-          <div class="flex flex-col text-left">
-            <span class="text-sm font-medium">{step.title}</span>
-            <span class="text-xs text-muted-foreground">{step.subtitle}</span>
-          </div>
-          <div
-            class="ml-auto flex items-center opacity-0 transition-opacity group-hover:opacity-100"
-          >
-            <ArrowRight class="h-4 w-4 text-muted-foreground" />
-          </div>
-        </Item>
-      {/each}
+      <Button variant="ghost" onclick={onTakeTour}>Take the 60-second tour</Button>
     </div>
   </div>
 </div>

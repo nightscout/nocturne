@@ -52,6 +52,7 @@ function layoutData(overrides: Partial<LayoutData> = {}): LayoutData {
     effectivePermissions: [],
     limitTo24Hours: false,
     refusedAsDemoSubject: false,
+    onboardingComplete: true,
     displayPreferences: [],
     displayLanguage: "en",
     serverPreferences: null,

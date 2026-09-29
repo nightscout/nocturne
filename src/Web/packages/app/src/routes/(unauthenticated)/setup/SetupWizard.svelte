@@ -346,10 +346,10 @@
     await goto(resolve("/setup"), { invalidateAll: true });
   }
 
-  async function handleNavigateWithCoach(url: string) {
+  async function handleTakeTour() {
     await markSetupComplete();
-    // eslint-disable-next-line svelte/no-navigation-without-resolve -- url is one of Finish.svelte's literal in-app paths with a ?coach= param
-    await goto(url, { invalidateAll: true });
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the resolved dashboard route plus a ?coach= param
+    await goto(`${resolve("/")}?coach=quick-tour`, { invalidateAll: true });
   }
 
   function handleSelectConnector(id: string) {
@@ -633,7 +633,7 @@
               {voice}
               onContinue={handleContinueToHub}
               {continueFailed}
-              onNavigateWithCoach={handleNavigateWithCoach}
+              onTakeTour={handleTakeTour}
             />
           {/if}
         </div>

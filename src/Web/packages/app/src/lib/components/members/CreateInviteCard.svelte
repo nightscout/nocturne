@@ -14,7 +14,6 @@
   import CopyInvitationMessageButton from "$lib/components/members/CopyInvitationMessageButton.svelte";
   import CopyButton from "$lib/components/members/CopyButton.svelte";
   import { Artwork } from "@nocturne/watercolour";
-  import { coachmark } from "@nocturne/coach";
   import { createInvite } from "$api/generated/memberInvites.generated.remote";
   import type { TenantRoleDto } from "$lib/api/generated/nocturne-api-client";
   import { describeSubmitError } from "$lib/forms";
@@ -134,11 +133,7 @@
         />
         <SuccessBanner>Invite link created. Share it with the new member.</SuccessBanner>
 
-        <div class="flex gap-2" {@attach coachmark({
-          key: "setup-invite.copy-link",
-          title: "Send the link",
-          description: `The link expires in ${expiryLabel}. They'll need to sign in or create an account to accept.`,
-        })}>
+        <div class="flex gap-2">
           <Input
             type="text"
             value={createdInviteUrl}
@@ -181,11 +176,7 @@
         </div>
 
         <!-- Role multi-select -->
-        <div class="space-y-2" {@attach coachmark({
-          key: "setup-invite.roles",
-          title: "Choose their access",
-          description: "Roles control what they can see and do. Viewer for a quick glance, Caretaker if they help manage your diabetes.",
-        })}>
+        <div class="space-y-2">
           <Label>Roles</Label>
           <div class="grid gap-2 @sm:grid-cols-2">
             {#each roles as role (role.id)}

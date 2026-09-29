@@ -22,7 +22,7 @@ function renderFinish(
     importResult,
     voice,
     onContinue: noop,
-    onNavigateWithCoach: noop,
+    onTakeTour: noop,
   });
 }
 
@@ -35,7 +35,6 @@ describe("Finish", () => {
       .toBeVisible();
     await expect.element(page.getByText(/CGM is connected/)).not.toBeInTheDocument();
     await expect.element(page.getByText(/target range/)).not.toBeInTheDocument();
-    await expect.element(page.getByText("Connect a data source")).toBeVisible();
   });
 
   it("says a saved connector has yet to sync", async () => {
@@ -95,7 +94,7 @@ describe("Finish", () => {
       importResult: null,
       voice: patientVoice(null),
       onContinue,
-      onNavigateWithCoach: noop,
+      onTakeTour: noop,
     });
 
     await page.getByRole("button", { name: "Continue setting up" }).click();
@@ -103,22 +102,22 @@ describe("Finish", () => {
     expect(onContinue).toHaveBeenCalledOnce();
   });
 
-  it("says setup could not be finished and offers to try again", async () => {
-    const onContinue = vi.fn();
+  it("offers the quick tour and none of the retired setup guides", async () => {
+    const onTakeTour = vi.fn();
     render(Finish, {
-      path: "fresh",
+      path: "migration",
       source: null,
-      importResult: null,
+      importResult: "complete",
       voice: patientVoice(null),
-      onContinue,
-      continueFailed: true,
-      onNavigateWithCoach: noop,
+      onContinue: noop,
+      onTakeTour,
     });
 
-    await expect.element(page.getByTestId("finish-failed")).toHaveTextContent(/couldn't finish setup/);
-    await page.getByRole("button", { name: "Try again" }).click();
+    await page.getByRole("button", { name: "Take the 60-second tour" }).click();
 
-    expect(onContinue).toHaveBeenCalledOnce();
+    expect(onTakeTour).toHaveBeenCalledOnce();
+    await expect.element(page.getByText("A few next things")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Your first report")).not.toBeInTheDocument();
   });
 
   it("offers no public share link", async () => {
