@@ -10,7 +10,8 @@
 //!
 //! `--bench` runs only the tick benchmark: GPU ms per tick with the sheet
 //! wet (swirl on), the commands encoded per tick, and the optics pass alone
-//! at a few output sizes, each the median of three runs.
+//! and the present path (into an offscreen canvas-format target) at a few
+//! output sizes, each the median of three runs.
 //!
 //! An optional `sim_resolution` (e.g. 384 or 512) overrides every scene's
 //! simulation grid so per-tick GPU cost can be compared across resolutions,
@@ -405,6 +406,24 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
         }
         println!(
             "bench {resolution}^2 sim: optics {size}x{size} {:.3} ms/frame median (runs {:?})",
+            median(ms.clone()),
+            ms.iter()
+                .map(|v| (v * 1e3).round() / 1e3)
+                .collect::<Vec<_>>()
+        );
+        gpu.present_offscreen(size, size, false).expect("present");
+        gpu.sync().expect("sync");
+        let mut ms = Vec::new();
+        for _ in 0..RUNS {
+            let t = Instant::now();
+            for _ in 0..8 {
+                gpu.present_offscreen(size, size, false).expect("present");
+            }
+            gpu.sync().expect("sync");
+            ms.push(t.elapsed().as_secs_f64() * 1000.0 / 8.0);
+        }
+        println!(
+            "bench {resolution}^2 sim: present {size}x{size} rgba8 {:.3} ms/frame median (runs {:?})",
             median(ms.clone()),
             ms.iter()
                 .map(|v| (v * 1e3).round() / 1e3)

@@ -265,7 +265,7 @@ single-run spot checks on the machine above, not a benchmark harness.
 portable; the wasm crate is ~400 lines of glue. A native host implements the same
 three things this package does around them: create a `GpuContext`, attach a
 `PresentSurface` (`GpuContext::create_window_surface` takes any
-`wgpu::SurfaceTarget`; `GpuEngine::present` blits the frame with `present.wgsl`),
+`wgpu::SurfaceTarget`; `GpuEngine::present` shades the frame straight into it),
 and resolve assets for the baked/static paths. `PngExporter`, `FrameSequence` and
 the `scene_tools` module (catalogue lookup, intensity, strip stitching, manifest)
 run unchanged on the host.

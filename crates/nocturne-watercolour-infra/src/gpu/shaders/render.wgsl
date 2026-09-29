@@ -9,6 +9,10 @@
 // `optics::cubic_sample`. The paper buffer is band-limited at generation time
 // (host side, `PaperField::generate_with_pixel_scale`), so the shader samples
 // the pre-attenuated height like the CPU reference does.
+//
+// `render` writes the premultiplied linear frame to `out` for readback;
+// `fs_render` shades the same pixel straight into a swapchain texture of the
+// output size, so presenting needs no frame buffer and no copy.
 
 struct RenderParams {
     out_width: u32,
@@ -20,7 +24,8 @@ struct RenderParams {
     // First output row of this dispatch; the host renders large frames as
     // row bands (`GpuEngine::render_frame`).
     y_offset: u32,
-    _p1: u32,
+    // `fs_render` only: see `encode_for_canvas`.
+    encode_srgb: u32,
     granulation_gain: f32,
     wet_pigment_visibility: f32,
     thickness_scale: f32,
@@ -211,11 +216,8 @@ fn presence_taps(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 }
 
-@compute @workgroup_size(16, 16)
-fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let x = gid.x;
-    let y = gid.y + R.y_offset;
-    if x >= R.out_width || y >= R.out_height { return; }
+// The premultiplied linear RGBA of output pixel (x, y).
+fn shade(x: u32, y: u32) -> vec4<f32> {
     let u = (f32(x) + 0.5) / f32(R.out_width);
     let v = (f32(y) + 0.5) / f32(R.out_height);
     let w = R.sim_width;
@@ -350,5 +352,59 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
         out_alpha = alpha_l;
         rgb = w_glow * alpha_l;
     }
-    out[y * R.out_width + x] = vec4<f32>(rgb, out_alpha);
+    return vec4<f32>(rgb, out_alpha);
+}
+
+@compute @workgroup_size(16, 16)
+fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let x = gid.x;
+    let y = gid.y + R.y_offset;
+    if x >= R.out_width || y >= R.out_height { return; }
+    out[y * R.out_width + x] = shade(x, y);
+}
+
+struct VertexOut {
+    @builtin(position) position: vec4<f32>,
+};
+
+@vertex
+fn vs_fullscreen(@builtin(vertex_index) index: u32) -> VertexOut {
+    // Three vertices covering clip space: (-1,-1), (3,-1), (-1,3).
+    let x = f32(i32(index & 1u) * 4 - 1);
+    let y = f32(i32(index >> 1u) * 4 - 1);
+    var vert: VertexOut;
+    vert.position = vec4<f32>(x, y, 0.0, 1.0);
+    return vert;
+}
+
+fn linear_to_srgb(v: vec3<f32>) -> vec3<f32> {
+    let c = clamp(v, vec3<f32>(0.0), vec3<f32>(1.0));
+    let low = c * 12.92;
+    let high = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - 0.055;
+    return select(high, low, c <= vec3<f32>(0.0031308));
+}
+
+// `encode_srgb` is set when the swapchain format is not an `*-srgb` type
+// (every browser canvas): premultiplied colour is un-premultiplied, run
+// through the sRGB transfer curve and re-premultiplied so the compositor,
+// which treats canvas bytes as encoded sRGB with premultiplied alpha, sees
+// the same colour `PngExporter` writes. On an sRGB swapchain the hardware
+// encodes and the value passes through linear.
+fn encode_for_canvas(px: vec4<f32>) -> vec4<f32> {
+    let alpha = clamp(px.a, 0.0, 1.0);
+    if R.encode_srgb == 0u {
+        return vec4<f32>(clamp(px.rgb, vec3<f32>(0.0), vec3<f32>(alpha)), alpha);
+    }
+    if alpha <= 1.0 / 1024.0 {
+        return vec4<f32>(0.0);
+    }
+    let straight = clamp(px.rgb / alpha, vec3<f32>(0.0), vec3<f32>(1.0));
+    return vec4<f32>(linear_to_srgb(straight) * alpha, alpha);
+}
+
+@fragment
+fn fs_render(in: VertexOut) -> @location(0) vec4<f32> {
+    let x = min(u32(in.position.x), R.out_width - 1u);
+    let y = min(u32(in.position.y), R.out_height - 1u);
+    return encode_for_canvas(shade(x, y));
 }
