@@ -92,6 +92,21 @@ public static class TimeZoneHelper
     }
 
     /// <summary>
+    /// The IANA id of the zone a timezone id names, in whatever form it arrived (IANA, mis-cased
+    /// <c>Etc/*</c>, or Windows), or null when it names no zone.
+    /// </summary>
+    public static string? ToIanaIdOrNull(string? timezoneId)
+    {
+        if (!TryGetTimeZoneInfoFromId(timezoneId?.Trim(), out var zone))
+            return null;
+
+        if (zone.HasIanaId)
+            return zone.Id;
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var ianaId) ? ianaId : null;
+    }
+
+    /// <summary>
     /// Canonicalizes the casing of an <c>Etc/*</c> timezone ID (e.g. <c>ETC/GMT-2</c> → <c>Etc/GMT-2</c>).
     /// Etc zone names after the prefix are all-uppercase tokens (<c>GMT</c>, <c>GMT-2</c>, <c>UTC</c>,
     /// <c>UCT</c>, <c>GMT0</c>), so uppercasing the remainder yields the canonical IANA form for the

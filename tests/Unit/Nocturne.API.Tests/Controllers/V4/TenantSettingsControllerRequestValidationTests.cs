@@ -2,7 +2,9 @@ using System.Net;
 using System.Reflection;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Mvc.Controllers;
@@ -94,6 +96,58 @@ public class TenantSettingsControllerRequestValidationTests
         new { glucoseUnits = "mmol", timezone = "Middle/Earth" },
     };
 
+    [Fact]
+    public async Task StoresTheIanaIdForATimezoneGivenInAnotherForm()
+    {
+        var units = new Mock<IUnitsAndTimezoneService>();
+        using var host = BuildHost(units: units);
+
+        var response = await host.GetTestClient().PutAsJsonAsync(
+            UnitsRoute, new { glucoseUnits = "mmol", timezone = "ETC/GMT-2" });
+
+        response.IsSuccessStatusCode.Should().BeTrue();
+        units.Verify(u => u.SetAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "mmol", "Etc/GMT-2", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task BindsTheLocaleAndNightscoutQueryOnTheRead()
+    {
+        var units = new Mock<IUnitsAndTimezoneService>();
+        units.Setup(u => u.GetAsync(It.IsAny<Guid>(), "sv-SE", true, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UnitsAndTimezoneDto("mmol", "Europe/Stockholm"));
+        using var host = BuildHost(units: units);
+
+        var answer = await host.GetTestClient().GetFromJsonAsync<UnitsAndTimezoneDto>(
+            UnitsRoute + "?locale=sv-SE&fromNightscout=true");
+
+        answer.Should().Be(new UnitsAndTimezoneDto("mmol", "Europe/Stockholm"));
+    }
+
+    [Fact]
+    public async Task RefusesAnAdministratorWhoIsNotTheOwner()
+    {
+        var units = new Mock<IUnitsAndTimezoneService>(MockBehavior.Strict);
+        using var host = BuildHost(scopes: [Scope.TenantSettings, Scope.TherapyReadWrite], units: units);
+        var client = host.GetTestClient();
+
+        (await client.PutAsJsonAsync(UnitsRoute, new { glucoseUnits = "mmol", timezone = "Australia/Sydney" }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await client.GetAsync(UnitsRoute)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task RefusesTheDemoAccount()
+    {
+        var units = new Mock<IUnitsAndTimezoneService>(MockBehavior.Strict);
+        using var host = BuildHost(demoSubject: true, units: units);
+
+        var response = await host.GetTestClient().PutAsJsonAsync(
+            UnitsRoute, new { glucoseUnits = "mmol", timezone = "Australia/Sydney" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
     [Theory]
     [MemberData(nameof(RefusedUnitsRequests))]
     public async Task RefusesUnitsOrATimezoneItDoesNotKnow(object body)
@@ -105,7 +159,8 @@ public class TenantSettingsControllerRequestValidationTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    private static IHost BuildHost()
+    private static IHost BuildHost(
+        string[]? scopes = null, bool demoSubject = false, Mock<IUnitsAndTimezoneService>? units = null)
     {
         var tenantId = Guid.CreateVersion7();
         var answer = (PatientRelationship?)null;
@@ -129,13 +184,23 @@ public class TenantSettingsControllerRequestValidationTests
         using (var seed = new NocturneDbContext(
             new DbContextOptionsBuilder<NocturneDbContext>().UseInMemoryDatabase(database).Options))
         {
-            seed.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Owner" });
+            seed.Subjects.Add(new SubjectEntity { Id = subjectId, Name = "Owner", IsDemoSubject = demoSubject });
             seed.SaveChanges();
         }
-        var units = new Mock<IUnitsAndTimezoneService>();
-        units.Setup(u => u.SetAsync(tenantId, subjectId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid _, Guid _, string glucoseUnits, string timezone, CancellationToken _) =>
-                new UnitsAndTimezoneDto(glucoseUnits, timezone));
+        if (units is null)
+        {
+            units = new Mock<IUnitsAndTimezoneService>();
+            units.Setup(u => u.SetAsync(tenantId, subjectId, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((Guid _, Guid _, string glucoseUnits, string timezone, CancellationToken _) =>
+                    new UnitsAndTimezoneDto(glucoseUnits, timezone));
+        }
+
+        // Forbid() needs an authentication service to answer with.
+        var authentication = new Mock<IAuthenticationService>();
+        authentication.Setup(a => a.ForbidAsync(It.IsAny<HttpContext>(), It.IsAny<string?>(), It.IsAny<AuthenticationProperties?>()))
+            .Callback((HttpContext context, string? _, AuthenticationProperties? _) =>
+                context.Response.StatusCode = StatusCodes.Status403Forbidden)
+            .Returns(Task.CompletedTask);
 
         var accessor = new Mock<ITenantAccessor>();
         accessor.SetupGet(a => a.TenantId).Returns(tenantId);
@@ -150,6 +215,7 @@ public class TenantSettingsControllerRequestValidationTests
                     services.AddSingleton(records.Object);
                     services.AddSingleton(accessor.Object);
                     services.AddSingleton(units.Object);
+                    services.AddSingleton(authentication.Object);
                     services.AddDbContextFactory<NocturneDbContext>(o => o.UseInMemoryDatabase(database));
                     services.Configure<RouteOptions>(o => o.SuppressCheckForUnhandledSecurityMetadata = true);
                     services.AddControllers().ConfigureApplicationPartManager(manager =>
@@ -164,7 +230,7 @@ public class TenantSettingsControllerRequestValidationTests
                     app.Use((context, next) =>
                     {
                         context.Items["GrantedScopes"] =
-                            (IReadOnlySet<string>)new HashSet<string> { Scope.FullAccess };
+                            (IReadOnlySet<string>)new HashSet<string>(scopes ?? [Scope.FullAccess]);
                         context.Items["AuthContext"] = new AuthContext { IsAuthenticated = true, SubjectId = subjectId };
                         return next(context);
                     });

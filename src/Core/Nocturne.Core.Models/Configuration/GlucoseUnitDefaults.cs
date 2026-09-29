@@ -26,13 +26,13 @@ public static class GlucoseUnitDefaults
     };
 
     /// <summary>
-    /// The default units for a BCP-47 locale such as "en-AU". A locale without a region (plain
-    /// "en") or one that cannot be parsed gets mg/dL, which is what the app showed before anyone
-    /// chose.
+    /// The default units for a BCP-47 locale such as "en-AU". A language without a region ("sv",
+    /// as browsers often send) stands for the region it is most spoken in. A locale that names no
+    /// region at all gets mg/dL, which is what the app showed before anyone chose.
     /// </summary>
     public static string ForLocale(string? locale)
     {
-        var region = RegionOf(locale);
+        var region = RegionOf(locale) ?? RegionOf(LikelyLocale(locale));
         if (region is null)
             return MgDl;
 
@@ -55,6 +55,25 @@ public static class GlucoseUnitDefaults
             "mgdl" => MgDl,
             _ => null,
         };
+    }
+
+    /// <summary>
+    /// The specific culture a language-only tag stands for ("sv" is "sv-SE"), or null where the
+    /// host has no culture data for it.
+    /// </summary>
+    private static string? LikelyLocale(string? locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale))
+            return null;
+
+        try
+        {
+            return System.Globalization.CultureInfo.CreateSpecificCulture(locale.Trim()).Name;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

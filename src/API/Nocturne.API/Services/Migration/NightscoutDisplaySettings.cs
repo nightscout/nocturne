@@ -13,7 +13,10 @@ namespace Nocturne.API.Services.Migration;
 /// The units the newest profile's default store is written in, as "mg/dl" or "mmol". Its targets
 /// and sensitivity are numbers in these units, which can differ from <paramref name="DisplayUnits"/>.
 /// </param>
-/// <param name="ProfileTimezone">The IANA timezone of the newest profile's default store.</param>
+/// <param name="ProfileTimezone">
+/// The IANA timezone of the newest profile's default store, canonicalised; null when it names no
+/// zone this server knows.
+/// </param>
 public record NightscoutDisplaySettings(string? DisplayUnits, string? ProfileUnits, string? ProfileTimezone)
 {
     /// <summary>
@@ -37,10 +40,8 @@ public record NightscoutDisplaySettings(string? DisplayUnits, string? ProfileUni
 
         var store = DefaultStore(profile);
         var profileUnits = GlucoseUnitDefaults.Normalize(StringOf(store, "units") ?? StringOf(profile, "units"));
-        var timezone = StringOf(store, "timezone")?.Trim();
-
         return new NightscoutDisplaySettings(
-            displayUnits, profileUnits, string.IsNullOrEmpty(timezone) ? null : timezone);
+            displayUnits, profileUnits, TimeZoneHelper.ToIanaIdOrNull(StringOf(store, "timezone")));
     }
 
     /// <summary>The profile document with the latest start, the one Nightscout treats as current.</summary>
@@ -72,7 +73,9 @@ public record NightscoutDisplaySettings(string? DisplayUnits, string? ProfileUni
         if (UploaderTimestamp.TryParse(StringOf(document, "startDate"), out var start))
             return start;
 
-        return document.TryGetProperty("mills", out var mills) && mills.TryGetInt64(out var ms)
+        return document.TryGetProperty("mills", out var mills)
+            && mills.ValueKind == JsonValueKind.Number
+            && mills.TryGetInt64(out var ms)
             ? DateTimeOffset.FromUnixTimeMilliseconds(ms)
             : DateTimeOffset.MinValue;
     }
