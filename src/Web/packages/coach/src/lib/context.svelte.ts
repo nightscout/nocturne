@@ -1,5 +1,6 @@
 import { getContext, setContext, untrack } from "svelte";
 import type {
+  CoachGates,
   CoachMarkAdapter,
   DismissOptions,
   MarkRegistration,
@@ -7,7 +8,7 @@ import type {
   MarkStatus,
   SequenceConfig,
 } from "./types.js";
-import { selectActiveMark, isSequenceDone, sequenceProgress, type SelectionResult } from "./sequencing.js";
+import { selectActiveMark, isPrerequisiteMet, sequenceProgress, type SelectionResult } from "./sequencing.js";
 
 const COACH_CONTEXT_KEY = Symbol("coach-mark-context");
 const DISABLED_STORAGE_KEY = "nocturne:coach-marks-disabled";
@@ -63,6 +64,7 @@ export class CoachMarkContext {
   private sequences: SequenceConfig;
   private settleDelay: number;
   private seenDwellMs: number;
+  private gates: () => CoachGates;
   private _keyToSequence: ReadonlyMap<string, string>;
 
   private _states = $state<MarkStates>(noMarkStates());
@@ -83,11 +85,13 @@ export class CoachMarkContext {
     sequences: SequenceConfig = {},
     settleDelay = 500,
     seenDwellMs = 2000,
+    gates: () => CoachGates = () => ({}),
   ) {
     this.adapter = adapter;
     this.sequences = sequences;
     this.settleDelay = settleDelay;
     this.seenDwellMs = seenDwellMs;
+    this.gates = gates;
 
     this._keyToSequence = indexSequences(sequences);
     // Read here rather than in initialize: marks register before the provider mounts, and a
@@ -245,6 +249,7 @@ export class CoachMarkContext {
         this._states,
         this._registrations,
         this.sequences,
+        this.gates(),
       );
     }
   }
@@ -270,7 +275,10 @@ export class CoachMarkContext {
     if (!seqName) return true; // standalone marks are always eligible
 
     const seq = this.sequences[seqName];
-    if (seq.prerequisite && !isSequenceDone(seq.prerequisite, this.sequences, this._states)) {
+    if (
+      seq.prerequisite &&
+      !isPrerequisiteMet(seq.prerequisite, this.sequences, this._states, this.gates())
+    ) {
       return false;
     }
 
@@ -428,6 +436,7 @@ export class CoachMarkContext {
         this._states,
         this._registrations,
         this.sequences,
+        this.gates(),
       );
     }, this.settleDelay);
   }
@@ -438,8 +447,9 @@ export function createCoachMarkContext(
   sequences: SequenceConfig = {},
   settleDelay = 500,
   seenDwellMs = 2000,
+  gates: () => CoachGates = () => ({}),
 ): CoachMarkContext {
-  const ctx = new CoachMarkContext(adapter, sequences, settleDelay, seenDwellMs);
+  const ctx = new CoachMarkContext(adapter, sequences, settleDelay, seenDwellMs, gates);
   setContext(COACH_CONTEXT_KEY, ctx);
   return ctx;
 }

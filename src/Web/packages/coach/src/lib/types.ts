@@ -41,6 +41,7 @@ export interface CoachMarkOptions {
 export interface SequenceDefinition {
   priority: number;
   steps: string[];
+  /** A sequence that must be done first, or a {@link CoachGates} entry the host must set true. */
   prerequisite?: string;
   completesKeys?: string[];
 }
@@ -48,6 +49,9 @@ export interface SequenceDefinition {
 export interface SequenceConfig {
   [name: string]: SequenceDefinition;
 }
+
+/** Conditions outside the coach marks, named by a sequence's `prerequisite`. */
+export type CoachGates = Readonly<Record<string, boolean>>;
 
 /** The part of a router's before-navigate event the provider needs; SvelteKit's `BeforeNavigate` fits. */
 export interface CoachNavigation {
@@ -67,6 +71,7 @@ export interface CoachRouter {
 export interface CoachMarkProviderOptions {
   adapter: CoachMarkAdapter;
   sequences?: SequenceConfig;
+  gates?: CoachGates;
   settleDelay?: number;
   seenDwellMs?: number;
 }
