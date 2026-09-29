@@ -3,7 +3,7 @@ import { DEFAULT_INTENSITY } from '../types';
 import { ICON_HINTS } from './icon-hints';
 import { iconAssetId, sourcePalette } from './palette-defaults';
 import { WatercolourError, toWatercolourError } from './errors';
-import type { WasmModule } from './engine-host';
+import type { WasmEngine, WasmInstance, WasmModule } from './engine-host';
 
 /** Version of the scene document this build reads; the engine validates everything past it. */
 export const SCENE_DOCUMENT_VERSION = 1;
@@ -115,15 +115,17 @@ export function mergeIconHints(name: string, hints?: IconHints): IconHints | und
   return { ...builtin, ...(caller as IconHints) };
 }
 
-export function resolveSceneJson(
-  module: Pick<WasmModule, 'catalogueScene' | 'iconScene'>,
-  ref: ArtworkRef | IconRef,
-  override: SceneResolutionOverride = {},
-): string {
-  try {
-    if (isIconRef(ref)) {
-      const hints = mergeIconHints(ref.name, ref.hints);
-      return module.iconScene(
+/** The engine's arguments for a reference: `iconScene`'s or `catalogueScene`'s. */
+type SceneArgs =
+  | { icon: true; args: Parameters<WasmModule['iconScene']> }
+  | { icon: false; args: Parameters<WasmModule['catalogueScene']> };
+
+function sceneArgs(ref: ArtworkRef | IconRef, override: SceneResolutionOverride): SceneArgs {
+  if (isIconRef(ref)) {
+    const hints = mergeIconHints(ref.name, ref.hints);
+    return {
+      icon: true,
+      args: [
         JSON.stringify(ref.icon),
         ref.name,
         ref.seed ?? 0,
@@ -133,9 +135,12 @@ export function resolveSceneJson(
         ref.surface ?? 'light',
         override.simResolution ?? 0,
         hints ? JSON.stringify(hints) : '',
-      );
-    }
-    return module.catalogueScene(
+      ],
+    };
+  }
+  return {
+    icon: false,
+    args: [
       ref.id,
       ref.seed ?? 0,
       sourcePalette(ref.id, ref.palette),
@@ -143,10 +148,50 @@ export function resolveSceneJson(
       override.detail ?? ref.detail ?? 'large',
       ref.surface ?? 'light',
       override.simResolution ?? 0,
-    );
+    ],
+  };
+}
+
+export function resolveSceneJson(
+  module: Pick<WasmModule, 'catalogueScene' | 'iconScene'>,
+  ref: ArtworkRef | IconRef,
+  override: SceneResolutionOverride = {},
+): string {
+  try {
+    const scene = sceneArgs(ref, override);
+    return scene.icon ? module.iconScene(...scene.args) : module.catalogueScene(...scene.args);
   } catch (error) {
     throw toWatercolourError(error);
   }
+}
+
+/** `createInstance`'s arguments after the scene document. */
+export type InstanceArgs = [durationMs: number, settleFraction: number, paintWallFraction: number, checkpointBudgetBytes: number | undefined];
+
+/**
+ * A live instance for a reference, authored in the engine straight into its
+ * playback where the build can (`createCatalogueInstance`/`createIconInstance`),
+ * so the scene never crosses as JSON; an older build goes through the document.
+ */
+export function createRefInstance(
+  engine: WasmEngine,
+  module: Pick<WasmModule, 'catalogueScene' | 'iconScene'>,
+  ref: ArtworkRef | IconRef,
+  override: SceneResolutionOverride,
+  instanceArgs: InstanceArgs,
+): WasmInstance {
+  let scene: SceneArgs;
+  try {
+    scene = sceneArgs(ref, override);
+  } catch (error) {
+    throw toWatercolourError(error);
+  }
+  if (scene.icon) {
+    if (engine.createIconInstance) return engine.createIconInstance(...scene.args, ...instanceArgs);
+  } else if (engine.createCatalogueInstance) {
+    return engine.createCatalogueInstance(...scene.args, ...instanceArgs);
+  }
+  return engine.createInstance(resolveSceneJson(module, ref, override), ...instanceArgs);
 }
 
 /** Stroke colour for the plain-SVG fallback, chosen so the stroke reads on the host ground. */
