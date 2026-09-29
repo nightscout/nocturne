@@ -27,6 +27,8 @@
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import { Artwork, type PaletteId } from "@nocturne/watercolour";
+  import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -49,6 +51,17 @@
   const tileVariant = $derived(
     getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
   );
+
+  // Presentation only: which paint each server-derived tile variant is washed in.
+  // Intensity carries the severity within a hue.
+  const washFor: Record<GlucoseTileVariant, { palette: PaletteId; intensity: number } | undefined> = {
+    "very-low": { palette: "ember", intensity: 0.9 },
+    low: { palette: "ember", intensity: 0.55 },
+    "in-range": { palette: "water", intensity: 0.6 },
+    high: { palette: "moonlight", intensity: 0.6 },
+    "very-high": { palette: "dusk", intensity: 0.9 },
+    neutral: undefined,
+  };
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -130,6 +143,25 @@
   }
 </script>
 
+{#snippet rangeWash()}
+  <!-- Keyed on the variant: a new reading in the same range leaves the paint alone. The flat fill
+       underneath stays, so a wash that cannot draw leaves the plain tile. -->
+  {#key tileVariant}
+    {@const wash = washFor[tileVariant]}
+    {#if wash}
+      <Artwork
+        artwork="wash"
+        palette={wash.palette}
+        intensity={wash.intensity}
+        durationMs={2000}
+        releaseAfterFinish
+        fit="fill"
+        class="size-full opacity-60 dark:opacity-40"
+      />
+    {/if}
+  {/key}
+{/snippet}
+
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->
 <div class="@container">
   <h1 class="sr-only">Nocturne</h1>
@@ -144,6 +176,7 @@
         {statusText}
         {statusTooltip}
         size="lg"
+        background={rangeWash}
       />
       <div class="text-sm text-muted-foreground tabular-nums">
         {displayBgDelta}

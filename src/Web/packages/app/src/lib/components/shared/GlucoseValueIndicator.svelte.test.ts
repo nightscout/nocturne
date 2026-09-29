@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect } from "vitest";
+import { createRawSnippet } from "svelte";
 import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
 import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 import { GlucoseValueIndicator } from "./index";
@@ -64,5 +65,26 @@ describe("GlucoseValueIndicator", () => {
     const tile = renderReading(GlucoseStatus.UrgentLow, true);
     await expect.element(tile).toHaveClass("bg-muted");
     await expect.element(tile).not.toHaveClass("bg-glucose-very-low");
+  });
+});
+
+describe("GlucoseValueIndicator background", () => {
+  const background = createRawSnippet(() => ({ render: () => `<i data-testid="wash"></i>` }));
+  const inRange = getGlucoseTileVariant(GlucoseStatus.InRange);
+
+  it("lays the background under the value and keeps the range fill", async () => {
+    render(GlucoseValueIndicator, { displayValue: 170, variant: inRange, background });
+
+    await expect.element(page.getByTestId("wash")).toBeInTheDocument();
+    await expect.element(page.getByText("170")).toHaveClass("bg-glucose-in-range");
+  });
+
+  it.each([
+    ["stale", { isStale: true }],
+    ["disconnected", { isDisconnected: true }],
+  ])("leaves the plain look when %s", async (_, state) => {
+    render(GlucoseValueIndicator, { displayValue: 170, variant: inRange, background, ...state });
+
+    await expect.element(page.getByTestId("wash")).not.toBeInTheDocument();
   });
 });

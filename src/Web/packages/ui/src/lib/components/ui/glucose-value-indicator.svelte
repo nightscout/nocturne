@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import * as Tooltip from "./tooltip";
   import { Skeleton } from "./skeleton";
   import type { GlucoseTileVariant } from "../../glucose";
@@ -24,6 +25,11 @@
     onSyncClick?: () => void;
     /** Size variant - 'xs' for collapsed sidebar, 'sm' for sidebar, 'lg' for dashboard */
     size?: "xs" | "sm" | "lg";
+    /**
+     * Painted over the range fill and under the value, for a host that has artwork to lay there.
+     * Skipped while stale or disconnected, so those keep the flat neutral look.
+     */
+    background?: Snippet;
     /** Additional CSS classes for the container */
     class?: string;
   }
@@ -39,6 +45,7 @@
     statusTooltip,
     onSyncClick,
     size = "lg",
+    background,
     class: className = "",
   }: Props = $props();
 
@@ -69,6 +76,9 @@
   };
 
   const fillClasses = $derived(variantClasses[isStale ? "neutral" : variant]);
+  const showBackground = $derived(
+    background !== undefined && !isStale && !isDisconnected && variant !== "neutral"
+  );
 
   // Get border style based on connection status
   const getBorderStyle = (disconnected: boolean, stale: boolean) => {
@@ -107,13 +117,18 @@
   {:else}
     <!-- Actual value display -->
     <div
-      class="font-bold rounded-lg {sizeClasses} {fillClasses} {getBorderStyle(
+      class="font-bold rounded-lg {showBackground ? 'relative isolate overflow-hidden' : ''} {sizeClasses} {fillClasses} {getBorderStyle(
         isDisconnected,
         isStale
       )} {isPulsing
         ? 'pulse-once'
         : ''}"
     >
+      {#if showBackground}
+        <span aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+          {@render background?.()}
+        </span>
+      {/if}
       {displayValue}
     </div>
 
