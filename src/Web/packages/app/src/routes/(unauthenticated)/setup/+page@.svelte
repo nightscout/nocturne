@@ -269,7 +269,7 @@
 
     navigating = true;
     try {
-      await startImportOnce();
+      await startImport();
       goToStep(importIndex);
     } finally {
       navigating = false;
@@ -372,8 +372,10 @@
   // progress view, so it runs in the onboarding tenant's own request context.
   const MIGRATION_CONNECTOR = "nightscout";
 
-  async function startImportOnce() {
-    if (path !== "migration" || !nightscoutConnected || migrationJobId) return;
+  // startOrResumeMigration reuses a job still in flight or one this session completed, so a
+  // failed job is replaced rather than watched again.
+  async function startImport() {
+    if (path !== "migration" || !nightscoutConnected) return;
     try {
       migrationStartError = undefined;
       migrationJobId = await startOrResumeMigration(MIGRATION_CONNECTOR);
@@ -545,6 +547,7 @@
               <NightscoutConnect
                 onComplete={() => {
                   nightscoutConnected = true;
+                  migrationStartError = undefined;
                   handleNext();
                 }}
               />
