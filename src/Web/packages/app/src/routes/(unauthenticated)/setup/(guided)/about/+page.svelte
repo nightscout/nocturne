@@ -12,10 +12,9 @@
 
   let clinical = $state<ClinicalState | undefined>(undefined);
 
-  // The item is done once the diabetes type is saved, which the form requires; the preferred name
-  // it may also have changed is what the patient voice reads.
+  // The item is done once the diabetes type is saved, which the form requires.
   async function saved() {
-    await Promise.all([getSetupHub().refresh(), relationshipQuery.refresh()]);
+    await getSetupHub().refresh();
     await goto(resolve("/setup"));
   }
 </script>
