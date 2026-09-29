@@ -67,6 +67,15 @@ const SKIPPED_ZERO_RUN: usize = 1024;
 /// megabytes is two 1024^2 canvases or thirty-two 256^2 ones.
 const PAPER_CACHE_BYTES: u64 = 8 * 1024 * 1024;
 
+/// GPU bytes of buffers a scene leaves behind (state, scratch, stamp,
+/// checkpoints, render buffers) that an engine and its forks keep for the
+/// next scene of the same shape instead of allocating again. Stills run one
+/// after another (a list of avatars), each at the last one's grid size, so
+/// each takes the last one's buffers; past the budget the oldest are
+/// destroyed, since a dropped buffer's memory otherwise waits for the
+/// browser's garbage collector.
+const BUFFER_POOL_BYTES: u64 = 16 * 1024 * 1024;
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ParamsUniform {
@@ -379,6 +388,9 @@ impl PaperKey {
 /// Least recently used first; see [`PAPER_CACHE_BYTES`].
 type PaperCache = Arc<Mutex<VecDeque<(PaperKey, wgpu::Buffer)>>>;
 
+/// Oldest first; see [`BUFFER_POOL_BYTES`].
+type BufferPool = Arc<Mutex<VecDeque<wgpu::Buffer>>>;
+
 struct Loaded {
     width: u32,
     height: u32,
@@ -386,8 +398,11 @@ struct Loaded {
     paper: Paper,
     paper_sim: PaperField,
     state: wgpu::Buffer,
+    scratch: wgpu::Buffer,
     stamp: wgpu::Buffer,
+    params: wgpu::Buffer,
     stroke: wgpu::Buffer,
+    pigments: wgpu::Buffer,
     optics: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     checkpoints: HashMap<CheckpointId, wgpu::Buffer>,
@@ -433,6 +448,9 @@ struct Pending {
     /// The tick timer's resolve is in `enc`; its map is requested once the
     /// batch is submitted.
     tick_sample: bool,
+    /// Released checkpoints `enc` may still copy into; pooled once it is
+    /// submitted or dropped, so no other scene can take one first.
+    retired: Vec<wgpu::Buffer>,
 }
 
 /// GPU commands encoded since the engine was created or the counts were
@@ -533,6 +551,7 @@ pub struct GpuEngine {
     pending: Mutex<Option<Pending>>,
     counter: CommandCounter,
     paper_cache: PaperCache,
+    pool: BufferPool,
     timers: Option<Timers>,
 }
 
@@ -807,6 +826,7 @@ impl GpuEngine {
             pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::default(),
+            pool: Arc::default(),
             timers,
         };
         (engine, validation)
@@ -831,6 +851,7 @@ impl GpuEngine {
             pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::clone(&self.paper_cache),
+            pool: Arc::clone(&self.pool),
             timers: Timers::new(&self.ctx),
         }
     }
@@ -969,6 +990,7 @@ impl GpuEngine {
             stamp_words: 0,
             strokes: 0,
             tick_sample: false,
+            retired: Vec::new(),
         });
         f(pending)
     }
@@ -983,22 +1005,91 @@ impl GpuEngine {
     /// Submits the open batch, if any.
     pub fn flush(&self) -> Result<(), EngineError> {
         match self.take_pending() {
-            Some(pending) => self.submit_batch(pending.enc, pending.tick_sample),
+            Some(pending) => self.submit_batch(pending.enc, pending.tick_sample, pending.retired),
             None => Ok(()),
         }
     }
 
-    /// Submits `enc`, then requests the tick sample it resolved, if any.
+    /// Drops the open batch unsent.
+    fn discard_pending(&self) {
+        if let Some(pending) = self.take_pending() {
+            self.recycle(pending.retired);
+        }
+    }
+
+    /// Submits `enc`, then requests the tick sample it resolved, if any, and
+    /// pools the buffers it was the last to use.
     fn submit_batch(
         &self,
         enc: wgpu::CommandEncoder,
         tick_sample: bool,
+        retired: Vec<wgpu::Buffer>,
     ) -> Result<(), EngineError> {
-        self.submit(enc.finish())?;
+        let submitted = self.submit(enc.finish());
+        self.recycle(retired);
+        submitted?;
         if tick_sample && let Some(t) = &self.timers {
             t.tick.request();
         }
         Ok(())
+    }
+
+    /// A buffer of `size` and `usage` from the pool, or a new one; `true`
+    /// when new, and so still zero-filled.
+    fn pooled(
+        &self,
+        label: &str,
+        size: u64,
+        usage: wgpu::BufferUsages,
+    ) -> Result<(wgpu::Buffer, bool), EngineError> {
+        let size = size.max(16);
+        {
+            let mut pool = self.pool.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(at) = pool
+                .iter()
+                .position(|b| b.size() == size && b.usage() == usage)
+                && let Some(buffer) = pool.remove(at)
+            {
+                return Ok((buffer, false));
+            }
+        }
+        Ok((self.buffer(label, size, usage)?, true))
+    }
+
+    /// Hands buffers nothing unsubmitted uses any more to the pool,
+    /// destroying the oldest past [`BUFFER_POOL_BYTES`].
+    fn recycle(&self, buffers: impl IntoIterator<Item = wgpu::Buffer>) {
+        let mut pool = self.pool.lock().unwrap_or_else(|p| p.into_inner());
+        for buffer in buffers {
+            if buffer.size() > BUFFER_POOL_BYTES {
+                buffer.destroy();
+            } else {
+                pool.push_back(buffer);
+            }
+        }
+        let mut total: u64 = pool.iter().map(|b| b.size()).sum();
+        while total > BUFFER_POOL_BYTES {
+            match pool.pop_front() {
+                Some(evicted) => {
+                    total -= evicted.size();
+                    evicted.destroy();
+                }
+                None => break,
+            }
+        }
+    }
+
+    /// Pools every buffer a scene owns but the shared render paper.
+    fn recycle_loaded(&self, l: Loaded) {
+        let mut buffers = vec![
+            l.state, l.scratch, l.stamp, l.params, l.stroke, l.pigments, l.optics,
+        ];
+        buffers.extend(l.checkpoints.into_values());
+        if let Some(target) = l.render_cache {
+            buffers.push(target.uniform);
+            buffers.push(target.presence);
+        }
+        self.recycle(buffers);
     }
 
     /// Byte offset of stroke slot `slot` in the stroke buffer.
@@ -1011,9 +1102,10 @@ impl GpuEngine {
         self.ctx.queue().write_buffer(buffer, offset, data);
     }
 
-    /// Uploads `data` into a buffer that is still zero-filled, leaving out
-    /// its runs of zero words.
-    fn write_into_zeroed(&self, buffer: &wgpu::Buffer, data: &[f32]) {
+    /// Uploads `data` leaving out its runs of zero words, which a new
+    /// (`zeroed`) buffer already holds and a pooled one is cleared to in the
+    /// batch: an upload lands before the batch, and the spans are disjoint.
+    fn write_skipping_zeros(&self, buffer: &wgpu::Buffer, data: &[f32], zeroed: bool) {
         let f = std::mem::size_of::<f32>();
         let mut start = 0;
         let mut i = 0;
@@ -1027,6 +1119,12 @@ impl GpuEngine {
                 i += 1;
             }
             if i - run >= SKIPPED_ZERO_RUN {
+                if !zeroed {
+                    self.with_pending(|p| {
+                        p.enc
+                            .clear_buffer(buffer, (run * f) as u64, Some(((i - run) * f) as u64))
+                    });
+                }
                 if run > start {
                     self.write_buffer(
                         buffer,
@@ -1304,7 +1402,7 @@ impl GpuEngine {
             (paper, aspect, pixel_scale)
         };
         let (paper, aspect, pixel_scale) = needs;
-        let uniform = self.buffer(
+        let (uniform, _) = self.pooled(
             "render-params",
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
@@ -1320,7 +1418,7 @@ impl GpuEngine {
                 l.layout.pigment_count as u64,
             )
         };
-        let presence = self.buffer(
+        let (presence, _) = self.pooled(
             "render-presence",
             presence_len * pigments * 8,
             wgpu::BufferUsages::STORAGE,
@@ -1375,7 +1473,7 @@ impl GpuEngine {
                 },
             ],
         });
-        self.loaded_mut()?.render_cache = Some(RenderTarget {
+        let replaced = self.loaded_mut()?.render_cache.replace(RenderTarget {
             width,
             height,
             pixel_scale,
@@ -1387,6 +1485,9 @@ impl GpuEngine {
             present_bind_group,
             readback: None,
         });
+        if let Some(old) = replaced {
+            self.recycle([old.uniform, old.presence]);
+        }
         Ok(())
     }
 
@@ -1645,8 +1746,8 @@ impl GpuEngine {
         let mut y_offset = 0;
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
-            let (mut enc, tick_sample) = match batch.take() {
-                Some(p) => (p.enc, p.tick_sample),
+            let (mut enc, tick_sample, retired) = match batch.take() {
+                Some(p) => (p.enc, p.tick_sample, p.retired),
                 None => (
                     self.ctx
                         .device()
@@ -1654,6 +1755,7 @@ impl GpuEngine {
                             label: Some("present"),
                         }),
                     false,
+                    Vec::new(),
                 ),
             };
             if y_offset == 0 {
@@ -1688,7 +1790,7 @@ impl GpuEngine {
             if let Some(t) = timer.filter(|_| last) {
                 t.resolve(&mut enc);
             }
-            self.submit_batch(enc, tick_sample)?;
+            self.submit_batch(enc, tick_sample, retired)?;
             y_offset += rows;
         }
         if let Some(t) = timer {
@@ -1916,49 +2018,54 @@ impl Simulator for GpuEngine {
         let layout = StateLayout::new(res, res, pigment_count);
         let f = std::mem::size_of::<f32>() as u64;
 
-        drop(self.take_pending());
-        self.loaded = None;
-        let state = self.buffer(
+        self.discard_pending();
+        if let Some(previous) = self.loaded.take() {
+            self.recycle_loaded(previous);
+        }
+        let (state, state_zeroed) = self.pooled(
             "state",
             layout.state_bytes(),
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         )?;
-        let scratch = self.buffer(
+        let (scratch, scratch_zeroed) = self.pooled(
             "scratch",
             layout.scratch_len() as u64 * f,
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::COPY_DST,
         )?;
-        let stamp = self.buffer(
+        if !scratch_zeroed {
+            self.with_pending(|p| p.enc.clear_buffer(&scratch, 0, None));
+        }
+        let (stamp, _) = self.pooled(
             "stamp",
             layout.n as u64 * f,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        let params = self.buffer(
+        let (params, _) = self.pooled(
             "params",
             std::mem::size_of::<ParamsUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let stroke = self.buffer(
+        let (stroke, _) = self.pooled(
             "stroke",
             u64::from(self.stroke_offset(STROKE_SLOTS)),
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let pigments = self.buffer(
+        let (pigments, _) = self.pooled(
             "pigments",
             (MAX_PIGMENTS * std::mem::size_of::<PigmentCoefUniform>()) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        let optics = self.buffer(
+        let (optics, _) = self.pooled(
             "optics",
             (MAX_PIGMENTS * 3 * 16) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
 
-        self.write_into_zeroed(&state, &layout.pack(&grid));
+        self.write_skipping_zeros(&state, &layout.pack(&grid), state_zeroed);
         self.write_buffer(
             &params,
             0,
@@ -2035,8 +2142,11 @@ impl Simulator for GpuEngine {
             paper: scene.paper,
             paper_sim,
             state,
+            scratch,
             stamp,
+            params,
             stroke,
+            pigments,
             optics,
             bind_group,
             checkpoints: HashMap::new(),
@@ -2229,7 +2339,7 @@ impl Simulator for GpuEngine {
             return Ok(None);
         }
         let bytes = l.layout.state_bytes();
-        let copy = self.buffer(
+        let (copy, _) = self.pooled(
             "checkpoint",
             bytes,
             wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
@@ -2258,8 +2368,16 @@ impl Simulator for GpuEngine {
     }
 
     fn release(&mut self, id: CheckpointId) {
-        if let Some(l) = self.loaded.as_mut() {
-            l.checkpoints.remove(&id);
+        let Some(buffer) = self.loaded.as_mut().and_then(|l| l.checkpoints.remove(&id)) else {
+            return;
+        };
+        let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        match pending.as_mut() {
+            Some(p) => p.retired.push(buffer),
+            None => {
+                drop(pending);
+                self.recycle([buffer]);
+            }
         }
     }
 
@@ -2283,6 +2401,17 @@ impl Renderer for GpuEngine {
             height,
             rgba: floats.to_vec(),
         })
+    }
+}
+
+/// Pools the scene's buffers for the next engine on the device; an unsent
+/// batch is dropped with the scene it was for.
+impl Drop for GpuEngine {
+    fn drop(&mut self) {
+        self.discard_pending();
+        if let Some(l) = self.loaded.take() {
+            self.recycle_loaded(l);
+        }
     }
 }
 

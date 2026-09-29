@@ -288,6 +288,34 @@ fn a_budget_below_one_checkpoint_holds_none_and_still_seeks_exactly() {
     assert_eq!(seeked, straight.simulator().read_grid().unwrap());
 }
 
+/// A fork takes the buffers a dropped sibling left in the shared pool, stale
+/// contents and all; its scene must play out exactly as on new buffers.
+#[test]
+fn a_scene_on_pooled_buffers_plays_as_on_new_ones() {
+    let (Some(template), Some(fresh)) = (gpu(), gpu()) else {
+        return;
+    };
+    let scene = small_scene("wash");
+    let mut first = Playback::new(template.fork(), scene.clone(), 1000.0).unwrap();
+    first.finish_immediately().unwrap();
+    first.simulator().render(64, 64).unwrap();
+    drop(first);
+
+    let mut pooled = Playback::new(template.fork(), scene.clone(), 1000.0).unwrap();
+    pooled.advance_ticks(150).unwrap();
+    pooled.seek_tick(70).unwrap();
+    let mut new = Playback::new(fresh, scene, 1000.0).unwrap();
+    new.advance_ticks(70).unwrap();
+    assert_eq!(
+        pooled.simulator().read_grid().unwrap(),
+        new.simulator().read_grid().unwrap()
+    );
+    assert_eq!(
+        pooled.simulator().render(64, 64).unwrap().rgba,
+        new.simulator().render(64, 64).unwrap().rgba
+    );
+}
+
 /// A playback's strokes, ticks and checkpoint copies go out together: a
 /// submission per sixteen ticks, plus one ahead of each upload into the state
 /// (`Dry`, `Settle`, the mask), plus the batch a readback flushes.

@@ -276,6 +276,15 @@ watchdog Windows resets the display driver at:
   CPU, is kept as its GPU buffer in a cache the template engine shares with
   every fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
   (`PAPER_CACHE_BYTES`), so a remount at the same size skips generating it.
+- **Buffers are pooled.** A scene's state, scratch, stamp, uniforms,
+  checkpoints and render buffers go, when it is replaced or its engine is
+  dropped, to a pool the template engine shares with every fork, and the next
+  scene of the same shape takes them (a reused state is cleared where its upload
+  skips zeros, a reused scratch cleared whole, both inside the batch). The pool
+  holds at most 16 MB (`BUFFER_POOL_BYTES`); past that the oldest are
+  destroyed, since a dropped buffer's memory otherwise waits for the browser's
+  garbage collector. A released checkpoint the open batch may still copy into
+  joins the pool only once the batch is submitted or dropped.
 - **GPU timestamps** (`GpuEngine::gpu_timings`, `stats().gpuTickMs` /
   `gpuRenderMs`) are taken when the adapter offers `TIMESTAMP_QUERY`; a sample
   starts only when the last one has been read back, so nothing waits on it.
