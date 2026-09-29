@@ -14,7 +14,12 @@
 //   --url URL              measure an arbitrary page instead of a scenario (no readiness signal)
 //   --wait SEC             --url only: seconds to observe after load (default 10)
 //   --ignore-https-errors  --url only, for self-signed local hosts
+//   --viewport-height PX   scenario viewport height for every profile (default 6000; see below)
 //   --warm                 warm the engine before mounting (splits engine boot from per-artwork cost)
+//
+// The scheduler pauses an artwork that is outside the viewport, so a component below the fold never
+// finishes and the scenario never signals ready. Scenarios are therefore measured in a viewport tall enough
+// to hold the whole page; the profile only sets width, DPR and CPU rate. --url runs keep the profile height.
 //
 // CPU throttling is Emulation.setCPUThrottlingRate, which slows the renderer's main thread. The GPU
 // (and the GPU process, and Dawn's command validation) cannot be throttled, so phone profiles model
@@ -76,7 +81,7 @@ const SCENARIOS = {
 };
 
 function parseArgs(argv) {
-  const opts = { repeats: 3, idle: 3000, wait: 10, scenarios: Object.keys(SCENARIOS), profiles: Object.keys(PROFILES), webgpu: [true] };
+  const opts = { repeats: 3, idle: 3000, wait: 10, scenarios: Object.keys(SCENARIOS), profiles: Object.keys(PROFILES), webgpu: [true], viewportHeight: 6000 };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => argv[++i];
@@ -94,6 +99,7 @@ function parseArgs(argv) {
     else if (a === '--wait') opts.wait = Number(val());
     else if (a === '--ignore-https-errors') opts.ignoreHttpsErrors = true;
     else if (a === '--warm') opts.warm = true;
+    else if (a === '--viewport-height') opts.viewportHeight = Number(val());
     else throw new Error(`unknown option ${a}`);
   }
   for (const p of opts.profiles) if (!PROFILES[p]) throw new Error(`unknown profile ${p}`);
@@ -217,7 +223,7 @@ async function runOnce(ctx, target, profileName, webgpu, repeat) {
   const browser = await chromium.launch({ channel: 'chrome', headless: !opts.headed, args: CHROME_ARGS });
   try {
     const context = await browser.newContext({
-      viewport: profile.viewport,
+      viewport: { width: profile.viewport.width, height: opts.url ? profile.viewport.height : opts.viewportHeight },
       deviceScaleFactor: profile.dpr,
       ignoreHTTPSErrors: !!opts.ignoreHttpsErrors,
     });

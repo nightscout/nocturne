@@ -237,7 +237,7 @@ pnpm --filter @nocturne/watercolour bench -- --url https://paint.nocturne.localh
 
 Profiles are `desktop` (no throttle), `laptop` (CPU 2x), `phone-high` (CPU 4x,
 390x844 at DPR 3) and `phone-low` (CPU 6x, 360x740 at DPR 2). CPU throttling
-does not slow the GPU, so phone rows are a lower bound. Each run is a fresh
+does not slow the GPU, so phone rows are a lower bound. Scenarios run in a 6000 px tall viewport at the profile width (`--viewport-height`), because the scheduler pauses artwork outside the viewport and a component below the fold would never finish. Each run is a fresh
 Chrome (cold caches) with `--enable-unsafe-webgpu
 --enable-dawn-features=allow_unsafe_apis --enable-precise-memory-info`. It writes
 one JSON per run plus `summary.md` and `summary.json` (median of repeats) to
