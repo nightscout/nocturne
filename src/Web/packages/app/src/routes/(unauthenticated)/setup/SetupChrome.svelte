@@ -23,7 +23,7 @@
   class="relative min-h-screen grid grid-rows-[auto_1fr_auto] bg-background text-foreground"
 >
   <header
-    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b bg-background/80 backdrop-blur-md max-[900px]:px-5 max-[900px]:py-3.5"
+    class="relative z-50 flex items-center justify-between px-5 py-3.5 md:px-8 md:py-5.5 border-b bg-background/80 backdrop-blur-md"
   >
     <div class="flex items-center gap-3">
       <AppLogo icon="nocturne" class="h-7 w-7" />
@@ -51,13 +51,13 @@
   </header>
 
   <main
-    class="relative px-8 py-12 pb-16 max-[900px]:px-5 max-[900px]:py-7 max-[900px]:pb-10"
+    class="relative px-5 py-7 pb-10 md:px-8 md:py-12 md:pb-16"
   >
     {@render children()}
   </main>
 
   <footer
-    class="relative px-8 py-5 border-t flex justify-between items-center text-xs text-muted-foreground max-[900px]:flex-wrap max-[900px]:gap-2.5"
+    class="relative px-5 py-5 md:px-8 border-t flex flex-wrap gap-2.5 justify-between items-center text-xs text-muted-foreground"
   >
     <div class="flex flex-wrap items-center gap-5">
       <span>&copy; 2026 Nocturne</span>
@@ -70,7 +70,7 @@
       target="_blank"
       rel="noopener noreferrer"
     >
-      <AppLogo class="max-h-12" icon="github" />
+      <AppLogo class="size-4" icon="github" />
       Source
     </a>
   </footer>

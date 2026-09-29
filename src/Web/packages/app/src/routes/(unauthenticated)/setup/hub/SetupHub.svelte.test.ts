@@ -74,7 +74,7 @@ describe("SetupHub", () => {
     await expect.element(page.getByTestId("hub-progress")).toHaveTextContent(/3 of 6 set up/);
     const done = page.getByTestId("hub-item-connect-data");
     await expect.element(done).toHaveAttribute("data-state", "Done");
-    await expect.element(done).toHaveAttribute("data-mark-shown", "true");
+    await expect.element(done).toHaveAttribute("data-mark-shown", "false");
     await expect.element(done.getByText("Done")).toBeVisible();
 
     const setAside = page.getByTestId("hub-item-alerts");

@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
   submitted: vi.fn(),
   hubRefreshed: vi.fn(),
+  confirmed: vi.fn(),
   goto: vi.fn(),
 }));
 
@@ -56,6 +57,7 @@ vi.mock("$api/generated/insulinCatalogs.generated.remote", () => ({
 }));
 vi.mock("$api/generated/setupHubs.generated.remote", () => ({
   getSetupHub: () => Object.assign(remoteQuery(() => undefined), { refresh: state.hubRefreshed }),
+  confirmAboutSetupItem: state.confirmed,
 }));
 vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
   getPatientRelationship: () => remoteQuery(() => state.relationship),
@@ -86,15 +88,24 @@ describe("About the patient", () => {
 
     await expect
       .element(page.getByTestId("about-intro"))
-      .toHaveTextContent(/Only your diabetes type is needed/);
+      .toHaveTextContent(/Everything here is optional/);
   });
 
-  it("asks for the diabetes type before saving, then saves the record as shown and returns to the hub", async () => {
+  it("saves without a diabetes type and returns to the hub", async () => {
     render(AboutPage);
 
     await page.getByRole("button", { name: "Save" }).click();
-    await expect.element(page.getByText("Diabetes type is required")).toBeVisible();
-    expect(state.submitted).not.toHaveBeenCalled();
+
+    await expect.poll(() => state.goto.mock.calls.length).toBe(1);
+    expect(state.submitted).toHaveBeenCalledTimes(1);
+    const posted = state.submitted.mock.calls[0][0];
+    expect(posted).toEqual(expect.objectContaining({ preferredName: "Sam" }));
+    expect(posted.diabetesType ?? "").toBe("");
+    expect(state.confirmed).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves the record as shown and returns to the hub", async () => {
+    render(AboutPage);
 
     await page.getByLabelText("Diabetes Type").click();
     await page.getByRole("option", { name: "Type 1" }).click();
@@ -108,6 +119,7 @@ describe("About the patient", () => {
         timezone: "Pacific/Auckland",
       })
     );
+    expect(state.confirmed).toHaveBeenCalledTimes(1);
     expect(state.hubRefreshed).toHaveBeenCalled();
     expect(state.goto).toHaveBeenCalledWith("/setup");
   });

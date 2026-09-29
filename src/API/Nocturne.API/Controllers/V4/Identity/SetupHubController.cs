@@ -71,6 +71,34 @@ public class SetupHubController(ISetupHubService setupHub) : ControllerBase
         }
     }
 
+    /// <summary>Marks the About step done because the owner saved it, whatever they filled in.</summary>
+    [DenyDemoSubject]
+    [HttpPost("items/about/confirm")]
+    [RequireScope(Scope.FullAccess)]
+    [RemoteCommand(Invalidates = ["GetSetupHub"])]
+    [ProducesResponseType(typeof(SetupHubStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<SetupHubStatus>> ConfirmAboutSetupItem(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess))
+            return Forbid();
+
+        try
+        {
+            return Ok(await setupHub.ConfirmAboutAsync(ct));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
+        }
+    }
+
     [DenyDemoSubject]
     [HttpPost("strip/dismiss")]
     [RequireScope(Scope.FullAccess)]

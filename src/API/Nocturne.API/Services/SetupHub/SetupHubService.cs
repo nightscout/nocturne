@@ -49,6 +49,23 @@ public class SetupHubService : ISetupHubService
         return await DescribeAsync(rows, ct);
     }
 
+    public async Task<SetupHubStatus> ConfirmAboutAsync(CancellationToken ct)
+    {
+        var recordId = await _db.PatientRecords.AsNoTracking().Select(r => (Guid?)r.Id).FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("There is no patient record to confirm.");
+
+        var rows = await SettleAsync(ct);
+        var row = rows.FirstOrDefault(r => r.ItemKey == SetupHubItemKey.About)
+            ?? throw new KeyNotFoundException("About is not on this tenant's setup hub.");
+        if (row.ConfirmedRecordId != recordId)
+        {
+            row.ConfirmedRecordId = recordId;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return await GetAsync(ct);
+    }
+
     public async Task<SetupHubStatus> DismissStripAsync(string revision, CancellationToken ct)
     {
         var tenant = await _db.Tenants.FirstAsync(t => t.Id == _db.TenantId, ct);

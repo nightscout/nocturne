@@ -35,6 +35,13 @@ public interface ISetupHubService
     /// <exception cref="InvalidOperationException">The item is done, which never reverts.</exception>
     Task<SetupHubStatus> SetStateAsync(SetupHubItemKey key, SetupHubItemState state, CancellationToken ct);
 
+    /// <summary>
+    /// Records that the owner saved the About step, so it is done even with every optional field
+    /// left blank. Kept against the patient record's id, like a confirmed therapy profile.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">There is no patient record to confirm.</exception>
+    Task<SetupHubStatus> ConfirmAboutAsync(CancellationToken ct);
+
     /// <summary>Hides the dashboard strip until the hub's revision moves on from <paramref name="revision"/>.</summary>
     Task<SetupHubStatus> DismissStripAsync(string revision, CancellationToken ct);
 }

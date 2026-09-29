@@ -325,7 +325,7 @@
   {:else}
     <!-- Import hero card -->
     <div
-      class="grid grid-cols-[1fr_260px] max-sm:grid-cols-1 max-sm:justify-items-center gap-6 p-7 rounded-2xl border overflow-hidden relative bg-card"
+      class="grid grid-cols-1 justify-items-center lg:grid-cols-[1fr_260px] lg:justify-items-stretch gap-6 p-7 rounded-2xl border overflow-hidden relative bg-card"
     >
       <!-- Left side -->
       <div class="flex flex-col gap-3">
@@ -367,13 +367,11 @@
 
       <!-- Right side — Progress ring -->
       <div
-        class="relative flex items-center justify-center w-[200px] h-[200px]"
+        class="relative flex items-center justify-center w-full max-w-50 aspect-square"
       >
         <svg
-          width="200"
-          height="200"
           viewBox="0 0 200 200"
-          class="-rotate-90"
+          class="-rotate-90 size-full"
         >
           <!-- Track -->
           <circle
