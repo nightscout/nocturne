@@ -3,18 +3,20 @@
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
   import { untrack } from "svelte";
-  import { Artwork } from "@nocturne/watercolour";
+  import { Artwork, seedFromName } from "@nocturne/watercolour";
 
   interface Props {
     /** Total carbs in the treatment */
     totalCarbs: number;
     /** Foods attributed to this treatment */
     foods: TreatmentFood[];
+    /** Stable id of the meal or treatment; seeds its wash so equal-carb meals differ */
+    seedKey?: string;
     /** Additional CSS classes */
     class?: string;
   }
 
-  let { totalCarbs, foods, class: className }: Props = $props();
+  let { totalCarbs, foods, seedKey, class: className }: Props = $props();
 
   // Color palette for food segments
   const colorPalette = [
@@ -135,7 +137,12 @@
     };
     measure();
     const mutations = new MutationObserver(measure);
-    mutations.observe(el, { subtree: true, childList: true, attributes: true });
+    mutations.observe(el, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["x", "y", "width", "height", "fill"],
+    });
     const resizes = new ResizeObserver(measure);
     resizes.observe(el);
     return () => {
@@ -196,7 +203,7 @@
             <Artwork
               artwork="wash"
               palette="slate"
-              seed={totalCarbs}
+              seed={seedKey ? seedFromName(seedKey) : totalCarbs}
               surface="light"
               autoplay="never"
               releaseAfterFinish
