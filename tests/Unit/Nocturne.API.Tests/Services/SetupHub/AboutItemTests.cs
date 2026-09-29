@@ -68,6 +68,39 @@ public class AboutItemTests
     }
 
     [Fact]
+    public async Task IsOpen_WhileTheTextFieldsAreBlank()
+    {
+        _db.PatientRecords.Add(new PatientRecordEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DiabetesType = "", Sex = "  ", Pronouns = " ",
+        });
+        await _db.SaveChangesAsync();
+
+        (await StateAsync()).Should().Be(SetupHubItemState.Open);
+    }
+
+    [Fact]
+    public async Task IsDone_WhenTheOwnerSavesWithEveryFieldLeftEmpty()
+    {
+        _db.PatientRecords.Add(new PatientRecordEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Sex = " " });
+        await _db.SaveChangesAsync();
+        (await StateAsync()).Should().Be(SetupHubItemState.Open);
+
+        var status = await _service.ConfirmAboutAsync(CancellationToken.None);
+
+        status.Items.Single(i => i.Key == SetupHubItemKey.About).State.Should().Be(SetupHubItemState.Done);
+        (await StateAsync()).Should().Be(SetupHubItemState.Done);
+    }
+
+    [Fact]
+    public async Task Confirming_WithNoPatientRecord_IsRefused()
+    {
+        var act = () => _service.ConfirmAboutAsync(CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task IsDone_EvenAfterBeingSetAside()
     {
         await _service.SetStateAsync(SetupHubItemKey.About, SetupHubItemState.NotForMe, CancellationToken.None);

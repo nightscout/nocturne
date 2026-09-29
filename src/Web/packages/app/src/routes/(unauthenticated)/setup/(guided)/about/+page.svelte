@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
+  import { confirmAboutSetupItem, getSetupHub } from "$api/generated/setupHubs.generated.remote";
   import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
   import { PatientClinicalForm, type ClinicalState } from "$lib/components/patient";
   import { FormActions } from "$lib/forms";
@@ -12,8 +12,9 @@
 
   let clinical = $state<ClinicalState | undefined>(undefined);
 
-  // Every field is optional; the item is done once any clinical field is saved.
+  // Every field is optional, so saving the step is itself what completes it.
   async function saved() {
+    await confirmAboutSetupItem();
     await getSetupHub().refresh();
     await goto(resolve("/setup"));
   }
