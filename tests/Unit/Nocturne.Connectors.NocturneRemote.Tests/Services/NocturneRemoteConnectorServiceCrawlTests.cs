@@ -90,6 +90,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
         result.Success.Should().BeFalse();
         result.ItemsSynced.Should().BeEmpty();
         fixture.PublishedGlucose.Should().BeEmpty();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().NotContain("see preceding connector logs",
+                "the response parsing cause must be visible in the connector status");
     }
 
     /// <summary>

@@ -395,6 +395,7 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         // connector logs, and a refused scope is the failure they can actually act on.
         string? refusal = null;
         string? transportFailure = null;
+        string? failure = null;
 
         var payload = await ExecuteWithRetryAsync(
             async () =>
@@ -417,19 +418,30 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
                     transportFailure = DescribeTransportFailure(ex);
                     throw;
                 }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // ExecuteWithRetryAsync deliberately converts parse/unexpected failures to a
+                    // null payload. Preserve the cause here so a tenant does not have to inspect
+                    // connector logs to distinguish malformed responses from an empty page.
+                    failure = DescribeFailure(ex);
+                    throw;
+                }
             },
             _retryDelayStrategy,
             maxRetries: config.MaxRetryAttempts,
             operationName: operationName,
             cancellationToken: ct);
 
-        return payload ?? throw FetchFailed(operationName, refusal ?? transportFailure);
+        return payload ?? throw FetchFailed(operationName, refusal ?? transportFailure ?? failure);
     }
 
     private static bool IsTransportFailure(Exception ex) =>
         ex is HttpRequestException { StatusCode: null } or IOException or TimeoutException;
 
     private static string DescribeTransportFailure(Exception ex)
+        => DescribeFailure(ex);
+
+    private static string DescribeFailure(Exception ex)
     {
         var detail = ex.GetBaseException().Message.Trim();
         return detail.Length <= 200 ? detail : detail[..200] + "...";
