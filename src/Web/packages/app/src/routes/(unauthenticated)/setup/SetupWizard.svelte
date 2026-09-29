@@ -333,9 +333,16 @@
     await goto(resolve("/"), { invalidateAll: true });
   }
 
-  // The core ends on the setup hub, which /setup serves once onboarding is complete.
+  // The core ends on the setup hub, which /setup serves only once the server has recorded the
+  // core as complete; until then /setup is still the core, so a failure stays here to be retried.
+  let continueFailed = $state(false);
   async function handleContinueToHub() {
-    await markSetupComplete();
+    continueFailed = false;
+    const result = await markSetupComplete().catch(() => undefined);
+    if (!result?.completed) {
+      continueFailed = true;
+      return;
+    }
     await goto(resolve("/setup"), { invalidateAll: true });
   }
 
@@ -625,6 +632,7 @@
               {importResult}
               {voice}
               onContinue={handleContinueToHub}
+              {continueFailed}
               onNavigateWithCoach={handleNavigateWithCoach}
             />
           {/if}
