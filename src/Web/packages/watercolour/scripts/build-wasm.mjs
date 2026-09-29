@@ -16,6 +16,8 @@ const run = (cmd, args, cwd) => {
   console.log(`> ${cmd} ${args.join(' ')}`);
   execFileSync(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
 };
+// WATERCOLOUR_WASM_PROFILE=1 keeps the name section so a CPU profile attributes wasm self-time to functions.
+const keepNames = process.env.WATERCOLOUR_WASM_PROFILE === '1';
 const kb = (path) => `${(statSync(path).size / 1024).toFixed(1)} KB`;
 
 run('cargo', ['build', '--profile', profile, '--target', 'wasm32-unknown-unknown', '-p', 'nocturne-watercolour-wasm'], cratesDir);
@@ -34,7 +36,7 @@ try {
   console.log('wasm-opt not on PATH; skipping (install binaryen to shrink the module further)');
 }
 if (hasWasmOpt) {
-  run('wasm-opt', ['-Os', '--enable-bulk-memory', '--enable-nontrapping-float-to-int', '-o', bgWasm, bgWasm], pkgDir);
+  run('wasm-opt', ['-Os', ...(keepNames ? ['-g'] : []), '--enable-bulk-memory', '--enable-nontrapping-float-to-int', '-o', bgWasm, bgWasm], pkgDir);
   console.log(`wasm (wasm-opt -Os): ${kb(bgWasm)}`);
 }
 if (!existsSync(resolve(outDir, 'nocturne_watercolour.js'))) {

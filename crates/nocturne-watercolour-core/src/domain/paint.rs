@@ -251,17 +251,21 @@ pub fn rasterize_path_span(
     params: StampParams,
     span: StrokeSpan,
 ) -> Stamp {
-    let mut coverage = coverage_upto(
-        path, radius, softness, target, aspect, seed, params, span.end,
-    );
-    if span.start > 0.0 {
-        let prefix = coverage_upto(
-            path, radius, softness, target, aspect, seed, params, span.start,
-        );
-        for (c, &p) in coverage.iter_mut().zip(&prefix) {
-            *c = (*c - p).max(0.0);
+    let chain = Chain::new(path, radius, softness, target, aspect, seed, params);
+    let (start, end) = (span.start.clamp(0.0, 1.0), span.end.clamp(0.0, 1.0));
+    let coverage = match &chain {
+        Some(chain) if span.start > 0.0 && start <= end => chain.span_coverage(start, end),
+        _ => {
+            let mut coverage = coverage_upto(chain.as_ref(), target, span.end);
+            if span.start > 0.0 {
+                let prefix = coverage_upto(chain.as_ref(), target, span.start);
+                for (c, &p) in coverage.iter_mut().zip(&prefix) {
+                    *c = (*c - p).max(0.0);
+                }
+            }
+            coverage
         }
-    }
+    };
     Stamp {
         width: target.width,
         height: target.height,
@@ -276,119 +280,474 @@ pub fn rasterize_path_span(
 /// `cov_upto` is monotone in `t_end` and the two terms of a span subtract
 /// exactly. A path with no arc length (a single point, or coincident points)
 /// is a dab that appears once `t_end > 0`.
-#[allow(clippy::too_many_arguments)]
-fn coverage_upto(
-    path: &[Point],
-    radius: RadiusProfile,
-    softness: f32,
-    target: StampTarget<'_>,
-    aspect: f32,
-    seed: Seed,
-    params: StampParams,
-    t_end: f32,
-) -> Vec<f32> {
-    let StampTarget {
-        width,
-        height,
-        paper_height,
-    } = target;
-    let n = (width as usize) * (height as usize);
+fn coverage_upto(chain: Option<&Chain<'_>>, target: StampTarget<'_>, t_end: f32) -> Vec<f32> {
+    let n = (target.width as usize) * (target.height as usize);
     let mut coverage = vec![0.0f32; n];
     let t_end = t_end.clamp(0.0, 1.0);
-    if path.is_empty() || t_end <= 0.0 {
+    let Some(chain) = chain else {
+        return coverage;
+    };
+    if t_end <= 0.0 {
         return coverage;
     }
-    let (w, h) = (width as f32, height as f32);
-    let (ax, ay) = isotropic_scale(aspect);
-    let iso = |p: &Point| Point::new(p.x * ax, p.y * ay);
-    let segments: Vec<(Point, Point)> = if path.len() == 1 {
-        vec![(iso(&path[0]), iso(&path[0]))]
-    } else {
-        path.windows(2).map(|p| (iso(&p[0]), iso(&p[1]))).collect()
+    let full = Rect::new(0, target.width, 0, target.height);
+    for si in 0..chain.segs.len() {
+        chain.walk_into(si, t_end, full, None, &mut coverage);
+    }
+    coverage
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Rect {
+    x0: u32,
+    x1: u32,
+    y0: u32,
+    y1: u32,
+}
+
+impl Rect {
+    const EMPTY: Rect = Rect {
+        x0: u32::MAX,
+        x1: 0,
+        y0: u32::MAX,
+        y1: 0,
     };
-    let total_len: f32 = segments
-        .iter()
-        .map(|(a, b)| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt())
-        .sum::<f32>()
-        .max(1e-6);
-    let inner = 1.0 - softness.clamp(0.0, 1.0);
-    let r_max = radius.max().max(1e-4) * (1.0 + params.jitter + params.edge_roughness);
-    // A cell's size in the isotropic metric, for the anti-aliasing ramp.
-    let cell = (ax / w).max(ay / h);
-    // Only a partial span clips its final segment; a full span walks every
-    // segment with the unclipped formula, so `StrokeSpan::FULL` stays
-    // bit-identical to a single stamp.
-    let clip = t_end < 1.0;
-    let mut walked = 0.0f32;
-    for (si, (a, b)) in segments.iter().enumerate() {
-        let seg_len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
-        let t0 = walked / total_len;
-        let t1 = (walked + seg_len) / total_len;
-        walked += seg_len;
-        if t0 >= t_end {
-            continue;
+
+    fn new(x0: u32, x1: u32, y0: u32, y1: u32) -> Rect {
+        Rect { x0, x1, y0, y1 }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.x0 >= self.x1 || self.y0 >= self.y1
+    }
+
+    fn union(self, o: Rect) -> Rect {
+        if o.is_empty() {
+            return self;
         }
-        // Bounding box back in grid cells: the isotropic radius spans
-        // r/ax of the width and r/ay of the height.
-        let x_min = (((a.x.min(b.x) - r_max) / ax * w).floor().max(0.0)) as u32;
-        let x_max = (((a.x.max(b.x) + r_max) / ax * w).ceil().min(w)) as u32;
-        let y_min = (((a.y.min(b.y) - r_max) / ay * h).floor().max(0.0)) as u32;
-        let y_max = (((a.y.max(b.y) + r_max) / ay * h).ceil().min(h)) as u32;
-        if !clip || t1 <= t_end {
-            // The segment lies fully inside the span: the original walk.
-            for y in y_min..y_max {
-                for x in x_min..x_max {
-                    let pu = (x as f32 + 0.5) / w * ax;
-                    let pv = (y as f32 + 0.5) / h * ay;
-                    let (dist, along) = distance_to_segment(pu, pv, *a, *b);
-                    let t = t0 + (t1 - t0) * along;
-                    let jitter = 1.0
-                        + params.jitter * (hash2(seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
-                    let r = (radius.at(t) * jitter).max(1e-5);
-                    let idx = (y as usize) * (width as usize) + x as usize;
-                    let grain = paper_height.get(idx).copied().unwrap_or(0.5) - 0.5;
-                    let shifted = dist + grain * params.edge_roughness * r;
-                    let aa = 0.75 * cell / r;
-                    let cov = falloff(shifted / r, inner.min(1.0 - aa));
-                    if cov > coverage[idx] {
-                        coverage[idx] = cov;
-                    }
+        Rect::new(
+            self.x0.min(o.x0),
+            self.x1.max(o.x1),
+            self.y0.min(o.y0),
+            self.y1.max(o.y1),
+        )
+    }
+
+    fn intersect(self, o: Rect) -> Rect {
+        Rect::new(
+            self.x0.max(o.x0),
+            self.x1.min(o.x1),
+            self.y0.max(o.y0),
+            self.y1.min(o.y1),
+        )
+    }
+
+    fn width(&self) -> usize {
+        self.x1.saturating_sub(self.x0) as usize
+    }
+
+    fn height(&self) -> usize {
+        self.y1.saturating_sub(self.y0) as usize
+    }
+
+    fn has_row(&self, y: u32) -> bool {
+        self.x0 < self.x1 && (self.y0..self.y1).contains(&y)
+    }
+
+    fn contains(&self, x: u32, y: u32) -> bool {
+        self.has_row(y) && (self.x0..self.x1).contains(&x)
+    }
+}
+
+/// One capsule of the chain, with the arc-length fractions of the full path
+/// it runs between.
+#[derive(Debug, Clone, Copy)]
+struct Seg {
+    a: Point,
+    b: Point,
+    t0: f32,
+    t1: f32,
+}
+
+/// How a segment enters `cov_upto(t_end)`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Walk {
+    Skip,
+    Full,
+    /// Walked only up to this clip point.
+    Clip(Point),
+}
+
+/// A stroke's segments in the isotropic metric, and what every cell of its
+/// walk reads.
+struct Chain<'a> {
+    segs: Vec<Seg>,
+    width: u32,
+    height: u32,
+    w: f32,
+    h: f32,
+    ax: f32,
+    ay: f32,
+    inner: f32,
+    r_max: f32,
+    cell: f32,
+    radius: RadiusProfile,
+    params: StampParams,
+    seed: Seed,
+    paper_height: &'a [f32],
+}
+
+impl<'a> Chain<'a> {
+    /// `None` for an empty path, which covers nothing.
+    fn new(
+        path: &[Point],
+        radius: RadiusProfile,
+        softness: f32,
+        target: StampTarget<'a>,
+        aspect: f32,
+        seed: Seed,
+        params: StampParams,
+    ) -> Option<Chain<'a>> {
+        if path.is_empty() {
+            return None;
+        }
+        let (w, h) = (target.width as f32, target.height as f32);
+        let (ax, ay) = isotropic_scale(aspect);
+        let iso = |p: &Point| Point::new(p.x * ax, p.y * ay);
+        let segments: Vec<(Point, Point)> = if path.len() == 1 {
+            vec![(iso(&path[0]), iso(&path[0]))]
+        } else {
+            path.windows(2).map(|p| (iso(&p[0]), iso(&p[1]))).collect()
+        };
+        let total_len: f32 = segments
+            .iter()
+            .map(|(a, b)| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt())
+            .sum::<f32>()
+            .max(1e-6);
+        let mut walked = 0.0f32;
+        let segs = segments
+            .iter()
+            .map(|&(a, b)| {
+                let seg_len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+                let t0 = walked / total_len;
+                let t1 = (walked + seg_len) / total_len;
+                walked += seg_len;
+                Seg { a, b, t0, t1 }
+            })
+            .collect();
+        Some(Chain {
+            segs,
+            width: target.width,
+            height: target.height,
+            w,
+            h,
+            ax,
+            ay,
+            inner: 1.0 - softness.clamp(0.0, 1.0),
+            r_max: radius.max().max(1e-4) * (1.0 + params.jitter + params.edge_roughness),
+            // A cell's size in the isotropic metric, for the anti-aliasing ramp.
+            cell: (ax / w).max(ay / h),
+            radius,
+            params,
+            seed,
+            paper_height: target.paper_height,
+        })
+    }
+
+    /// Only a partial span clips its final segment; a full span walks every
+    /// segment with the unclipped formula, so `StrokeSpan::FULL` stays
+    /// bit-identical to a single stamp.
+    fn walk(&self, si: usize, t_end: f32) -> Walk {
+        let s = self.segs[si];
+        if s.t0 >= t_end {
+            Walk::Skip
+        } else if t_end >= 1.0 || t_end.is_nan() || s.t1 <= t_end {
+            Walk::Full
+        } else {
+            let frac = (t_end - s.t0) / (s.t1 - s.t0).max(1e-12);
+            Walk::Clip(Point::new(
+                s.a.x + (s.b.x - s.a.x) * frac,
+                s.a.y + (s.b.y - s.a.y) * frac,
+            ))
+        }
+    }
+
+    /// The segment's bounding box in grid cells: the isotropic radius spans
+    /// r/ax of the width and r/ay of the height.
+    fn rect(&self, si: usize, walk: Walk) -> Rect {
+        let s = self.segs[si];
+        let end = match walk {
+            Walk::Skip => return Rect::EMPTY,
+            Walk::Full => s.b,
+            Walk::Clip(c) => c,
+        };
+        let (a, r_max, ax, ay, w, h) = (s.a, self.r_max, self.ax, self.ay, self.w, self.h);
+        Rect::new(
+            (((a.x.min(end.x) - r_max) / ax * w).floor().max(0.0)) as u32,
+            (((a.x.max(end.x) + r_max) / ax * w).ceil().min(w)) as u32,
+            (((a.y.min(end.y) - r_max) / ay * h).floor().max(0.0)) as u32,
+            (((a.y.max(end.y) + r_max) / ay * h).ceil().min(h)) as u32,
+        )
+    }
+
+    /// Cell `(x, y)`'s centre in the isotropic metric, its distance to
+    /// segment `si` and the full-path `t` of the closest point.
+    fn locate(&self, si: usize, x: u32, y: u32) -> (f32, f32, f32, f32) {
+        let Seg { a, b, t0, t1 } = self.segs[si];
+        let pu = (x as f32 + 0.5) / self.w * self.ax;
+        let pv = (y as f32 + 0.5) / self.h * self.ay;
+        let (dist, along) = distance_to_segment(pu, pv, a, b);
+        (pu, pv, dist, t0 + (t1 - t0) * along)
+    }
+
+    /// The jittered radius at `t` on segment `si`.
+    fn radius_at(&self, si: usize, t: f32) -> f32 {
+        let jitter = 1.0
+            + self.params.jitter * (hash2(self.seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
+        (self.radius.at(t) * jitter).max(1e-5)
+    }
+
+    /// The distance `walk` measures: a clipped segment keeps each cell's
+    /// full-path `t`, so the clip cap and the unclipped walk share one
+    /// radius and jitter.
+    fn walk_dist(walk: Walk, (pu, pv, dist, t): (f32, f32, f32, f32), t_end: f32) -> f32 {
+        match walk {
+            Walk::Clip(c) => {
+                let cap_dist = ((pu - c.x).powi(2) + (pv - c.y).powi(2)).sqrt();
+                if t <= t_end { dist } else { cap_dist }
+            }
+            _ => dist,
+        }
+    }
+
+    fn cover(&self, r: f32, x: u32, y: u32, dist: f32) -> f32 {
+        let idx = (y as usize) * (self.width as usize) + x as usize;
+        let grain = self.paper_height.get(idx).copied().unwrap_or(0.5) - 0.5;
+        let shifted = dist + grain * self.params.edge_roughness * r;
+        let aa = 0.75 * self.cell / r;
+        falloff(shifted / r, self.inner.min(1.0 - aa))
+    }
+
+    /// Takes the max of segment `si`'s coverage in `cov_upto(t_end)` into
+    /// `buf`, which holds the cells of `frame`, over the part of its box
+    /// inside `frame` and, per row of `frame`, inside `rows`.
+    fn walk_into(
+        &self,
+        si: usize,
+        t_end: f32,
+        frame: Rect,
+        rows: Option<&[(u32, u32)]>,
+        buf: &mut [f32],
+    ) {
+        let walk = self.walk(si, t_end);
+        let r = self.rect(si, walk).intersect(frame);
+        let stride = frame.width();
+        for y in r.y0..r.y1 {
+            let ly = (y - frame.y0) as usize;
+            let (lo, hi) = rows.map_or((r.x0, r.x1), |rows| rows[ly]);
+            for x in r.x0.max(lo)..r.x1.min(hi) {
+                let at = self.locate(si, x, y);
+                let radius = self.radius_at(si, at.3);
+                let cov = self.cover(radius, x, y, Self::walk_dist(walk, at, t_end));
+                let local = ly * stride + (x - frame.x0) as usize;
+                if cov > buf[local] {
+                    buf[local] = cov;
                 }
             }
-        } else {
-            // The span ends inside this segment: walk only up to the clip
-            // point, but keep each cell's full-path `t` so the clip cap and
-            // the unclipped walk share one radius and jitter.
-            let frac = (t_end - t0) / (t1 - t0).max(1e-12);
-            let c = Point::new(a.x + (b.x - a.x) * frac, a.y + (b.y - a.y) * frac);
-            let x_min = (((a.x.min(c.x) - r_max) / ax * w).floor().max(0.0)) as u32;
-            let x_max = (((a.x.max(c.x) + r_max) / ax * w).ceil().min(w)) as u32;
-            let y_min = (((a.y.min(c.y) - r_max) / ay * h).floor().max(0.0)) as u32;
-            let y_max = (((a.y.max(c.y) + r_max) / ay * h).ceil().min(h)) as u32;
-            for y in y_min..y_max {
-                for x in x_min..x_max {
-                    let pu = (x as f32 + 0.5) / w * ax;
-                    let pv = (y as f32 + 0.5) / h * ay;
-                    let (dist, along) = distance_to_segment(pu, pv, *a, *b);
-                    let t = t0 + (t1 - t0) * along;
-                    let jitter = 1.0
-                        + params.jitter * (hash2(seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
-                    let r = (radius.at(t) * jitter).max(1e-5);
-                    let cap_dist = ((pu - c.x).powi(2) + (pv - c.y).powi(2)).sqrt();
-                    let dist = if t <= t_end { dist } else { cap_dist };
-                    let idx = (y as usize) * (width as usize) + x as usize;
-                    let grain = paper_height.get(idx).copied().unwrap_or(0.5) - 0.5;
-                    let shifted = dist + grain * params.edge_roughness * r;
-                    let aa = 0.75 * cell / r;
-                    let cov = falloff(shifted / r, inner.min(1.0 - aa));
-                    if cov > coverage[idx] {
-                        coverage[idx] = cov;
+        }
+    }
+
+    /// [`Chain::walk_into`] for both terms of a span at once, sharing each
+    /// cell's geometry.
+    #[allow(clippy::too_many_arguments)]
+    fn walk_pair(
+        &self,
+        si: usize,
+        (start, end): (f32, f32),
+        frame: Rect,
+        rows: &[(u32, u32)],
+        upto_start: &mut [f32],
+        upto_end: &mut [f32],
+    ) {
+        let (ws, we) = (self.walk(si, start), self.walk(si, end));
+        let (rs, re) = (
+            self.rect(si, ws).intersect(frame),
+            self.rect(si, we).intersect(frame),
+        );
+        let both = Rect::EMPTY.union(rs).union(re);
+        let stride = frame.width();
+        for y in both.y0..both.y1 {
+            let ly = (y - frame.y0) as usize;
+            let (lo, hi) = rows[ly];
+            for x in both.x0.max(lo)..both.x1.min(hi) {
+                let (in_s, in_e) = (rs.contains(x, y), re.contains(x, y));
+                if !in_s && !in_e {
+                    continue;
+                }
+                let at = self.locate(si, x, y);
+                let radius = self.radius_at(si, at.3);
+                let local = ly * stride + (x - frame.x0) as usize;
+                let mut from_start = None;
+                if in_s {
+                    let dist = Self::walk_dist(ws, at, start);
+                    let cov = self.cover(radius, x, y, dist);
+                    from_start = Some((dist, cov));
+                    if cov > upto_start[local] {
+                        upto_start[local] = cov;
+                    }
+                }
+                if in_e {
+                    let dist = Self::walk_dist(we, at, end);
+                    let cov = match from_start {
+                        Some((d, cov)) if d.to_bits() == dist.to_bits() => cov,
+                        _ => self.cover(radius, x, y, dist),
+                    };
+                    if cov > upto_end[local] {
+                        upto_end[local] = cov;
                     }
                 }
             }
         }
     }
-    coverage
+
+    /// The cells of row `y` in `x0..x1` whose closest point on segment `si`
+    /// has `t <= t_end`. Every step from a cell's column to its `t` is
+    /// monotone, rounding included, so they are one run at the end of the
+    /// row the segment starts from.
+    fn behind(&self, si: usize, y: u32, (x0, x1): (u32, u32), t_end: f32) -> (u32, u32) {
+        if x0 >= x1 {
+            return (x0, x0);
+        }
+        let Seg { a, b, .. } = self.segs[si];
+        let (abx, aby) = (b.x - a.x, b.y - a.y);
+        let settled = |x: u32| self.locate(si, x, y).3 <= t_end;
+        let first = |pred: &dyn Fn(u32) -> bool| {
+            let (mut lo, mut hi) = (x0, x1);
+            while lo < hi {
+                let mid = lo + (hi - lo) / 2;
+                if pred(mid) { hi = mid } else { lo = mid + 1 }
+            }
+            lo
+        };
+        if abx * abx + aby * aby < DEGENERATE_LEN2 || abx == 0.0 {
+            if settled(x0) { (x0, x1) } else { (x0, x0) }
+        } else if abx > 0.0 {
+            (x0, first(&|x| !settled(x)))
+        } else {
+            (first(&settled), x1)
+        }
+    }
+
+    /// Widens `rows` over the cells where segment `si` can add a different
+    /// value to the two terms of a span. The rest of its box it adds to
+    /// both alike: cells behind the start's clip point, which both terms
+    /// measure to the segment itself.
+    fn mark_differing(
+        &self,
+        si: usize,
+        (start, end): (f32, f32),
+        frame: Rect,
+        rows: &mut [(u32, u32)],
+    ) {
+        let (ws, we) = (self.walk(si, start), self.walk(si, end));
+        let (rs, re) = (
+            self.rect(si, ws).intersect(frame),
+            self.rect(si, we).intersect(frame),
+        );
+        let both = Rect::EMPTY.union(rs).union(re);
+        for y in both.y0..both.y1 {
+            let (s_row, e_row) = (rs.has_row(y), re.has_row(y));
+            let mut span = (u32::MAX, 0u32);
+            for (on, r) in [(s_row, rs), (e_row, re)] {
+                if on {
+                    span = (span.0.min(r.x0), span.1.max(r.x1));
+                }
+            }
+            if span.0 >= span.1 {
+                continue;
+            }
+            let same = if matches!(ws, Walk::Clip(_)) && s_row && e_row {
+                self.behind(si, y, (rs.x0.max(re.x0), rs.x1.min(re.x1)), start)
+            } else {
+                (0, 0)
+            };
+            let differing = if same.0 >= same.1 {
+                span
+            } else if same.0 <= span.0 && same.1 >= span.1 {
+                continue;
+            } else if same.0 <= span.0 {
+                (same.1, span.1)
+            } else if same.1 >= span.1 {
+                (span.0, same.0)
+            } else {
+                span
+            };
+            let row = &mut rows[(y - frame.y0) as usize];
+            *row = (row.0.min(differing.0), row.1.max(differing.1));
+        }
+    }
+
+    /// `max(0, cov_upto(end) - cov_upto(start))` for `0 < start <= end`,
+    /// equal to the bit to subtracting the two full walks. Each term is a max
+    /// over its segments, and a segment adds the same value to both terms
+    /// wherever it walks both unclipped, or reaches a cell behind the start's
+    /// clip point. Where every segment does, the difference is exactly zero,
+    /// so only the cells where some segment differs are walked, the shared
+    /// segments once for both terms.
+    fn span_coverage(&self, start: f32, end: f32) -> Vec<f32> {
+        let full = Rect::new(0, self.width, 0, self.height);
+        let mut out = vec![0.0f32; full.width() * full.height()];
+        let (shared, tail): (Vec<usize>, Vec<usize>) = (0..self.segs.len()).partition(|&si| {
+            self.walk(si, start) == Walk::Full && self.walk(si, end) == Walk::Full
+        });
+        let mut frame = Rect::EMPTY;
+        for &si in &tail {
+            frame = frame
+                .union(self.rect(si, self.walk(si, start)))
+                .union(self.rect(si, self.walk(si, end)));
+        }
+        let frame = frame.intersect(full);
+        if frame.is_empty() {
+            return out;
+        }
+        let mut rows = vec![(u32::MAX, 0u32); frame.height()];
+        for &si in &tail {
+            self.mark_differing(si, (start, end), frame, &mut rows);
+        }
+        let mut upto_end = vec![0.0f32; frame.width() * frame.height()];
+        for &si in &shared {
+            self.walk_into(si, end, frame, Some(&rows), &mut upto_end);
+        }
+        let mut upto_start = upto_end.clone();
+        for &si in &tail {
+            self.walk_pair(
+                si,
+                (start, end),
+                frame,
+                &rows,
+                &mut upto_start,
+                &mut upto_end,
+            );
+        }
+        let stride = frame.width();
+        for (ly, &(lo, hi)) in rows.iter().enumerate() {
+            if lo >= hi {
+                continue;
+            }
+            let y = frame.y0 as usize + ly;
+            let (a, b) = ((lo - frame.x0) as usize, (hi - frame.x0) as usize);
+            let row = y * full.width() + frame.x0 as usize;
+            let local = ly * stride;
+            for (o, (&c, &p)) in out[row + a..row + b].iter_mut().zip(
+                upto_end[local + a..local + b]
+                    .iter()
+                    .zip(&upto_start[local + a..local + b]),
+            ) {
+                *o = (c - p).max(0.0);
+            }
+        }
+        out
+    }
 }
 
 fn falloff(x: f32, inner: f32) -> f32 {
@@ -402,12 +761,16 @@ fn falloff(x: f32, inner: f32) -> f32 {
     }
 }
 
+/// Below this squared length a segment is a point: `distance_to_segment` pins
+/// its parameter to 0, and `Chain::behind` must agree or its rows stop matching.
+const DEGENERATE_LEN2: f32 = 1e-12;
+
 /// Distance from `(px, py)` to segment `ab` and the parameter along it.
 fn distance_to_segment(px: f32, py: f32, a: Point, b: Point) -> (f32, f32) {
     let abx = b.x - a.x;
     let aby = b.y - a.y;
     let len2 = abx * abx + aby * aby;
-    let t = if len2 < 1e-12 {
+    let t = if len2 < DEGENERATE_LEN2 {
         0.0
     } else {
         (((px - a.x) * abx + (py - a.y) * aby) / len2).clamp(0.0, 1.0)
@@ -511,6 +874,7 @@ pub fn rasterize_mask_aspect(mask: &Mask, width: u32, height: u32, aspect: f32) 
         // per-cell cast below indexes out of bounds and panics.
         _ => vec![Vec::new(); height as usize],
     };
+    let bbox = polygon_bbox(mask.points());
     let mut out = vec![0.0f32; n];
     for y in 0..height {
         for x in 0..width {
@@ -518,10 +882,11 @@ pub fn rasterize_mask_aspect(mask: &Mask, width: u32, height: u32, aspect: f32) 
             let pv = (y as f32 + 0.5) / h;
             let idx = (y as usize) * (width as usize) + x as usize;
             let outside = match mask {
-                Mask::Polygon { points, .. } => {
+                Mask::Polygon { .. } => {
                     // A cell outside the polygon's bounding box is never
                     // inside, so the cast can be skipped there.
-                    let inside = if in_polygon_bbox(pu, pv, points) {
+                    let (x0, x1, y0, y1) = bbox;
+                    let inside = if !(pu < x0 || pu > x1 || pv < y0 || pv > y1) {
                         let mut inside = false;
                         for &(a, b) in &row_edges[y as usize] {
                             let x_at = a.x + (pv - a.y) / (b.y - a.y) * (b.x - a.x);
@@ -582,10 +947,9 @@ fn walk_mask_segment(
     }
 }
 
-/// Whether a normalised cell centre can lie inside the polygon at all: the
-/// polygon is contained in its own vertex bounding box, so a point outside it
-/// is outside the polygon.
-fn in_polygon_bbox(pu: f32, pv: f32, points: &[Point]) -> bool {
+/// The polygon's vertex bounding box, `(x0, x1, y0, y1)`. The polygon lies
+/// inside it, so a cell centre outside it is outside the polygon.
+fn polygon_bbox(points: &[Point]) -> (f32, f32, f32, f32) {
     let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     for p in points {
         x0 = x0.min(p.x);
@@ -593,7 +957,7 @@ fn in_polygon_bbox(pu: f32, pv: f32, points: &[Point]) -> bool {
         y0 = y0.min(p.y);
         y1 = y1.max(p.y);
     }
-    !(pu < x0 || pu > x1 || pv < y0 || pv > y1)
+    (x0, x1, y0, y1)
 }
 
 pub fn apply_brush(
@@ -928,5 +1292,207 @@ mod tests {
             empty,
         );
         assert!(s.coverage.iter().all(|&c| c == 0.0));
+    }
+
+    /// Two full `cov_upto` walks, subtracted: the definition `span_coverage`
+    /// must match bit for bit.
+    #[allow(clippy::too_many_arguments)]
+    fn reference_upto(
+        path: &[Point],
+        radius: RadiusProfile,
+        softness: f32,
+        target: StampTarget<'_>,
+        aspect: f32,
+        seed: Seed,
+        params: StampParams,
+        t_end: f32,
+    ) -> Vec<f32> {
+        let StampTarget {
+            width,
+            height,
+            paper_height,
+        } = target;
+        let n = (width as usize) * (height as usize);
+        let mut coverage = vec![0.0f32; n];
+        let t_end = t_end.clamp(0.0, 1.0);
+        if path.is_empty() || t_end <= 0.0 {
+            return coverage;
+        }
+        let (w, h) = (width as f32, height as f32);
+        let (ax, ay) = isotropic_scale(aspect);
+        let iso = |p: &Point| Point::new(p.x * ax, p.y * ay);
+        let segments: Vec<(Point, Point)> = if path.len() == 1 {
+            vec![(iso(&path[0]), iso(&path[0]))]
+        } else {
+            path.windows(2).map(|p| (iso(&p[0]), iso(&p[1]))).collect()
+        };
+        let total_len: f32 = segments
+            .iter()
+            .map(|(a, b)| ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt())
+            .sum::<f32>()
+            .max(1e-6);
+        let inner = 1.0 - softness.clamp(0.0, 1.0);
+        let r_max = radius.max().max(1e-4) * (1.0 + params.jitter + params.edge_roughness);
+        // A cell's size in the isotropic metric, for the anti-aliasing ramp.
+        let cell = (ax / w).max(ay / h);
+        // Only a partial span clips its final segment; a full span walks every
+        // segment with the unclipped formula, so `StrokeSpan::FULL` stays
+        // bit-identical to a single stamp.
+        let clip = t_end < 1.0;
+        let mut walked = 0.0f32;
+        for (si, (a, b)) in segments.iter().enumerate() {
+            let seg_len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+            let t0 = walked / total_len;
+            let t1 = (walked + seg_len) / total_len;
+            walked += seg_len;
+            if t0 >= t_end {
+                continue;
+            }
+            // Bounding box back in grid cells: the isotropic radius spans
+            // r/ax of the width and r/ay of the height.
+            let x_min = (((a.x.min(b.x) - r_max) / ax * w).floor().max(0.0)) as u32;
+            let x_max = (((a.x.max(b.x) + r_max) / ax * w).ceil().min(w)) as u32;
+            let y_min = (((a.y.min(b.y) - r_max) / ay * h).floor().max(0.0)) as u32;
+            let y_max = (((a.y.max(b.y) + r_max) / ay * h).ceil().min(h)) as u32;
+            if !clip || t1 <= t_end {
+                // The segment lies fully inside the span: the original walk.
+                for y in y_min..y_max {
+                    for x in x_min..x_max {
+                        let pu = (x as f32 + 0.5) / w * ax;
+                        let pv = (y as f32 + 0.5) / h * ay;
+                        let (dist, along) = distance_to_segment(pu, pv, *a, *b);
+                        let t = t0 + (t1 - t0) * along;
+                        let jitter = 1.0
+                            + params.jitter
+                                * (hash2(seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
+                        let r = (radius.at(t) * jitter).max(1e-5);
+                        let idx = (y as usize) * (width as usize) + x as usize;
+                        let grain = paper_height.get(idx).copied().unwrap_or(0.5) - 0.5;
+                        let shifted = dist + grain * params.edge_roughness * r;
+                        let aa = 0.75 * cell / r;
+                        let cov = falloff(shifted / r, inner.min(1.0 - aa));
+                        if cov > coverage[idx] {
+                            coverage[idx] = cov;
+                        }
+                    }
+                }
+            } else {
+                // The span ends inside this segment: walk only up to the clip
+                // point, but keep each cell's full-path `t` so the clip cap and
+                // the unclipped walk share one radius and jitter.
+                let frac = (t_end - t0) / (t1 - t0).max(1e-12);
+                let c = Point::new(a.x + (b.x - a.x) * frac, a.y + (b.y - a.y) * frac);
+                let x_min = (((a.x.min(c.x) - r_max) / ax * w).floor().max(0.0)) as u32;
+                let x_max = (((a.x.max(c.x) + r_max) / ax * w).ceil().min(w)) as u32;
+                let y_min = (((a.y.min(c.y) - r_max) / ay * h).floor().max(0.0)) as u32;
+                let y_max = (((a.y.max(c.y) + r_max) / ay * h).ceil().min(h)) as u32;
+                for y in y_min..y_max {
+                    for x in x_min..x_max {
+                        let pu = (x as f32 + 0.5) / w * ax;
+                        let pv = (y as f32 + 0.5) / h * ay;
+                        let (dist, along) = distance_to_segment(pu, pv, *a, *b);
+                        let t = t0 + (t1 - t0) * along;
+                        let jitter = 1.0
+                            + params.jitter
+                                * (hash2(seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
+                        let r = (radius.at(t) * jitter).max(1e-5);
+                        let cap_dist = ((pu - c.x).powi(2) + (pv - c.y).powi(2)).sqrt();
+                        let dist = if t <= t_end { dist } else { cap_dist };
+                        let idx = (y as usize) * (width as usize) + x as usize;
+                        let grain = paper_height.get(idx).copied().unwrap_or(0.5) - 0.5;
+                        let shifted = dist + grain * params.edge_roughness * r;
+                        let aa = 0.75 * cell / r;
+                        let cov = falloff(shifted / r, inner.min(1.0 - aa));
+                        if cov > coverage[idx] {
+                            coverage[idx] = cov;
+                        }
+                    }
+                }
+            }
+        }
+        coverage
+    }
+
+    /// Every span of every stroke equals the two full walks subtracted, to
+    /// the bit, over paths with coincident points, axis-aligned, off-grid and
+    /// one-point paths, tapered and grid-wide radii, non-square grids and
+    /// rough paper.
+    #[test]
+    fn a_span_equals_its_two_full_walks_subtracted() {
+        let mut state = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 40) as f32 / (1u64 << 24) as f32
+        };
+        let mut checked = 0;
+        for case in 0..240 {
+            let (width, height) = [(64, 64), (37, 23), (50, 90), (96, 40)][case % 4];
+            let paper: Vec<f32> = (0..width * height).map(|_| next()).collect();
+            let target = StampTarget {
+                width,
+                height,
+                paper_height: &paper,
+            };
+            let aspect = [1.0, 0.6, 1.7, 2.4][(case / 4) % 4];
+            let points = 1 + (case % 7);
+            let mut path: Vec<Point> = (0..points)
+                .map(|_| Point::new(next() * 1.4 - 0.2, next() * 1.4 - 0.2))
+                .collect();
+            if case % 5 == 0 && points > 2 {
+                path[1] = path[0];
+            }
+            // Axis-aligned segments: a row's `t` is then constant or runs one way.
+            for i in 1..path.len() {
+                match case % 6 {
+                    1 => path[i].x = path[i - 1].x,
+                    3 => path[i].y = path[i - 1].y,
+                    _ => {}
+                }
+            }
+            let reach = if case % 3 == 0 { 0.4 } else { 0.12 };
+            let radius = RadiusProfile {
+                start: 0.01 + next() * reach,
+                end: 0.01 + next() * reach,
+            };
+            let softness = next();
+            let seed = Seed(case as u64 * 31 + 7);
+            let params = StampParams::default();
+            let steps = 1 + (case % 13) as u32;
+            let mut spans: Vec<StrokeSpan> = (0..steps)
+                .map(|i| StrokeSpan::new(i as f32 / steps as f32, (i + 1) as f32 / steps as f32))
+                .collect();
+            let (a, b) = (next(), next());
+            spans.extend([
+                StrokeSpan::new(a, b),
+                StrokeSpan::new(a, a),
+                StrokeSpan::new(a, 1.0),
+            ]);
+            for span in spans {
+                let got = rasterize_path_span(
+                    &path, radius, softness, target, aspect, seed, params, span,
+                );
+                let mut want = reference_upto(
+                    &path, radius, softness, target, aspect, seed, params, span.end,
+                );
+                if span.start > 0.0 {
+                    let prefix = reference_upto(
+                        &path, radius, softness, target, aspect, seed, params, span.start,
+                    );
+                    for (c, &p) in want.iter_mut().zip(&prefix) {
+                        *c = (*c - p).max(0.0);
+                    }
+                }
+                let bits = |v: &[f32]| v.iter().map(|c| c.to_bits()).collect::<Vec<_>>();
+                assert_eq!(
+                    bits(&got.coverage),
+                    bits(&want),
+                    "case {case} span {span:?}"
+                );
+                checked += 1;
+            }
+        }
+        assert!(checked > 2000);
     }
 }
