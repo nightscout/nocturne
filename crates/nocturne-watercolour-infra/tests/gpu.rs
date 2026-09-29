@@ -8,10 +8,13 @@ use std::sync::OnceLock;
 use nocturne_watercolour_core::application::{
     CheckpointPolicy, CpuEngine, Playback, Renderer, Simulator,
 };
+use nocturne_watercolour_core::domain::optics::RenderParams;
+use nocturne_watercolour_core::domain::sim::SimParams;
 use nocturne_watercolour_core::domain::{
-    Background, CompositeMode, Palette, Scene, Seed, SimResolution,
+    Background, CompositeMode, Palette, Scene, Seed, SimResolution, swirl,
 };
 use nocturne_watercolour_infra::authoring::ArtworkCatalogue;
+use nocturne_watercolour_infra::export::linear_to_srgb;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
 
 /// Mean absolute difference (linear premultiplied RGBA) tolerated between
@@ -314,4 +317,109 @@ fn gpu_matches_cpu_on_the_velocity_a_stroke_injects() {
         worst <= CPU_GPU_VELOCITY_TOLERANCE,
         "the two ports inject different velocity: worst cell differs by {worst}"
     );
+}
+
+/// The tick hands the pressure correction and the suspended pigment between
+/// `state` and `scratch` by parity, and the shipped parameters (8 Jacobi
+/// iterations, 6 swirl substeps) take only the even branch; this runs the
+/// odd one of each against the CPU reference.
+#[test]
+fn gpu_matches_cpu_with_odd_jacobi_iterations_and_swirl_substeps() {
+    let Some(template) = gpu() else { return };
+    let params = SimParams {
+        jacobi_iterations: 7,
+        swirl_speed: 0.8,
+        ..SimParams::default()
+    };
+    let substeps =
+        swirl::Geometry::new(128, 1.0, params.swirl_speed, params.swirl_frequency).substeps;
+    assert_eq!(substeps % 2, 1, "{substeps} swirl substeps is not odd");
+    let gpu = GpuEngine::with_params(template.context().clone(), params, RenderParams::default())
+        .unwrap();
+    let scene = small_scene("wash");
+    let mut g = Playback::new(gpu, scene.clone(), 1000.0).unwrap();
+    let mut c = Playback::new(
+        CpuEngine::new(params, RenderParams::default()),
+        scene,
+        1000.0,
+    )
+    .unwrap();
+    g.advance_ticks(60).unwrap();
+    c.advance_ticks(60).unwrap();
+    // Sixty ticks leave the ports within float rounding of each other; a
+    // branch that reads a stale buffer lands well inside the whole-run
+    // tolerance, so this compares at the tighter one.
+    let gpu_grid = g.simulator().read_grid().unwrap();
+    let cpu_grid = c.simulator().grid().unwrap();
+    let mae = |a: &[f32], b: &[f32]| {
+        a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum::<f32>() / a.len() as f32
+    };
+    for (field, gpu_field, cpu_field) in [
+        (
+            "suspended",
+            &gpu_grid.pigments_in_water,
+            &cpu_grid.pigments_in_water,
+        ),
+        (
+            "deposited",
+            &gpu_grid.pigments_deposited,
+            &cpu_grid.pigments_deposited,
+        ),
+        ("velocity_u", &gpu_grid.velocity_u, &cpu_grid.velocity_u),
+        ("pressure", &gpu_grid.pressure, &cpu_grid.pressure),
+    ] {
+        let e = mae(gpu_field, cpu_field);
+        assert!(e < ODD_PARITY_TOLERANCE, "{field} mae {e}");
+    }
+}
+
+/// Per-field mean absolute difference allowed after 60 ticks of the odd
+/// parity run; measured at about 1e-9, while reading the wrong buffer on
+/// either branch gives about 1e-4.
+const ODD_PARITY_TOLERANCE: f32 = 1e-6;
+
+/// `present` shades straight into the swapchain; this draws the same way
+/// into an `rgba8unorm` target (a browser canvas) and checks it against the
+/// readback frame encoded as the canvas path does: un-premultiplied, sRGB
+/// encoded, re-premultiplied. 1200x1000 is two row bands, so the band seam
+/// is covered too.
+#[test]
+fn the_presented_frame_is_the_rendered_frame_encoded_for_a_canvas() {
+    let Some(template) = gpu() else { return };
+    for background in [Background::Transparent, Background::TransparentOnDark] {
+        let mut scene = small_scene("glaze_pair");
+        scene.background = background;
+        let mut pb = Playback::new(template.fork(), scene, 1000.0).unwrap();
+        pb.advance_ticks(60).unwrap();
+        let (w, h) = (1200, 1000);
+        let frame = pb.simulator().render(w, h).unwrap();
+        let bytes = pb
+            .simulator()
+            .present_offscreen(w, h, true)
+            .unwrap()
+            .expect("read back");
+        assert_eq!(bytes.len(), (w * h * 4) as usize);
+        let mut worst = 0u8;
+        let mut painted = 0usize;
+        for (px, got) in frame.rgba.chunks(4).zip(bytes.chunks(4)) {
+            let alpha = px[3].clamp(0.0, 1.0);
+            let expected = if alpha <= 1.0 / 1024.0 {
+                [0.0; 4]
+            } else {
+                let enc = |c: f32| linear_to_srgb((c / alpha).clamp(0.0, 1.0)) * alpha;
+                [enc(px[0]), enc(px[1]), enc(px[2]), alpha]
+            };
+            if alpha > 0.05 {
+                painted += 1;
+            }
+            for (e, &g) in expected.iter().zip(got) {
+                worst = worst.max(((e * 255.0).round() as i32 - i32::from(g)).unsigned_abs() as u8);
+            }
+        }
+        assert!(painted > 1000, "{background:?}: nothing painted to compare");
+        assert!(
+            worst <= 1,
+            "{background:?}: a channel differs by {worst}/255"
+        );
+    }
 }

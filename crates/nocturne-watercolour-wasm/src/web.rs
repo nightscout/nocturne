@@ -36,6 +36,11 @@ export interface EngineStats {
   checkpointBytes: number;
   lastStepMs: number;
   lastRenderMs: number;
+  /** GPU milliseconds per tick from timestamp queries; null without the
+   * `timestamp-query` feature or before the first sample is read back. */
+  gpuTickMs: number | null;
+  /** GPU milliseconds of the latest sampled frame's optics. */
+  gpuRenderMs: number | null;
   initMs: number;
   adapterName: string;
 }
@@ -85,6 +90,8 @@ struct Shared {
     checkpoint_bytes: Cell<f64>,
     last_step_ms: Cell<f64>,
     last_render_ms: Cell<f64>,
+    gpu_tick_ms: Cell<Option<f64>>,
+    gpu_render_ms: Cell<Option<f64>>,
     init_ms: Cell<f64>,
 }
 
@@ -226,8 +233,10 @@ impl WatercolourEngine {
         self.ctx.adapter_name().to_string()
     }
 
-    /// Timings are CPU-side (submission, not GPU completion) in
-    /// `performance.now()` milliseconds.
+    /// `lastStepMs` and `lastRenderMs` are CPU-side (submission, not GPU
+    /// completion) in `performance.now()` milliseconds; `gpuTickMs` and
+    /// `gpuRenderMs` are GPU timestamps, quantised by the browser (100 us in
+    /// Chrome unless it runs with `--enable-dawn-features=allow_unsafe_apis`).
     #[wasm_bindgen(unchecked_return_type = "EngineStats")]
     pub fn stats(&self) -> Result<JsValue, JsError> {
         let obj = js_sys::Object::new();
@@ -241,6 +250,9 @@ impl WatercolourEngine {
         set("checkpointBytes", self.shared.checkpoint_bytes.get().into())?;
         set("lastStepMs", self.shared.last_step_ms.get().into())?;
         set("lastRenderMs", self.shared.last_render_ms.get().into())?;
+        let or_null = |v: Option<f64>| v.map_or(JsValue::NULL, JsValue::from);
+        set("gpuTickMs", or_null(self.shared.gpu_tick_ms.get()))?;
+        set("gpuRenderMs", or_null(self.shared.gpu_render_ms.get()))?;
         set("initMs", self.shared.init_ms.get().into())?;
         set("adapterName", JsValue::from_str(self.ctx.adapter_name()))?;
         Ok(obj.into())
@@ -373,6 +385,16 @@ impl SceneInstance {
         guard_device(&self.ctx)
     }
 
+    fn sync_gpu_timings(&mut self) {
+        let timings = self.playback.simulator().gpu_timings();
+        if timings.tick_ms.is_some() {
+            self.shared.gpu_tick_ms.set(timings.tick_ms);
+        }
+        if timings.render_ms.is_some() {
+            self.shared.gpu_render_ms.set(timings.render_ms);
+        }
+    }
+
     fn timed_step(
         &mut self,
         f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
@@ -382,6 +404,7 @@ impl SceneInstance {
         let result = f(&mut self.playback).map_err(engine_err);
         self.shared.last_step_ms.set(now_ms() - t0);
         self.sync_checkpoint_bytes();
+        self.sync_gpu_timings();
         result
     }
 
@@ -584,6 +607,7 @@ impl SceneInstance {
             .present(surface)
             .map_err(engine_err)?;
         self.shared.last_render_ms.set(now_ms() - t0);
+        self.sync_gpu_timings();
         Ok(presented)
     }
 
