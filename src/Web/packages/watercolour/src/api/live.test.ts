@@ -9,6 +9,7 @@ function fakeInstance(total: number) {
   const calls: string[] = [];
   let tick = 0;
   let playing = false;
+  let owed = 0;
   const instance = {
     calls,
     get tick() {
@@ -23,9 +24,13 @@ function fakeInstance(total: number) {
       calls.push(`ticks:${ticks}`);
       return tick >= total;
     },
+    /** 25 ticks a second: at 60 fps most frames run no tick at all. */
     advanceByElapsed(seconds: number) {
       if (!playing || tick >= total) return false;
-      const next = Math.min(total, tick + Math.floor(seconds * 100));
+      owed += seconds * 25;
+      const whole = Math.floor(owed);
+      owed -= whole;
+      const next = Math.min(total, tick + whole);
       const moved = next !== tick;
       tick = next;
       return moved;
@@ -149,5 +154,26 @@ describe('a live still under reduced motion', () => {
 
     expect(instance.calls).toEqual(['finishImmediately']);
     expect(pinned.state.finished).toBe(true);
+  });
+});
+
+describe('a live reveal', () => {
+  it('presents only the frames whose simulation moved', async () => {
+    const instance = fakeInstance(8);
+    const { scheduler, frame } = manualScheduler();
+    const reveal = player(instance, scheduler, { motion: 'full', autoplay: 'once' });
+    await reveal.ready;
+
+    const moved: number[] = [];
+    for (let i = 0; i < 40 && !reveal.state.finished; i++) {
+      const before = instance.tick;
+      frame();
+      if (instance.tick !== before) moved.push(instance.tick);
+    }
+
+    const renders = instance.calls.filter((c) => c.startsWith('render'));
+    // The first frame draws the blank sheet; after that only a moved tick does.
+    expect(renders).toEqual(['render@0', ...moved.map((t) => `render@${t}`)]);
+    expect(reveal.state.finished).toBe(true);
   });
 });

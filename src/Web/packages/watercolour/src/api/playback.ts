@@ -482,6 +482,7 @@ class LiveBackend implements Backend {
     this.step(() => {
       do done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
       while (!done && performance.now() - started < SETTLE_FRAME_BUDGET_MS);
+      return true;
     });
     if (!done || !this.settling) return;
     this.settling = false;
@@ -525,10 +526,11 @@ class LiveBackend implements Backend {
     this.endTurn?.();
   }
 
-  private step(action: () => void): void {
+  /** `action` returns `false` when it left the simulation as it was, which needs no new frame. */
+  private step(action: () => boolean | void): void {
     if (this.disposed || this.released) return;
     try {
-      action();
+      if (action() === false) return;
       this.dirty = true;
       this.handle.setActive(true);
     } catch (error) {
