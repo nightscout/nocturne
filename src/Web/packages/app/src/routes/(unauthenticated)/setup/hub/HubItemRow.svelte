@@ -14,13 +14,13 @@
   const done = $derived(item.state === SetupHubItemState.Done);
 </script>
 
-<!-- A done item keeps its mark; an open one paints only under the pointer. -->
+<!-- A done item stays plain; an open one paints under the pointer. -->
 <DropSurface
   as="a"
   href={resolve("/(unauthenticated)/setup/(guided)/[item]", { item: view.slug })}
   name={view.slug}
   palette={view.palette}
-  shown={done ? true : undefined}
+  shown={done ? false : undefined}
   data-testid="hub-item-{view.slug}"
   data-state={item.state}
   class="group block transition-colors hover:bg-accent/50"
