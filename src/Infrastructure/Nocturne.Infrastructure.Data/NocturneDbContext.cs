@@ -397,6 +397,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<SetupHubItemEntity> SetupHubItems { get; set; }
 
+    public DbSet<SetupHubAdditionEntity> SetupHubAdditions { get; set; }
+
     public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
 
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
@@ -1234,6 +1236,18 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasFilter("managed_by IS NOT NULL");
 
         modelBuilder
+            .Entity<AlertRuleEntity>()
+            .Property(r => r.StarterKind)
+            .HasConversion<string>();
+
+        modelBuilder
+            .Entity<AlertRuleEntity>()
+            .HasIndex(r => new { r.StarterKind, r.TenantId })
+            .IsUnique()
+            .HasFilter("starter_kind IS NOT NULL")
+            .HasDatabaseName("ix_alert_rules_starter_kind_tenant");
+
+        modelBuilder
             .Entity<TrackerNotificationThresholdEntity>()
             .HasIndex(t => t.TrackerDefinitionId)
             .HasDatabaseName("ix_tracker_notification_thresholds_definition_id");
@@ -1846,6 +1860,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.ItemKey })
                 .IsUnique()
                 .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+        });
+
+        modelBuilder.Entity<SetupHubAdditionEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.RecordKind).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey, e.RecordKind })
+                .HasDatabaseName("ix_setup_hub_additions_tenant_item_kind");
         });
 
         // Signal loss sweep: find tenants that haven't reported recently
