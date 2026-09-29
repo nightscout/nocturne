@@ -16,6 +16,7 @@
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
     import Printer from "@lucide/svelte/icons/printer";
+    import {HeaderMotif} from "@nocturne/watercolour";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -116,7 +117,7 @@
                 class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
-                <div class="flex items-center gap-2">
+                <div class="flex h-full items-center gap-2">
                     <!-- Report info -->
                     <div class="flex items-center gap-3">
                         <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
@@ -134,6 +135,7 @@
                             </Button>
                         {/if}
                     </div>
+                    <HeaderMotif class="hidden self-end @3xl:block"/>
                 </div>
 
                 <div class="flex items-center gap-2">
