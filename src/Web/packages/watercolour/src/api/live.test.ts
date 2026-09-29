@@ -84,6 +84,10 @@ function manualScheduler() {
   });
   return {
     scheduler,
+    /** Main-thread time an engine call takes. */
+    spend(ms: number) {
+      clock += ms;
+    },
     frame() {
       clock += 16;
       const pending = Array.from(frames.values());
@@ -119,11 +123,11 @@ afterEach(() => {
 
 describe('a live still under reduced motion', () => {
   it('runs its timeline a budgeted slice per frame, then presents once and lets go', async () => {
-    // Each engine call takes 4 ms of the 6 ms budget, so a frame runs two.
-    let now = 0;
-    vi.spyOn(performance, 'now').mockImplementation(() => (now += 4));
+    // Each engine call takes 4 ms of a 60 Hz frame's 10 ms budget, so a frame runs three.
     const instance = fakeInstance(40);
-    const { scheduler, frame } = manualScheduler();
+    const { scheduler, frame, spend } = manualScheduler();
+    const advance = instance.advanceTicks;
+    instance.advanceTicks = (ticks) => (spend(4), advance(ticks));
     const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
     await still.ready;
     let finished = 0;
@@ -133,7 +137,7 @@ describe('a live still under reduced motion', () => {
     expect(instance.calls).toEqual([]);
 
     frame();
-    expect(instance.calls).toEqual(['ticks:4', 'ticks:4']);
+    expect(instance.calls).toEqual(['ticks:4', 'ticks:4', 'ticks:4']);
 
     for (let i = 0; i < 10 && !instance.calls.includes('dispose'); i++) frame();
 

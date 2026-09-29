@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAME_SECONDS, Scheduler, type SchedulerEnv } from './scheduler';
+import { MAX_FRAME_SECONDS, Scheduler, type SchedulerEnv, frameBudgetMs } from './scheduler';
 
 type Listener = () => void;
 
@@ -191,5 +191,38 @@ describe('Scheduler', () => {
     fake.frame();
     expect(t.renders).toBe(1);
     expect(visibility).toEqual([false, true]);
+  });
+
+  it('estimates the frame interval from the spacing of frames, discounting late ones', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(1000 / 60);
+    scheduler.register(target().target).setActive(true);
+    for (let i = 0; i < 12; i++) fake.frame(i % 4 === 3 ? 25 : 8.3);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(8.3);
+    expect(scheduler.frameBudgetMs).toBeCloseTo(4.98);
+  });
+
+  it('does not count the time the loop was stopped as a frame', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const handle = scheduler.register(target().target);
+    handle.setActive(true);
+    fake.frame(16.7);
+    fake.frame(16.7);
+    handle.setActive(false);
+    fake.frame(16.7);
+    handle.setActive(true);
+    fake.frame(5000);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(16.7);
+  });
+});
+
+describe('frameBudgetMs', () => {
+  it('takes most of a frame, within bounds', () => {
+    expect(frameBudgetMs(1000 / 60)).toBeCloseTo(10);
+    expect(frameBudgetMs(1000 / 120)).toBe(5);
+    expect(frameBudgetMs(1000 / 240)).toBe(4);
+    expect(frameBudgetMs(1000 / 30)).toBe(12);
   });
 });

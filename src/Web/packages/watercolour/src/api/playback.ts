@@ -207,13 +207,6 @@ export function invertEasing(easing: (t: number) => number, y: number): number {
   return (lo + hi) / 2;
 }
 
-/**
- * Main-thread time a sliced finish may take out of one frame. A still's whole
- * run in one task is tens of milliseconds on a desktop GPU and several times
- * that on a phone; spread over frames it never holds the thread longer.
- */
-export const SETTLE_FRAME_BUDGET_MS = 6;
-
 /** Ticks per engine call while settling; small, so the budget is kept to within a few ticks. */
 const SETTLE_SLICE_TICKS = 4;
 
@@ -231,6 +224,7 @@ class LiveBackend implements Backend {
   private readonly easing?: (t: number) => number;
   private readonly resolvedDetail: DetailLevel;
   private readonly durationMs: number;
+  private readonly scheduler: Scheduler;
   /** Wall-clock progress holder while `easing` drives `advanceToProgress`. */
   private elapsedMs = 0;
 
@@ -319,6 +313,7 @@ class LiveBackend implements Backend {
     this.easing = easing;
     this.resolvedDetail = resolvedDetail;
     this.durationMs = durationMs;
+    this.scheduler = scheduler;
     this.handle = scheduler.register({
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
@@ -480,13 +475,18 @@ class LiveBackend implements Backend {
     }
   }
 
-  /** The steps `finishImmediately` takes, a few at a time within {@link SETTLE_FRAME_BUDGET_MS}. */
+  /**
+   * The steps `finishImmediately` takes, a few at a time within the
+   * scheduler's frame budget. A still's whole run in one task is tens of
+   * milliseconds on a desktop GPU and several times that on a phone.
+   */
   private settle(): void {
-    const started = performance.now();
+    const started = this.scheduler.now();
+    const budget = this.scheduler.frameBudgetMs;
     let done = false;
     this.step(() => {
       do done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
-      while (!done && performance.now() - started < SETTLE_FRAME_BUDGET_MS);
+      while (!done && this.scheduler.now() - started < budget);
       return true;
     });
     if (!done || !this.settling) return;

@@ -41,6 +41,16 @@ export interface FrameStats {
 /** Longest step handed to an instance; a stalled tab resumes gently instead of jumping. */
 export const MAX_FRAME_SECONDS = 0.25;
 const HISTOGRAM_SIZE = 120;
+const INTERVAL_SAMPLES = 16;
+const DEFAULT_FRAME_INTERVAL_MS = 1000 / 60;
+
+/**
+ * Main-thread time sliced work may take out of one display frame: enough of
+ * it to finish quickly, the rest left to the page and the compositor.
+ */
+export function frameBudgetMs(frameIntervalMs: number): number {
+  return Math.min(12, Math.max(4, frameIntervalMs * 0.6));
+}
 
 interface Entry {
   target: SchedulerTarget;
@@ -71,6 +81,8 @@ export class Scheduler {
   private durationCount = 0;
   private durationIndex = 0;
   private lastDuration = 0;
+  private readonly intervals: number[] = [];
+  private interval = DEFAULT_FRAME_INTERVAL_MS;
   private readonly onVisibility = () => {
     const state = this.env.document?.visibilityState ?? 'visible';
     this.hidden = state === 'hidden';
@@ -90,6 +102,23 @@ export class Scheduler {
 
   get running(): boolean {
     return this.frameHandle !== undefined;
+  }
+
+  now(): number {
+    return this.env.now();
+  }
+
+  /**
+   * The display's frame interval, from the spacing of recent frames. A low
+   * percentile rather than the mean: a frame that overran arrives late, and
+   * counting it would raise the budget exactly when the page is struggling.
+   */
+  get frameIntervalMs(): number {
+    return this.interval;
+  }
+
+  get frameBudgetMs(): number {
+    return frameBudgetMs(this.interval);
   }
 
   register(target: SchedulerTarget): SchedulerHandle {
@@ -169,6 +198,7 @@ export class Scheduler {
   private readonly frame = (time: number) => {
     this.frameHandle = undefined;
     const elapsed = this.lastTime === undefined ? 0 : Math.min(MAX_FRAME_SECONDS, Math.max(0, (time - this.lastTime) / 1000));
+    if (this.lastTime !== undefined && time > this.lastTime) this.sampleInterval(time - this.lastTime);
     this.lastTime = time;
     const started = this.env.now();
     this.inFrame = true;
@@ -188,6 +218,13 @@ export class Scheduler {
       this.lastTime = undefined;
     }
   };
+
+  private sampleInterval(ms: number): void {
+    this.intervals.push(ms);
+    if (this.intervals.length > INTERVAL_SAMPLES) this.intervals.shift();
+    const sorted = [...this.intervals].sort((a, b) => a - b);
+    this.interval = sorted[Math.floor((sorted.length - 1) / 4)]!;
+  }
 
   private record(ms: number): void {
     this.lastDuration = ms;
