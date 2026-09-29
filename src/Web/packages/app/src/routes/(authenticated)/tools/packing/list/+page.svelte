@@ -151,7 +151,7 @@
        full-bleed bar on small screens, a side column with a larger suitcase from lg. -->
   <div class="space-y-5 lg:grid lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start lg:gap-8 lg:space-y-0">
     <div
-      class="sticky top-0 z-10 -mx-6 space-y-2 border-b bg-background/95 px-6 py-2 backdrop-blur lg:top-6 lg:mx-0 lg:space-y-3 lg:border-b-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
+      class="sticky top-(--app-sticky-top,0px) z-10 -mx-6 space-y-2 border-b bg-background/95 px-6 py-2 backdrop-blur lg:top-[calc(var(--app-sticky-top,0px)_+_1.5rem)] lg:mx-0 lg:space-y-3 lg:border-b-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none"
       data-testid="packing-header"
     >
       <div class="relative -mx-3 flex items-center gap-4 rounded-xl px-3 py-1 lg:mx-0 lg:flex-col lg:items-start lg:gap-3 lg:p-0">
@@ -170,8 +170,8 @@
             class="size-16 shrink-0 lg:size-48 lg:self-center"
           />
         {/if}
-        <div class="relative flex flex-1 items-center justify-between gap-2 lg:w-full lg:flex-none">
-          <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+        <div class="relative flex flex-1 items-center justify-between gap-2 lg:w-full lg:flex-none lg:flex-col lg:items-start lg:justify-start">
+          <h1 class="text-2xl lg:text-xl font-bold tracking-tight flex items-center gap-2">
             {#if !showSuitcase}
               <ListChecks class="h-6 w-6" data-testid="packing-icon" />
             {/if}

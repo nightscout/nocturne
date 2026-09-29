@@ -85,5 +85,7 @@ describe("packing list page", () => {
 
     const header = page.getByTestId("packing-header").element();
     expect(getComputedStyle(header).position).toBe("sticky");
+    expect(header.className).toContain("top-(--app-sticky-top,0px)");
+    expect(header.className).toContain("lg:top-[calc(var(--app-sticky-top,0px)_+_1.5rem)]");
   });
 });
