@@ -15,6 +15,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import Shield from "@lucide/svelte/icons/shield";
   import Eye from "@lucide/svelte/icons/eye";
+  import { SelectionEdge } from "@nocturne/watercolour";
   import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
   import {
     goToTenant,
@@ -163,6 +164,13 @@
     });
   });
 
+  /**
+   * The edge marks the most specific active item on screen: a parent only while
+   * its active child is hidden, in a closed submenu or the icon rail.
+   */
+  const showParentEdge = (item: NavItem): boolean =>
+    isActive(item) && (!openMenus[item.id] || sidebar.state === "collapsed");
+
   function toggleMenu(id: string) {
     openMenus[id] = !openMenus[id];
   }
@@ -276,6 +284,7 @@
                     isActive={isActive(item)}
                     onclick={() => toggleMenu(item.id)}
                   >
+                    <SelectionEdge active={showParentEdge(item)} />
                     <item.icon class="h-4 w-4" />
                     <span class="group-data-[collapsible=icon]:hidden">
                       {item.title}
@@ -300,6 +309,7 @@
                             href={child.href}
                             isActive={isActive(child)}
                           >
+                            <SelectionEdge active={isActive(child)} />
                             <child.icon class="h-4 w-4" />
                             <span>{child.title}</span>
                           </Sidebar.MenuSubButton>
@@ -316,6 +326,7 @@
                   {#snippet child({ props })}
                     <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- item.href is a runtime string | undefined from NavItem; resolve() requires a literal route id and throws on undefined -->
                     <a href={item.href} {...props}>
+                      <SelectionEdge active={isActive(item)} />
                       <item.icon class="h-4 w-4" />
                       <span class="group-data-[collapsible=icon]:hidden">
                         {item.title}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { isRecord } from "$lib/utils/type-guards";
   import * as Card from "$lib/components/ui/card";
-  import * as Avatar from "$lib/components/ui/avatar";
+  import UserAvatar from "./UserAvatar.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
@@ -47,15 +47,6 @@
   let localAvatarUrl = $derived(user.avatarUrl);
 
   /** Get initials from user name */
-  function getInitials(name: string): string {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
-
   /** Open file picker when avatar is clicked */
   function handleAvatarClick() {
     if (isUploading || isDeleting) return;
@@ -106,12 +97,7 @@
           disabled={isUploading || isDeleting}
           title="Change avatar"
         >
-          <Avatar.Root class="h-16 w-16">
-            <Avatar.Image src={localAvatarUrl} alt={user.name} />
-            <Avatar.Fallback variant="primary" class="text-xl">
-              {getInitials(user.name)}
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar name={user.name} src={localAvatarUrl} size="lg" />
           <div class="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
             {#if isUploading}
               <Loader2 class="h-5 w-5 text-white animate-spin" />

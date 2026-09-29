@@ -9,6 +9,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { EmptyState } from "$lib/components/shared";
+  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
   import { slide } from "svelte/transition";
   import { flip } from "svelte/animate";
   import CopyButton from "$lib/components/members/CopyButton.svelte";
@@ -395,6 +396,7 @@
           >
             <Card.Root>
               <Card.Content class="flex items-center gap-4 py-3">
+                <UserAvatar name={link.label || "Untitled"} />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-sm truncate">

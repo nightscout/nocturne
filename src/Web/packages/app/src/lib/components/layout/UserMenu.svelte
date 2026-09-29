@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import * as Avatar from "$lib/components/ui/avatar";
+  import UserAvatar from "$lib/components/account/UserAvatar.svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import User from "@lucide/svelte/icons/user";
   import LogOut from "@lucide/svelte/icons/log-out";
@@ -35,16 +35,6 @@
   let isOpen = $state(false);
   let showRequestDialog = $state(false);
 
-  /** Get initials from user name */
-  function getInitials(name: string): string {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  }
-
 </script>
 
 {#if user}
@@ -52,12 +42,7 @@
     <DropdownMenu.Trigger>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Sidebar.MenuButton size="lg" class={className} {...props}>
-          <Avatar.Root class="h-8 w-8 shrink-0">
-            <Avatar.Image src={user.avatarUrl} alt={user.name} />
-            <Avatar.Fallback variant="primary" class="text-xs">
-              {getInitials(user.name)}
-            </Avatar.Fallback>
-          </Avatar.Root>
+          <UserAvatar name={user.name} src={user.avatarUrl} />
           {#if !collapsed}
             <div class="flex flex-col items-start text-left flex-1 min-w-0">
               <span class="text-sm font-medium truncate w-full">

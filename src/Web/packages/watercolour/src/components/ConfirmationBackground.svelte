@@ -48,8 +48,9 @@
       canvas,
       'confirmation-background',
       {
-        ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode, fit, surface }, { autoplay: 'once' }),
+        ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
         fit: fit ?? backgroundFit,
+        surface,
         fitAnchor: 'bottom-left',
       },
       onready,

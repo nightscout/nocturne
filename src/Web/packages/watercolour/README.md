@@ -161,11 +161,17 @@ that dies at runtime (device lost, render error) emits `fallback` and the player
 moves down the chain without retrying live. Reduced motion (`motion: 'reduced'`,
 or `'auto'` with `prefers-reduced-motion`) shows the finished frame at once: static
 if an asset exists, else the live engine finished immediately, else the strip's
-last frame. `releaseAfterFinish` makes live finish on first appearance, present
-one frame and then dispose the engine instance (the canvas keeps the pixels), so
-the artwork holds no live slot or checkpoints; under reduced motion it also lets
-`auto` pick live over the identical baked still, which is what gives `AvatarWash`
-its per-name wash. `autoplay: 'once'` starts on first appearance (the shared
+last frame. `releaseAfterFinish` disposes the engine instance once the reveal has
+finished and its frame is presented (the canvas keeps the pixels, and a later
+resize only rescales them), so the artwork holds no live slot or checkpoints
+afterwards. Under reduced motion or `autoplay: 'never'` it finishes at once and
+presents immediately, visible or not, so a still below the fold frees its slot
+straight away. Such stills take their live turn one at a time
+(`EngineHost.stillTurn`), so a burst of them - a member list's avatars - holds one
+slot rather than the whole cap; under reduced motion it also lets `auto` pick live over the
+identical baked still, which is what gives `AvatarWash` its per-name wash. The
+accent components (`PaintedUnderline`, `SelectionEdge`, `HeaderMotif`) set it too,
+so a one-shot accent does not pin a slot for as long as it is mounted. `autoplay: 'once'` starts on first appearance (the shared
 `IntersectionObserver`) and never loops; `'never'` waits for `play()`.
 
 A canvas that has produced a WebGPU context cannot produce a 2D one, so a fallback
