@@ -333,10 +333,10 @@
     {/if}
 
     <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-      <a class="text-primary underline-offset-4 hover:underline" href={resolve("/(authenticated)/alerts/dnd")}>
+      <a class="text-primary underline underline-offset-4" href={resolve("/(authenticated)/alerts/dnd")}>
         Set quiet hours
       </a>
-      <a class="text-primary underline-offset-4 hover:underline" href={resolve("/(authenticated)/alerts")}>
+      <a class="text-primary underline underline-offset-4" href={resolve("/(authenticated)/alerts")}>
         Open the full rule builder
       </a>
     </div>

@@ -312,8 +312,7 @@ export function showNotification(
   activeNotification = new Notification(title, {
     body,
     tag, // Replaces existing notifications with same tag
-    icon: '/images/logo-128.png', // Nocturne app icon
-    badge: '/images/logo-64.png',
+    icon: '/favicon.png',
     requireInteraction: true, // Notification stays until user interacts
     silent,
   });
