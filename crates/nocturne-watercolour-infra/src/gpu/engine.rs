@@ -51,6 +51,10 @@ const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
 
+/// Stroke uniforms one batch can hold (see [`Pending`]), each at its own
+/// dynamic offset; a batch with more events is submitted and a new one begun.
+const STROKE_SLOTS: u32 = 64;
+
 /// Zero words in a row that an upload into a zero-filled buffer leaves out.
 /// A loaded state is mostly fields that start at zero (water, velocity,
 /// pigment), so only the paper, the mask and the header go over.
@@ -206,6 +210,9 @@ struct StrokeUniform {
     rect_y: u32,
     rect_w: u32,
     rect_h: u32,
+    /// Word offset of this stroke's rect in the stamp arena.
+    stamp_offset: u32,
+    _pad: [u32; 3],
 }
 
 /// The rows and columns of a stamp that hold a non-zero coverage bit, with
@@ -413,6 +420,21 @@ struct Readback {
     bind_group: wgpu::BindGroup,
 }
 
+/// What the simulation encodes between two points something reads the
+/// state (a present, a readback, an upload into `state`): ticks, applies
+/// and checkpoint copies, submitted as one command buffer. Each apply's
+/// stamp rect and stroke uniform get their own region of the stamp arena
+/// and of the stroke buffer, since every upload lands before the batch runs.
+struct Pending {
+    enc: wgpu::CommandEncoder,
+    ticks: u32,
+    stamp_words: usize,
+    strokes: u32,
+    /// The tick timer's resolve is in `enc`; its map is requested once the
+    /// batch is submitted.
+    tick_sample: bool,
+}
+
 /// GPU commands encoded since the engine was created or the counts were
 /// last reset: what the per-command overhead of a host scales with.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -508,6 +530,7 @@ pub struct GpuEngine {
     /// Submissions not yet known to have completed, oldest first; see
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`].
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
+    pending: Mutex<Option<Pending>>,
     counter: CommandCounter,
     paper_cache: PaperCache,
     timers: Option<Timers>,
@@ -623,7 +646,16 @@ impl GpuEngine {
                 storage_entry(1, false),
                 storage_entry(2, false),
                 storage_entry(3, true),
-                uniform_entry(4),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
                 storage_entry(5, true),
             ],
         });
@@ -772,6 +804,7 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
             in_flight: Mutex::new(VecDeque::new()),
+            pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::default(),
             timers,
@@ -795,6 +828,7 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
+            pending: Mutex::new(None),
             counter: CommandCounter::default(),
             paper_cache: Arc::clone(&self.paper_cache),
             timers: Timers::new(&self.ctx),
@@ -842,6 +876,7 @@ impl GpuEngine {
 
     /// Blocks until every submitted command has finished; used for timing.
     pub fn sync(&self) -> Result<(), EngineError> {
+        self.flush()?;
         self.ctx.wait_idle()
     }
 
@@ -918,6 +953,57 @@ impl GpuEngine {
         #[cfg(target_arch = "wasm32")]
         let _ = oldest;
         Ok(())
+    }
+
+    /// Runs `f` on the open batch, beginning one if there is none.
+    fn with_pending<R>(&self, f: impl FnOnce(&mut Pending) -> R) -> R {
+        let mut slot = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+        let pending = slot.get_or_insert_with(|| Pending {
+            enc: self
+                .ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("batch"),
+                }),
+            ticks: 0,
+            stamp_words: 0,
+            strokes: 0,
+            tick_sample: false,
+        });
+        f(pending)
+    }
+
+    fn take_pending(&self) -> Option<Pending> {
+        self.pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take()
+    }
+
+    /// Submits the open batch, if any.
+    pub fn flush(&self) -> Result<(), EngineError> {
+        match self.take_pending() {
+            Some(pending) => self.submit_batch(pending.enc, pending.tick_sample),
+            None => Ok(()),
+        }
+    }
+
+    /// Submits `enc`, then requests the tick sample it resolved, if any.
+    fn submit_batch(
+        &self,
+        enc: wgpu::CommandEncoder,
+        tick_sample: bool,
+    ) -> Result<(), EngineError> {
+        self.submit(enc.finish())?;
+        if tick_sample && let Some(t) = &self.timers {
+            t.tick.request();
+        }
+        Ok(())
+    }
+
+    /// Byte offset of stroke slot `slot` in the stroke buffer.
+    fn stroke_offset(&self, slot: u32) -> u32 {
+        slot * self.ctx.limits().min_uniform_buffer_offset_alignment
     }
 
     fn write_buffer(&self, buffer: &wgpu::Buffer, offset: u64, data: &[u8]) {
@@ -1025,7 +1111,10 @@ impl GpuEngine {
         CommandCounter::add(&self.counter.dispatches, dispatches);
     }
 
+    /// Writes into `state` directly, so the batch encoded so far is submitted
+    /// first: an upload lands ahead of any command buffer not yet submitted.
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
+        self.flush()?;
         let l = self.loaded()?;
         self.write_buffer(
             &l.state,
@@ -1035,27 +1124,27 @@ impl GpuEngine {
         Ok(())
     }
 
+    /// Encodes `pipeline` over `cells` into the batch, reading stroke slot
+    /// `slot`.
     fn dispatch_apply(
         &self,
         pipeline: &wgpu::ComputePipeline,
         cells: u32,
+        slot: u32,
     ) -> Result<(), EngineError> {
         let l = self.loaded()?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("apply"),
-            });
-        {
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        let offset = self.stroke_offset(slot);
+        self.with_pending(|p| {
+            let mut pass = p
+                .enc
+                .begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &l.bind_group, &[]);
+            pass.set_bind_group(0, &l.bind_group, &[offset]);
             pass.dispatch_workgroups(groups(cells), 1, 1);
-        }
+        });
         CommandCounter::add(&self.counter.passes, 1);
         CommandCounter::add(&self.counter.dispatches, 1);
-        self.submit(enc.finish())
+        Ok(())
     }
 
     /// Uploads the stamp's non-zero rect and applies `pipeline` over it; a
@@ -1069,22 +1158,50 @@ impl GpuEngine {
         let Some(rect) = StampRect::of(stamp) else {
             return Ok(());
         };
+        let arena = self.loaded()?.layout.n;
+        let words = rect.coverage.len();
+        let full = self
+            .pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .is_some_and(|p| p.stamp_words + words > arena || p.strokes >= STROKE_SLOTS);
+        if full {
+            self.flush()?;
+        }
+        let (offset, slot) = self.with_pending(|p| {
+            let at = (p.stamp_words, p.strokes);
+            p.stamp_words += words;
+            p.strokes += 1;
+            at
+        });
         let l = self.loaded()?;
         let stroke = StrokeUniform {
             rect_x: rect.x,
             rect_y: rect.y,
             rect_w: rect.w,
             rect_h: rect.h,
+            stamp_offset: offset as u32,
             ..stroke
         };
-        self.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&rect.coverage));
-        self.write_buffer(&l.stroke, 0, bytemuck::bytes_of(&stroke));
-        self.dispatch_apply(pipeline, rect.w * rect.h)
+        let f = std::mem::size_of::<f32>();
+        self.write_buffer(
+            &l.stamp,
+            (offset * f) as u64,
+            bytemuck::cast_slice(&rect.coverage),
+        );
+        self.write_buffer(
+            &l.stroke,
+            u64::from(self.stroke_offset(slot)),
+            bytemuck::bytes_of(&stroke),
+        );
+        self.dispatch_apply(pipeline, rect.w * rect.h, slot)
     }
 
     /// Reads the whole state back; used by tests and the CPU comparison.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_grid(&self) -> Result<SimulationGrid, EngineError> {
+        self.flush()?;
         let l = self.loaded()?;
         let bytes = l.layout.state_bytes();
         let staging = self.buffer(
@@ -1444,6 +1561,7 @@ impl GpuEngine {
         if width == 0 || height == 0 {
             return Err(EngineError::new("zero output size"));
         }
+        self.flush()?;
         self.ensure_render_target(width, height)?;
         self.ensure_readback()?;
         if let Some(t) = self.timers.as_mut() {
@@ -1522,15 +1640,22 @@ impl GpuEngine {
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
         self.write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
         let band_rows = render_band_rows(width, height);
+        // The simulation batch goes out with the first band.
+        let mut batch = self.take_pending();
         let mut y_offset = 0;
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
-            let mut enc =
-                self.ctx
-                    .device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("present"),
-                    });
+            let (mut enc, tick_sample) = match batch.take() {
+                Some(p) => (p.enc, p.tick_sample),
+                None => (
+                    self.ctx
+                        .device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("present"),
+                        }),
+                    false,
+                ),
+            };
             if y_offset == 0 {
                 self.encode_presence(&mut enc, l, target, timer);
             }
@@ -1563,7 +1688,7 @@ impl GpuEngine {
             if let Some(t) = timer.filter(|_| last) {
                 t.resolve(&mut enc);
             }
-            self.submit(enc.finish())?;
+            self.submit_batch(enc, tick_sample)?;
             y_offset += rows;
         }
         if let Some(t) = timer {
@@ -1789,6 +1914,7 @@ impl Simulator for GpuEngine {
         let layout = StateLayout::new(res, res, pigment_count);
         let f = std::mem::size_of::<f32>() as u64;
 
+        drop(self.take_pending());
         self.loaded = None;
         let state = self.buffer(
             "state",
@@ -1816,7 +1942,7 @@ impl Simulator for GpuEngine {
         )?;
         let stroke = self.buffer(
             "stroke",
-            std::mem::size_of::<StrokeUniform>() as u64,
+            u64::from(self.stroke_offset(STROKE_SLOTS)),
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
         let pigments = self.buffer(
@@ -1860,39 +1986,45 @@ impl Simulator for GpuEngine {
         }
         self.write_buffer(&optics, 0, bytemuck::cast_slice(&optics_data));
 
-        let bind_group = self
-            .ctx
-            .device()
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("watercolour-sim"),
-                layout: &self.sim.layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: params.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: state.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: scratch.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: stamp.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: stroke.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 5,
-                        resource: pigments.as_entire_binding(),
-                    },
-                ],
-            });
+        let bind_group =
+            self.ctx
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("watercolour-sim"),
+                    layout: &self.sim.layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: params.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: state.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: scratch.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: stamp.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &stroke,
+                                offset: 0,
+                                size: wgpu::BufferSize::new(
+                                    std::mem::size_of::<StrokeUniform>() as u64
+                                ),
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: pigments.as_entire_binding(),
+                        },
+                    ],
+                });
 
         self.loaded = Some(Loaded {
             width: res,
@@ -2017,7 +2149,7 @@ impl Simulator for GpuEngine {
             }
             Operation::DryAll => {
                 let n = self.loaded()?.layout.n as u32;
-                self.dispatch_apply(&self.sim.dry_all, n)
+                self.dispatch_apply(&self.sim.dry_all, n, 0)
             }
             Operation::SetMask(mask) => {
                 let field = paint::rasterize_mask_aspect(mask, w, h, aspect);
@@ -2042,45 +2174,48 @@ impl Simulator for GpuEngine {
         if ticks == 0 {
             return Ok(());
         }
+        let sample_free = !self.with_pending(|p| p.tick_sample);
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            if t.tick.idle() {
+            if t.tick.idle() && sample_free {
                 t.sampled_ticks = ticks;
             }
         }
-        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|t| t.idle());
+        let timer = self
+            .timers
+            .as_ref()
+            .map(|t| &t.tick)
+            .filter(|t| t.idle() && sample_free);
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
-            let batch = remaining.min(TICKS_PER_SUBMIT);
-            let (first, last) = (remaining == ticks, remaining == batch);
-            let mut enc =
-                self.ctx
-                    .device()
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            let full = self.with_pending(|p| {
+                let batch = remaining.min(TICKS_PER_SUBMIT - p.ticks);
+                let (first, last) = (remaining == ticks, remaining == batch);
+                {
+                    let mut pass = p.enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("ticks"),
+                        timestamp_writes: timer
+                            .filter(|_| first || last)
+                            .map(|t| t.compute_writes(first, last)),
                     });
-            {
-                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("ticks"),
-                    timestamp_writes: timer
-                        .filter(|_| first || last)
-                        .map(|t| t.compute_writes(first, last)),
-                });
-                CommandCounter::add(&self.counter.passes, 1);
-                pass.set_bind_group(0, &l.bind_group, &[]);
-                for _ in 0..batch {
-                    self.encode_tick(&mut pass, l);
+                    CommandCounter::add(&self.counter.passes, 1);
+                    pass.set_bind_group(0, &l.bind_group, &[0]);
+                    for _ in 0..batch {
+                        self.encode_tick(&mut pass, l);
+                    }
                 }
+                if let Some(t) = timer.filter(|_| last) {
+                    t.resolve(&mut p.enc);
+                    p.tick_sample = true;
+                }
+                p.ticks += batch;
+                remaining -= batch;
+                p.ticks >= TICKS_PER_SUBMIT
+            });
+            if full {
+                self.flush()?;
             }
-            if let Some(t) = timer.filter(|_| last) {
-                t.resolve(&mut enc);
-            }
-            self.submit(enc.finish())?;
-            remaining -= batch;
-        }
-        if let Some(t) = timer {
-            t.request();
         }
         Ok(())
     }
@@ -2097,15 +2232,8 @@ impl Simulator for GpuEngine {
             bytes,
             wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
         )?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("snapshot"),
-            });
-        enc.copy_buffer_to_buffer(&l.state, 0, &copy, 0, bytes);
+        self.with_pending(|p| p.enc.copy_buffer_to_buffer(&l.state, 0, &copy, 0, bytes));
         CommandCounter::add(&self.counter.copies, 1);
-        self.submit(enc.finish())?;
         let id = CheckpointId(self.next_checkpoint);
         self.next_checkpoint += 1;
         self.loaded_mut()?.checkpoints.insert(id, copy);
@@ -2118,15 +2246,11 @@ impl Simulator for GpuEngine {
             .checkpoints
             .get(&id)
             .ok_or_else(|| EngineError::new(format!("unknown checkpoint {id:?}")))?;
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("restore"),
-            });
-        enc.copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes());
+        self.with_pending(|p| {
+            p.enc
+                .copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes())
+        });
         CommandCounter::add(&self.counter.copies, 1);
-        self.submit(enc.finish())?;
         self.loaded_mut()?.maybe_wet = true;
         Ok(())
     }

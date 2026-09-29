@@ -267,6 +267,40 @@ fn checkpoint_capacity_is_bounded_and_releasable() {
     assert!(gpu.snapshot().unwrap().is_some());
 }
 
+/// A playback's strokes, ticks and checkpoint copies go out together: a
+/// submission per sixteen ticks, plus one ahead of each upload into the state
+/// (`Dry`, `Settle`, the mask), plus the batch a readback flushes.
+#[test]
+fn a_playback_submits_a_batch_per_sixteen_ticks_and_state_upload() {
+    use nocturne_watercolour_core::domain::Operation;
+    let Some(gpu) = gpu() else { return };
+    let scene = small_scene("glaze_pair");
+    let uploads = scene
+        .timeline
+        .events
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.op,
+                Operation::Dry { .. }
+                    | Operation::Settle { .. }
+                    | Operation::SetMask(_)
+                    | Operation::ClearMask
+            )
+        })
+        .count() as u64;
+    let ticks = u64::from(scene.timeline.total_ticks);
+    let mut pb = Playback::new(gpu, scene, 1000.0).unwrap();
+    let before = pb.simulator().command_counts().submits;
+    pb.finish_immediately().unwrap();
+    pb.simulator().sync().unwrap();
+    let submits = pb.simulator().command_counts().submits - before;
+    assert!(
+        submits <= ticks.div_ceil(16) + uploads + 1,
+        "{submits} submissions for {ticks} ticks and {uploads} state uploads"
+    );
+}
+
 /// Largest per-cell velocity difference tolerated between the two ports.
 /// Both inject the same `paint::StrokeFlow` off the same uploaded stamp, so
 /// the residual is float rounding, not a difference in the rule.

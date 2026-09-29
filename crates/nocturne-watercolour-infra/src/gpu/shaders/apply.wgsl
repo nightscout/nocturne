@@ -15,7 +15,7 @@ fn stamp_at(x: u32, y: u32) -> f32 {
     let lx = x - stroke.rect_x;
     let ly = y - stroke.rect_y;
     if lx >= stroke.rect_w || ly >= stroke.rect_h { return 0.0; }
-    return stamp[ly * stroke.rect_w + lx];
+    return stamp[stroke.stamp_offset + ly * stroke.rect_w + lx];
 }
 
 // Grid index of the rect's `li`-th cell; an apply dispatch covers the rect only.
@@ -57,7 +57,7 @@ fn apply_brush(@builtin(global_invocation_id) gid: vec3<u32>) {
     let li = gid.x;
     if li >= stroke.rect_w * stroke.rect_h { return; }
     let i = stamp_cell(li);
-    let cov = stamp[li] * state[o_m() + i];
+    let cov = stamp[stroke.stamp_offset + li] * state[o_m() + i];
     if cov <= 0.0 { return; }
     let k = min(stroke.pigment, P.pigment_count - 1u);
     let water = stroke.water * cov * stroke_water_factor(state[o_h() + i]);
@@ -74,7 +74,7 @@ fn apply_water(@builtin(global_invocation_id) gid: vec3<u32>) {
     let li = gid.x;
     if li >= stroke.rect_w * stroke.rect_h { return; }
     let i = stamp_cell(li);
-    let cov = stamp[li] * state[o_m() + i];
+    let cov = stamp[stroke.stamp_offset + li] * state[o_m() + i];
     if cov <= 0.0 { return; }
     state[o_p() + i] += stroke.water * cov * stroke_water_factor(state[o_h() + i]);
     if state[o_p() + i] > P.wet_threshold {
@@ -88,7 +88,7 @@ fn apply_lift(@builtin(global_invocation_id) gid: vec3<u32>) {
     let li = gid.x;
     if li >= stroke.rect_w * stroke.rect_h { return; }
     let i = stamp_cell(li);
-    let f = clamp(1.0 - stroke.strength * stamp[li], 0.0, 1.0);
+    let f = clamp(1.0 - stroke.strength * stamp[stroke.stamp_offset + li], 0.0, 1.0);
     if f >= 1.0 { return; }
     state[o_p() + i] *= f;
     for (var k = 0u; k < P.pigment_count; k++) {

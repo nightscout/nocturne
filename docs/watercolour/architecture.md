@@ -185,8 +185,10 @@ returns for the engine to load.
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
 | `render.wgsl` | `presence_taps`, `render`, `fs_render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; each tap position's presence and inside share computed once per frame by `presence_taps`), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
 
-Stamps and masks are rasterised on the CPU by the shared `domain::paint` code
-and uploaded as a coverage field, so both backends see identical geometry. Shared
+Stamps and masks are rasterised on the CPU by the shared `domain::paint` code,
+so both backends see identical geometry. A mask goes over as a field; a stamp as
+the rect holding its non-zero coverage, which the apply pass is dispatched over
+(a zero-coverage cell is left as it was). Shared
 constants in the shaders (`DRAIN_DEPTH`, `ALPHA_SOFTNESS`, `LUMINOUS_*`, ...)
 mirror the `pub const`s in `domain::sim`, `domain::paint` and `domain::optics`;
 tunable parameters travel in the `Params` uniform.
@@ -255,9 +257,15 @@ watchdog Windows resets the display driver at:
   buffers) and refused with an `EngineError`. wgpu reports an oversized buffer
   as an uncaptured error after the fact, which would fault the device for
   every instance sharing it.
-- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), one
-  compute pass each, a few tens of milliseconds at the 512^2 maximum on an
-  integrated GPU.
+- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), a few
+  tens of milliseconds at the 512^2 maximum on an integrated GPU. `Playback`
+  steps from one event or periodic-checkpoint tick to the next in one call, and
+  the engine keeps what it encodes (ticks, applies, checkpoint copies) in one
+  open batch, submitted when it holds sixteen ticks, ahead of an upload into
+  the state (`Dry`, `Settle`, a mask), or with the first band of the next
+  present. Each apply in a batch has its own stroke uniform (a dynamic offset)
+  and its own region of the stamp arena, since every upload lands before the
+  batch runs.
 - **The optics pass is dispatched in row bands** of at most 2^20 output pixels
   (`RENDER_PIXELS_PER_DISPATCH`), each its own submission, so a large canvas or
   export raises the number of dispatches rather than the length of one. A
