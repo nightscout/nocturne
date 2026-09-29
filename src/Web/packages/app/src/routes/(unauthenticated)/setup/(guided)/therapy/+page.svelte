@@ -134,7 +134,11 @@
     />
 
     {#if actionTimeQuery.current}
-      <InsulinActionTimeNote actionTime={actionTimeQuery.current} {voice} />
+      <InsulinActionTimeNote
+        actionTime={actionTimeQuery.current}
+        {voice}
+        profileHasNoActionTime={review.source === TherapySource.Entered}
+      />
     {/if}
 
     {#if mismatch}

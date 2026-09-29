@@ -7,9 +7,14 @@
     /** From the server's resolver, so the note names the value insulin on board really uses. */
     actionTime: InsulinActionTime;
     voice: PatientVoice;
+    /**
+     * The profile's action time is only the model default, not a value anyone set, as for a
+     * profile entered in the setup hub, which does not ask for one.
+     */
+    profileHasNoActionTime?: boolean;
   }
 
-  let { actionTime, voice }: Props = $props();
+  let { actionTime, voice, profileHasNoActionTime = false }: Props = $props();
 
   const hours = $derived(actionTime.hours);
   const insulin = $derived(actionTime.primaryInsulinName);
@@ -45,6 +50,20 @@
     {/if}
     {#if insulin}
       That value is used instead of the action time of {insulin}.
+    {/if}
+  {:else if actionTime.source === InsulinActionTimeSource.Profile && profileHasNoActionTime}
+    {#if voice.kind === "self"}
+      No action time is set in your profile, so Nocturne uses the default of {hours} hours for insulin
+      on board and predictions. Once a rapid-acting insulin is set in Devices, its action time is used
+      instead.
+    {:else if voice.kind === "named"}
+      No action time is set in {voice.name}'s profile, so Nocturne uses the default of {hours} hours for
+      insulin on board and predictions. Once a rapid-acting insulin is set in Devices, its action time is
+      used instead.
+    {:else}
+      No action time is set in the profile, so Nocturne uses the default of {hours} hours for insulin on
+      board and predictions. Once a rapid-acting insulin is set in Devices, its action time is used
+      instead.
     {/if}
   {:else if actionTime.source === InsulinActionTimeSource.Profile}
     {#if voice.kind === "self"}

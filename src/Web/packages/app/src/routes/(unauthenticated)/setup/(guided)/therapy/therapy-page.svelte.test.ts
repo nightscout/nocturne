@@ -329,6 +329,29 @@ describe("therapy settings, imported from Nightscout", () => {
 });
 
 describe("therapy settings, entered here", () => {
+  it("calls the profile's model-default action time the default, since nobody entered one", async () => {
+    tenant.relationship = { relationship: "Caregiver", patientName: "Sam" };
+    reviewState = reviewOf(TherapySource.Entered);
+    actionTime.value = { source: InsulinActionTimeSource.Profile, hours: 3 };
+    render(TherapyPage);
+
+    await expect
+      .element(page.getByTestId("action-time"))
+      .toHaveTextContent(
+        "No action time is set in Sam's profile, so Nocturne uses the default of 3 hours for insulin on board and predictions. Once a rapid-acting insulin is set in Devices, its action time is used instead."
+      );
+  });
+
+  it("keeps the profile wording for a profile an app sent", async () => {
+    reviewState = reviewOf(TherapySource.Imported);
+    actionTime.value = { source: InsulinActionTimeSource.Profile, hours: 4 };
+    render(TherapyPage);
+
+    await expect
+      .element(page.getByTestId("action-time"))
+      .toHaveTextContent("Nocturne uses the action time in your profile, 4 hours");
+  });
+
   it("shows the entered values with a way to the profile page and nothing to confirm", async () => {
     reviewState = reviewOf(TherapySource.Entered);
     render(TherapyPage);
