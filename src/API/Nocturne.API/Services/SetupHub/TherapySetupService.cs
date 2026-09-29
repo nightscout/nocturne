@@ -29,9 +29,6 @@ public partial class TherapySetupService(
     ITargetRangeScheduleRepository targetRangeRepo,
     IPatientRecordRepository patientRecords) : ITherapySetupService
 {
-    /// <summary>The <c>settings</c> row whose presence records the owner's confirmation.</summary>
-    public const string ConfirmedSettingsKey = "nocturne.setupHub.therapyConfirmed";
-
     /// <summary>
     /// Stored numbers are mg/dL whatever the owner typed, and the units label says what they mean;
     /// an "mmol" label over mg/dL numbers is the mislabelling the legacy profile read suffers.
@@ -42,10 +39,8 @@ public partial class TherapySetupService(
     {
         var settings = (await settingsRepo.GetDefaultsAsync(ct)).FirstOrDefault()
             ?? await settingsRepo.GetNewestDocumentRowAsync(ct);
-        var confirmed = await db.Settings.AnyAsync(s => s.Key == ConfirmedSettingsKey && s.IsActive, ct);
-
         if (settings is null)
-            return new TherapyReview(TherapySource.None, null, null, confirmed, null, null, null, null, null,
+            return new TherapyReview(TherapySource.None, null, null, false, null, null, null, null, null,
                 TherapyUnitPlausibility.Rules);
 
         var now = DateTime.UtcNow;
@@ -56,6 +51,10 @@ public partial class TherapySetupService(
         var targetRange = await targetRangeRepo.GetActiveAtAsync(name, now, ct);
 
         var source = await SourceOfAsync(settings, ct);
+        var confirmedId = await db.SetupHubItems.AsNoTracking()
+            .Where(i => i.ItemKey == SetupHubItemKey.Therapy)
+            .Select(i => i.ConfirmedRecordId)
+            .FirstOrDefaultAsync(ct);
         var lastUpdated = new DateTime?[]
             { settings.Timestamp, basal?.Timestamp, carbRatio?.Timestamp, sensitivity?.Timestamp, targetRange?.Timestamp }
             .Max();
@@ -64,7 +63,7 @@ public partial class TherapySetupService(
             source,
             source == TherapySource.Synced ? settings.EnteredBy ?? settings.Device : null,
             lastUpdated,
-            confirmed,
+            confirmedId == settings.Id,
             settings, basal, carbRatio, sensitivity, targetRange,
             TherapyUnitPlausibility.Rules);
     }
@@ -77,18 +76,13 @@ public partial class TherapySetupService(
         if (review.Confirmed)
             return review;
 
-        var now = DateTimeOffset.UtcNow;
-        db.Settings.Add(new SettingsEntity
+        var item = await db.SetupHubItems.FirstOrDefaultAsync(i => i.ItemKey == SetupHubItemKey.Therapy, ct);
+        if (item is null)
         {
-            Id = Guid.CreateVersion7(),
-            Key = ConfirmedSettingsKey,
-            Value = review.Settings!.Id.ToString(),
-            Mills = now.ToUnixTimeMilliseconds(),
-            SrvCreated = now,
-            SrvModified = now,
-            IsActive = true,
-            App = "nocturne-api",
-        });
+            item = new SetupHubItemEntity { Id = Guid.CreateVersion7(), ItemKey = SetupHubItemKey.Therapy };
+            db.SetupHubItems.Add(item);
+        }
+        item.ConfirmedRecordId = review.Settings!.Id;
         await db.SaveChangesAsync(ct);
         return review with { Confirmed = true };
     }
@@ -109,7 +103,7 @@ public partial class TherapySetupService(
             throw new ArgumentException("Enter at least one schedule.");
 
         if ((await GetReviewAsync(ct)).Source != TherapySource.None)
-            throw new InvalidOperationException("This tenant already has a therapy profile.");
+            throw new InvalidOperationException("A therapy profile already exists.");
 
         var now = DateTime.UtcNow;
         var correlationId = Guid.CreateVersion7();

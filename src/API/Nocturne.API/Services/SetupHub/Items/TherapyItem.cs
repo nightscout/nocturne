@@ -16,6 +16,6 @@ public class TherapyItem(NocturneDbContext db) : ISetupHubItem
     public SetupHubItemKey Key => SetupHubItemKey.Therapy;
 
     public async Task<bool> WorksAsync(CancellationToken ct) =>
-        await db.Settings.AnyAsync(s => s.Key == TherapySetupService.ConfirmedSettingsKey && s.IsActive, ct)
+        await db.SetupHubItems.AnyAsync(i => i.ItemKey == Key && i.ConfirmedRecordId != null, ct)
         || await db.TherapySettings.AnyAsync(t => t.DataSource == DataSources.ManualEntry, ct);
 }

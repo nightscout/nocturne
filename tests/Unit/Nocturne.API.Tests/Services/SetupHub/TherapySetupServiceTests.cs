@@ -77,13 +77,14 @@ public class TherapySetupServiceTests : IDisposable
 
     private static readonly DateTime ProfileMadeAt = new(2026, 3, 1, 8, 0, 0, DateTimeKind.Utc);
 
-    private static Profile UploadedProfile(string documentId, string enteredBy = "Loop", string units = "mg/dL") => new()
+    private static Profile UploadedProfile(
+        string documentId, string enteredBy = "Loop", string units = "mg/dL", DateTime? madeAt = null) => new()
     {
         Id = documentId,
         DefaultProfile = "Default",
         Units = units,
         EnteredBy = enteredBy,
-        Mills = new DateTimeOffset(ProfileMadeAt).ToUnixTimeMilliseconds(),
+        Mills = new DateTimeOffset(madeAt ?? ProfileMadeAt).ToUnixTimeMilliseconds(),
         Store = new Dictionary<string, ProfileData>
         {
             ["Default"] = new()
@@ -203,7 +204,25 @@ public class TherapySetupServiceTests : IDisposable
         await Service().ConfirmAsync(CancellationToken.None);
         await Service().ConfirmAsync(CancellationToken.None);
 
-        (await _db.Settings.CountAsync(s => s.Key == TherapySetupService.ConfirmedSettingsKey)).Should().Be(1);
+        (await _db.SetupHubItems.CountAsync(i => i.ConfirmedRecordId != null)).Should().Be(1);
+        (await _db.Settings.AnyAsync()).Should().BeFalse("the Nightscout settings collection is readable over v3");
+    }
+
+    [Fact]
+    public async Task AConfirmation_HoldsForTheConfirmedProfileOnly()
+    {
+        await Decomposer().DecomposeAsync(UploadedProfile("5f0000000000000000000001"), WriteOrigin.Live);
+        await Service().ConfirmAsync(CancellationToken.None);
+
+        await Decomposer().DecomposeAsync(
+            UploadedProfile("5f0000000000000000000002", enteredBy: "Trio", madeAt: ProfileMadeAt.AddDays(1)),
+            WriteOrigin.Live);
+
+        var review = await Service().GetReviewAsync(CancellationToken.None);
+        review.SourceName.Should().Be("Trio");
+        review.Confirmed.Should().BeFalse("the owner confirmed Loop's profile, not this one");
+        (await Hub().GetAsync(CancellationToken.None)).Items.Single().State.Should().Be(SetupHubItemState.Done,
+            "done never reverts");
     }
 
     [Fact]
