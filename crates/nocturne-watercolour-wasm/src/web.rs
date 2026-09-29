@@ -6,6 +6,7 @@
 //! `InstanceLimit`, `DeviceLost`, `NoSurface` and `Engine`).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use nocturne_watercolour_core::application::playback::DEFAULT_PAINT_WALL_FRACTION;
@@ -41,7 +42,11 @@ export interface EngineStats {
 "#;
 
 thread_local! {
-    static LOST_CALLBACKS: RefCell<Vec<js_sys::Function>> = const { RefCell::new(Vec::new()) };
+    /// Keyed by engine: a host that rebuilds its engine after a loss must not
+    /// hear the dead device again, nor an old engine's listeners fire for the
+    /// new device. A thread-local because the device-lost hook must be `Send`.
+    static LOST_CALLBACKS: RefCell<HashMap<u32, Vec<js_sys::Function>>> = RefCell::new(HashMap::new());
+    static NEXT_ENGINE_ID: Cell<u32> = const { Cell::new(0) };
 }
 
 fn now_ms() -> f64 {
@@ -88,6 +93,14 @@ pub struct WatercolourEngine {
     ctx: GpuContext,
     template: GpuEngine,
     shared: Rc<Shared>,
+    id: u32,
+}
+
+impl Drop for WatercolourEngine {
+    fn drop(&mut self) {
+        let id = self.id;
+        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().remove(&id));
+    }
 }
 
 #[wasm_bindgen]
@@ -105,9 +118,14 @@ impl WatercolourEngine {
             .await
             .map_err(|e| js_err("InitFailed", e))?
             .with_checkpoint_budget(BROWSER_CHECKPOINT_BUDGET_BYTES);
-        ctx.on_device_lost(|message| {
+        let id = NEXT_ENGINE_ID.with(|next| {
+            let id = next.get();
+            next.set(id.wrapping_add(1));
+            id
+        });
+        ctx.on_device_lost(move |message| {
             LOST_CALLBACKS.with(|cbs| {
-                for cb in cbs.borrow().iter() {
+                for cb in cbs.borrow().get(&id).into_iter().flatten() {
                     let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(&message));
                 }
             });
@@ -119,6 +137,7 @@ impl WatercolourEngine {
             ctx,
             template,
             shared,
+            id,
         })
     }
 
@@ -189,7 +208,7 @@ impl WatercolourEngine {
     /// `callback(message)` runs when the browser reports the device lost.
     #[wasm_bindgen(js_name = onDeviceLost)]
     pub fn on_device_lost(&self, callback: js_sys::Function) {
-        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().push(callback));
+        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().entry(self.id).or_default().push(callback));
     }
 
     #[wasm_bindgen(getter, js_name = maxLiveInstances)]
@@ -366,6 +385,15 @@ impl SceneInstance {
         result
     }
 
+    fn timed_advance(
+        &mut self,
+        f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
+    ) -> Result<bool, JsError> {
+        let before = self.playback.current_tick();
+        self.timed_step(f)?;
+        Ok(self.playback.current_tick() != before)
+    }
+
     async fn frames_async(
         &mut self,
         count: u32,
@@ -469,17 +497,30 @@ impl SceneInstance {
         self.timed_step(|p| p.reset())
     }
 
+    /// `true` when the call moved the simulation, so the state on screen is
+    /// stale; a frame that ran no tick has nothing new to render.
     #[wasm_bindgen(js_name = advanceByElapsed)]
-    pub fn advance_by_elapsed(&mut self, seconds: f32) -> Result<(), JsError> {
-        self.timed_step(|p| p.advance_by_elapsed(seconds))
+    pub fn advance_by_elapsed(&mut self, seconds: f32) -> Result<bool, JsError> {
+        self.timed_advance(|p| p.advance_by_elapsed(seconds))
     }
 
     /// Drives the reveal from a caller-supplied progress (0..1, clamped) with
     /// a linear progress-to-tick mapping and no internal easing; steps
     /// forward, seeks backwards. Callers apply their own easing first.
+    /// Returns whether the simulation moved, as `advanceByElapsed`.
     #[wasm_bindgen(js_name = advanceToProgress)]
-    pub fn advance_to_progress(&mut self, progress: f32) -> Result<(), JsError> {
-        self.timed_step(|p| p.advance_to_progress(progress))
+    pub fn advance_to_progress(&mut self, progress: f32) -> Result<bool, JsError> {
+        self.timed_advance(|p| p.advance_to_progress(progress))
+    }
+
+    /// Runs up to `ticks` more steps whatever the play state, finishing (and
+    /// drying) at the end of the timeline; `true` once finished. The same
+    /// steps as `finishImmediately`, so a host can spread a still's run over
+    /// several frames instead of blocking one.
+    #[wasm_bindgen(js_name = advanceTicks)]
+    pub fn advance_ticks(&mut self, ticks: u32) -> Result<bool, JsError> {
+        self.timed_step(|p| p.advance_ticks(ticks))?;
+        Ok(self.is_finished())
     }
 
     /// Swaps the curve `advanceByElapsed`/`seekProgress` map progress with;
