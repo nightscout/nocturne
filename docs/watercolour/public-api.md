@@ -71,7 +71,11 @@ player.dispose();
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
 
-`player.ready` resolves once a backend is drawing. `player.canvas` is the
+`player.ready` resolves once a backend is drawing. A player whose canvas is in
+the document does not start until the canvas is within 200 px of the viewport
+(`NEAR_VIEWPORT_MARGIN`), so for one below the fold `ready` waits for the
+scroll; a canvas outside the document, or a page without
+`IntersectionObserver`, starts at once. `player.canvas` is the
 current element, which differs from the one passed in only after a live-to-baked
 fallback (a WebGPU canvas can never give a 2D context, so the element is
 replaced in place).
