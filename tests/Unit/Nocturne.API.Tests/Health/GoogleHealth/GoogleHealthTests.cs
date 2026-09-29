@@ -409,8 +409,9 @@ public class GoogleHealthTests
         var preview = await service.PreviewAsync(Guid.NewGuid(), default);
 
         Assert.Equal(2, tokenCalls);
-        Assert.Equal(2, oldTokenCalls);
-        Assert.Equal(GoogleHealthClient.Capabilities.Count(capability => capability.Supported), freshTokenCalls);
+        var supportedCount = GoogleHealthClient.Capabilities.Count(capability => capability.Supported);
+        Assert.Equal(supportedCount, oldTokenCalls);
+        Assert.Equal(supportedCount, freshTokenCalls);
         Assert.All(preview.Items.Where(item => item.Supported), item =>
         {
             Assert.Equal(1, item.Count);
@@ -420,7 +421,7 @@ public class GoogleHealthTests
         Assert.True((await service.StatusAsync(default)).Connected);
         await service.PreviewAsync(Guid.NewGuid(), default);
         Assert.Equal(2, tokenCalls);
-        Assert.Equal(2, oldTokenCalls);
+        Assert.Equal(supportedCount, oldTokenCalls);
     }
 
     [Fact]
@@ -445,7 +446,8 @@ public class GoogleHealthTests
 
         Assert.Equal("reconnect_required", error.Message);
         Assert.Equal(2, tokenCalls);
-        Assert.Equal(2, inventoryCalls);
+        var supportedCount = GoogleHealthClient.Capabilities.Count(capability => capability.Supported);
+        Assert.Equal(supportedCount * 2, inventoryCalls);
         Assert.False(store.Secrets.ContainsKey("refreshToken"));
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
         var status = await service.StatusAsync(default);
@@ -454,7 +456,7 @@ public class GoogleHealthTests
         Assert.False((await store.Configurations.GetConfigurationAsync("GoogleHealth"))!.IsHealthy);
         await Assert.ThrowsAsync<GoogleHealthException>(() => service.PreviewAsync(Guid.NewGuid(), default));
         Assert.Equal(2, tokenCalls);
-        Assert.Equal(2, inventoryCalls);
+        Assert.Equal(supportedCount * 2, inventoryCalls);
     }
 
     [Fact]

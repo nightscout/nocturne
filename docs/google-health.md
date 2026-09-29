@@ -32,6 +32,25 @@ staging is not routinely reset. Back up the database before upgrading.
 5. Enter the client ID and secret, choose an import start date, and sign in to Google.
 6. Review the inventory, select supported data types, and choose **Save selection and import**.
 
+### Use your own test connector
+
+For testing, create the OAuth client in a Google Cloud project that you control;
+do not reuse a maintainer's client. Add the Google account that will be tested as
+a test user on the OAuth consent screen while the project is in testing mode.
+The client ID, client secret and refresh token are then stored in the Nocturne
+tenant's encrypted connector configuration. The browser completes the
+authorization-code flow with PKCE, and the connector uses the resulting token to
+read only the Google Health scopes granted by that account.
+
+The connector calls Google Health from the Nocturne server and writes the
+selected records to that server's existing tenant-scoped health histories. It
+does not send the imported records to a shared Nocturne service, the maintainer's
+Google project or Nightscout. When you run a private or test deployment, the
+imported data therefore remains in that deployment and its database, subject to
+the operators who administer that server. Use HTTPS and normal tenant access
+controls, and revoke the Google grant in Google Account security if the test
+deployment is discarded.
+
 Secrets use Nocturne's encrypted connector configuration. OAuth authorization
 uses state and PKCE validation. Google test-mode grants may expire after seven
 days; production use can require Google verification. Only data made available
