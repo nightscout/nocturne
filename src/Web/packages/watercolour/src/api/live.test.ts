@@ -65,7 +65,7 @@ function fakeHost(instance: ReturnType<typeof fakeInstance>): EngineHost {
     WatercolourEngine: { create: async () => engine },
     catalogueScene: () => '{"version":1}',
   } as unknown as WasmModule;
-  return new EngineHost({ loadModule: async () => module });
+  return new EngineHost({ loadModule: async () => module, capabilities: gpu });
 }
 
 const gpu = async () => ({ webgpu: true, adapter: true, reducedMotion: false, offscreenCanvas: false });
