@@ -73,7 +73,13 @@ export function sliceTicks(budgetMs: number, msPerTick: number | undefined): num
  * queues are also capped by the GPU time they were last measured at.
  */
 export class SlicePacer {
-  private msPerTick: number | undefined;
+  /**
+   * Decaying sums over recent calls, read as a mean per tick. Every few calls
+   * one carries the batched GPU submit; sized from the cheap calls between,
+   * the next call would fold several submits into one long task.
+   */
+  private msSum = 0;
+  private tickSum = 0;
   private frameTicks = 0;
 
   beginFrame(): void {
@@ -82,7 +88,7 @@ export class SlicePacer {
 
   /** Ticks for the next call: 0 once the budget left fits none, or this frame's GPU share is queued. */
   next(remainingMs: number, budgetMs: number, gpuTickMs?: number | null): number {
-    const ticks = sliceTicks(Math.max(0, remainingMs), this.msPerTick);
+    const ticks = sliceTicks(Math.max(0, remainingMs), this.tickSum > 0 ? this.msSum / this.tickSum : undefined);
     if (!gpuTickMs || gpuTickMs <= 0) return ticks;
     const gpuLeft = Math.floor(budgetMs / gpuTickMs) - this.frameTicks;
     return Math.min(ticks, this.frameTicks === 0 ? Math.max(1, gpuLeft) : Math.max(0, gpuLeft));
@@ -90,8 +96,8 @@ export class SlicePacer {
 
   record(ticks: number, ms: number): void {
     this.frameTicks += ticks;
-    const sample = ms / ticks;
-    this.msPerTick = this.msPerTick === undefined ? sample : this.msPerTick + 0.3 * (sample - this.msPerTick);
+    this.msSum = this.msSum * 0.9 + ms;
+    this.tickSum = this.tickSum * 0.9 + ticks;
   }
 }
 

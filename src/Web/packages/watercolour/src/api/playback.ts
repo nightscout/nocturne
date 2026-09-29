@@ -475,8 +475,9 @@ class LiveBackend implements Backend {
 
   /**
    * The steps `finishImmediately` takes, in calls `Scheduler.slices` sizes to
-   * what the scheduler's frame budget has left. A still's whole run in one task is tens
-   * of milliseconds on a desktop GPU and several times that on a phone.
+   * what the scheduler's frame budget has left. A still's whole run in one
+   * task is tens of milliseconds on a desktop GPU and several times that on a
+   * phone.
    *
    * Outside the frame callback it runs only on budget the frame left over: a
    * still handed its turn there starts at once rather than a frame later. In
@@ -491,8 +492,7 @@ class LiveBackend implements Backend {
       let ran = false;
       while (!done) {
         const remaining = scheduler.budgetRemainingMs();
-        if (remaining <= 0 && (ran || !inFrame)) break;
-        let ticks = scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs);
+        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs) : 0;
         if (ticks === 0) {
           if (ran || !inFrame) break;
           ticks = 1;

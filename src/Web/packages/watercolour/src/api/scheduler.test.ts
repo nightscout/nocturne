@@ -248,12 +248,18 @@ describe('SlicePacer', () => {
     expect(pacer.next(10, 10)).toBe(0);
   });
 
-  it('grows the next call after a fast one, smoothing a single outlier', () => {
+  it('grows the next call after a fast one', () => {
     const pacer = new SlicePacer();
     pacer.record(4, 2);
     expect(pacer.next(10, 10)).toBe(20);
-    pacer.record(20, 40);
-    // 0.5 ms a tick eased 30% toward 2 ms: 0.95 ms.
+  });
+
+  it('sizes from the mean of recent calls, so cheap calls between submits do not hide them', () => {
+    const pacer = new SlicePacer();
+    for (let i = 0; i < 3; i++) pacer.record(4, 0.2);
+    expect(pacer.next(10, 10)).toBe(64);
+    pacer.record(4, 12.8);
+    // About 1 ms a tick over the four calls, where the cheap ones alone said 0.05 ms.
     expect(pacer.next(10, 10)).toBe(10);
   });
 
