@@ -202,7 +202,7 @@
       <span class="text-xs text-muted-foreground" data-testid="field-unit">{unit}</span>
     </div>
     {#if note}
-      <p class="ml-auto mt-1 max-w-64 text-left text-xs text-warning">{note}</p>
+      <p class="ml-auto mt-1 max-w-56 whitespace-normal text-left text-xs text-warning">{note}</p>
     {/if}
   </Table.Cell>
 {/snippet}
