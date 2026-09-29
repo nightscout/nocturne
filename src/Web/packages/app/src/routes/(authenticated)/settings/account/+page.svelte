@@ -1,5 +1,7 @@
 <script lang="ts">
   import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  import type { IconArtworkSource } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -64,7 +66,7 @@
   const recoveryQuery = getRecoveryStatus();
 
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; icon?: IconArtworkSource } | null>(null);
 
   // Passkey add flow
   let isRegistering = $state(false);
@@ -118,10 +120,10 @@
   $effect(() => {
     const linked = page.url.searchParams.get("linked");
     if (linked === "success") {
-      successMessage = "Account linked successfully.";
+      successMessage = { text: "Account linked successfully." };
       clearMessages();
     } else if (linked === "already") {
-      successMessage = "This account was already linked.";
+      successMessage = { text: "This account was already linked." };
       clearMessages();
     }
     if (linked && typeof window !== "undefined") {
@@ -185,7 +187,7 @@
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
-      successMessage = "Passkey added successfully.";
+      successMessage = { text: "Passkey added successfully.", icon: fingerprintArtwork };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
@@ -216,7 +218,7 @@
 
     try {
       await removeCredential(removeTarget.id);
-      successMessage = "Passkey removed.";
+      successMessage = { text: "Passkey removed." };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove passkey.");
@@ -302,7 +304,7 @@
       totpQrDataUrl = null;
       totpVerifyCode = "";
       totpLabel = "";
-      successMessage = "Authenticator app added successfully.";
+      successMessage = { text: "Authenticator app added successfully." };
       clearMessages();
     } catch (err) {
       totpSetupError = describeTotpSetupError(err);
@@ -324,7 +326,7 @@
 
     try {
       await totpRemoveCredential(totpRemoveTarget.id);
-      successMessage = "Authenticator removed.";
+      successMessage = { text: "Authenticator removed." };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to remove authenticator.");
@@ -373,7 +375,7 @@
     {/if}
 
     {#if successMessage}
-      <SuccessBanner>{successMessage}</SuccessBanner>
+      <SuccessBanner icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
     {/if}
 
     {#if isSecurityLoading}
