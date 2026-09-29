@@ -33,7 +33,7 @@
     roles: TenantRoleDto[];
     /**
      * Offered as a single choice in place of the role checkboxes and direct permissions, for
-     * someone who should not need to know the roles by name.
+     * someone who should not need to know the roles by name. Empty falls back to the checkboxes.
      */
     roleChoices?: InviteRoleChoice[];
     onCreated: (url: string) => void;
@@ -212,7 +212,7 @@
           />
         </div>
 
-        {#if roleChoices}
+        {#if roleChoices?.length}
           <div class="space-y-2">
             <Label id="invite-access-label">What can they do?</Label>
             <RadioGroup.Root
@@ -278,7 +278,7 @@
           </p>
         </div>
 
-        {#if !roleChoices}
+        {#if !roleChoices?.length}
         <!-- Direct permissions (collapsible) -->
         <Collapsible.Root
           open={showInvitePermissions}

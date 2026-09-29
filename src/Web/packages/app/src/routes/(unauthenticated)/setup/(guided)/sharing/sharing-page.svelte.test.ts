@@ -5,8 +5,17 @@ import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const state = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
-  hubState: "Open",
+  hubState: "Open" as string | undefined,
+  roles: [] as { id: string; slug: string; name: string; permissions: string[] }[],
 }));
+
+const SEEDED_ROLES = [
+  { slug: "owner", permissions: ["*"] },
+  { slug: "admin", permissions: ["glucose.readwrite", "therapy.readwrite", "members.manage", "roles.manage"] },
+  { slug: "caretaker", permissions: ["glucose.read", "treatments.readwrite", "alerts.readwrite", "device.notify"] },
+  { slug: "viewer", permissions: ["glucose.read", "reports.read"] },
+  { slug: "clinician", permissions: ["glucose.read", "treatments.read", "therapy.read", "device.actuate"] },
+].map((r) => ({ ...r, id: `role-${r.slug}`, name: r.slug }));
 
 let share = $state.raw<Record<string, unknown>>({});
 
@@ -28,14 +37,18 @@ vi.mock("$app/state", () => ({ page: { data: { effectivePermissions: ["*"] } } }
 vi.mock("$api/generated/setupHubs.generated.remote", () => ({
   getSetupHub: () =>
     Object.assign(
-      remoteQuery(() => ({
-        items: [{ key: "Sharing", state: state.hubState }],
-        resolvedCount: 0,
-        openCount: 1,
-        totalCount: 1,
-        revision: "r",
-        showStrip: false,
-      })),
+      remoteQuery(() =>
+        state.hubState === undefined
+          ? undefined
+          : {
+              items: [{ key: "Sharing", state: state.hubState }],
+              resolvedCount: 0,
+              openCount: 1,
+              totalCount: 1,
+              revision: "r",
+              showStrip: false,
+            },
+      ),
       { refresh: commands.refreshHub },
     ),
   setSetupHubItemState: commands.setState,
@@ -44,14 +57,7 @@ vi.mock("$api/generated/tenantSettings.generated.remote", () => ({
   getPatientRelationship: () => remoteQuery(() => state.relationship),
 }));
 vi.mock("$api/generated/roles.generated.remote", () => ({
-  getRoles: () =>
-    remoteQuery(() =>
-      ["owner", "admin", "caretaker", "viewer", "clinician"].map((slug) => ({
-        id: `role-${slug}`,
-        slug,
-        name: slug,
-      })),
-    ),
+  getRoles: () => remoteQuery(() => state.roles),
 }));
 vi.mock("$api/generated/memberInvites.generated.remote", () => ({
   createInvite: commands.createInvite,
@@ -80,6 +86,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.relationship = { relationship: "Caregiver", patientName: "Sam" };
   state.hubState = "Open";
+  state.roles = SEEDED_ROLES;
   share = { enabled: false, scopes: [], fullHistory: false };
 });
 
@@ -116,6 +123,34 @@ describe("sharing guided page", () => {
       ),
     );
     await vi.waitFor(() => expect(refreshHub).toHaveBeenCalled());
+  });
+
+  it("drops an access level whose role was edited past what its words promise", async () => {
+    state.roles = SEEDED_ROLES.map((r) =>
+      r.slug === "clinician"
+        ? { ...r, permissions: [...r.permissions, "glucose.readwrite"] }
+        : r.slug === "caretaker"
+          ? { ...r, permissions: [...r.permissions, "tenant.settings"] }
+          : r,
+    );
+    render(SharingPage);
+
+    await card("family").click();
+    const invite = flow("family");
+    await expect.element(invite.getByText("Can manage settings")).toBeVisible();
+    expect(invite.getByText("Can see everything").elements()).toHaveLength(0);
+    expect(invite.getByText("Can see and log treatments").elements()).toHaveLength(0);
+  });
+
+  it("falls back to the role picker when no seeded role is left to offer", async () => {
+    state.roles = [{ id: "role-custom", slug: "custom", name: "Custom", permissions: ["glucose.read"] }];
+    render(SharingPage);
+
+    await card("family").click();
+    const invite = flow("family");
+    await expect.element(invite.getByText("Roles", { exact: true })).toBeVisible();
+    await expect.element(invite.getByText("Custom")).toBeVisible();
+    expect(invite.getByText("What can they do?").elements()).toHaveLength(0);
   });
 
   it("opens the guest links for a school, clinic or someone temporary", async () => {
@@ -168,6 +203,23 @@ describe("sharing guided page", () => {
     await expect.element(card("public")).toHaveAttribute("aria-pressed", "false");
     expect(document.querySelectorAll('[data-testid^="sharing-flow-"]')).toHaveLength(1);
 
+    await page.getByTestId("sharing-keep-to-me").click();
+
+    await vi.waitFor(() =>
+      expect(commands.setState).toHaveBeenCalledWith({
+        key: "Sharing",
+        request: { state: "NotForMe" },
+      }),
+    );
+  });
+
+  it("sets the item aside even before the hub has loaded", async () => {
+    state.hubState = undefined;
+    commands.setState.mockResolvedValue({});
+    commands.goto.mockResolvedValue(undefined);
+    render(SharingPage);
+
+    await card("just-me").click();
     await page.getByTestId("sharing-keep-to-me").click();
 
     await vi.waitFor(() =>

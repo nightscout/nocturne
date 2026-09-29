@@ -27,7 +27,7 @@ export function sharingQuestion(voice: PatientVoice): string {
       : "Who else should see this data?";
 }
 
-/** Built per call, so the copy is read in the current locale. */
+/** Built per call, so the copy is translated in the locale current at the call. */
 export function sharingAudiences(voice: PatientVoice): SharingAudience[] {
   return [
     {
@@ -74,30 +74,45 @@ export function sharingAudiences(voice: PatientVoice): SharingAudience[] {
   ];
 }
 
+const isRead = (scope: string) => scope.endsWith(".read") || scope.startsWith("device.");
+const logsTreatments = (scope: string) =>
+  isRead(scope) || scope === "treatments.readwrite" || scope === "alerts.readwrite";
+
 /**
- * The seeded roles a family member or carer is offered, in plain words. A tenant that renamed or
- * deleted one still offers the others, since roles are matched by slug.
+ * The seeded roles a family member or carer is offered, in plain words, matched by slug. Seeded
+ * roles' permissions can be edited, so a role is offered only while its permissions still fit what
+ * its words promise; the manage level promises the most and so always fits.
  */
 export function familyRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
-  const choices: Omit<InviteRoleChoice, "roleId">[] = [
+  const levels: (Omit<InviteRoleChoice, "roleId"> & {
+    slug: string;
+    fits: (scope: string) => boolean;
+  })[] = [
     {
+      slug: "clinician",
+      fits: isRead,
       label: "Can see everything",
       description: "Readings, treatments, devices and reports. They can't change anything.",
     },
     {
+      slug: "caretaker",
+      fits: logsTreatments,
       label: "Can see and log treatments",
       description: "They can also log insulin and carbs, and change alerts.",
     },
     {
+      slug: "admin",
+      fits: () => true,
       label: "Can manage settings",
       description:
-        "They can also change settings, therapy settings included, and choose who else has access.",
+        "They can also change settings, therapy settings included, edit or delete readings and device data, manage roles, and choose who else has access.",
     },
   ];
-  const slugs = ["clinician", "caretaker", "admin"];
 
-  return choices.flatMap((choice, i) => {
-    const role = roles.find((r) => r.slug === slugs[i]);
-    return role?.id ? [{ ...choice, roleId: role.id }] : [];
+  return levels.flatMap(({ slug, fits, label, description }) => {
+    const role = roles.find((r) => r.slug === slug);
+    return role?.id && (role.permissions ?? []).every(fits)
+      ? [{ roleId: role.id, label, description }]
+      : [];
   });
 }

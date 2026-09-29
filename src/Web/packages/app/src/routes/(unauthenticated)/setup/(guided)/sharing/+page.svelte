@@ -22,7 +22,7 @@
     sharingQuestion,
     type SharingAudience,
     type SharingAudienceId,
-  } from "./audiences";
+  } from "./audiences.svelte";
 
   const hubQuery = getSetupHub();
   const relationshipQuery = getPatientRelationship();
@@ -59,7 +59,7 @@
     keeping = true;
     error = undefined;
     try {
-      if (itemState === SetupHubItemState.Open) {
+      if (itemState !== SetupHubItemState.Done && itemState !== SetupHubItemState.NotForMe) {
         await setSetupHubItemState({
           key: SetupHubItemKey.Sharing,
           request: { state: SetupHubItemState.NotForMe },
