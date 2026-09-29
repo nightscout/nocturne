@@ -395,6 +395,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<CoachMarkStateEntity> CoachMarkStates { get; set; }
 
+    public DbSet<SetupHubItemEntity> SetupHubItems { get; set; }
+
     public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
 
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
@@ -1836,6 +1838,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         modelBuilder.Entity<TenantEntity>()
             .Property(t => t.PatientRelationship)
             .HasConversion<string>();
+
+        modelBuilder.Entity<SetupHubItemEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.State).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey })
+                .IsUnique()
+                .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+        });
 
         // Signal loss sweep: find tenants that haven't reported recently
         modelBuilder.Entity<TenantEntity>()

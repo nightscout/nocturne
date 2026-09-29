@@ -57,6 +57,18 @@ public class TenantEntity : ISystemTimestamped
     public DateTime? OnboardingCompletedAt { get; set; }
 
     /// <summary>
+    /// When the tenant finished an onboarding core that ends on the setup hub. Tenants onboarded
+    /// before the hub existed have none, so the dashboard never offers them the hub unasked.
+    /// </summary>
+    [Column("setup_hub_enrolled_at")]
+    public DateTime? SetupHubEnrolledAt { get; set; }
+
+    /// <summary>The setup hub revision at which the owner dismissed the dashboard strip.</summary>
+    [Column("setup_strip_dismissed_revision")]
+    [MaxLength(64)]
+    public string? SetupStripDismissedRevision { get; set; }
+
+    /// <summary>
     /// The onboarder's answer to "who is Nocturne for". Null until answered.
     /// </summary>
     [Column("patient_relationship")]

@@ -18,6 +18,8 @@ using Nocturne.API.Services.Analytics;
 using Nocturne.API.Services.Auth;
 using Nocturne.API.Services.BackgroundServices;
 using Nocturne.API.Services.CoachMarks;
+using Nocturne.API.Services.SetupHub;
+using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Contracts.Content;
 using Nocturne.Core.Contracts.Translations;
 using Nocturne.API.Services.Timezones;
@@ -53,6 +55,7 @@ using Nocturne.Connectors.Core.Models;
 using Nocturne.Connectors.Nightscout.Services.WriteBack;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Contracts.CoachMarks;
+using Nocturne.Core.Contracts.SetupHub;
 using Nocturne.Core.Contracts.Timezones;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Alerts;
@@ -736,6 +739,15 @@ public static class ServiceRegistrationExtensions
 
         // Coach marks
         services.AddScoped<ICoachMarkService, CoachMarkService>();
+
+        // Setup hub
+        services.AddScoped<ISetupHubService, SetupHubService>();
+        services.AddScoped<ISetupHubItem, ConnectDataItem>();
+        services.AddScoped<ISetupHubItem, AlertsItem>();
+        services.AddScoped<ISetupHubItem, DevicesItem>();
+        services.AddScoped<ISetupHubItem, TherapyItem>();
+        services.AddScoped<ISetupHubItem, SharingItem>();
+        services.AddScoped<ISetupHubItem, AboutItem>();
 
         // Timezone timeline (fake-UTC connector conversion + travel/relocation)
         services.AddScoped<ITimezoneTimelineService, TimezoneTimelineService>();
