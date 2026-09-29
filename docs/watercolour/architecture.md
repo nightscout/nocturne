@@ -5,7 +5,7 @@ inward: domain and application live in `nocturne-watercolour-core` with **zero
 dependencies**, infrastructure (wgpu/WGSL, serde documents, export, catalogue)
 depends on core, and the wasm adapter depends on infra. On the web side the
 wasm crate is the adapter and the TypeScript API plus Svelte components plus
-the showcase are the presentation layer.
+are the presentation layer.
 
 ```
 domain (pure data + functions)
@@ -16,7 +16,7 @@ infrastructure (GpuEngine/WGSL, scene documents, export, catalogue)   <- nocturn
    ^
 web adapter (wasm-bindgen)                            <- nocturne-watercolour-wasm
    ^
-presentation (TS API, Svelte components, showcase)    <- @nocturne/watercolour + showcase
+presentation (TS API, Svelte components)    <- @nocturne/watercolour
 ```
 
 ## Layers
@@ -27,7 +27,7 @@ presentation (TS API, Svelte components, showcase)    <- @nocturne/watercolour +
 | Application | `core/src/application/` | The ports a backend implements, the reference `CpuEngine` (ports implemented with domain code), the `Playback` controller, command-style use cases, the `Reveal` timeline builder, and the `choreography` timeline transform. Callers supply elapsed time; nothing here schedules. |
 | Infrastructure | `infra/src/` | `gpu` (wgpu/WGSL `Simulator` + `Renderer`), `document` (serde `SceneDocumentV1`), `export` (PNG, frame sequences), `authoring` (artwork catalogue, Lucide icon authoring in `svg.rs`). Everything platform-specific lives here so core stays `std`-only. |
 | Web adapter | `wasm/src/` | `web.rs`: the wasm-bindgen surface (one shared `WatercolourEngine`, per-scene `SceneInstance`); `scene_tools.rs`: platform-neutral scene construction, intensity, strip stitching, the baked manifest. |
-| Presentation | `src/Web/packages/watercolour/` | `src/api/*.ts` (player, capabilities, engine host, scheduler, mode resolution, baked/static assets, scene documents), `src/components/*.svelte`, baked assets in `assets/`, wasm output in `src/wasm/`. The showcase app (`watercolour-showcase`) renders the components across its routes. |
+| Presentation | `src/Web/packages/watercolour/` | `src/api/*.ts` (player, capabilities, engine host, scheduler, mode resolution, baked/static assets, scene documents), `src/components/*.svelte`, baked assets in `assets/`, wasm output in `src/wasm/`. |
 
 ## Ports and use cases
 
@@ -235,7 +235,7 @@ checkpoint is released, and if none remain no more are taken. Capacity is
   44 MB per live instance.
 
 The budget is per instance: `createInstance` takes it as a fifth argument, and
-paint drops (`DropSurface`) pass 1 byte unless the showcase scrubber is driving
+paint drops (`DropSurface`) pass 1 byte unless a scrubber is driving
 them, so an unscrubbed drop holds the single tick-0 checkpoint and nothing else.
 
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint
