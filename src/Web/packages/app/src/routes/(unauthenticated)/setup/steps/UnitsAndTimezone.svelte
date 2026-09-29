@@ -13,6 +13,7 @@
     type GlucoseUnits,
   } from "$lib/utils/formatting";
   import type { NightscoutDisplaySettings } from "$api";
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   interface Props {
     units: GlucoseUnits | undefined;
@@ -21,8 +22,7 @@
     timezoneDetected: boolean;
     nightscout?: NightscoutDisplaySettings | null;
     nightscoutUnavailable?: boolean;
-    /** Who the copy speaks of: the patient themself, a named patient, or neither. */
-    voice: { self: boolean; named: boolean; name?: string };
+    voice: PatientVoice;
     error?: string;
   }
 
@@ -63,9 +63,9 @@
       Glucose units and <em class="not-italic font-light text-primary">time</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-muted-foreground">
-      {#if voice.self}
+      {#if voice.kind === "self"}
         Pick the unit your meter or sensor app shows.
-      {:else if voice.named}
+      {:else if voice.kind === "named"}
         Pick the unit {voice.name}'s meter or sensor app shows.
       {:else}
         Pick the unit the meter or sensor app shows.
@@ -163,9 +163,9 @@
         <p class="text-xs text-muted-foreground">
           {#if timezoneDetected}
             Detected from this device. Change it if you usually live somewhere else.
-          {:else if voice.self}
+          {:else if voice.kind === "self"}
             Times of day, like overnight alerts and daily reports, follow your timezone.
-          {:else if voice.named}
+          {:else if voice.kind === "named"}
             Times of day, like overnight alerts and daily reports, follow {voice.name}'s
             timezone.
           {:else}

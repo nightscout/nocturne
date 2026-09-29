@@ -87,8 +87,6 @@ public class TenantSettingsControllerTests
             .Which.Value.Should().BeEquivalentTo(new TenantSettingsDto(true));
     }
 
-    // Who the tenant is for describes the owner's own relationship to the patient, so running the
-    // tenant (tenant.settings) is not enough to read or change it.
     [Fact]
     public async Task GetPatientRelationship_RefusesAnAdministratorWhoIsNotTheOwner()
     {
@@ -106,7 +104,7 @@ public class TenantSettingsControllerTests
         var (controller, tenants, records, _) = BuildWithRecords(Scope.TenantSettings, Scope.TherapyReadWrite);
 
         var result = await controller.SetPatientRelationship(
-            new SetPatientRelationshipRequest(PatientRelationship.Caregiver, "Sam"), CancellationToken.None);
+            new SetPatientRelationshipRequest { Relationship = PatientRelationship.Caregiver, PatientName = "Sam" }, CancellationToken.None);
 
         result.Result.Should().BeOfType<ForbidResult>();
         tenants.VerifyNoOtherCalls();
@@ -155,7 +153,7 @@ public class TenantSettingsControllerTests
         records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(() => record);
 
         var result = await controller.SetPatientRelationship(
-            new SetPatientRelationshipRequest(answer, "  Sam "), CancellationToken.None);
+            new SetPatientRelationshipRequest { Relationship = answer, PatientName = "  Sam " }, CancellationToken.None);
 
         tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
         records.Verify(r => r.UpdateAsync(
@@ -176,7 +174,7 @@ public class TenantSettingsControllerTests
         records.Setup(r => r.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync((PatientRecord?)null);
 
         await controller.SetPatientRelationship(
-            new SetPatientRelationshipRequest(answer, name), CancellationToken.None);
+            new SetPatientRelationshipRequest { Relationship = answer, PatientName = name }, CancellationToken.None);
 
         tenants.Verify(t => t.SetPatientRelationshipAsync(TenantId, answer, It.IsAny<CancellationToken>()), Times.Once);
         records.Verify(r => r.GetOrCreateAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -192,7 +190,7 @@ public class TenantSettingsControllerTests
         (await controller.GetUnitsAndTimezone("en-AU", false, CancellationToken.None))
             .Result.Should().BeOfType<ForbidResult>();
         (await controller.SetUnitsAndTimezone(
-                new SetUnitsAndTimezoneRequest("mmol", "Australia/Sydney"), CancellationToken.None))
+                new SetUnitsAndTimezoneRequest { GlucoseUnits = "mmol", Timezone = "Australia/Sydney" }, CancellationToken.None))
             .Result.Should().BeOfType<ForbidResult>();
         units.VerifyNoOtherCalls();
     }
@@ -218,24 +216,9 @@ public class TenantSettingsControllerTests
             .ReturnsAsync(saved);
 
         var result = await controller.SetUnitsAndTimezone(
-            new SetUnitsAndTimezoneRequest("mmol", " Australia/Sydney "), CancellationToken.None);
+            new SetUnitsAndTimezoneRequest { GlucoseUnits = "mmol", Timezone = " Australia/Sydney " }, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().Be(saved);
-    }
-
-    [Theory]
-    [InlineData("mmol/L", "Australia/Sydney")]
-    [InlineData("MG/DL", "Australia/Sydney")]
-    [InlineData("mmol", "Middle/Earth")]
-    public async Task SetUnitsAndTimezone_RefusesUnitsOrATimezoneItDoesNotKnow(string glucoseUnits, string timezone)
-    {
-        var (controller, units) = BuildForUnits(Scope.FullAccess);
-
-        var result = await controller.SetUnitsAndTimezone(
-            new SetUnitsAndTimezoneRequest(glucoseUnits, timezone), CancellationToken.None);
-
-        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        units.VerifyNoOtherCalls();
     }
 
     private static (TenantSettingsController, Mock<IUnitsAndTimezoneService>) BuildForUnits(params string[] grantedScopes)

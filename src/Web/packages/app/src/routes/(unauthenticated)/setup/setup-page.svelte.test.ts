@@ -72,7 +72,7 @@ import SetupPage from "./+page@.svelte";
 const freshCard = () =>
   page.getByRole("radio", { name: /Start with a blank slate/ });
 const migrationCard = () =>
-  page.getByRole("radio", { name: /Migrate my Nightscout data/ });
+  page.getByRole("radio", { name: /Migrate .*Nightscout data/ });
 const continueButton = () => page.getByRole("button", { name: "Continue" });
 const skipButton = () => page.getByRole("button", { name: "Skip for now" });
 
@@ -94,7 +94,7 @@ async function skipToDataSource() {
 
 beforeEach(() => {
   relationship.stored = {};
-  relationship.set.mockReset();
+  relationship.set.mockReset().mockImplementation(async (answer) => answer);
   unitsAnswer.stored = { glucoseUnits: "mmol" };
   unitsAnswer.asked = [];
   unitsAnswer.set.mockReset();
@@ -173,6 +173,30 @@ describe("setup who-for step", () => {
       .element(page.getByRole("radio", { name: /Someone I care for/ }))
       .toHaveAttribute("aria-checked", "true");
     await expect.element(page.getByLabelText("What's their name?")).toHaveValue("Sam");
+  });
+
+  it("saves a changed name under the stored answer", async () => {
+    relationship.stored = { relationship: "Caregiver", patientName: "Sam" };
+    render(SetupPage);
+
+    await page.getByLabelText("What's their name?").fill("Alex");
+    await continueButton().click();
+
+    expect(relationship.set).toHaveBeenCalledWith({ relationship: "Caregiver", patientName: "Alex" });
+    await expect
+      .element(page.getByRole("radio", { name: /Migrate Alex's Nightscout data/ }))
+      .toBeVisible();
+  });
+
+  it("does not save the stored answer again", async () => {
+    relationship.stored = { relationship: "Helper", patientName: "Sam" };
+    render(SetupPage);
+
+    await expect.element(page.getByLabelText("What's their name?")).toHaveValue("Sam");
+    await continueButton().click();
+
+    expect(relationship.set).not.toHaveBeenCalled();
+    await expect.element(page.getByText("Step 02 / 06")).toBeVisible();
   });
 
   it("stays on the step when the answer cannot be saved", async () => {

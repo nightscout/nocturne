@@ -160,9 +160,6 @@ public class TenantSettingsController : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
             return Forbid();
 
-        if (request.GlucoseUnits is not (GlucoseUnitDefaults.MgDl or GlucoseUnitDefaults.Mmol))
-            return Problem(detail: "glucoseUnits must be 'mg/dl' or 'mmol'.", statusCode: 400, title: "Bad Request");
-
         var timezone = request.Timezone.Trim();
         if (!TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out _))
             return Problem(detail: $"'{timezone}' is not a known timezone.", statusCode: 400, title: "Bad Request");
@@ -181,14 +178,32 @@ public class TenantSettingsController : ControllerBase
 
 public record SetPublicDocsRequest(bool Enabled);
 
-public record SetPatientRelationshipRequest(
-    [property: JsonRequired] PatientRelationship Relationship,
-    [property: MaxLength(256)] string? PatientName = null);
+/// <remarks>
+/// Nominal rather than positional: MVC refuses validation attributes on a positional record's
+/// properties, and NSwag reads them only from properties.
+/// </remarks>
+public record SetPatientRelationshipRequest
+{
+    [JsonRequired]
+    [EnumDataType(typeof(PatientRelationship))]
+    public PatientRelationship Relationship { get; init; }
+
+    [MaxLength(256)]
+    public string? PatientName { get; init; }
+}
 
 public record PatientRelationshipDto(PatientRelationship? Relationship, string? PatientName);
 
-/// <param name="GlucoseUnits">"mg/dl" or "mmol".</param>
-/// <param name="Timezone">IANA timezone, e.g. "Australia/Sydney".</param>
-public record SetUnitsAndTimezoneRequest(
-    [property: JsonRequired] string GlucoseUnits,
-    [property: JsonRequired, MaxLength(64)] string Timezone);
+/// <remarks>Nominal for the same reason as <see cref="SetPatientRelationshipRequest"/>.</remarks>
+public record SetUnitsAndTimezoneRequest
+{
+    /// <summary>"mg/dl" or "mmol".</summary>
+    [JsonRequired]
+    [AllowedValues(GlucoseUnitDefaults.MgDl, GlucoseUnitDefaults.Mmol)]
+    public string GlucoseUnits { get; init; } = "";
+
+    /// <summary>IANA timezone, e.g. "Australia/Sydney".</summary>
+    [JsonRequired]
+    [MaxLength(64)]
+    public string Timezone { get; init; } = "";
+}
