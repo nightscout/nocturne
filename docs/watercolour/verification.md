@@ -241,6 +241,12 @@ image transfer bytes. "Submit drain" is `onSubmittedWorkDone` after a sampled
 submit: an approximation of GPU time, not a timestamp query. Compare runs by
 diffing two `summary.json` files.
 
+To attribute main-thread time inside the engine, build the wasm with
+`WATERCOLOUR_WASM_PROFILE=1 pnpm --filter @nocturne/watercolour build:wasm`,
+which keeps the name section, and record a CPU profile of the scenario (DevTools,
+or CDP `Profiler` from Playwright). Wasm-opt inlines single-caller functions, so
+a function's self time can include a callee that no longer appears by name.
+
 ## Limitations
 
 - **Single alpha per pixel** (`ALPHA_SOFTNESS = 0.6`): a chromatic glaze loses a
