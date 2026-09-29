@@ -1,45 +1,45 @@
+<script lang="ts" module>
+  /** What the data source step actually achieved; `null` when it was skipped. */
+  export type SourceResult = "connector-saved" | "uploader-receiving" | null;
+  /** Where the Nightscout import got to; `null` when no run was started. */
+  export type ImportResult = "running" | "complete" | "partial" | "failed" | null;
+</script>
+
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
+  import * as Alert from "$lib/components/ui/alert";
+  import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
   import { Item } from "$lib/components/ui/item";
-  import { rotateShareLink, disableShareLink } from "$api/generated/shareLinks.generated.remote";
-  import ChartLine from "@lucide/svelte/icons/chart-line";
   import Users from "@lucide/svelte/icons/users";
   import Bell from "@lucide/svelte/icons/bell";
   import BookOpen from "@lucide/svelte/icons/book-open";
   import Plug from "@lucide/svelte/icons/plug";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import Globe from "@lucide/svelte/icons/globe";
-  import { Artwork } from "@nocturne/watercolour";
-  import { sproutArtwork } from "$lib/watercolour-icons";
+  import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let {
     path,
-    onEnterDashboard,
+    source,
+    importResult,
+    voice,
+    onContinue,
+    continueFailed = false,
     onNavigateWithCoach,
   }: {
     path: "fresh" | "migration";
-    onEnterDashboard: () => void;
+    source: SourceResult;
+    importResult: ImportResult;
+    voice: PatientVoice;
+    /** Leaves the core for the setup hub. */
+    onContinue: () => void;
+    /** The last continue could not record the finished setup, so it is offered again. */
+    continueFailed?: boolean;
     onNavigateWithCoach: (url: string) => void;
   } = $props();
 
-  let isPublic = $state(false);
-  let isToggling = $state(false);
-
-  async function handlePublicToggle() {
-    isToggling = true;
-    try {
-      if (isPublic) {
-        await disableShareLink();
-        isPublic = false;
-      } else {
-        await rotateShareLink();
-        isPublic = true;
-      }
-    } finally {
-      isToggling = false;
-    }
-  }
+  const hasData = $derived(
+    path === "migration" ? importResult === "complete" || importResult === "partial" : source !== null
+  );
 
   const nextSteps = $derived([
     {
@@ -47,124 +47,120 @@
       title: "Invite a caretaker",
       subtitle: "Add follower access with one link",
       coachUrl: "/settings/members?coach=setup-invite",
-      useBookArtwork: false,
     },
     {
       icon: Bell,
       title: "Alerts",
       subtitle: "Set up alerts",
       coachUrl: "/alerts?coach=setup-alerts",
-      useBookArtwork: false,
     },
-    ...(path === "migration"
-      ? [
-          {
-            icon: BookOpen,
-            title: "Your first report",
-            subtitle: "Generate an AGP for your next clinic visit",
-            coachUrl: "/reports?coach=setup-reports",
-            useBookArtwork: true,
-          },
-        ]
-      : [
-          {
-            icon: Plug,
-            title: "Connect another source",
-            subtitle: "Add another device or service",
-            coachUrl: "/settings/connectors?coach=setup-connectors",
-            useBookArtwork: false,
-          },
-        ]),
+    path === "migration" && hasData
+      ? {
+          icon: BookOpen,
+          title: "Your first report",
+          subtitle:
+            voice.kind === "self"
+              ? "Generate an AGP for your next clinic visit"
+              : voice.kind === "named"
+                ? `Generate an AGP for ${voice.name}'s next clinic visit`
+                : "Generate an AGP for the next clinic visit",
+          coachUrl: "/reports?coach=setup-reports",
+        }
+      : {
+          icon: Plug,
+          title: hasData ? "Connect another source" : "Connect a data source",
+          subtitle: hasData
+            ? "Add another device or service"
+            : "Choose a CGM, pump, or phone app",
+          coachUrl: "/settings/connectors?coach=setup-connectors",
+        },
   ]);
 </script>
 
 <div
-  class="grid grid-cols-[1.1fr_0.9fr] max-[820px]:grid-cols-1 gap-10 items-start"
+  class="grid grid-cols-[1.1fr_0.9fr] max-[820px]:grid-cols-1 gap-10 items-start px-4 py-8"
 >
-  <!-- Left column -->
   <div class="flex flex-col gap-8">
-    <!-- Celebration -->
-    <div class="pulse-wrapper relative size-24">
-      <Artwork
-        artwork="confirmation-mark"
-        palette="moss"
-        surface="dark"
-        motion="auto"
-        autoplay="once"
-        class="size-48"
-      />
-    </div>
-
-    <!-- Heading -->
     <h1
-      class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight"
+      class="font-brand font-hairline text-5xl max-[820px]:text-4xl leading-tight text-foreground"
     >
-      {#if path === "migration"}
-        Your data is <em
-          class="not-italic font-light text-(--onb-accent)"
-        >
-          home.
-        </em>
+      {#if path === "migration" && importResult === "complete"}
+        {#if voice.kind === "self"}
+          Your data is <em class="not-italic font-light text-primary">home.</em>
+        {:else if voice.kind === "named"}
+          {voice.name}'s data is <em class="not-italic font-light text-primary">home.</em>
+        {:else}
+          The data is <em class="not-italic font-light text-primary">home.</em>
+        {/if}
       {:else}
-        You're <em
-          class="not-italic font-light text-(--onb-accent)"
-        >
-          in.
-        </em>
+        You're <em class="not-italic font-light text-primary">in.</em>
       {/if}
     </h1>
 
-    {#if path === "fresh"}
-      <Artwork
-        icon={sproutArtwork}
-        palette="moss"
-        surface="dark"
-        motion="auto"
-        autoplay="once"
-        class="size-48"
-      />
-    {/if}
-
-    <!-- Lead paragraph -->
     <p class="text-lg leading-relaxed text-muted-foreground max-w-130">
       {#if path === "migration"}
-        All your entries, treatments, and profiles are in Nocturne. Your
-        existing uploaders keep working — you don't need to change them until
-        you're ready.
+        {#if importResult === "complete" && voice.kind === "self"}
+          Your Nightscout history has been copied into Nocturne. Your Nightscout
+          site hasn't been changed, and your uploaders keep sending to it until
+          you choose to move them.
+        {:else if importResult === "complete" && voice.kind === "named"}
+          {voice.name}'s Nightscout history has been copied into Nocturne. The
+          Nightscout site hasn't been changed, and {voice.name}'s uploaders keep
+          sending to it until you choose to move them.
+        {:else if importResult === "complete"}
+          The Nightscout history has been copied into Nocturne. The Nightscout
+          site hasn't been changed, and its uploaders keep sending to it until
+          you choose to move them.
+        {:else if importResult === "partial"}
+          Some of the Nightscout history was copied, but not all of it. You can
+          see what was missed and run the import again from Settings.
+        {:else if importResult === "failed"}
+          The import from Nightscout stopped before it finished, so
+          some or all of the history is missing. You can see what arrived and
+          try again from Settings.
+        {:else if importResult === "running"}
+          We lost track of your import before it finished. It may still be
+          running; check Settings to see how it ended.
+        {:else}
+          The Nightscout history hasn't been imported yet. You can start the
+          import from Settings whenever you're ready.
+        {/if}
+      {:else if source === "uploader-receiving"}
+        The phone app is sending readings to Nocturne, so the dashboard is
+        ready.
+      {:else if source === "connector-saved"}
+        Your data source is saved and switched on. Readings will appear on the
+        dashboard after its first sync.
       {:else}
-        Your CGM is connected, your target range is set, and the dashboard is
-        waiting. The next reading will land any minute.
+        You haven't connected a data source yet, so the dashboard will be empty
+        until you do. You can connect one from Settings at any time.
       {/if}
     </p>
 
-    <!-- Buttons -->
-    <div class="flex flex-row items-center gap-3">
-      <Button onclick={onEnterDashboard}>
-        <ChartLine class="mr-2 h-4 w-4" />
-        Open my dashboard
+    {#if continueFailed}
+      <Alert.Root variant="warning" data-testid="finish-failed">
+        <TriangleAlert />
+        <Alert.Title>We couldn't finish setup</Alert.Title>
+        <Alert.Description>
+          Nocturne didn't record that setup is finished, so it can't move on yet. Check your
+          connection and try again.
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
+
+    <div class="flex flex-row flex-wrap items-center gap-3">
+      <Button onclick={onContinue}>
+        {#if continueFailed}
+          Try again
+        {:else}
+          Continue setting up
+        {/if}
+        <ArrowRight class="ml-2 h-4 w-4" />
       </Button>
       <Button variant="ghost" onclick={() => onNavigateWithCoach("/?coach=quick-tour")}>Take the 60-second tour</Button>
     </div>
-
-    <!-- Public access toggle -->
-    <label class="flex items-start gap-3 cursor-pointer" class:opacity-50={isToggling}>
-      <Checkbox
-        checked={isPublic}
-        onCheckedChange={handlePublicToggle}
-        disabled={isToggling}
-        class="mt-0.5"
-      />
-      <div class="flex items-start gap-2">
-        <Globe class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <div class="flex flex-col gap-0.5">
-          <span class="text-sm text-white">Create a public share link</span>
-          <span class="text-xs text-white/50">Anyone with the link can view your glucose data without signing in. Copy, rotate, or disable it later in Members settings.</span>
-        </div>
-      </div>
-    </label>
   </div>
 
-  <!-- Right column -->
   <div class="flex flex-col gap-4">
     <span class="text-xs uppercase tracking-widest text-muted-foreground">
       A few next things
@@ -178,13 +174,9 @@
           onclick={() => onNavigateWithCoach(step.coachUrl)}
         >
           <div
-            class="flex {step.useBookArtwork ? 'size-12' : 'h-8.5 w-8.5'} shrink-0 items-center justify-center rounded-lg text-muted-foreground"
+            class="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
           >
-            {#if step.useBookArtwork}
-              <BookOpen class="size-6 text-primary" />
-            {:else}
-              <step.icon class="h-4.5 w-4.5" />
-            {/if}
+            <step.icon class="h-4.5 w-4.5" />
           </div>
           <div class="flex flex-col text-left">
             <span class="text-sm font-medium">{step.title}</span>
@@ -200,26 +192,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  .pulse-wrapper::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    border: 2px solid var(--onb-accent);
-    animation: pulse-ring 2s ease-out infinite;
-    pointer-events: none;
-  }
-
-  @keyframes pulse-ring {
-    0% {
-      transform: scale(1);
-      opacity: 0.6;
-    }
-    100% {
-      transform: scale(1.3);
-      opacity: 0;
-    }
-  }
-</style>

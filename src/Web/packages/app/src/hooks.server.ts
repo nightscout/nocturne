@@ -111,6 +111,7 @@ const authHandle: Handle = async ({ event, resolve }) => {
         expiresAt: session.expiresAt,
         preferredLanguage: session.preferredLanguage ?? undefined,
         preferences: session.preferences ?? undefined,
+        defaultGlucoseUnits: session.defaultGlucoseUnits ?? undefined,
         avatarUrl: session.avatarUrl ?? undefined,
       };
 

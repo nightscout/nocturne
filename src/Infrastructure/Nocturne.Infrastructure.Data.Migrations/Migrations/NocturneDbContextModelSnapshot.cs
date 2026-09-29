@@ -3875,6 +3875,50 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.ToTable("settings");
                 });
 
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SetupHubItemEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ItemKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("item_key");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("state");
+
+                    b.Property<DateTime>("SysCreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_created_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime>("SysUpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sys_updated_at")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ItemKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+
+                    b.ToTable("setup_hub_items");
+                });
+
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SleepBiometricSampleEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4802,6 +4846,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("allow_public_docs");
 
+                    b.Property<string>("DefaultGlucoseUnits")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("default_glucose_units");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -4823,6 +4872,20 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("OnboardingCompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("onboarding_completed_at");
+
+                    b.Property<string>("PatientRelationship")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("patient_relationship");
+
+                    b.Property<DateTime?>("SetupHubEnrolledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("setup_hub_enrolled_at");
+
+                    b.Property<string>("SetupStripDismissedRevision")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("setup_strip_dismissed_revision");
 
                     b.Property<DateTime?>("ShareLastAccessedAt")
                         .HasColumnType("timestamp with time zone")
@@ -9402,6 +9465,15 @@ namespace Nocturne.Infrastructure.Data.Migrations
                 });
 
             modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SettingsEntity", b =>
+                {
+                    b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Nocturne.Infrastructure.Data.Entities.SetupHubItemEntity", b =>
                 {
                     b.HasOne("Nocturne.Infrastructure.Data.Entities.TenantEntity", null)
                         .WithMany()

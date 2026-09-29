@@ -7,6 +7,7 @@
   import SidebarGlucoseWidget from "./SidebarGlucoseWidget.svelte";
   import SidebarNotifications from "./SidebarNotifications.svelte";
   import SidebarDndToggle from "$lib/components/alerts/SidebarDndToggle.svelte";
+  import SetupOpenCount from "$lib/components/setup-hub/SetupOpenCount.svelte";
   import UserMenu from "./UserMenu.svelte";
   import LanguageSelector from "$lib/components/LanguageSelector.svelte";
   import { updateLanguagePreference } from "$api/user-preferences.remote";
@@ -312,6 +313,9 @@
                             <SelectionEdge active={isActive(child)} />
                             <child.icon class="h-4 w-4" />
                             <span>{child.title}</span>
+                            {#if child.href === "/setup"}
+                              <SetupOpenCount />
+                            {/if}
                           </Sidebar.MenuSubButton>
                         {/if}
                       </Sidebar.MenuSubItem>

@@ -1,4 +1,4 @@
-import { Battery, BookOpen, Database, Fingerprint, Flag, FlaskConical, Scale, Sprout, Syringe, Volume2 } from 'lucide';
+import { Battery, BookOpen, Database, Fingerprint, Flag, FlaskConical, Scale, Syringe, Volume2 } from 'lucide';
 import type { IconArtworkSource } from '@nocturne/watercolour';
 
 export const batteryArtwork = { icon: Battery, name: 'battery' } satisfies IconArtworkSource;
@@ -8,6 +8,5 @@ export const fingerprintArtwork = { icon: Fingerprint, name: 'fingerprint' } sat
 export const flagArtwork = { icon: Flag, name: 'flag' } satisfies IconArtworkSource;
 export const labResultArtwork = { icon: FlaskConical, name: 'flask-conical' } satisfies IconArtworkSource;
 export const soundArtwork = { icon: Volume2, name: 'volume-2' } satisfies IconArtworkSource;
-export const sproutArtwork = { icon: Sprout, name: 'sprout' } satisfies IconArtworkSource;
 export const syringeArtwork = { icon: Syringe, name: 'syringe' } satisfies IconArtworkSource;
 export const weightScaleArtwork = { icon: Scale, name: 'scale' } satisfies IconArtworkSource;

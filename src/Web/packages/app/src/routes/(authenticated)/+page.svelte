@@ -14,6 +14,7 @@
   import TenantsOverview from "$lib/components/tenants/TenantsOverview.svelte";
   import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
   import FirstReadingChartArea from "$lib/components/dashboard/first-reading/FirstReadingChartArea.svelte";
+  import SetupStrip from "$lib/components/setup-hub/SetupStrip.svelte";
   import { tryGetRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import type { PageData } from "./$types";
 
@@ -122,6 +123,9 @@
         />
       {/if}
     </div>
+
+    <!-- Below the reading and the chart, so it never competes with the current reading. -->
+    <SetupStrip />
 
     {#if isMainSectionEnabled(widgets, WidgetId.DailyStats)}
       <RecentEntriesCard />

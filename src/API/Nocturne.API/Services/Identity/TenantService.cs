@@ -11,6 +11,7 @@ using Nocturne.API.Services.Docs;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Extensions;
@@ -265,6 +266,50 @@ public partial class TenantService : ITenantService
         ScalarAuthProvider.EvictTenant(_cache, tenant.Slug);
 
         return new TenantSettingsDto(tenant.AllowPublicDocs);
+    }
+
+    public async Task<PatientRelationship?> GetPatientRelationshipAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var tenant = await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => new { t.PatientRelationship })
+            .FirstOrDefaultAsync(ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        return tenant.PatientRelationship;
+    }
+
+    public async Task SetPatientRelationshipAsync(
+        Guid id, PatientRelationship relationship, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.PatientRelationship = relationship;
+        await context.SaveChangesAsync(ct);
+    }
+
+    public async Task<string?> GetDefaultGlucoseUnitsAsync(Guid id, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        return await context.Tenants
+            .AsNoTracking()
+            .Where(t => t.Id == id)
+            .Select(t => t.DefaultGlucoseUnits)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task SetDefaultGlucoseUnitsAsync(Guid id, string units, CancellationToken ct = default)
+    {
+        await using var context = await _factory.CreateDbContextAsync(ct);
+        var tenant = await context.Tenants.FindAsync([id], ct)
+            ?? throw new KeyNotFoundException($"Tenant {id} not found");
+
+        tenant.DefaultGlucoseUnits = units;
+        await context.SaveChangesAsync(ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
