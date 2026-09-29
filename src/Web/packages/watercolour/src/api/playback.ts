@@ -63,11 +63,14 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
    * accents that would otherwise pin a slot for as long as they are mounted.
    */
   releaseAfterFinish?: boolean;
+  /** Skips the reveal: finishes on first appearance whatever the motion, as a repaint of a finished artwork does. */
+  startFinished?: boolean;
   /**
    * Live only: GPU memory this instance may spend on seek checkpoints.
-   * Absent keeps the engine's default; 0 leaves it with the single
-   * checkpoint at tick 0, so a backwards seek replays from the start
-   * instead of restoring a nearer state.
+   * Absent keeps the engine's default, or none past tick 0 for a
+   * `releaseAfterFinish` player, which nothing can seek once it has let go;
+   * 0 leaves it with the single checkpoint at tick 0, so a backwards seek
+   * replays from the start instead of restoring a nearer state.
    */
   checkpointBudgetBytes?: number;
   scheduler?: Scheduler;
@@ -138,6 +141,16 @@ function pixelSize(width: number, height: number, dpr: number): PixelSize {
     width: Math.max(1, Math.round(width * ratio)),
     height: Math.max(1, Math.round(height * ratio)),
   };
+}
+
+/**
+ * The budget handed to the engine. The engine reads 0 as "its default", so
+ * the documented 0 goes over as one byte, which is below any checkpoint and
+ * leaves only the one at tick 0.
+ */
+export function checkpointBudget(options: Pick<PlayerOptions, 'checkpointBudgetBytes' | 'releaseAfterFinish'>): number | undefined {
+  const bytes = options.checkpointBudgetBytes ?? (options.releaseAfterFinish ? 0 : undefined);
+  return bytes === 0 ? 1 : bytes;
 }
 
 /**
@@ -235,7 +248,7 @@ class LiveBackend implements Backend {
         durationMs,
         0,
         1 - (options.tail ?? DEFAULT_TAIL),
-        options.checkpointBudgetBytes,
+        checkpointBudget(options),
       );
       if (options.easing) instance.setProgressCurve('linear');
       try {
@@ -934,6 +947,7 @@ class Player implements ArtworkPlayer {
       hasBaked,
       hasStatic,
       releaseAfterFinish: this.options.releaseAfterFinish,
+      customised: this.customised(),
     });
     if (first !== 'live') {
       // An explicit `live` request that resolveMode downgraded (usually the
@@ -965,6 +979,11 @@ class Player implements ArtworkPlayer {
       }
     }
     await this.start([first, ...fallbackOrder(first, { hasBaked, hasStatic })]);
+  }
+
+  private customised(): boolean {
+    const ref = this.ref ?? this.icon;
+    return ref?.seed !== undefined || ref?.intensity !== undefined;
   }
 
   private assetKey(): AssetKey | undefined {
@@ -1018,9 +1037,13 @@ class Player implements ArtworkPlayer {
 
   private autoplay(): void {
     if (!this.backend) return;
-    const action = autoplayAction(this.motion, this.options.autoplay, this.options.releaseAfterFinish);
+    const action = this.autoplayAction(this.options.releaseAfterFinish);
     if (action === 'finish') this.backend.finish();
     else if (action === 'play') this.backend.play();
+  }
+
+  private autoplayAction(releaseAfterFinish: boolean | undefined): 'finish' | 'play' | 'wait' {
+    return this.options.startFinished ? 'finish' : autoplayAction(this.motion, this.options.autoplay, releaseAfterFinish);
   }
 
   private createBackend(mode: ResolvedMode): Promise<Backend> {
@@ -1035,7 +1058,7 @@ class Player implements ArtworkPlayer {
       case 'live': {
         const create = (onFreed?: () => void) =>
           LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, onFreed);
-        const still = this.options.releaseAfterFinish && autoplayAction(this.motion, this.options.autoplay, true) === 'finish';
+        const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
         return this.host.stillTurn().then((endTurn) => {

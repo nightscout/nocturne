@@ -10,11 +10,14 @@ export interface ModeInputs {
   capReached: boolean;
   hasBaked: boolean;
   hasStatic: boolean;
-  /**
-   * The live backend renders one frame and releases, so under reduced motion
-   * it outranks the identical baked still — the caller's seed matters.
-   */
+  /** The live backend renders one frame and releases. */
   releaseAfterFinish?: boolean;
+  /**
+   * The caller set a seed or an intensity, which the baked still (one seed,
+   * default intensity) cannot show. Only then is a releasing live frame worth
+   * simulating under reduced motion instead of drawing the still.
+   */
+  customised?: boolean;
 }
 
 export function resolveMotion(motion: ArtworkMotion, systemReducedMotion: boolean): 'full' | 'reduced' {
@@ -40,7 +43,7 @@ export function resolveMode(inputs: ModeInputs): ResolvedMode {
       return inputs.hasStatic ? 'static' : inputs.hasBaked ? 'baked' : 'none';
     case 'auto':
       if (reduced) {
-        if (inputs.releaseAfterFinish) {
+        if (inputs.releaseAfterFinish && inputs.customised) {
           if (liveAvailable) return 'live';
           if (inputs.hasStatic) return 'static';
           return inputs.hasBaked ? 'baked' : 'none';

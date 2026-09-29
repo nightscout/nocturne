@@ -19,6 +19,7 @@
     surface,
     position = 'relative',
     assetBaseUrl,
+    releaseAfterFinish,
     onready,
     onstatechange,
     class: className = '',
@@ -38,6 +39,13 @@
      */
     position?: 'relative' | 'absolute' | 'fixed' | 'sticky';
     assetBaseUrl?: string;
+    /**
+     * Lets go of the live engine once the reveal has finished and its frame
+     * is on screen, keeping the pixels: a mounted artwork then holds no live
+     * slot and no GPU memory. Defaults on unless `autoplay` is `never`, whose
+     * host drives the player (`seek`, `play`) and needs it alive.
+     */
+    releaseAfterFinish?: boolean;
     /** Fires once a backend is drawing; the returned cleanup runs with the player's disposal. */
     onready?: PlayerReadyCallback;
     /** Fires on every player state change, including settling on `none`, where `onready` never fires. */
@@ -54,7 +62,23 @@
       frame,
       canvas,
       artwork,
-      { icon, palette, seed, intensity, durationMs, easing, tail, motion, quality, mode, autoplay, fit, surface, assetBaseUrl },
+      {
+        icon,
+        palette,
+        seed,
+        intensity,
+        durationMs,
+        easing,
+        tail,
+        motion,
+        quality,
+        mode,
+        autoplay,
+        fit,
+        surface,
+        assetBaseUrl,
+        releaseAfterFinish: releaseAfterFinish ?? autoplay !== 'never',
+      },
       onready,
       onstatechange,
     );

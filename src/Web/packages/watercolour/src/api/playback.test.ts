@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IconNode } from '../types';
 import { EngineHost } from './engine-host';
-import { type PlayerState, autoplayAction, createArtworkPlayer, iconStaticBackend } from './playback';
+import { type PlayerState, autoplayAction, checkpointBudget, createArtworkPlayer, iconStaticBackend } from './playback';
 import { Scheduler } from './scheduler';
 
 const clock: IconNode[] = [
@@ -129,5 +129,21 @@ describe('live stills after a failed engine boot', () => {
     ]);
     expect(outcome).toBe('settled');
     expect(second.state.mode).toBe('none');
+  });
+});
+
+describe('checkpointBudget', () => {
+  it('keeps the engine default for a player that may be seeked', () => {
+    expect(checkpointBudget({})).toBeUndefined();
+    expect(checkpointBudget({ checkpointBudgetBytes: 4096 })).toBe(4096);
+  });
+
+  it('keeps only tick 0 for a releasing player, which nothing can seek once it lets go', () => {
+    expect(checkpointBudget({ releaseAfterFinish: true })).toBe(1);
+    expect(checkpointBudget({ releaseAfterFinish: true, checkpointBudgetBytes: 4096 })).toBe(4096);
+  });
+
+  it('sends a documented 0 as one byte, since the engine reads 0 as its default', () => {
+    expect(checkpointBudget({ checkpointBudgetBytes: 0 })).toBe(1);
   });
 });

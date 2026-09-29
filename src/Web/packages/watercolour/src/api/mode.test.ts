@@ -11,7 +11,7 @@ const resolve = (
   requested: ArtworkMode,
   capabilities: typeof gpu,
   assets: { baked: boolean; static: boolean },
-  extra: { motion?: ArtworkMotion; capReached?: boolean; releaseAfterFinish?: boolean } = {},
+  extra: { motion?: ArtworkMotion; capReached?: boolean; releaseAfterFinish?: boolean; customised?: boolean } = {},
 ) =>
   resolveMode({
     requested,
@@ -21,6 +21,7 @@ const resolve = (
     hasBaked: assets.baked,
     hasStatic: assets.static,
     releaseAfterFinish: extra.releaseAfterFinish,
+    customised: extra.customised,
   });
 
 const all = { baked: true, static: true };
@@ -50,13 +51,20 @@ describe('resolveMode', () => {
     expect(resolve('auto', reduced, all, { motion: 'full' })).toBe('live');
   });
 
-  it('auto + releaseAfterFinish: reduced motion runs live (a released single frame), not the still', () => {
-    expect(resolve('auto', reduced, all, { releaseAfterFinish: true })).toBe('live');
-    expect(resolve('auto', { ...noGpu, reducedMotion: true }, all, { releaseAfterFinish: true })).toBe('static');
-    expect(resolve('auto', { ...noGpu, reducedMotion: true }, { baked: true, static: false }, { releaseAfterFinish: true })).toBe('baked');
-    expect(resolve('auto', reduced, all, { releaseAfterFinish: true, motion: 'full' })).toBe('live');
-    expect(resolve('auto', reduced, none, { releaseAfterFinish: true })).toBe('live');
-    expect(resolve('auto', reduced, all, { releaseAfterFinish: true, capReached: true })).toBe('static');
+  it('auto + releaseAfterFinish + a custom seed: reduced motion runs live (a released single frame), not the still', () => {
+    const custom = { releaseAfterFinish: true, customised: true };
+    expect(resolve('auto', reduced, all, custom)).toBe('live');
+    expect(resolve('auto', { ...noGpu, reducedMotion: true }, all, custom)).toBe('static');
+    expect(resolve('auto', { ...noGpu, reducedMotion: true }, { baked: true, static: false }, custom)).toBe('baked');
+    expect(resolve('auto', reduced, all, { ...custom, motion: 'full' })).toBe('live');
+    expect(resolve('auto', reduced, none, custom)).toBe('live');
+    expect(resolve('auto', reduced, all, { ...custom, capReached: true })).toBe('static');
+  });
+
+  it('auto + releaseAfterFinish without a custom seed: reduced motion draws the still, as any unseeded artwork does', () => {
+    expect(resolve('auto', reduced, all, { releaseAfterFinish: true })).toBe('static');
+    expect(resolve('auto', reduced, { baked: true, static: false }, { releaseAfterFinish: true })).toBe('live');
+    expect(resolve('auto', gpu, all, { releaseAfterFinish: true })).toBe('live');
   });
 
   it('explicit modes fall down the chain when unavailable', () => {
