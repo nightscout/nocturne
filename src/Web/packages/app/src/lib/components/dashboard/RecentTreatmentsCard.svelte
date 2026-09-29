@@ -8,6 +8,7 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
+  import { EmptyState } from "$lib/components/shared";
   import { time } from "$lib/utils/formatting";
   import { entryDetails, entryLabel } from "$lib/utils/entry-summary";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
@@ -103,9 +104,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="text-muted-foreground text-center py-8">
-          No recent entries
-        </p>
+        <EmptyState art="clock" size="compact" title="No recent entries" />
       {/if}
     </CardContent>
   </svelte:boundary>

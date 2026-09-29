@@ -6,6 +6,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Checkbox } from "$lib/components/ui/checkbox";
+  import { EmptyState } from "$lib/components/shared";
   import TokenScopeSelector from "./TokenScopeSelector.svelte";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Plus from "@lucide/svelte/icons/plus";
@@ -233,19 +234,11 @@
           Refresh the page to try again.
         </p>
       {:else if grants.length === 0}
-        <div
-          class="flex flex-col items-center justify-center py-8 text-center"
-        >
-          <div
-            class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-          >
-            <KeyRound class="h-6 w-6 text-muted-foreground" />
-          </div>
-          <p class="text-sm text-muted-foreground max-w-sm">
-            No API tokens. Create a token to enable programmatic access to
-            your data.
-          </p>
-        </div>
+        <EmptyState
+          art="key"
+          title="No API tokens"
+          body="Create a token to enable programmatic access to your data."
+        />
       {:else}
         {#each grants as grant (grant.id)}
           <div class="rounded-md border p-3 space-y-3">

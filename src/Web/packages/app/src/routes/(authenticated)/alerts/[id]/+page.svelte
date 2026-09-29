@@ -45,6 +45,7 @@
   import CalendarDays from "@lucide/svelte/icons/calendar-days";
 
   import { EditorActionBar } from "$lib/components/layout";
+  import { EmptyState } from "$lib/components/shared";
   import RuleBuilder from "$lib/components/alerts/RuleBuilder.svelte";
   import AutoResolveSection from "$lib/components/alerts/AutoResolveSection.svelte";
   import ChannelsSection from "$lib/components/alerts/ChannelsSection.svelte";
@@ -592,11 +593,12 @@
                 <Loader2 class="h-4 w-4 animate-spin" />
               </div>
             {:else if history.length === 0}
-              <div
-                class="rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground"
-              >
-                No firings yet.
-              </div>
+              <EmptyState
+                art="clock"
+                size="compact"
+                variant="outline"
+                title="No firings yet"
+              />
             {:else}
               <div class="max-h-72 overflow-y-auto space-y-1">
                 {#each history as h (h.id)}

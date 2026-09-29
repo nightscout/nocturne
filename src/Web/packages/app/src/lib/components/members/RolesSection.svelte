@@ -5,6 +5,7 @@
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { EmptyState } from "$lib/components/shared";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
   import PermissionSummary from "$lib/components/rbac/PermissionSummary.svelte";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -243,14 +244,12 @@
     {/each}
 
     {#if roles.length === 0}
-      <div class="flex flex-col items-center justify-center rounded-xl border border-border py-12 text-center">
-        <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-          <Shield class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="max-w-sm text-sm text-muted-foreground">
-          No roles configured. Create a role to get started.
-        </p>
-      </div>
+      <EmptyState
+        art="shield"
+        variant="dashed"
+        title="No roles configured"
+        body="Create a role to get started."
+      />
     {/if}
   </div>
 </div>

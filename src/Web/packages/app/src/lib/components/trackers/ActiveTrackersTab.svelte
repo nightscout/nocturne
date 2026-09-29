@@ -10,10 +10,10 @@
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
   import Plus from "@lucide/svelte/icons/plus";
-  import Timer from "@lucide/svelte/icons/timer";
   import Check from "@lucide/svelte/icons/check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Droplet from "@lucide/svelte/icons/droplet";
+  import { EmptyState } from "$lib/components/shared";
   import { cn } from "$lib/utils";
   import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
@@ -76,11 +76,11 @@
     </CardHeader>
     <CardContent>
       {#if activeInstances.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <Timer class="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No active trackers</p>
-          <p class="text-sm">Start a tracker from your definitions</p>
-        </div>
+        <EmptyState
+          art="stopwatch"
+          title="No active trackers"
+          body="Start a tracker from your definitions"
+        />
       {:else}
         <div class="space-y-3">
           {#each activeInstances as instance (instance.id)}

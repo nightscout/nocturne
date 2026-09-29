@@ -29,7 +29,7 @@
   import Server from "@lucide/svelte/icons/server";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Info from "@lucide/svelte/icons/info";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { databaseArtwork } from "$lib/watercolour-icons";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
@@ -587,19 +587,11 @@
                 </Button>
               </div>
             {:else}
-              <div class="text-center py-12 text-muted-foreground">
-                <Artwork
-                  icon={databaseArtwork}
-                  palette="slate"
-                  motion="auto"
-                  autoplay="once"
-                  class="mx-auto mb-3 size-48"
-                />
-                <p>No active migration</p>
-                <p class="text-sm">
-                  Start a new migration to see progress here
-                </p>
-              </div>
+              <EmptyState
+                art={databaseArtwork}
+                title="No active migration"
+                body="Start a new migration to see progress here"
+              />
             {/if}
           </CardContent>
         </Card>
@@ -616,17 +608,11 @@
           </CardHeader>
           <CardContent>
             {#if history.length === 0}
-              <div class="text-center py-12 text-muted-foreground">
-                <Artwork
-                  icon={databaseArtwork}
-                  palette="slate"
-                  motion="auto"
-                  autoplay="once"
-                  class="mx-auto mb-3 size-48"
-                />
-                <p>No migration history</p>
-                <p class="text-sm">Completed migrations will appear here</p>
-              </div>
+              <EmptyState
+                art={databaseArtwork}
+                title="No migration history"
+                body="Completed migrations will appear here"
+              />
             {:else}
               <div class="space-y-3">
                 {#each history as job (job.id)}

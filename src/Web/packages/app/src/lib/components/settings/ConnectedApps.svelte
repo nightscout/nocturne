@@ -4,7 +4,6 @@
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
-  import Shield from "@lucide/svelte/icons/shield";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
@@ -13,6 +12,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import BadgeCheck from "@lucide/svelte/icons/badge-check";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import { EmptyState } from "$lib/components/shared";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import { list, revoke } from "$lib/api/generated/connectedApps.generated.remote";
   import { getOAuthScopeDescription } from "$lib/constants/oauth-scopes";
@@ -90,21 +90,12 @@
   {/if}
 
   {#if apps.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Shield class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No connected applications. When you authorize apps to access your
-          data, they will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="shield"
+      variant="card"
+      title="No connected applications"
+      body="When you authorize apps to access your data, they will appear here."
+    />
   {:else}
     {#each apps as app (app.grantId)}
       <Card.Root>

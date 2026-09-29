@@ -2,6 +2,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { EmptyState } from "$lib/components/shared";
   import {
     Select,
     SelectContent,
@@ -57,10 +58,13 @@
 
     <div class="space-y-2 py-4">
       {#if localRules.length === 0}
-        <div class="text-center py-8 text-muted-foreground border border-dashed rounded-lg">
-          <p class="text-sm">No rules configured.</p>
-          <p class="text-xs">Add a rule to set processing defaults based on the uploading client.</p>
-        </div>
+        <EmptyState
+          art="plug"
+          size="compact"
+          variant="outline"
+          title="No rules configured"
+          body="Add a rule to set processing defaults based on the uploading client."
+        />
       {:else}
         {#each localRules as rule, index (index)}
           <div

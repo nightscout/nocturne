@@ -14,7 +14,7 @@
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
@@ -257,20 +257,12 @@
       {/if}
 
       {#if visibleMembers.length === 0}
-        <Card.Root>
-          <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <Artwork
-              artwork="people-group"
-              palette="dusk"
-              motion="auto"
-              autoplay="once"
-              class="mx-auto mb-4 size-48"
-            />
-            <p class="max-w-sm text-sm text-muted-foreground">
-              No members. Invite someone to share your data.
-            </p>
-          </Card.Content>
-        </Card.Root>
+        <EmptyState
+          art="people-group"
+          variant="card"
+          title="No members"
+          body="Invite someone to share your data."
+        />
       {:else}
         {#each visibleMembers as member (member.subjectId)}
           <div transition:slide={{ duration: 300 }} animate:flip={{ duration: 300 }}>

@@ -7,7 +7,7 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import History from "@lucide/svelte/icons/history";
+  import { EmptyState } from "$lib/components/shared";
   import { CompletionReason, type TrackerInstanceDto } from "$api";
 
   interface Props {
@@ -33,10 +33,7 @@
     </CardHeader>
     <CardContent>
       {#if historyInstances.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <History class="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No history yet</p>
-        </div>
+        <EmptyState art="clock" title="No history yet" />
       {:else}
         <div class="space-y-2">
           {#each historyInstances as instance (instance.id)}

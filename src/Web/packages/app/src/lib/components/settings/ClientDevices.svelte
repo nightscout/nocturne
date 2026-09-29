@@ -6,7 +6,6 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
   import { Separator } from "$lib/components/ui/separator";
-  import Smartphone from "@lucide/svelte/icons/smartphone";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Check from "@lucide/svelte/icons/check";
   import X from "@lucide/svelte/icons/x";
@@ -14,6 +13,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import Pencil from "@lucide/svelte/icons/pencil";
+  import { EmptyState } from "$lib/components/shared";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
 
@@ -126,21 +126,12 @@
   {/if}
 
   {#if devices.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Smartphone class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No registered devices. When you pair an app such as the Companion, it
-          will appear here.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState
+      art="phone"
+      variant="card"
+      title="No registered devices"
+      body="When you pair an app such as the Companion, it will appear here."
+    />
   {:else}
     {#each devices as device (device.id)}
       <Card.Root>

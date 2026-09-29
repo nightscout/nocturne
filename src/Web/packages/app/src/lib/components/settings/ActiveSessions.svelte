@@ -11,6 +11,7 @@
   import Clock from "@lucide/svelte/icons/clock";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import LogOut from "@lucide/svelte/icons/log-out";
+  import { EmptyState } from "$lib/components/shared";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     list,
@@ -169,20 +170,7 @@
   {/if}
 
   {#if sessions.length === 0}
-    <Card.Root>
-      <Card.Content
-        class="flex flex-col items-center justify-center py-12 text-center"
-      >
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Monitor class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No active sessions found.
-        </p>
-      </Card.Content>
-    </Card.Root>
+    <EmptyState art="phone" variant="card" title="No active sessions found" />
   {:else}
     {#each sessions as session (session.sessionId)}
       <Card.Root>

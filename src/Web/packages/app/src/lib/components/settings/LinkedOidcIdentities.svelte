@@ -9,6 +9,8 @@
   import Clock from "@lucide/svelte/icons/clock";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
+  import { EmptyState } from "$lib/components/shared";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import {
     getLinkedIdentities,
@@ -161,17 +163,11 @@
         <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     {:else if identities.length === 0}
-      <div class="flex flex-col items-center justify-center py-8 text-center">
-        <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted"
-        >
-          <Link2 class="h-6 w-6 text-muted-foreground" />
-        </div>
-        <p class="text-sm text-muted-foreground max-w-sm">
-          No linked sign-in methods. Add one to sign in with an external
-          provider.
-        </p>
-      </div>
+      <EmptyState
+        art={fingerprintArtwork}
+        title="No linked sign-in methods"
+        body="Add one to sign in with an external provider."
+      />
     {:else}
       {#each identities as identity (identity.id)}
         <div
@@ -268,9 +264,11 @@
     </Dialog.Header>
     <div class="space-y-2 py-4">
       {#if availableProviders.length === 0}
-        <p class="text-sm text-muted-foreground">
-          No providers available to link.
-        </p>
+        <EmptyState
+          art={fingerprintArtwork}
+          size="compact"
+          title="No providers available to link"
+        />
       {:else}
         {#each availableProviders as provider (provider.id)}
           <Button

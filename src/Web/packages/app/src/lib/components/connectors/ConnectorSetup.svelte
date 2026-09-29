@@ -40,6 +40,7 @@
   import Lock from "@lucide/svelte/icons/lock";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
+  import { EmptyState } from "$lib/components/shared";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
@@ -449,25 +450,14 @@
           onSave={handleSave}
         />
       {:else}
-        <Card>
-          <CardContent class="py-8">
-            <div class="text-center">
-              <AlertCircle
-                class="h-12 w-12 mx-auto mb-4 text-muted-foreground"
-              />
-              <p class="font-medium">No Runtime Configuration Available</p>
-              <p class="text-sm text-muted-foreground mt-2">
-                This connector does not support runtime configuration.
-                {#if connectorInfo?.documentationUrl}
-                  Check the documentation for environment variable
-                  configuration.
-                {:else}
-                  Configure via environment variables on the server.
-                {/if}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          art="plug"
+          variant="card"
+          title="No Runtime Configuration Available"
+          body={connectorInfo?.documentationUrl
+            ? "This connector does not support runtime configuration. Check the documentation for environment variable configuration."
+            : "This connector does not support runtime configuration. Configure via environment variables on the server."}
+        />
       {/if}
 
       <!-- Extras snippet -->

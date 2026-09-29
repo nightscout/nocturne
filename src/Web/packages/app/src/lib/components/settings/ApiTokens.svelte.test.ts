@@ -232,7 +232,7 @@ describe("ApiTokens load failure", () => {
     // fallback; see READ_SURFACE in $lib/forms/submit-error.
     await expect.element(page.getByText("boom", { exact: true })).toBeVisible();
     await expect
-      .element(page.getByText("No API tokens.", { exact: false }))
+      .element(page.getByText("No API tokens"))
       .not.toBeInTheDocument();
   });
 });
