@@ -5,11 +5,21 @@ using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.SetupHub.Items;
 
-/// <summary>Done once the tenant has an enabled alert rule of its own; tracker-managed rules do not count.</summary>
+/// <summary>
+/// Done once an enabled rule of the tenant's own has a test alert the owner confirmed arrived
+/// (<see cref="AlertSetupService.ConfirmReceivedAsync"/>). A rule alone is not enough: nothing says
+/// its alerts reach anyone. A helper is offered it too and leaves it for the person they hand over
+/// to, since a helper cannot confirm a test.
+/// </summary>
 public class AlertsItem(NocturneDbContext db) : ISetupHubItem
 {
     public SetupHubItemKey Key => SetupHubItemKey.Alerts;
 
     public Task<bool> WorksAsync(CancellationToken ct) =>
-        db.AlertRules.AnyAsync(r => r.ManagedBy == null && r.IsEnabled, ct);
+        db.AlertInstances.AnyAsync(
+            i => i.IsTest
+                 && i.ReceiptConfirmedAt != null
+                 && i.AlertExcursion!.AlertRule!.IsEnabled
+                 && i.AlertExcursion.AlertRule.ManagedBy == null,
+            ct);
 }

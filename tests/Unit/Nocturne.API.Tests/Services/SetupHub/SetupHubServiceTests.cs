@@ -50,6 +50,28 @@ public class SetupHubServiceTests
         Id = Guid.CreateVersion7(), TenantId = tenantId, Timestamp = DateTime.UtcNow, Mgdl = 110,
     };
 
+    /// <summary>A rule with one test alert, confirmed received or not.</summary>
+    private AlertRuleEntity RuleWithTest(bool confirmed, bool enabled = true, string? managedBy = null)
+    {
+        var rule = new AlertRuleEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Low", IsEnabled = enabled, ManagedBy = managedBy,
+        };
+        var excursion = new AlertExcursionEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, AlertRuleId = rule.Id,
+            StartedAt = DateTime.UtcNow, EndedAt = DateTime.UtcNow,
+        };
+        _db.AlertRules.Add(rule);
+        _db.AlertExcursions.Add(excursion);
+        _db.AlertInstances.Add(new AlertInstanceEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, AlertExcursionId = excursion.Id, Status = "test",
+            TriggeredAt = DateTime.UtcNow, IsTest = true, ReceiptConfirmedAt = confirmed ? DateTime.UtcNow : null,
+        });
+        return rule;
+    }
+
     private void Enrol()
     {
         _db.Tenants.Single(t => t.Id == TenantId).SetupHubEnrolledAt = DateTime.UtcNow;
@@ -127,7 +149,7 @@ public class SetupHubServiceTests
     public async Task AnExistingTenant_HasItsItemsResolvedFromItsCurrentData()
     {
         _db.SensorGlucose.Add(Reading(TenantId));
-        _db.AlertRules.Add(new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Low" });
+        RuleWithTest(confirmed: true);
         _db.PatientDevices.Add(new PatientDeviceEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
@@ -148,16 +170,28 @@ public class SetupHubServiceTests
     }
 
     [Fact]
-    public async Task Alerts_IgnoresRulesATrackerManagesAndDisabledRules()
+    public async Task Alerts_IsNotDoneByARule_ATestNobodyConfirmed_OrAConfirmedTestOfADisabledOrManagedRule()
     {
-        _db.AlertRules.AddRange(
-            new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Sensor", ManagedBy = "tracker" },
-            new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Off", IsEnabled = false });
+        _db.AlertRules.Add(new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Rule only" });
+        RuleWithTest(confirmed: false);
+        RuleWithTest(confirmed: true, enabled: false);
+        RuleWithTest(confirmed: true, managedBy: "tracker:x");
         await _db.SaveChangesAsync();
 
         var hub = await Service.GetAsync(CancellationToken.None);
 
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Open);
+    }
+
+    [Fact]
+    public async Task Alerts_IsDone_OnceATestOfAnEnabledRuleIsConfirmedReceived()
+    {
+        RuleWithTest(confirmed: true);
+        await _db.SaveChangesAsync();
+
+        var hub = await Service.GetAsync(CancellationToken.None);
+
+        hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Done);
     }
 
     [Fact]

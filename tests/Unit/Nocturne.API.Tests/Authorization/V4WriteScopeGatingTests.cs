@@ -381,6 +381,7 @@ public class V4WriteScopeGatingTests
             ["TenantAlertSettingsController"] = Scope.AlertsReadWrite,
             ["AlertCustomSoundsController"] = Scope.AlertsReadWrite,
             ["AlertInvitesController"] = Scope.AlertsReadWrite,
+            ["SetupAlertsController"] = Scope.AlertsReadWrite,
             ["NotificationsController"] = Scope.AlertsReadWrite,
 
             // devices: a reservoir report is stored as a manual-source pump_snapshots row, and a fill
