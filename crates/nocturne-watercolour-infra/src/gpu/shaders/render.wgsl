@@ -45,6 +45,10 @@ struct RenderParams {
 @group(0) @binding(2) var<storage, read> optics: array<vec4<f32>>;
 @group(0) @binding(3) var<storage, read> paper_out: array<f32>;
 @group(0) @binding(4) var<storage, read_write> out: array<vec4<f32>>;
+// Per pigment, per tap position (see `presence_index`): the tap's presence
+// and how far inside the paint it is, written by `presence_taps`.
+@group(0) @binding(5) var<storage, read> presence: array<vec2<f32>>;
+@group(1) @binding(0) var<storage, read_write> presence_out: array<vec2<f32>>;
 
 const MAX_BETA: f32 = 40.0;
 // Mirror optics::ALPHA_SOFTNESS and the LUMINOUS_* tuning constants.
@@ -147,6 +151,66 @@ fn cubic_weights(t: f32) -> vec4<f32> {
     );
 }
 
+fn painted_amount(k: u32, x: i32, y: i32) -> f32 {
+    let cx = u32(min(max(x, 0), i32(R.sim_width) - 1i));
+    let cy = u32(min(max(y, 0), i32(R.sim_height) - 1i));
+    let j = cy * R.sim_width + cx;
+    return max(state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility, 0.0);
+}
+
+// A pixel's taps sit at sim cells `x0 - 1 ..= x0 + 2` with `x0` in
+// `0..width`, so every tap is one of `(width + 3) * (height + 3)` positions,
+// offset by one; a tap outside the grid clamps its 3x3 cell by cell, as
+// `optics::cubic_sample`'s window does, so it is not its clamped cell's tap.
+fn presence_index(k: u32, px: u32, py: u32) -> u32 {
+    let pw = R.sim_width + 3u;
+    return (k * (R.sim_height + 3u) + py) * pw + px;
+}
+
+// optics::cubic_sample's per-tap presence (the tap cell raised toward its
+// 3x3 by a Gaussian-weighted fourth-power mean) and inside share, which
+// depend on the tap alone: computed once per tap position instead of once
+// per output pixel that reads it.
+@compute @workgroup_size(256)
+fn presence_taps(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let pw = R.sim_width + 3u;
+    let ph = R.sim_height + 3u;
+    let c = gid.x;
+    if c >= pw * ph { return; }
+    let px = c % pw;
+    let py = c / pw;
+    let tx = i32(px) - 1i;
+    let ty = i32(py) - 1i;
+    for (var k = 0u; k < R.pigment_count; k++) {
+        var acc = 0.0;
+        var neighbours = 0u;
+        var soft = 0.0;
+        for (var dy = 0u; dy < 3u; dy++) {
+            for (var dx = 0u; dx < 3u; dx++) {
+                let q = painted_amount(k, tx + i32(dx) - 1i, ty + i32(dy) - 1i);
+                let q2 = q * q;
+                acc += presence_weight(dx, dy) * q2 * q2;
+                if q > LUMINOUS_MASK_THICKNESS {
+                    soft += presence_weight(dx, dy);
+                    if dy != 1u || dx != 1u {
+                        neighbours += 1u;
+                    }
+                }
+            }
+        }
+        let own = painted_amount(k, tx, ty);
+        // optics::cubic_sample: the painted share of the tap's 3x3, full
+        // when a painted majority rings it or when the tap is a painted thin
+        // mark.
+        var inside = soft;
+        let thin = own > LUMINOUS_MASK_THICKNESS && neighbours <= MASK_THIN;
+        if neighbours >= MASK_MAJORITY || thin {
+            inside = 1.0;
+        }
+        presence_out[presence_index(k, px, py)] = vec2<f32>(max(sqrt(sqrt(acc)), own), inside);
+    }
+}
+
 @compute @workgroup_size(16, 16)
 fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
     let x = gid.x;
@@ -186,53 +250,15 @@ fn render(@builtin(global_invocation_id) gid: vec3<u32>) {
             }
         }
     }
-    // optics::cubic_sample's window: the 6x6 cells the taps and their 3x3
-    // neighbourhoods read, clamped at the grid edge, read once per pigment.
-    // From it, per tap, the presence (the tap cell raised toward its 3x3 by a
-    // Gaussian-weighted fourth-power mean) and how far inside the paint the
-    // tap is.
     var mask = 0.0;
-    var win: array<f32, 36>;
     for (var k = 0u; k < R.pigment_count; k++) {
-        for (var wy_i = 0u; wy_i < 6u; wy_i++) {
-            let ny = u32(min(max(i32(y0) + i32(wy_i) - 2i, 0), i32(h) - 1i));
-            for (var wx_i = 0u; wx_i < 6u; wx_i++) {
-                let nx = u32(min(max(i32(x0) + i32(wx_i) - 2i, 0), i32(w) - 1i));
-                let j = ny * w + nx;
-                win[wy_i * 6u + wx_i] = max(state[o_d(k) + j] + state[o_g(k) + j] * R.wet_pigment_visibility, 0.0);
-            }
-        }
         var mask_k = 0.0;
         for (var oy = 0u; oy < 4u; oy++) {
             for (var ox = 0u; ox < 4u; ox++) {
                 let wgt = wx[ox] * wy[oy];
-                var acc = 0.0;
-                var neighbours = 0u;
-                var soft = 0.0;
-                for (var dy = 0u; dy < 3u; dy++) {
-                    for (var dx = 0u; dx < 3u; dx++) {
-                        let q = win[(oy + dy) * 6u + ox + dx];
-                        let q2 = q * q;
-                        acc += presence_weight(dx, dy) * q2 * q2;
-                        if q > LUMINOUS_MASK_THICKNESS {
-                            soft += presence_weight(dx, dy);
-                            if dy != 1u || dx != 1u {
-                                neighbours += 1u;
-                            }
-                        }
-                    }
-                }
-                let own = win[(oy + 1u) * 6u + ox + 1u];
-                pres[k] += max(sqrt(sqrt(acc)), own) * wgt;
-                // optics::cubic_sample: the painted share of the tap's 3x3,
-                // full when a painted majority rings it or when the tap is a
-                // painted thin mark.
-                var inside = soft;
-                let thin = own > LUMINOUS_MASK_THICKNESS && neighbours <= MASK_THIN;
-                if neighbours >= MASK_MAJORITY || thin {
-                    inside = 1.0;
-                }
-                mask_k += inside * wgt;
+                let tap = presence[presence_index(k, x0 + ox, y0 + oy)];
+                pres[k] += tap.x * wgt;
+                mask_k += tap.y * wgt;
             }
         }
         mask = max(mask, mask_k);

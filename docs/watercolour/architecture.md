@@ -183,7 +183,7 @@ returns for the engine to load.
 | `transfer.wgsl` | `transfer`, `transfer_g_scratch` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
-| `render.wgsl` | `render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
+| `render.wgsl` | `presence_taps`, `render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; each tap position's presence and inside share computed once per frame by `presence_taps`), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
 
 Stamps and masks are rasterised on the CPU by the shared `domain::paint` code
 and uploaded as a coverage field, so both backends see identical geometry. Shared

@@ -261,6 +261,11 @@ struct SimPipelines {
 struct RenderPipeline {
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
+    /// `presence_taps`: group 0 is the uniform and state, group 1 the
+    /// presence buffer it writes.
+    presence_inputs: wgpu::BindGroupLayout,
+    presence_output: wgpu::BindGroupLayout,
+    presence: wgpu::ComputePipeline,
 }
 
 #[repr(C)]
@@ -308,6 +313,8 @@ struct RenderTarget {
     pixel_scale: f32,
     uniform: wgpu::Buffer,
     out: wgpu::Buffer,
+    presence_inputs: wgpu::BindGroup,
+    presence_output: wgpu::BindGroup,
     /// Host-visible copy of `out`, created on the first readback. A
     /// presenting instance never reads back, so it never pays for one.
     staging: Option<wgpu::Buffer>,
@@ -534,6 +541,7 @@ impl GpuEngine {
                 storage_entry(2, true),
                 storage_entry(3, true),
                 storage_entry(4, false),
+                storage_entry(5, true),
             ],
         });
         let render_pipeline_layout =
@@ -547,6 +555,28 @@ impl GpuEngine {
             layout: Some(&render_pipeline_layout),
             module: &render_module,
             entry_point: Some("render"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let presence_inputs = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("watercolour-presence-inputs"),
+            entries: &[uniform_entry(0), storage_entry(1, true)],
+        });
+        let presence_output = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("watercolour-presence-output"),
+            entries: &[storage_entry(0, false)],
+        });
+        let presence_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("watercolour-presence"),
+                bind_group_layouts: &[Some(&presence_inputs), Some(&presence_output)],
+                ..Default::default()
+            });
+        let presence_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("presence_taps"),
+            layout: Some(&presence_pipeline_layout),
+            module: &render_module,
+            entry_point: Some("presence_taps"),
             compilation_options: Default::default(),
             cache: None,
         });
@@ -596,6 +626,9 @@ impl GpuEngine {
             render: RenderPipeline {
                 layout: render_layout,
                 pipeline: render_pipeline,
+                presence_inputs,
+                presence_output,
+                presence: presence_pipeline,
             },
             present: PresentPipeline {
                 layout: present_layout,
@@ -965,7 +998,42 @@ impl GpuEngine {
         self.ctx
             .queue()
             .write_buffer(&paper_buf, 0, bytemuck::cast_slice(&paper_out.height));
+        let (presence_len, pigments) = {
+            let l = self.loaded()?;
+            (
+                (l.width as u64 + 3) * (l.height as u64 + 3),
+                l.layout.pigment_count as u64,
+            )
+        };
+        let presence = self.buffer(
+            "render-presence",
+            presence_len * pigments * 8,
+            wgpu::BufferUsages::STORAGE,
+        )?;
         let l = self.loaded()?;
+        let device = self.ctx.device();
+        let presence_inputs = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("watercolour-presence-inputs"),
+            layout: &self.render.presence_inputs,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: l.state.as_entire_binding(),
+                },
+            ],
+        });
+        let presence_output = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("watercolour-presence-output"),
+            layout: &self.render.presence_output,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: presence.as_entire_binding(),
+            }],
+        });
         let bind_group = self
             .ctx
             .device()
@@ -992,6 +1060,10 @@ impl GpuEngine {
                     wgpu::BindGroupEntry {
                         binding: 4,
                         resource: out.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: presence.as_entire_binding(),
                     },
                 ],
             });
@@ -1023,6 +1095,8 @@ impl GpuEngine {
             pixel_scale,
             uniform,
             out,
+            presence_inputs,
+            presence_output,
             staging: None,
             bind_group,
             present_uniform,
@@ -1082,6 +1156,14 @@ impl GpuEngine {
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("render"),
                     });
+            if y_offset == 0 {
+                let taps = (l.width + 3) * (l.height + 3);
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+                pass.set_pipeline(&self.render.presence);
+                pass.set_bind_group(0, &target.presence_inputs, &[]);
+                pass.set_bind_group(1, &target.presence_output, &[]);
+                pass.dispatch_workgroups(groups(taps), 1, 1);
+            }
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
                 pass.set_pipeline(&self.render.pipeline);
