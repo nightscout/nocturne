@@ -2,7 +2,6 @@
   import { FoodState } from './food-state.svelte.js';
   import { setFoodState } from './food-context.js';
   import { onMount } from 'svelte';
-  import type { Food } from '$api';
   import type { GiLevel } from './types';
 
   import FoodList from './FoodList.svelte';
@@ -33,10 +32,6 @@
 
   const giLevels: GiLevel[] = ['low', 'medium', 'high'];
   const ALL_CATEGORIES = '__all';
-
-  async function handleAdd(food: Food) {
-    await state.addFood(food);
-  }
 </script>
 
 <svelte:head>
@@ -149,7 +144,7 @@
 
     <!-- Composer -->
     {#if state.composerOpen}
-      <Composer onadd={handleAdd} onclose={() => (state.composerOpen = false)} />
+      <Composer onadd={(food) => state.addFood(food)} onclose={() => (state.composerOpen = false)} />
     {/if}
 
     <!-- Content -->

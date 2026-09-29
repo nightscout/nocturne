@@ -24,3 +24,4 @@ export { default as FormError } from "./FormError.svelte";
 export { default as FormActions } from "./FormActions.svelte";
 export { default as SubmitButton } from "./SubmitButton.svelte";
 export { default as SuccessBanner } from "./SuccessBanner.svelte";
+export { default as PaintedMoment } from "./PaintedMoment.svelte";

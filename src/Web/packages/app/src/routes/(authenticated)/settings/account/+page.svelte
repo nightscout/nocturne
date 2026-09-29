@@ -1,5 +1,7 @@
 <script lang="ts">
   import SuccessBanner from "$lib/forms/SuccessBanner.svelte";
+  import type { IconArtworkSource } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import * as Card from "$lib/components/ui/card";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
@@ -64,7 +66,7 @@
   const recoveryQuery = getRecoveryStatus();
 
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean; icon?: IconArtworkSource } | null>(null);
 
   // Passkey add flow
   let isRegistering = $state(false);
@@ -185,7 +187,7 @@
       showLabelDialog = false;
       pendingPasskey = null;
       newPasskeyLabel = "";
-      successMessage = { text: "Passkey added successfully.", wash: true };
+      successMessage = { text: "Passkey added successfully.", wash: true, icon: fingerprintArtwork };
       clearMessages();
     } catch (err) {
       errorMessage = describeSubmitError(err, "Failed to register passkey.");
@@ -377,7 +379,7 @@
     {/if}
 
     {#if successMessage}
-      <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
+      <SuccessBanner wash={successMessage.wash} icon={successMessage.icon}>{successMessage.text}</SuccessBanner>
     {/if}
 
     {#if isSecurityLoading}

@@ -34,6 +34,8 @@
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import MigrationCompleteMoment from "./MigrationCompleteMoment.svelte";
+  import { completedCleanly } from "./migration-outcome";
   import {
     type MigrationJobInfo,
     type MigrationJobStatus,
@@ -56,6 +58,8 @@
   // Active migration state
   let activeMigration = $state<MigrationJobStatus | null>(null);
   let pollingActive = $state(false);
+  /** A run this page watched finish cleanly; set only by polling, never by loading history. */
+  let completedJobId = $state<string | null>(null);
 
   // Form state
   let mode = $state<"Api" | "MongoDb">("Api");
@@ -139,6 +143,7 @@
   // Poll migration status
   async function pollMigrationStatus(jobId: string) {
     pollingActive = true;
+    completedJobId = null;
     try {
       while (pollingActive) {
         const status = await migrationRemote.getStatus(jobId).run();
@@ -153,6 +158,7 @@
         ) {
           pollingActive = false;
           await loadData(); // Refresh history
+          if (completedCleanly(history.find((j) => j.id === jobId))) completedJobId = jobId;
           break;
         }
 
@@ -262,6 +268,12 @@
           ready.
         </Alert.Description>
       </Alert.Root>
+    {/if}
+
+    {#if completedJobId}
+      {#key completedJobId}
+        <MigrationCompleteMoment />
+      {/key}
     {/if}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">

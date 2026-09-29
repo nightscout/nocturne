@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { createRawSnippet } from "svelte";
 import { describe, it, expect } from "vitest";
 import SuccessBanner from "./SuccessBanner.svelte";
+import { fingerprintArtwork } from "$lib/watercolour-icons";
 
 const text = (message: string) =>
   createRawSnippet(() => ({ render: () => `<span>${message}</span>` }));
@@ -22,5 +23,13 @@ describe("SuccessBanner", () => {
     const banner = page.getByRole("status");
     await expect.element(banner).toHaveTextContent("Passkey removed.");
     expect(banner.element().querySelector("canvas")).toBeNull();
+  });
+
+  it("paints the added thing beside the message, over the wash", async () => {
+    render(SuccessBanner, { icon: fingerprintArtwork, children: text("Passkey added successfully.") });
+
+    const banner = page.getByRole("status");
+    await expect.element(banner).toHaveTextContent("Passkey added successfully.");
+    expect(banner.element().querySelectorAll("canvas")).toHaveLength(2);
   });
 });
