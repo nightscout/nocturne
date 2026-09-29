@@ -66,7 +66,7 @@
 
   // Messages
   let errorMessage = $state<string | null>(null);
-  let successMessage = $state<string | null>(null);
+  let successMessage = $state<{ text: string; wash: boolean } | null>(null);
 
   function clearMessages() {
     setTimeout(() => {
@@ -110,7 +110,7 @@
         description: createDescription.trim() || undefined,
         permissions: createPermissions,
       });
-      successMessage = "Role created successfully.";
+      successMessage = { text: "Role created successfully.", wash: true };
       resetCreateForm();
       clearMessages();
     } catch (err) {
@@ -133,7 +133,7 @@
           permissions: editPermissions,
         },
       });
-      successMessage = "Role updated successfully.";
+      successMessage = { text: "Role updated successfully.", wash: true };
       isEditOpen = false;
       clearMessages();
     } catch (err) {
@@ -149,7 +149,7 @@
     errorMessage = null;
     try {
       await deleteRole(deleteId);
-      successMessage = "Role deleted successfully.";
+      successMessage = { text: "Role deleted successfully.", wash: false };
       isDeleteOpen = false;
       clearMessages();
     } catch (err) {
@@ -181,7 +181,7 @@
   {/if}
 
   {#if successMessage}
-    <SuccessBanner>{successMessage}</SuccessBanner>
+    <SuccessBanner wash={successMessage.wash}>{successMessage.text}</SuccessBanner>
   {/if}
 
   <div class="space-y-2.5">

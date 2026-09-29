@@ -187,7 +187,7 @@
 {/if}
 
 {#if successMessage}
-  <SuccessBanner>{successMessage}</SuccessBanner>
+  <SuccessBanner wash={false}>{successMessage}</SuccessBanner>
 {/if}
 
 {#if isLoading}

@@ -173,7 +173,7 @@
 
   // --- UI state ---
   let isSaving = $state(false);
-  let saveMessage = $state<{ type: "success" | "error"; text: string } | null>(
+  let saveMessage = $state<{ type: "success" | "error"; text: string; wash?: boolean } | null>(
     null
   );
 
@@ -303,6 +303,7 @@
       saveMessage = {
         type: "success",
         text: active ? "Connector enabled" : "Connector disabled",
+        wash: active,
       };
     } catch (e) {
       saveMessage = {
@@ -383,7 +384,7 @@
           </CardContent>
         </Card>
       {:else if saveMessage}
-        <SuccessBanner>{saveMessage.text}</SuccessBanner>
+        <SuccessBanner wash={saveMessage.wash}>{saveMessage.text}</SuccessBanner>
       {/if}
 
       <!-- Enable/Disable Toggle -->

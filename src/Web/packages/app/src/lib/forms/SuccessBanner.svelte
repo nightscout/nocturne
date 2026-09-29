@@ -8,7 +8,16 @@
    * as it appears; without a GPU it is the baked still, and the banner's own
    * success colours carry it when there is no paint at all.
    */
-  let { class: className, children }: { class?: string; children: Snippet } = $props();
+  let {
+    wash = true,
+    class: className,
+    children,
+  }: {
+    /** False for a removal, revocation or denial: those are not celebrated with paint. */
+    wash?: boolean;
+    class?: string;
+    children: Snippet;
+  } = $props();
 </script>
 
 <div
@@ -19,6 +28,8 @@
     className,
   )}
 >
-  <ConfirmationBackground palette="moss" motion="auto" fit="fill" class="-z-10" />
+  {#if wash}
+    <ConfirmationBackground palette="moss" motion="auto" fit="fill" class="-z-10" />
+  {/if}
   <p>{@render children()}</p>
 </div>
