@@ -22,6 +22,7 @@ use nocturne_watercolour_core::domain::{
 use super::context::GpuContext;
 use super::layout::StateLayout;
 use super::surface::PresentSurface;
+use super::timer::GpuTimer;
 
 /// Bytes of checkpoint storage held on the GPU per loaded scene. At the
 /// 512x512 / 8-pigment maximum one checkpoint is 25 MB, so this admits 10;
@@ -395,6 +396,50 @@ impl CommandCounter {
     }
 }
 
+/// GPU time of the latest sampled work, from timestamp queries; `None`
+/// until a sample has been read back, and always on a device without
+/// `TIMESTAMP_QUERY`. Samples are taken whenever the previous one has been
+/// read, so these lag the work by a frame or two.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct GpuTimings {
+    /// Milliseconds per tick, averaged over the ticks of one `step`.
+    pub tick_ms: Option<f64>,
+    /// Milliseconds for one frame's optics (presence pass through the last
+    /// band), presented or read back.
+    pub render_ms: Option<f64>,
+}
+
+struct Timers {
+    tick: GpuTimer,
+    render: GpuTimer,
+    /// Nanoseconds per timestamp unit.
+    period: f32,
+    /// Ticks the in-flight tick sample spans.
+    sampled_ticks: u32,
+    last: GpuTimings,
+}
+
+impl Timers {
+    fn new(ctx: &GpuContext) -> Option<Timers> {
+        ctx.has_timestamps().then(|| Timers {
+            tick: GpuTimer::new(ctx.device(), "tick-timestamps"),
+            render: GpuTimer::new(ctx.device(), "render-timestamps"),
+            period: ctx.queue().get_timestamp_period(),
+            sampled_ticks: 1,
+            last: GpuTimings::default(),
+        })
+    }
+
+    fn collect(&mut self) {
+        if let Some(ms) = self.tick.collect(self.period) {
+            self.last.tick_ms = Some(ms / f64::from(self.sampled_ticks.max(1)));
+        }
+        if let Some(ms) = self.render.collect(self.period) {
+            self.last.render_ms = Some(ms);
+        }
+    }
+}
+
 pub struct GpuEngine {
     ctx: GpuContext,
     params: SimParams,
@@ -410,6 +455,7 @@ pub struct GpuEngine {
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
     counter: CommandCounter,
     paper_cache: PaperCache,
+    timers: Option<Timers>,
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -648,6 +694,7 @@ impl GpuEngine {
             });
 
         let validation = error_scope.pop();
+        let timers = Timers::new(&ctx);
         let engine = GpuEngine {
             ctx,
             params,
@@ -672,6 +719,7 @@ impl GpuEngine {
             in_flight: Mutex::new(VecDeque::new()),
             counter: CommandCounter::default(),
             paper_cache: Arc::default(),
+            timers,
         };
         (engine, validation)
     }
@@ -694,6 +742,7 @@ impl GpuEngine {
             in_flight: Mutex::new(VecDeque::new()),
             counter: CommandCounter::default(),
             paper_cache: Arc::clone(&self.paper_cache),
+            timers: Timers::new(&self.ctx),
         }
     }
 
@@ -716,6 +765,20 @@ impl GpuEngine {
 
     pub fn command_counts(&self) -> CommandCounts {
         self.counter.get()
+    }
+
+    /// The latest GPU timestamps read back, collecting any that have
+    /// arrived; never blocks.
+    pub fn gpu_timings(&mut self) -> GpuTimings {
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = self.ctx.device().poll(wgpu::PollType::Poll);
+        match self.timers.as_mut() {
+            Some(t) => {
+                t.collect();
+                t.last
+            }
+            None => GpuTimings::default(),
+        }
     }
 
     pub fn context(&self) -> &GpuContext {
@@ -1240,9 +1303,18 @@ impl GpuEngine {
         }
     }
 
-    fn encode_presence(&self, enc: &mut wgpu::CommandEncoder, l: &Loaded, target: &RenderTarget) {
+    fn encode_presence(
+        &self,
+        enc: &mut wgpu::CommandEncoder,
+        l: &Loaded,
+        target: &RenderTarget,
+        timer: Option<&GpuTimer>,
+    ) {
         let taps = (l.width + 3) * (l.height + 3);
-        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("presence"),
+            timestamp_writes: timer.map(|t| t.compute_writes(true, false)),
+        });
         pass.set_pipeline(&self.render.presence);
         pass.set_bind_group(0, &target.presence_inputs, &[]);
         pass.set_bind_group(1, &target.presence_output, &[]);
@@ -1261,6 +1333,10 @@ impl GpuEngine {
         }
         self.ensure_render_target(width, height)?;
         self.ensure_readback()?;
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+        }
+        let timer = self.render_timer();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let readback = target
@@ -1282,18 +1358,30 @@ impl GpuEngine {
                         label: Some("render"),
                     });
             if y_offset == 0 {
-                self.encode_presence(&mut enc, l, target);
+                self.encode_presence(&mut enc, l, target, timer);
             }
+            let last = y_offset + rows >= height;
             {
-                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("render"),
+                    timestamp_writes: timer
+                        .filter(|_| last)
+                        .map(|t| t.compute_writes(false, true)),
+                });
                 pass.set_pipeline(&self.render.pipeline);
                 pass.set_bind_group(0, &readback.bind_group, &[]);
                 pass.dispatch_workgroups(width.div_ceil(16), rows.div_ceil(16), 1);
             }
             CommandCounter::add(&self.counter.passes, 1);
             CommandCounter::add(&self.counter.dispatches, 1);
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
+            }
             self.submit(enc.finish())?;
             y_offset += rows;
+        }
+        if let Some(t) = timer {
+            t.request();
         }
         Ok(())
     }
@@ -1314,6 +1402,10 @@ impl GpuEngine {
         }
         self.ensure_render_target(width, height)?;
         let pipeline = self.present_pipeline(format);
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+        }
+        let timer = self.render_timer();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
@@ -1331,11 +1423,13 @@ impl GpuEngine {
                         label: Some("present"),
                     });
             if y_offset == 0 {
-                self.encode_presence(&mut enc, l, target);
+                self.encode_presence(&mut enc, l, target, timer);
             }
+            let last = y_offset + rows >= height;
             {
                 let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("present"),
+                    timestamp_writes: timer.filter(|_| last).map(|t| t.render_writes(false, true)),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view,
                         depth_slice: None,
@@ -1357,10 +1451,21 @@ impl GpuEngine {
                 pass.draw(0..3, 0..1);
             }
             CommandCounter::add(&self.counter.passes, 1);
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
+            }
             self.submit(enc.finish())?;
             y_offset += rows;
         }
+        if let Some(t) = timer {
+            t.request();
+        }
         Ok(())
+    }
+
+    /// The render timer when it is free to take a sample.
+    fn render_timer(&self) -> Option<&GpuTimer> {
+        self.timers.as_ref().map(|t| &t.render).filter(|t| t.idle())
     }
 
     /// The optics pass alone, with no readback or presentation; for timing.
@@ -1823,10 +1928,18 @@ impl Simulator for GpuEngine {
         if ticks == 0 {
             return Ok(());
         }
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+            if t.tick.idle() {
+                t.sampled_ticks = ticks;
+            }
+        }
+        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|t| t.idle());
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
             let batch = remaining.min(TICKS_PER_SUBMIT);
+            let (first, last) = (remaining == ticks, remaining == batch);
             let mut enc =
                 self.ctx
                     .device()
@@ -1836,7 +1949,9 @@ impl Simulator for GpuEngine {
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("ticks"),
-                    timestamp_writes: None,
+                    timestamp_writes: timer
+                        .filter(|_| first || last)
+                        .map(|t| t.compute_writes(first, last)),
                 });
                 CommandCounter::add(&self.counter.passes, 1);
                 pass.set_bind_group(0, &l.bind_group, &[]);
@@ -1844,8 +1959,14 @@ impl Simulator for GpuEngine {
                     self.encode_tick(&mut pass, l);
                 }
             }
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
+            }
             self.submit(enc.finish())?;
             remaining -= batch;
+        }
+        if let Some(t) = timer {
+            t.request();
         }
         Ok(())
     }

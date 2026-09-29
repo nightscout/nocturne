@@ -408,6 +408,7 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
     pb.simulator().sync().expect("sync");
     let gpu = pb.simulator();
     let mut tick_ms = Vec::new();
+    let mut stamped = Vec::new();
     let mut counts = String::new();
     for _ in 0..RUNS {
         let before = gpu.command_counts();
@@ -416,6 +417,7 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
         gpu.sync().expect("sync");
         tick_ms.push(t.elapsed().as_secs_f64() * 1000.0 / f64::from(BENCH_TICKS));
         counts = per_tick(before, gpu.command_counts(), BENCH_TICKS);
+        stamped.extend(gpu.gpu_timings().tick_ms);
     }
     println!(
         "bench {resolution}^2 sim: {:.4} ms/tick median of {RUNS} (runs {:?}); per tick: {counts}",
@@ -425,6 +427,12 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
             .map(|v| (v * 1e4).round() / 1e4)
             .collect::<Vec<_>>()
     );
+    if !stamped.is_empty() {
+        println!(
+            "bench {resolution}^2 sim: timestamps {:.4} ms/tick median",
+            median(stamped)
+        );
+    }
     let grid = gpu.read_grid().expect("read grid");
     let frame = gpu.render(256, 256).expect("render");
     let state_bits = [
@@ -455,6 +463,9 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
             gpu.sync().expect("sync");
             ms.push(t.elapsed().as_secs_f64() * 1000.0 / 8.0);
         }
+        if let Some(stamp) = gpu.gpu_timings().render_ms {
+            println!("bench {resolution}^2 sim: timestamps optics {size}x{size} {stamp:.3} ms");
+        }
         println!(
             "bench {resolution}^2 sim: optics {size}x{size} {:.3} ms/frame median (runs {:?})",
             median(ms.clone()),
@@ -472,6 +483,9 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
             }
             gpu.sync().expect("sync");
             ms.push(t.elapsed().as_secs_f64() * 1000.0 / 8.0);
+        }
+        if let Some(stamp) = gpu.gpu_timings().render_ms {
+            println!("bench {resolution}^2 sim: timestamps present {size}x{size} {stamp:.3} ms");
         }
         println!(
             "bench {resolution}^2 sim: present {size}x{size} rgba8 {:.3} ms/frame median (runs {:?})",
