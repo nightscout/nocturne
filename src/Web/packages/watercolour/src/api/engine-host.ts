@@ -225,7 +225,7 @@ export class EngineHost {
  * probe already holds. Only that first call is answered.
  */
 export async function answeringAdapterRequest<T>(adapter: unknown, create: () => Promise<T>): Promise<T> {
-  const gpu = typeof navigator === 'undefined' ? undefined : (navigator as { gpu?: Record<string, unknown> }).gpu;
+  const gpu = typeof navigator === 'undefined' ? undefined : (navigator as unknown as { gpu?: Record<string, unknown> }).gpu;
   if (!adapter || !gpu) return create();
   const own = Object.prototype.hasOwnProperty.call(gpu, 'requestAdapter');
   const previous = gpu.requestAdapter;
