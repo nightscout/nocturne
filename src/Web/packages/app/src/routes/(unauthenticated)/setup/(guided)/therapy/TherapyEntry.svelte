@@ -9,8 +9,8 @@
   import { describeSubmitError, errorStatus } from "$lib/forms/submit-error";
   import ScheduleView from "$lib/components/schedule/ScheduleView.svelte";
   import { enterTherapySettings } from "$api/generated/setupTherapies.generated.remote";
-  import { SetupHubItemKey, TherapyGlucoseField, type WrongUnitRule } from "$api";
-  import { setupHubItems } from "$lib/setup-hub/items.svelte";
+  import { TherapyGlucoseField, type InsulinActionTime, type WrongUnitRule } from "$api";
+  import { InsulinActionTimeNote } from "$lib/components/patient";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel } from "$lib/utils/formatting";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
@@ -22,13 +22,13 @@
     onsaved: () => void | Promise<void>;
     /** A profile arrived while the form was being filled in, so nothing was saved. */
     onconflict: () => void | Promise<void>;
+    /** What insulin on board uses for how long insulin acts, as the server resolves it now. */
+    actionTime?: InsulinActionTime;
   }
 
-  let { voice, rules, onsaved, onconflict }: Props = $props();
+  let { voice, rules, onsaved, onconflict, actionTime }: Props = $props();
 
-  const devicesHref = resolve("/(unauthenticated)/setup/(guided)/[item]", {
-    item: setupHubItems()[SetupHubItemKey.Devices].slug,
-  });
+  const devicesHref = resolve("/(unauthenticated)/setup/(guided)/devices");
 
   // Every block starts with its time and nothing else: no value is ever suggested.
   let basal = $state<{ time?: string; value?: number }[]>([{ time: "00:00" }]);
@@ -123,9 +123,16 @@
         Any schedule left out uses Nocturne's built-in default instead. If any of these settings
         are in use, enter the insulin sensitivity and target range as well.
       {/if}
-      How long insulin acts comes from the insulin set in
-      <a class="underline underline-offset-2" href={devicesHref}>Devices</a>, or 3 hours if none is
-      set.
+    </p>
+    {#if actionTime}
+      <InsulinActionTimeNote {actionTime} {voice} />
+    {/if}
+    <p class="text-xs text-muted-foreground">
+      <!-- A new tab, so the values typed here are not lost. -->
+      <a class="underline underline-offset-2" href={devicesHref} target="_blank" rel="noopener">
+        Open Devices in a new tab
+      </a>
+      to set the insulins in use.
     </p>
   </div>
 

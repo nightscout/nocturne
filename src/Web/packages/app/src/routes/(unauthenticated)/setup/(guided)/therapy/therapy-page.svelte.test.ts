@@ -17,6 +17,12 @@ vi.mock("$api/generated/setupTherapies.generated.remote", () => ({
   enterTherapySettings: remoteCommand(therapy.enter),
 }));
 
+const actionTime = vi.hoisted(() => ({ value: undefined as unknown, refresh: vi.fn() }));
+vi.mock("$api/generated/setupDevices.generated.remote", () => ({
+  getInsulinActionTime: () =>
+    Object.assign(remoteQuery(() => actionTime.value), { refresh: actionTime.refresh }),
+}));
+
 const hubRefresh = vi.hoisted(() => vi.fn());
 vi.mock("$api/generated/setupHubs.generated.remote", () => ({
   getSetupHub: () => ({ refresh: hubRefresh }),
@@ -33,7 +39,7 @@ vi.mock("$api/generated/profiles.generated.remote", () => ({
   createTargetRangeSchedule: vi.fn(),
 }));
 
-import { TherapyGlucoseField, TherapySource } from "$api";
+import { InsulinActionTimeSource, TherapyGlucoseField, TherapySource } from "$api";
 import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
 import TherapyPage from "./+page.svelte";
 
@@ -69,6 +75,8 @@ beforeEach(() => {
   therapy.confirm.mockReset().mockResolvedValue({});
   therapy.enter.mockReset().mockResolvedValue({});
   hubRefresh.mockReset().mockResolvedValue(undefined);
+  actionTime.refresh.mockReset().mockResolvedValue(undefined);
+  actionTime.value = { source: InsulinActionTimeSource.Default, hours: 3, primaryInsulinName: "Fiasp" };
 });
 
 describe("therapy settings, nothing yet", () => {
@@ -148,15 +156,29 @@ describe("therapy settings, nothing yet", () => {
     await expect.element(page.getByText(/This looks like a value in/).nth(1)).toBeVisible();
   });
 
-  it("says what a schedule left out falls back to, and where insulin action comes from", async () => {
+  it("says what a schedule left out falls back to, and the action time the server resolves", async () => {
     render(TherapyPage);
 
     await expect
       .element(page.getByTestId("therapy-defaults"))
       .toHaveTextContent(
-        "Any schedule left out uses Nocturne's built-in default instead. If you use any of these settings, enter your insulin sensitivity and target range as well. How long insulin acts comes from the insulin set in Devices, or 3 hours if none is set."
+        "Any schedule left out uses Nocturne's built-in default instead. If you use any of these settings, enter your insulin sensitivity and target range as well."
       );
-    await expect.element(page.getByTestId("therapy-defaults").getByRole("link", { name: "Devices" })).toBeVisible();
+    await expect.element(page.getByTestId("action-time")).toHaveAttribute("data-source", "Default");
+    await expect
+      .element(page.getByTestId("action-time"))
+      .toHaveTextContent(
+        "Until your therapy settings are set up, Nocturne uses the default of 3 hours for insulin on board and predictions, not the action time of Fiasp."
+      );
+  });
+
+  it("opens Devices in a new tab, so typed values are kept", async () => {
+    render(TherapyPage);
+
+    const devices = page.getByRole("link", { name: "Open Devices in a new tab" });
+    await expect.element(devices).toHaveAttribute("target", "_blank");
+    await expect.element(devices).toHaveAttribute("rel", "noopener");
+    await expect.element(devices).toHaveAttribute("href", "/(unauthenticated)/setup/(guided)/devices");
   });
 
   it("keeps both target fields when a block's low and high are cleared", async () => {
@@ -192,6 +214,7 @@ describe("therapy settings, nothing yet", () => {
       .toHaveTextContent("so what you typed was not saved. Here is what arrived.");
     await expect.element(page.getByText(/already exists/)).not.toBeInTheDocument();
     expect(hubRefresh).not.toHaveBeenCalled();
+    expect(actionTime.refresh).toHaveBeenCalledOnce();
   });
 
   it("saves what was typed, in the owner's units, blanks left blank", async () => {
@@ -211,6 +234,7 @@ describe("therapy settings, nothing yet", () => {
       targetRange: [{ time: "00:00", low: undefined, high: undefined }],
     });
     await expect.poll(() => hubRefresh.mock.calls.length).toBe(1);
+    expect(actionTime.refresh).toHaveBeenCalledOnce();
   });
 });
 
@@ -227,6 +251,16 @@ describe("therapy settings, synced from an app", () => {
     await expect.element(page.getByText("3", { exact: true })).toBeVisible();
     await expect.element(page.getByRole("spinbutton")).not.toBeInTheDocument();
     await expect.element(page.getByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("says which action time insulin on board uses for the profile under review", async () => {
+    actionTime.value = { source: InsulinActionTimeSource.ExternalProfile, hours: 5 };
+    render(TherapyPage);
+
+    await expect.element(page.getByTestId("action-time")).toHaveAttribute("data-source", "ExternalProfile");
+    await expect
+      .element(page.getByTestId("action-time"))
+      .toHaveTextContent("Nocturne uses its action time, 5 hours, for insulin on board and predictions.");
   });
 
   it("confirms a match and returns to the hub", async () => {
