@@ -123,8 +123,12 @@ export function applyCanvasFit(canvas: HTMLCanvasElement, box: FitBox, dpr: numb
   canvas.height = Math.max(1, Math.round(box.height * dpr));
 }
 
-/** Maps component props to player options, filling unset props from `defaults`. */
-export function artworkOptionsFrom(options: MountOptions, defaults: ArtworkOptions = {}): ArtworkOptions {
+/**
+ * Maps component props to player options, filling unset props from `defaults`.
+ * `fit` and `surface` are mount options, not player options: a component
+ * passes them to `mountPlayer` itself, and the input type refuses them here.
+ */
+export function artworkOptionsFrom(options: ArtworkOptions, defaults: ArtworkOptions = {}): ArtworkOptions {
   return {
     palette: options.palette ?? defaults.palette,
     seed: options.seed ?? defaults.seed,
@@ -161,6 +165,10 @@ function currentCanvas(frame: HTMLElement, canvas: HTMLCanvasElement): HTMLCanva
  * when a prop changes, and disposes it on unmount. `onready` fires once a
  * backend is drawing and its returned cleanup runs with the player's
  * disposal.
+ *
+ * A frame with no area (under `display: none`, say) gets no player until it
+ * first has one: a still would otherwise paint and release at 1x1 and only
+ * ever be stretched, and a reveal would hold a live slot it can never play.
  */
 export function mountPlayer(
   frame: HTMLElement,
@@ -171,34 +179,27 @@ export function mountPlayer(
 ): () => void {
   if (!options.icon && !id) throw new TypeError('Artwork requires either `artwork` or `icon`.');
   const dpr = componentDpr();
-  const rect = frame.getBoundingClientRect();
-  const containerWidth = Math.max(1, Math.round(rect.width));
-  const containerHeight = Math.max(1, Math.round(rect.height));
-  const box = resolveBox(containerWidth, containerHeight, id, options);
-  applyCanvasFit(currentCanvas(frame, canvas), box, dpr);
-  const source = options.icon
-    ? {
-        icon: options.icon.icon,
-        name: options.icon.name,
-        hints: options.icon.hints,
-        palette: options.palette,
-        seed: options.seed,
-        intensity: options.intensity,
-        surface: options.surface ?? hostSurface(),
-        detail: detailForEdge(Math.max(box.width, box.height)),
-      }
-    : {
-        id: id!,
-        palette: options.palette,
-        seed: options.seed,
-        intensity: options.intensity,
-        surface: options.surface ?? hostSurface(),
-        detail: detailForEdge(Math.max(box.width, box.height)),
-      };
-  const player = createArtworkPlayer(
-    currentCanvas(frame, canvas),
-    source,
-    {
+  let player: ArtworkPlayer | undefined;
+  let unready: (() => void) | undefined;
+
+  const start = (containerWidth: number, containerHeight: number) => {
+    const box = resolveBox(containerWidth, containerHeight, id, options);
+    applyCanvasFit(currentCanvas(frame, canvas), box, dpr);
+    const detail = detailForEdge(Math.max(box.width, box.height));
+    const surface = options.surface ?? hostSurface();
+    const source = options.icon
+      ? {
+          icon: options.icon.icon,
+          name: options.icon.name,
+          hints: options.icon.hints,
+          palette: options.palette,
+          seed: options.seed,
+          intensity: options.intensity,
+          surface,
+          detail,
+        }
+      : { id: id!, palette: options.palette, seed: options.seed, intensity: options.intensity, surface, detail };
+    const created = createArtworkPlayer(currentCanvas(frame, canvas), source, {
       durationMs: options.durationMs,
       easing: options.easing,
       tail: options.tail,
@@ -211,20 +212,28 @@ export function mountPlayer(
       width: box.width,
       height: box.height,
       dpr,
-    },
-  );
-  let unready: (() => void) | undefined;
-  if (onready) {
-    player.on('ready', () => {
-      unready = onready(player) ?? undefined;
     });
-  }
+    if (onready) {
+      created.on('ready', () => {
+        unready = onready(created) ?? undefined;
+      });
+    }
+    player = created;
+  };
+
+  const rect = frame.getBoundingClientRect();
+  const area = measuredSize(rect.width, rect.height);
+  if (area) start(area.width, area.height);
+
   const observer = new ResizeObserver((entries) => {
     const content = entries[0]?.contentRect;
     if (!content) return;
-    const nextWidth = Math.max(1, Math.round(content.width));
-    const nextHeight = Math.max(1, Math.round(content.height));
-    const nextBox = resolveBox(nextWidth, nextHeight, id, options);
+    const next = measuredSize(content.width, content.height);
+    if (!player) {
+      if (next) start(next.width, next.height);
+      return;
+    }
+    const nextBox = resolveBox(next?.width ?? 1, next?.height ?? 1, id, options);
     const released = player.state.released === true;
     applyCanvasFit(currentCanvas(frame, canvas), nextBox, dpr, released);
     if (released) return;
@@ -234,6 +243,13 @@ export function mountPlayer(
   return () => {
     observer.disconnect();
     if (unready) unready();
-    player.dispose();
+    player?.dispose();
   };
+}
+
+/** Whole CSS pixels of a measured box, or nothing when it has no area. */
+export function measuredSize(width: number, height: number): { width: number; height: number } | undefined {
+  const w = Math.round(width);
+  const h = Math.round(height);
+  return w >= 1 && h >= 1 ? { width: w, height: h } : undefined;
 }

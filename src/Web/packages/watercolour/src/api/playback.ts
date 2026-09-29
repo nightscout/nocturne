@@ -211,8 +211,8 @@ class LiveBackend implements Backend {
     options: PlayerOptions,
     onFreed: () => void = () => {},
   ): Promise<LiveBackend> {
-    const lease = await host.acquire();
     try {
+      const lease = await host.acquire();
       // Live reveals pick the detail tier from the canvas's BACKING long edge
       // (the size passed in is DPR-scaled). The simulation grid is the tier's
       // own, whatever the canvas: the fluid moves in cells, so a different
@@ -1037,10 +1037,16 @@ class Player implements ArtworkPlayer {
           LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, onFreed);
         const still = this.options.releaseAfterFinish && autoplayAction(this.motion, this.options.autoplay, true) === 'finish';
         if (!still) return create();
+        // Every path out of the turn ends it; a turn left open blocks every later still.
         return this.host.stillTurn().then((endTurn) => {
-          if (!this.disposed) return create(endTurn);
-          endTurn();
-          throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+          if (this.disposed) {
+            endTurn();
+            throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+          }
+          return create(endTurn).catch((error: unknown) => {
+            endTurn();
+            throw error;
+          });
         });
       }
       case 'baked':

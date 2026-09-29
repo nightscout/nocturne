@@ -71,6 +71,16 @@ describe('artworkOptionsFrom (prop to option)', () => {
     const options = artworkOptionsFrom({ mode: 'live' }, { mode: 'static' });
     expect(options.mode).toBe('live');
   });
+
+  it('refuses the mount-only options it would drop', () => {
+    // A surface or fit passed here never reached the player; `pnpm check` holds these errors.
+    // @ts-expect-error surface is a mount option
+    const surfaced = artworkOptionsFrom({ surface: 'dark' });
+    // @ts-expect-error fit is a mount option
+    const fitted = artworkOptionsFrom({ fit: 'fill' });
+    expect(surfaced).not.toHaveProperty('surface');
+    expect(fitted).not.toHaveProperty('fit');
+  });
 });
 
 describe('hostSurface', () => {

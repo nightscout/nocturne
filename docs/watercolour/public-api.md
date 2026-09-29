@@ -166,6 +166,9 @@ the player in an effect and dispose it on destroy or when any prop changes.
 Every component accepts the `ArtworkOptions` props (`palette`, `seed`,
 `intensity`, `durationMs`, `motion`, `quality`, `mode`, `autoplay`), an
 optional `surface`, a `fit` prop, an `onready` callback, and `class`.
+A component whose frame has no area (inside `display: none`) creates no player
+until the frame first has one, so a hidden artwork neither holds a live slot nor
+paints a 1x1 still.
 
 Each artwork has a natural aspect (`ARTWORK_ASPECT` / `artworkAspect(id)`; the
 icons and `wash` are square, the scenes and accents keep their authored ratio).
