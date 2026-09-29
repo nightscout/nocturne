@@ -104,7 +104,8 @@ under fused-multiply-add rounding, which shows up as isolated max differences of
 The same test file checks seeded replay is bit-identical on the same device, that 128
 and 1024 renders from one state agree in mean alpha, that checkpoint seek equals
 straight replay (bit-identical grid readback), and the checkpoint bound. Every GPU test
-prints and returns early when no adapter is available.
+prints and returns early when no hardware device opens; a software rasteriser (llvmpipe,
+WARP) counts as none.
 
 ## Running
 
@@ -112,7 +113,13 @@ prints and returns early when no adapter is available.
 cd crates
 cargo run -p nocturne-watercolour-infra --example render_native --release -- <out_dir>
 cargo test -p nocturne-watercolour-infra
+cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_artwork -- --ignored
 ```
+
+The default run checks the reveal gates in `tests/reveal_preserves_the_artwork.rs` on one
+artwork at `Medium` detail. The catalogue-wide sweeps at `Large` are `#[ignore]`d: they
+take about an hour in `--release` on 16 cores. Run them after changing the catalogue,
+the choreography or the simulation.
 
 The example writes, per artwork and per palette variant (`normal`, `dark`):
 `<name>_<variant>_gpu.png` (transparent, 512²), `<name>_<variant>_gpu_over_light.png`

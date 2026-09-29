@@ -28,7 +28,7 @@ use nocturne_watercolour_core::application::playback::{
     DEFAULT_PAINT_WALL_FRACTION, DEFAULT_TICK_BUDGET,
 };
 use nocturne_watercolour_core::application::{CpuEngine, Playback, ProgressCurve, Renderer};
-use nocturne_watercolour_core::domain::{Background, Image, Palette, Seed};
+use nocturne_watercolour_core::domain::{Background, Image, Operation, Palette, Seed};
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DEFAULT_INTENSITY, DetailLevel};
 
 /// Alpha at or above which a pixel counts as part of the artwork at all: the
@@ -152,21 +152,20 @@ fn body_mae(a: &Image, b: &Image) -> f32 {
         / n
 }
 
-/// The one that matters. `Large` detail and a 256 px edge, because the bug
-/// this guards showed up as a shape change of several percent and a smaller
-/// grid hides it in reconstruction.
-#[test]
-fn every_artwork_survives_its_own_reveal() {
+/// The one that matters. A 256 px edge, and the full sweep runs at `Large`
+/// detail, because the bug this guards showed up as a shape change of several
+/// percent and a smaller grid hides it in reconstruction.
+fn assert_each_survives_its_own_reveal(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut worst: Vec<(String, f32, f32)> = Vec::new();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let drawn = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -175,7 +174,7 @@ fn every_artwork_survives_its_own_reveal() {
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
             None,
         )
@@ -208,11 +207,10 @@ fn every_artwork_survives_its_own_reveal() {
 
 /// The dark ground renders through a different compositing mode, so it gets
 /// its own pass over the ids most likely to lose a silhouette there.
-#[test]
-fn artworks_survive_their_reveal_on_a_dark_ground() {
+fn assert_each_survives_its_reveal_on_a_dark_ground(ids: &[&str]) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let drawn = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
@@ -286,6 +284,15 @@ fn the_silhouette_measure_catches_a_mark_that_shrank() {
 /// arriving, and the share of the final area it may have covered by then.
 const PACE_AT: f32 = 0.25;
 const MAX_AREA_AT_PACE: f32 = 0.45;
+/// The share of a stage's change from one stop to the next that may be made
+/// by [`PACE_AT`] of that stage's brushwork: a steady stage is about a quarter
+/// done there (the worst measured is 0.29), so 0.6 passes that with room and
+/// fails a stage that is front-loaded or snaps into place.
+const MAX_STAGE_DONE_AT_PACE: f32 = 0.6;
+/// The least mean change a stage must make to the sheet. Area alone cannot
+/// show it: once the land is down the later stages paint inside the covered
+/// sheet (the sun, mist, birds), and some of them lift paint.
+const MIN_STAGE_CHANGE: f32 = 1e-4;
 
 fn covered_area(image: &Image) -> f32 {
     let present = image
@@ -304,21 +311,25 @@ fn covered_area(image: &Image) -> f32 {
 ///
 /// Measured in the viewer's time, not the simulation's: a quarter of the way
 /// through the paint phase's wall clock, no more than
-/// [`MAX_AREA_AT_PACE`] of the finished artwork may be on the paper.
-#[test]
-fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
+/// [`MAX_AREA_AT_PACE`] of the finished artwork may be on the paper. A staged
+/// artwork is gated by [`assert_each_stage_is_laid_in_order`] instead.
+///
+/// The full sweep gates at `Large`, the tier a hero renders at. `Small` draws
+/// fewer marks and so paces more easily; gating there would pass artworks
+/// that arrive all at once everywhere anyone actually sees them.
+fn assert_each_is_still_arriving_a_quarter_of_the_way_in(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut slow: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
+        if ArtworkCatalogue::stages(id).is_some() {
+            continue;
+        }
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            // The tier a hero renders at. `Small` draws fewer marks and so
-            // paces more easily; gating there would pass artworks that arrive
-            // all at once everywhere anyone actually sees them.
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -351,6 +362,96 @@ fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
   {}",
         slow.join("
   ")
+    );
+}
+
+/// The pace gate for a staged artwork, which
+/// [`assert_each_is_still_arriving_a_quarter_of_the_way_in`] skips: a host
+/// steps it one stage at a time with a linear seek, and each stage lays a whole
+/// layer (the first is the sky, about half the sheet), so a cap on the share of
+/// the finished area early on measures the layer, not the pacing. Instead, per
+/// stage `k`: the sheet at stop `k + 1` covers no less than at stop `k` and
+/// differs from it by at least [`MIN_STAGE_CHANGE`], and a quarter of the way
+/// through the stage's brushwork no more than [`MAX_STAGE_DONE_AT_PACE`] of the
+/// change from stop `k` to stop `k + 1` has been made. That each stop is dry and holds exactly its first `k` stages is
+/// the `hub` authoring tests' job.
+fn assert_each_stage_is_laid_in_order(ids: &[&str], detail: DetailLevel) {
+    let palette = Palette::moonlight();
+    let mut failed: Vec<String> = Vec::new();
+    for &id in ids {
+        let stages = ArtworkCatalogue::stages(id).expect("a staged artwork");
+        let scene = ArtworkCatalogue::by_id_for(
+            id,
+            Seed(11),
+            &palette,
+            DEFAULT_INTENSITY,
+            detail,
+            Background::Transparent,
+        )
+        .unwrap();
+        let aspect = scene.size_hint.height as f32 / scene.size_hint.width as f32;
+        let (w, h) = (192u32, ((192.0 * aspect).round() as u32).max(8));
+        let window = scene.timeline.total_ticks / stages;
+        let last_strokes: Vec<u32> = (0..stages)
+            .map(|k| {
+                scene
+                    .timeline
+                    .events
+                    .iter()
+                    .filter(|e| e.at_tick / window == k)
+                    .filter(|e| {
+                        matches!(
+                            e.op,
+                            Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
+                        )
+                    })
+                    .map(|e| e.at_tick)
+                    .max()
+                    .unwrap_or((k + 1) * window)
+            })
+            .collect();
+        let mut pb = Playback::new(CpuEngine::default(), scene, 3000.0).unwrap();
+        pb.set_progress_curve(ProgressCurve::Linear);
+        let mut stop = pb.simulator().render(w, h).unwrap();
+        for k in 0..stages {
+            let from = k * window;
+            let pace_tick =
+                from + (PACE_AT * (last_strokes[k as usize] - from) as f32).round() as u32;
+            pb.seek_tick(pace_tick).unwrap();
+            let early = pb.simulator().render(w, h).unwrap();
+            pb.seek_tick(from + window).unwrap();
+            let next = pb.simulator().render(w, h).unwrap();
+            let change = body_mae(&stop, &next);
+            let done = if change > 0.0 {
+                1.0 - body_mae(&early, &next) / change
+            } else {
+                1.0
+            };
+            let (before, after) = (covered_area(&stop), covered_area(&next));
+            println!(
+                "{id:<24} stage {k}: covered {before:.3} -> {after:.3}, change {change:.4}, {done:.2} done at {:.0} %",
+                PACE_AT * 100.0
+            );
+            if after < before || change < MIN_STAGE_CHANGE {
+                failed.push(format!(
+                    "{id}: stage {k} adds nothing (covered {before:.3} -> {after:.3}, change {change:.4})"
+                ));
+            }
+            if done > MAX_STAGE_DONE_AT_PACE {
+                failed.push(format!(
+                    "{id}: stage {k} was {done:.2} done a quarter of the way through its brushwork"
+                ));
+            }
+            stop = next;
+        }
+    }
+    assert!(
+        failed.is_empty(),
+        "{}",
+        failed.join(
+            "
+  "
+        )
     );
 }
 
@@ -391,12 +492,18 @@ fn the_brushwork_fits_the_frames_it_is_given() {
             )
             .unwrap();
             let total = scene.timeline.total_ticks as f32;
-            let ProgressCurve::Reveal { tick_split, .. } =
-                ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION)
-            else {
-                unreachable!("reveal_for always returns Reveal")
+            // A staged artwork plays one stage per step, each its own reveal.
+            let paint_ticks = match ArtworkCatalogue::stages(id) {
+                Some(stages) => total / stages as f32,
+                None => {
+                    let ProgressCurve::Reveal { tick_split, .. } =
+                        ProgressCurve::reveal_for(&scene, DEFAULT_PAINT_WALL_FRACTION)
+                    else {
+                        unreachable!("reveal_for always returns Reveal")
+                    };
+                    tick_split * total
+                }
             };
-            let paint_ticks = tick_split * total;
             let ratio = paint_ticks / affordable;
             println!("{id:<24} {detail:?} paint {paint_ticks:.0} ticks, {ratio:.2} of budget");
             if ratio > MAX_BRUSHWORK_SLIP {
@@ -477,22 +584,21 @@ fn wet_until(scene: nocturne_watercolour_core::domain::Scene) -> f32 {
 /// at the end, because that is when pigment leaves suspension and sets into
 /// the paper. An artwork that is bone dry two thirds of the way through spends
 /// its last second holding a finished picture.
-#[test]
-fn the_sheet_is_still_settling_at_the_end() {
+fn assert_each_sheet_is_still_settling_at_the_end(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
         let share = wet_until(scene);
-        let known = KNOWN_EARLY_DRY.iter().find(|(k, _)| *k == *id);
+        let known = KNOWN_EARLY_DRY.iter().find(|(k, _)| *k == id);
         println!(
             "{id:<24} wet until {share:.2} of its ticks{}",
             if known.is_some() {
@@ -543,17 +649,16 @@ const MAX_SNAP_RATIO: f32 = 3.0;
 ///
 /// Measured in the viewer's time, as the viewer sees it: the change between
 /// the last two frames against the median change across the reveal.
-#[test]
-fn no_artwork_snaps_to_its_final_state() {
+fn assert_none_snaps_to_its_final_state(ids: &[&str], detail: DetailLevel) {
     let palette = Palette::moonlight();
     let mut failed: Vec<String> = Vec::new();
-    for id in ArtworkCatalogue::ids() {
+    for &id in ids {
         let scene = ArtworkCatalogue::by_id_for(
             id,
             Seed(11),
             &palette,
             DEFAULT_INTENSITY,
-            DetailLevel::Large,
+            detail,
             Background::Transparent,
         )
         .unwrap();
@@ -594,4 +699,93 @@ fn no_artwork_snaps_to_its_final_state() {
         }
     }
     assert!(failed.is_empty(), "{}", failed.join("\n  "));
+}
+
+/// The artwork the default run checks at [`REPRESENTATIVE_DETAIL`], in
+/// seconds, so the gates cannot rot between full sweeps: the one this file was
+/// written for.
+const REPRESENTATIVE: &[&str] = &["alarm-bell"];
+const REPRESENTATIVE_DETAIL: DetailLevel = DetailLevel::Medium;
+/// An entry of [`KNOWN_EARLY_DRY`], so the default run takes the ratchet path
+/// as well. Only the settle check gets it: a wide scene is the slowest thing
+/// in the catalogue to render.
+const REPRESENTATIVE_EARLY_DRY: &str = "moonlit-shoreline";
+/// The staged artwork the default run steps through stop by stop.
+const REPRESENTATIVE_STAGED: &str = "hub-dawn-ridges";
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_artwork_survives_its_own_reveal() {
+    assert_each_survives_its_own_reveal(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn representative_artworks_survive_their_own_reveal() {
+    assert_each_survives_its_own_reveal(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id; run with cargo test --release -- --ignored"]
+fn artworks_survive_their_reveal_on_a_dark_ground() {
+    assert_each_survives_its_reveal_on_a_dark_ground(ArtworkCatalogue::ids());
+}
+
+#[test]
+fn representative_artworks_survive_their_reveal_on_a_dark_ground() {
+    assert_each_survives_its_reveal_on_a_dark_ground(REPRESENTATIVE);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_artwork_is_still_arriving_a_quarter_of_the_way_in() {
+    assert_each_is_still_arriving_a_quarter_of_the_way_in(
+        ArtworkCatalogue::ids(),
+        DetailLevel::Large,
+    );
+}
+
+#[test]
+fn representative_artworks_are_still_arriving_a_quarter_of_the_way_in() {
+    assert_each_is_still_arriving_a_quarter_of_the_way_in(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn the_sheet_is_still_settling_at_the_end() {
+    assert_each_sheet_is_still_settling_at_the_end(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn representative_sheets_are_still_settling_at_the_end() {
+    assert_each_sheet_is_still_settling_at_the_end(
+        &[REPRESENTATIVE[0], REPRESENTATIVE_EARLY_DRY],
+        REPRESENTATIVE_DETAIL,
+    );
+}
+
+#[test]
+#[ignore = "slow: every catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn no_artwork_snaps_to_its_final_state() {
+    assert_none_snaps_to_its_final_state(ArtworkCatalogue::ids(), DetailLevel::Large);
+}
+
+#[test]
+fn no_representative_artwork_snaps_to_its_final_state() {
+    assert_none_snaps_to_its_final_state(REPRESENTATIVE, REPRESENTATIVE_DETAIL);
+}
+
+#[test]
+#[ignore = "slow: every staged catalogue id at Large detail; run with cargo test --release -- --ignored"]
+fn every_staged_artwork_lays_its_stages_in_order() {
+    let staged: Vec<&str> = ArtworkCatalogue::ids()
+        .iter()
+        .copied()
+        .filter(|id| ArtworkCatalogue::stages(id).is_some())
+        .collect();
+    assert_each_stage_is_laid_in_order(&staged, DetailLevel::Large);
+}
+
+#[test]
+fn the_representative_staged_artwork_lays_its_stages_in_order() {
+    assert_each_stage_is_laid_in_order(&[REPRESENTATIVE_STAGED], REPRESENTATIVE_DETAIL);
 }

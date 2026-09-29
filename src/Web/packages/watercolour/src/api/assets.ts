@@ -64,6 +64,7 @@ export const DEFAULT_PALETTE: Record<string, PaletteId> = {
   'exclamation-mark': 'ember',
   'chat-bubble': 'water',
   'phone': 'slate',
+  'hub-dawn-ridges': 'dusk',
   'lucide-database': 'slate',
   'lucide-server': 'slate',
   'lucide-cpu': 'slate',

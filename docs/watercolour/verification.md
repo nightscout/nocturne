@@ -27,12 +27,16 @@ surrounding detail.
 | Playback | `tests/playback.rs`: seek-vs-replay bit-equality, finish-immediately dryness, front-loaded elapsed-time advance, checkpoint bound |
 | Mask raster | `tests/mask_raster.rs`: FNV-1a snapshot of `rasterize_mask_aspect` over 64 synthetic masks, captured from the original code and green on the accelerated one; degenerate polygons (fewer than three points) do not panic |
 
-### `nocturne-watercolour-infra` (GPU needed; tests print and return early without an adapter)
+### `nocturne-watercolour-infra` (GPU tests print and return early without a hardware device)
 
-Run this suite with `--release`: `reveal_preserves_the_artwork` aborts with a
-native exit code partway through in debug builds on the reference machine (the
-CPU-simulation tests are not feasible unoptimised) and passes in release
-(7/7, ~7-14 min).
+The default run checks `reveal_preserves_the_artwork` on one artwork at `Medium`
+detail and finishes in seconds, debug or release. Its catalogue-wide sweeps at
+`Large` are `#[ignore]`d; they take about an hour and need `--release`, where
+they once aborted with a native exit code in debug on the reference machine:
+
+```bash
+cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_artwork -- --ignored
+```
 
 | Area | What is asserted |
 |---|---|

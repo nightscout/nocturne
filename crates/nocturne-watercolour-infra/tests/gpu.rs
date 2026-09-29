@@ -1,4 +1,7 @@
-//! GPU backend tests. Each returns early with a note when no adapter exists.
+//! GPU backend tests. Each returns early with a note when no hardware device
+//! can be opened: on a GPU-less runner wgpu may still offer a software
+//! rasteriser, whose device may refuse the default limits and whose rounding
+//! the CPU parity tolerances were not set against.
 
 use std::sync::OnceLock;
 
@@ -20,15 +23,23 @@ const CPU_GPU_MAE_TOLERANCE: f32 = 0.01;
 /// One device for the whole binary: the harness runs tests on parallel
 /// threads, and a device per test would open one per thread against the
 /// same adapter.
-static CONTEXT: OnceLock<Option<GpuContext>> = OnceLock::new();
+static CONTEXT: OnceLock<Result<GpuContext, String>> = OnceLock::new();
 
 fn gpu() -> Option<GpuEngine> {
-    let ctx =
-        CONTEXT.get_or_init(|| GpuContext::try_new().expect("context creation must not error"));
+    let ctx = CONTEXT.get_or_init(|| match GpuContext::try_new() {
+        Ok(Some(ctx)) if ctx.is_software() => Err(format!(
+            "only a software adapter ({}, {:?})",
+            ctx.adapter_name(),
+            ctx.backend()
+        )),
+        Ok(Some(ctx)) => Ok(ctx),
+        Ok(None) => Err("no GPU adapter".into()),
+        Err(e) => Err(format!("the adapter would not open a device: {e}")),
+    });
     match ctx {
-        Some(ctx) => Some(GpuEngine::new(ctx.clone()).expect("engine")),
-        None => {
-            eprintln!("skipping: no GPU adapter");
+        Ok(ctx) => Some(GpuEngine::new(ctx.clone()).expect("engine")),
+        Err(reason) => {
+            eprintln!("skipping: {reason}");
             None
         }
     }
