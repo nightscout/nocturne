@@ -12,7 +12,11 @@ vi.mock("$app/navigation", async (importOriginal) => ({
 }));
 vi.mock("@nocturne/watercolour", async () => ({
   Artwork: (await import("$lib/test-stubs/Artwork.test-stub.svelte")).default,
+  DropSurface: (await import("$lib/test-stubs/DropSurface.test-stub.svelte")).default,
+  DropGroup: (await import("$lib/test-stubs/Passthrough.test-stub.svelte")).default,
+  ConfirmationBackground: (await import("$lib/test-stubs/Empty.test-stub.svelte")).default,
   hostSurface: () => "light",
+  prefersReducedMotion: () => false,
   watchSurface: () => () => {},
 }));
 const migrationHistory = vi.hoisted(() => ({ jobs: [] as { id: string; state: MigrationJobState }[] }));
@@ -99,7 +103,9 @@ async function skipToDataSource() {
   await skipButton().click();
 }
 
-beforeEach(() => {
+// The step list in the side rail only shows from the md breakpoint up.
+beforeEach(async () => {
+  await page.viewport(1280, 900);
   migrationHistory.jobs = [];
   relationship.stored = {};
   relationship.set.mockReset().mockImplementation(async (answer) => answer);
@@ -120,6 +126,18 @@ describe("setup who-for step", () => {
     await expect
       .element(page.getByTestId("artwork"))
       .toHaveAttribute("data-artwork", "people-group");
+  });
+
+  it("paints the step's artwork inside the card, and folds the step list away on a phone", async () => {
+    await page.viewport(360, 800);
+    render(SetupPage);
+
+    await expect.element(page.getByTestId("artwork")).toBeVisible();
+    expect(document.querySelector("section [data-testid=artwork]")).not.toBeNull();
+    await expect
+      .element(page.getByRole("button", { name: "Finish", exact: true }))
+      .not.toBeInTheDocument();
+    await expect.element(page.getByText("Step 01 / 06")).toBeVisible();
   });
 
   it("asks the patient's name only for someone else", async () => {

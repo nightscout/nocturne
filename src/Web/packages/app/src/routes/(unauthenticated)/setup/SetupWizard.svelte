@@ -50,7 +50,7 @@
     type ImportResult,
     type SourceResult,
   } from "./steps/Finish.svelte";
-  import type { StepArt } from "./StepArtwork.svelte";
+  import StepArtwork, { type StepArt } from "./StepArtwork.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
 
   // Auth check is handled server-side in +page.server.ts:
@@ -442,25 +442,23 @@
     </div>
   {:else}
     <div
-      class="w-full max-w-280 mx-auto grid grid-cols-[320px_1fr] gap-14 items-start max-[900px]:grid-cols-1 max-[900px]:gap-6"
+      class="w-full max-w-280 mx-auto grid grid-cols-1 gap-6 md:grid-cols-[240px_minmax(0,1fr)] md:gap-10 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-14 items-start"
     >
-      <aside class="sticky top-8 max-[900px]:static">
+      <aside class="md:sticky md:top-8">
         <StepSidebar
           path={setupRequired ? "fresh" : path}
           currentStep={activeIndex}
           steps={activeSteps}
-          art={activeStep?.art ?? "welcome"}
           {voice}
-          {artProgress}
           onJumpToStep={handleJumpToStep}
         />
       </aside>
 
       <section
-        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden min-h-135 flex flex-col"
+        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden md:min-h-135 flex flex-col"
       >
         <div
-          class="flex items-center justify-between px-7 py-5 border-b max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
+          class="flex items-center justify-between flex-wrap gap-2.5 px-5 py-3.5 md:px-7 md:py-5 border-b"
         >
           <div class="flex items-center gap-3 text-xs text-muted-foreground">
             <span class="font-mono uppercase tracking-wide">
@@ -491,7 +489,12 @@
           </div>
         </div>
 
-        <div class="flex-1 px-5 py-3 max-[900px]:px-4">
+        <div class="flex-1 px-4 py-3 md:px-5">
+          <StepArtwork
+            art={activeStep?.art ?? "welcome"}
+            progress={artProgress}
+            class="mx-auto mt-4 size-28 md:size-40 lg:size-48"
+          />
           {#if activeStep?.id === "tenant"}
             <TenantIdentity onComplete={handleTenantCreated} />
           {:else if activeStep?.id === "account"}
@@ -640,9 +643,9 @@
 
         {#if !setupRequired}
           <div
-            class="flex justify-between items-center px-7 py-4.5 border-t bg-muted/40 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
+            class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center px-5 py-3.5 md:px-7 md:py-4.5 border-t bg-muted/40 *:sm:w-auto *:w-full"
           >
-            <div>
+            <div class="empty:hidden [&>button]:w-full sm:[&>button]:w-auto">
               {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
                 <Button variant="outline" onclick={handleBack}>
                   <ArrowLeft class="h-4 w-4" />
@@ -650,7 +653,7 @@
                 </Button>
               {/if}
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center *:w-full *:sm:w-auto">
               {#if currentStep?.id === "finish"}
                 <Button onclick={handleContinueToHub}>
                   Continue

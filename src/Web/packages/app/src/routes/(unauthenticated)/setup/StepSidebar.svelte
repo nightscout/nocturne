@@ -1,35 +1,23 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
-  import StepArtwork, { type StepArt } from "./StepArtwork.svelte";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let {
     path,
     currentStep,
     steps,
-    art,
-    artProgress,
     voice,
     onJumpToStep,
   }: {
     path: "fresh" | "migration";
     currentStep: number;
     steps: readonly { id: string; label: string }[];
-    art: StepArt;
-    /** See {@link StepArtwork}'s `progress`. */
-    artProgress?: number;
     voice: PatientVoice;
     onJumpToStep: (index: number) => void;
   } = $props();
 </script>
 
-<nav class="flex flex-col gap-8">
-  <StepArtwork
-    {art}
-    progress={artProgress}
-    class="size-40 max-[900px]:size-24"
-  />
-
+<nav class="flex flex-col gap-4 md:gap-8">
   <p
     class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-primary"
   >
@@ -42,7 +30,7 @@
   </p>
 
   <h2
-    class="font-brand text-4xl font-hairline leading-tight tracking-tight text-foreground"
+    class="font-brand text-2xl md:text-4xl font-hairline leading-tight tracking-tight text-foreground"
   >
     {#if path === "fresh"}
       {#if voice.kind === "self"}
@@ -61,7 +49,7 @@
     {/if}
   </h2>
 
-  <p class="text-sm leading-relaxed text-muted-foreground">
+  <p class="hidden md:block text-sm leading-relaxed text-muted-foreground">
     {#if path === "fresh"}
       A few short steps. Skip anything you're not ready for; you can change
       every choice in Settings afterwards.
@@ -80,7 +68,7 @@
     {/if}
   </p>
 
-  <ol class="flex flex-col">
+  <ol class="hidden md:flex flex-col">
     {#each steps as step, index (step.id)}
       {@const isDone = index < currentStep}
       {@const isCurrent = index === currentStep}
