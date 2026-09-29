@@ -1,3 +1,4 @@
+import { subscribePresentation } from '../api/presentation';
 import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
 
@@ -282,7 +283,14 @@ export function mountPlayer(
     }, RELEASED_REPAINT_SETTLE_MS);
   });
   observer.observe(frame);
+  // The player resolved its mode under the old preference, so it is rebuilt.
+  const unsubscribe = subscribePresentation(() => {
+    stop();
+    const size = measuredSize(frame.getBoundingClientRect().width, frame.getBoundingClientRect().height);
+    if (size) start(size.width, size.height);
+  });
   return () => {
+    unsubscribe();
     observer.disconnect();
     stop();
   };

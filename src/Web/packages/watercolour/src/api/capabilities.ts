@@ -1,3 +1,5 @@
+import { getPresentation } from './presentation';
+
 export interface Capabilities {
   /** `navigator.gpu` exists. */
   webgpu: boolean;
@@ -63,6 +65,11 @@ export function resetCapabilitiesCache(): void {
   cached = undefined;
 }
 
+/**
+ * Whether a host should skip its own animation: the OS asks for reduced
+ * motion, or the presentation preference is `still` or `off`.
+ */
 export function prefersReducedMotion(): boolean {
+  if (getPresentation() !== 'animated') return true;
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
