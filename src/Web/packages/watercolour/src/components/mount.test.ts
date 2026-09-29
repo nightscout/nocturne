@@ -4,6 +4,7 @@ type CreatedOptions = { width: number; height: number; startFinished?: boolean }
 
 const created: Array<{ source: { surface?: string }; options: CreatedOptions; disposed: boolean }> = [];
 let released = false;
+let finished = false;
 
 vi.mock('../api/playback', () => ({
   createArtworkPlayer: (_canvas: unknown, source: { surface?: string }, options: CreatedOptions) => {
@@ -14,12 +15,13 @@ vi.mock('../api/playback', () => ({
       dispose: () => (entry.disposed = true),
       resize: () => {},
       get state() {
-        return { released };
+        return { released, finished };
       },
     };
   },
 }));
 
+import { setPresentation } from '../api/presentation';
 import { measuredSize, mountPlayer, needsRepaint } from './helpers';
 
 type Resize = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
@@ -36,9 +38,13 @@ function fakeFrame(width: number, height: number): HTMLElement {
 
 const canvas = { style: {}, width: 0, height: 0 } as unknown as HTMLCanvasElement;
 
+const unmounts: Array<() => void> = [];
+const mount = (...args: Parameters<typeof mountPlayer>) => void unmounts.push(mountPlayer(...args));
+
 beforeEach(() => {
   created.length = 0;
   released = false;
+  finished = false;
   observed = undefined;
   vi.stubGlobal(
     'ResizeObserver',
@@ -53,6 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const unmount of unmounts.splice(0)) unmount();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -71,7 +78,7 @@ describe('measuredSize', () => {
 
 describe('mountPlayer', () => {
   it('creates no player while the frame has no area, then one at its first real size', () => {
-    mountPlayer(fakeFrame(0, 0), canvas, 'header-motif', { surface: 'light' });
+    mount(fakeFrame(0, 0), canvas, 'header-motif', { surface: 'light' });
     expect(created).toHaveLength(0);
 
     observed!([{ contentRect: { width: 0, height: 0 } }]);
@@ -84,20 +91,37 @@ describe('mountPlayer', () => {
   });
 
   it('creates the player at once for a frame that already has area', () => {
-    mountPlayer(fakeFrame(160, 32), canvas, 'header-motif', { surface: 'light' });
+    mount(fakeFrame(160, 32), canvas, 'header-motif', { surface: 'light' });
     expect(created).toHaveLength(1);
   });
 
   it('hands the surface it is given to the player', () => {
-    mountPlayer(fakeFrame(96, 32), canvas, 'confirmation-background', { surface: 'dark' });
+    mount(fakeFrame(96, 32), canvas, 'confirmation-background', { surface: 'dark' });
     expect(created[0].source.surface).toBe('dark');
+  });
+});
+
+describe('a change of presentation', () => {
+  afterEach(() => setPresentation('animated'));
+
+  it('rebuilds a finished player finished, and one mid-reveal from the start', () => {
+    mount(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light' });
+    setPresentation('still');
+    expect(created).toHaveLength(2);
+    expect(created[0].disposed).toBe(true);
+    expect(created[1].options.startFinished).toBe(false);
+
+    finished = true;
+    setPresentation('animated');
+    expect(created).toHaveLength(3);
+    expect(created[2].options.startFinished).toBe(true);
   });
 });
 
 describe('a released still that is resized', () => {
   it('only stretches for a small change, and paints again, finished, once a large one settles', () => {
     vi.useFakeTimers();
-    mountPlayer(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light', releaseAfterFinish: true });
+    mount(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light', releaseAfterFinish: true });
     released = true;
 
     observed!([{ contentRect: { width: 72, height: 72 } }]);

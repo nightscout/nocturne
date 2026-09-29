@@ -113,7 +113,7 @@ describe('live stills after a failed engine boot', () => {
   it('ends a failed still turn, so the next still resolves', async () => {
     const host = new EngineHost({ loadModule: () => Promise.reject(new Error('wasm fetch failed')) });
     const capabilities = async () => ({ webgpu: true, adapter: true, reducedMotion: true, offscreenCanvas: false });
-    const scheduler = { register: () => ({ setActive() {}, dispose() {}, visible: true }) } as never;
+    const scheduler = { register: () => ({ setActive() {}, dispose() {}, visible: true }), whenBudget: async () => {} } as never;
     const canvas = () => ({ clientWidth: 32, clientHeight: 32, width: 32, height: 32 }) as unknown as HTMLCanvasElement;
     const options = { engineHost: host, scheduler, capabilities, releaseAfterFinish: true, motion: 'reduced' as const, width: 32, height: 32, dpr: 1 };
 
