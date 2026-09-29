@@ -448,13 +448,42 @@ describe("setup units step", () => {
     expect(unitsAnswer.set).toHaveBeenCalledWith({ glucoseUnits: "mmol", timezone: "Pacific/Auckland" });
   });
 
-  it("saves nothing when skipped", async () => {
+  // The step shows a checked unit; leaving it any way but with that unit saved would put the
+  // app in mg/dL whatever was shown.
+  it("saves the units and timezone it shows when skipped", async () => {
     await reachUnits();
 
     await skipButton().click();
 
-    expect(unitsAnswer.set).not.toHaveBeenCalled();
+    expect(unitsAnswer.set).toHaveBeenCalledWith({ glucoseUnits: "mmol", timezone: browserZone });
+    expect(applyPreferences).toHaveBeenCalledWith({ glucoseUnits: "mmol" }, { refreshCookie: true });
     await expect.element(sendingCopy()).toBeVisible();
+  });
+
+  it("stays on the step when a skip cannot save", async () => {
+    unitsAnswer.set.mockRejectedValueOnce(new Error("boom"));
+    await reachUnits();
+
+    await skipButton().click();
+
+    await expect.element(unitsHeading()).toBeVisible();
+    await expect.element(page.getByRole("alert")).toBeVisible();
+  });
+
+  it("saves once however often Continue is pressed", async () => {
+    let finishSave: () => void = () => {};
+    unitsAnswer.set.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishSave = resolve))
+    );
+    await reachUnits();
+
+    await continueButton().click();
+    await expect.element(continueButton()).toBeDisabled();
+    await expect.element(skipButton()).toBeDisabled();
+    finishSave();
+
+    await expect.element(sendingCopy()).toBeVisible();
+    expect(unitsAnswer.set).toHaveBeenCalledOnce();
   });
 
   it("stays on the step when the answer cannot be saved", async () => {
@@ -502,6 +531,41 @@ describe("setup units step", () => {
     await reachUnitsFromNightscout();
 
     await expect.element(page.getByText(/couldn't read your Nightscout's settings/)).toBeVisible();
+  });
+
+  it("starts the import when the step is skipped", async () => {
+    vi.mocked(startFromConnector).mockClear();
+    await reachUnitsFromNightscout();
+
+    await skipButton().click();
+
+    expect(startFromConnector).toHaveBeenCalledWith("nightscout");
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+  });
+
+  it("resumes the same import after going back", async () => {
+    vi.mocked(startFromConnector).mockClear();
+    vi.mocked(startFromConnector).mockResolvedValueOnce({ id: "job-1" });
+    await reachUnitsFromNightscout();
+
+    await continueButton().click();
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    await page.getByRole("button", { name: "Stub: settle" }).click();
+    await page.getByRole("button", { name: "Back" }).click();
+    await continueButton().click();
+
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
+    expect(startFromConnector).toHaveBeenCalledOnce();
+  });
+
+  it("starts the import and shows it when the sidebar jumps past it", async () => {
+    vi.mocked(startFromConnector).mockClear();
+    await reachUnitsFromNightscout();
+
+    await page.getByRole("button", { name: "Finish", exact: true }).click();
+
+    expect(startFromConnector).toHaveBeenCalledWith("nightscout");
+    await expect.element(page.getByText("Step 05 / 06")).toBeVisible();
   });
 
   it("starts the import once the step is answered", async () => {

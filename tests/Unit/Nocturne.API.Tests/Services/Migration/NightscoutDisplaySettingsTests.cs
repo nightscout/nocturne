@@ -65,6 +65,33 @@ public class NightscoutDisplaySettingsTests
             .Should().Be(new NightscoutDisplaySettings(null, null, null));
     }
 
+    // The PUT that saves the step accepts only a zone it can resolve, so a pre-fill must be one.
+    [Theory]
+    [InlineData("ETC/GMT-2", "Etc/GMT-2")]
+    [InlineData(" Europe/London ", "Europe/London")]
+    [InlineData("AUS Eastern Standard Time", "Australia/Sydney")]
+    [InlineData("Middle/Earth", null)]
+    public void CanonicalisesTheProfileTimezoneOrDropsIt(string stored, string? expected)
+    {
+        var profiles = JsonSerializer.Serialize(new[]
+        {
+            new { defaultProfile = "Default", store = new { Default = new { units = "mmol", timezone = stored } } },
+        });
+
+        NightscoutDisplaySettings.Parse(MmolStatus, profiles).ProfileTimezone.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ReadsAProfileWhoseMillsIsNotANumber()
+    {
+        const string profiles = """
+            [{"defaultProfile":"Default","mills":"soon","store":{"Default":{"units":"mmol","timezone":"Europe/Oslo"}}}]
+            """;
+
+        NightscoutDisplaySettings.Parse(MmolStatus, profiles)
+            .Should().Be(new NightscoutDisplaySettings("mmol", "mmol", "Europe/Oslo"));
+    }
+
     [Fact]
     public void RefusesABodyThatIsNotJson()
     {

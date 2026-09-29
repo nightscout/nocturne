@@ -9,6 +9,7 @@ using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
@@ -160,9 +161,8 @@ public class TenantSettingsController : ControllerBase
         if (!HttpContext.HasScope(Scope.FullAccess) || HttpContext.GetAuthContext()?.SubjectId is not { } subjectId)
             return Forbid();
 
-        var timezone = request.Timezone.Trim();
-        if (!TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out _))
-            return Problem(detail: $"'{timezone}' is not a known timezone.", statusCode: 400, title: "Bad Request");
+        if (TimeZoneHelper.ToIanaIdOrNull(request.Timezone) is not { } timezone)
+            return Problem(detail: $"'{request.Timezone}' is not a known timezone.", statusCode: 400, title: "Bad Request");
 
         return Ok(await _unitsAndTimezone.SetAsync(
             _tenantAccessor.TenantId, subjectId, request.GlucoseUnits, timezone, ct));
