@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, parseBakedManifest, sharedStill, stripFramePosition } from './baked';
+import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, parseBakedManifest, sharedStill, sharedStrip, stripFramePosition } from './baked';
 import { WatercolourError } from './errors';
 
 const valid = { version: 1, frames: 12, width: 256, height: 256, durationMs: 600, layout: 'vertical' };
@@ -162,5 +162,31 @@ describe('sharedStill (one decode, many marks)', () => {
     await expect(sharedStill('/missing.png')).rejects.toThrow();
     await expect(sharedStill('/missing.png')).rejects.toThrow();
     expect(attempts).toBe(2);
+  });
+});
+
+describe('sharedStrip (one decode per artwork and palette)', () => {
+  const manifest = parseBakedManifest({ version: 1, frames: 10, width: 16, height: 16, durationMs: 600, layout: 'vertical' });
+
+  afterEach(() => {
+    clearSharedStills();
+    vi.unstubAllGlobals();
+  });
+
+  it('decodes a strip once for every baked reveal of it, and never closes it', async () => {
+    let decodes = 0;
+    const close = vi.fn();
+    vi.stubGlobal('fetch', async () => ({ ok: true, blob: async () => ({}) as Blob }));
+    vi.stubGlobal('createImageBitmap', async () => {
+      decodes += 1;
+      return { width: 16, height: 160, close } as unknown as ImageBitmap;
+    });
+
+    const first = await sharedStrip('/tab/strip.webp', manifest);
+    const second = await sharedStrip('/tab/strip.webp', manifest);
+
+    expect(decodes).toBe(1);
+    expect(second).toBe(first);
+    expect(close).not.toHaveBeenCalled();
   });
 });

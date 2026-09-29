@@ -38,10 +38,11 @@ export { catalogueIds } from './api/catalogue';
 export { detectCapabilities, probeCapabilities, resetCapabilitiesCache, prefersReducedMotion } from './api/capabilities';
 export type { Capabilities, CapabilityEnvironment } from './api/capabilities';
 
-export { EngineHost, getEngineHost, configureEngineHost, DEFAULT_MAX_LIVE_INSTANCES } from './api/engine-host';
+export { EngineHost, getEngineHost, configureEngineHost, DEFAULT_MAX_LIVE_INSTANCES, WARM_IDLE_TIMEOUT_MS } from './api/engine-host';
 export type { EngineHostOptions, EngineLease, EngineStats, WasmModule } from './api/engine-host';
 
 export { Scheduler, getScheduler, MAX_FRAME_SECONDS } from './api/scheduler';
+export { NEAR_VIEWPORT_MARGIN } from './api/viewport';
 export type { SchedulerEnv, SchedulerHandle, SchedulerTarget, FrameStats } from './api/scheduler';
 
 export { resolveMode, resolveMotion, fallbackOrder } from './api/mode';

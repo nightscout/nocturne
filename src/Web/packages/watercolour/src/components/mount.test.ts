@@ -1,15 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const created: Array<{ source: { surface?: string }; options: { width: number; height: number } }> = [];
+type CreatedOptions = { width: number; height: number; startFinished?: boolean };
+
+const created: Array<{ source: { surface?: string }; options: CreatedOptions; disposed: boolean }> = [];
+let released = false;
 
 vi.mock('../api/playback', () => ({
-  createArtworkPlayer: (_canvas: unknown, source: { surface?: string }, options: { width: number; height: number }) => {
-    created.push({ source, options });
-    return { on: () => () => {}, dispose: () => {}, resize: () => {}, state: { released: false } };
+  createArtworkPlayer: (_canvas: unknown, source: { surface?: string }, options: CreatedOptions) => {
+    const entry = { source, options, disposed: false };
+    created.push(entry);
+    return {
+      on: () => () => {},
+      dispose: () => (entry.disposed = true),
+      resize: () => {},
+      get state() {
+        return { released };
+      },
+    };
   },
 }));
 
-import { measuredSize, mountPlayer } from './helpers';
+import { measuredSize, mountPlayer, needsRepaint } from './helpers';
 
 type Resize = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
 
@@ -27,6 +38,7 @@ const canvas = { style: {}, width: 0, height: 0 } as unknown as HTMLCanvasElemen
 
 beforeEach(() => {
   created.length = 0;
+  released = false;
   observed = undefined;
   vi.stubGlobal(
     'ResizeObserver',
@@ -42,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('measuredSize', () => {
@@ -78,5 +91,33 @@ describe('mountPlayer', () => {
   it('hands the surface it is given to the player', () => {
     mountPlayer(fakeFrame(96, 32), canvas, 'confirmation-background', { surface: 'dark' });
     expect(created[0].source.surface).toBe('dark');
+  });
+});
+
+describe('a released still that is resized', () => {
+  it('only stretches for a small change, and paints again, finished, once a large one settles', () => {
+    vi.useFakeTimers();
+    mountPlayer(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light', releaseAfterFinish: true });
+    released = true;
+
+    observed!([{ contentRect: { width: 72, height: 72 } }]);
+    vi.advanceTimersByTime(1000);
+    expect(created).toHaveLength(1);
+
+    observed!([{ contentRect: { width: 128, height: 128 } }]);
+    observed!([{ contentRect: { width: 160, height: 160 } }]);
+    vi.advanceTimersByTime(1000);
+    expect(created).toHaveLength(2);
+    expect(created[0].disposed).toBe(true);
+    expect(created[1].options).toMatchObject({ width: 160, height: 160, startFinished: true });
+  });
+
+  it('asks for a repaint only past the scale threshold', () => {
+    const box = { width: 64, height: 64, offsetX: 0, offsetY: 0 };
+    expect(needsRepaint({ width: 64, height: 64 }, box, 1)).toBe(false);
+    expect(needsRepaint({ width: 64, height: 64 }, { ...box, width: 90 }, 1)).toBe(false);
+    expect(needsRepaint({ width: 64, height: 64 }, { ...box, width: 96 }, 1)).toBe(true);
+    expect(needsRepaint({ width: 64, height: 64 }, box, 2)).toBe(true);
+    expect(needsRepaint({ width: 128, height: 128 }, box, 1)).toBe(true);
   });
 });

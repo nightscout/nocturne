@@ -1,3 +1,4 @@
+import { type Capabilities, detectCapabilities } from './capabilities';
 import { WatercolourError, toWatercolourError } from './errors';
 import type { EngineStats, WasmEngine, WasmModule } from './wasm-types';
 
@@ -13,7 +14,12 @@ export interface EngineHostOptions {
   maxLiveInstances?: number;
   /** Test seam: supplies the bindings instead of importing `../wasm`. */
   loadModule?: () => Promise<WasmModule>;
+  /** Test seam: the probe asked before the module is fetched. */
+  capabilities?: () => Promise<Capabilities>;
 }
+
+/** How long {@link EngineHost.warmWhenIdle} waits for an idle period before warming anyway. */
+export const WARM_IDLE_TIMEOUT_MS = 3000;
 
 export const DEFAULT_MAX_LIVE_INSTANCES = 4;
 
@@ -55,12 +61,14 @@ export class EngineHost {
   private readonly lostListeners = new Set<(message: string) => void>();
   private maxLive: number;
   private readonly loadModule: () => Promise<WasmModule>;
+  private readonly capabilities: () => Promise<Capabilities>;
   /** Marks for `performance.getEntriesByName`, so hosts can time first paint against init. */
   readonly marks = { moduleLoaded: 'watercolour:module-loaded', engineReady: 'watercolour:engine-ready' };
 
   constructor(options: EngineHostOptions = {}) {
     this.maxLive = options.maxLiveInstances ?? DEFAULT_MAX_LIVE_INSTANCES;
     this.loadModule = options.loadModule ?? importBindings;
+    this.capabilities = options.capabilities ?? detectCapabilities;
   }
 
   get lost(): boolean {
@@ -136,6 +144,8 @@ export class EngineHost {
    *
    * Resolves `false` when there is no usable GPU. That is not an error: the
    * baked and static paths cover it, and they are what would have been chosen.
+   * The adapter is asked for before the module is fetched, so a machine
+   * without one downloads and compiles nothing.
    */
   async warm(): Promise<boolean> {
     try {
@@ -146,6 +156,17 @@ export class EngineHost {
     } finally {
       this.release();
     }
+  }
+
+  /**
+   * {@link warm} in the browser's next idle period, or after `timeoutMs` if
+   * the page never goes idle, so the boot does not compete with first paint.
+   */
+  warmWhenIdle(timeoutMs = WARM_IDLE_TIMEOUT_MS): Promise<boolean> {
+    return new Promise<void>((resolve) => {
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout: timeoutMs });
+      else setTimeout(resolve, 0);
+    }).then(() => this.warm());
   }
 
   onLost(listener: (message: string) => void): () => void {
@@ -164,6 +185,10 @@ export class EngineHost {
 
   private async create(): Promise<EngineLease> {
     if (!this.module) {
+      const capabilities = await this.capabilities();
+      if (!capabilities.webgpu || !capabilities.adapter) {
+        throw new WatercolourError('WebGpuUnavailable', capabilities.reason ?? 'no WebGPU adapter');
+      }
       this.module = await this.loadModule();
       performance.mark?.(this.marks.moduleLoaded);
     }

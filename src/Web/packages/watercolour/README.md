@@ -152,7 +152,7 @@ curves and both colour directions - is in
 |---|---|---|---|
 | `live` | WebGPU via the wasm engine, presented straight to the canvas | `navigator.gpu`, an adapter, a free slot under `maxLiveInstances` (default 4) | Preferred when available and motion is not reduced |
 | `baked` | 2D canvas, cross-fading two frames of a PNG strip | the strip + manifest asset (bundled or `assetBaseUrl`) | No usable GPU or the instance cap is reached |
-| `static` | 2D canvas, the finished PNG drawn once | the final asset | Reduced motion (first choice), or nothing else works |
+| `static` | 2D canvas, the finished still drawn once: `final-128` up to 128 device px on the long edge, else `final-512` | the final asset | Reduced motion (first choice), or nothing else works |
 | `none` | nothing | - | No GPU and no asset; `error` fires with a typed code |
 
 Explicit modes fall down the same chain when unavailable (`live` -> `baked` ->
@@ -164,12 +164,16 @@ if an asset exists, else the live engine finished immediately, else the strip's
 last frame. `releaseAfterFinish` disposes the engine instance once the reveal has
 finished and its frame is presented (the canvas keeps the pixels, and a later
 resize only rescales them), so the artwork holds no live slot or checkpoints
-afterwards. Under reduced motion or `autoplay: 'never'` it finishes at once and
-presents immediately, visible or not, so a still below the fold frees its slot
-straight away. Such stills take their live turn one at a time
+afterwards. Under reduced motion or `autoplay: 'never'` it runs straight to the
+end and presents once: the run is spread over frames, a few milliseconds of main
+thread each (`SETTLE_FRAME_BUDGET_MS`), and it keeps going off screen once started
+so it can let go. Such stills take their live turn one at a time
 (`EngineHost.stillTurn`), so a burst of them - a member list's avatars - holds one
-slot rather than the whole cap; under reduced motion it also lets `auto` pick live over the
-identical baked still, which is what gives `AvatarWash` its per-name wash. The
+slot rather than the whole cap. Under reduced motion it lets `auto` pick live over
+the baked still only when the caller set a `seed` or `intensity` the bake cannot
+show, which is what gives `AvatarWash` its per-name wash; an unseeded artwork
+draws its still. No player resolves its mode, decodes an asset or takes a live
+slot until its canvas is within 200 px of the viewport. The
 accent components (`PaintedUnderline`, `SelectionEdge`, `HeaderMotif`) set it too,
 so a one-shot accent does not pin a slot for as long as it is mounted. `autoplay: 'once'` starts on first appearance (the shared
 `IntersectionObserver`) and never loops; `'never'` waits for `play()`.

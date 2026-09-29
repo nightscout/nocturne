@@ -43,10 +43,12 @@ frames. `tail` used to mean a share of simulation ticks, and for baked reveals
 a hold on the finished frame; both are gone.
 
 `checkpointBudgetBytes` (live only) is the GPU memory the instance may spend on
-seek checkpoints. Absent keeps the engine's 48 MB default; `0` leaves it the
-single checkpoint at tick 0, so a backwards `seek` reloads and replays from the
-start rather than restoring a nearer state. A player nothing ever seeks - every
-drop outside the showcase scrubber - should pass it.
+seek checkpoints. Absent keeps the engine's 48 MB default, except on a
+`releaseAfterFinish` player, which nothing can seek once it has let go and so
+keeps only tick 0's; `0` leaves it the single checkpoint at tick 0, so a
+backwards `seek` reloads and replays from the start rather than restoring a
+nearer state. A player nothing ever seeks - every drop outside the showcase
+scrubber - should pass it.
 
 ### Player methods and state
 
@@ -69,7 +71,11 @@ player.dispose();
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
 
-`player.ready` resolves once a backend is drawing. `player.canvas` is the
+`player.ready` resolves once a backend is drawing. A player whose canvas is in
+the document does not start until the canvas is within 200 px of the viewport
+(`NEAR_VIEWPORT_MARGIN`), so for one below the fold `ready` waits for the
+scroll; a canvas outside the document, or a page without
+`IntersectionObserver`, starts at once. `player.canvas` is the
 current element, which differs from the one passed in only after a live-to-baked
 fallback (a WebGPU canvas can never give a 2D context, so the element is
 replaced in place).
@@ -182,11 +188,11 @@ disposal.
 
 | Component | Artwork id it renders | Extra props | Notes |
 |---|---|---|---|
-| `Artwork` | the `artwork` prop, or the `icon` prop (a Lucide element list, takes precedence) | `artwork: ArtworkId`, `icon?: IconArtworkSource`, `assetBaseUrl` | Renders `detailForEdge` from its rendered box's backing long edge (below 64 px small, below 192 px medium, below 320 px large, 320 px and above extraLarge; sim grids 96/160/256/384, the tier's own whatever the canvas size); `surface` defaults from the host theme: a `.dark`/`.light` class on `<html>`, then `<html>`'s computed `color-scheme`, then `prefers-color-scheme`. |
+| `Artwork` | the `artwork` prop, or the `icon` prop (a Lucide element list, takes precedence) | `artwork: ArtworkId`, `icon?: IconArtworkSource`, `assetBaseUrl` | Renders `detailForEdge` from its rendered box's backing long edge (below 64 px small, below 192 px medium, below 320 px large, 320 px and above extraLarge; sim grids 96/160/256/384, the tier's own whatever the canvas size); `surface` defaults from the host theme: a `.dark`/`.light` class on `<html>`, then `<html>`'s computed `color-scheme`, then `prefers-color-scheme`. `releaseAfterFinish` defaults on unless `autoplay="never"`, so a mounted reveal frees its live slot and GPU memory once its last frame is presented; a host that drives the player with `seek` sets `autoplay="never"`. A released artwork resized past 1.5x (or 1/1.5x) repaints, finished, at its new size once the resize settles; a smaller change only rescales. |
 | `PaintedUnderline` | `tab-underline` | `active: boolean` | `opacity-0` unless `active`; plays once on activation, then releases its live slot. A 6px strip along the bottom of a tab. |
 | `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A 16px vertical or horizontal edge strip, `fit: 'fill'` by default so the stroke runs the item's full length; plays once on activation, then releases its live slot. |
-| `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live, whether on screen or not, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
-| `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. |
+| `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
+| `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
 | `HeaderMotif` | `header-motif` | - | Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
@@ -332,8 +338,10 @@ page is already at its cap of `DEFAULT_MAX_LIVE_INSTANCES` (4) - the surface sho
 its ordinary hover state and **no mark**. That is the intended behaviour, not an
 error; the old catalogue fallback was judged not worth keeping alongside. One
 surface is one instance, whatever its size, and hover rarely holds more than one
-open. A host that wants the marks calls `getEngineHost().warm()` at idle; without
-it the first pointer pays the engine boot inside its own transition.
+open. A host that wants the marks calls `getEngineHost().warmWhenIdle()` (or
+`warm()` from its own idle hook); without it the first pointer pays the engine
+boot inside its own transition. Warming asks for a WebGPU adapter first, so a
+machine without one fetches and compiles no wasm at all.
 
 The canvas is only as large as the mark needs (`strokeFrame`): the paint plus room
 for the bloom, clipped to the bleed the surface allows, and never more elongated
