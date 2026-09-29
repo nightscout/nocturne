@@ -872,6 +872,7 @@ pub fn rasterize_mask_aspect(mask: &Mask, width: u32, height: u32, aspect: f32) 
         // per-cell cast below indexes out of bounds and panics.
         _ => vec![Vec::new(); height as usize],
     };
+    let bbox = polygon_bbox(mask.points());
     let mut out = vec![0.0f32; n];
     for y in 0..height {
         for x in 0..width {
@@ -879,10 +880,11 @@ pub fn rasterize_mask_aspect(mask: &Mask, width: u32, height: u32, aspect: f32) 
             let pv = (y as f32 + 0.5) / h;
             let idx = (y as usize) * (width as usize) + x as usize;
             let outside = match mask {
-                Mask::Polygon { points, .. } => {
+                Mask::Polygon { .. } => {
                     // A cell outside the polygon's bounding box is never
                     // inside, so the cast can be skipped there.
-                    let inside = if in_polygon_bbox(pu, pv, points) {
+                    let (x0, x1, y0, y1) = bbox;
+                    let inside = if !(pu < x0 || pu > x1 || pv < y0 || pv > y1) {
                         let mut inside = false;
                         for &(a, b) in &row_edges[y as usize] {
                             let x_at = a.x + (pv - a.y) / (b.y - a.y) * (b.x - a.x);
@@ -943,10 +945,9 @@ fn walk_mask_segment(
     }
 }
 
-/// Whether a normalised cell centre can lie inside the polygon at all: the
-/// polygon is contained in its own vertex bounding box, so a point outside it
-/// is outside the polygon.
-fn in_polygon_bbox(pu: f32, pv: f32, points: &[Point]) -> bool {
+/// The polygon's vertex bounding box, `(x0, x1, y0, y1)`. The polygon lies
+/// inside it, so a cell centre outside it is outside the polygon.
+fn polygon_bbox(points: &[Point]) -> (f32, f32, f32, f32) {
     let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
     for p in points {
         x0 = x0.min(p.x);
@@ -954,7 +955,7 @@ fn in_polygon_bbox(pu: f32, pv: f32, points: &[Point]) -> bool {
         y0 = y0.min(p.y);
         y1 = y1.max(p.y);
     }
-    !(pu < x0 || pu > x1 || pv < y0 || pv > y1)
+    (x0, x1, y0, y1)
 }
 
 pub fn apply_brush(
