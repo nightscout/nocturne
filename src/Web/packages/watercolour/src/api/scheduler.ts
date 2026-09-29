@@ -76,6 +76,7 @@ export class Scheduler {
   /** `setActive(true)` from inside a tick must not queue a second loop; the frame reschedules itself. */
   private inFrame = false;
   private lastTime: number | undefined;
+  private frameStartedAt: number | undefined;
   private hidden = false;
   private readonly durations = new Float64Array(HISTOGRAM_SIZE);
   private durationCount = 0;
@@ -119,6 +120,16 @@ export class Scheduler {
 
   get frameBudgetMs(): number {
     return frameBudgetMs(this.interval);
+  }
+
+  /**
+   * What the current frame's budget has left, shared by everything sliced in
+   * it. It keeps counting after the frame callback returns, so work started in
+   * that frame's microtasks (a still handed its turn) spends the same budget.
+   */
+  budgetRemainingMs(): number {
+    if (this.frameStartedAt === undefined) return 0;
+    return this.frameBudgetMs - (this.env.now() - this.frameStartedAt);
   }
 
   register(target: SchedulerTarget): SchedulerHandle {
@@ -201,6 +212,7 @@ export class Scheduler {
     if (this.lastTime !== undefined && time > this.lastTime) this.sampleInterval(time - this.lastTime);
     this.lastTime = time;
     const started = this.env.now();
+    this.frameStartedAt = started;
     this.inFrame = true;
     try {
       for (const entry of Array.from(this.entries)) {

@@ -404,6 +404,7 @@ class LiveBackend implements Backend {
       this.instance.pause();
       this.settling = true;
       this.handle.setActive(true);
+      this.settle(false);
       return;
     }
     this.settling = false;
@@ -463,7 +464,7 @@ class LiveBackend implements Backend {
 
   private tick(dt: number): void {
     if (this.settling) {
-      this.settle();
+      this.settle(true);
       return;
     }
     if (!this.isPlaying || this.disposed || this.released) return;
@@ -476,22 +477,29 @@ class LiveBackend implements Backend {
   }
 
   /**
-   * The steps `finishImmediately` takes, a few at a time within the
-   * scheduler's frame budget. A still's whole run in one task is tens of
-   * milliseconds on a desktop GPU and several times that on a phone.
+   * The steps `finishImmediately` takes, a few at a time within what the
+   * scheduler's frame budget has left. A still's whole run in one task is tens
+   * of milliseconds on a desktop GPU and several times that on a phone.
+   *
+   * Outside the frame callback it runs only on budget the frame left over: a
+   * still handed its turn there starts at once rather than a frame later. In
+   * the frame it runs at least one call, so work that took the whole budget
+   * before it does not stall it.
    */
-  private settle(): void {
-    const started = this.scheduler.now();
-    const budget = this.scheduler.frameBudgetMs;
+  private settle(inFrame: boolean): void {
     let done = false;
     this.step(() => {
-      do done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
-      while (!done && this.scheduler.now() - started < budget);
-      return true;
+      let ran = false;
+      while (!done && (this.scheduler.budgetRemainingMs() > 0 || (inFrame && !ran))) {
+        done = this.instance.advanceTicks!(SETTLE_SLICE_TICKS);
+        ran = true;
+      }
+      return ran;
     });
     if (!done || !this.settling) return;
     this.settling = false;
     this.callbacks.onFinished();
+    if (!inFrame) this.render();
   }
 
   private render(): void {

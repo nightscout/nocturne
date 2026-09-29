@@ -53,9 +53,9 @@ function fakeInstance(total: number) {
   return instance;
 }
 
-function fakeHost(instance: ReturnType<typeof fakeInstance>): EngineHost {
+function fakeHost(...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   const engine = {
-    createInstance: () => instance,
+    createInstance: () => instances.shift(),
     onDeviceLost() {},
     stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }),
     maxLiveInstances: 4,
@@ -147,6 +147,49 @@ describe('a live still under reduced motion', () => {
     expect(finished).toBe(1);
     expect(still.state).toMatchObject({ finished: true, released: true });
     expect((window as Window).__watercolourLive).toEqual([]);
+  });
+
+  it('hands its turn to the next still inside the frame it finished in', async () => {
+    const first = fakeInstance(8);
+    const second = fakeInstance(8);
+    const { scheduler, frame, spend } = manualScheduler();
+    for (const instance of [first, second]) {
+      const advance = instance.advanceTicks;
+      instance.advanceTicks = (ticks) => (spend(1), advance(ticks));
+    }
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    const a = player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await a.ready;
+
+    frame();
+    await b.ready;
+
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(second.calls).toEqual(['ticks:4', 'ticks:4', 'render@8', 'dispose']);
+    expect(b.state).toMatchObject({ finished: true, released: true });
+  });
+
+  it('leaves the next still for the next frame when the budget is spent', async () => {
+    const first = fakeInstance(8);
+    const second = fakeInstance(8);
+    const { scheduler, frame, spend } = manualScheduler();
+    const advance = first.advanceTicks;
+    first.advanceTicks = (ticks) => (spend(6), advance(ticks));
+    const engineHost = fakeHost(first, second);
+    const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
+    const a = player(first, scheduler, options);
+    const b = player(second, scheduler, options);
+    await a.ready;
+
+    frame();
+    await b.ready;
+    expect(first.calls.at(-1)).toBe('dispose');
+    expect(second.calls).toEqual([]);
+
+    frame();
+    expect(second.calls).toEqual(['ticks:4', 'ticks:4', 'render@8', 'dispose']);
   });
 
   it('still finishes in one call when the host asks for it outright', async () => {
