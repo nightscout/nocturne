@@ -267,6 +267,7 @@
                         <CarbBreakdownBar
                           {totalCarbs}
                           foods={meal.foods ?? []}
+                          seedKey={meal.carbIntakes?.[0]?.id}
                         />
                       </div>
                       <span class="text-lg font-semibold tabular-nums">

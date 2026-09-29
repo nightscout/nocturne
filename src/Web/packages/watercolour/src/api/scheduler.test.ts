@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_FRAME_SECONDS, Scheduler, type SchedulerEnv } from './scheduler';
+import { FIRST_SLICE_TICKS, MAX_FRAME_SECONDS, MAX_SLICE_TICKS, Scheduler, type SchedulerEnv, SlicePacer, frameBudgetMs, sliceTicks } from './scheduler';
 
 type Listener = () => void;
 
@@ -191,5 +191,101 @@ describe('Scheduler', () => {
     fake.frame();
     expect(t.renders).toBe(1);
     expect(visibility).toEqual([false, true]);
+  });
+
+  it('holds a wait for budget while the tab is hidden and answers it on the first frame after', async () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    fake.setVisibility('hidden');
+    let answered = false;
+    void scheduler.whenBudget().then(() => (answered = true));
+    expect(fake.queued).toBe(0);
+
+    fake.setVisibility('visible');
+    expect(fake.queued).toBe(1);
+    fake.frame();
+    await Promise.resolve();
+    expect(answered).toBe(true);
+  });
+
+  it('estimates the frame interval from the spacing of frames, discounting late ones', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(1000 / 60);
+    scheduler.register(target().target).setActive(true);
+    for (let i = 0; i < 12; i++) fake.frame(i % 4 === 3 ? 25 : 8.3);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(8.3);
+    expect(scheduler.frameBudgetMs).toBeCloseTo(4.98);
+  });
+
+  it('does not count the time the loop was stopped as a frame', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const handle = scheduler.register(target().target);
+    handle.setActive(true);
+    fake.frame(16.7);
+    fake.frame(16.7);
+    handle.setActive(false);
+    fake.frame(16.7);
+    handle.setActive(true);
+    fake.frame(5000);
+    expect(scheduler.frameIntervalMs).toBeCloseTo(16.7);
+  });
+});
+
+describe('frameBudgetMs', () => {
+  it('takes most of a frame, within bounds', () => {
+    expect(frameBudgetMs(1000 / 60)).toBeCloseTo(10);
+    expect(frameBudgetMs(1000 / 120)).toBe(5);
+    expect(frameBudgetMs(1000 / 240)).toBe(4);
+    expect(frameBudgetMs(1000 / 30)).toBe(12);
+  });
+});
+
+describe('sliceTicks', () => {
+  it('fits one call to the budget at the measured rate', () => {
+    expect(sliceTicks(10, undefined)).toBe(FIRST_SLICE_TICKS);
+    expect(sliceTicks(10, 2)).toBe(5);
+    expect(sliceTicks(10, 0.001)).toBe(MAX_SLICE_TICKS);
+    expect(sliceTicks(10, 0)).toBe(MAX_SLICE_TICKS);
+    expect(sliceTicks(10, 25)).toBe(0);
+    expect(sliceTicks(0, 1)).toBe(0);
+  });
+});
+
+describe('SlicePacer', () => {
+  it('shrinks the next call after a slow one', () => {
+    const pacer = new SlicePacer();
+    expect(pacer.next(10, 10)).toBe(4);
+    pacer.record(4, 20);
+    expect(pacer.next(10, 10)).toBe(2);
+    pacer.record(2, 100);
+    expect(pacer.next(10, 10)).toBe(0);
+  });
+
+  it('grows the next call after a fast one', () => {
+    const pacer = new SlicePacer();
+    pacer.record(4, 8);
+    expect(pacer.next(10, 10)).toBe(5);
+  });
+
+  it('sizes from the mean of recent calls, so cheap calls between submits do not hide them', () => {
+    const pacer = new SlicePacer();
+    for (let i = 0; i < 3; i++) pacer.record(4, 0.2);
+    expect(pacer.next(5, 10)).toBe(MAX_SLICE_TICKS);
+    pacer.record(4, 12.8);
+    // About 1 ms a tick over the four calls, where the cheap ones alone said 0.05 ms.
+    expect(pacer.next(5, 10)).toBe(5);
+  });
+
+  it('caps the ticks a frame queues by their GPU time', () => {
+    const pacer = new SlicePacer();
+    pacer.record(4, 0.4);
+    expect(pacer.next(10, 10, 2)).toBe(1);
+    pacer.record(1, 0.1);
+    expect(pacer.next(10, 10, 2)).toBe(0);
+    pacer.beginFrame();
+    expect(pacer.next(10, 10, 2)).toBe(5);
+    expect(pacer.next(10, 10, 50)).toBe(1);
   });
 });

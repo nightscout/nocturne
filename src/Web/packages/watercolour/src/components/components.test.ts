@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { artworkAspect, detailForEdge, seedFromName } from '../types';
 import { artworkOptionsFrom, containBox, hostSurface } from './helpers';
+import heroSource from './ArtworkHero.svelte?raw';
 
 describe('detailForEdge (size to detail)', () => {
   it('maps the backing long edge to the catalogue detail level', () => {
@@ -173,5 +174,18 @@ describe('containBox (aspect-fit canvas box)', () => {
     expect(box.height).toBeCloseTo(235 / 3, 5);
     expect(box.offsetX).toBe(0);
     expect(box.offsetY).toBeCloseTo(172 - 235 / 3, 5);
+  });
+});
+describe('ArtworkHero stacked layout', () => {
+  it('feeds aspect-ratio only properties set without units', () => {
+    const source = heroSource;
+    const set = new Map([...source.matchAll(/style:(--[\w-]+)="([^"]*)"/g)].map((m) => [m[1]!, m[2]!]));
+    const ratios = [...source.matchAll(/aspect-ratio:\s*([^;]+);/g)].map((m) => m[1]!.trim()).filter((v) => v !== 'auto');
+    expect(ratios.length).toBeGreaterThan(0);
+    for (const ratio of ratios) {
+      const vars = [...ratio.matchAll(/var\((--[\w-]+)\)/g)].map((m) => m[1]!);
+      expect(vars.length).toBeGreaterThan(0);
+      for (const name of vars) expect(set.get(name), name).toMatch(/^\{\w+\} \/ \{\w+\}$|^[^a-z%]*$/);
+    }
   });
 });

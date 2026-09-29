@@ -27,6 +27,7 @@
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
+  import { Artwork } from "@nocturne/watercolour";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -128,7 +129,40 @@
     completingDefinitionId = undefined;
     completingCompletionEventType = undefined;
   }
+
+  const softLight = "mix-blend-soft-light";
+  const darkenOnly = "mix-blend-multiply opacity-60";
+  const washBlend: Record<ReturnType<typeof getGlucoseTileVariant>, string> = {
+    "very-low": darkenOnly,
+    low: softLight,
+    "in-range": softLight,
+    high: softLight,
+    "very-high": darkenOnly,
+    neutral: softLight,
+  };
 </script>
+
+{#snippet rangeWash()}
+  <!-- A grey wash soft-lit over the range fill: the tile keeps the range token's own hue in every
+       theme, and soft-light (not multiply) lightens as much as it darkens, so the tile keeps the
+       token's tone and the digits their contrast. The very-low and very-high tiles carry light
+       digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
+       fill toward the digits. Cropped to the wash's interior so its dried edge
+       falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
+  {#key tileVariant}
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain {washBlend[tileVariant]}">
+      <Artwork
+        artwork="wash"
+        palette="slate"
+        surface="light"
+        durationMs={1600}
+        releaseAfterFinish
+        fit="fill"
+        class="size-full"
+      />
+    </span>
+  {/key}
+{/snippet}
 
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->
 <div class="@container">
@@ -144,6 +178,7 @@
         {statusText}
         {statusTooltip}
         size="lg"
+        background={rangeWash}
       />
       <div class="text-sm text-muted-foreground tabular-nums">
         {displayBgDelta}
@@ -209,3 +244,10 @@
   completionEventType={completingCompletionEventType}
   onClose={handleCompletionDialogClose}
 />
+
+<style>
+  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  .wash-grain {
+    filter: grayscale(1) brightness(1.5) contrast(1.6);
+  }
+</style>

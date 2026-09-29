@@ -82,6 +82,7 @@
   class="nwc-hero nwc-hero--{side} {wrap ? 'nwc-hero--wrap' : 'nwc-hero--gutter'} {className}"
   style:--nwc-hero-size="{size}px"
   style:--nwc-hero-height="{height}px"
+  style:--nwc-hero-ratio="{size} / {height}"
   style:--nwc-hero-gap="{gap}px"
   style:--nwc-hero-threshold={threshold}
   style:--nwc-hero-shape={shape ? `url("${shape}")` : 'none'}
@@ -94,7 +95,8 @@
      plain block above the text at its natural aspect. */
   .nwc-hero {
     width: min(100%, var(--nwc-hero-size));
-    aspect-ratio: var(--nwc-hero-size) / var(--nwc-hero-height);
+    /* A <ratio> takes plain numbers; the px sizes would void the declaration and collapse the box to no height. */
+    aspect-ratio: var(--nwc-hero-ratio);
     margin: 0 auto var(--nwc-hero-gap);
   }
 

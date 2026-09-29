@@ -2,17 +2,21 @@
   import type { TreatmentFood } from "$lib/api";
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
+  import { untrack } from "svelte";
+  import { Artwork, seedFromName } from "@nocturne/watercolour";
 
   interface Props {
     /** Total carbs in the treatment */
     totalCarbs: number;
     /** Foods attributed to this treatment */
     foods: TreatmentFood[];
+    /** Stable id of the meal or treatment; seeds its wash so equal-carb meals differ */
+    seedKey?: string;
     /** Additional CSS classes */
     class?: string;
   }
 
-  let { totalCarbs, foods, class: className }: Props = $props();
+  let { totalCarbs, foods, seedKey, class: className }: Props = $props();
 
   // Color palette for food segments
   const colorPalette = [
@@ -105,12 +109,54 @@
   const chartWidthPercent = $derived(
     Math.max(MIN_WIDTH_PERCENT, Math.min(100, (totalCarbs / MAX_CARBS) * 100))
   );
+
+  // The attributed bars are read back off the rendered chart: layerchart nices
+  // the x domain, so their extent cannot be derived from the carbs alone.
+  let chartEl = $state<HTMLDivElement>();
+  let paintBox = $state<{ left: number; top: number; width: number; height: number }>();
+
+  $effect(() => {
+    const el = chartEl;
+    if (!el) return;
+    const measure = () => {
+      const host = el.getBoundingClientRect();
+      let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+      for (const rect of el.querySelectorAll("rect")) {
+        if (!colorPalette.includes(rect.getAttribute("fill") ?? "")) continue;
+        const box = rect.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0) continue;
+        left = Math.min(left, box.left);
+        top = Math.min(top, box.top);
+        right = Math.max(right, box.right);
+        bottom = Math.max(bottom, box.bottom);
+      }
+      const next = right > left
+        ? { left: left - host.left, top: top - host.top, width: right - left, height: bottom - top }
+        : undefined;
+      if (JSON.stringify(next) !== JSON.stringify(untrack(() => paintBox))) paintBox = next;
+    };
+    measure();
+    const mutations = new MutationObserver(measure);
+    mutations.observe(el, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["x", "y", "width", "height", "fill"],
+    });
+    const resizes = new ResizeObserver(measure);
+    resizes.observe(el);
+    return () => {
+      mutations.disconnect();
+      resizes.disconnect();
+    };
+  });
 </script>
 
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
-    {#key chartKey}
-      <div class="h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
+    <div class="relative isolate h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
+      {#key chartKey}
+        <div bind:this={chartEl} class="h-full">
         <BarChart
           data={chartData}
           orientation="horizontal"
@@ -137,7 +183,43 @@
             },
           }}
         />
-      </div>
-    {/key}
+        </div>
+      {/key}
+      {#if paintBox}
+        <!-- A grey wash multiplied over the attributed bars, so the paint takes each bar's own hue.
+             Multiply, where the glucose tile soft-lights: on a bar this light and this small a
+             soft-light wash vanishes, and there is no text over it to lose contrast. Cropped to the
+             wash's interior so no dried edge floats inside the bar. -->
+        <div
+          aria-hidden="true"
+          data-carb-wash
+          class="pointer-events-none absolute top-(--paint-y) left-(--paint-x) h-(--paint-h) w-(--paint-w) overflow-hidden"
+          style:--paint-x="{paintBox.left}px"
+          style:--paint-y="{paintBox.top}px"
+          style:--paint-w="{paintBox.width}px"
+          style:--paint-h="{paintBox.height}px"
+        >
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-multiply">
+            <Artwork
+              artwork="wash"
+              palette="slate"
+              seed={seedKey ? seedFromName(seedKey) : totalCarbs}
+              surface="light"
+              autoplay="never"
+              releaseAfterFinish
+              fit="fill"
+              class="size-full"
+            />
+          </div>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
+
+<style>
+  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  .wash-grain {
+    filter: grayscale(1) brightness(2.6) contrast(1.15);
+  }
+</style>

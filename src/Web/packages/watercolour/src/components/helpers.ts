@@ -1,3 +1,4 @@
+import { subscribePresentation } from '../api/presentation';
 import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
 
@@ -151,6 +152,24 @@ export function componentDpr(): number {
 }
 
 /**
+ * How far a released still's box may grow or shrink before it is painted
+ * again at its new size. Short of this it is only stretched: a released
+ * canvas cannot redraw, and a repaint blanks it until the new frame lands.
+ */
+export const RELEASED_REPAINT_SCALE = 1.5;
+
+/** A drag resizes every frame; the repaint waits for the size to settle. */
+const RELEASED_REPAINT_SETTLE_MS = 200;
+
+/** Whether a released canvas's backing store is far enough off `box` to paint it again. */
+export function needsRepaint(canvas: { width: number; height: number }, box: FitBox, dpr: number): boolean {
+  const width = Math.max(1, Math.round(box.width * dpr));
+  const height = Math.max(1, Math.round(box.height * dpr));
+  const ratio = Math.max(width / canvas.width, canvas.width / width, height / canvas.height, canvas.height / height);
+  return ratio >= RELEASED_REPAINT_SCALE;
+}
+
+/**
  * The canvas actually in the frame. A backend swaps the element in place when
  * the context type changes (a 2D-locked canvas can never give WebGPU and vice
  * versa), so the passed-in `bind:this` reference can go stale; the swap target
@@ -184,8 +203,17 @@ export function mountPlayer(
   const dpr = componentDpr();
   let player: ArtworkPlayer | undefined;
   let unready: (() => void) | undefined;
+  let repaintTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const start = (containerWidth: number, containerHeight: number) => {
+  const stop = () => {
+    clearTimeout(repaintTimer);
+    unready?.();
+    unready = undefined;
+    player?.dispose();
+    player = undefined;
+  };
+
+  const start = (containerWidth: number, containerHeight: number, startFinished = false) => {
     const box = resolveBox(containerWidth, containerHeight, id, options);
     applyCanvasFit(currentCanvas(frame, canvas), box, dpr);
     const detail = detailForEdge(Math.max(box.width, box.height));
@@ -211,6 +239,7 @@ export function mountPlayer(
       mode: options.mode,
       autoplay: options.autoplay,
       releaseAfterFinish: options.releaseAfterFinish,
+      startFinished,
       assetBaseUrl: options.assetBaseUrl,
       width: box.width,
       height: box.height,
@@ -239,15 +268,33 @@ export function mountPlayer(
     }
     const nextBox = resolveBox(next?.width ?? 1, next?.height ?? 1, id, options);
     const released = player.state.released === true;
-    applyCanvasFit(currentCanvas(frame, canvas), nextBox, dpr, released);
-    if (released) return;
-    player.resize(nextBox.width, nextBox.height, dpr);
+    const target = currentCanvas(frame, canvas);
+    applyCanvasFit(target, nextBox, dpr, released);
+    clearTimeout(repaintTimer);
+    if (!released) {
+      player.resize(nextBox.width, nextBox.height, dpr);
+      return;
+    }
+    if (!next || !needsRepaint(target, nextBox, dpr)) return;
+    // The reveal has been seen; the repaint lands on the finished frame.
+    repaintTimer = setTimeout(() => {
+      stop();
+      start(next.width, next.height, true);
+    }, RELEASED_REPAINT_SETTLE_MS);
   });
   observer.observe(frame);
+  // The player resolved its mode under the old preference, so it is rebuilt;
+  // a reveal already seen is not played again.
+  const unsubscribe = subscribePresentation(() => {
+    const finished = player?.state.finished === true;
+    stop();
+    const size = measuredSize(frame.getBoundingClientRect().width, frame.getBoundingClientRect().height);
+    if (size) start(size.width, size.height, finished);
+  });
   return () => {
+    unsubscribe();
     observer.disconnect();
-    if (unready) unready();
-    player?.dispose();
+    stop();
   };
 }
 

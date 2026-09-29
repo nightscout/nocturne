@@ -52,6 +52,7 @@
         fit: fit ?? backgroundFit,
         surface,
         fitAnchor: 'bottom-left',
+        releaseAfterFinish: true,
       },
       onready,
     );

@@ -65,7 +65,7 @@ impl GpuContext {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nocturne-watercolour"),
-                required_features: wgpu::Features::empty(),
+                required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
                 required_limits: wgpu::Limits::default(),
                 ..Default::default()
             })
@@ -130,6 +130,15 @@ impl GpuContext {
 
     pub fn adapter_name(&self) -> &str {
         &self.inner.info.name
+    }
+
+    /// Whether the device records GPU timestamps (`TIMESTAMP_QUERY`, taken
+    /// whenever the adapter offers it); see `GpuEngine::gpu_timings`.
+    pub fn has_timestamps(&self) -> bool {
+        self.inner
+            .device
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY)
     }
 
     pub fn backend(&self) -> wgpu::Backend {

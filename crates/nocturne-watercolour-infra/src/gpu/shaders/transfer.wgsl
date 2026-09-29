@@ -1,6 +1,7 @@
 // Rule: Curtis TransferPigment plus evaporation, capillary absorption and
-// drying (sim::pass_transfer). Per cell, in place: each invocation touches
-// only its own index. Deviations from Curtis shared with the CPU reference:
+// drying (sim::pass_transfer). Per cell: each invocation touches only its
+// own index, reading water from advect's scratch and suspended pigment from
+// wherever the swirl left it, and writing both back into state. Deviations from Curtis shared with the CPU reference:
 // deposition follows the settle rule (a thinning film settles hard, while a
 // deep film still settles by density and stains by staining power), flow
 // speed keeps pigment suspended, and lift needs water and grows with flow.
@@ -8,12 +9,17 @@
 // adds to the fibres out of the film, so the sheet cannot manufacture water.
 // No deviation from the CPU reference.
 
-@compute @workgroup_size(256)
-fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if i >= P.n { return; }
-    if wet(i) == 0.0 { return; }
-    let p = state[o_p() + i];
+fn transfer_cell(i: u32, g_in_scratch: bool) {
+    let p = scratch[so_p() + i];
+    if wet(i) == 0.0 {
+        state[o_p() + i] = p;
+        if g_in_scratch {
+            for (var k = 0u; k < P.pigment_count; k++) {
+                state[o_g(k) + i] = scratch[so_g(k) + i];
+            }
+        }
+        return;
+    }
     let h = state[o_h() + i];
     let m = state[o_m() + i];
     let dry_rate = state[o_dry_rate()];
@@ -27,7 +33,8 @@ fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
         let coef = pigments[k];
         let gi = o_g(k) + i;
         let di = o_d(k) + i;
-        let g = state[gi];
+        var g = state[gi];
+        if g_in_scratch { g = scratch[so_g(k) + i]; }
         let d = state[di];
         let carry = clamp(1.0 - speed * P.carry * (P.carry_reach - coef.density), P.carry_min, 1.0);
         let settle = coef.density * (settle_gate + P.wet_settle * w) + P.stain_bite * coef.staining_power * w;
@@ -59,4 +66,18 @@ fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
         state[o_v() + i] = 0.0;
     }
     state[o_p() + i] = np;
+}
+
+@compute @workgroup_size(256)
+fn transfer(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    transfer_cell(i, false);
+}
+
+@compute @workgroup_size(256)
+fn transfer_g_scratch(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    transfer_cell(i, true);
 }
