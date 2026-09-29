@@ -524,7 +524,7 @@
           <RadioGroup.Card value="still">
             <div class="font-semibold">Still</div>
             <p class="text-sm text-muted-foreground">
-              Show finished paintings without animation. Uses less battery.
+              Show finished paintings without animation.
             </p>
           </RadioGroup.Card>
           <RadioGroup.Card value="off">

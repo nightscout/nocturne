@@ -51,12 +51,13 @@
    * settled within 90 ms of the hover or it falls back to a still.
    *
    * Resolves false where there is no GPU, which needs no handling: that is the
-   * case the baked and static paths exist for. Skipped where nothing would use
-   * the engine (`still`, `off`) or the user asked to save data; a route that
-   * wants live artwork then boots the engine on demand.
+   * case the baked and static paths exist for. Washes have no baked assets, so `still`
+   * resolves them live too. Skipped for `off` (nothing uses the engine) or when
+   * the user asked to save data; a route that wants live artwork then boots the
+   * engine on demand.
    */
   $effect(() => {
-    if (illustrations.current !== "animated") return;
+    if (illustrations.current === "off") return;
     const connection: { saveData?: boolean } | undefined = Reflect.get(navigator, "connection");
     if (connection?.saveData) return;
     void getEngineHost().warmWhenIdle();
