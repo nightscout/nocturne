@@ -12,6 +12,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
 
 namespace Nocturne.API.Services.SetupHub;
 
@@ -22,9 +23,11 @@ namespace Nocturne.API.Services.SetupHub;
 /// </summary>
 /// <remarks>
 /// "This device" is an <c>in_app</c> channel addressed to the caller: it is the one channel routed
-/// to a person, so a caregiver's alerts reach the caregiver, and the browser shows it as a
-/// notification. A test confirmed received is what makes the item done
-/// (<see cref="Items.AlertsItem"/>).
+/// to a person, and an open, signed-in Nocturne page raises it as a system notification. It shows
+/// nothing while Nocturne is closed, so a caregiver needs a channel that delivers without it, and a
+/// patient who keeps only this device confirms they understand that
+/// (<see cref="ConfirmReceivedAsync"/>). A test confirmed received is what makes the item done
+/// (<see cref="AlertDeliveryCheck"/>).
 /// </remarks>
 public class AlertSetupService(
     NocturneDbContext db,
@@ -47,6 +50,14 @@ public class AlertSetupService(
             [StarterAlertKind.NoReadings] = ("No readings for 20 minutes", AlertRuleSeverity.Warning, null, 0),
         };
 
+    /// <summary>
+    /// What can be chosen instead of this device. <c>device_action</c> is left to the rule builder:
+    /// a device that runs its own engine takes no delivery from a test.
+    /// </summary>
+    private static readonly IReadOnlyList<ChannelType> ChannelTypesOffered = ChannelDestinations.Offered
+        .Where(t => AlertDeliveryCheck.DeliversWhileClosed(t) && t != ChannelType.DeviceAction)
+        .ToList();
+
     private readonly AlertRuleChannelWriter _channels = new(encryption);
 
     public async Task<AlertSetupStatus> GetAsync(Guid callerId, CancellationToken ct)
@@ -68,11 +79,8 @@ public class AlertSetupService(
             ? PrimaryChannels(first, callerId).ToList()
             : [];
         var toThisDevice = starters.Count == 0
-            || primary is [{ ChannelType: ChannelType.InApp } only] && only.Destination == callerId.ToString();
-
-        var starterIds = starters.Values.Where(r => r.IsEnabled).Select(r => r.Id).ToList();
-        var verified = await db.AlertInstances.AsNoTracking().AnyAsync(
-            i => i.ReceiptConfirmedAt != null && starterIds.Contains(i.AlertExcursion!.AlertRuleId), ct);
+            ? routing != AlertRouting.ToYouAsCaregiver
+            : primary is [{ ChannelType: ChannelType.InApp } only] && only.Destination == callerId.ToString();
 
         var members = routing == AlertRouting.ToYou
             ? await MembersAsync(callerId, starters.GetValueOrDefault(StarterAlertKind.UrgentLow), ct)
@@ -81,7 +89,11 @@ public class AlertSetupService(
         return new AlertSetupStatus(
             routing, units, starters.Count > 0, rules, toThisDevice,
             toThisDevice ? [] : primary.Select(ToResponse).ToList(),
-            verified, members);
+            ChannelTypesOffered,
+            primary.Any(c => AlertDeliveryCheck.DeliversWhileClosed(c.ChannelType)),
+            routing == AlertRouting.ToYouAsCaregiver,
+            await AlertDeliveryCheck.VerifiedAsync(db, ct),
+            members);
     }
 
     /// <summary>
@@ -90,9 +102,27 @@ public class AlertSetupService(
     /// that reads the same as the stored value keeps the stored value, so a round trip through
     /// mmol/L never moves it.
     /// </summary>
+    /// <remarks>
+    /// Urgent low always sounds through Do Not Disturb, and every rule does for a caregiver. Two
+    /// saves racing to create the rules meet at the one-per-kind index; the loser saves again over
+    /// the winner's rules.
+    /// </remarks>
     /// <exception cref="ArgumentException">A threshold is missing or out of range, or a channel cannot deliver.</exception>
     /// <exception cref="InvalidOperationException">The onboarder is a helper, who leaves alerts to the recipient.</exception>
     public async Task<AlertSetupStatus> SaveAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
+    {
+        try
+        {
+            return await SaveOnceAsync(callerId, request, ct);
+        }
+        catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            db.ChangeTracker.Clear();
+            return await SaveOnceAsync(callerId, request, ct);
+        }
+    }
+
+    private async Task<AlertSetupStatus> SaveOnceAsync(Guid callerId, SaveAlertSetupRequest request, CancellationToken ct)
     {
         var routing = await RoutingAsync(ct);
         if (routing == AlertRouting.LeftForRecipient)
@@ -100,8 +130,7 @@ public class AlertSetupService(
         if (request.Rules.GroupBy(r => r.Kind).Any(g => g.Count() > 1))
             throw new ArgumentException("Each starter rule may be given once.");
 
-        var channelRequests = request.Channels
-            ?? [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.InApp, Destination = callerId.ToString() }];
+        var channelRequests = ChannelsFor(callerId, request.Channels);
         if (await _channels.ResolveAndValidateAsync(channelRequests, db, callerId, ct) is { } badChannel)
             throw new ArgumentException(badChannel);
 
@@ -120,7 +149,9 @@ public class AlertSetupService(
 
             var enabled = asked?.IsEnabled ?? rule?.IsEnabled ?? true;
             var stored = rule is null ? defaultMgdl : ThresholdOf(rule);
-            var mgdl = direction is null || asked is null ? stored : ToMgdl(kind, asked.Threshold, stored, units);
+            var mgdl = direction is null || asked is null || (asked.Threshold is null && !enabled)
+                ? stored
+                : ToMgdl(kind, asked.Threshold, stored, units);
             var conditionType = direction is null ? AlertConditionType.SignalLoss : AlertConditionType.Threshold;
             var conditionParams = direction is null
                 ? JsonSerializer.Serialize(new { timeout_minutes = NoReadingsMinutes })
@@ -157,7 +188,7 @@ public class AlertSetupService(
                 rule.UpdatedAt = now;
             }
 
-            if (routing == AlertRouting.ToYouAsCaregiver)
+            if (kind == StarterAlertKind.UrgentLow || routing == AlertRouting.ToYouAsCaregiver)
                 rule.AllowThroughDnd = true;
 
             ReplacePrimaryChannels(rule, callerId, channelRequests);
@@ -216,24 +247,38 @@ public class AlertSetupService(
     }
 
     /// <summary>
-    /// Records that the test alert arrived. Only a test Nocturne did send counts: one whose every
-    /// delivery failed cannot have arrived, whatever the answer.
+    /// Records that the test alert arrived. Only a test Nocturne sent to the rule's channels as they
+    /// are now counts (<see cref="AlertDeliveryCheck.Matches"/>). A caregiver's must have reached a
+    /// channel that delivers while Nocturne is closed; anyone else's that reached none needs
+    /// <paramref name="acknowledgedOpenPageOnly"/>.
     /// </summary>
     /// <exception cref="KeyNotFoundException">No test of a starter rule has this id.</exception>
-    /// <exception cref="InvalidOperationException">Every delivery of the test failed, or the onboarder is a helper.</exception>
-    public async Task<AlertSetupStatus> ConfirmReceivedAsync(Guid callerId, Guid instanceId, CancellationToken ct)
+    /// <exception cref="InvalidOperationException">The test cannot show that alerts reach the caller, or the onboarder is a helper.</exception>
+    public async Task<AlertSetupStatus> ConfirmReceivedAsync(
+        Guid callerId, Guid instanceId, bool acknowledgedOpenPageOnly, CancellationToken ct)
     {
-        if (await RoutingAsync(ct) == AlertRouting.LeftForRecipient)
+        var routing = await RoutingAsync(ct);
+        if (routing == AlertRouting.LeftForRecipient)
             throw new InvalidOperationException("The person this is handed over to chooses where alerts go.");
 
         var instance = await db.AlertInstances
+            .Include(i => i.AlertExcursion)
             .Where(i => i.IsTest && i.AlertExcursion!.AlertRule!.StarterKind != null)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct)
             ?? throw new KeyNotFoundException();
 
-        var sent = await db.AlertDeliveries.AnyAsync(d => d.AlertInstanceId == instanceId && d.Status != "failed", ct);
-        if (!sent)
-            throw new InvalidOperationException("Every delivery of this test failed.");
+        var sent = await AlertDeliveryCheck.SentToAsync(db, instanceId, ct);
+        var current = await db.AlertRuleChannels.AsNoTracking()
+            .Where(c => c.AlertRuleId == instance.AlertExcursion!.AlertRuleId)
+            .ToListAsync(ct);
+        if (!AlertDeliveryCheck.Matches(sent, current))
+            throw new InvalidOperationException("This test did not reach every place alerts now go. Send another.");
+
+        var whileClosed = sent.Any(s => AlertDeliveryCheck.DeliversWhileClosed(s.Type));
+        if (!whileClosed && routing == AlertRouting.ToYouAsCaregiver)
+            throw new InvalidOperationException("A caregiver's alerts need a destination that works while Nocturne is closed.");
+        if (!whileClosed && !acknowledgedOpenPageOnly)
+            throw new InvalidOperationException("Alerts on this device show only while Nocturne is open, which needs acknowledging.");
 
         instance.ReceiptConfirmedAt ??= DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -277,6 +322,32 @@ public class AlertSetupService(
 
         await db.SaveChangesAsync(ct);
         return await GetAsync(callerId, ct);
+    }
+
+    /// <summary>
+    /// The channels a save asks for. None asks for this device. <c>web_push</c> reaches no browser,
+    /// and an <c>in_app</c> channel reaches the caller or no one.
+    /// </summary>
+    private static List<CreateAlertRuleChannelRequest> ChannelsFor(Guid callerId, List<CreateAlertRuleChannelRequest>? requested)
+    {
+        if (requested is null)
+            return [new CreateAlertRuleChannelRequest { ChannelType = ChannelType.InApp, Destination = callerId.ToString() }];
+        if (requested.Count == 0)
+            throw new ArgumentException("Choose where alerts go.");
+
+        foreach (var channel in requested)
+        {
+            if (channel.ChannelType == ChannelType.WebPush)
+                throw new ArgumentException("Browser push reaches no browser yet. Choose another destination.");
+            if (channel.ChannelType != ChannelType.InApp)
+                continue;
+            if (string.IsNullOrWhiteSpace(channel.Destination))
+                channel.Destination = callerId.ToString();
+            else if (channel.Destination != callerId.ToString())
+                throw new ArgumentException("An in-app alert set up here goes to you.");
+        }
+
+        return requested;
     }
 
     private IQueryable<AlertInstanceEntity> StarterTests() =>

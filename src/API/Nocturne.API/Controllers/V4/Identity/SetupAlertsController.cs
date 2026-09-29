@@ -68,8 +68,9 @@ public class SetupAlertsController(AlertSetupService alerts) : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public Task<ActionResult<AlertSetupStatus>> ConfirmSetupTestAlertReceived(Guid instanceId, CancellationToken ct) =>
-        Run(caller => alerts.ConfirmReceivedAsync(caller, instanceId, ct));
+    public Task<ActionResult<AlertSetupStatus>> ConfirmSetupTestAlertReceived(
+        Guid instanceId, [FromBody] ConfirmSetupTestAlertRequest request, CancellationToken ct) =>
+        Run(caller => alerts.ConfirmReceivedAsync(caller, instanceId, request.AcknowledgedOpenPageOnly, ct));
 
     /// <summary>Also sends urgent low alerts to another member, or stops.</summary>
     [DenyDemoSubject]

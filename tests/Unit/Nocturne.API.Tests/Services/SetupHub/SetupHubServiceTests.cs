@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Contracts.SetupHub;
+using Nocturne.Core.Models.Alerts;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -62,12 +63,24 @@ public class SetupHubServiceTests
             Id = Guid.CreateVersion7(), TenantId = TenantId, AlertRuleId = rule.Id,
             StartedAt = DateTime.UtcNow, EndedAt = DateTime.UtcNow,
         };
-        _db.AlertRules.Add(rule);
-        _db.AlertExcursions.Add(excursion);
-        _db.AlertInstances.Add(new AlertInstanceEntity
+        var channel = new AlertRuleChannelEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, AlertRuleId = rule.Id,
+            ChannelType = ChannelType.Webhook, Destination = "https://example.invalid/alerts",
+        };
+        var instance = new AlertInstanceEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, AlertExcursionId = excursion.Id, Status = "test",
             TriggeredAt = DateTime.UtcNow, IsTest = true, ReceiptConfirmedAt = confirmed ? DateTime.UtcNow : null,
+        };
+        _db.AlertRules.Add(rule);
+        _db.AlertRuleChannels.Add(channel);
+        _db.AlertExcursions.Add(excursion);
+        _db.AlertInstances.Add(instance);
+        _db.AlertDeliveries.Add(new AlertDeliveryEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, AlertInstanceId = instance.Id, AlertRuleChannelId = channel.Id,
+            ChannelType = channel.ChannelType, Destination = channel.Destination, Status = "delivered", IsTest = true,
         });
         return rule;
     }

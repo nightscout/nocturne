@@ -75,6 +75,20 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     private static decimal StoredValue(JsonElement rule) =>
         rule.GetProperty("conditionParams").GetProperty("value").GetDecimal();
 
+    private static readonly object[] Webhook =
+        [new { channelType = "webhook", destination = "https://example.invalid/alerts" }];
+
+    private async Task<JsonElement> SendTestAsync() =>
+        await ReadAsync(await AuthenticatedClient.PostAsync($"{Setup}/test", null));
+
+    private async Task<HttpResponseMessage> ConfirmAsync(string instanceId, bool acknowledged = false) =>
+        await AuthenticatedClient.PostAsJsonAsync(
+            $"{Setup}/test/{instanceId}/received", new { acknowledgedOpenPageOnly = acknowledged });
+
+    /// <summary>What the bot's callback records once an off-page channel has sent the alert.</summary>
+    private Task MarkDeliveredAsync(string instanceId) =>
+        SqlAsync("UPDATE alert_deliveries SET status = 'delivered' WHERE alert_instance_id = @i", ("i", Guid.Parse(instanceId)));
+
     private async Task<string> HubStateAsync()
     {
         var hub = await ReadAsync(await AuthenticatedClient.GetAsync("/api/v4/setup-hub"));
@@ -110,6 +124,8 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
             var channel = rule.GetProperty("channels").EnumerateArray().Should().ContainSingle().Subject;
             channel.GetProperty("channelType").GetString().Should().Be("in_app");
             channel.GetProperty("destination").GetString().Should().Be(Fixture.OwnerSubjectId.ToString());
+            rule.GetProperty("allowThroughDnd").GetBoolean().Should().Be(
+                rule.GetProperty("name").GetString() == "Urgent low", "urgent low always sounds through Do Not Disturb");
         }
 
         await SaveAsync(Rules(55, 70, 250));
@@ -149,19 +165,68 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
         (await AlertRulesByNameAsync())["Urgent low"].GetProperty("isEnabled").GetBoolean().Should().BeTrue();
 
         await SaveAsync(Rules(5, 70, 250), expected: HttpStatusCode.BadRequest);
+
+        var clearedWhileOff = new object[]
+        {
+            new { kind = "UrgentLow", isEnabled = false, threshold = (decimal?)null },
+            new { kind = "Low", isEnabled = true, threshold = (decimal?)70 },
+            new { kind = "High", isEnabled = true, threshold = (decimal?)250 },
+            new { kind = "NoReadings", isEnabled = true, threshold = (decimal?)null },
+        };
+        await SaveAsync(clearedWhileOff);
+        StoredValue((await AlertRulesByNameAsync())["Urgent low"]).Should().Be(55, "a switched-off rule keeps its threshold");
     }
 
     [Fact]
-    public async Task Caregiver_HasAlertsSentToThemselves_OvernightIncluded()
+    public async Task Save_RefusesNoDestination_AndBrowserPush_AndAddressesABlankInAppChannelToTheCaller()
+    {
+        await SaveAsync(Rules(55, 70, 250), Array.Empty<object>(), HttpStatusCode.BadRequest);
+        await SaveAsync(Rules(55, 70, 250), new object[] { new { channelType = "web_push" } }, HttpStatusCode.BadRequest);
+
+        var saved = await SaveAsync(Rules(55, 70, 250), new object[] { new { channelType = "in_app" } });
+
+        saved.GetProperty("toThisDevice").GetBoolean().Should().BeTrue();
+        (await AlertRulesByNameAsync())["Low"].GetProperty("channels")[0].GetProperty("destination").GetString()
+            .Should().Be(Fixture.OwnerSubjectId.ToString());
+    }
+
+    [Fact]
+    public async Task TwoSavesAtOnce_MakeOneSetOfStarterRules()
+    {
+        await Task.WhenAll(
+            AuthenticatedClient.PutAsJsonAsync(Setup, new { rules = Rules(55, 70, 250) }),
+            AuthenticatedClient.PutAsJsonAsync(Setup, new { rules = Rules(55, 70, 250) }));
+
+        (await AlertRulesByNameAsync()).Should().HaveCount(4);
+    }
+
+    [Fact]
+    public async Task Caregiver_IsDoneOnlyByATestToADestinationThatWorksWithNocturneClosed()
     {
         await RelationshipAsync("Caregiver");
+        var before = await GetSetupAsync();
+        before.GetProperty("toThisDevice").GetBoolean().Should().BeFalse("a caregiver is steered off this device");
+        before.GetProperty("needsDeliveryWhileClosed").GetBoolean().Should().BeTrue();
+        before.GetProperty("channelTypesOffered").EnumerateArray().Select(t => t.GetString())
+            .Should().Contain("telegram_dm").And.NotContain("web_push").And.NotContain("in_app");
 
-        var saved = await SaveAsync(Rules(55, 70, 250));
-
-        saved.GetProperty("routing").GetString().Should().Be("ToYouAsCaregiver");
-        saved.GetProperty("toThisDevice").GetBoolean().Should().BeTrue();
+        var onDevice = await SaveAsync(Rules(55, 70, 250));
+        onDevice.GetProperty("routing").GetString().Should().Be("ToYouAsCaregiver");
+        onDevice.GetProperty("deliversWhileClosed").GetBoolean().Should().BeFalse();
         foreach (var rule in (await AlertRulesByNameAsync()).Values)
             rule.GetProperty("allowThroughDnd").GetBoolean().Should().BeTrue();
+
+        var deviceTest = (await SendTestAsync()).GetProperty("instanceId").GetString()!;
+        (await ConfirmAsync(deviceTest, acknowledged: true)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await HubStateAsync()).Should().Be("Open");
+
+        var offPage = await SaveAsync(Rules(55, 70, 250), Webhook);
+        offPage.GetProperty("deliversWhileClosed").GetBoolean().Should().BeTrue();
+        var webhookTest = (await SendTestAsync()).GetProperty("instanceId").GetString()!;
+        await MarkDeliveredAsync(webhookTest);
+
+        (await ReadAsync(await ConfirmAsync(webhookTest))).GetProperty("verified").GetBoolean().Should().BeTrue();
+        (await HubStateAsync()).Should().Be("Done");
     }
 
     [Fact]
@@ -220,11 +285,38 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
             .Which.GetProperty("channelType").GetString().Should().Be("in_app");
         (await HubStateAsync()).Should().Be("Open", "sending a test is not knowing it arrived");
 
-        (await AuthenticatedClient.PostAsync($"{Setup}/test/{Guid.CreateVersion7()}/received", null))
+        (await ConfirmAsync(Guid.CreateVersion7().ToString(), acknowledged: true))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        var confirmed = await ReadAsync(await AuthenticatedClient.PostAsync($"{Setup}/test/{instanceId}/received", null));
+        (await ConfirmAsync(instanceId!)).StatusCode.Should().Be(
+            HttpStatusCode.Conflict, "this device only shows alerts while Nocturne is open, which must be acknowledged");
+
+        var confirmed = await ReadAsync(await ConfirmAsync(instanceId!, acknowledged: true));
         confirmed.GetProperty("verified").GetBoolean().Should().BeTrue();
         (await HubStateAsync()).Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task AConfirmedTest_StopsCounting_OnceAlertsGoSomewhereElse()
+    {
+        await SaveAsync(Rules(55, 70, 250));
+        var test = (await SendTestAsync()).GetProperty("instanceId").GetString()!;
+        (await ReadAsync(await ConfirmAsync(test, acknowledged: true))).GetProperty("verified").GetBoolean().Should().BeTrue();
+
+        var moved = await SaveAsync(Rules(55, 70, 250), Webhook);
+
+        moved.GetProperty("verified").GetBoolean().Should().BeFalse("the test never went to the webhook");
+        (await ConfirmAsync(test, acknowledged: true)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task ATestNocturneCouldNotSend_CannotBeConfirmed()
+    {
+        await SaveAsync(Rules(55, 70, 250), Webhook);
+        var test = await SendTestAsync();
+        test.GetProperty("deliveries")[0].GetProperty("status").GetString().Should().Be("failed");
+
+        (await ConfirmAsync(test.GetProperty("instanceId").GetString()!, acknowledged: true))
+            .StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 }

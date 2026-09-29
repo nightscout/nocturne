@@ -28,9 +28,15 @@ public record AlertSetupMember(Guid SubjectId, string Name, bool AlertedToUrgent
 
 /// <param name="GlucoseUnits">"mg/dl" or "mmol": the caller's units, which thresholds are read and written in.</param>
 /// <param name="Saved">Whether the starter rules exist yet. Until they do, <paramref name="Rules"/> holds the starting points.</param>
-/// <param name="ToThisDevice">Whether alerts come to the caller's own account rather than to <paramref name="Channels"/>.</param>
+/// <param name="ToThisDevice">
+/// Whether alerts come to the caller's own account in Nocturne rather than to <paramref name="Channels"/>.
+/// Before the rules are saved, whether that is the suggested choice.
+/// </param>
 /// <param name="Channels">Where alerts go when not to this device.</param>
-/// <param name="Verified">Whether the caller confirmed a test alert from an enabled starter rule arrived.</param>
+/// <param name="ChannelTypesOffered">The channel types that can be chosen instead of this device: those that deliver while Nocturne is closed.</param>
+/// <param name="DeliversWhileClosed">Whether a saved destination reaches the caller with no Nocturne page open.</param>
+/// <param name="NeedsDeliveryWhileClosed">Whether the item needs such a destination to be done, as a caregiver's does.</param>
+/// <param name="Verified">Whether a confirmed test alert went to the destination saved now (<see cref="AlertDeliveryCheck"/>).</param>
 /// <param name="Members">The people who can also be sent urgent low alerts; only listed for <see cref="AlertRouting.ToYou"/>.</param>
 public record AlertSetupStatus(
     AlertRouting Routing,
@@ -39,6 +45,9 @@ public record AlertSetupStatus(
     IReadOnlyList<StarterAlertRule> Rules,
     bool ToThisDevice,
     IReadOnlyList<AlertRuleChannelResponse> Channels,
+    IReadOnlyList<ChannelType> ChannelTypesOffered,
+    bool DeliversWhileClosed,
+    bool NeedsDeliveryWhileClosed,
     bool Verified,
     IReadOnlyList<AlertSetupMember> Members);
 
@@ -51,7 +60,7 @@ public record StarterAlertRuleRequest
     [JsonRequired]
     public bool IsEnabled { get; init; }
 
-    /// <summary>In the caller's units. Required for every kind but <see cref="StarterAlertKind.NoReadings"/>.</summary>
+    /// <summary>In the caller's units. Required for an enabled rule of any kind but <see cref="StarterAlertKind.NoReadings"/>.</summary>
     public decimal? Threshold { get; init; }
 }
 
@@ -62,6 +71,15 @@ public record SaveAlertSetupRequest
 
     /// <summary>Where every starter rule sends its alerts. Null sends them to the caller on this device.</summary>
     public List<CreateAlertRuleChannelRequest>? Channels { get; init; }
+}
+
+public record ConfirmSetupTestAlertRequest
+{
+    /// <summary>
+    /// That the caller understands alerts sent only to this device show only while Nocturne is open.
+    /// Required to confirm a test that reached no channel delivering while Nocturne is closed.
+    /// </summary>
+    public bool AcknowledgedOpenPageOnly { get; init; }
 }
 
 public record SetUrgentLowRecipientRequest

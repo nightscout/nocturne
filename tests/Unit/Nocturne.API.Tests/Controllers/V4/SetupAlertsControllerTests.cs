@@ -28,7 +28,7 @@ public class SetupAlertsControllerTests
         (await controller.SaveAlertSetup(new SaveAlertSetupRequest(), CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
         (await controller.SendSetupTestAlert(CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
         (await controller.GetSetupTestAlert(id, CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
-        (await controller.ConfirmSetupTestAlertReceived(id, CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
+        (await controller.ConfirmSetupTestAlertReceived(id, new ConfirmSetupTestAlertRequest(), CancellationToken.None)).Result.Should().BeOfType<ForbidResult>();
         (await controller.SetUrgentLowRecipient(id, new SetUrgentLowRecipientRequest { Alerted = true }, CancellationToken.None))
             .Result.Should().BeOfType<ForbidResult>();
     }

@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260929085830_AddAlertSetupStarterRules")]
+    [Migration("20260929104534_AddAlertSetupStarterRules")]
     partial class AddAlertSetupStarterRules
     {
         /// <inheritdoc />
@@ -590,6 +590,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasFilter("managed_by IS NOT NULL");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("StarterKind", "TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_alert_rules_starter_kind_tenant")
+                        .HasFilter("starter_kind IS NOT NULL");
 
                     b.ToTable("alert_rules", (string)null);
                 });

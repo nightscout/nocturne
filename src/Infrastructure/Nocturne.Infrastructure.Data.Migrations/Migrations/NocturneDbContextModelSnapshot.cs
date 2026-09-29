@@ -588,6 +588,11 @@ namespace Nocturne.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId");
 
+                    b.HasIndex("StarterKind", "TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_alert_rules_starter_kind_tenant")
+                        .HasFilter("starter_kind IS NOT NULL");
+
                     b.ToTable("alert_rules", (string)null);
                 });
 
