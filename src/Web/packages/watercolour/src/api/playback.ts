@@ -247,13 +247,17 @@ class LiveBackend implements Backend {
       // at every size. An explicit `detail`/`simResolution` option wins.
       const longEdge = Math.max(size.width, size.height);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
-      const sceneJson = isArtworkRef(source) || isIconRef(source)
+      const engineAuthored = isArtworkRef(source) || isIconRef(source);
+      const sceneJson = engineAuthored
         ? resolveSceneJson(lease.module, source, {
             detail: resolvedDetail,
             simResolution: options.simResolution,
           })
         : authoredSceneJson(source, lease.module);
-      parseSceneDocument(sceneJson);
+      // The engine writes its own documents at the version it reads, and a
+      // full parse of one only to read that field is main-thread time per
+      // artwork; a caller's document still gets the typed version error.
+      if (!engineAuthored) parseSceneDocument(sceneJson);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
       // phase does NOT get.
