@@ -2,6 +2,7 @@ using FluentAssertions;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Contracts.SetupHub;
+using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -158,6 +159,93 @@ public class SetupHubServiceTests
         var hub = await Service.GetAsync(CancellationToken.None);
 
         hub.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.Open);
+    }
+
+    private void AddMember(bool system = false)
+    {
+        var subject = new SubjectEntity { Id = Guid.CreateVersion7(), Name = system ? "Public" : "Person", IsSystemSubject = system };
+        _db.Subjects.Add(subject);
+        _db.TenantMembers.Add(new TenantMemberEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = subject.Id });
+    }
+
+    private void AddGrant(string grantType, DateTime? expiresAt = null, DateTime? revokedAt = null) =>
+        _db.OAuthGrants.Add(new OAuthGrantEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, SubjectId = Guid.CreateVersion7(), GrantType = grantType,
+            ExpiresAt = expiresAt, RevokedAt = revokedAt,
+        });
+
+    private void AddInvite(DateTime expiresAt, DateTime? revokedAt = null, int useCount = 0) =>
+        _db.MemberInvites.Add(new MemberInviteEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, TokenHash = "hash", ExpiresAt = expiresAt,
+            RevokedAt = revokedAt, MaxUses = 1, UseCount = useCount,
+        });
+
+    private async Task<SetupHubItemState> SharingStateAsync() =>
+        (await Service.GetAsync(CancellationToken.None)).Items.Single(i => i.Key == SetupHubItemKey.Sharing).State;
+
+    [Fact]
+    public async Task Sharing_StaysOpen_ForAnOwnerAloneWithTheirOwnAppsAndTokens()
+    {
+        AddMember();
+        AddMember(system: true);
+        AddGrant(OAuthGrantTypes.App);
+        AddGrant(OAuthGrantTypes.Direct);
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Open);
+    }
+
+    [Fact]
+    public async Task Sharing_StaysOpen_ForInvitesAndGuestLinksThatCanNoLongerLetAnyoneIn()
+    {
+        var past = DateTime.UtcNow.AddHours(-1);
+        var future = DateTime.UtcNow.AddDays(7);
+        AddMember();
+        AddInvite(future, revokedAt: past);
+        AddInvite(past);
+        AddGrant(OAuthGrantTypes.Guest, expiresAt: past);
+        AddGrant(OAuthGrantTypes.Guest, expiresAt: future, revokedAt: past);
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Open, "done never reverts, so only a live link may reach it");
+    }
+
+    [Theory]
+    [InlineData("invite")]
+    [InlineData("accepted invite")]
+    [InlineData("guest link")]
+    [InlineData("follower")]
+    [InlineData("public link")]
+    [InlineData("second member")]
+    public async Task Sharing_IsDone_OnceAnyoneElseIsLetIn(string how)
+    {
+        AddMember();
+        switch (how)
+        {
+            case "invite": AddInvite(DateTime.UtcNow.AddDays(7)); break;
+            case "accepted invite": AddInvite(DateTime.UtcNow.AddHours(-1), useCount: 1); break;
+            case "guest link": AddGrant(OAuthGrantTypes.Guest, expiresAt: DateTime.UtcNow.AddHours(48)); break;
+            case "follower": AddGrant(OAuthGrantTypes.Follower); break;
+            case "public link": _db.Tenants.Single(t => t.Id == TenantId).ShareToken = "digest"; break;
+            case "second member": AddMember(); break;
+        }
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Done);
+    }
+
+    [Fact]
+    public async Task Sharing_JustMe_ResolvesIt_UntilTheOwnerSharesAfterAll()
+    {
+        var justMe = await Service.SetStateAsync(SetupHubItemKey.Sharing, SetupHubItemState.NotForMe, CancellationToken.None);
+        justMe.Items.Single(i => i.Key == SetupHubItemKey.Sharing).State.Should().Be(SetupHubItemState.NotForMe);
+
+        AddGrant(OAuthGrantTypes.Guest);
+        await _db.SaveChangesAsync();
+
+        (await SharingStateAsync()).Should().Be(SetupHubItemState.Done);
     }
 
     [Fact]
