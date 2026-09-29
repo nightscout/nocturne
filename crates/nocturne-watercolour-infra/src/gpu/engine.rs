@@ -371,6 +371,8 @@ pub struct CommandCounts {
     /// Buffer-to-buffer copies and clears.
     pub copies: u64,
     pub submits: u64,
+    /// Bytes handed to `write_buffer`.
+    pub uploaded_bytes: u64,
 }
 
 #[derive(Default)]
@@ -379,6 +381,7 @@ struct CommandCounter {
     dispatches: AtomicU64,
     copies: AtomicU64,
     submits: AtomicU64,
+    uploaded_bytes: AtomicU64,
 }
 
 impl CommandCounter {
@@ -392,6 +395,7 @@ impl CommandCounter {
             dispatches: self.dispatches.load(Ordering::Relaxed),
             copies: self.copies.load(Ordering::Relaxed),
             submits: self.submits.load(Ordering::Relaxed),
+            uploaded_bytes: self.uploaded_bytes.load(Ordering::Relaxed),
         }
     }
 }
@@ -865,6 +869,11 @@ impl GpuEngine {
         Ok(())
     }
 
+    fn write_buffer(&self, buffer: &wgpu::Buffer, offset: u64, data: &[u8]) {
+        CommandCounter::add(&self.counter.uploaded_bytes, data.len() as u64);
+        self.ctx.queue().write_buffer(buffer, offset, data);
+    }
+
     /// Encodes one tick into `pass`: the same pass order as `sim::step`.
     /// Every dispatch in a compute pass is its own usage scope, so each one
     /// sees the storage writes of the one before; where the CPU swaps
@@ -932,7 +941,7 @@ impl GpuEngine {
 
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
         let l = self.loaded()?;
-        self.ctx.queue().write_buffer(
+        self.write_buffer(
             &l.state,
             (offset_elems * std::mem::size_of::<f32>()) as u64,
             bytemuck::cast_slice(data),
@@ -961,9 +970,8 @@ impl GpuEngine {
 
     fn upload_stamp(&self, stamp: &paint::Stamp, stroke: StrokeUniform) -> Result<(), EngineError> {
         let l = self.loaded()?;
-        let q = self.ctx.queue();
-        q.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&stamp.coverage));
-        q.write_buffer(&l.stroke, 0, bytemuck::bytes_of(&stroke));
+        self.write_buffer(&l.stamp, 0, bytemuck::cast_slice(&stamp.coverage));
+        self.write_buffer(&l.stroke, 0, bytemuck::bytes_of(&stroke));
         Ok(())
     }
 
@@ -1184,9 +1192,7 @@ impl GpuEngine {
             (field.height.len() * std::mem::size_of::<f32>()) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
-        self.ctx
-            .queue()
-            .write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
+        self.write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
         if buffer.size() <= PAPER_CACHE_BYTES {
             let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
             cache.push_back((key, buffer.clone()));
@@ -1348,9 +1354,7 @@ impl GpuEngine {
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
             let uniform = self.render_uniform(l, width, height, y_offset, false);
-            self.ctx
-                .queue()
-                .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
+            self.write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
             let mut enc =
                 self.ctx
                     .device()
@@ -1409,9 +1413,7 @@ impl GpuEngine {
         let l = self.loaded()?;
         let target = self.render_target()?;
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
-        self.ctx
-            .queue()
-            .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
+        self.write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
         let band_rows = render_band_rows(width, height);
         let mut y_offset = 0;
         while y_offset < height {
@@ -1721,9 +1723,8 @@ impl Simulator for GpuEngine {
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
 
-        let q = self.ctx.queue();
-        q.write_buffer(&state, 0, bytemuck::cast_slice(&layout.pack(&grid)));
-        q.write_buffer(
+        self.write_buffer(&state, 0, bytemuck::cast_slice(&layout.pack(&grid)));
+        self.write_buffer(
             &params,
             0,
             bytemuck::bytes_of(&ParamsUniform::new(
@@ -1743,14 +1744,14 @@ impl Simulator for GpuEngine {
                 _pad: 0.0,
             })
             .collect();
-        q.write_buffer(&pigments, 0, bytemuck::cast_slice(&coefs));
+        self.write_buffer(&pigments, 0, bytemuck::cast_slice(&coefs));
         let mut optics_data: Vec<[f32; 4]> = Vec::with_capacity(pigment_count * 3);
         for p in scene.palette.pigments() {
             optics_data.push([p.k.0[0], p.k.0[1], p.k.0[2], 0.0]);
             optics_data.push([p.s.0[0], p.s.0[1], p.s.0[2], 0.0]);
             optics_data.push([p.granulation, 0.0, 0.0, 0.0]);
         }
-        q.write_buffer(&optics, 0, bytemuck::cast_slice(&optics_data));
+        self.write_buffer(&optics, 0, bytemuck::cast_slice(&optics_data));
 
         let bind_group = self
             .ctx
@@ -1990,6 +1991,7 @@ impl Simulator for GpuEngine {
                 label: Some("snapshot"),
             });
         enc.copy_buffer_to_buffer(&l.state, 0, &copy, 0, bytes);
+        CommandCounter::add(&self.counter.copies, 1);
         self.submit(enc.finish())?;
         let id = CheckpointId(self.next_checkpoint);
         self.next_checkpoint += 1;
@@ -2010,6 +2012,7 @@ impl Simulator for GpuEngine {
                 label: Some("restore"),
             });
         enc.copy_buffer_to_buffer(src, 0, &l.state, 0, l.layout.state_bytes());
+        CommandCounter::add(&self.counter.copies, 1);
         self.submit(enc.finish())?;
         self.loaded_mut()?.maybe_wet = true;
         Ok(())

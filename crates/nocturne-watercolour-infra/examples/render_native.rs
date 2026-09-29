@@ -404,8 +404,23 @@ fn tick_bench(gpu: GpuEngine, resolution: u32) -> GpuEngine {
     scene.sim_resolution = SimResolution(resolution);
     let mut pb = Playback::new(gpu, scene.clone(), DURATION_MS).expect("playback");
     let warm = pb.total_ticks() * 3 / 10;
+    let before = pb.simulator().command_counts();
     pb.advance_ticks(warm).expect("advance");
     pb.simulator().sync().expect("sync");
+    let after = pb.simulator().command_counts();
+    println!(
+        "bench {resolution}^2 sim: playback to 30% ({warm} ticks, {} events): {} submits, {} passes, {} copies, {} KB uploaded",
+        scene
+            .timeline
+            .events
+            .iter()
+            .filter(|e| e.at_tick < warm)
+            .count(),
+        after.submits - before.submits,
+        after.passes - before.passes,
+        after.copies - before.copies,
+        (after.uploaded_bytes - before.uploaded_bytes) / 1024,
+    );
     let gpu = pb.simulator();
     let mut tick_ms = Vec::new();
     let mut stamped = Vec::new();
