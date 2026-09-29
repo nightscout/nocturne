@@ -334,7 +334,10 @@ page is already at its cap of `DEFAULT_MAX_LIVE_INSTANCES` (4) - the surface sho
 its ordinary hover state and **no mark**. That is the intended behaviour, not an
 error; the old catalogue fallback was judged not worth keeping alongside. One
 surface is one instance, whatever its size, and hover rarely holds more than one
-open. A host that wants the marks calls `getEngineHost().warmWhenIdle()` (or
+open. Once its stroke has dried a surface lets the instance go and keeps the
+canvas, so a re-open with nothing changed fades the same stroke back in rather
+than simulating it again; a surface scrolled out of range, resized or repainted
+starts over. A scrubbed surface (`progress` set) keeps its instance. A host that wants the marks calls `getEngineHost().warmWhenIdle()` (or
 `warm()` from its own idle hook); without it the first pointer pays the engine
 boot inside its own transition. Warming asks for a WebGPU adapter first, so a
 machine without one fetches and compiles no wasm at all.
