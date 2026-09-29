@@ -3,7 +3,7 @@ import School from "@lucide/svelte/icons/school";
 import Globe from "@lucide/svelte/icons/globe";
 import UserRound from "@lucide/svelte/icons/user-round";
 import type { Component } from "svelte";
-import type { TenantRoleDto } from "$api";
+import { RoleAccessLevel, type TenantRoleDto } from "$api";
 import type { InviteRoleChoice } from "$lib/components/members/CreateInviteCard.svelte";
 import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
@@ -74,45 +74,36 @@ export function sharingAudiences(voice: PatientVoice): SharingAudience[] {
   ];
 }
 
-const isRead = (scope: string) => scope.endsWith(".read") || scope.startsWith("device.");
-const logsTreatments = (scope: string) =>
-  isRead(scope) || scope === "treatments.readwrite" || scope === "alerts.readwrite";
-
 /**
- * The seeded roles a family member or carer is offered, in plain words, matched by slug. Seeded
- * roles' permissions can be edited, so a role is offered only while its permissions still fit what
- * its words promise; the manage level promises the most and so always fits.
+ * The seeded roles a family member or carer is offered, in plain words, matched by slug. Each is
+ * offered only while the server judges its permissions to be at the level its words promise, since
+ * a seeded role's permissions can be edited.
  */
 export function familyRoleChoices(roles: TenantRoleDto[]): InviteRoleChoice[] {
-  const levels: (Omit<InviteRoleChoice, "roleId"> & {
-    slug: string;
-    fits: (scope: string) => boolean;
-  })[] = [
+  const levels: (Omit<InviteRoleChoice, "roleId"> & { slug: string; level: RoleAccessLevel })[] = [
     {
       slug: "clinician",
-      fits: isRead,
+      level: RoleAccessLevel.ReadOnly,
       label: "Can see everything",
       description: "Readings, treatments, devices and reports. They can't change anything.",
     },
     {
       slug: "caretaker",
-      fits: logsTreatments,
+      level: RoleAccessLevel.ReadAndLogTreatments,
       label: "Can see and log treatments",
       description: "They can also log insulin and carbs, and change alerts.",
     },
     {
       slug: "admin",
-      fits: () => true,
+      level: RoleAccessLevel.Manage,
       label: "Can manage settings",
       description:
         "They can also change settings, therapy settings included, edit or delete readings and device data, manage roles, and choose who else has access.",
     },
   ];
 
-  return levels.flatMap(({ slug, fits, label, description }) => {
+  return levels.flatMap(({ slug, level, label, description }) => {
     const role = roles.find((r) => r.slug === slug);
-    return role?.id && (role.permissions ?? []).every(fits)
-      ? [{ roleId: role.id, label, description }]
-      : [];
+    return role?.id && role.accessLevel === level ? [{ roleId: role.id, label, description }] : [];
   });
 }

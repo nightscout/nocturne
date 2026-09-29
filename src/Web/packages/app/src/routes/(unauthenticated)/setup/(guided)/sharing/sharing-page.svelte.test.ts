@@ -6,15 +6,15 @@ import { remoteQuery } from "$lib/test-stubs/remote-resource";
 const state = vi.hoisted(() => ({
   relationship: {} as { relationship?: string; patientName?: string },
   hubState: "Open" as string | undefined,
-  roles: [] as { id: string; slug: string; name: string; permissions: string[] }[],
+  roles: [] as { id: string; slug: string; name: string; accessLevel?: string }[],
 }));
 
 const SEEDED_ROLES = [
-  { slug: "owner", permissions: ["*"] },
-  { slug: "admin", permissions: ["glucose.readwrite", "therapy.readwrite", "members.manage", "roles.manage"] },
-  { slug: "caretaker", permissions: ["glucose.read", "treatments.readwrite", "alerts.readwrite", "device.notify"] },
-  { slug: "viewer", permissions: ["glucose.read", "reports.read"] },
-  { slug: "clinician", permissions: ["glucose.read", "treatments.read", "therapy.read", "device.actuate"] },
+  { slug: "owner", accessLevel: "Manage" },
+  { slug: "admin", accessLevel: "Manage" },
+  { slug: "caretaker", accessLevel: "ReadAndLogTreatments" },
+  { slug: "viewer", accessLevel: "ReadOnly" },
+  { slug: "clinician", accessLevel: "ReadOnly" },
 ].map((r) => ({ ...r, id: `role-${r.slug}`, name: r.slug }));
 
 let share = $state.raw<Record<string, unknown>>({});
@@ -127,11 +127,7 @@ describe("sharing guided page", () => {
 
   it("drops an access level whose role was edited past what its words promise", async () => {
     state.roles = SEEDED_ROLES.map((r) =>
-      r.slug === "clinician"
-        ? { ...r, permissions: [...r.permissions, "glucose.readwrite"] }
-        : r.slug === "caretaker"
-          ? { ...r, permissions: [...r.permissions, "tenant.settings"] }
-          : r,
+      r.slug === "clinician" || r.slug === "caretaker" ? { ...r, accessLevel: "Manage" } : r,
     );
     render(SharingPage);
 
@@ -143,7 +139,7 @@ describe("sharing guided page", () => {
   });
 
   it("falls back to the role picker when no seeded role is left to offer", async () => {
-    state.roles = [{ id: "role-custom", slug: "custom", name: "Custom", permissions: ["glucose.read"] }];
+    state.roles = [{ id: "role-custom", slug: "custom", name: "Custom", accessLevel: "ReadOnly" }];
     render(SharingPage);
 
     await card("family").click();
