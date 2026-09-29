@@ -132,6 +132,7 @@ export class Scheduler {
   private durationCount = 0;
   private durationIndex = 0;
   private lastDuration = 0;
+  private readonly budgetWaiters: Array<() => void> = [];
   private readonly intervals: number[] = [];
   private interval = DEFAULT_FRAME_INTERVAL_MS;
   private readonly onVisibility = () => {
@@ -180,6 +181,15 @@ export class Scheduler {
   budgetRemainingMs(): number {
     if (this.frameStartedAt === undefined) return 0;
     return this.frameBudgetMs - (this.env.now() - this.frameStartedAt);
+  }
+
+  /** Resolves now if the current frame has budget left, else once the next frame has run. */
+  whenBudget(): Promise<void> {
+    if (this.budgetRemainingMs() > 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.budgetWaiters.push(resolve);
+      this.ensureLoop();
+    });
   }
 
   register(target: SchedulerTarget): SchedulerHandle {
@@ -237,6 +247,7 @@ export class Scheduler {
   }
 
   private hasWork(): boolean {
+    if (this.budgetWaiters.length > 0) return true;
     for (const entry of this.entries) {
       if (entry.active && entry.visible) return true;
     }
@@ -264,6 +275,7 @@ export class Scheduler {
     const started = this.env.now();
     this.frameStartedAt = started;
     this.slices.beginFrame();
+    for (const resolve of this.budgetWaiters.splice(0)) resolve();
     this.inFrame = true;
     try {
       for (const entry of Array.from(this.entries)) {

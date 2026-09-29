@@ -38,7 +38,7 @@ describe('presentation preference', () => {
 describe('playback under a presentation', () => {
   const canvas = () => ({ clientWidth: 32, clientHeight: 32, width: 32, height: 32 }) as unknown as HTMLCanvasElement;
   const gpu = async () => ({ webgpu: true, adapter: true, reducedMotion: false, offscreenCanvas: false });
-  const scheduler = { register: () => ({ setActive() {}, dispose() {}, visible: true }) } as never;
+  const scheduler = { register: () => ({ setActive() {}, dispose() {}, visible: true }), whenBudget: async () => {} } as never;
 
   it('off settles on none without probing or fetching anything', async () => {
     setPresentation('off');

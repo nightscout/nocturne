@@ -100,6 +100,9 @@ function manualScheduler() {
   };
 }
 
+/** Lets a player's startup run to where it waits on the scheduler. */
+const idle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const canvas = () => ({ width: 64, height: 64, clientWidth: 64, clientHeight: 64 }) as unknown as HTMLCanvasElement;
 
 function player(instance: ReturnType<typeof fakeInstance>, scheduler: Scheduler, options: PlayerOptions) {
@@ -126,23 +129,24 @@ afterEach(() => {
 
 describe('a live still under reduced motion', () => {
   it('runs its timeline a budgeted slice per frame, then presents once and lets go', async () => {
-    // A tick costs 1 ms of a 10 ms budget (9.6 ms once 16 ms frames are measured); each call is sized from the last.
+    // A tick costs 1 ms of a 10 ms budget; each call is sized from the last.
     const instance = fakeInstance(40);
     const { scheduler, frame, spend } = manualScheduler();
     const advance = instance.advanceTicks;
     instance.advanceTicks = (ticks) => (spend(ticks), advance(ticks));
     const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
-    await still.ready;
     let finished = 0;
     still.on('finished', () => (finished += 1));
-
-    expect(still.state.mode).toBe('live');
+    await idle();
     expect(instance.calls).toEqual([]);
 
+    // It is let in by a frame and starts on what that frame has left.
     frame();
+    await still.ready;
+    expect(still.state.mode).toBe('live');
     expect(instance.calls).toEqual(['ticks:4', 'ticks:6']);
     frame();
-    expect(instance.calls.slice(2)).toEqual(['ticks:9']);
+    expect(instance.calls.slice(2)).toEqual(['ticks:10']);
 
     for (let i = 0; i < 10 && !instance.calls.includes('dispose'); i++) frame();
 
@@ -164,9 +168,9 @@ describe('a live still under reduced motion', () => {
     }
     const engineHost = fakeHost(first, second);
     const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
-    const a = player(first, scheduler, options);
+    player(first, scheduler, options);
     const b = player(second, scheduler, options);
-    await a.ready;
+    await idle();
 
     frame();
     await b.ready;
@@ -186,14 +190,16 @@ describe('a live still under reduced motion', () => {
     const options: PlayerOptions = { motion: 'reduced', releaseAfterFinish: true, engineHost };
     const a = player(first, scheduler, options);
     const b = player(second, scheduler, options);
-    await a.ready;
+    await idle();
 
     frame();
-    await b.ready;
+    await a.ready;
+    await idle();
     expect(first.calls.at(-1)).toBe('dispose');
     expect(second.calls).toEqual([]);
 
     frame();
+    await b.ready;
     expect(second.calls.slice(-2)).toEqual(['render@8', 'dispose']);
   });
 
@@ -204,9 +210,10 @@ describe('a live still under reduced motion', () => {
     let swapchain = false;
     instance.render = () => (swapchain ? render() : false);
     const still = player(instance, scheduler, { motion: 'reduced', releaseAfterFinish: true });
-    await still.ready;
+    await idle();
 
     frame();
+    await still.ready;
     expect(instance.calls).toEqual(['ticks:4']);
     expect(still.state.released).toBe(false);
 

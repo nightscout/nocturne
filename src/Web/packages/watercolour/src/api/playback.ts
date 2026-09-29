@@ -1181,15 +1181,17 @@ class Player implements ArtworkPlayer {
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
-        return this.host.stillTurn().then((endTurn) => {
-          if (this.disposed) {
-            endTurn();
-            throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
-          }
-          return create(endTurn).catch((error: unknown) => {
+        // Creating the instance is a long task's worth on a slow phone; it waits for a frame
+        // with budget rather than joining the task that finished the still before it.
+        return this.host.stillTurn().then(async (endTurn) => {
+          try {
+            await this.scheduler.whenBudget();
+            if (this.disposed) throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+            return await create(endTurn);
+          } catch (error) {
             endTurn();
             throw error;
-          });
+          }
         });
       }
       case 'baked':
