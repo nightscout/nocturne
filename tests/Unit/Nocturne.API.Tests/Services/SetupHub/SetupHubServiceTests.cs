@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Constants;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
@@ -8,6 +9,7 @@ using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -42,15 +44,37 @@ public class SetupHubServiceTests
         {
             // Registered out of order on purpose: the key decides the hub order.
             new AboutItem(db), new SharingItem(db), new TherapyItem(db),
-            new DevicesItem(db), new AlertsItem(db), new ConnectDataItem(db),
+            DevicesItemOver(db), new AlertsItem(db), new ConnectDataItem(db),
         });
 
     private SetupHubService Service => ServiceOver(_db);
+
+    internal static DevicesItem DevicesItemOver(NocturneDbContext db)
+    {
+        var factory = new TestTenantDbContextFactory(db);
+        return new DevicesItem(
+            db,
+            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
+            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance));
+    }
 
     private static SensorGlucoseEntity Reading(Guid tenantId) => new()
     {
         Id = Guid.CreateVersion7(), TenantId = tenantId, Timestamp = DateTime.UtcNow, Mgdl = 110,
     };
+
+    /// <summary>What makes the Devices item work: a CGM on record and the insulin question answered.</summary>
+    private void AddCgmAndInsulin()
+    {
+        _db.PatientDevices.Add(new PatientDeviceEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7", IsCurrent = true,
+        });
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), TenantId = TenantId, InsulinCategory = "RapidActing", Name = "Humalog", IsCurrent = true,
+        });
+    }
 
     private void Enrol()
     {
@@ -130,10 +154,7 @@ public class SetupHubServiceTests
     {
         _db.SensorGlucose.Add(Reading(TenantId));
         _db.AlertRules.Add(new AlertRuleEntity { Id = Guid.CreateVersion7(), TenantId = TenantId, Name = "Low" });
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         _db.TherapySettings.Add(new TherapySettingsEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, ProfileName = "Default", Timestamp = DateTime.UtcNow,
@@ -270,10 +291,7 @@ public class SetupHubServiceTests
     public async Task NotForMe_GivesWayToDone_WhenTheThingStartsWorking()
     {
         await Service.SetStateAsync(SetupHubItemKey.Devices, SetupHubItemState.NotForMe, CancellationToken.None);
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
         var hub = await Service.GetAsync(CancellationToken.None);
@@ -285,10 +303,7 @@ public class SetupHubServiceTests
     public async Task SetState_RefusesDone_ADoneItem_AndAnUnlistedItem()
     {
         _db.SensorGlucose.Add(Reading(TenantId));
-        _db.PatientDevices.Add(new PatientDeviceEntity
-        {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
-        });
+        AddCgmAndInsulin();
         await _db.SaveChangesAsync();
 
         await Service.Invoking(s => s.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.Done, CancellationToken.None))
