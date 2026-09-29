@@ -76,7 +76,8 @@ describe("GlucoseValueIndicator background", () => {
     render(GlucoseValueIndicator, { displayValue: 170, variant: inRange, background });
 
     await expect.element(page.getByTestId("wash")).toBeInTheDocument();
-    await expect.element(page.getByText("170")).toHaveClass("bg-glucose-in-range");
+    await expect.element(page.getByText("170")).toBeInTheDocument();
+    expect(page.getByText("170").element().parentElement).toHaveClass("bg-glucose-in-range");
   });
 
   it.each([

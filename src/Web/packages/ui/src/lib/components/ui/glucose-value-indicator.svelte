@@ -125,11 +125,14 @@
         : ''}"
     >
       {#if showBackground}
-        <span aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+        <!-- No z-index here: a stacking context would isolate the host's blend modes from the fill. -->
+        <span aria-hidden="true" class="pointer-events-none absolute inset-0">
           {@render background?.()}
         </span>
+        <span class="relative">{displayValue}</span>
+      {:else}
+        {displayValue}
       {/if}
-      {displayValue}
     </div>
 
     {#if statusText}
