@@ -155,14 +155,17 @@
           {#if review.source === TherapySource.Imported || !app}
             <p>
               {#if voice.kind === "self"}
-                If no app sends your settings to Nocturne, update them on the
-                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+                If no app sends your settings to Nocturne, you can find them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a> and change the target range there. Basal rates, carb
+                ratios and insulin sensitivity can't be changed in Nocturne yet.
               {:else if voice.kind === "named"}
-                If no app sends {voice.name}'s settings to Nocturne, update them on the
-                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+                If no app sends {voice.name}'s settings to Nocturne, you can find them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a> and change the target range there. Basal rates, carb
+                ratios and insulin sensitivity can't be changed in Nocturne yet.
               {:else}
-                If no app sends these settings to Nocturne, update them on the
-                <a class="underline underline-offset-2" href={profileHref}>profile page</a>.
+                If no app sends these settings to Nocturne, you can find them on the
+                <a class="underline underline-offset-2" href={profileHref}>profile page</a> and change the target range there. Basal rates, carb
+                ratios and insulin sensitivity can't be changed in Nocturne yet.
               {/if}
             </p>
           {/if}
