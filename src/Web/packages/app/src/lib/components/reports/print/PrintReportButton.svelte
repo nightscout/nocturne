@@ -19,7 +19,7 @@
   artClass="size-7"
   class="text-xs text-muted-foreground print:hidden"
 >
-  Printed
+  Sent to print
 </PaintedMoment>
 <Button variant="outline" size="sm" onclick={print} aria-label="Print report">
   <Printer class="w-4 h-4" />

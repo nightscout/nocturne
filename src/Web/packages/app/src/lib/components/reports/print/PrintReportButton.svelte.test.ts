@@ -14,16 +14,16 @@ describe("PrintReportButton", () => {
     render(PrintReportButton);
 
     await expect.element(page.getByRole("button", { name: "Print report" })).toBeVisible();
-    await expect.element(page.getByText("Printed")).not.toBeInTheDocument();
+    await expect.element(page.getByText("Sent to print")).not.toBeInTheDocument();
   });
 
-  it("notes the print once the dialog returns", async () => {
+  it("notes the print was sent once the dialog returns", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     render(PrintReportButton);
 
     await page.getByRole("button", { name: "Print report" }).click();
 
-    await expect.element(page.getByText("Printed")).toBeVisible();
+    await expect.element(page.getByText("Sent to print")).toBeVisible();
     expect(print).toHaveBeenCalledOnce();
   });
 
@@ -31,10 +31,10 @@ describe("PrintReportButton", () => {
     vi.spyOn(window, "print").mockImplementation(() => {});
     render(PrintReportButton);
     await page.getByRole("button", { name: "Print report" }).click();
-    await expect.element(page.getByText("Printed")).toBeVisible();
+    await expect.element(page.getByText("Sent to print")).toBeVisible();
 
     await cdp().send("Emulation.setEmulatedMedia", { media: "print" });
 
-    await expect.element(page.getByText("Printed")).not.toBeVisible();
+    await expect.element(page.getByText("Sent to print")).not.toBeVisible();
   });
 });
