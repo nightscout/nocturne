@@ -64,12 +64,32 @@ describe("HubPainting", () => {
     expect(fakePlayer.plays).toBe(0);
   });
 
-  it("stays out of sight when only the finished still can be shown", async () => {
+  it("stays out of sight when only the finished still can be shown, and says so at once", async () => {
     fakePlayer.state.mode = "static";
+    const onpainted = vi.fn();
 
-    render(HubPainting, { stop: 1 });
+    render(HubPainting, { stop: 1, onpainted });
 
     await expect.element(artwork()).toHaveClass("hidden");
     expect(fakePlayer.seeks).toEqual([]);
+    expect(onpainted).toHaveBeenCalledWith(1);
+  });
+
+  it("reports a stop only once it is on the canvas", async () => {
+    const onpainted = vi.fn();
+    render(HubPainting, { stop: 6, from: 5, onpainted });
+
+    await expect.poll(() => fakePlayer.plays).toBe(1);
+    expect(onpainted).not.toHaveBeenCalled();
+
+    fakePlayer.state.progress = 1;
+
+    await expect.poll(() => onpainted.mock.calls).toEqual([[6]]);
+  });
+
+  it("shows half the first stage when nothing is resolved", async () => {
+    render(HubPainting, { stop: 0.5 });
+
+    await expect.poll(() => fakePlayer.seeks).toEqual([0.5 / 6]);
   });
 });

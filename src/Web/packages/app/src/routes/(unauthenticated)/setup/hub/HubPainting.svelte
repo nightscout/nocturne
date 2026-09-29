@@ -12,19 +12,22 @@
   let {
     stop,
     from,
+    onpainted,
     class: className,
   }: {
     /** 0 to {@link HUB_PAINTING_STOPS}; see `hubPaintingStop`. */
     stop: number;
     /** A stop already seen, to paint forward from rather than jump past. */
     from?: number;
+    /** Called with the stop once it is on the canvas, or at once when no stop can be shown. */
+    onpainted?: (stop: number) => void;
     class?: string;
   } = $props();
 
   let surface = $state(hostSurface());
   $effect(() => watchSurface((next) => (surface = next)));
 
-  let player = $state<ArtworkPlayer | null>(null);
+  let player = $state.raw<ArtworkPlayer | null>(null);
   function handleReady(ready: ArtworkPlayer) {
     player = ready;
     return () => {
@@ -48,7 +51,12 @@
 
     const { mode: resolved, motion } = current.state;
     seekable = resolved === "live" || resolved === "baked";
-    if (!seekable) return;
+    // Untracked: the host's state written in the callback must not become this effect's input.
+    const reached = () => untrack(() => onpainted?.(target));
+    if (!seekable) {
+      reached();
+      return;
+    }
 
     const previous = painted;
     painted = target;
@@ -57,6 +65,7 @@
     if (previous === undefined || previous >= target || motion === "reduced") {
       current.pause();
       current.seek(position);
+      reached();
       return;
     }
 
@@ -66,6 +75,7 @@
       if (current.state.progress >= position || !current.state.playing) {
         current.pause();
         current.seek(position);
+        reached();
         return;
       }
       frame = requestAnimationFrame(watch);

@@ -130,11 +130,11 @@ export function setupHubItemBySlug(slug: string): SetupHubItemKey | undefined {
 export const HUB_PAINTING_STOPS = 6;
 
 /**
- * The painting stop a hub with `open` items left shows: one stage per resolved
- * item, counted back from the finished picture, so an item a tenant is never
- * offered is already painted. The first stage stays down even with everything
- * open, since stop 0 is blank paper.
+ * The painting stop a hub with `open` items left shows: one whole stage per
+ * resolved item, counted back from the finished picture, so an item a tenant
+ * is never offered is already painted. With every item open it shows half the
+ * first stage rather than blank paper; any resolved item lands on a dry stop.
  */
 export function hubPaintingStop(open: number): number {
-  return Math.min(HUB_PAINTING_STOPS, Math.max(1, HUB_PAINTING_STOPS - open));
+  return Math.min(HUB_PAINTING_STOPS, Math.max(HUB_PAINTING_STOPS - open, 0.5));
 }
