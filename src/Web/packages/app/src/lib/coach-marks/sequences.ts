@@ -16,6 +16,7 @@ export const sequences: SequenceConfig = {
   },
   "quick-tour": {
     priority: 200,
+    prerequisite: ONBOARDING_CORE_GATE,
     steps: [
       "quick-tour.current-bg",
       "quick-tour.chart",

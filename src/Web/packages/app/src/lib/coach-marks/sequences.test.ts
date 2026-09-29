@@ -118,16 +118,11 @@ describe("coach mark sequences", () => {
     }
   });
 
-  it("gates every discovery tour on the onboarding core, not on a sequence", () => {
+  it("gates every tour on the onboarding core, not on a sequence", () => {
     for (const [name, seq] of Object.entries(sequences)) {
-      if (name === "quick-tour") continue;
       expect(seq.prerequisite, name).toBe(ONBOARDING_CORE_GATE);
     }
     expect(sequences).not.toHaveProperty(ONBOARDING_CORE_GATE);
-  });
-
-  it("lets the quick tour run straight after the core", () => {
-    expect(sequences["quick-tour"]).not.toHaveProperty("prerequisite");
   });
 
   it("names steps within their own sequence", () => {

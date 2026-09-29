@@ -87,6 +87,42 @@ describe("the quick tour", () => {
     expect(shown).toEqual(sequences["quick-tour"].steps);
     for (const key of shown) expect(context.getStatus(key)).toBe("completed");
   });
+
+  it("passes over the chart while the first-reading empty state hides it", async () => {
+    const context = await started({ [ONBOARDING_CORE_GATE]: true });
+    context.register(makeRegistration("quick-tour.current-bg"));
+    context.register(makeRegistration("quick-tour.widgets"));
+
+    context.startSequence("quick-tour");
+    const shown: string[] = [];
+    while (context.activeKey) {
+      shown.push(context.activeKey);
+      context.complete(context.activeKey);
+    }
+
+    expect(shown).toEqual(["quick-tour.current-bg", "quick-tour.widgets"]);
+    expect(context.getStatus("quick-tour.chart")).toBe("unseen");
+  });
+
+  it("raises a passed-over step once it mounts", async () => {
+    const context = await started({ [ONBOARDING_CORE_GATE]: true });
+    context.register(makeRegistration("quick-tour.current-bg"));
+    context.startSequence("quick-tour");
+    context.complete("quick-tour.current-bg");
+    expect(context.activeKey).toBeNull();
+
+    context.register(makeRegistration("quick-tour.chart"));
+
+    expect(context.activeKey).toBe("quick-tour.chart");
+  });
+
+  it("stays shut organically for a viewer the core gate keeps out", async () => {
+    const context = await started({ [ONBOARDING_CORE_GATE]: false });
+    context.register(makeRegistration("quick-tour.current-bg"));
+    settle();
+
+    expect(context.activeKey).toBeNull();
+  });
 });
 
 describe("stored states for retired marks", () => {

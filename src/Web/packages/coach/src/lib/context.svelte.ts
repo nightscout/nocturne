@@ -352,29 +352,28 @@ export class CoachMarkContext {
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
 
+    // A step whose element is not on the page is passed over, not waited on: some are mounted
+    // only conditionally (a chart hidden behind an empty state), and waiting on one strands the
+    // rest of the tour. It stays unseen, and register() raises it if it mounts later.
+    let awaitingMount = false;
     for (const stepKey of seq.steps) {
       const status = this.getStatus(stepKey);
       if (status === "completed" || status === "dismissed") continue;
 
-      // Found the first unseen/seen step
-      if (!this._registrations.some((r) => r.key === stepKey)) {
-        // Not mounted yet — wait for lazy registration to trigger
-        return;
-      }
-
-      // Mounted and eligible: activate it
       const stepRegistrations = this._registrations
         .filter((r) => r.key === stepKey)
         .sort((a, b) => a.step - b.step);
 
-      if (stepRegistrations.length > 0) {
-        this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
-        return;
+      if (stepRegistrations.length === 0) {
+        awaitingMount = true;
+        continue;
       }
+
+      this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
+      return;
     }
 
-    // All steps done
-    this.onForcedSequenceComplete();
+    if (!awaitingMount) this.onForcedSequenceComplete();
   }
 
   private onForcedSequenceComplete(): void {
