@@ -190,7 +190,7 @@
           style:width="{paintBox.width}px"
           style:height="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.3)_contrast(1.3)]">
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.7)_contrast(1.25)]">
             <Artwork
               artwork="wash"
               palette="slate"

@@ -136,7 +136,7 @@
        gains the paper's variation. Cropped to the wash's interior so its dried edge falls outside
        the tile. Keyed on the variant: a new range repaints, a new reading in the same range does not. -->
   {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.5)_contrast(1.3)]">
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.8)_contrast(1.25)]">
       <Artwork
         artwork="wash"
         palette="slate"
