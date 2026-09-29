@@ -216,7 +216,43 @@ a deliberately wrong band.
 
 Methodology: `performance.mark`/`performance.now` around module load,
 `WatercolourEngine.create`, first paint and each scheduler tick; single-run
-spot checks on the machine above, not a benchmark harness.
+spot checks on the machine above. The repeatable harness is below.
+
+### Benchmark harness
+
+`packages/watercolour/bench/` builds plain scenario pages (`avatars`, `tabs`,
+`empty`, `hero`, `drops`, `motif`, `edge`, `mixed`; `?s=<name>&n=<count>`) from
+the package's public components, and `run.mjs` drives them in real Chrome
+through Playwright against a production `vite build` served by `vite preview`.
+It depends on nothing but the package's own source, so it runs against any
+revision of the engine.
+
+```bash
+pnpm --filter @nocturne/watercolour build:wasm     # needs wasm-opt on PATH (npm i -g binaryen)
+pnpm --filter @nocturne/watercolour bench                                   # all scenarios x all profiles x 3
+pnpm --filter @nocturne/watercolour bench -- --scenarios "avatars&n=80,tabs" --profiles desktop,phone-low --repeats 2
+pnpm --filter @nocturne/watercolour bench -- --no-webgpu --headed --out /tmp/wc
+pnpm --filter @nocturne/watercolour bench -- --url https://paint.nocturne.localhost:59251/ --ignore-https-errors --wait 10
+```
+
+Profiles are `desktop` (no throttle), `laptop` (CPU 2x), `phone-high` (CPU 4x,
+390x844 at DPR 3) and `phone-low` (CPU 6x, 360x740 at DPR 2). CPU throttling
+does not slow the GPU, so phone rows are a lower bound. Each run is a fresh
+Chrome (cold caches) with `--enable-unsafe-webgpu
+--enable-dawn-features=allow_unsafe_apis --enable-precise-memory-info`. It writes
+one JSON per run plus `summary.md` and `summary.json` (median of repeats) to
+`bench/results/<timestamp>/` (gitignored).
+
+Per run: time to ready and first artwork (from mount), long tasks, long
+animation frames and total blocking time, interaction latency (input to the
+second following frame) and Event Timing for the tab, edge and drop clicks and
+hovers, rAF callbacks per second over an idle window after settle (target 0),
+WebGPU call counts (encoders, passes, copies, submits, `writeBuffer` bytes,
+buffer and texture bytes allocated, live and peak estimates, pipelines) in total
+and per rAF frame, live WebGPU canvases, JS heap after GC, and wasm, glue, JS and
+image transfer bytes. "Submit drain" is `onSubmittedWorkDone` after a sampled
+submit: an approximation of GPU time, not a timestamp query. Compare runs by
+diffing two `summary.json` files.
 
 ## Limitations
 
