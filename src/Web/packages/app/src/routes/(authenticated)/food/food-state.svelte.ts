@@ -120,7 +120,10 @@ export class FoodState {
   async addFood(food: Food): Promise<Food | null> {
     try {
       const result = await createFoodRemote(food);
-      if (!result?._id) return null;
+      if (!result?._id) {
+        toast.error('Failed to create food');
+        return null;
+      }
       this.foods = [result, ...this.foods];
       return result;
     } catch (err) {
