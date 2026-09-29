@@ -213,6 +213,6 @@
 <style>
   /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
   .wash-grain {
-    filter: grayscale(1) brightness(3) contrast(1.6);
+    filter: grayscale(1) brightness(2.6) contrast(1.15);
   }
 </style>
