@@ -22,6 +22,6 @@
   } = $props();
 </script>
 
-<svelte:element this={as} {...rest} data-mark-shown={shown ? "true" : undefined}>
+<svelte:element this={as} {...rest} data-mark-shown={shown === undefined ? undefined : String(shown)}>
   {@render children()}
 </svelte:element>
