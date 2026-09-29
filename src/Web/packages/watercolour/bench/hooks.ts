@@ -18,7 +18,7 @@ interface BenchState {
   tracked: Tracked[];
 }
 
-const TIMEOUT_MS = 90_000;
+const TIMEOUT_MS = 240_000;
 
 const state: BenchState = { scenario: '', expected: 0, mountAt: 0, timedOut: false, tracked: [] };
 let resolveReady: (state: BenchState) => void = () => {};

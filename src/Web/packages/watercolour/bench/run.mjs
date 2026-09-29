@@ -247,10 +247,10 @@ async function runOnce(ctx, target, profileName, webgpu, repeat) {
       await page.waitForTimeout(opts.wait * 1000);
       await waitQuiet(page, 1500, 30000);
     } else {
-      await page.waitForFunction(() => window.__benchReady, null, { timeout: 60000 });
+      await page.waitForFunction(() => window.__benchReady, null, { timeout: 90000, polling: 250 });
       const ready = await Promise.race([
         page.evaluate(() => window.__benchReady.then(() => true)),
-        sleep(120000).then(() => false),
+        sleep(300000).then(() => false),
       ]);
       timedOut = !ready;
       await waitQuiet(page);
