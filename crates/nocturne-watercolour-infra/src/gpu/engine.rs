@@ -50,6 +50,13 @@ const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
 
+/// GPU bytes of render-resolution paper an engine and its forks keep after
+/// the instance that made them is gone. A remount at the same size (a tab
+/// switch, a re-hover, a list of same-seed accents) then skips generating
+/// the paper on the CPU, the main-thread cost of a first present; eight
+/// megabytes is two 1024^2 canvases or thirty-two 256^2 ones.
+const PAPER_CACHE_BYTES: u64 = 8 * 1024 * 1024;
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct ParamsUniform {
@@ -280,6 +287,39 @@ struct PresentPipeline {
     cached: Arc<Mutex<Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>>>,
 }
 
+/// What a render-resolution paper field is a function of.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct PaperKey {
+    seed: u64,
+    paper: [u32; 5],
+    width: u32,
+    height: u32,
+    aspect: u32,
+    pixel_scale: u32,
+}
+
+impl PaperKey {
+    fn new(paper: &Paper, width: u32, height: u32, aspect: f32, pixel_scale: f32) -> PaperKey {
+        PaperKey {
+            seed: paper.seed.0,
+            paper: [
+                paper.grain_scale.to_bits(),
+                paper.height_amplitude.to_bits(),
+                paper.absorbency[0].to_bits(),
+                paper.absorbency[1].to_bits(),
+                paper.fibre_anisotropy.to_bits(),
+            ],
+            width,
+            height,
+            aspect: aspect.to_bits(),
+            pixel_scale: pixel_scale.to_bits(),
+        }
+    }
+}
+
+/// Least recently used first; see [`PAPER_CACHE_BYTES`].
+type PaperCache = Arc<Mutex<VecDeque<(PaperKey, wgpu::Buffer)>>>;
+
 struct Loaded {
     width: u32,
     height: u32,
@@ -369,6 +409,7 @@ pub struct GpuEngine {
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`].
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
     counter: CommandCounter,
+    paper_cache: PaperCache,
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -630,6 +671,7 @@ impl GpuEngine {
             checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
             in_flight: Mutex::new(VecDeque::new()),
             counter: CommandCounter::default(),
+            paper_cache: Arc::default(),
         };
         (engine, validation)
     }
@@ -651,6 +693,7 @@ impl GpuEngine {
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
             counter: CommandCounter::default(),
+            paper_cache: Arc::clone(&self.paper_cache),
         }
     }
 
@@ -966,22 +1009,15 @@ impl GpuEngine {
             (paper, aspect, pixel_scale)
         };
         let (paper, aspect, pixel_scale) = needs;
-        let paper_out =
-            PaperField::generate_with_pixel_scale(&paper, width, height, aspect, pixel_scale);
-        let pixels = (width as u64) * (height as u64);
         let uniform = self.buffer(
             "render-params",
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let paper_buf = self.buffer(
-            "paper-out",
-            pixels * 4,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        let paper_buf = self.paper_buffer(
+            PaperKey::new(&paper, width, height, aspect, pixel_scale),
+            &paper,
         )?;
-        self.ctx
-            .queue()
-            .write_buffer(&paper_buf, 0, bytemuck::cast_slice(&paper_out.height));
         let (presence_len, pigments) = {
             let l = self.loaded()?;
             (
@@ -1057,6 +1093,49 @@ impl GpuEngine {
             readback: None,
         });
         Ok(())
+    }
+
+    /// The render-resolution paper for `key`, from the shared cache or
+    /// generated and uploaded (and cached when it fits the budget).
+    fn paper_buffer(&self, key: PaperKey, paper: &Paper) -> Result<wgpu::Buffer, EngineError> {
+        {
+            let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(at) = cache.iter().position(|(k, _)| *k == key) {
+                let hit = cache
+                    .remove(at)
+                    .ok_or_else(|| EngineError::new("paper cache"))?;
+                let buffer = hit.1.clone();
+                cache.push_back(hit);
+                return Ok(buffer);
+            }
+        }
+        let field = PaperField::generate_with_pixel_scale(
+            paper,
+            key.width,
+            key.height,
+            f32::from_bits(key.aspect),
+            f32::from_bits(key.pixel_scale),
+        );
+        let buffer = self.buffer(
+            "paper-out",
+            (field.height.len() * std::mem::size_of::<f32>()) as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        )?;
+        self.ctx
+            .queue()
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
+        if buffer.size() <= PAPER_CACHE_BYTES {
+            let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
+            cache.push_back((key, buffer.clone()));
+            let mut total: u64 = cache.iter().map(|(_, b)| b.size()).sum();
+            while total > PAPER_CACHE_BYTES {
+                match cache.pop_front() {
+                    Some((_, evicted)) => total -= evicted.size(),
+                    None => break,
+                }
+            }
+        }
+        Ok(buffer)
     }
 
     /// The `out` buffer `render` writes and its host-visible copy, made on
@@ -1629,15 +1708,6 @@ impl Simulator for GpuEngine {
 
     fn apply(&mut self, op: &Operation, seed: Seed) -> Result<(), EngineError> {
         let stamp_params: StampParams = self.params.stamp;
-        let (w, h, aspect, paper_height) = {
-            let l = self.loaded()?;
-            (
-                l.width,
-                l.height,
-                l.paper_sim.aspect,
-                l.paper_sim.height.clone(),
-            )
-        };
         match op {
             Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
                 self.loaded_mut()?.maybe_wet = true;
@@ -1648,6 +1718,9 @@ impl Simulator for GpuEngine {
             | Operation::SetMask(_)
             | Operation::ClearMask => {}
         }
+        let l = self.loaded()?;
+        let (w, h, aspect) = (l.width, l.height, l.paper_sim.aspect);
+        let paper_height = &l.paper_sim.height;
         let rasterize = |path: &[_], radius, softness, span: StrokeSpan| {
             paint::rasterize_path_span(
                 path,
@@ -1656,7 +1729,7 @@ impl Simulator for GpuEngine {
                 StampTarget {
                     width: w,
                     height: h,
-                    paper_height: &paper_height,
+                    paper_height,
                 },
                 aspect,
                 seed,

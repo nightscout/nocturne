@@ -39,6 +39,7 @@ use nocturne_watercolour_core::domain::{
     StrokeSpan,
 };
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DetailLevel};
+use nocturne_watercolour_infra::document::{parse_scene_json, scene_to_json};
 use nocturne_watercolour_infra::export::{FrameSequence, PngExporter, srgb_to_linear};
 use nocturne_watercolour_infra::gpu::{CommandCounts, GpuContext, GpuEngine};
 
@@ -343,6 +344,56 @@ fn per_tick(before: CommandCounts, after: CommandCounts, ticks: u32) -> String {
     )
 }
 
+/// CPU cost of reading a catalogue scene document, as `createInstance` does.
+fn json_bench() {
+    let scene = ArtworkCatalogue::build("glaze_pair", SEED, Palette::dusk()).expect("scene");
+    let json = scene_to_json(&scene).expect("json");
+    let mut ms = Vec::new();
+    for _ in 0..3 {
+        let t = Instant::now();
+        for _ in 0..20 {
+            parse_scene_json(&json).expect("parse");
+        }
+        ms.push(t.elapsed().as_secs_f64() * 1000.0 / 20.0);
+    }
+    println!(
+        "bench scene json ({} KB): {:.3} ms/parse median (runs {:?})",
+        json.len() / 1024,
+        median(ms.clone()),
+        ms.iter()
+            .map(|v| (v * 1e3).round() / 1e3)
+            .collect::<Vec<_>>()
+    );
+}
+
+/// CPU cost of the render-resolution paper a first present generates.
+fn paper_bench() {
+    let paper = Paper::cold_press(SEED);
+    for size in [256u32, 512, 1024] {
+        let mut ms = Vec::new();
+        let mut digest = 0;
+        for _ in 0..3 {
+            let t = Instant::now();
+            let field = PaperField::generate_with_pixel_scale(
+                &paper,
+                size,
+                size,
+                1.0,
+                render_pixel_scale(size, size, 1.0),
+            );
+            ms.push(t.elapsed().as_secs_f64() * 1000.0);
+            digest = fnv(field.height.iter().map(|f| f.to_bits()));
+        }
+        println!(
+            "bench paper {size}x{size}: {:.2} ms median (runs {:?}), digest {digest:016x}",
+            median(ms.clone()),
+            ms.iter()
+                .map(|v| (v * 100.0).round() / 100.0)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
 /// GPU cost of the tick loop on a wet sheet: the catalogue `wash` played to
 /// 30% (every stroke down, swirl active), then `BENCH_TICKS` bare ticks per
 /// run.
@@ -463,6 +514,8 @@ fn main() {
     );
 
     if bench {
+        paper_bench();
+        json_bench();
         for res in sim_resolution.map_or(vec![160, 256, 384], |r| vec![r]) {
             gpu = tick_bench(gpu, res);
         }

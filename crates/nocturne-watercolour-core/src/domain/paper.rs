@@ -98,12 +98,16 @@ impl PaperField {
         let mut cap = Vec::with_capacity(n);
         let inv_w = 1.0 / width.max(1) as f32;
         let inv_h = 1.0 / height.max(1) as f32;
-        let band = grain_band_window(width.max(height) as f32);
+        let bands = OctaveBands::new(
+            paper,
+            pixel_scale,
+            grain_band_window(width.max(height) as f32),
+        );
         for y in 0..height {
             for x in 0..width {
                 let u = (x as f32 + 0.5) * inv_w;
                 let v = (y as f32 + 0.5) * inv_h;
-                let value = sample_height_aspect(paper, u, v, aspect, pixel_scale, band);
+                let value = sample_height_banded(paper, u, v, aspect, &bands);
                 h.push(value);
                 let t = ((value - 0.5) / paper.height_amplitude.max(1e-3) + 0.5).clamp(0.0, 1.0);
                 cap.push(paper.absorbency[0] + (paper.absorbency[1] - paper.absorbency[0]) * t);
@@ -216,7 +220,40 @@ pub fn sample_height_aspect(
     pixel_scale: f32,
     band: (f32, f32),
 ) -> f32 {
-    let (min_px, full_px) = band;
+    sample_height_banded(
+        paper,
+        u,
+        v,
+        aspect,
+        &OctaveBands::new(paper, pixel_scale, band),
+    )
+}
+
+/// The [`octave_band`] weights of one field's noise terms, which depend on
+/// the paper and the output alone: computed once per field, not per pixel.
+struct OctaveBands {
+    grain: [f32; 4],
+    fibre: f32,
+}
+
+impl OctaveBands {
+    fn new(paper: &Paper, pixel_scale: f32, band: (f32, f32)) -> OctaveBands {
+        let (min_px, full_px) = band;
+        let base = paper.grain_scale.max(1.0);
+        let mut grain = [0.0; 4];
+        let mut freq = base;
+        for weight in &mut grain {
+            *weight = octave_band(pixel_scale, min_px, full_px, freq);
+            freq *= 2.3;
+        }
+        OctaveBands {
+            grain,
+            fibre: octave_band(pixel_scale, min_px, full_px, base * 1.6),
+        }
+    }
+}
+
+fn sample_height_banded(paper: &Paper, u: f32, v: f32, aspect: f32, bands: &OctaveBands) -> f32 {
     let (ax, ay) = isotropic_scale(aspect);
     let (u, v) = (u * ax, v * ay);
     let seed = paper.seed.0;
@@ -229,8 +266,7 @@ pub fn sample_height_aspect(
     let mut deviation = 0.0;
     let mut amp = 1.0;
     let mut freq = base;
-    for octave in 0..4u64 {
-        let band = octave_band(pixel_scale, min_px, full_px, freq);
+    for (octave, &band) in (0..4u64).zip(&bands.grain) {
         deviation += amp
             * band
             * (value_noise(seed.wrapping_add(octave * 0x1F1F), u * freq, v * freq) - 0.5);
@@ -246,9 +282,8 @@ pub fn sample_height_aspect(
                 v * base * 0.05 + 0.11,
             ))
         / 1.7;
-    let fibre = 0.5
-        + (value_noise(seed ^ 0xF1B7, u * base * 0.12, v * base * 1.6) - 0.5)
-            * octave_band(pixel_scale, min_px, full_px, base * 1.6);
+    let fibre =
+        0.5 + (value_noise(seed ^ 0xF1B7, u * base * 0.12, v * base * 1.6) - 0.5) * bands.fibre;
     let body = grain * (1.0 - POOL_WEIGHT) + pool * POOL_WEIGHT;
     let fibre_w = paper.fibre_anisotropy * 0.6;
     // The fibre's cross-streak period is its fine axis (`base * 1.6`); the
