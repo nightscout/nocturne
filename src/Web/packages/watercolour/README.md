@@ -144,7 +144,6 @@ through a radial mask spreading from where the brush touched down.
 The full contract - the three-layer stack, the placement rules, the reveal
 curves and both colour directions - is in
 [`docs/watercolour/public-api.md`](../../../docs/watercolour/public-api.md#paint-drops).
-`/drops` in the showcase is the working reference.
 
 ## Modes and fallbacks
 
@@ -237,14 +236,14 @@ to the bundled set only - an `assetBaseUrl` is served exactly as requested.
 ## Performance
 
 Measured on Chrome 153, Windows 11, RTX 5060 Laptop GPU, at a 512 x 512 canvas
-with a 256 x 256 simulation grid (the showcase defaults), unless noted.
+with a 256 x 256 simulation grid (the former showcase's defaults; the bench harness in `bench/` is the measurement tool now), unless noted.
 
 - **wasm module**: 778 KB, 277 KB gzip (`build:wasm` reports the live sizes).
 - **GPU init** (adapter + device + pipeline compile, one per page): 59-90 ms
   warm; about 2.1 s cold. Reported as `engine.stats().initMs`.
 - **First painted frame**: 1.1-1.6 s warm after a cold `createArtworkPlayer`,
   from `performance.mark` around module load, engine init and the first
-  presented frame (the showcase exposes it as `watercolour:first-paint`).
+  presented frame (the former showcase exposed it as `watercolour:first-paint`).
 - **Steady-state scheduler cost**: about 0.2 ms per frame (CPU step + render
   submission, measured with `performance.now`); the scheduler keeps a frame-time
   histogram (`getScheduler().stats()`).

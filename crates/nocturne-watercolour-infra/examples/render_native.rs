@@ -266,7 +266,7 @@ fn finished_frame<E: Simulator + Renderer>(engine: E, scene: &Scene) -> (E, Imag
     (pb.into_simulator(), image, run_ms)
 }
 
-/// The showcase hero at a given simulation resolution, to 900x506: the
+/// The former showcase hero at a given simulation resolution, to 900x506: the
 /// coordinator compares the edge quality across resolutions. `size_hint` is
 /// set to the output aspect so paper grain and stamps are measured in it.
 fn shoreline_wide(gpu: GpuEngine, out_dir: &Path, resolution: u32, light: Rgb) -> GpuEngine {

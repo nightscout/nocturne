@@ -54,7 +54,7 @@ use nocturne_watercolour_wasm::scene_tools::{
 use serde::Deserialize;
 
 /// Baked assets are keyed by artwork and palette only, so one seed serves
-/// every host; it matches the showcase's default.
+/// every host; it matches the former showcase's default.
 const SEED: Seed = Seed(1610);
 const STRIP_FRAMES: u32 = 12;
 const STRIP_EDGE: u32 = 256;

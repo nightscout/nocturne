@@ -60,12 +60,6 @@ cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_a
 | Player static rung | `playback.test.ts`: `iconStaticBackend` routes a baked icon to its final and an unbaked one to the SVG backend |
 | Components | `components.test.ts`: `detailForEdge` thresholds, `seedFromName` determinism/FNV-1a, `artworkOptionsFrom` defaults, `hostSurface` |
 
-### Showcase (`@nocturne/watercolour-showcase`)
-
-Vitest unit tests for the synthetic data (`units`, `history`) and the
-`ShowcaseSettings` store (defaults, option forwarding, reset). `check`,
-`test` and `build` run clean for the scaffold.
-
 ## What was verified in a browser
 
 - **Stage 2 (wasm adapter + TS API) was verified live in Chrome 153**: WebGPU
@@ -113,13 +107,6 @@ as a dead tail), and `--reference <dir>` diffs the final frame against an
 earlier run. Choreography flags (`--tip-scale`, `--paint-spread`,
 `--bloom-trail`, `--settle-fraction`, `--settle-budget`, `--wet-sheen`, ...)
 sweep parameters without rebuilding.
-
-## Showcase browser pass
-
-All twelve showcase routes were loaded in Chrome 153 at 1280 px with a clean
-console apart from Chrome's `powerPreference` notice; row selection, filtering
-to the empty state, tab switching, dark-mode toggling and exports were
-exercised. Screenshots live in `.playwright-mcp/stage3/` (gitignored).
 
 The visual review of those captures (the luminous review's Folder B) found:
 
@@ -203,13 +190,13 @@ re-measured the whole catalogue at 165.4 ms (`Large`) and 391.3 ms
 output is asserted by the FNV-1a snapshot tests named above, which go red under
 a deliberately wrong band.
 
-### Browser (Chrome 153, Windows 11, RTX 5060 Laptop GPU; 512^2 canvas, 256^2 sim grid, showcase defaults)
+### Browser (Chrome 153, Windows 11, RTX 5060 Laptop GPU; 512^2 canvas, 256^2 sim grid, the former showcase's defaults)
 
 | Measurement | Value |
 |---|---|
 | wasm module | 652,953 B, 274,570 B gzip with `wasm-opt -Os` (binaryen 132); 966,642 B / 339,648 B gzip when the build machine lacks `wasm-opt` and the build script skips the pass. The `iconScene` surface added +163 KB raw / +56 KB gzip before optimisation. |
 | GPU init (adapter + device + pipeline compile, once per page) | 59-90 ms warm; ~2.1 s cold (`engine.stats().initMs`) |
-| First painted frame after a cold `createArtworkPlayer` | 1.1-1.6 s warm (from `performance.mark` around module load, engine init, first presented frame; the showcase exposes `watercolour:first-paint`) |
+| First painted frame after a cold `createArtworkPlayer` | 1.1-1.6 s warm (from `performance.mark` around module load, engine init, first presented frame; the former showcase exposed `watercolour:first-paint`) |
 | Steady-state scheduler cost | ~0.2 ms per frame (CPU step + render submission; `getScheduler().stats()` histogram) |
 | Checkpoints | ~44 MB per live instance in the browser (10 checkpoints at 256^2 x 4 pigments) |
 | Baked assets | 5.4 MB on disk as WebP, from 20.3 MB as PNG (400 files: 100 sets x 4 files, of which the twelve `lucide-<name>` sets are 96) |
