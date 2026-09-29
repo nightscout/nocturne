@@ -44,6 +44,7 @@ public record SetupHubItem(SetupHubItemKey Key, SetupHubItemState State);
 public record SetupHubStatus(
     IReadOnlyList<SetupHubItem> Items,
     int ResolvedCount,
+    int OpenCount,
     int TotalCount,
     string Revision,
     bool ShowStrip);

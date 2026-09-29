@@ -110,7 +110,7 @@ public class SetupHubService : ISetupHubService
             && resolved < items.Count
             && tenant.SetupStripDismissedRevision != revision;
 
-        return new SetupHubStatus(items, resolved, items.Count, revision, showStrip);
+        return new SetupHubStatus(items, resolved, items.Count - resolved, items.Count, revision, showStrip);
     }
 
     private static string RevisionOf(IEnumerable<SetupHubItem> items)

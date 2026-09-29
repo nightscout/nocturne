@@ -64,6 +64,7 @@ public class SetupHubServiceTests
         hub.Items.Select(i => i.Key).Should().Equal(Enum.GetValues<SetupHubItemKey>());
         hub.Items.Should().OnlyContain(i => i.State == SetupHubItemState.Open);
         hub.ResolvedCount.Should().Be(0);
+        hub.OpenCount.Should().Be(6);
         hub.TotalCount.Should().Be(6);
     }
 
@@ -165,6 +166,7 @@ public class SetupHubServiceTests
         var set = await Service.SetStateAsync(SetupHubItemKey.Alerts, SetupHubItemState.NotForMe, CancellationToken.None);
         set.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State.Should().Be(SetupHubItemState.NotForMe);
         set.ResolvedCount.Should().Be(1);
+        set.OpenCount.Should().Be(5);
 
         var reread = await Service.GetAsync(CancellationToken.None);
         reread.Items.Single(i => i.Key == SetupHubItemKey.Alerts).State

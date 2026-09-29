@@ -12,7 +12,7 @@ namespace Nocturne.API.Tests.Controllers.V4;
 
 public class SetupHubControllerTests
 {
-    private static readonly SetupHubStatus Hub = new([], 0, 0, "rev", false);
+    private static readonly SetupHubStatus Hub = new([], 0, 0, 0, "rev", false);
 
     private static (SetupHubController, Mock<ISetupHubService>) Build(params string[] grantedScopes)
     {
