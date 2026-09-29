@@ -16,13 +16,13 @@
   import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
   import { SetupHubItemState, type SetupHubItemKey } from "$api";
   import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
-  import { SETUP_HUB_ITEMS } from "$lib/setup-hub/items.svelte";
+  import { setupHubItems } from "$lib/setup-hub/items.svelte";
   import SetupChrome from "../SetupChrome.svelte";
 
   let { children } = $props();
 
   const key = $derived<SetupHubItemKey>(page.data.item);
-  const view = $derived(SETUP_HUB_ITEMS[key]);
+  const view = $derived(setupHubItems()[key]);
 
   const hubQuery = getSetupHub();
   const relationshipQuery = getPatientRelationship();

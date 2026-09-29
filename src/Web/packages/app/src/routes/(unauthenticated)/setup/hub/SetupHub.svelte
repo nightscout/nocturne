@@ -96,7 +96,9 @@
         {#if washing}
           <ConfirmationBackground palette="moss" />
         {/if}
-        <HubPainting stop={stop ?? seen ?? 1} from={seen} class="aspect-[3/1] w-full" />
+        <div class="relative px-6 pt-6">
+          <HubPainting stop={stop ?? seen ?? 1} from={seen} class="aspect-[3/1] w-full" />
+        </div>
         <div class="relative flex flex-col gap-2 px-6 pb-6">
           <h1 class="font-brand font-hairline text-3xl leading-tight md:text-4xl">
             {#if voice.kind === "self"}

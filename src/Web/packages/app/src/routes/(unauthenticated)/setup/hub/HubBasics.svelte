@@ -20,7 +20,8 @@
   let { voice }: { voice: PatientVoice } = $props();
 
   const relationshipQuery = getPatientRelationship();
-  const unitsQuery = getUnitsAndTimezone({ locale: browser ? navigator.language : undefined });
+  // No locale: Basics shows the units in effect, not the core's suggestion for a first answer.
+  const unitsQuery = getUnitsAndTimezone({});
 
   const stored = $derived(relationshipQuery.current);
   const storedUnits = $derived(

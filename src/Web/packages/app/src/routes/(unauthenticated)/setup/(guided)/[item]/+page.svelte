@@ -1,12 +1,12 @@
 <script lang="ts">
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import { Button } from "$lib/components/ui/button";
-  import { SETUP_HUB_ITEMS } from "$lib/setup-hub/items.svelte";
+  import { setupHubItems } from "$lib/setup-hub/items.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  const view = $derived(SETUP_HUB_ITEMS[data.item]);
+  const view = $derived(setupHubItems()[data.item]);
 </script>
 
 <div class="flex flex-col items-start gap-4">

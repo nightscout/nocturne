@@ -5,12 +5,12 @@
   import Check from "@lucide/svelte/icons/check";
   import { Badge } from "$lib/components/ui/badge";
   import { SetupHubItemState, type SetupHubItem } from "$api";
-  import { SETUP_HUB_ITEMS } from "$lib/setup-hub/items.svelte";
+  import { setupHubItems } from "$lib/setup-hub/items.svelte";
   import type { PatientVoice } from "$lib/onboarding/patient-voice.svelte";
 
   let { item, voice }: { item: SetupHubItem; voice: PatientVoice } = $props();
 
-  const view = $derived(SETUP_HUB_ITEMS[item.key!]);
+  const view = $derived(setupHubItems()[item.key!]);
   const done = $derived(item.state === SetupHubItemState.Done);
 </script>
 
