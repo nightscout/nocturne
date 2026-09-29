@@ -27,8 +27,7 @@
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import { Artwork, type PaletteId } from "@nocturne/watercolour";
-  import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
+  import { Artwork } from "@nocturne/watercolour";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -51,17 +50,6 @@
   const tileVariant = $derived(
     getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
   );
-
-  // Presentation only: which paint each server-derived tile variant is washed in.
-  // Intensity carries the severity within a hue.
-  const washFor: Record<GlucoseTileVariant, { palette: PaletteId; intensity: number } | undefined> = {
-    "very-low": { palette: "ember", intensity: 0.9 },
-    low: { palette: "ember", intensity: 0.55 },
-    "in-range": { palette: "water", intensity: 0.6 },
-    high: { palette: "moonlight", intensity: 0.6 },
-    "very-high": { palette: "dusk", intensity: 0.9 },
-    neutral: undefined,
-  };
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -144,21 +132,21 @@
 </script>
 
 {#snippet rangeWash()}
-  <!-- Keyed on the variant: a new reading in the same range leaves the paint alone. The flat fill
-       underneath stays, so a wash that cannot draw leaves the plain tile. -->
+  <!-- A grey wash multiplied over the range fill, so the tile keeps the range token's own hue and
+       gains the paper's variation. Cropped to the wash's interior so its dried edge falls outside
+       the tile. Keyed on the variant: a new range repaints, a new reading in the same range does not. -->
   {#key tileVariant}
-    {@const wash = washFor[tileVariant]}
-    {#if wash}
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(2.5)_contrast(1.3)]">
       <Artwork
         artwork="wash"
-        palette={wash.palette}
-        intensity={wash.intensity}
-        durationMs={2000}
+        palette="slate"
+        surface="light"
+        durationMs={1600}
         releaseAfterFinish
         fit="fill"
-        class="size-full opacity-60 dark:opacity-40"
+        class="size-full"
       />
-    {/if}
+    </span>
   {/key}
 {/snippet}
 
