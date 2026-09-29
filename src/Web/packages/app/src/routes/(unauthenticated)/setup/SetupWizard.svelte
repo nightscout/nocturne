@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { tick } from "svelte";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Sprout from "@lucide/svelte/icons/sprout";
@@ -220,6 +221,31 @@
       ? 100
       : (activeIndex / (activeSteps.length - 1)) * 100
   );
+
+  let stepCard = $state<HTMLElement>();
+  let shownStepId: string | undefined;
+
+  // The steps share one card, so a step change keeps the scroll position and the focused
+  // button. Bring the card back into view and land keyboard and screen-reader users on the new
+  // heading.
+  $effect(() => {
+    const id = activeStep?.id;
+    const previous = shownStepId;
+    shownStepId = id;
+    if (previous === undefined || previous === id) return;
+    void tick().then(() => {
+      if (!stepCard) return;
+      if (stepCard.getBoundingClientRect().top < 0) {
+        const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        stepCard.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+      }
+      const heading = stepCard.querySelector<HTMLElement>("h1");
+      if (heading) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+    });
+  });
 
   const importBlocking = $derived(
     activeStep?.id === "import" && !importSettled
@@ -455,6 +481,7 @@
       </aside>
 
       <section
+        bind:this={stepCard}
         class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden md:min-h-135 flex flex-col"
       >
         <div
