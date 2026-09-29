@@ -471,13 +471,19 @@ pub fn scene_to_json(scene: &Scene) -> Result<String, DocumentError> {
     Ok(serde_json::to_string_pretty(&to_document(scene))?)
 }
 
-/// Reads `version` first so a newer document fails with
-/// `UnsupportedVersion` rather than a field error deep in the body.
+/// Parses the body once; only when that fails is `version` read on its own,
+/// so a newer document fails with `UnsupportedVersion` (or a document
+/// without one with `MissingVersion`) rather than a field error deep in the
+/// body.
 pub fn parse_scene_json(json: &str) -> Result<Scene, DocumentError> {
     #[derive(Deserialize)]
     struct VersionOnly {
         version: Option<u32>,
     }
+    let body_error = match serde_json::from_str::<SceneDocumentV1>(json) {
+        Ok(doc) => return from_document(doc),
+        Err(e) => e,
+    };
     let head: VersionOnly = serde_json::from_str(json)?;
     let version = head.version.ok_or(DocumentError::MissingVersion)?;
     if version != CURRENT_VERSION {
@@ -486,8 +492,7 @@ pub fn parse_scene_json(json: &str) -> Result<Scene, DocumentError> {
             supported: CURRENT_VERSION,
         });
     }
-    let doc: SceneDocumentV1 = serde_json::from_str(json)?;
-    from_document(doc)
+    Err(body_error.into())
 }
 
 #[cfg(test)]

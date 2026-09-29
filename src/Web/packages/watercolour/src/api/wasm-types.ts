@@ -10,6 +10,10 @@ export interface EngineStats {
   lastStepMs: number;
   lastRenderMs: number;
   initMs: number;
+  /** GPU time of the last tick batch; `null` without timestamp queries or before a tick. */
+  gpuTickMs: number | null;
+  /** GPU time of the last presented frame; `null` without timestamp queries. */
+  gpuRenderMs: number | null;
   adapterName: string;
 }
 

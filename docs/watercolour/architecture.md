@@ -117,8 +117,13 @@ workspace) breaks internally tagged enums on floats. `parse_scene_json` reads
 **Scene to GPU state.** Every per-cell field is packed into one `array<f32>`
 **state** buffer and one **scratch** buffer (`StateLayout` / `common.wgsl`),
 which keeps the port inside WebGPU's default eight storage buffers per stage
-and makes a checkpoint a single `copy_buffer_to_buffer`. Each pass reads
-`state` and writes its own scratch region, so no pass reads its own output.
+and makes a checkpoint a single `copy_buffer_to_buffer`. A pass that reads a
+field at its neighbours writes the result to the other buffer, so no pass
+reads its own output; the next reader takes the field from there, and the
+last writer of the tick puts it back in `state`, which holds every field
+between ticks. A tick therefore needs no buffer copies, and a batch of ticks
+is one compute pass (each dispatch is its own usage scope, so WebGPU orders
+its storage writes before the next dispatch's reads).
 The composite mode travels in the state header (`StateLayout::pack` writes
 `grid.composite_mode.flag()` into the spare float after `dry_rate`;
 `render.wgsl` reads it), so checkpoints and both backends read the mode from
@@ -141,7 +146,7 @@ integer hash, a pure function of (cell corner, tick, seed). The tick and the
 swirl seed (`SimulationGrid::tick`, `swirl_seed`, derived from the scene seed)
 sit in the state header, so a checkpoint restores the swirl's phase with the
 rest of the state and a seek replays it exactly; the GPU advances its tick
-with a one-thread `clock` dispatch at the end of every step. Both backends
+in the step's last dispatch (`capillary_wet`, cell 0). Both backends
 stop counting at `grid::MAX_TICK` (`2^24`, the largest integer the `f32`
 header slot holds exactly), where the swirl's phase freezes. Every division
 the swirl needs is done once on the host (`swirl::Geometry`) and passed in the
@@ -173,12 +178,12 @@ returns for the engine to load.
 | Shader | Entry points | Rule (CPU reference) | Deviation from CPU reference |
 |---|---|---|---|
 | `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
-| `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (host copies `q2 -> q` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl`, `clock` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
-| `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
+| `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project`, `project_q2` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (`project_q2` reads the correction from `q2` when the iteration count is odd) |
+| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
+| `transfer.wgsl` | `transfer`, `transfer_g_scratch` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
-| `render.wgsl` | `render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
+| `render.wgsl` | `presence_taps`, `render`, `fs_render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; each tap position's presence and inside share computed once per frame by `presence_taps`), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
 
 Stamps and masks are rasterised on the CPU by the shared `domain::paint` code
 and uploaded as a coverage field, so both backends see identical geometry. Shared
@@ -250,11 +255,20 @@ watchdog Windows resets the display driver at:
   buffers) and refused with an `EngineError`. wgpu reports an oversized buffer
   as an uncaptured error after the fact, which would fault the device for
   every instance sharing it.
-- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), a few
-  tens of milliseconds at the 512^2 maximum on an integrated GPU.
+- **Ticks are encoded sixteen per command buffer** (`TICKS_PER_SUBMIT`), one
+  compute pass each, a few tens of milliseconds at the 512^2 maximum on an
+  integrated GPU.
 - **The optics pass is dispatched in row bands** of at most 2^20 output pixels
   (`RENDER_PIXELS_PER_DISPATCH`), each its own submission, so a large canvas or
-  export raises the number of dispatches rather than the length of one.
+  export raises the number of dispatches rather than the length of one. A
+  presented frame is drawn in the same bands, scissored.
+- **Render paper is cached.** The render-resolution paper, generated on the
+  CPU, is kept as its GPU buffer in a cache the template engine shares with
+  every fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
+  (`PAPER_CACHE_BYTES`), so a remount at the same size skips generating it.
+- **GPU timestamps** (`GpuEngine::gpu_timings`, `stats().gpuTickMs` /
+  `gpuRenderMs`) are taken when the adapter offers `TIMESTAMP_QUERY`; a sample
+  starts only when the last one has been read back, so nothing waits on it.
 - **At most 32 submissions are in flight natively** (`MAX_IN_FLIGHT_SUBMISSIONS`):
   the 33rd blocks on the oldest, so an unattended replay (bake, tests) cannot
   pin unbounded driver memory. The browser paces its own queue.
@@ -264,8 +278,9 @@ watchdog Windows resets the display driver at:
   uncaptured-error handler; the first validation/out-of-memory/internal error
   is kept and every later submission returns it (`GpuContext::check`). Natively
   wgpu's default handler would abort the process; in wasm it would leave the
-  module unusable. The readback staging buffer is created on first readback,
-  so a presenting instance never holds one.
+  module unusable. The f32 readback frame and its staging buffer are created
+  on first readback, so a presenting instance never holds either: `present`
+  shades each pixel straight into the swapchain texture (`fs_render`).
 
 ## Future native integration points
 

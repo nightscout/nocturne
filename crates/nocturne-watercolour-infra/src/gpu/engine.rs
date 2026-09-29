@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -21,6 +22,7 @@ use nocturne_watercolour_core::domain::{
 use super::context::GpuContext;
 use super::layout::StateLayout;
 use super::surface::PresentSurface;
+use super::timer::GpuTimer;
 
 /// Bytes of checkpoint storage held on the GPU per loaded scene. At the
 /// 512x512 / 8-pigment maximum one checkpoint is 25 MB, so this admits 10;
@@ -48,6 +50,13 @@ const MAX_IN_FLIGHT_SUBMISSIONS: usize = 32;
 const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
+
+/// GPU bytes of render-resolution paper an engine and its forks keep after
+/// the instance that made them is gone. A remount at the same size (a tab
+/// switch, a re-hover, a list of same-seed accents) then skips generating
+/// the paper on the CPU, the main-thread cost of a first present; eight
+/// megabytes is two 1024^2 canvases or thirty-two 256^2 ones.
+const PAPER_CACHE_BYTES: u64 = 8 * 1024 * 1024;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -210,7 +219,7 @@ struct RenderUniform {
     n: u32,
     /// First output row of this dispatch's band.
     y_offset: u32,
-    _p1: u32,
+    encode_srgb: u32,
     granulation_gain: f32,
     wet_pigment_visibility: f32,
     thickness_scale: f32,
@@ -237,15 +246,17 @@ struct SimPipelines {
     jacobi_a: wgpu::ComputePipeline,
     jacobi_b: wgpu::ComputePipeline,
     project: wgpu::ComputePipeline,
+    project_q2: wgpu::ComputePipeline,
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
     swirl_distance_h: wgpu::ComputePipeline,
     swirl_distance_v: wgpu::ComputePipeline,
     swirl_stream: wgpu::ComputePipeline,
-    swirl: wgpu::ComputePipeline,
-    clock: wgpu::ComputePipeline,
+    swirl_from_scratch: wgpu::ComputePipeline,
+    swirl_from_state: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
+    transfer_g_scratch: wgpu::ComputePipeline,
     capillary: wgpu::ComputePipeline,
     capillary_wet: wgpu::ComputePipeline,
     apply_brush: wgpu::ComputePipeline,
@@ -258,26 +269,57 @@ struct SimPipelines {
 struct RenderPipeline {
     layout: wgpu::BindGroupLayout,
     pipeline: wgpu::ComputePipeline,
+    /// `presence_taps`: group 0 is the uniform and state, group 1 the
+    /// presence buffer it writes.
+    presence_inputs: wgpu::BindGroupLayout,
+    presence_output: wgpu::BindGroupLayout,
+    presence: wgpu::ComputePipeline,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-struct PresentUniform {
-    width: u32,
-    height: u32,
-    encode_srgb: u32,
-    _pad: u32,
-}
-
-/// The swapchain format is only known once a surface exists, so the render
-/// pipeline is built on first present and rebuilt if the format changes.
+/// `fs_render` in `render.wgsl`. The swapchain format is only known once a
+/// surface exists, so a pipeline is built on the first present in each
+/// format; the cache is shared by every fork, so instances after the first
+/// reuse it.
 #[derive(Clone)]
 struct PresentPipeline {
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     module: wgpu::ShaderModule,
-    cached: Option<(wgpu::TextureFormat, wgpu::RenderPipeline)>,
+    cached: Arc<Mutex<Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>>>,
 }
+
+/// What a render-resolution paper field is a function of.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct PaperKey {
+    seed: u64,
+    paper: [u32; 5],
+    width: u32,
+    height: u32,
+    aspect: u32,
+    pixel_scale: u32,
+}
+
+impl PaperKey {
+    fn new(paper: &Paper, width: u32, height: u32, aspect: f32, pixel_scale: f32) -> PaperKey {
+        PaperKey {
+            seed: paper.seed.0,
+            paper: [
+                paper.grain_scale.to_bits(),
+                paper.height_amplitude.to_bits(),
+                paper.absorbency[0].to_bits(),
+                paper.absorbency[1].to_bits(),
+                paper.fibre_anisotropy.to_bits(),
+            ],
+            width,
+            height,
+            aspect: aspect.to_bits(),
+            pixel_scale: pixel_scale.to_bits(),
+        }
+    }
+}
+
+/// Least recently used first; see [`PAPER_CACHE_BYTES`].
+type PaperCache = Arc<Mutex<VecDeque<(PaperKey, wgpu::Buffer)>>>;
 
 struct Loaded {
     width: u32,
@@ -286,7 +328,6 @@ struct Loaded {
     paper: Paper,
     paper_sim: PaperField,
     state: wgpu::Buffer,
-    scratch: wgpu::Buffer,
     stamp: wgpu::Buffer,
     stroke: wgpu::Buffer,
     optics: wgpu::Buffer,
@@ -305,13 +346,98 @@ struct RenderTarget {
     height: u32,
     pixel_scale: f32,
     uniform: wgpu::Buffer,
-    out: wgpu::Buffer,
-    /// Host-visible copy of `out`, created on the first readback. A
-    /// presenting instance never reads back, so it never pays for one.
-    staging: Option<wgpu::Buffer>,
-    bind_group: wgpu::BindGroup,
-    present_uniform: wgpu::Buffer,
+    paper: wgpu::Buffer,
+    presence: wgpu::Buffer,
+    presence_inputs: wgpu::BindGroup,
+    presence_output: wgpu::BindGroup,
     present_bind_group: wgpu::BindGroup,
+    readback: Option<Readback>,
+}
+
+/// The f32 frame `render` writes (16 B per output pixel) and its
+/// host-visible copy; see `GpuEngine::ensure_readback`.
+struct Readback {
+    out: wgpu::Buffer,
+    staging: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+}
+
+/// GPU commands encoded since the engine was created or the counts were
+/// last reset: what the per-command overhead of a host scales with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CommandCounts {
+    pub passes: u64,
+    pub dispatches: u64,
+    /// Buffer-to-buffer copies and clears.
+    pub copies: u64,
+    pub submits: u64,
+}
+
+#[derive(Default)]
+struct CommandCounter {
+    passes: AtomicU64,
+    dispatches: AtomicU64,
+    copies: AtomicU64,
+    submits: AtomicU64,
+}
+
+impl CommandCounter {
+    fn add(counter: &AtomicU64, n: u64) {
+        counter.fetch_add(n, Ordering::Relaxed);
+    }
+
+    fn get(&self) -> CommandCounts {
+        CommandCounts {
+            passes: self.passes.load(Ordering::Relaxed),
+            dispatches: self.dispatches.load(Ordering::Relaxed),
+            copies: self.copies.load(Ordering::Relaxed),
+            submits: self.submits.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// GPU time of the latest sampled work, from timestamp queries; `None`
+/// until a sample has been read back, and always on a device without
+/// `TIMESTAMP_QUERY`. Samples are taken whenever the previous one has been
+/// read, so these lag the work by a frame or two.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct GpuTimings {
+    /// Milliseconds per tick, averaged over the ticks of one `step`.
+    pub tick_ms: Option<f64>,
+    /// Milliseconds for one frame's optics (presence pass through the last
+    /// band), presented or read back.
+    pub render_ms: Option<f64>,
+}
+
+struct Timers {
+    tick: GpuTimer,
+    render: GpuTimer,
+    /// Nanoseconds per timestamp unit.
+    period: f32,
+    /// Ticks the in-flight tick sample spans.
+    sampled_ticks: u32,
+    last: GpuTimings,
+}
+
+impl Timers {
+    fn new(ctx: &GpuContext) -> Option<Timers> {
+        ctx.has_timestamps().then(|| Timers {
+            tick: GpuTimer::new(ctx.device(), "tick-timestamps"),
+            render: GpuTimer::new(ctx.device(), "render-timestamps"),
+            period: ctx.queue().get_timestamp_period(),
+            sampled_ticks: 1,
+            last: GpuTimings::default(),
+        })
+    }
+
+    fn collect(&mut self) {
+        if let Some(ms) = self.tick.collect(self.period) {
+            self.last.tick_ms = Some(ms / f64::from(self.sampled_ticks.max(1)));
+        }
+        if let Some(ms) = self.render.collect(self.period) {
+            self.last.render_ms = Some(ms);
+        }
+    }
 }
 
 pub struct GpuEngine {
@@ -327,6 +453,9 @@ pub struct GpuEngine {
     /// Submissions not yet known to have completed, oldest first; see
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`].
     in_flight: Mutex<VecDeque<wgpu::SubmissionIndex>>,
+    counter: CommandCounter,
+    paper_cache: PaperCache,
+    timers: Option<Timers>,
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -339,7 +468,6 @@ const SIM_SOURCES: [&str; 6] = [
     include_str!("shaders/apply.wgsl"),
 ];
 const RENDER_SOURCE: &str = include_str!("shaders/render.wgsl");
-const PRESENT_SOURCE: &str = include_str!("shaders/present.wgsl");
 
 fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
@@ -465,15 +593,17 @@ impl GpuEngine {
             jacobi_a: make("jacobi_a"),
             jacobi_b: make("jacobi_b"),
             project: make("project"),
+            project_q2: make("project_q2"),
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
             swirl_distance_h: make("swirl_distance_h"),
             swirl_distance_v: make("swirl_distance_v"),
             swirl_stream: make("swirl_stream"),
-            swirl: make("swirl"),
-            clock: make("clock"),
+            swirl_from_scratch: make("swirl_from_scratch"),
+            swirl_from_state: make("swirl_from_state"),
             transfer: make("transfer"),
+            transfer_g_scratch: make("transfer_g_scratch"),
             capillary: make("capillary"),
             capillary_wet: make("capillary_wet"),
             apply_brush: make("apply_brush"),
@@ -495,6 +625,7 @@ impl GpuEngine {
                 storage_entry(2, true),
                 storage_entry(3, true),
                 storage_entry(4, false),
+                storage_entry(5, true),
             ],
         });
         let render_pipeline_layout =
@@ -511,34 +642,48 @@ impl GpuEngine {
             compilation_options: Default::default(),
             cache: None,
         });
-
-        let present_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("watercolour-present"),
-            source: wgpu::ShaderSource::Wgsl(PRESENT_SOURCE.into()),
+        let presence_inputs = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("watercolour-presence-inputs"),
+            entries: &[uniform_entry(0), storage_entry(1, true)],
         });
+        let presence_output = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("watercolour-presence-output"),
+            entries: &[storage_entry(0, false)],
+        });
+        let presence_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("watercolour-presence"),
+                bind_group_layouts: &[Some(&presence_inputs), Some(&presence_output)],
+                ..Default::default()
+            });
+        let presence_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("presence_taps"),
+            layout: Some(&presence_pipeline_layout),
+            module: &render_module,
+            entry_point: Some("presence_taps"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let fragment = |binding: u32, ty: wgpu::BufferBindingType| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let read_only = wgpu::BufferBindingType::Storage { read_only: true };
         let present_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("watercolour-present"),
             entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
+                fragment(0, wgpu::BufferBindingType::Uniform),
+                fragment(1, read_only),
+                fragment(2, read_only),
+                fragment(3, read_only),
+                fragment(5, read_only),
             ],
         });
         let present_pipeline_layout =
@@ -549,6 +694,7 @@ impl GpuEngine {
             });
 
         let validation = error_scope.pop();
+        let timers = Timers::new(&ctx);
         let engine = GpuEngine {
             ctx,
             params,
@@ -557,17 +703,23 @@ impl GpuEngine {
             render: RenderPipeline {
                 layout: render_layout,
                 pipeline: render_pipeline,
+                presence_inputs,
+                presence_output,
+                presence: presence_pipeline,
             },
             present: PresentPipeline {
                 layout: present_layout,
                 pipeline_layout: present_pipeline_layout,
-                module: present_module,
-                cached: None,
+                module: render_module,
+                cached: Arc::default(),
             },
             loaded: None,
             next_checkpoint: 1,
             checkpoint_budget: CHECKPOINT_BUDGET_BYTES,
             in_flight: Mutex::new(VecDeque::new()),
+            counter: CommandCounter::default(),
+            paper_cache: Arc::default(),
+            timers,
         };
         (engine, validation)
     }
@@ -588,6 +740,9 @@ impl GpuEngine {
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
+            counter: CommandCounter::default(),
+            paper_cache: Arc::clone(&self.paper_cache),
+            timers: Timers::new(&self.ctx),
         }
     }
 
@@ -605,6 +760,24 @@ impl GpuEngine {
         match &self.loaded {
             Some(l) => l.checkpoints.len() as u64 * l.layout.state_bytes(),
             None => 0,
+        }
+    }
+
+    pub fn command_counts(&self) -> CommandCounts {
+        self.counter.get()
+    }
+
+    /// The latest GPU timestamps read back, collecting any that have
+    /// arrived; never blocks.
+    pub fn gpu_timings(&mut self) -> GpuTimings {
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = self.ctx.device().poll(wgpu::PollType::Poll);
+        match self.timers.as_mut() {
+            Some(t) => {
+                t.collect();
+                t.last
+            }
+            None => GpuTimings::default(),
         }
     }
 
@@ -672,6 +845,7 @@ impl GpuEngine {
     /// [`MAX_IN_FLIGHT_SUBMISSIONS`] are pending.
     fn submit(&self, commands: wgpu::CommandBuffer) -> Result<(), EngineError> {
         self.ctx.check()?;
+        CommandCounter::add(&self.counter.submits, 1);
         let index = self.ctx.queue().submit([commands]);
         let oldest = {
             let mut pending = self.in_flight.lock().unwrap_or_else(|p| p.into_inner());
@@ -691,88 +865,69 @@ impl GpuEngine {
         Ok(())
     }
 
-    /// Encodes one tick: the same pass order as `sim::step`, with scratch
-    /// regions copied back into `state` where the CPU swaps vectors.
-    fn encode_tick(&self, enc: &mut wgpu::CommandEncoder, l: &Loaded) {
-        let n = l.layout.n as u32;
-        let f = std::mem::size_of::<f32>() as u64;
-        let region = |elems: usize| (elems as u64) * f;
-        let copy = |enc: &mut wgpu::CommandEncoder, from: usize, to: usize, elems: usize| {
-            enc.copy_buffer_to_buffer(
-                &l.scratch,
-                region(from),
-                &l.state,
-                region(to),
-                region(elems),
-            );
-        };
-        let dispatch = |enc: &mut wgpu::CommandEncoder, pipeline: &wgpu::ComputePipeline| {
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+    /// Encodes one tick into `pass`: the same pass order as `sim::step`.
+    /// Every dispatch in a compute pass is its own usage scope, so each one
+    /// sees the storage writes of the one before; where the CPU swaps
+    /// vectors, the next reader takes the field from `scratch` instead (see
+    /// `common.wgsl`), so a tick needs no copies.
+    fn encode_tick(&self, pass: &mut wgpu::ComputePass<'_>, l: &Loaded) {
+        let cells = groups(l.layout.n as u32);
+        let mut dispatches = 0;
+        let mut dispatch = |pipeline: &wgpu::ComputePipeline, groups: u32| {
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(n), 1, 1);
+            pass.dispatch_workgroups(groups, 1, 1);
+            dispatches += 1;
         };
-        let lay = &l.layout;
+        let sim = &self.sim;
 
-        dispatch(enc, &self.sim.velocity);
-        copy(enc, lay.scratch_u(), lay.u(), lay.n);
-        copy(enc, lay.scratch_v(), lay.v(), lay.n);
-
-        dispatch(enc, &self.sim.divergence);
-        enc.clear_buffer(&l.scratch, region(lay.scratch_q()), Some(region(lay.n)));
+        dispatch(&sim.velocity, cells);
+        dispatch(&sim.divergence, cells);
         for i in 0..self.params.jacobi_iterations {
             dispatch(
-                enc,
                 if i % 2 == 0 {
-                    &self.sim.jacobi_a
+                    &sim.jacobi_a
                 } else {
-                    &self.sim.jacobi_b
+                    &sim.jacobi_b
                 },
+                cells,
             );
         }
         if self.params.jacobi_iterations % 2 == 1 {
-            enc.copy_buffer_to_buffer(
-                &l.scratch,
-                region(lay.scratch_q2()),
-                &l.scratch,
-                region(lay.scratch_q()),
-                region(lay.n),
-            );
+            dispatch(&sim.project_q2, cells);
+        } else {
+            dispatch(&sim.project, cells);
         }
-        dispatch(enc, &self.sim.project);
-        copy(enc, lay.scratch_u(), lay.u(), lay.n);
-        copy(enc, lay.scratch_v(), lay.v(), lay.n);
 
-        dispatch(enc, &self.sim.blur_h);
-        dispatch(enc, &self.sim.blur_v);
-        dispatch(enc, &self.sim.advect);
-        copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
-        copy(enc, lay.scratch_p(), lay.p(), lay.n);
+        dispatch(&sim.blur_h, cells);
+        dispatch(&sim.blur_v, cells);
+        dispatch(&sim.advect, cells);
 
+        let mut g_in_scratch = true;
         if self.params.swirl_speed > 0.0 && l.maybe_wet {
-            dispatch(enc, &self.sim.swirl_distance_h);
-            dispatch(enc, &self.sim.swirl_distance_v);
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-            pass.set_pipeline(&self.sim.swirl_stream);
-            pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(lay.corner_count() as u32), 1, 1);
-            drop(pass);
+            dispatch(&sim.swirl_distance_h, cells);
+            dispatch(&sim.swirl_distance_v, cells);
+            dispatch(&sim.swirl_stream, groups(l.layout.corner_count() as u32));
             for _ in 0..l.swirl_substeps {
-                dispatch(enc, &self.sim.swirl);
-                copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+                dispatch(
+                    if g_in_scratch {
+                        &sim.swirl_from_scratch
+                    } else {
+                        &sim.swirl_from_state
+                    },
+                    cells,
+                );
+                g_in_scratch = !g_in_scratch;
             }
         }
 
-        dispatch(enc, &self.sim.transfer);
-
-        dispatch(enc, &self.sim.capillary);
-        dispatch(enc, &self.sim.capillary_wet);
-        copy(enc, lay.scratch_s(), lay.s(), lay.n);
-
-        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-        pass.set_pipeline(&self.sim.clock);
-        pass.set_bind_group(0, &l.bind_group, &[]);
-        pass.dispatch_workgroups(1, 1, 1);
+        if g_in_scratch {
+            dispatch(&sim.transfer_g_scratch, cells);
+        } else {
+            dispatch(&sim.transfer, cells);
+        }
+        dispatch(&sim.capillary, cells);
+        dispatch(&sim.capillary_wet, cells);
+        CommandCounter::add(&self.counter.dispatches, dispatches);
     }
 
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
@@ -799,6 +954,8 @@ impl GpuEngine {
             pass.set_bind_group(0, &l.bind_group, &[]);
             pass.dispatch_workgroups(groups(l.layout.n as u32), 1, 1);
         }
+        CommandCounter::add(&self.counter.passes, 1);
+        CommandCounter::add(&self.counter.dispatches, 1);
         self.submit(enc.finish())
     }
 
@@ -915,28 +1072,155 @@ impl GpuEngine {
             (paper, aspect, pixel_scale)
         };
         let (paper, aspect, pixel_scale) = needs;
-        let paper_out =
-            PaperField::generate_with_pixel_scale(&paper, width, height, aspect, pixel_scale);
-        let pixels = (width as u64) * (height as u64);
         let uniform = self.buffer(
             "render-params",
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let paper_buf = self.buffer(
-            "paper-out",
-            pixels * 4,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        let paper_buf = self.paper_buffer(
+            PaperKey::new(&paper, width, height, aspect, pixel_scale),
+            &paper,
         )?;
-        let out = self.buffer(
-            "render-out",
-            pixels * 16,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        let (presence_len, pigments) = {
+            let l = self.loaded()?;
+            (
+                (l.width as u64 + 3) * (l.height as u64 + 3),
+                l.layout.pigment_count as u64,
+            )
+        };
+        let presence = self.buffer(
+            "render-presence",
+            presence_len * pigments * 8,
+            wgpu::BufferUsages::STORAGE,
+        )?;
+        let l = self.loaded()?;
+        let device = self.ctx.device();
+        let presence_inputs = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("watercolour-presence-inputs"),
+            layout: &self.render.presence_inputs,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: l.state.as_entire_binding(),
+                },
+            ],
+        });
+        let presence_output = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("watercolour-presence-output"),
+            layout: &self.render.presence_output,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: presence.as_entire_binding(),
+            }],
+        });
+        let present_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("watercolour-present"),
+            layout: &self.present.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: l.state.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: l.optics.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: paper_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: presence.as_entire_binding(),
+                },
+            ],
+        });
+        self.loaded_mut()?.render_cache = Some(RenderTarget {
+            width,
+            height,
+            pixel_scale,
+            uniform,
+            paper: paper_buf,
+            presence,
+            presence_inputs,
+            presence_output,
+            present_bind_group,
+            readback: None,
+        });
+        Ok(())
+    }
+
+    /// The render-resolution paper for `key`, from the shared cache or
+    /// generated and uploaded (and cached when it fits the budget).
+    fn paper_buffer(&self, key: PaperKey, paper: &Paper) -> Result<wgpu::Buffer, EngineError> {
+        {
+            let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(at) = cache.iter().position(|(k, _)| *k == key) {
+                let hit = cache
+                    .remove(at)
+                    .ok_or_else(|| EngineError::new("paper cache"))?;
+                let buffer = hit.1.clone();
+                cache.push_back(hit);
+                return Ok(buffer);
+            }
+        }
+        let field = PaperField::generate_with_pixel_scale(
+            paper,
+            key.width,
+            key.height,
+            f32::from_bits(key.aspect),
+            f32::from_bits(key.pixel_scale),
+        );
+        let buffer = self.buffer(
+            "paper-out",
+            (field.height.len() * std::mem::size_of::<f32>()) as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         )?;
         self.ctx
             .queue()
-            .write_buffer(&paper_buf, 0, bytemuck::cast_slice(&paper_out.height));
+            .write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
+        if buffer.size() <= PAPER_CACHE_BYTES {
+            let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
+            cache.push_back((key, buffer.clone()));
+            let mut total: u64 = cache.iter().map(|(_, b)| b.size()).sum();
+            while total > PAPER_CACHE_BYTES {
+                match cache.pop_front() {
+                    Some((_, evicted)) => total -= evicted.size(),
+                    None => break,
+                }
+            }
+        }
+        Ok(buffer)
+    }
+
+    /// The `out` buffer `render` writes and its host-visible copy, made on
+    /// the first readback: a presenting instance never pays for either.
+    fn ensure_readback(&mut self) -> Result<(), EngineError> {
+        let target = self.render_target()?;
+        if target.readback.is_some() {
+            return Ok(());
+        }
+        let bytes = (target.width as u64) * (target.height as u64) * 16;
+        let out = self.buffer(
+            "render-out",
+            bytes,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        )?;
+        let staging = self.buffer(
+            "render-staging",
+            bytes,
+            wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        )?;
         let l = self.loaded()?;
+        let target = self.render_target()?;
         let bind_group = self
             .ctx
             .device()
@@ -946,7 +1230,7 @@ impl GpuEngine {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: uniform.as_entire_binding(),
+                        resource: target.uniform.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
@@ -958,92 +1242,112 @@ impl GpuEngine {
                     },
                     wgpu::BindGroupEntry {
                         binding: 3,
-                        resource: paper_buf.as_entire_binding(),
+                        resource: target.paper.as_entire_binding(),
                     },
                     wgpu::BindGroupEntry {
                         binding: 4,
                         resource: out.as_entire_binding(),
                     },
-                ],
-            });
-        let present_uniform = self.buffer(
-            "present-params",
-            std::mem::size_of::<PresentUniform>() as u64,
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        )?;
-        let present_bind_group = self
-            .ctx
-            .device()
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("watercolour-present"),
-                layout: &self.present.layout,
-                entries: &[
                     wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: present_uniform.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: out.as_entire_binding(),
+                        binding: 5,
+                        resource: target.presence.as_entire_binding(),
                     },
                 ],
             });
-        self.loaded_mut()?.render_cache = Some(RenderTarget {
-            width,
-            height,
-            pixel_scale,
-            uniform,
+        let target = self
+            .loaded_mut()?
+            .render_cache
+            .as_mut()
+            .ok_or_else(|| EngineError::new("no rendered frame"))?;
+        target.readback = Some(Readback {
             out,
-            staging: None,
+            staging,
             bind_group,
-            present_uniform,
-            present_bind_group,
         });
         Ok(())
     }
 
-    /// Runs the optics pass into the cached output buffer at `width` x
-    /// `height`; readback and presentation both start from here. The frame
-    /// is rendered in row bands (see [`RENDER_PIXELS_PER_DISPATCH`]); each
-    /// band's uniform write is queued ahead of its own submission, so the
-    /// bands execute in order against the same uniform buffer.
+    fn render_uniform(
+        &self,
+        l: &Loaded,
+        width: u32,
+        height: u32,
+        y_offset: u32,
+        encode_srgb: bool,
+    ) -> RenderUniform {
+        RenderUniform {
+            out_width: width,
+            out_height: height,
+            sim_width: l.width,
+            sim_height: l.height,
+            pigment_count: l.layout.pigment_count as u32,
+            n: l.layout.n as u32,
+            y_offset,
+            encode_srgb: u32::from(encode_srgb),
+            granulation_gain: self.render_params.granulation_gain,
+            wet_pigment_visibility: self.render_params.wet_pigment_visibility,
+            thickness_scale: self.render_params.thickness_scale,
+            wet_darken: self.render_params.wet_darken,
+            wet_sheen_add: self.render_params.wet_sheen_add,
+            sheen_depth: self.render_params.sheen_depth,
+            wet_scatter_loss: self.render_params.wet_scatter_loss,
+            wet_absorb_gain: self.render_params.wet_absorb_gain,
+            optical_gamma: self.render_params.optical_gamma,
+            optical_max: self.render_params.optical_max,
+            optical_mid: self.render_params.optical_mid,
+            surface_k1: self.render_params.surface_k1,
+            surface_k2: self.render_params.surface_k2,
+            surface_coverage_gain: self.render_params.surface_coverage_gain,
+            _p2: 0.0,
+            _p3: 0.0,
+        }
+    }
+
+    fn encode_presence(
+        &self,
+        enc: &mut wgpu::CommandEncoder,
+        l: &Loaded,
+        target: &RenderTarget,
+        timer: Option<&GpuTimer>,
+    ) {
+        let taps = (l.width + 3) * (l.height + 3);
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("presence"),
+            timestamp_writes: timer.map(|t| t.compute_writes(true, false)),
+        });
+        pass.set_pipeline(&self.render.presence);
+        pass.set_bind_group(0, &target.presence_inputs, &[]);
+        pass.set_bind_group(1, &target.presence_output, &[]);
+        pass.dispatch_workgroups(groups(taps), 1, 1);
+        CommandCounter::add(&self.counter.passes, 1);
+        CommandCounter::add(&self.counter.dispatches, 1);
+    }
+
+    /// Runs the optics pass into the readback buffer at `width` x `height`.
+    /// The frame is rendered in row bands (see [`RENDER_PIXELS_PER_DISPATCH`]);
+    /// each band's uniform write is queued ahead of its own submission, so
+    /// the bands execute in order against the same uniform buffer.
     fn render_frame(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
         if width == 0 || height == 0 {
             return Err(EngineError::new("zero output size"));
         }
         self.ensure_render_target(width, height)?;
+        self.ensure_readback()?;
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+        }
+        let timer = self.render_timer();
         let l = self.loaded()?;
         let target = self.render_target()?;
+        let readback = target
+            .readback
+            .as_ref()
+            .ok_or_else(|| EngineError::new("no readback buffer"))?;
         let band_rows = render_band_rows(width, height);
         let mut y_offset = 0;
         while y_offset < height {
             let rows = band_rows.min(height - y_offset);
-            let uniform = RenderUniform {
-                out_width: width,
-                out_height: height,
-                sim_width: l.width,
-                sim_height: l.height,
-                pigment_count: l.layout.pigment_count as u32,
-                n: l.layout.n as u32,
-                y_offset,
-                _p1: 0,
-                granulation_gain: self.render_params.granulation_gain,
-                wet_pigment_visibility: self.render_params.wet_pigment_visibility,
-                thickness_scale: self.render_params.thickness_scale,
-                wet_darken: self.render_params.wet_darken,
-                wet_sheen_add: self.render_params.wet_sheen_add,
-                sheen_depth: self.render_params.sheen_depth,
-                wet_scatter_loss: self.render_params.wet_scatter_loss,
-                wet_absorb_gain: self.render_params.wet_absorb_gain,
-                optical_gamma: self.render_params.optical_gamma,
-                optical_max: self.render_params.optical_max,
-                optical_mid: self.render_params.optical_mid,
-                surface_k1: self.render_params.surface_k1,
-                surface_k2: self.render_params.surface_k2,
-                surface_coverage_gain: self.render_params.surface_coverage_gain,
-                _p2: 0.0,
-                _p3: 0.0,
-            };
+            let uniform = self.render_uniform(l, width, height, y_offset, false);
             self.ctx
                 .queue()
                 .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
@@ -1053,44 +1357,192 @@ impl GpuEngine {
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("render"),
                     });
+            if y_offset == 0 {
+                self.encode_presence(&mut enc, l, target, timer);
+            }
+            let last = y_offset + rows >= height;
             {
-                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("render"),
+                    timestamp_writes: timer
+                        .filter(|_| last)
+                        .map(|t| t.compute_writes(false, true)),
+                });
                 pass.set_pipeline(&self.render.pipeline);
-                pass.set_bind_group(0, &target.bind_group, &[]);
+                pass.set_bind_group(0, &readback.bind_group, &[]);
                 pass.dispatch_workgroups(width.div_ceil(16), rows.div_ceil(16), 1);
+            }
+            CommandCounter::add(&self.counter.passes, 1);
+            CommandCounter::add(&self.counter.dispatches, 1);
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
             }
             self.submit(enc.finish())?;
             y_offset += rows;
         }
+        if let Some(t) = timer {
+            t.request();
+        }
         Ok(())
     }
 
-    fn ensure_staging(&mut self) -> Result<(), EngineError> {
-        let target = self.render_target()?;
-        if target.staging.is_some() {
-            return Ok(());
+    /// Shades the current state straight into `view`, a `format` target of
+    /// `width` x `height`: the frame `render_frame` computes, in the same row
+    /// bands, each its own submission, with no frame buffer in between.
+    fn draw_frame(
+        &mut self,
+        view: &wgpu::TextureView,
+        format: wgpu::TextureFormat,
+        encode_srgb: bool,
+        width: u32,
+        height: u32,
+    ) -> Result<(), EngineError> {
+        if width == 0 || height == 0 {
+            return Err(EngineError::new("zero output size"));
         }
-        let bytes = (target.width as u64) * (target.height as u64) * 16;
+        self.ensure_render_target(width, height)?;
+        let pipeline = self.present_pipeline(format);
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+        }
+        let timer = self.render_timer();
+        let l = self.loaded()?;
+        let target = self.render_target()?;
+        let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
+        self.ctx
+            .queue()
+            .write_buffer(&target.uniform, 0, bytemuck::bytes_of(&uniform));
+        let band_rows = render_band_rows(width, height);
+        let mut y_offset = 0;
+        while y_offset < height {
+            let rows = band_rows.min(height - y_offset);
+            let mut enc =
+                self.ctx
+                    .device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("present"),
+                    });
+            if y_offset == 0 {
+                self.encode_presence(&mut enc, l, target, timer);
+            }
+            let last = y_offset + rows >= height;
+            {
+                let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("present"),
+                    timestamp_writes: timer.filter(|_| last).map(|t| t.render_writes(false, true)),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: if y_offset == 0 {
+                                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+                            } else {
+                                wgpu::LoadOp::Load
+                            },
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                pass.set_pipeline(&pipeline);
+                pass.set_bind_group(0, &target.present_bind_group, &[]);
+                pass.set_scissor_rect(0, y_offset, width, rows);
+                pass.draw(0..3, 0..1);
+            }
+            CommandCounter::add(&self.counter.passes, 1);
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
+            }
+            self.submit(enc.finish())?;
+            y_offset += rows;
+        }
+        if let Some(t) = timer {
+            t.request();
+        }
+        Ok(())
+    }
+
+    /// The render timer when it is free to take a sample.
+    fn render_timer(&self) -> Option<&GpuTimer> {
+        self.timers.as_ref().map(|t| &t.render).filter(|t| t.idle())
+    }
+
+    /// The optics pass alone, with no readback or presentation; for timing.
+    pub fn render_without_readback(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
+        self.render_frame(width, height)
+    }
+
+    /// Draws the frame as `present` does into an offscreen `rgba8unorm`
+    /// target, a browser canvas's format, and returns its RGBA bytes row by
+    /// row; with `read_back` false it only draws, for timing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn present_offscreen(
+        &mut self,
+        width: u32,
+        height: u32,
+        read_back: bool,
+    ) -> Result<Option<Vec<u8>>, EngineError> {
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.ctx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("offscreen-present"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        self.draw_frame(&view, format, true, width, height)?;
+        if !read_back {
+            return Ok(None);
+        }
+        let row = (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let staging = self.buffer(
-            "render-staging",
-            bytes,
+            "offscreen-readback",
+            u64::from(row) * u64::from(height),
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         )?;
-        let target = self
-            .loaded_mut()?
-            .render_cache
-            .as_mut()
-            .ok_or_else(|| EngineError::new("no rendered frame"))?;
-        target.staging = Some(staging);
-        Ok(())
+        let mut enc = self
+            .ctx
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("offscreen-readback"),
+            });
+        enc.copy_texture_to_buffer(
+            texture.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: Some(height),
+                },
+            },
+            size,
+        );
+        self.submit(enc.finish())?;
+        let data = self.map_read(&staging)?;
+        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+        for line in data.chunks(row as usize).take(height as usize) {
+            rgba.extend_from_slice(&line[..(width * 4) as usize]);
+        }
+        Ok(Some(rgba))
     }
 
     fn copy_frame_to_staging(&self, width: u32, height: u32) -> Result<&wgpu::Buffer, EngineError> {
-        let target = self.render_target()?;
-        let staging = target
-            .staging
+        let readback = self
+            .render_target()?
+            .readback
             .as_ref()
-            .ok_or_else(|| EngineError::new("no staging buffer"))?;
+            .ok_or_else(|| EngineError::new("no readback buffer"))?;
         let bytes = (width as u64) * (height as u64) * 16;
         let mut enc = self
             .ctx
@@ -1098,15 +1550,15 @@ impl GpuEngine {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("readback"),
             });
-        enc.copy_buffer_to_buffer(&target.out, 0, staging, 0, bytes);
+        enc.copy_buffer_to_buffer(&readback.out, 0, &readback.staging, 0, bytes);
+        CommandCounter::add(&self.counter.copies, 1);
         self.submit(enc.finish())?;
-        Ok(staging)
+        Ok(&readback.staging)
     }
 
     /// `Renderer::render` for hosts that cannot block on a buffer map.
     pub async fn render_async(&mut self, width: u32, height: u32) -> Result<Image, EngineError> {
         self.render_frame(width, height)?;
-        self.ensure_staging()?;
         let staging = self.copy_frame_to_staging(width, height)?;
         let data = self.map_read_async(staging).await?;
         let floats: &[f32] = bytemuck::cast_slice(&data);
@@ -1123,61 +1575,35 @@ impl GpuEngine {
     pub fn present(&mut self, surface: &PresentSurface) -> Result<bool, EngineError> {
         self.ctx.check()?;
         let (width, height) = surface.size();
-        self.render_frame(width, height)?;
-        let format = surface.format();
-        if !matches!(&self.present.cached, Some((f, _)) if *f == format) {
-            let pipeline = self.build_present_pipeline(format);
-            self.present.cached = Some((format, pipeline));
-        }
         let Some(frame) = surface.acquire(&self.ctx)? else {
             return Ok(false);
         };
-        let target = self.render_target()?;
-        self.ctx.queue().write_buffer(
-            &target.present_uniform,
-            0,
-            bytemuck::bytes_of(&PresentUniform {
-                width,
-                height,
-                encode_srgb: u32::from(surface.encodes_srgb_in_shader()),
-                _pad: 0,
-            }),
-        );
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut enc = self
-            .ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("present"),
-            });
-        {
-            let (_, pipeline) = self
-                .present
-                .cached
-                .as_ref()
-                .ok_or_else(|| EngineError::new("no present pipeline"))?;
-            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("present"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &target.present_bind_group, &[]);
-            pass.draw(0..3, 0..1);
-        }
-        self.submit(enc.finish())?;
+        self.draw_frame(
+            &view,
+            surface.format(),
+            surface.encodes_srgb_in_shader(),
+            width,
+            height,
+        )?;
         self.ctx.queue().present(frame);
         Ok(true)
+    }
+
+    fn present_pipeline(&self, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
+        let mut cache = self
+            .present
+            .cached
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        if let Some((_, pipeline)) = cache.iter().find(|(f, _)| *f == format) {
+            return pipeline.clone();
+        }
+        let pipeline = self.build_present_pipeline(format);
+        cache.push((format, pipeline.clone()));
+        pipeline
     }
 
     fn build_present_pipeline(&self, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
@@ -1197,7 +1623,7 @@ impl GpuEngine {
                 multisample: wgpu::MultisampleState::default(),
                 fragment: Some(wgpu::FragmentState {
                     module: &self.present.module,
-                    entry_point: Some("fs_present"),
+                    entry_point: Some("fs_render"),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
@@ -1367,7 +1793,6 @@ impl Simulator for GpuEngine {
             paper: scene.paper,
             paper_sim,
             state,
-            scratch,
             stamp,
             stroke,
             optics,
@@ -1388,15 +1813,6 @@ impl Simulator for GpuEngine {
 
     fn apply(&mut self, op: &Operation, seed: Seed) -> Result<(), EngineError> {
         let stamp_params: StampParams = self.params.stamp;
-        let (w, h, aspect, paper_height) = {
-            let l = self.loaded()?;
-            (
-                l.width,
-                l.height,
-                l.paper_sim.aspect,
-                l.paper_sim.height.clone(),
-            )
-        };
         match op {
             Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
                 self.loaded_mut()?.maybe_wet = true;
@@ -1407,6 +1823,9 @@ impl Simulator for GpuEngine {
             | Operation::SetMask(_)
             | Operation::ClearMask => {}
         }
+        let l = self.loaded()?;
+        let (w, h, aspect) = (l.width, l.height, l.paper_sim.aspect);
+        let paper_height = &l.paper_sim.height;
         let rasterize = |path: &[_], radius, softness, span: StrokeSpan| {
             paint::rasterize_path_span(
                 path,
@@ -1415,7 +1834,7 @@ impl Simulator for GpuEngine {
                 StampTarget {
                     width: w,
                     height: h,
-                    paper_height: &paper_height,
+                    paper_height,
                 },
                 aspect,
                 seed,
@@ -1509,21 +1928,45 @@ impl Simulator for GpuEngine {
         if ticks == 0 {
             return Ok(());
         }
+        if let Some(t) = self.timers.as_mut() {
+            t.collect();
+            if t.tick.idle() {
+                t.sampled_ticks = ticks;
+            }
+        }
+        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|t| t.idle());
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
             let batch = remaining.min(TICKS_PER_SUBMIT);
+            let (first, last) = (remaining == ticks, remaining == batch);
             let mut enc =
                 self.ctx
                     .device()
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("ticks"),
                     });
-            for _ in 0..batch {
-                self.encode_tick(&mut enc, l);
+            {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("ticks"),
+                    timestamp_writes: timer
+                        .filter(|_| first || last)
+                        .map(|t| t.compute_writes(first, last)),
+                });
+                CommandCounter::add(&self.counter.passes, 1);
+                pass.set_bind_group(0, &l.bind_group, &[]);
+                for _ in 0..batch {
+                    self.encode_tick(&mut pass, l);
+                }
+            }
+            if let Some(t) = timer.filter(|_| last) {
+                t.resolve(&mut enc);
             }
             self.submit(enc.finish())?;
             remaining -= batch;
+        }
+        if let Some(t) = timer {
+            t.request();
         }
         Ok(())
     }
@@ -1590,7 +2033,6 @@ impl Simulator for GpuEngine {
 impl Renderer for GpuEngine {
     fn render(&mut self, width: u32, height: u32) -> Result<Image, EngineError> {
         self.render_frame(width, height)?;
-        self.ensure_staging()?;
         let staging = self.copy_frame_to_staging(width, height)?;
         let data = self.map_read(staging)?;
         let floats: &[f32] = bytemuck::cast_slice(&data);
