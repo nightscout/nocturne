@@ -54,8 +54,12 @@ export function frameBudgetMs(frameIntervalMs: number): number {
 
 /** Ticks the first sliced call runs, before any call has been timed. */
 export const FIRST_SLICE_TICKS = 4;
-/** Most ticks one sliced call runs, which bounds what a stale estimate can cost. */
-export const MAX_SLICE_TICKS = 64;
+/**
+ * Most ticks one sliced call runs. Per-tick cost is lumpy, so a mean that
+ * says a call fits can still fold several GPU submits into it: at 6x CPU
+ * throttling, calls of 33+ ticks took a median 133 ms against 0.3 ms for 5-8.
+ */
+export const MAX_SLICE_TICKS = 8;
 
 /** Ticks one call can run in `budgetMs` at `msPerTick`; 0 when not even one fits. */
 export function sliceTicks(budgetMs: number, msPerTick: number | undefined): number {

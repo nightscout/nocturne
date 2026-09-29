@@ -230,7 +230,7 @@ describe('frameBudgetMs', () => {
 describe('sliceTicks', () => {
   it('fits one call to the budget at the measured rate', () => {
     expect(sliceTicks(10, undefined)).toBe(FIRST_SLICE_TICKS);
-    expect(sliceTicks(10, 0.5)).toBe(20);
+    expect(sliceTicks(10, 2)).toBe(5);
     expect(sliceTicks(10, 0.001)).toBe(MAX_SLICE_TICKS);
     expect(sliceTicks(10, 0)).toBe(MAX_SLICE_TICKS);
     expect(sliceTicks(10, 25)).toBe(0);
@@ -250,27 +250,27 @@ describe('SlicePacer', () => {
 
   it('grows the next call after a fast one', () => {
     const pacer = new SlicePacer();
-    pacer.record(4, 2);
-    expect(pacer.next(10, 10)).toBe(20);
+    pacer.record(4, 8);
+    expect(pacer.next(10, 10)).toBe(5);
   });
 
   it('sizes from the mean of recent calls, so cheap calls between submits do not hide them', () => {
     const pacer = new SlicePacer();
     for (let i = 0; i < 3; i++) pacer.record(4, 0.2);
-    expect(pacer.next(10, 10)).toBe(64);
+    expect(pacer.next(5, 10)).toBe(MAX_SLICE_TICKS);
     pacer.record(4, 12.8);
     // About 1 ms a tick over the four calls, where the cheap ones alone said 0.05 ms.
-    expect(pacer.next(10, 10)).toBe(10);
+    expect(pacer.next(5, 10)).toBe(5);
   });
 
   it('caps the ticks a frame queues by their GPU time', () => {
     const pacer = new SlicePacer();
     pacer.record(4, 0.4);
-    expect(pacer.next(10, 10, 0.5)).toBe(16);
-    pacer.record(16, 1.6);
-    expect(pacer.next(8, 10, 0.5)).toBe(0);
+    expect(pacer.next(10, 10, 2)).toBe(1);
+    pacer.record(1, 0.1);
+    expect(pacer.next(10, 10, 2)).toBe(0);
     pacer.beginFrame();
-    expect(pacer.next(10, 10, 0.5)).toBe(20);
+    expect(pacer.next(10, 10, 2)).toBe(5);
     expect(pacer.next(10, 10, 50)).toBe(1);
   });
 });

@@ -146,7 +146,7 @@ describe('a live still under reduced motion', () => {
     expect(still.state.mode).toBe('live');
     expect(instance.calls).toEqual(['ticks:4', 'ticks:6']);
     frame();
-    expect(instance.calls.slice(2)).toEqual(['ticks:10']);
+    expect(instance.calls.slice(2)).toEqual(['ticks:8', 'ticks:2']);
 
     for (let i = 0; i < 10 && !instance.calls.includes('dispose'); i++) frame();
 
