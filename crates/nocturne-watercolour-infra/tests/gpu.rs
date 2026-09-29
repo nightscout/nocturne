@@ -15,7 +15,7 @@ use nocturne_watercolour_core::domain::{
 };
 use nocturne_watercolour_infra::authoring::ArtworkCatalogue;
 use nocturne_watercolour_infra::export::linear_to_srgb;
-use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
+use nocturne_watercolour_infra::gpu::{BLUR_MAX_RADIUS, GpuContext, GpuEngine};
 
 /// Mean absolute difference (linear premultiplied RGBA) tolerated between
 /// the CPU reference and the GPU port on the finished `wash` at 128x128 sim.
@@ -405,13 +405,15 @@ fn gpu_matches_cpu_on_the_velocity_a_stroke_injects() {
 /// The tick hands the pressure correction and the suspended pigment between
 /// `state` and `scratch` by parity, and the shipped parameters (8 Jacobi
 /// iterations, 6 swirl substeps) take only the even branch; this runs the
-/// odd one of each against the CPU reference.
+/// odd one of each against the CPU reference. Its blur is wider than the
+/// one-dispatch `blur` holds, so it also runs `blur_h` then `blur_v`.
 #[test]
 fn gpu_matches_cpu_with_odd_jacobi_iterations_and_swirl_substeps() {
     let Some(template) = gpu() else { return };
     let params = SimParams {
         jacobi_iterations: 7,
         swirl_speed: 0.8,
+        blur_radius: BLUR_MAX_RADIUS + 1,
         ..SimParams::default()
     };
     let substeps =
@@ -450,6 +452,38 @@ fn gpu_matches_cpu_with_odd_jacobi_iterations_and_swirl_substeps() {
         ),
         ("velocity_u", &gpu_grid.velocity_u, &cpu_grid.velocity_u),
         ("pressure", &gpu_grid.pressure, &cpu_grid.pressure),
+    ] {
+        let e = mae(gpu_field, cpu_field);
+        assert!(e < ODD_PARITY_TOLERANCE, "{field} mae {e}");
+    }
+}
+
+/// The tiled passes (`velocity_divergence`, `jacobi_pair_*`, `blur`) cover
+/// the grid in 16x16 tiles; a side that is not whole tiles leaves the last
+/// row and column of them part-empty.
+#[test]
+fn gpu_matches_cpu_on_a_grid_that_is_not_whole_tiles() {
+    let Some(gpu) = gpu() else { return };
+    let mut scene = small_scene("wash");
+    scene.sim_resolution = SimResolution(100);
+    let mut g = Playback::new(gpu, scene.clone(), 1000.0).unwrap();
+    let mut c = Playback::new(CpuEngine::default(), scene, 1000.0).unwrap();
+    g.advance_ticks(60).unwrap();
+    c.advance_ticks(60).unwrap();
+    let gpu_grid = g.simulator().read_grid().unwrap();
+    let cpu_grid = c.simulator().grid().unwrap();
+    let mae = |a: &[f32], b: &[f32]| {
+        a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum::<f32>() / a.len() as f32
+    };
+    for (field, gpu_field, cpu_field) in [
+        ("wet", &gpu_grid.wet, &cpu_grid.wet),
+        ("velocity_u", &gpu_grid.velocity_u, &cpu_grid.velocity_u),
+        ("pressure", &gpu_grid.pressure, &cpu_grid.pressure),
+        (
+            "suspended",
+            &gpu_grid.pigments_in_water,
+            &cpu_grid.pigments_in_water,
+        ),
     ] {
         let e = mae(gpu_field, cpu_field);
         assert!(e < ODD_PARITY_TOLERANCE, "{field} mae {e}");

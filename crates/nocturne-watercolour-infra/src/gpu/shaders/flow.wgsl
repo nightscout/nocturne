@@ -49,6 +49,50 @@ fn blur_v(@builtin(global_invocation_id) gid: vec3<u32>) {
     scratch[so_blurred() + i] = sum * inv;
 }
 
+// blur_h and blur_v in one dispatch, for a radius up to BLUR_MAX_RADIUS. A
+// workgroup covers a 16x16 tile: it runs blur_h over the tile's columns for
+// its rows and `radius` rows either side into workgroup memory, then blur_v
+// over the tile from there. Each value is blur_h's and blur_v's own sum, in
+// their order, so the blurred mask is the two-pass one.
+const BLUR_MAX_RADIUS: u32 = 8u;
+var<workgroup> blur_rows: array<f32, 512>;
+
+@compute @workgroup_size(256)
+fn blur(
+    @builtin(workgroup_id) wg: vec3<u32>,
+    @builtin(local_invocation_index) lid: u32,
+) {
+    let w = i32(P.width);
+    let h = i32(P.height);
+    let radius = i32(P.blur_radius);
+    let inv = 1.0 / f32(2 * radius + 1);
+    let x0 = i32(wg.x * 16u);
+    let top = i32(wg.y * 16u);
+    let y0 = top - radius;
+    for (var c = lid; c < (16u + 2u * u32(radius)) * 16u; c += 256u) {
+        let x = x0 + i32(c % 16u);
+        let y = y0 + i32(c / 16u);
+        if x < w && y >= 0 && y < h {
+            var sum = 0.0;
+            for (var dx = -radius; dx <= radius; dx++) {
+                let sx = clamp(x + dx, 0, w - 1);
+                sum += state[o_wet() + u32(y * w + sx)];
+            }
+            blur_rows[c] = sum * inv;
+        }
+    }
+    workgroupBarrier();
+    let x = x0 + i32(lid % 16u);
+    let y = top + i32(lid / 16u);
+    if x >= w || y >= h { return; }
+    var sum = 0.0;
+    for (var dy = -radius; dy <= radius; dy++) {
+        let sy = clamp(y + dy, 0, h - 1);
+        sum += blur_rows[u32(sy - y0) * 16u + u32(x - x0)];
+    }
+    scratch[so_blurred() + u32(y * w + x)] = sum * inv;
+}
+
 fn diffusion_weight(i: u32, j: u32, coef: f32, pi: f32) -> f32 {
     if j == i || wet(j) == 0.0 {
         return 0.0;

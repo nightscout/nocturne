@@ -46,6 +46,7 @@ fn rust_value(name: &str) -> Option<f64> {
         "SWIRL_DRIFT_SKEW" => swirl::SWIRL_DRIFT_SKEW as f64,
         "SWIRL_FACE_LIMIT" => swirl::SWIRL_FACE_LIMIT as f64,
         "MAX_TICK" => grid::MAX_TICK as f64,
+        "BLUR_MAX_RADIUS" => nocturne_watercolour_infra::gpu::BLUR_MAX_RADIUS as f64,
         _ => return None,
     };
     Some(v)

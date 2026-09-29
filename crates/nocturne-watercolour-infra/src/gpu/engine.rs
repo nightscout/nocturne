@@ -51,6 +51,10 @@ const RENDER_PIXELS_PER_DISPATCH: u64 = 1 << 20;
 
 const WORKGROUP: u32 = 256;
 
+/// `BLUR_MAX_RADIUS` in `flow.wgsl`: the widest blur the one-dispatch `blur`
+/// holds in workgroup memory; a wider one runs as `blur_h` then `blur_v`.
+pub const BLUR_MAX_RADIUS: u32 = 8;
+
 /// Stroke uniforms one batch can hold (see [`Pending`]), each at its own
 /// dynamic offset; a batch with more events is submitted and a new one begun.
 const STROKE_SLOTS: u32 = 64;
@@ -308,14 +312,16 @@ struct RenderUniform {
 #[derive(Clone)]
 struct SimPipelines {
     layout: wgpu::BindGroupLayout,
-    velocity: wgpu::ComputePipeline,
-    divergence: wgpu::ComputePipeline,
+    velocity_divergence: wgpu::ComputePipeline,
     jacobi_a: wgpu::ComputePipeline,
     jacobi_b: wgpu::ComputePipeline,
+    jacobi_pair_a: wgpu::ComputePipeline,
+    jacobi_pair_b: wgpu::ComputePipeline,
     project: wgpu::ComputePipeline,
     project_q2: wgpu::ComputePipeline,
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
+    blur: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
     swirl_distance_h: wgpu::ComputePipeline,
     swirl_distance_v: wgpu::ComputePipeline,
@@ -694,14 +700,16 @@ impl GpuEngine {
             })
         };
         let sim = SimPipelines {
-            velocity: make("velocity"),
-            divergence: make("divergence"),
+            velocity_divergence: make("velocity_divergence"),
             jacobi_a: make("jacobi_a"),
             jacobi_b: make("jacobi_b"),
+            jacobi_pair_a: make("jacobi_pair_a"),
+            jacobi_pair_b: make("jacobi_pair_b"),
             project: make("project"),
             project_q2: make("project_q2"),
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
+            blur: make("blur"),
             advect: make("advect"),
             swirl_distance_h: make("swirl_distance_h"),
             swirl_distance_v: make("swirl_distance_v"),
@@ -1150,42 +1158,55 @@ impl GpuEngine {
     /// vectors, the next reader takes the field from `scratch` instead (see
     /// `common.wgsl`), so a tick needs no copies.
     fn encode_tick(&self, pass: &mut wgpu::ComputePass<'_>, l: &Loaded) {
-        let cells = groups(l.layout.n as u32);
+        let cells = (groups(l.layout.n as u32), 1);
+        // One workgroup per 16x16 tile, for the tiled passes (`velocity_divergence`,
+        // `jacobi_pair_*`, `blur`).
+        let tiles = (l.width.div_ceil(16), l.height.div_ceil(16));
         let mut dispatches = 0;
-        let mut dispatch = |pipeline: &wgpu::ComputePipeline, groups: u32| {
+        let mut dispatch = |pipeline: &wgpu::ComputePipeline, (x, y): (u32, u32)| {
             pass.set_pipeline(pipeline);
-            pass.dispatch_workgroups(groups, 1, 1);
+            pass.dispatch_workgroups(x, y, 1);
             dispatches += 1;
         };
         let sim = &self.sim;
 
-        dispatch(&sim.velocity, cells);
-        dispatch(&sim.divergence, cells);
-        for i in 0..self.params.jacobi_iterations {
+        dispatch(&sim.velocity_divergence, tiles);
+        // The correction alternates between q and q2, and a pair of
+        // iterations moves it once, as a single iteration does.
+        let mut in_q = true;
+        for _ in 0..self.params.jacobi_iterations / 2 {
             dispatch(
-                if i % 2 == 0 {
-                    &sim.jacobi_a
+                if in_q {
+                    &sim.jacobi_pair_a
                 } else {
-                    &sim.jacobi_b
+                    &sim.jacobi_pair_b
                 },
-                cells,
+                tiles,
             );
+            in_q = !in_q;
         }
         if self.params.jacobi_iterations % 2 == 1 {
-            dispatch(&sim.project_q2, cells);
-        } else {
-            dispatch(&sim.project, cells);
+            dispatch(if in_q { &sim.jacobi_a } else { &sim.jacobi_b }, cells);
+            in_q = !in_q;
         }
+        dispatch(if in_q { &sim.project } else { &sim.project_q2 }, cells);
 
-        dispatch(&sim.blur_h, cells);
-        dispatch(&sim.blur_v, cells);
+        if self.params.blur_radius <= BLUR_MAX_RADIUS {
+            dispatch(&sim.blur, tiles);
+        } else {
+            dispatch(&sim.blur_h, cells);
+            dispatch(&sim.blur_v, cells);
+        }
         dispatch(&sim.advect, cells);
 
         let mut g_in_scratch = true;
         if self.params.swirl_speed > 0.0 && l.maybe_wet {
             dispatch(&sim.swirl_distance_h, cells);
             dispatch(&sim.swirl_distance_v, cells);
-            dispatch(&sim.swirl_stream, groups(l.layout.corner_count() as u32));
+            dispatch(
+                &sim.swirl_stream,
+                (groups(l.layout.corner_count() as u32), 1),
+            );
             for _ in 0..l.swirl_substeps {
                 dispatch(
                     if g_in_scratch {

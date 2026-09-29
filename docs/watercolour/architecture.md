@@ -177,9 +177,9 @@ returns for the engine to load.
 
 | Shader | Entry points | Rule (CPU reference) | Deviation from CPU reference |
 |---|---|---|---|
-| `velocity.wgsl` | `velocity` | Curtis UpdateVelocities (`sim::pass_velocity`) | none |
-| `pressure.wgsl` | `divergence`, `jacobi_a`, `jacobi_b`, `project`, `project_q2` | Curtis RelaxDivergence (`pass_divergence`, `pass_jacobi` x 8 ping-pong, `pass_project`) | none (`project_q2` reads the correction from `q2` when the iteration count is odd) |
-| `flow.wgsl` | `blur_h`, `blur_v`, `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
+| `velocity.wgsl` | `velocity_divergence` | Curtis UpdateVelocities (`sim::pass_velocity`) and the divergence of `pass_divergence`, per 16x16 tile with a one-cell ring in workgroup memory | none |
+| `pressure.wgsl` | `jacobi_pair_a`, `jacobi_pair_b`, `jacobi_a`, `jacobi_b`, `project`, `project_q2` | Curtis RelaxDivergence (`pass_jacobi` x 8 ping-pong, two iterations per tiled dispatch, `pass_project`) | none (`project_q2` reads the correction from `q2` when the dispatch count is odd) |
+| `flow.wgsl` | `blur` (or `blur_h`, `blur_v` past `BLUR_MAX_RADIUS`), `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
 | `transfer.wgsl` | `transfer`, `transfer_g_scratch` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
