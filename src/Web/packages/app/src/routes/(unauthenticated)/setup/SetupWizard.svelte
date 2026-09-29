@@ -482,7 +482,7 @@
 
       <section
         bind:this={stepCard}
-        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-hidden md:min-h-135 flex flex-col"
+        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-clip md:min-h-135 flex flex-col"
       >
         <div
           class="flex items-center justify-between flex-wrap gap-2.5 px-5 py-3.5 md:px-7 md:py-5 border-b"
@@ -670,7 +670,7 @@
 
         {#if !setupRequired}
           <div
-            class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center px-5 py-3.5 md:px-7 md:py-4.5 border-t bg-muted/40 *:sm:w-auto *:w-full"
+            class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center px-5 py-3.5 md:px-7 md:py-4.5 border-t bg-background md:bg-muted/40 sticky bottom-0 z-10 md:static *:sm:w-auto *:w-full"
           >
             <div class="empty:hidden [&>button]:w-full sm:[&>button]:w-auto">
               {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
