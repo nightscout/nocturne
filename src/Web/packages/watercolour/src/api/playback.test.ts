@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { IconNode } from '../types';
 import { EngineHost } from './engine-host';
-import { type PlayerState, createArtworkPlayer, iconStaticBackend } from './playback';
+import { type PlayerState, autoplayAction, createArtworkPlayer, iconStaticBackend } from './playback';
 import { Scheduler } from './scheduler';
 
 const clock: IconNode[] = [
@@ -89,5 +89,22 @@ describe('player statechange', () => {
 
     expect(states.at(-1)?.mode).toBe('none');
     expect(states.at(-1)?.error).toBeDefined();
+  });
+});
+
+describe('autoplayAction', () => {
+  it('reveals a releasing player that autoplays, so the slot frees only when the reveal ends', () => {
+    expect(autoplayAction('full', undefined, true)).toBe('play');
+    expect(autoplayAction('full', 'once', true)).toBe('play');
+  });
+
+  it('finishes at once under reduced motion, releasing or not', () => {
+    expect(autoplayAction('reduced', 'once', true)).toBe('finish');
+    expect(autoplayAction('reduced', 'once', false)).toBe('finish');
+  });
+
+  it('finishes a releasing player that never autoplays, so it cannot hold a slot waiting for play()', () => {
+    expect(autoplayAction('full', 'never', true)).toBe('finish');
+    expect(autoplayAction('full', 'never', false)).toBe('wait');
   });
 });

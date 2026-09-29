@@ -108,12 +108,17 @@ function resolveBox(
   return containBox(containerWidth, containerHeight, aspect, options.fitAnchor ?? 'center');
 }
 
-export function applyCanvasFit(canvas: HTMLCanvasElement, box: FitBox, dpr: number): void {
+/**
+ * Sizes the canvas to `box`. `keepBacking` changes only its CSS box: resizing
+ * the backing store clears it, which a released live canvas cannot redraw.
+ */
+export function applyCanvasFit(canvas: HTMLCanvasElement, box: FitBox, dpr: number, keepBacking = false): void {
   canvas.style.position = 'absolute';
   canvas.style.left = `${box.offsetX}px`;
   canvas.style.top = `${box.offsetY}px`;
   canvas.style.width = `${box.width}px`;
   canvas.style.height = `${box.height}px`;
+  if (keepBacking) return;
   canvas.width = Math.max(1, Math.round(box.width * dpr));
   canvas.height = Math.max(1, Math.round(box.height * dpr));
 }
@@ -220,7 +225,9 @@ export function mountPlayer(
     const nextWidth = Math.max(1, Math.round(content.width));
     const nextHeight = Math.max(1, Math.round(content.height));
     const nextBox = resolveBox(nextWidth, nextHeight, id, options);
-    applyCanvasFit(currentCanvas(frame, canvas), nextBox, dpr);
+    const released = player.state.released === true;
+    applyCanvasFit(currentCanvas(frame, canvas), nextBox, dpr, released);
+    if (released) return;
     player.resize(nextBox.width, nextBox.height, dpr);
   });
   observer.observe(frame);

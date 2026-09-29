@@ -50,6 +50,7 @@ export class EngineHost {
   private module: WasmModule | undefined;
   private engine: WasmEngine | undefined;
   private leases = 0;
+  private stillQueue: Promise<void> = Promise.resolve();
   private lostFlag = false;
   private readonly lostListeners = new Set<(message: string) => void>();
   private maxLive: number;
@@ -106,6 +107,23 @@ export class EngineHost {
 
   release(): void {
     this.leases = Math.max(0, this.leases - 1);
+  }
+
+  /**
+   * Waits for the turn of a live instance that renders one frame and releases
+   * (a still), and resolves with the function that ends it.
+   *
+   * Stills mount in bursts - a member list's avatars - and each resolves its
+   * mode before any has taken a slot, so unqueued they claim the whole cap at
+   * once and starve whatever else mounts beside them. One at a time they hold
+   * a single slot for a few milliseconds each.
+   */
+  stillTurn(): Promise<() => void> {
+    let end!: () => void;
+    const turn = new Promise<void>((resolve) => (end = resolve));
+    const ready = this.stillQueue.then(() => end);
+    this.stillQueue = this.stillQueue.then(() => turn);
+    return ready;
   }
 
   /**
