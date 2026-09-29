@@ -16,6 +16,8 @@
     getTherapyReview,
   } from "$api/generated/setupTherapies.generated.remote";
   import { getSetupHub } from "$api/generated/setupHubs.generated.remote";
+  import { getInsulinActionTime } from "$api/generated/setupDevices.generated.remote";
+  import { InsulinActionTimeNote } from "$lib/components/patient";
   import { getPatientRelationship } from "$api/generated/tenantSettings.generated.remote";
   import { TherapySource } from "$api";
   import { patientVoice } from "$lib/onboarding/patient-voice.svelte";
@@ -24,6 +26,7 @@
 
   const reviewQuery = getTherapyReview();
   const relationshipQuery = getPatientRelationship();
+  const actionTimeQuery = getInsulinActionTime();
   const review = $derived(reviewQuery.current);
   const voice = $derived(patientVoice(relationshipQuery.current));
   const app = $derived(review?.sourceName ?? undefined);
@@ -36,7 +39,7 @@
   let error = $state<string | undefined>(undefined);
 
   async function backToHub() {
-    await getSetupHub().refresh();
+    await Promise.all([getSetupHub().refresh(), actionTimeQuery.refresh()]);
     await goto(resolve("/setup"));
   }
 
@@ -67,8 +70,9 @@
     onsaved={backToHub}
     onconflict={async () => {
       conflicted = true;
-      await reviewQuery.refresh();
+      await Promise.all([reviewQuery.refresh(), actionTimeQuery.refresh()]);
     }}
+    actionTime={actionTimeQuery.current}
   />
 {:else}
   <div class="@container flex flex-col gap-6" data-testid="therapy-review" data-source={review.source}>
@@ -128,6 +132,14 @@
       targetRange={review.targetRange}
       readOnly
     />
+
+    {#if actionTimeQuery.current}
+      <InsulinActionTimeNote
+        actionTime={actionTimeQuery.current}
+        {voice}
+        profileHasNoActionTime={review.source === TherapySource.Entered}
+      />
+    {/if}
 
     {#if mismatch}
       <Alert.Root variant="warning" data-testid="therapy-mismatch">
