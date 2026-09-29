@@ -283,11 +283,13 @@ export function mountPlayer(
     }, RELEASED_REPAINT_SETTLE_MS);
   });
   observer.observe(frame);
-  // The player resolved its mode under the old preference, so it is rebuilt.
+  // The player resolved its mode under the old preference, so it is rebuilt;
+  // a reveal already seen is not played again.
   const unsubscribe = subscribePresentation(() => {
+    const finished = player?.state.finished === true;
     stop();
     const size = measuredSize(frame.getBoundingClientRect().width, frame.getBoundingClientRect().height);
-    if (size) start(size.width, size.height);
+    if (size) start(size.width, size.height, finished);
   });
   return () => {
     unsubscribe();
