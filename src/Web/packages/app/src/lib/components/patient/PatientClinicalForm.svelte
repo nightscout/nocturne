@@ -11,9 +11,11 @@
     
   interface Props {
     onstate?: (state: ClinicalState) => void;
+    /** Runs once the record, and the weight if it changed, have saved. */
+    onsaved?: () => void | Promise<void>;
   }
 
-  let { onstate }: Props = $props();
+  let { onstate, onsaved }: Props = $props();
 
   let formEl = $state<HTMLFormElement | null>(null);
   const clinical = new ClinicalState(() => formEl);
@@ -27,7 +29,11 @@
   id="clinical-form"
   class="@container"
   bind:this={formEl}
-  {...clinical.guard.enhance(() => clinical.weight.save())}
+  {...clinical.guard.enhance(async () => {
+    const saved = await clinical.weight.save();
+    if (saved) await onsaved?.();
+    return saved;
+  })}
 >
   <!-- Hidden fields for read-only record data -->
   {#if clinical.record?.id}
