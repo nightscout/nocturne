@@ -37,6 +37,10 @@
     /** Numeric input constraints (edit mode only) */
     step?: number;
     min?: number;
+    /** Low/high columns even while every entry is still blank (edit mode only). */
+    range?: boolean;
+    /** A note shown under a value that looks wrong (edit mode only). */
+    warning?: (value: number) => string | undefined;
     /** Rendered on the right of the read-mode card header (e.g. an Edit button) */
     actions?: Snippet;
   }
@@ -52,11 +56,15 @@
     onchange,
     step = 0.1,
     min = 0,
+    range,
+    warning,
     actions,
   }: Props = $props();
 
   /** Whether this is a range schedule (has low/high) vs single-value */
-  let isRange = $derived(entries.some((e) => e.low !== undefined || e.high !== undefined));
+  let isRange = $derived(
+    range ?? entries.some((e) => e.low !== undefined || e.high !== undefined)
+  );
 
   /** Whether editing is enabled */
   let editable = $derived(!!onchange);
@@ -120,11 +128,7 @@
   function addEntry() {
     if (!onchange) return;
     const updated = cloneEntries();
-    if (isRange) {
-      updated.push({ time: "12:00", low: 0, high: 0 });
-    } else {
-      updated.push({ time: "12:00", value: 0 });
-    }
+    updated.push({ time: "12:00" });
     onchange(updated);
   }
 
@@ -136,6 +140,11 @@
     onchange(updated);
   }
 
+  /** A cleared field is blank, not zero. */
+  function inputNumber(e: Event & { currentTarget: HTMLInputElement }): number | undefined {
+    return e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value);
+  }
+
   function updateEntryTime(index: number, time: string) {
     if (!onchange) return;
     const updated = cloneEntries();
@@ -145,7 +154,7 @@
     }
   }
 
-  function updateEntryValue(index: number, value: number) {
+  function updateEntryValue(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -154,7 +163,7 @@
     }
   }
 
-  function updateEntryLow(index: number, value: number) {
+  function updateEntryLow(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -163,7 +172,7 @@
     }
   }
 
-  function updateEntryHigh(index: number, value: number) {
+  function updateEntryHigh(index: number, value: number | undefined) {
     if (!onchange) return;
     const updated = cloneEntries();
     if (updated[index]) {
@@ -172,6 +181,31 @@
     }
   }
 </script>
+
+{#snippet numberField(
+  value: number | undefined,
+  label: string,
+  set: (value: number | undefined) => void
+)}
+  {@const note = value === undefined ? undefined : warning?.(value)}
+  <Table.Cell class="text-right align-top">
+    <div class="flex items-center justify-end gap-1.5">
+      <Input
+        type="number"
+        {step}
+        {min}
+        value={value ?? ""}
+        aria-label={label}
+        class="w-24 text-right"
+        onchange={(e: Event & { currentTarget: HTMLInputElement }) => set(inputNumber(e))}
+      />
+      <span class="text-xs text-muted-foreground" data-testid="field-unit">{unit}</span>
+    </div>
+    {#if note}
+      <p class="ml-auto mt-1 max-w-64 text-left text-xs text-warning">{note}</p>
+    {/if}
+  </Table.Cell>
+{/snippet}
 
 {#if editable}
   <!-- Edit mode: compact input rows, no Card wrapper -->
@@ -223,40 +257,10 @@
               />
             </Table.Cell>
             {#if isRange}
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.low ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryLow(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.high ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryHigh(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
+              {@render numberField(entry.low, `Low from ${entry.time}`, (v) => updateEntryLow(i, v))}
+              {@render numberField(entry.high, `High from ${entry.time}`, (v) => updateEntryHigh(i, v))}
             {:else}
-              <Table.Cell class="text-right">
-                <Input
-                  type="number"
-                  {step}
-                  {min}
-                  value={entry.value ?? 0}
-                  class="ml-auto w-24 text-right"
-                  onchange={(e: Event & { currentTarget: HTMLInputElement }) =>
-                    updateEntryValue(i, Number(e.currentTarget.value))}
-                />
-              </Table.Cell>
+              {@render numberField(entry.value, `${title} from ${entry.time}`, (v) => updateEntryValue(i, v))}
             {/if}
             <Table.Cell>
               <Button
