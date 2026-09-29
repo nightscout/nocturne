@@ -186,16 +186,17 @@
         <div
           aria-hidden="true"
           data-carb-wash
-          class="pointer-events-none absolute overflow-hidden"
-          style:left="{paintBox.left}px"
-          style:top="{paintBox.top}px"
-          style:width="{paintBox.width}px"
-          style:height="{paintBox.height}px"
+          class="pointer-events-none absolute top-(--paint-y) left-(--paint-x) h-(--paint-h) w-(--paint-w) overflow-hidden"
+          style:--paint-x="{paintBox.left}px"
+          style:--paint-y="{paintBox.top}px"
+          style:--paint-w="{paintBox.width}px"
+          style:--paint-h="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply [filter:grayscale(1)_brightness(3)_contrast(1.6)]">
+          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-multiply brightness-300 contrast-160 grayscale">
             <Artwork
               artwork="wash"
               palette="slate"
+              seed={totalCarbs}
               surface="light"
               autoplay="never"
               releaseAfterFinish

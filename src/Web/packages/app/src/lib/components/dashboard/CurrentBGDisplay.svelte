@@ -137,7 +137,7 @@
        token's tone and the digits their contrast. Cropped to the wash's interior so its dried edge
        falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
   {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light [filter:grayscale(1)_brightness(1.5)_contrast(1.6)]">
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] mix-blend-soft-light brightness-150 contrast-160 grayscale">
       <Artwork
         artwork="wash"
         palette="slate"
