@@ -8,17 +8,19 @@ namespace Nocturne.API.Services.SetupHub;
 
 /// <summary>
 /// Whether a tenant's alerts are known to reach someone: an enabled rule of its own whose test alert
-/// the owner confirmed arrived, sent to the channels the rule has now. A caregiver's test must also
-/// have gone to a channel that delivers while Nocturne is closed.
+/// the owner confirmed arrived, sent to the channels the rule has now, which every enabled starter
+/// rule still shares. A caregiver's test must also have gone to a channel that delivers while
+/// Nocturne is closed.
 /// </summary>
 public static class AlertDeliveryCheck
 {
     /// <summary>
     /// Channel types that reach someone with no Nocturne page open. <c>in_app</c> shows only in an
-    /// open, signed-in page, and <c>web_push</c> reaches no browser at all.
+    /// open, signed-in page, <c>web_push</c> reaches no browser at all, and <c>device_action</c> is
+    /// reported handled whether or not a device took it: a device running its own engine drops it.
     /// </summary>
     public static bool DeliversWhileClosed(ChannelType type) =>
-        type is not (ChannelType.InApp or ChannelType.WebPush);
+        type is not (ChannelType.InApp or ChannelType.WebPush or ChannelType.DeviceAction);
 
     public static async Task<bool> VerifiedAsync(NocturneDbContext db, CancellationToken ct)
     {
@@ -42,16 +44,33 @@ public static class AlertDeliveryCheck
                 .Where(c => ruleIds.Contains(c.AlertRuleId))
                 .ToListAsync(ct))
             .ToLookup(c => c.AlertRuleId);
+        var starters = await EnabledStarterChannelsAsync(db, ct);
 
         foreach (var test in tests)
         {
             var sent = await SentToAsync(db, test.Id, ct);
-            if (Matches(sent, channels[test.AlertRuleId]) && (!caregiver || sent.Any(s => DeliversWhileClosed(s.Type))))
+            if (Matches(sent, channels[test.AlertRuleId])
+                && starters.All(rule => Matches(sent, rule))
+                && (!caregiver || sent.Any(s => DeliversWhileClosed(s.Type))))
                 return true;
         }
 
         return false;
     }
+
+    /// <summary>
+    /// The channels of each enabled starter rule. A test goes through one of them, and it vouches for
+    /// the rest only while they send where it did: one sent elsewhere from the rule builder, or
+    /// switched on after the test, is not known to reach anyone.
+    /// </summary>
+    public static async Task<List<List<AlertRuleChannelEntity>>> EnabledStarterChannelsAsync(
+        NocturneDbContext db, CancellationToken ct) =>
+        (await db.AlertRules.AsNoTracking()
+            .Include(r => r.Channels)
+            .Where(r => r.StarterKind != null && r.IsEnabled)
+            .ToListAsync(ct))
+        .Select(r => r.Channels.ToList())
+        .ToList();
 
     /// <summary>The rule channels a test was sent to and did not fail on.</summary>
     public static async Task<HashSet<(ChannelType Type, string Destination)>> SentToAsync(

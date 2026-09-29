@@ -50,12 +50,9 @@ public class AlertSetupService(
             [StarterAlertKind.NoReadings] = ("No readings for 20 minutes", AlertRuleSeverity.Warning, null, 0),
         };
 
-    /// <summary>
-    /// What can be chosen instead of this device. <c>device_action</c> is left to the rule builder:
-    /// a device that runs its own engine takes no delivery from a test.
-    /// </summary>
+    /// <summary>What can be chosen instead of this device.</summary>
     private static readonly IReadOnlyList<ChannelType> ChannelTypesOffered = ChannelDestinations.Offered
-        .Where(t => AlertDeliveryCheck.DeliversWhileClosed(t) && t != ChannelType.DeviceAction)
+        .Where(AlertDeliveryCheck.DeliversWhileClosed)
         .ToList();
 
     private readonly AlertRuleChannelWriter _channels = new(encryption);
@@ -271,7 +268,8 @@ public class AlertSetupService(
         var current = await db.AlertRuleChannels.AsNoTracking()
             .Where(c => c.AlertRuleId == instance.AlertExcursion!.AlertRuleId)
             .ToListAsync(ct);
-        if (!AlertDeliveryCheck.Matches(sent, current))
+        if (!AlertDeliveryCheck.Matches(sent, current)
+            || !(await AlertDeliveryCheck.EnabledStarterChannelsAsync(db, ct)).All(rule => AlertDeliveryCheck.Matches(sent, rule)))
             throw new InvalidOperationException("This test did not reach every place alerts now go. Send another.");
 
         var whileClosed = sent.Any(s => AlertDeliveryCheck.DeliversWhileClosed(s.Type));
@@ -339,6 +337,8 @@ public class AlertSetupService(
         {
             if (channel.ChannelType == ChannelType.WebPush)
                 throw new ArgumentException("Browser push reaches no browser yet. Choose another destination.");
+            if (channel.ChannelType == ChannelType.DeviceAction)
+                throw new ArgumentException("A device alert is set up in the rule builder. Choose another destination.");
             if (channel.ChannelType != ChannelType.InApp)
                 continue;
             if (string.IsNullOrWhiteSpace(channel.Destination))

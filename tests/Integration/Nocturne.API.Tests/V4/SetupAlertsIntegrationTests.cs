@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Nocturne.Core.Models.Alerts;
+using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -88,6 +90,24 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
     /// <summary>What the bot's callback records once an off-page channel has sent the alert.</summary>
     private Task MarkDeliveredAsync(string instanceId) =>
         SqlAsync("UPDATE alert_deliveries SET status = 'delivered' WHERE alert_instance_id = @i", ("i", Guid.Parse(instanceId)));
+
+    /// <summary>Points every channel of the named starter rules somewhere else, as the rule builder can.</summary>
+    private async Task RerouteAsync(ChannelType type, string destination, bool enable, params string[] ruleNames)
+    {
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        var rules = await db.AlertRules.Include(r => r.Channels).Where(r => ruleNames.Contains(r.Name)).ToListAsync();
+        foreach (var rule in rules)
+        {
+            if (enable)
+                rule.IsEnabled = true;
+            foreach (var channel in rule.Channels)
+            {
+                channel.ChannelType = type;
+                channel.Destination = destination;
+            }
+        }
+        await db.SaveChangesAsync();
+    }
 
     private async Task<string> HubStateAsync()
     {
@@ -227,6 +247,40 @@ public class SetupAlertsIntegrationTests : ApiIntegrationTestBase
 
         (await ReadAsync(await ConfirmAsync(webhookTest))).GetProperty("verified").GetBoolean().Should().BeTrue();
         (await HubStateAsync()).Should().Be("Done");
+    }
+
+    [Fact]
+    public async Task Caregiver_IsNotDoneByADeviceChannel()
+    {
+        await RelationshipAsync("Caregiver");
+        await SaveAsync(
+            Rules(55, 70, 250),
+            new object[] { new { channelType = "device_action", destination = "companion" } },
+            HttpStatusCode.BadRequest);
+
+        await SaveAsync(Rules(55, 70, 250));
+        await RerouteAsync(ChannelType.DeviceAction, "companion", enable: false, "Urgent low", "Low", "High", "No readings for 20 minutes");
+        (await GetSetupAsync()).GetProperty("deliversWhileClosed").GetBoolean().Should().BeFalse();
+
+        var test = (await SendTestAsync()).GetProperty("instanceId").GetString()!;
+        await MarkDeliveredAsync(test);
+
+        (await ConfirmAsync(test, acknowledged: true)).StatusCode.Should().Be(
+            HttpStatusCode.Conflict, "a device running its own engine takes nothing from a delivery");
+        (await HubStateAsync()).Should().Be("Open");
+    }
+
+    [Fact]
+    public async Task AConfirmedTest_StopsCounting_OnceAnotherStarterRuleSendsElsewhere()
+    {
+        await SaveAsync(Rules(55, 70, 250, urgentLowOn: false));
+        var test = (await SendTestAsync()).GetProperty("instanceId").GetString()!;
+        (await ReadAsync(await ConfirmAsync(test, acknowledged: true))).GetProperty("verified").GetBoolean().Should().BeTrue();
+
+        await RerouteAsync(ChannelType.WebPush, "", enable: true, "Urgent low");
+
+        (await GetSetupAsync()).GetProperty("verified").GetBoolean()
+            .Should().BeFalse("urgent low was switched on sending somewhere the test never went");
     }
 
     [Fact]
