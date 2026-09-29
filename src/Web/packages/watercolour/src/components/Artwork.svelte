@@ -1,6 +1,8 @@
 <script lang="ts">
   import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface } from '../types';
-  import { type PlayerReadyCallback, type PlayerStateCallback, mountPlayer } from './helpers';
+  import { getPresentation, subscribePresentation } from '../api/presentation';
+  import { iconSvg } from '../api/scenes';
+  import { type PlayerReadyCallback, type PlayerStateCallback, hostSurface, mountPlayer } from './helpers';
 
   let {
     artwork,
@@ -56,7 +58,13 @@
   let frame: HTMLDivElement | undefined = $state();
   let canvas: HTMLCanvasElement | undefined = $state();
 
+  let presentation = $state(getPresentation());
+  $effect(() => subscribePresentation((value) => (presentation = value)));
+  /** Turned off, an icon keeps its meaning as the plain Lucide glyph; anything else draws nothing. */
+  const plainIcon = $derived(presentation === 'off' && icon ? iconSvg(icon.icon, surface ?? hostSurface()) : undefined);
+
   $effect(() => {
+    if (plainIcon) return;
     if (!frame || !canvas) return;
     return mountPlayer(
       frame,
@@ -93,5 +101,17 @@
   style:position
   style:overflow="hidden"
 >
-  <canvas bind:this={canvas} style="position:absolute;inset:0;display:block"></canvas>
+  {#if plainIcon}
+    <div class="nwc-plain-icon" style="position:absolute;inset:0">{@html plainIcon}</div>
+  {:else}
+    <canvas bind:this={canvas} style="position:absolute;inset:0;display:block"></canvas>
+  {/if}
 </div>
+
+<style>
+  .nwc-plain-icon :global(svg) {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+</style>

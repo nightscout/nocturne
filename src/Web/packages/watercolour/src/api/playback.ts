@@ -6,6 +6,7 @@ import { type Capabilities, detectCapabilities } from './capabilities';
 import { type EngineHost, type EngineLease, type WasmInstance, getEngineHost } from './engine-host';
 import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
+import { getPresentation } from './presentation';
 import { type ArtworkRef, type IconRef, type SceneSource, authoredSceneJson, iconSvg, isArtworkRef, isIconRef, parseSceneDocument, resolveSceneJson } from './scenes';
 import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 import { type ViewportWait, waitNearViewport } from './viewport';
@@ -1024,6 +1025,14 @@ class Player implements ArtworkPlayer {
   }
 
   private async init(): Promise<void> {
+    // The constructor runs this synchronously; listeners attach after it returns.
+    await Promise.resolve();
+    const presentation = getPresentation();
+    if (presentation === 'off') {
+      this.mode = 'none';
+      if (!this.disposed) this.emit('statechange');
+      return;
+    }
     // Nothing below the fold is simulated or decoded, and no live slot is
     // taken for it, until it comes near the viewport.
     this.viewportWait = waitNearViewport(this.currentCanvas);
@@ -1031,7 +1040,8 @@ class Player implements ArtworkPlayer {
     if (this.disposed) return;
     const capabilities = await (this.options.capabilities ?? detectCapabilities)();
     if (this.disposed) return;
-    this.motion = resolveMotion(this.options.motion ?? 'auto', capabilities.reducedMotion);
+    const motionRequest = presentation === 'still' ? 'reduced' : (this.options.motion ?? 'auto');
+    this.motion = resolveMotion(motionRequest, capabilities.reducedMotion);
     // A baked icon source resolves to its `lucide-<name>` set like any
     // artwork; an unbaked one has no assets, so its plain-SVG fallback is the
     // guaranteed last rung below `live`.
@@ -1039,7 +1049,7 @@ class Player implements ArtworkPlayer {
     const hasStatic = this.icon ? true : this.assetOk('final');
     const first = resolveMode({
       requested: this.options.mode ?? 'auto',
-      motion: this.options.motion ?? 'auto',
+      motion: motionRequest,
       capabilities,
       capReached: this.host.capReached,
       hasBaked,

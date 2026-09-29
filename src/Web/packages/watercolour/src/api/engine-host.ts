@@ -1,4 +1,5 @@
 import { type Capabilities, detectCapabilities } from './capabilities';
+import { getPresentation } from './presentation';
 import { WatercolourError, toWatercolourError } from './errors';
 import type { EngineStats, WasmEngine, WasmModule } from './wasm-types';
 
@@ -146,8 +147,11 @@ export class EngineHost {
    * baked and static paths cover it, and they are what would have been chosen.
    * The adapter is asked for before the module is fetched, so a machine
    * without one downloads and compiles nothing.
+   *
+   * Does nothing while the presentation is `off`: nothing will be drawn.
    */
   async warm(): Promise<boolean> {
+    if (getPresentation() === 'off') return false;
     try {
       await this.acquire();
       return true;

@@ -45,6 +45,9 @@ export { Scheduler, getScheduler, MAX_FRAME_SECONDS } from './api/scheduler';
 export { NEAR_VIEWPORT_MARGIN } from './api/viewport';
 export type { SchedulerEnv, SchedulerHandle, SchedulerTarget, FrameStats } from './api/scheduler';
 
+export { getPresentation, setPresentation, subscribePresentation, PRESENTATIONS } from './api/presentation';
+export type { Presentation } from './api/presentation';
+
 export { resolveMode, resolveMotion, fallbackOrder } from './api/mode';
 export type { ResolvedMode, ModeInputs } from './api/mode';
 
