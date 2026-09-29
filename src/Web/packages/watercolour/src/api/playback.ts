@@ -207,9 +207,17 @@ export function invertEasing(easing: (t: number) => number, y: number): number {
   return (lo + hi) / 2;
 }
 
+/**
+ * Presents in a row that may find no swapchain texture before a frame counts
+ * as drawn anyway. A still holds the one still turn until it presents, so a
+ * canvas that never gets a texture would otherwise block every still after it.
+ */
+export const MAX_UNPRESENTED_RENDERS = 30;
+
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
+  private unpresented = 0;
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
@@ -521,7 +529,8 @@ class LiveBackend implements Backend {
         return;
       }
       // No swapchain texture this frame; a still released now would keep a blank canvas.
-      if (presented === false) return;
+      if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
+      this.unpresented = 0;
       this.dirty = false;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
