@@ -129,15 +129,28 @@
     completingDefinitionId = undefined;
     completingCompletionEventType = undefined;
   }
+
+  const softLight = "mix-blend-soft-light";
+  const darkenOnly = "mix-blend-multiply opacity-60";
+  const washBlend: Record<ReturnType<typeof getGlucoseTileVariant>, string> = {
+    "very-low": darkenOnly,
+    low: softLight,
+    "in-range": softLight,
+    high: softLight,
+    "very-high": darkenOnly,
+    neutral: softLight,
+  };
 </script>
 
 {#snippet rangeWash()}
   <!-- A grey wash soft-lit over the range fill: the tile keeps the range token's own hue in every
        theme, and soft-light (not multiply) lightens as much as it darkens, so the tile keeps the
-       token's tone and the digits their contrast. Cropped to the wash's interior so its dried edge
+       token's tone and the digits their contrast. The very-low and very-high tiles carry light
+       digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
+       fill toward the digits. Cropped to the wash's interior so its dried edge
        falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
   {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-soft-light">
+    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain {washBlend[tileVariant]}">
       <Artwork
         artwork="wash"
         palette="slate"
