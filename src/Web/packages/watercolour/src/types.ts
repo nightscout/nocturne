@@ -41,7 +41,8 @@ export type ArtworkId =
   | 'cgm-sensor'
   | 'insulin-pump'
   | 'glucose-gauge'
-  | 'ringing-bell';
+  | 'ringing-bell'
+  | 'hub-dawn-ridges';
 
 export type PaletteId = 'moonlight' | 'water' | 'dusk' | 'ember' | 'moss' | 'slate';
 
@@ -184,6 +185,7 @@ export const ARTWORK_IDS: readonly ArtworkId[] = [
   'insulin-pump',
   'glucose-gauge',
   'ringing-bell',
+  'hub-dawn-ridges',
 ];
 
 export const PALETTE_IDS: readonly PaletteId[] = ['moonlight', 'water', 'dusk', 'ember', 'moss', 'slate'];
@@ -253,6 +255,7 @@ export const ARTWORK_ASPECT: Readonly<Record<ArtworkId, number>> = {
   'insulin-pump': 1,
   'glucose-gauge': 1,
   'ringing-bell': 1,
+  'hub-dawn-ridges': 3,
 };
 
 export function artworkAspect(id: ArtworkId): number {

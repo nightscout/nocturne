@@ -7,7 +7,7 @@ use nocturne_watercolour_core::application::{CpuEngine, Playback, Renderer};
 use nocturne_watercolour_core::domain::{Background, Palette, Seed, SimResolution};
 use nocturne_watercolour_infra::authoring::{ArtworkCatalogue, DetailLevel};
 
-const EXPECTED_IDS: [&str; 42] = [
+const EXPECTED_IDS: [&str; 43] = [
     "crescent-moon",
     "alarm-bell",
     "linked-rings",
@@ -50,6 +50,7 @@ const EXPECTED_IDS: [&str; 42] = [
     "insulin-pump",
     "glucose-gauge",
     "ringing-bell",
+    "hub-dawn-ridges",
 ];
 
 fn palettes() -> Vec<Palette> {

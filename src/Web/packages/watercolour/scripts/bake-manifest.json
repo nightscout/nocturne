@@ -427,6 +427,16 @@
       "stripHeight": 160
     },
     {
+      "id": "hub-dawn-ridges",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 255,
+      "stripHeight": 85
+    },
+    {
       "id": "lucide:database",
       "palette": "slate",
       "surfaces": [
