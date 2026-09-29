@@ -201,6 +201,7 @@ public class DeviceSetupServiceTests
 
         var recorded = Slot(await Setup(), DeviceCategory.CGM).Recorded!;
         recorded.CatalogId.Should().Be("dexcom-g6");
+        (recorded.Manufacturer, recorded.Model).Should().Be(("Dexcom", "G6"));
         recorded.AidAlgorithm.Should().BeNull();
     }
 

@@ -103,7 +103,10 @@ public partial class DeviceSetupService(
         {
             DeviceCategory = entry.Category,
             Manufacturer = entry.Manufacturer,
-            Model = entry.Name,
+            // Shown after the manufacturer everywhere a device is listed, so "Dexcom G7" is stored as "G7".
+            Model = entry.Name.StartsWith(entry.Manufacturer + " ", StringComparison.Ordinal)
+                ? entry.Name[(entry.Manufacturer.Length + 1)..]
+                : entry.Name,
             CatalogId = entry.Id,
             AidAlgorithm = entry.Category == DeviceCategory.InsulinPump ? algorithm : null,
             IsCurrent = true,

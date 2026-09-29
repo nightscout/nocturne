@@ -112,6 +112,13 @@
   const insulinIdOn = (formulation: InsulinFormulation) =>
     setup?.insulins?.find((i) => i.formulationId === formulation.id)?.id;
 
+  const otherInsulins = $derived.by(() => {
+    const listed = new Set(
+      (setup?.insulinChoices ?? []).flatMap((g) => (g.formulations ?? []).map((f) => f.id))
+    );
+    return (setup?.insulins ?? []).filter((i) => !listed.has(i.formulationId ?? undefined));
+  });
+
   function toggleInsulin(formulation: InsulinFormulation) {
     const recordedId = insulinIdOn(formulation);
     return run(async () => {
@@ -302,6 +309,12 @@
           </div>
         </div>
       {/each}
+
+      {#if otherInsulins.length > 0}
+        <p class="text-sm text-muted-foreground" data-testid="other-insulins">
+          Also on record: {otherInsulins.map((i) => i.name).join(", ")}
+        </p>
+      {/if}
 
       <div class="flex items-center gap-2">
         <Switch
