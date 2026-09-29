@@ -15,7 +15,12 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { FormError } from "$lib/forms";
   import { describeSubmitError } from "$lib/forms/submit-error";
-  import { PatientDeviceManager, PatientInsulinManager, aidAlgorithmLabels } from "$lib/components/patient";
+  import {
+    InsulinActionTimeNote,
+    PatientDeviceManager,
+    PatientInsulinManager,
+    aidAlgorithmLabels,
+  } from "$lib/components/patient";
   import {
     getDeviceSetup,
     confirmSetupDevice,
@@ -50,7 +55,6 @@
   const voice = $derived(patientVoice(relationshipQuery.current));
   const setup = $derived(setupQuery.current);
 
-  const patientSettingsHref = resolve("/(authenticated)/settings/patient");
   const trackerSettingsHref = resolve("/(authenticated)/settings/trackers");
   const alertsHref = resolve("/(authenticated)/alerts");
 
@@ -375,31 +379,8 @@
         </Label>
       </div>
 
-      {#if setup.actionTimeInsulin}
-        {@const insulin = setup.actionTimeInsulin}
-        <p class="text-xs text-muted-foreground" data-testid="action-time">
-          {#if voice.kind === "self"}
-            Nocturne will use the action time of {insulin.name}, {insulin.dia} hours, for insulin on board
-            and predictions, in place of the value in your profile. It doesn't change your pump or AID
-            app. You can change the time in <a class="underline" href={patientSettingsHref}>patient settings</a>.
-            Check it with your care team.
-          {:else if voice.kind === "named"}
-            Nocturne will use the action time of {insulin.name}, {insulin.dia} hours, for insulin on board
-            and predictions, in place of the value in {voice.name}'s profile. It doesn't change
-            {voice.name}'s pump or AID app. You can change the time in
-            <a class="underline" href={patientSettingsHref}>patient settings</a>. Check it with the care team.
-          {:else}
-            Nocturne will use the action time of {insulin.name}, {insulin.dia} hours, for insulin on board
-            and predictions, in place of the profile's value. It doesn't change the pump or AID app. You can
-            change the time in <a class="underline" href={patientSettingsHref}>patient settings</a>. Check
-            it with the care team.
-          {/if}
-        </p>
-      {:else}
-        <p class="text-xs text-muted-foreground">
-          Nocturne uses the action time of the insulin set here for insulin on board and predictions, and
-          3 hours if none is set.
-        </p>
+      {#if setup.actionTime}
+        <InsulinActionTimeNote actionTime={setup.actionTime} {voice} />
       {/if}
 
       <Collapsible.Root>

@@ -118,9 +118,8 @@ public record TrackerOffer(
 /// <param name="Algorithm">The AID algorithm the evidence points at, for the owner to confirm with the pump.</param>
 /// <param name="Insulins">The patient's current insulins.</param>
 /// <param name="OtherInsulins">Current insulins that are not on the short list.</param>
-/// <param name="ActionTimeInsulin">
-/// The current primary bolus insulin, whose action time Nocturne uses for insulin on board and
-/// predictions; null when there is none.
+/// <param name="ActionTime">
+/// The insulin action time Nocturne uses now for insulin on board and predictions, and its source.
 /// </param>
 /// <param name="TakesNoInsulin">The owner answered that no insulin is used, and none is on record.</param>
 /// <param name="Trackers">Trackers offered for the recorded devices.</param>
@@ -130,6 +129,6 @@ public record DeviceSetup(
     IReadOnlyList<InsulinChoiceGroup> InsulinChoices,
     IReadOnlyList<PatientInsulin> Insulins,
     IReadOnlyList<PatientInsulin> OtherInsulins,
-    PatientInsulin? ActionTimeInsulin,
+    InsulinActionTime ActionTime,
     bool TakesNoInsulin,
     IReadOnlyList<TrackerOffer> Trackers);

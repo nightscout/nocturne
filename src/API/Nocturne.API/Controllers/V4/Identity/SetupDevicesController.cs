@@ -36,11 +36,27 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
         return Ok(await deviceSetup.GetAsync(HttpContext.GetSubjectIdString()!, ct));
     }
 
+    /// <summary>
+    /// The insulin action time Nocturne uses now for insulin on board and predictions, and where it
+    /// comes from: an externally managed profile, the primary insulin, the profile, or the default.
+    /// </summary>
+    [HttpGet("action-time")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(InsulinActionTime), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<InsulinActionTime>> GetInsulinActionTime(CancellationToken ct)
+    {
+        if (!HttpContext.HasScope(Scope.FullAccess))
+            return Forbid();
+
+        return Ok(await deviceSetup.ActionTimeAsync(ct));
+    }
+
     /// <summary>Records a guessed device, or the catalogue model it was swapped for.</summary>
     [DenyDemoSubject]
     [HttpPost("confirm")]
     [RequireScope(Scope.DevicesReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -50,7 +66,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [DenyDemoSubject]
     [HttpPost("insulins")]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -61,7 +77,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [DenyDemoSubject]
     [HttpPut("no-insulin")]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -72,7 +88,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [DenyDemoSubject]
     [HttpPost("trackers")]
     [RequireScope(Scope.AlertsReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -83,7 +99,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [DenyDemoSubject]
     [HttpDelete("insulins/{formulationId}")]
     [RequireScope(Scope.TherapyReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -94,7 +110,7 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     [DenyDemoSubject]
     [HttpDelete("trackers/{kind}")]
     [RequireScope(Scope.AlertsReadWrite)]
-    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup", "GetInsulinActionTime"])]
     [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]

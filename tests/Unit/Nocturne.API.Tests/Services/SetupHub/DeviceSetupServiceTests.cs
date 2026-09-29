@@ -5,6 +5,7 @@ using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.SetupHub;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
@@ -27,6 +28,8 @@ public class DeviceSetupServiceTests
     private readonly DeviceSetupService _service;
     private readonly Mock<IDeviceReattributionService> _reattribution = new();
     private readonly Mock<ITrackerAlertRuleSyncService> _ruleSync = new();
+    private readonly Mock<ITherapySettingsResolver> _therapySettings = new();
+    private static readonly InsulinActionTime Profile5h = new(InsulinActionTimeSource.Profile, 5, null);
 
     public DeviceSetupServiceTests()
     {
@@ -42,7 +45,11 @@ public class DeviceSetupServiceTests
             new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance),
             _reattribution.Object,
             new TrackerRepository(_db),
-            _ruleSync.Object);
+            _ruleSync.Object,
+            _therapySettings.Object);
+        _therapySettings.Setup(t => t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Profile5h);
+        _therapySettings.Setup(t => t.GetTimezoneAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync("Pacific/Auckland");
     }
 
     private Task<DeviceSetup> Setup() => _service.GetAsync(Owner, CancellationToken.None);
@@ -250,8 +257,24 @@ public class DeviceSetupServiceTests
         await _service.ConfirmDeviceAsync("dexcom-g7", null, CancellationToken.None);
 
         _db.ChangeTracker.Clear();
-        _db.PatientDevices.Where(d => d.IsCurrent).Select(d => d.CatalogId).Should().Equal("dexcom-g7");
-        _db.PatientDevices.Should().Contain(d => d.CatalogId == "dexcom-g6" && !d.IsCurrent);
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(
+            DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("Pacific/Auckland")));
+        var g6 = _db.PatientDevices.Single(d => d.CatalogId == "dexcom-g6");
+        var g7 = _db.PatientDevices.Single(d => d.CatalogId == "dexcom-g7");
+        (g6.IsCurrent, g6.StartDate, g6.EndDate).Should().Be((false, (DateOnly?)null, (DateOnly?)today),
+            "the first device claims its history and ends on the patient's today");
+        (g7.IsCurrent, g7.StartDate, g7.EndDate).Should().Be((true, (DateOnly?)today, (DateOnly?)null));
+    }
+
+    [Fact]
+    public async Task TheActionTimeShown_IsTheOneTheResolverUses()
+    {
+        var external = new InsulinActionTime(InsulinActionTimeSource.ExternalProfile, 6, "Fiasp");
+        _therapySettings.Setup(t => t.GetActionTimeAsync(It.IsAny<long>(), null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(external);
+
+        (await Setup()).ActionTime.Should().Be(external);
+        (await _service.ActionTimeAsync(CancellationToken.None)).Should().Be(external);
     }
 
     [Fact]
@@ -292,7 +315,6 @@ public class DeviceSetupServiceTests
         {
             Role = InsulinRole.Basal, IsPrimary = false, InsulinCategory = InsulinCategory.UltraLongActing,
         }, "the pump insulin already covers basal");
-        setup.ActionTimeInsulin!.FormulationId.Should().Be("fiasp");
     }
 
     [Fact]

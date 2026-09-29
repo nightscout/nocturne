@@ -52,7 +52,7 @@ import {
   DeviceEvidenceSource,
   InsulinCategory,
   InsulinGroup,
-  InsulinRole,
+  InsulinActionTimeSource,
   PatientRelationship,
   TrackerOfferKind,
   TrackerOfferState,
@@ -94,6 +94,7 @@ function guessed(over: Partial<DeviceSetup> = {}): DeviceSetup {
     ],
     insulins: [],
     otherInsulins: [],
+    actionTime: { source: InsulinActionTimeSource.Profile, hours: 5 },
     takesNoInsulin: false,
     trackers: [],
     ...over,
@@ -229,7 +230,7 @@ describe("DeviceSetupItem", () => {
   it("says whose insulin action time Nocturne will use, and that it doesn't change the pump", async () => {
     remote.relationship = { relationship: PatientRelationship.Caregiver, patientName: "Sam" };
     remote.setup = guessed({
-      actionTimeInsulin: { id: "i1", name: "Fiasp (Faster Aspart)", dia: 3.5, role: InsulinRole.Both },
+      actionTime: { source: InsulinActionTimeSource.PrimaryInsulin, hours: 3.5, primaryInsulinName: "Fiasp (Faster Aspart)" },
       insulins: [{ id: "i1" }],
     });
     render(DeviceSetupItem);

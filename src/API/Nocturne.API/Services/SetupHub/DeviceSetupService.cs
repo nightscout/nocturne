@@ -5,6 +5,7 @@ using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Constants;
+using Nocturne.Core.Contracts.Profiles.Resolvers;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -35,7 +36,8 @@ public partial class DeviceSetupService(
     IPatientInsulinRepository insulins,
     IDeviceReattributionService reattribution,
     ITrackerRepository trackers,
-    ITrackerAlertRuleSyncService trackerRuleSync)
+    ITrackerAlertRuleSyncService trackerRuleSync,
+    ITherapySettingsResolver therapySettings)
 {
     /// <summary>How far back data counts as evidence of what is in use now.</summary>
     internal static readonly TimeSpan EvidenceWindow = TimeSpan.FromDays(30);
@@ -108,14 +110,19 @@ public partial class DeviceSetupService(
             choiceGroups,
             currentInsulins,
             currentInsulins.Where(i => i.FormulationId is null || !listedIds.Contains(i.FormulationId)).ToList(),
-            currentInsulins.FirstOrDefault(i => i.IsPrimary && i.Role is InsulinRole.Bolus or InsulinRole.Both),
+            await ActionTimeAsync(ct),
             takesNoInsulin,
             await TrackerOffersAsync(current, userId, ct));
     }
 
+    /// <summary>The insulin action time in use now, resolved as insulin on board resolves it.</summary>
+    public Task<InsulinActionTime> ActionTimeAsync(CancellationToken ct) =>
+        therapySettings.GetActionTimeAsync(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), ct: ct);
+
     /// <summary>
     /// Records a confirmed guess, or the catalogue entry it was swapped for, as the current device of
-    /// its category; a device that was current in that category stops being current. The AID
+    /// its category. A device that was current in that category stops being current and ends today,
+    /// and the new one starts today, so attribution can tell their readings apart. The AID
     /// algorithm is only what the owner confirmed with the pump, never the guess itself.
     /// </summary>
     /// <exception cref="ArgumentException">The id is not a CGM or pump in the catalogue.</exception>
@@ -125,9 +132,12 @@ public partial class DeviceSetupService(
         if (entry is null || !SlotCategories.Contains(entry.Category))
             throw new ArgumentException($"'{catalogId}' is not a CGM or pump in the device catalogue.", nameof(catalogId));
 
-        foreach (var previous in (await devices.GetCurrentAsync(ct)).Where(d => d.DeviceCategory == entry.Category))
+        var replaced = (await devices.GetCurrentAsync(ct)).Where(d => d.DeviceCategory == entry.Category).ToList();
+        DateOnly? today = replaced.Count > 0 ? await PatientTodayAsync(ct) : null;
+        foreach (var previous in replaced)
         {
             previous.IsCurrent = false;
+            previous.EndDate = today;
             await devices.UpdateAsync(previous.Id, previous, WriteOrigin.Live, ct);
         }
 
@@ -141,9 +151,19 @@ public partial class DeviceSetupService(
                 : entry.Name,
             CatalogId = entry.Id,
             AidAlgorithm = entry.Category == DeviceCategory.InsulinPump ? algorithm : null,
+            StartDate = today,
             IsCurrent = true,
         }, WriteOrigin.Live, ct);
         await reattribution.ReattributeForDeviceAsync(created, ct);
+    }
+
+    /// <summary>Today on the patient's clock; device usage windows are the patient's local dates.</summary>
+    private async Task<DateOnly> PatientTodayAsync(CancellationToken ct)
+    {
+        var zone = TimeZoneInfo.TryFindSystemTimeZoneById(await therapySettings.GetTimezoneAsync(ct: ct) ?? "", out var found)
+            ? found
+            : TimeZoneInfo.Utc;
+        return DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone));
     }
 
     /// <summary>
