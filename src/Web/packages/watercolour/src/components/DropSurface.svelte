@@ -159,12 +159,6 @@
   let lingering = $state(false);
   /** The backend the player settled on; only a live one draws a generated stroke. */
   let drew = $state<string | undefined>(undefined);
-  /**
-   * The canvas holds a finished stroke, so it stays mounted through a closed
-   * spell and a re-open fades it back in instead of simulating it again.
-   * Anything the stroke is built from changing starts over.
-   */
-  let kept = $state(false);
   let theme = $state<Surface>('light');
   /**
    * Whether the surface is near enough to the viewport to be worth painting.
@@ -375,10 +369,8 @@
         width: box.w,
         height: box.h,
         dpr,
-        // Only a scrubbed surface ever seeks, so only it pays for checkpoints
-        // and keeps its instance; the rest let go once the stroke has dried.
+        // Only a scrubbed surface ever seeks, so only it pays for checkpoints.
         checkpointBudgetBytes: scrubbed ? undefined : 1,
-        releaseAfterFinish: !scrubbed,
       },
     );
     drew = undefined;
@@ -392,14 +384,12 @@
         drew = resolved;
         onresolved?.(name || `surface ${slot}`, fallbackReason ? `${resolved} (${fallbackReason})` : resolved);
       });
-    const keep = () => untrack(() => (kept = !scrubbed && drew === 'live'));
-    const offs = [next.on('ready', write), next.on('statechange', write), next.on('fallback', write), next.on('finished', keep)];
+    const offs = [next.on('ready', write), next.on('statechange', write), next.on('fallback', write)];
     player = next;
     return () => {
       for (const off of offs) off();
       next.dispose();
       player = undefined;
-      kept = false;
     };
   });
 
@@ -446,11 +436,11 @@
     <div class="nwc-drops__tint pointer-events-none absolute inset-0 z-0" style:background-color={tint}></div>
   {/if}
   <div class="pointer-events-none absolute inset-0 z-0">
-    {#if stroke && frame && (lingering || kept) && visible}
+    {#if stroke && frame && lingering && visible}
       <div
         class="nwc-drop"
         data-kind={stroke.kind}
-        class:nwc-drop--shown={drew === 'live' && lingering}
+        class:nwc-drop--shown={drew === 'live'}
         class:nwc-drop--animated={animated && lingering}
         class:nwc-drop--leaving={leaving}
         style:left="{frame.x}px"
