@@ -65,3 +65,26 @@ describe('EngineHost.warm (paying the boot before a pointer does)', () => {
     expect(loadModule).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('EngineHost.stillTurn', () => {
+  it('hands out one turn at a time, in the order asked', async () => {
+    const host = new EngineHost();
+    const order: string[] = [];
+    const first = host.stillTurn().then((end) => {
+      order.push('first');
+      return end;
+    });
+    const second = host.stillTurn().then((end) => {
+      order.push('second');
+      end();
+    });
+
+    const endFirst = await first;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(['first']);
+
+    endFirst();
+    await second;
+    expect(order).toEqual(['first', 'second']);
+  });
+});

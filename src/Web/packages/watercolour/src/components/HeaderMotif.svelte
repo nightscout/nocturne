@@ -34,7 +34,12 @@
       frame,
       canvas,
       'header-motif',
-      artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode, fit, surface }, { autoplay: 'once' }),
+      {
+        ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
+        fit,
+        surface,
+        releaseAfterFinish: true,
+      },
       onready,
     );
   });

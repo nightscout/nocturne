@@ -43,7 +43,9 @@
       canvas,
       'avatar-wash',
       {
-        ...artworkOptionsFrom({ palette, seed: resolvedSeed, intensity, durationMs, motion: resolvedMotion, quality, mode, fit, surface }),
+        ...artworkOptionsFrom({ palette, seed: resolvedSeed, intensity, durationMs, motion: resolvedMotion, quality, mode }),
+        fit,
+        surface,
         releaseAfterFinish: true,
       },
       onready,

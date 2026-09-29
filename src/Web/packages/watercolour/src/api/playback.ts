@@ -1,4 +1,4 @@
-import type { ArtworkOptions, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, DetailLevel, Surface } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, loadStrip, parseBakedManifest, sharedStill } from './baked';
@@ -35,6 +35,8 @@ export interface PlayerState {
   simResolution?: number;
   /** Live only: simulation steps the loaded scene's timeline runs. */
   totalTicks?: number;
+  /** Live only: the engine was released; the canvas holds its last frame and cannot redraw. */
+  released?: boolean;
 }
 
 export interface FallbackDetail {
@@ -53,10 +55,12 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   height?: number;
   dpr?: number;
   /**
-   * For live mode: finish on first appearance, present one frame, then
+   * For live mode: once the reveal has finished and its frame is presented,
    * dispose the engine instance while keeping the canvas pixels, so the
-   * artwork holds no live slot and no checkpoints. Meant for stills that are
-   * cheap to render but numerous (avatars).
+   * artwork holds no live slot and no checkpoints afterwards. Under reduced
+   * motion, or with `autoplay: 'never'`, it finishes on first appearance and
+   * releases after one frame: stills that are numerous (avatars), and one-shot
+   * accents that would otherwise pin a slot for as long as they are mounted.
    */
   releaseAfterFinish?: boolean;
   /**
@@ -116,6 +120,7 @@ interface Backend {
   readonly detail?: DetailLevel;
   readonly simResolution?: number;
   readonly totalTicks?: number;
+  readonly isReleased?: boolean;
   play(): void;
   pause(): void;
   reset(): void;
@@ -204,6 +209,7 @@ class LiveBackend implements Backend {
     scheduler: Scheduler,
     callbacks: BackendCallbacks,
     options: PlayerOptions,
+    onFreed: () => void = () => {},
   ): Promise<LiveBackend> {
     const lease = await host.acquire();
     try {
@@ -247,6 +253,7 @@ class LiveBackend implements Backend {
           options.easing,
           resolvedDetail,
           durationMs,
+          onFreed,
         );
       } catch (error) {
         instance.dispose();
@@ -254,6 +261,7 @@ class LiveBackend implements Backend {
       }
     } catch (error) {
       host.release();
+      onFreed();
       throw toWatercolourError(error);
     }
   }
@@ -269,6 +277,7 @@ class LiveBackend implements Backend {
     easing: ((t: number) => number) | undefined,
     resolvedDetail: DetailLevel,
     durationMs: number,
+    private readonly onFreed: () => void,
   ) {
     this.releaseAfterFinish = releaseAfterFinish;
     this.easing = easing;
@@ -311,6 +320,10 @@ class LiveBackend implements Backend {
   get simResolution(): number | undefined {
     if (this.released) return undefined;
     return this.guarded(() => this.instance.simResolution(), undefined);
+  }
+
+  get isReleased(): boolean {
+    return this.released;
   }
 
   get totalTicks(): number | undefined {
@@ -356,6 +369,10 @@ class LiveBackend implements Backend {
     this.step(() => this.instance.finishImmediately());
     this.isPlaying = false;
     this.callbacks.onFinished();
+    // Presented now rather than on the scheduler's next visible frame, so an
+    // off-screen still (an avatar below the fold) does not hold its slot
+    // until it is scrolled to.
+    if (this.releaseAfterFinish) this.render();
   }
 
   resize(size: PixelSize): void {
@@ -400,6 +417,7 @@ class LiveBackend implements Backend {
         // Already freed by a device loss; nothing left to release.
       }
       this.host.release();
+      this.onFreed();
     }
   }
 
@@ -447,6 +465,7 @@ class LiveBackend implements Backend {
       // Already freed by a device loss; nothing left to release.
     }
     this.host.release();
+    this.onFreed();
   }
 
   private step(action: () => void): void {
@@ -753,6 +772,20 @@ export function iconStaticBackend(icon: IconRef | undefined, hasFinal: boolean):
   return icon && !hasFinal ? 'svg' : 'baked';
 }
 
+/**
+ * What a player does once its backend is ready. A `releaseAfterFinish` player
+ * that autoplays still reveals, and releases when the reveal ends.
+ */
+export function autoplayAction(
+  motion: 'full' | 'reduced',
+  autoplay: ArtworkAutoplay | undefined,
+  releaseAfterFinish: boolean | undefined,
+): 'finish' | 'play' | 'wait' {
+  if (motion === 'reduced') return 'finish';
+  if ((autoplay ?? 'once') === 'once') return 'play';
+  return releaseAfterFinish ? 'finish' : 'wait';
+}
+
 type Listener = (payload?: unknown) => void;
 
 class Player implements ArtworkPlayer {
@@ -813,6 +846,7 @@ class Player implements ArtworkPlayer {
       detail: b?.detail,
       simResolution: b?.simResolution,
       totalTicks: b?.totalTicks,
+      released: b?.isReleased,
     };
   }
 
@@ -969,6 +1003,7 @@ class Player implements ArtworkPlayer {
         this.emit('statechange');
         return;
       } catch (error) {
+        if (this.disposed) return;
         lastError = toWatercolourError(error);
         this.fallbackReason = `${mode}: ${lastError.code}: ${lastError.message}`;
         if (import.meta.env.DEV) console.warn(`[watercolour] ${this.assetKey()?.id ?? 'player'} fell back ${mode} -> ${lastError.code}: ${lastError.message}`);
@@ -982,11 +1017,9 @@ class Player implements ArtworkPlayer {
 
   private autoplay(): void {
     if (!this.backend) return;
-    if (this.motion === 'reduced' || this.options.releaseAfterFinish) {
-      this.backend.finish();
-      return;
-    }
-    if ((this.options.autoplay ?? 'once') === 'once') this.backend.play();
+    const action = autoplayAction(this.motion, this.options.autoplay, this.options.releaseAfterFinish);
+    if (action === 'finish') this.backend.finish();
+    else if (action === 'play') this.backend.play();
   }
 
   private createBackend(mode: ResolvedMode): Promise<Backend> {
@@ -995,17 +1028,17 @@ class Player implements ArtworkPlayer {
       onFault: (error) => this.handleFault(error),
     };
     switch (mode) {
-      case 'live':
-        return LiveBackend.create(
-          this.currentCanvas,
-          this.source,
-          this.durationMs,
-          this.size,
-          this.host,
-          this.scheduler,
-          callbacks,
-          this.options,
-        );
+      case 'live': {
+        const create = (onFreed?: () => void) =>
+          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, onFreed);
+        const still = this.options.releaseAfterFinish && autoplayAction(this.motion, this.options.autoplay, true) === 'finish';
+        if (!still) return create();
+        return this.host.stillTurn().then((endTurn) => {
+          if (!this.disposed) return create(endTurn);
+          endTurn();
+          throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+        });
+      }
       case 'baked':
         return this.resolveUrls(['manifest', 'strip']).then(([manifest, strip]) =>
           BakedBackend.create(this.currentCanvas, { manifest, strip }, this.durationMs, this.size, this.scheduler, callbacks, this.options),
