@@ -6,16 +6,15 @@
     import ResourceGuard from "$lib/components/reports/ResourceGuard.svelte";
     import HistoryLimitNotice from "$lib/components/layout/HistoryLimitNotice.svelte";
     import ReportPrintHeader from "$lib/components/reports/print/ReportPrintHeader.svelte";
+    import PrintReportButton from "$lib/components/reports/print/PrintReportButton.svelte";
     import {
         createReportPrintContext,
         installPrintFitFallback,
-        printReport,
     } from "$lib/components/reports/print/report-print.svelte";
     import {reportCategories} from "$lib/navigation/report-navigation.svelte";
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import Printer from "@lucide/svelte/icons/printer";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -137,15 +136,7 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <Button
-                            variant="outline"
-                            size="sm"
-                            onclick={printReport}
-                            aria-label="Print report"
-                    >
-                        <Printer class="w-4 h-4"/>
-                        <span class="hidden sm:inline">Print</span>
-                    </Button>
+                    <PrintReportButton/>
                     {#if showFilters}
                         <Button
                                 variant="outline"
