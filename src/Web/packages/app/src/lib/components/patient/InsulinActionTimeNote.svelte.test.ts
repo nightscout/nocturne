@@ -42,6 +42,20 @@ describe("InsulinActionTimeNote", () => {
     await expect.element(note).not.toHaveTextContent(/default/);
   });
 
+  it("says the default wins over a picked insulin until therapy settings exist", async () => {
+    render(InsulinActionTimeNote, {
+      actionTime: { source: InsulinActionTimeSource.Default, hours: 3, primaryInsulinName: "Fiasp" },
+      voice: sam,
+    });
+
+    const note = page.getByTestId("action-time");
+    await expect.element(note).toHaveTextContent(
+      /Until Sam's therapy settings are set up, Nocturne uses the default of 3 hours/
+    );
+    await expect.element(note).toHaveTextContent(/not the action time of Fiasp/);
+    await expect.element(note).not.toHaveTextContent(/No action time is set/);
+  });
+
   it("names the default only when nothing sets a time", async () => {
     render(InsulinActionTimeNote, {
       actionTime: { source: InsulinActionTimeSource.Default, hours: 3 },

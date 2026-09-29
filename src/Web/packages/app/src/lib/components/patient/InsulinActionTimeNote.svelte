@@ -57,6 +57,17 @@
       Nocturne uses the action time in the profile, {hours} hours, for insulin on board and predictions.
       Once a rapid-acting insulin is set in Devices, its action time is used instead.
     {/if}
+  {:else if insulin}
+    {#if voice.kind === "self"}
+      Until your therapy settings are set up, Nocturne uses the default of {hours} hours for insulin on
+      board and predictions, not the action time of {insulin}.
+    {:else if voice.kind === "named"}
+      Until {voice.name}'s therapy settings are set up, Nocturne uses the default of {hours} hours for
+      insulin on board and predictions, not the action time of {insulin}.
+    {:else}
+      Until therapy settings are set up, Nocturne uses the default of {hours} hours for insulin on board
+      and predictions, not the action time of {insulin}.
+    {/if}
   {:else}
     No action time is set, so Nocturne uses the default of {hours} hours for insulin on board and
     predictions.
