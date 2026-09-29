@@ -113,12 +113,20 @@ describe("SetupHub", () => {
     await expect.element(page.getByTestId("hub-header")).not.toBeInTheDocument();
   });
 
-  it("finishes the painting with a wash before collapsing, when it was last seen unfinished", async () => {
+  it("paints the last stage, then washes, then collapses, when it was last seen unfinished", async () => {
+    const { fakePlayer } = await import("$lib/test-stubs/Artwork.test-stub.svelte");
+    Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false });
     sessionStorage.setItem("nocturne.setup-hub.stop", "5");
     hub.status = hubWith(6);
     render(SetupHub);
 
+    await expect.poll(() => fakePlayer.state.playing).toBe(true);
+    // Longer than the wash: the collapse waits on the painting, not on a clock.
+    await new Promise((resolve) => setTimeout(resolve, 3500));
     await expect.element(page.getByTestId("hub-header")).toBeVisible();
+
+    fakePlayer.state.progress = 1;
+
     await expect
       .poll(() => page.getByTestId("hub-all-set").query(), { timeout: 5000 })
       .not.toBeNull();
