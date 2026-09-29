@@ -26088,6 +26088,23 @@ msgstr "Importación ejecutándose en segundo plano"
 msgid "Google Health import progress"
 msgstr "Progreso de la importación de Google Health"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Historical import progress"
+msgstr "Progreso de la importación histórica"
+
+#. 0: day(status.backfillSyncedThrough)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}."
+msgstr "Sincronizado hasta {0}."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The requested history is complete."
+msgstr "El historial solicitado está completo."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Each sync refreshes today and imports one older calendar month."
+msgstr "Cada sincronización actualiza hoy e importa un mes calendario anterior."
+
 #. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "{0} of {1} data types read"

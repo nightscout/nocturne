@@ -27,6 +27,9 @@ const representativeCopy = [
   "Open connector reset",
   "Save and connect",
   "Refresh inventory",
+  "Historical import progress",
+  "The requested history is complete.",
+  "Each sync refreshes today and imports one older calendar month.",
 ];
 
 function entries(catalog) {

@@ -26088,6 +26088,23 @@ msgstr "백그라운드에서 가져오기 실행 중"
 msgid "Google Health import progress"
 msgstr "Google Health 가져오기 진행 상황"
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Historical import progress"
+msgstr "과거 데이터 가져오기 진행률"
+
+#. 0: day(status.backfillSyncedThrough)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}."
+msgstr "{0}까지 동기화됨."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The requested history is complete."
+msgstr "요청한 기간의 기록을 모두 가져왔습니다."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Each sync refreshes today and imports one older calendar month."
+msgstr "동기화할 때마다 오늘 데이터를 새로 고치고 이전 달력 월 하나를 가져옵니다."
+
 #. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "{0} of {1} data types read"
