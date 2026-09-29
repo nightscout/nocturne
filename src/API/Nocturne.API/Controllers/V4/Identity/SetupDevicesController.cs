@@ -79,6 +79,29 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
     public Task<ActionResult<DeviceSetup>> AddSetupTracker([FromBody] AddSetupTrackerRequest request, CancellationToken ct) =>
         Write(() => deviceSetup.AddTrackerAsync(request.Kind, request.Name, HttpContext.GetSubjectIdString()!, ct), ct);
 
+    /// <summary>Takes back an insulin this item added; one that was on record before is refused.</summary>
+    [DenyDemoSubject]
+    [HttpDelete("insulins/{formulationId}")]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<DeviceSetup>> RemoveSetupInsulin([FromRoute][MaxLength(64)] string formulationId, CancellationToken ct) =>
+        Write(() => deviceSetup.RemoveInsulinAsync(formulationId, ct), ct);
+
+    /// <summary>Deletes a tracker this item created; one the owner had before is refused.</summary>
+    [DenyDemoSubject]
+    [HttpDelete("trackers/{kind}")]
+    [RequireScope(Scope.AlertsReadWrite)]
+    [RemoteCommand(Invalidates = ["GetDeviceSetup"])]
+    [ProducesResponseType(typeof(DeviceSetup), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public Task<ActionResult<DeviceSetup>> RemoveSetupTracker([FromRoute] TrackerOfferKind kind, CancellationToken ct) =>
+        Write(() => deviceSetup.RemoveTrackerAsync(kind, HttpContext.GetSubjectIdString()!, ct), ct);
+
     private async Task<ActionResult<DeviceSetup>> Write(Func<Task> write, CancellationToken ct)
     {
         if (!HttpContext.HasScope(Scope.FullAccess))
@@ -92,9 +115,9 @@ public class SetupDevicesController(DeviceSetupService deviceSetup) : Controller
         {
             return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
-        catch (InvalidOperationException)
+        catch (DeviceSetupConflictException ex)
         {
-            return Problem(detail: "Remove the insulins on record before answering none.", statusCode: 409, title: "Conflict");
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
         }
 
         return Ok(await deviceSetup.GetAsync(HttpContext.GetSubjectIdString()!, ct));

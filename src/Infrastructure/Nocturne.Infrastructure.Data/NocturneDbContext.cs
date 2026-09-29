@@ -397,6 +397,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<SetupHubItemEntity> SetupHubItems { get; set; }
 
+    public DbSet<SetupHubAdditionEntity> SetupHubAdditions { get; set; }
+
     public DbSet<TranslationDraftEntity> TranslationDrafts { get; set; }
 
     public DbSet<ReadAccessLogEntity> ReadAccessLog { get; set; }
@@ -1846,6 +1848,14 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             entity.HasIndex(e => new { e.TenantId, e.ItemKey })
                 .IsUnique()
                 .HasDatabaseName("ix_setup_hub_items_tenant_item_key");
+        });
+
+        modelBuilder.Entity<SetupHubAdditionEntity>(entity =>
+        {
+            entity.Property(e => e.ItemKey).HasConversion<string>();
+            entity.Property(e => e.RecordKind).HasConversion<string>();
+            entity.HasIndex(e => new { e.TenantId, e.ItemKey, e.RecordKind })
+                .HasDatabaseName("ix_setup_hub_additions_tenant_item_kind");
         });
 
         // Signal loss sweep: find tenants that haven't reported recently

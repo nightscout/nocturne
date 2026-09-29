@@ -66,7 +66,7 @@ public class SetupDevicesControllerTests
 
         var confirmed = await controller.ConfirmSetupDevice(new() { CatalogId = "dexcom-g7" }, CancellationToken.None);
         var setup = confirmed.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeOfType<DeviceSetup>().Subject;
-        setup.Trackers.Should().ContainSingle().Which.LifespanHours.Should().Be(240);
+        setup.Trackers.Should().ContainSingle().Which.WearDays.Should().Be(10);
 
         var tracked = await controller.AddSetupTracker(
             new() { Kind = TrackerOfferKind.Sensor, Name = "Dexcom G7 sensor" }, CancellationToken.None);

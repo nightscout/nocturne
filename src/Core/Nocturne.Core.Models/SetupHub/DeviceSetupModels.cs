@@ -3,11 +3,19 @@ using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Models.SetupHub;
 
+/// <summary>What a setup hub item created on the owner's behalf.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SetupHubRecordKind>))]
+public enum SetupHubRecordKind
+{
+    Insulin,
+    Tracker,
+}
+
 /// <summary>Where a device guess came from.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<DeviceEvidenceSource>))]
 public enum DeviceEvidenceSource
 {
-    /// <summary>A connector the tenant set up.</summary>
+    /// <summary>An enabled connector the tenant set up.</summary>
     Connector,
 
     /// <summary>The pump status an uploader or connector reports.</summary>
@@ -45,6 +53,10 @@ public record DeviceSlot(
     IReadOnlyList<DeviceEvidence> Evidence,
     IReadOnlyList<DeviceCatalogEntry> Choices);
 
+/// <summary>
+/// The AID algorithm the evidence points at. It is only a suggestion: the owner confirms or
+/// changes it with the pump, and nothing records it otherwise.
+/// </summary>
 public record AlgorithmGuess(AidAlgorithm Algorithm, IReadOnlyList<DeviceEvidence> Evidence);
 
 [JsonConverter(typeof(JsonStringEnumConverter<InsulinGroup>))]
@@ -54,7 +66,14 @@ public enum InsulinGroup
     LongActing,
 }
 
-public record InsulinChoiceGroup(InsulinGroup Group, IReadOnlyList<InsulinFormulation> Formulations);
+/// <param name="RecordedId">The current patient insulin of this formulation, if there is one.</param>
+/// <param name="AddedHere">
+/// Whether the Devices item recorded it, and so may take it back. One that was on record before
+/// is shown as picked but cannot be unpicked here.
+/// </param>
+public record InsulinChoice(InsulinFormulation Formulation, Guid? RecordedId, bool AddedHere);
+
+public record InsulinChoiceGroup(InsulinGroup Group, IReadOnlyList<InsulinChoice> Choices);
 
 [JsonConverter(typeof(JsonStringEnumConverter<TrackerOfferKind>))]
 public enum TrackerOfferKind
@@ -65,17 +84,44 @@ public enum TrackerOfferKind
     Reservoir,
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<TrackerOfferState>))]
+public enum TrackerOfferState
+{
+    Off,
+
+    /// <summary>The Devices item created the tracker, so it can turn it off again.</summary>
+    AddedHere,
+
+    /// <summary>
+    /// The owner already had a tracker for this; it is left alone and managed in tracker settings.
+    /// </summary>
+    AlreadyTracked,
+}
+
 /// <param name="DeviceName">The catalogue name of the recorded device the tracker follows.</param>
-/// <param name="LifespanHours">
-/// The manufacturer's rated wear time from the catalogue; null when the catalogue rates none.
+/// <param name="WearDays">
+/// Whole days of the catalogue's typical wear time; with <paramref name="WearHours"/> it makes the
+/// full time. Both null when the catalogue rates none.
 /// </param>
-/// <param name="DefinitionId">The caller's tracker that already covers this, if there is one.</param>
-public record TrackerOffer(TrackerOfferKind Kind, string DeviceName, int? LifespanHours, Guid? DefinitionId);
+/// <param name="WearHours">Hours past <paramref name="WearDays"/>.</param>
+/// <param name="DefinitionId">The tracker behind <paramref name="State"/>, when it is not off.</param>
+public record TrackerOffer(
+    TrackerOfferKind Kind,
+    string DeviceName,
+    int? WearDays,
+    int? WearHours,
+    TrackerOfferState State,
+    Guid? DefinitionId);
 
 /// <summary>Everything the Devices setup item shows.</summary>
 /// <param name="Devices">The CGM slot, then the pump slot.</param>
-/// <param name="Algorithm">The AID algorithm the evidence points at, recorded on the pump when it is confirmed.</param>
+/// <param name="Algorithm">The AID algorithm the evidence points at, for the owner to confirm with the pump.</param>
 /// <param name="Insulins">The patient's current insulins.</param>
+/// <param name="OtherInsulins">Current insulins that are not on the short list.</param>
+/// <param name="ActionTimeInsulin">
+/// The current primary bolus insulin, whose action time Nocturne uses for insulin on board and
+/// predictions; null when there is none.
+/// </param>
 /// <param name="TakesNoInsulin">The owner answered that no insulin is used, and none is on record.</param>
 /// <param name="Trackers">Trackers offered for the recorded devices.</param>
 public record DeviceSetup(
@@ -83,5 +129,7 @@ public record DeviceSetup(
     AlgorithmGuess? Algorithm,
     IReadOnlyList<InsulinChoiceGroup> InsulinChoices,
     IReadOnlyList<PatientInsulin> Insulins,
+    IReadOnlyList<PatientInsulin> OtherInsulins,
+    PatientInsulin? ActionTimeInsulin,
     bool TakesNoInsulin,
     IReadOnlyList<TrackerOffer> Trackers);

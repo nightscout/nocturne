@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.Connectors.Core.Constants;
@@ -17,9 +18,16 @@ using Nocturne.Infrastructure.Data.Entities.V4;
 namespace Nocturne.API.Services.SetupHub;
 
 /// <summary>
+/// A Devices setup write that would undo something the item did not do, or contradict what is on
+/// record.
+/// </summary>
+public sealed class DeviceSetupConflictException(string message) : Exception(message);
+
+/// <summary>
 /// The Devices setup item: guesses the patient's CGM, pump and AID algorithm from what is connected
 /// and what recent data says about itself, and records only what the owner confirms. Guesses name
-/// <see cref="DeviceCatalog"/> entries; the trackers it offers carry the catalogue's rated wear times.
+/// <see cref="DeviceCatalog"/> entries; the trackers it offers carry the catalogue's wear times.
+/// It takes back only the insulins and trackers it added itself (<see cref="SetupHubAdditionEntity"/>).
 /// </summary>
 public partial class DeviceSetupService(
     NocturneDbContext db,
@@ -57,7 +65,7 @@ public partial class DeviceSetupService(
         ("medtronic", "Medtronic"), ("minimed", "Medtronic"), ("carelink", "Medtronic"),
         ("insulet", "Insulet"), ("omnipod", "Insulet"),
         ("tandem", "Tandem"),
-        ("ypso", "Ypsomed"),
+        ("ypso", "Ypsomed"), ("mylife", "Ypsomed"),
         ("dana", "SOOIL"), ("sooil", "SOOIL"),
     ];
 
@@ -79,25 +87,49 @@ public partial class DeviceSetupService(
         }).ToList();
 
         var currentInsulins = (await insulins.GetCurrentAsync(ct)).ToList();
+        var addedInsulins = await AdditionsAsync(SetupHubRecordKind.Insulin, ct);
+        var shortList = ShortList();
+        var listedIds = shortList.SelectMany(g => g.Formulations).Select(f => f.Id).ToHashSet();
+
+        var choiceGroups = shortList
+            .Select(g => new InsulinChoiceGroup(g.Group, g.Formulations.Select(f =>
+            {
+                var recorded = currentInsulins.FirstOrDefault(i => i.FormulationId == f.Id);
+                return new InsulinChoice(f, recorded?.Id, recorded is not null && addedInsulins.Contains(recorded.Id));
+            }).ToList()))
+            .ToList();
+
         var takesNoInsulin = currentInsulins.Count == 0
             && await db.PatientRecords.AnyAsync(r => r.TakesNoInsulin, ct);
 
         return new DeviceSetup(
             slots,
             evidence.Algorithm,
-            InsulinChoices(),
+            choiceGroups,
             currentInsulins,
+            currentInsulins.Where(i => i.FormulationId is null || !listedIds.Contains(i.FormulationId)).ToList(),
+            currentInsulins.FirstOrDefault(i => i.IsPrimary && i.Role is InsulinRole.Bolus or InsulinRole.Both),
             takesNoInsulin,
             await TrackerOffersAsync(current, userId, ct));
     }
 
-    /// <summary>Records a confirmed guess, or the catalogue entry it was swapped for, as a current device.</summary>
+    /// <summary>
+    /// Records a confirmed guess, or the catalogue entry it was swapped for, as the current device of
+    /// its category; a device that was current in that category stops being current. The AID
+    /// algorithm is only what the owner confirmed with the pump, never the guess itself.
+    /// </summary>
     /// <exception cref="ArgumentException">The id is not a CGM or pump in the catalogue.</exception>
     public async Task ConfirmDeviceAsync(string catalogId, AidAlgorithm? algorithm, CancellationToken ct)
     {
         var entry = DeviceCatalog.GetById(catalogId);
         if (entry is null || !SlotCategories.Contains(entry.Category))
             throw new ArgumentException($"'{catalogId}' is not a CGM or pump in the device catalogue.", nameof(catalogId));
+
+        foreach (var previous in (await devices.GetCurrentAsync(ct)).Where(d => d.DeviceCategory == entry.Category))
+        {
+            previous.IsCurrent = false;
+            await devices.UpdateAsync(previous.Id, previous, WriteOrigin.Live, ct);
+        }
 
         var created = await devices.CreateAsync(new PatientDevice
         {
@@ -122,7 +154,7 @@ public partial class DeviceSetupService(
     /// <exception cref="ArgumentException">The formulation is not offered on the insulin list.</exception>
     public async Task AddInsulinAsync(string formulationId, CancellationToken ct)
     {
-        var (group, formulation) = InsulinChoices()
+        var (group, formulation) = ShortList()
             .SelectMany(g => g.Formulations.Select(f => (g.Group, Formulation: f)))
             .FirstOrDefault(c => c.Formulation.Id == formulationId);
         if (formulation is null)
@@ -133,7 +165,7 @@ public partial class DeviceSetupService(
             return;
 
         var role = group == InsulinGroup.LongActing ? InsulinRole.Basal
-            : await db.PatientDevices.AnyAsync(d => d.IsCurrent && d.DeviceCategory == nameof(DeviceCategory.InsulinPump), ct)
+            : (await devices.GetCurrentAsync(ct)).Any(d => d.DeviceCategory == DeviceCategory.InsulinPump)
                 ? InsulinRole.Both
                 : InsulinRole.Bolus;
 
@@ -153,30 +185,43 @@ public partial class DeviceSetupService(
         if (created.IsPrimary)
             await insulins.SetPrimaryAsync(created.Id, ct);
 
+        await RecordAdditionAsync(SetupHubRecordKind.Insulin, created.Id, ct);
         await SetTakesNoInsulinFlagAsync(false, ct);
     }
 
+    /// <summary>Takes back an insulin this item added. One that was on record before stays.</summary>
+    /// <exception cref="DeviceSetupConflictException">The insulin was not added here.</exception>
+    public async Task RemoveInsulinAsync(string formulationId, CancellationToken ct)
+    {
+        var recorded = (await insulins.GetCurrentAsync(ct)).FirstOrDefault(i => i.FormulationId == formulationId);
+        if (recorded is null)
+            return;
+        if (!(await AdditionsAsync(SetupHubRecordKind.Insulin, ct)).Contains(recorded.Id))
+            throw new DeviceSetupConflictException("This insulin was on record before; change it in patient settings.");
+
+        await insulins.DeleteAsync(recorded.Id, WriteOrigin.Live, ct);
+        await ForgetAdditionAsync(recorded.Id, ct);
+    }
+
     /// <summary>Answers the insulin question with "none", or takes that answer back.</summary>
-    /// <exception cref="InvalidOperationException">"None" while an insulin is on record.</exception>
+    /// <exception cref="DeviceSetupConflictException">"None" while an insulin is on record.</exception>
     public async Task SetTakesNoInsulinAsync(bool takesNoInsulin, CancellationToken ct)
     {
         if (takesNoInsulin && (await insulins.GetCurrentAsync(ct)).Any())
-            throw new InvalidOperationException("An insulin is on record.");
+            throw new DeviceSetupConflictException("An insulin is on record; remove it before answering none.");
         await SetTakesNoInsulinFlagAsync(takesNoInsulin, ct);
     }
 
     /// <summary>
     /// Creates the offered tracker of <paramref name="kind"/> for <paramref name="userId"/>, with the
-    /// catalogue's rated wear time as its lifespan and restarting on the matching device events.
-    /// Does nothing when the caller already has one.
+    /// catalogue's wear time as its lifespan and restarting on the matching device events. Does
+    /// nothing when the owner already has one.
     /// </summary>
     /// <exception cref="ArgumentException">No tracker of that kind is offered for the recorded devices.</exception>
     public async Task AddTrackerAsync(TrackerOfferKind kind, string name, string userId, CancellationToken ct)
     {
-        var offers = await TrackerOffersAsync((await devices.GetCurrentAsync(ct)).ToList(), userId, ct);
-        var offer = offers.FirstOrDefault(o => o.Kind == kind)
-            ?? throw new ArgumentException($"No {kind} tracker is offered for the recorded devices.", nameof(kind));
-        if (offer.DefinitionId is not null)
+        var (offer, hours) = await OfferAsync(kind, userId, ct);
+        if (offer.State != TrackerOfferState.Off)
             return;
 
         var created = await trackers.CreateDefinitionAsync(new TrackerDefinitionEntity
@@ -184,11 +229,60 @@ public partial class DeviceSetupService(
             UserId = userId,
             Name = name,
             Category = TrackerCategoryOf(kind),
-            LifespanHours = offer.LifespanHours,
+            LifespanHours = hours,
             TriggerEventTypes = JsonSerializer.Serialize(TriggersOf(kind)),
             Mode = TrackerMode.Duration,
         }, ct);
         await trackerRuleSync.SyncDefinitionAsync(created.Id, CancellationToken.None);
+        await RecordAdditionAsync(SetupHubRecordKind.Tracker, created.Id, ct);
+    }
+
+    /// <summary>Deletes a tracker this item created. A tracker the owner had before is never touched.</summary>
+    /// <exception cref="ArgumentException">No tracker of that kind is offered for the recorded devices.</exception>
+    /// <exception cref="DeviceSetupConflictException">The tracker was not created here.</exception>
+    public async Task RemoveTrackerAsync(TrackerOfferKind kind, string userId, CancellationToken ct)
+    {
+        var (offer, _) = await OfferAsync(kind, userId, ct);
+        if (offer.State == TrackerOfferState.Off)
+            return;
+        if (offer.State != TrackerOfferState.AddedHere)
+            throw new DeviceSetupConflictException("This tracker was there before; change it in tracker settings.");
+
+        var id = offer.DefinitionId!.Value;
+        await trackers.DeleteDefinitionAsync(id, ct);
+        await trackerRuleSync.DeleteRulesForDefinitionAsync(id, CancellationToken.None);
+        await ForgetAdditionAsync(id, ct);
+    }
+
+    private async Task<(TrackerOffer Offer, int? Hours)> OfferAsync(TrackerOfferKind kind, string userId, CancellationToken ct)
+    {
+        var current = (await devices.GetCurrentAsync(ct)).ToList();
+        var offer = (await TrackerOffersAsync(current, userId, ct)).FirstOrDefault(o => o.Kind == kind)
+            ?? throw new ArgumentException($"No {kind} tracker is offered for the recorded devices.", nameof(kind));
+        return (offer, offer.WearDays * 24 + offer.WearHours);
+    }
+
+    private async Task<HashSet<Guid>> AdditionsAsync(SetupHubRecordKind kind, CancellationToken ct) =>
+        (await db.SetupHubAdditions
+            .Where(a => a.ItemKey == SetupHubItemKey.Devices && a.RecordKind == kind)
+            .Select(a => a.RecordId)
+            .ToListAsync(ct))
+        .ToHashSet();
+
+    private async Task RecordAdditionAsync(SetupHubRecordKind kind, Guid recordId, CancellationToken ct)
+    {
+        db.SetupHubAdditions.Add(new SetupHubAdditionEntity
+        {
+            Id = Guid.CreateVersion7(), ItemKey = SetupHubItemKey.Devices, RecordKind = kind, RecordId = recordId,
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task ForgetAdditionAsync(Guid recordId, CancellationToken ct)
+    {
+        db.SetupHubAdditions.RemoveRange(
+            await db.SetupHubAdditions.Where(a => a.ItemKey == SetupHubItemKey.Devices && a.RecordId == recordId).ToListAsync(ct));
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task SetTakesNoInsulinFlagAsync(bool value, CancellationToken ct)
@@ -208,14 +302,14 @@ public partial class DeviceSetupService(
     private static bool RolesOverlap(InsulinRole a, InsulinRole b) =>
         a == b || a == InsulinRole.Both || b == InsulinRole.Both;
 
-    private static IReadOnlyList<InsulinChoiceGroup> InsulinChoices()
+    private static IReadOnlyList<(InsulinGroup Group, IReadOnlyList<InsulinFormulation> Formulations)> ShortList()
     {
         // Diluted and custom formulations stay in the full insulin editor; this is the short list.
         var all = InsulinCatalog.GetAll().Where(f => f.Id != "custom" && f.Concentration >= 100).ToList();
         return
         [
-            new(InsulinGroup.RapidActing, all.Where(f => f.Category == InsulinCategory.RapidActing).ToList()),
-            new(InsulinGroup.LongActing, all.Where(f => f.Category is InsulinCategory.LongActing or InsulinCategory.UltraLongActing).ToList()),
+            (InsulinGroup.RapidActing, all.Where(f => f.Category == InsulinCategory.RapidActing).ToList()),
+            (InsulinGroup.LongActing, all.Where(f => f.Category is InsulinCategory.LongActing or InsulinCategory.UltraLongActing).ToList()),
         ];
     }
 
@@ -248,16 +342,51 @@ public partial class DeviceSetupService(
         if (offers.Count == 0)
             return [];
 
-        var existing = await db.TrackerDefinitions
-            .Where(d => d.UserId == userId)
-            .Select(d => new { d.Id, d.Category })
-            .ToListAsync(ct);
-
-        return offers
-            .Select(o => new TrackerOffer(
-                o.Kind, o.Device, o.Hours,
-                existing.FirstOrDefault(d => d.Category == TrackerCategoryOf(o.Kind))?.Id))
+        var added = await AdditionsAsync(SetupHubRecordKind.Tracker, ct);
+        var existing = (await db.TrackerDefinitions
+                .Where(d => d.UserId == userId)
+                .Select(d => new { d.Id, d.Category, d.TriggerEventTypes })
+                .ToListAsync(ct))
+            .Select(d => (d.Id, d.Category, Triggers: ParseTriggers(d.TriggerEventTypes)))
             .ToList();
+
+        return offers.Select(o =>
+        {
+            var covering = existing.Where(d => Covers(o.Kind, d.Category, d.Triggers)).ToList();
+            var mine = covering.Where(d => added.Contains(d.Id)).Select(d => (Guid?)d.Id).FirstOrDefault();
+            var (state, id) = mine is not null
+                ? (TrackerOfferState.AddedHere, mine)
+                : covering.Count > 0
+                    ? (TrackerOfferState.AlreadyTracked, covering[0].Id)
+                    : (TrackerOfferState.Off, null);
+            return new TrackerOffer(o.Kind, o.Device, o.Hours / 24, o.Hours % 24, state, id);
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Whether an existing tracker already follows what an offer of <paramref name="kind"/> would.
+    /// A site tracker restarting on pod changes is a pod tracker, one restarting on anything else
+    /// an infusion-set tracker, and one with no triggers could be either.
+    /// </summary>
+    private static bool Covers(TrackerOfferKind kind, TrackerCategory category, IReadOnlyCollection<string> triggers) => kind switch
+    {
+        TrackerOfferKind.Sensor => category == TrackerCategory.Sensor,
+        TrackerOfferKind.Reservoir => category == TrackerCategory.Reservoir,
+        TrackerOfferKind.Pod => category == TrackerCategory.Cannula
+            && (triggers.Count == 0 || triggers.Contains(TreatmentTypes.PodChange)),
+        _ => category == TrackerCategory.Cannula && !triggers.Contains(TreatmentTypes.PodChange),
+    };
+
+    private static IReadOnlyCollection<string> ParseTriggers(string json)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private static TrackerCategory TrackerCategoryOf(TrackerOfferKind kind) => kind switch
@@ -278,8 +407,8 @@ public partial class DeviceSetupService(
     private sealed record Evidence(IReadOnlyList<DeviceEvidence> Devices, AlgorithmGuess? Algorithm);
 
     /// <summary>
-    /// What the tenant's connectors and recent data say about the hardware, strongest first: a
-    /// reading's device label and the pump's own status can name a model, a connector only a maker.
+    /// What the tenant's enabled connectors and recent data say about the hardware, strongest first:
+    /// a reading's device label and the pump's own status can name a model, a connector only a maker.
     /// </summary>
     private async Task<Evidence> GatherEvidenceAsync(CancellationToken ct)
     {
@@ -302,8 +431,14 @@ public partial class DeviceSetupService(
         if (pump is not null)
             found.Add(new(DeviceEvidenceSource.PumpStatus, $"{pump.Manufacturer} {pump.Model}".Trim()));
 
-        var connectors = await db.ConnectorConfigurations.Select(c => c.ConnectorName).OrderBy(n => n).ToListAsync(ct);
-        found.AddRange(connectors.Select(n => new DeviceEvidence(DeviceEvidenceSource.Connector, n)));
+        var connectors = await db.ConnectorConfigurations
+            .Select(c => new { c.ConnectorName, c.ConfigurationJson })
+            .ToListAsync(ct);
+        found.AddRange(connectors
+            .Where(c => ConnectorConfigurationService.GetEnabledFromConfig(c.ConfigurationJson))
+            .Select(c => c.ConnectorName)
+            .Order()
+            .Select(n => new DeviceEvidence(DeviceEvidenceSource.Connector, n)));
 
         var algorithmName = await db.ApsSnapshots
             .Where(a => a.Timestamp >= since)

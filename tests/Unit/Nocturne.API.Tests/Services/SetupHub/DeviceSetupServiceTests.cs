@@ -5,7 +5,6 @@ using Moq;
 using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.Monitoring;
 using Nocturne.API.Services.SetupHub;
-using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.SetupHub;
 using Nocturne.Core.Models.V4;
@@ -51,8 +50,11 @@ public class DeviceSetupServiceTests
     private static DeviceSlot Slot(DeviceSetup setup, DeviceCategory category) =>
         setup.Devices.Single(s => s.Category == category);
 
-    private void Connector(string name) =>
-        _db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity { Id = Guid.CreateVersion7(), ConnectorName = name });
+    private void Connector(string name, string configuration = "{}") =>
+        _db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        {
+            Id = Guid.CreateVersion7(), ConnectorName = name, ConfigurationJson = configuration,
+        });
 
     private void Reading(string device, DateTime? at = null) =>
         _db.SensorGlucose.Add(new SensorGlucoseEntity
@@ -72,7 +74,20 @@ public class DeviceSetupServiceTests
             Id = Guid.CreateVersion7(), Timestamp = DateTime.UtcNow, AidAlgorithm = algorithm.ToString(),
         });
 
-    private Task<bool> DevicesItemWorks() => new DevicesItem(_db).WorksAsync(CancellationToken.None);
+    private TrackerDefinitionEntity ExistingTracker(TrackerCategory category, params string[] triggers)
+    {
+        var definition = new TrackerDefinitionEntity
+        {
+            Id = Guid.CreateVersion7(), UserId = Owner, Name = "Mine", Category = category,
+            TriggerEventTypes = JsonSerializer.Serialize(triggers), LifespanHours = 72,
+        };
+        _db.TrackerDefinitions.Add(definition);
+        _db.SaveChanges();
+        return definition;
+    }
+
+    private Task<bool> DevicesItemWorks() =>
+        SetupHubServiceTests.DevicesItemOver(_db).WorksAsync(CancellationToken.None);
 
     [Fact]
     public async Task NothingConnected_GuessesNothing_ButOffersTheCatalogueToPickFrom()
@@ -102,19 +117,30 @@ public class DeviceSetupServiceTests
     }
 
     [Fact]
-    public async Task ACareLinkConnector_PointsAtAMedtronicSensorAndPump()
+    public async Task ADisabledConnector_IsNotEvidence()
     {
-        Connector("CareLink");
+        Connector("Dexcom", """{"enabled":false}""");
         await _db.SaveChangesAsync();
 
-        var setup = await Setup();
+        Slot(await Setup(), DeviceCategory.CGM).Guess.Should().BeNull();
+    }
 
-        Slot(setup, DeviceCategory.CGM).Guess!.Manufacturer.Should().Be("Medtronic");
-        Slot(setup, DeviceCategory.InsulinPump).Guess!.Id.Should().Be("medtronic-780g");
+    [Theory]
+    [InlineData("CareLink", "medtronic-780g")]
+    [InlineData("MyLife", "ypsopump")]
+    public async Task APumpMakersConnector_PointsAtItsPump_AsABrandOnlyGuess(string connector, string expected)
+    {
+        Connector(connector);
+        await _db.SaveChangesAsync();
+
+        var pump = Slot(await Setup(), DeviceCategory.InsulinPump);
+
+        pump.Guess!.Id.Should().Be(expected);
+        pump.ModelKnown.Should().BeFalse();
     }
 
     [Fact]
-    public async Task LoopDeviceStatus_NamesThePumpModel_AndTheAlgorithm()
+    public async Task LoopDeviceStatus_NamesThePumpModel_AndSuggestsTheAlgorithm()
     {
         PumpStatus("Insulet", "Dash");
         LoopStatus(AidAlgorithm.Loop);
@@ -173,7 +199,7 @@ public class DeviceSetupServiceTests
     }
 
     [Fact]
-    public async Task ConfirmingAGuess_RecordsTheCatalogueDevice_AndStopsGuessingForIt()
+    public async Task ConfirmingAGuess_RecordsTheCatalogueDevice_WithTheConfirmedAlgorithm()
     {
         PumpStatus("Insulet", "Dash");
         await _db.SaveChangesAsync();
@@ -192,6 +218,18 @@ public class DeviceSetupServiceTests
     }
 
     [Fact]
+    public async Task AGuessedAlgorithm_IsNeverRecorded_UnlessTheOwnerConfirmsIt()
+    {
+        PumpStatus("Insulet", "Dash");
+        LoopStatus(AidAlgorithm.Loop);
+        await _db.SaveChangesAsync();
+
+        await _service.ConfirmDeviceAsync("omnipod-5", null, CancellationToken.None);
+
+        Slot(await Setup(), DeviceCategory.InsulinPump).Recorded!.AidAlgorithm.Should().BeNull();
+    }
+
+    [Fact]
     public async Task SwappingAGuess_RecordsTheChosenModel_AndNeverAnAlgorithmOnACgm()
     {
         Connector("Dexcom");
@@ -203,6 +241,17 @@ public class DeviceSetupServiceTests
         recorded.CatalogId.Should().Be("dexcom-g6");
         (recorded.Manufacturer, recorded.Model).Should().Be(("Dexcom", "G6"));
         recorded.AidAlgorithm.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ConfirmingANewDevice_EndsThePreviousCurrentOneOfItsCategory()
+    {
+        await _service.ConfirmDeviceAsync("dexcom-g6", null, CancellationToken.None);
+        await _service.ConfirmDeviceAsync("dexcom-g7", null, CancellationToken.None);
+
+        _db.ChangeTracker.Clear();
+        _db.PatientDevices.Where(d => d.IsCurrent).Select(d => d.CatalogId).Should().Equal("dexcom-g7");
+        _db.PatientDevices.Should().Contain(d => d.CatalogId == "dexcom-g6" && !d.IsCurrent);
     }
 
     [Fact]
@@ -218,10 +267,10 @@ public class DeviceSetupServiceTests
         var groups = (await Setup()).InsulinChoices;
 
         groups.Select(g => g.Group).Should().Equal(InsulinGroup.RapidActing, InsulinGroup.LongActing);
-        groups[0].Formulations.Should().Contain(f => f.Id == "novorapid")
+        groups[0].Choices.Select(c => c.Formulation).Should().Contain(f => f.Id == "novorapid")
             .And.OnlyContain(f => f.Category == InsulinCategory.RapidActing && f.Concentration >= 100)
             .And.NotContain(f => f.Id == "custom");
-        groups[1].Formulations.Select(f => f.Id).Should().Contain(["lantus", "tresiba"]);
+        groups[1].Choices.Select(c => c.Formulation.Id).Should().Contain(["lantus", "tresiba"]);
     }
 
     [Fact]
@@ -233,16 +282,17 @@ public class DeviceSetupServiceTests
         await _service.AddInsulinAsync("fiasp", CancellationToken.None);
         await _service.AddInsulinAsync("tresiba", CancellationToken.None);
 
-        var insulins = (await Setup()).Insulins;
-        insulins.Should().HaveCount(2, "picking the same insulin twice records it once");
-        insulins.Single(i => i.FormulationId == "fiasp").Should().BeEquivalentTo(new
+        var setup = await Setup();
+        setup.Insulins.Should().HaveCount(2, "picking the same insulin twice records it once");
+        setup.Insulins.Single(i => i.FormulationId == "fiasp").Should().BeEquivalentTo(new
         {
             Role = InsulinRole.Both, IsPrimary = true, Dia = 3.5, Peak = 55, Curve = "ultra-rapid", IsCurrent = true,
         });
-        insulins.Single(i => i.FormulationId == "tresiba").Should().BeEquivalentTo(new
+        setup.Insulins.Single(i => i.FormulationId == "tresiba").Should().BeEquivalentTo(new
         {
             Role = InsulinRole.Basal, IsPrimary = false, InsulinCategory = InsulinCategory.UltraLongActing,
         }, "the pump insulin already covers basal");
+        setup.ActionTimeInsulin!.FormulationId.Should().Be("fiasp");
     }
 
     [Fact]
@@ -254,6 +304,44 @@ public class DeviceSetupServiceTests
         var insulins = (await Setup()).Insulins;
         insulins.Should().OnlyContain(i => i.IsPrimary);
         insulins.Single(i => i.FormulationId == "novorapid").Role.Should().Be(InsulinRole.Bolus);
+    }
+
+    [Fact]
+    public async Task AnInsulinPickedHere_CanBeUnpicked()
+    {
+        await _service.AddInsulinAsync("novorapid", CancellationToken.None);
+        var choice = (await Setup()).InsulinChoices[0].Choices.Single(c => c.Formulation.Id == "novorapid");
+        choice.AddedHere.Should().BeTrue();
+
+        await _service.RemoveInsulinAsync("novorapid", CancellationToken.None);
+
+        (await Setup()).Insulins.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AnInsulinOnRecordBefore_IsShownPicked_ButCannotBeUnpickedHere()
+    {
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), InsulinCategory = "RapidActing", Name = "NovoRapid",
+            FormulationId = "novorapid", IsCurrent = true, Role = "Bolus",
+        });
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), InsulinCategory = "RapidActing", Name = "Humalog U10",
+            FormulationId = "humalog-u10", IsCurrent = true, Role = "Bolus",
+        });
+        await _db.SaveChangesAsync();
+
+        var setup = await Setup();
+        var choice = setup.InsulinChoices[0].Choices.Single(c => c.Formulation.Id == "novorapid");
+        choice.RecordedId.Should().NotBeNull();
+        choice.AddedHere.Should().BeFalse();
+        setup.OtherInsulins.Select(i => i.Name).Should().Equal("Humalog U10");
+
+        await _service.Invoking(s => s.RemoveInsulinAsync("novorapid", CancellationToken.None))
+            .Should().ThrowAsync<DeviceSetupConflictException>();
+        (await Setup()).Insulins.Should().HaveCount(2);
     }
 
     [Fact]
@@ -273,7 +361,7 @@ public class DeviceSetupServiceTests
         (await Setup()).TakesNoInsulin.Should().BeFalse();
 
         await _service.Invoking(s => s.SetTakesNoInsulinAsync(true, CancellationToken.None))
-            .Should().ThrowAsync<InvalidOperationException>();
+            .Should().ThrowAsync<DeviceSetupConflictException>();
     }
 
     [Fact]
@@ -285,8 +373,8 @@ public class DeviceSetupServiceTests
         await _service.ConfirmDeviceAsync("omnipod-dash", null, CancellationToken.None);
 
         (await Setup()).Trackers.Should().Equal(
-            new TrackerOffer(TrackerOfferKind.Sensor, "Dexcom G7", 240, null),
-            new TrackerOffer(TrackerOfferKind.Pod, "Omnipod DASH", 72, null));
+            new TrackerOffer(TrackerOfferKind.Sensor, "Dexcom G7", 10, 0, TrackerOfferState.Off, null),
+            new TrackerOffer(TrackerOfferKind.Pod, "Omnipod DASH", 3, 0, TrackerOfferState.Off, null));
     }
 
     [Fact]
@@ -295,12 +383,12 @@ public class DeviceSetupServiceTests
         await _service.ConfirmDeviceAsync("tandem-mobi", null, CancellationToken.None);
 
         (await Setup()).Trackers.Should().Equal(
-            new TrackerOffer(TrackerOfferKind.InfusionSet, "t:slim Mobi", 72, null),
-            new TrackerOffer(TrackerOfferKind.Reservoir, "t:slim Mobi", 72, null));
+            new TrackerOffer(TrackerOfferKind.InfusionSet, "t:slim Mobi", 3, 0, TrackerOfferState.Off, null),
+            new TrackerOffer(TrackerOfferKind.Reservoir, "t:slim Mobi", 3, 0, TrackerOfferState.Off, null));
     }
 
     [Fact]
-    public async Task TurningATrackerOn_CreatesItWithTheWearTimeAndChangeTriggers_Once()
+    public async Task TurningATrackerOn_CreatesItWithTheWearTimeAndChangeTriggers_Once_AndOffDeletesIt()
     {
         await _service.ConfirmDeviceAsync("libre-3", null, CancellationToken.None);
 
@@ -314,8 +402,48 @@ public class DeviceSetupServiceTests
             LifespanHours = (int?)336, Mode = TrackerMode.Duration,
         });
         JsonSerializer.Deserialize<string[]>(definition.TriggerEventTypes).Should().Equal("Sensor Start", "Sensor Change");
-        (await Setup()).Trackers.Single().DefinitionId.Should().Be(definition.Id);
+        (await Setup()).Trackers.Single().Should().BeEquivalentTo(new
+        {
+            State = TrackerOfferState.AddedHere, DefinitionId = (Guid?)definition.Id,
+        });
         _ruleSync.Verify(r => r.SyncDefinitionAsync(definition.Id, It.IsAny<CancellationToken>()), Times.Once);
+
+        await _service.RemoveTrackerAsync(TrackerOfferKind.Sensor, Owner, CancellationToken.None);
+
+        _db.TrackerDefinitions.Should().BeEmpty();
+        (await Setup()).Trackers.Single().State.Should().Be(TrackerOfferState.Off);
+        _ruleSync.Verify(r => r.DeleteRulesForDefinitionAsync(definition.Id, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ATrackerTheOwnerAlreadyHad_IsShownAsTracked_AndSurvivesTurningOff()
+    {
+        await _service.ConfirmDeviceAsync("dexcom-g7", null, CancellationToken.None);
+        var mine = ExistingTracker(TrackerCategory.Sensor, "Sensor Start");
+
+        (await Setup()).Trackers.Single().Should().BeEquivalentTo(new
+        {
+            State = TrackerOfferState.AlreadyTracked, DefinitionId = (Guid?)mine.Id,
+        });
+
+        await _service.Invoking(s => s.RemoveTrackerAsync(TrackerOfferKind.Sensor, Owner, CancellationToken.None))
+            .Should().ThrowAsync<DeviceSetupConflictException>();
+        await _service.AddTrackerAsync(TrackerOfferKind.Sensor, "Another", Owner, CancellationToken.None);
+
+        _db.TrackerDefinitions.Should().ContainSingle().Which.Id.Should().Be(mine.Id);
+    }
+
+    [Fact]
+    public async Task ASiteTracker_CoversAPodOnlyWhenItFollowsPodChanges()
+    {
+        await _service.ConfirmDeviceAsync("omnipod-dash", null, CancellationToken.None);
+        ExistingTracker(TrackerCategory.Cannula, "Site Change");
+
+        (await Setup()).Trackers.Single().State.Should().Be(TrackerOfferState.Off,
+            "an infusion-set tracker is not a pod tracker");
+
+        ExistingTracker(TrackerCategory.Cannula, "Pod Change");
+        (await Setup()).Trackers.Single().State.Should().Be(TrackerOfferState.AlreadyTracked);
     }
 
     [Fact]
@@ -341,6 +469,43 @@ public class DeviceSetupServiceTests
         await _service.SetTakesNoInsulinAsync(false, CancellationToken.None);
         await _service.AddInsulinAsync("lyumjev", CancellationToken.None);
         (await DevicesItemWorks()).Should().BeTrue("trackers are optional");
+    }
+
+    [Fact]
+    public async Task Done_ReadsTheCategoryAsTheDeviceRecordDoes_SoASeededLowercaseCgmCounts()
+    {
+        _db.PatientDevices.Add(new PatientDeviceEntity
+        {
+            Id = Guid.CreateVersion7(), DeviceCategory = "cgm", Manufacturer = "Dexcom", Model = "G7", IsCurrent = true,
+        });
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), InsulinCategory = "RapidActing", Name = "Humalog", IsCurrent = true,
+        });
+        await _db.SaveChangesAsync();
+
+        (await DevicesItemWorks()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Done_CountsOnlyCurrentDevicesAndInsulins()
+    {
+        _db.PatientDevices.Add(new PatientDeviceEntity
+        {
+            Id = Guid.CreateVersion7(), DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G6", IsCurrent = false,
+        });
+        _db.PatientInsulins.Add(new PatientInsulinEntity
+        {
+            Id = Guid.CreateVersion7(), InsulinCategory = "RapidActing", Name = "Humalog", IsCurrent = true,
+        });
+        await _db.SaveChangesAsync();
+        (await DevicesItemWorks()).Should().BeFalse("the only CGM is no longer in use");
+
+        await _service.ConfirmDeviceAsync("dexcom-g7", null, CancellationToken.None);
+        var insulin = _db.PatientInsulins.Single();
+        insulin.IsCurrent = false;
+        await _db.SaveChangesAsync();
+        (await DevicesItemWorks()).Should().BeFalse("the only insulin is no longer in use");
     }
 
     [Fact]

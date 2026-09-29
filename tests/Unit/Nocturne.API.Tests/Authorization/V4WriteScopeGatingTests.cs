@@ -444,6 +444,8 @@ public class V4WriteScopeGatingTests
             ["SetupDevicesController.AddSetupInsulin"] = Scope.TherapyReadWrite,
             ["SetupDevicesController.SetTakesNoInsulin"] = Scope.TherapyReadWrite,
             ["SetupDevicesController.AddSetupTracker"] = Scope.AlertsReadWrite,
+            ["SetupDevicesController.RemoveSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.RemoveSetupTracker"] = Scope.AlertsReadWrite,
         };
 
     [Fact]

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.API.Services.SetupHub;
 using Nocturne.API.Services.SetupHub.Items;
 using Nocturne.Core.Contracts.SetupHub;
@@ -6,6 +7,7 @@ using Nocturne.Core.Models.SetupHub;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Tests.Shared.Infrastructure;
 using Xunit;
 
@@ -40,10 +42,19 @@ public class SetupHubServiceTests
         {
             // Registered out of order on purpose: the key decides the hub order.
             new AboutItem(db), new SharingItem(db), new TherapyItem(db),
-            new DevicesItem(db), new AlertsItem(db), new ConnectDataItem(db),
+            DevicesItemOver(db), new AlertsItem(db), new ConnectDataItem(db),
         });
 
     private SetupHubService Service => ServiceOver(_db);
+
+    internal static DevicesItem DevicesItemOver(NocturneDbContext db)
+    {
+        var factory = new TestTenantDbContextFactory(db);
+        return new DevicesItem(
+            db,
+            new PatientDeviceRepository(factory, NullLogger<PatientDeviceRepository>.Instance),
+            new PatientInsulinRepository(factory, NullLogger<PatientInsulinRepository>.Instance));
+    }
 
     private static SensorGlucoseEntity Reading(Guid tenantId) => new()
     {
@@ -55,11 +66,11 @@ public class SetupHubServiceTests
     {
         _db.PatientDevices.Add(new PatientDeviceEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7",
+            Id = Guid.CreateVersion7(), TenantId = TenantId, DeviceCategory = "CGM", Manufacturer = "Dexcom", Model = "G7", IsCurrent = true,
         });
         _db.PatientInsulins.Add(new PatientInsulinEntity
         {
-            Id = Guid.CreateVersion7(), TenantId = TenantId, InsulinCategory = "RapidActing", Name = "Humalog",
+            Id = Guid.CreateVersion7(), TenantId = TenantId, InsulinCategory = "RapidActing", Name = "Humalog", IsCurrent = true,
         });
     }
 
