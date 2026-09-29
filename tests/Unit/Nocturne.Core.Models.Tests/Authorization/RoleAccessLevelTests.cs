@@ -27,6 +27,7 @@ public class RoleAccessLevelTests
     [InlineData(Scope.TenantSettings, RoleAccessLevel.Manage)]
     [InlineData(Scope.MembersInvite, RoleAccessLevel.Manage)]
     [InlineData(Scope.DeviceActuate, RoleAccessLevel.ReadOnly)]
+    [InlineData("device.manage", RoleAccessLevel.Manage)]
     public void AnEditedClinician_IsJudgedByWhatItWasGiven(string added, RoleAccessLevel level) =>
         RoleAccessLevels.Of([.. RoleSeeds.Permissions[RoleSeeds.Clinician], added]).Should().Be(level);
 }

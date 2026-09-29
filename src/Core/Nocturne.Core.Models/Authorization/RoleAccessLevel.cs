@@ -38,5 +38,5 @@ public static class RoleAccessLevels
 
     private static bool IsRead(string permission) =>
         permission.EndsWith(".read", StringComparison.Ordinal)
-        || permission.StartsWith("device.", StringComparison.Ordinal);
+        || permission is Scope.DeviceNotify or Scope.DeviceActuate;
 }
