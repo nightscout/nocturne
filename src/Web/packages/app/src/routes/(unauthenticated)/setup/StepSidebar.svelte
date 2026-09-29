@@ -17,7 +17,7 @@
   } = $props();
 </script>
 
-<nav class="flex flex-col gap-4 md:gap-8">
+<nav class="flex flex-col gap-4 lg:gap-8">
   <p
     class="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-primary"
   >
@@ -30,7 +30,7 @@
   </p>
 
   <h2
-    class="font-brand text-2xl md:text-4xl font-hairline leading-tight tracking-tight text-foreground"
+    class="font-brand text-2xl lg:text-4xl font-hairline leading-tight tracking-tight text-foreground"
   >
     {#if path === "fresh"}
       {#if voice.kind === "self"}
@@ -49,7 +49,7 @@
     {/if}
   </h2>
 
-  <p class="hidden md:block text-sm leading-relaxed text-muted-foreground">
+  <p class="hidden lg:block text-sm leading-relaxed text-muted-foreground">
     {#if path === "fresh"}
       A few short steps. Skip anything you're not ready for; you can change
       every choice in Settings afterwards.
@@ -68,7 +68,7 @@
     {/if}
   </p>
 
-  <ol class="hidden md:flex flex-col">
+  <ol class="hidden lg:flex flex-col">
     {#each steps as step, index (step.id)}
       {@const isDone = index < currentStep}
       {@const isCurrent = index === currentStep}

@@ -468,9 +468,9 @@
     </div>
   {:else}
     <div
-      class="w-full max-w-280 mx-auto grid grid-cols-1 gap-6 md:grid-cols-[240px_minmax(0,1fr)] md:gap-10 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-14 items-start"
+      class="w-full max-w-280 mx-auto grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-14 items-start"
     >
-      <aside class="md:sticky md:top-8">
+      <aside class="lg:sticky lg:top-8">
         <StepSidebar
           path={setupRequired ? "fresh" : path}
           currentStep={activeIndex}
@@ -482,7 +482,7 @@
 
       <section
         bind:this={stepCard}
-        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-clip md:min-h-135 flex flex-col"
+        class="relative rounded-3xl border bg-card text-card-foreground shadow-sm overflow-clip lg:min-h-135 flex flex-col"
       >
         <div
           class="flex items-center justify-between flex-wrap gap-2.5 px-5 py-3.5 md:px-7 md:py-5 border-b"
@@ -516,7 +516,7 @@
           </div>
         </div>
 
-        <div class="flex-1 px-4 py-3 md:px-5">
+        <div class="flex-1 px-4 py-3 md:px-5 max-lg:[&_:is(input,select,textarea,[role=combobox],[role=radio])]:scroll-mb-32">
           <StepArtwork
             art={activeStep?.art ?? "welcome"}
             progress={artProgress}
@@ -670,7 +670,7 @@
 
         {#if !setupRequired}
           <div
-            class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center px-5 py-3.5 md:px-7 md:py-4.5 border-t bg-background md:bg-muted/40 sticky bottom-0 z-10 md:static *:sm:w-auto *:w-full"
+            class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between sm:items-center px-5 py-3.5 md:px-7 md:py-4.5 border-t bg-background lg:bg-muted/40 sticky bottom-0 z-10 lg:static *:sm:w-auto *:w-full"
           >
             <div class="empty:hidden [&>button]:w-full sm:[&>button]:w-auto">
               {#if stepIndex > 0 && currentStep?.id !== "finish" && !importBlocking}
