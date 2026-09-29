@@ -112,7 +112,11 @@ public sealed class GoogleHealthService(
     private static readonly TimeSpan AccessTokenSafety = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PreviewWindow = TimeSpan.FromDays(7);
     private static readonly TimeSpan PreviewGateTimeout = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan PreviewTimeout = TimeSpan.FromSeconds(45);
+    // Heart-rate can contain hundreds of thousands of points in the seven-day inventory
+    // window.  Counting each supported type sequentially made an otherwise healthy connector
+    // look unavailable after the old 45-second limit.  The inventory now runs the four bounded
+    // counts concurrently and keeps a generous upper bound for a slow Google response.
+    private static readonly TimeSpan PreviewTimeout = TimeSpan.FromMinutes(3);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private Guid TenantId => tenantAccessor.TenantId;
 
@@ -575,31 +579,28 @@ public sealed class GoogleHealthService(
     private async Task<GoogleHealthPreview> ReadInventoryAsync(
         GoogleHealthTokenSession token, DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
-        var items = new List<GoogleHealthPreviewItem>();
-        foreach (var capability in GoogleHealthClient.Capabilities)
+        var items = await Task.WhenAll(GoogleHealthClient.Capabilities.Select(async capability =>
         {
             var type = capability.DataType;
             if (!capability.Supported)
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Supported = false });
-                continue;
+                return new GoogleHealthPreviewItem { DataType = type, Supported = false };
             }
             var granted = token.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal);
             if (!granted)
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true });
-                continue;
+                return new GoogleHealthPreviewItem { DataType = type, Granted = false, Supported = true };
             }
             try
             {
                 var count = await google.CountAsync(token.AccessToken!, type, from, to, ct);
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true });
+                return new GoogleHealthPreviewItem { DataType = type, Granted = true, Count = count, Supported = true };
             }
             catch (GoogleHealthException ex) when (ex.Message != "access_token_rejected")
             {
-                items.Add(new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true });
+                return new GoogleHealthPreviewItem { DataType = type, Granted = true, ErrorCode = ex.Message, Supported = true };
             }
-        }
+        }));
         return new GoogleHealthPreview { Items = items.ToArray() };
     }
 
