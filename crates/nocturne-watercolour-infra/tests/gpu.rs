@@ -8,8 +8,10 @@ use std::sync::OnceLock;
 use nocturne_watercolour_core::application::{
     CheckpointPolicy, CpuEngine, Playback, Renderer, Simulator,
 };
+use nocturne_watercolour_core::domain::optics::RenderParams;
+use nocturne_watercolour_core::domain::sim::SimParams;
 use nocturne_watercolour_core::domain::{
-    Background, CompositeMode, Palette, Scene, Seed, SimResolution,
+    Background, CompositeMode, Palette, Scene, Seed, SimResolution, swirl,
 };
 use nocturne_watercolour_infra::authoring::ArtworkCatalogue;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine};
@@ -315,3 +317,62 @@ fn gpu_matches_cpu_on_the_velocity_a_stroke_injects() {
         "the two ports inject different velocity: worst cell differs by {worst}"
     );
 }
+
+/// The tick hands the pressure correction and the suspended pigment between
+/// `state` and `scratch` by parity, and the shipped parameters (8 Jacobi
+/// iterations, 6 swirl substeps) take only the even branch; this runs the
+/// odd one of each against the CPU reference.
+#[test]
+fn gpu_matches_cpu_with_odd_jacobi_iterations_and_swirl_substeps() {
+    let Some(template) = gpu() else { return };
+    let params = SimParams {
+        jacobi_iterations: 7,
+        swirl_speed: 0.8,
+        ..SimParams::default()
+    };
+    let substeps =
+        swirl::Geometry::new(128, 1.0, params.swirl_speed, params.swirl_frequency).substeps;
+    assert_eq!(substeps % 2, 1, "{substeps} swirl substeps is not odd");
+    let gpu = GpuEngine::with_params(template.context().clone(), params, RenderParams::default())
+        .unwrap();
+    let scene = small_scene("wash");
+    let mut g = Playback::new(gpu, scene.clone(), 1000.0).unwrap();
+    let mut c = Playback::new(
+        CpuEngine::new(params, RenderParams::default()),
+        scene,
+        1000.0,
+    )
+    .unwrap();
+    g.advance_ticks(60).unwrap();
+    c.advance_ticks(60).unwrap();
+    // Sixty ticks leave the ports within float rounding of each other; a
+    // branch that reads a stale buffer lands well inside the whole-run
+    // tolerance, so this compares at the tighter one.
+    let gpu_grid = g.simulator().read_grid().unwrap();
+    let cpu_grid = c.simulator().grid().unwrap();
+    let mae = |a: &[f32], b: &[f32]| {
+        a.iter().zip(b).map(|(x, y)| (x - y).abs()).sum::<f32>() / a.len() as f32
+    };
+    for (field, gpu_field, cpu_field) in [
+        (
+            "suspended",
+            &gpu_grid.pigments_in_water,
+            &cpu_grid.pigments_in_water,
+        ),
+        (
+            "deposited",
+            &gpu_grid.pigments_deposited,
+            &cpu_grid.pigments_deposited,
+        ),
+        ("velocity_u", &gpu_grid.velocity_u, &cpu_grid.velocity_u),
+        ("pressure", &gpu_grid.pressure, &cpu_grid.pressure),
+    ] {
+        let e = mae(gpu_field, cpu_field);
+        assert!(e < ODD_PARITY_TOLERANCE, "{field} mae {e}");
+    }
+}
+
+/// Per-field mean absolute difference allowed after 60 ticks of the odd
+/// parity run; measured at about 1e-9, while reading the wrong buffer on
+/// either branch gives about 1e-4.
+const ODD_PARITY_TOLERANCE: f32 = 1e-6;

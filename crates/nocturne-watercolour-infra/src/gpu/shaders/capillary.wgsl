@@ -2,7 +2,8 @@
 // gathers saturation exchange into scratch s2 with a symmetric pair
 // function so the transfer is conservative without atomics; `capillary_wet`
 // then wets cells whose new saturation crosses sigma (blooms), reading s2
-// and writing only the cell's own wet/pressure. Deviation from Curtis: no
+// and writing only the cell's own wet/pressure/saturation, and advances the
+// tick clock. Deviation from Curtis: no
 // destination threshold delta, as in the CPU reference; fibres under a wet
 // cell decay at P.wet_capillary_dry share of the bare-paper rate; a bloom
 // takes the water it adds to the cell's film out of the fibres (scratch
@@ -41,11 +42,14 @@ fn capillary(@builtin(global_invocation_id) gid: vec3<u32>) {
 fn capillary_wet(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if i >= P.n { return; }
+    if i == 0u { advance_clock(); }
     let m = state[o_m() + i];
-    if wet(i) == 0.0 && scratch[so_s() + i] > P.capillary_sigma * state[o_c() + i] && m > 0.01 {
-        let seep = min(P.capillary_seep * m, scratch[so_s() + i]);
+    var s = scratch[so_s() + i];
+    if wet(i) == 0.0 && s > P.capillary_sigma * state[o_c() + i] && m > 0.01 {
+        let seep = min(P.capillary_seep * m, s);
         state[o_wet() + i] = 1.0;
         state[o_p() + i] = min(state[o_p() + i] + seep, P.max_water_depth);
-        scratch[so_s() + i] -= seep;
+        s -= seep;
     }
+    state[o_s() + i] = s;
 }

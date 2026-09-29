@@ -238,15 +238,17 @@ struct SimPipelines {
     jacobi_a: wgpu::ComputePipeline,
     jacobi_b: wgpu::ComputePipeline,
     project: wgpu::ComputePipeline,
+    project_q2: wgpu::ComputePipeline,
     blur_h: wgpu::ComputePipeline,
     blur_v: wgpu::ComputePipeline,
     advect: wgpu::ComputePipeline,
     swirl_distance_h: wgpu::ComputePipeline,
     swirl_distance_v: wgpu::ComputePipeline,
     swirl_stream: wgpu::ComputePipeline,
-    swirl: wgpu::ComputePipeline,
-    clock: wgpu::ComputePipeline,
+    swirl_from_scratch: wgpu::ComputePipeline,
+    swirl_from_state: wgpu::ComputePipeline,
     transfer: wgpu::ComputePipeline,
+    transfer_g_scratch: wgpu::ComputePipeline,
     capillary: wgpu::ComputePipeline,
     capillary_wet: wgpu::ComputePipeline,
     apply_brush: wgpu::ComputePipeline,
@@ -287,7 +289,6 @@ struct Loaded {
     paper: Paper,
     paper_sim: PaperField,
     state: wgpu::Buffer,
-    scratch: wgpu::Buffer,
     stamp: wgpu::Buffer,
     stroke: wgpu::Buffer,
     optics: wgpu::Buffer,
@@ -501,15 +502,17 @@ impl GpuEngine {
             jacobi_a: make("jacobi_a"),
             jacobi_b: make("jacobi_b"),
             project: make("project"),
+            project_q2: make("project_q2"),
             blur_h: make("blur_h"),
             blur_v: make("blur_v"),
             advect: make("advect"),
             swirl_distance_h: make("swirl_distance_h"),
             swirl_distance_v: make("swirl_distance_v"),
             swirl_stream: make("swirl_stream"),
-            swirl: make("swirl"),
-            clock: make("clock"),
+            swirl_from_scratch: make("swirl_from_scratch"),
+            swirl_from_state: make("swirl_from_state"),
             transfer: make("transfer"),
+            transfer_g_scratch: make("transfer_g_scratch"),
             capillary: make("capillary"),
             capillary_wet: make("capillary_wet"),
             apply_brush: make("apply_brush"),
@@ -734,98 +737,69 @@ impl GpuEngine {
         Ok(())
     }
 
-    /// Encodes one tick: the same pass order as `sim::step`, with scratch
-    /// regions copied back into `state` where the CPU swaps vectors.
-    fn encode_tick(&self, enc: &mut wgpu::CommandEncoder, l: &Loaded) {
-        let n = l.layout.n as u32;
-        let f = std::mem::size_of::<f32>() as u64;
-        let region = |elems: usize| (elems as u64) * f;
-        let c = &self.counter;
-        let copy = |enc: &mut wgpu::CommandEncoder, from: usize, to: usize, elems: usize| {
-            CommandCounter::add(&c.copies, 1);
-            enc.copy_buffer_to_buffer(
-                &l.scratch,
-                region(from),
-                &l.state,
-                region(to),
-                region(elems),
-            );
-        };
-        let dispatch = |enc: &mut wgpu::CommandEncoder, pipeline: &wgpu::ComputePipeline| {
-            CommandCounter::add(&c.passes, 1);
-            CommandCounter::add(&c.dispatches, 1);
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+    /// Encodes one tick into `pass`: the same pass order as `sim::step`.
+    /// Every dispatch in a compute pass is its own usage scope, so each one
+    /// sees the storage writes of the one before; where the CPU swaps
+    /// vectors, the next reader takes the field from `scratch` instead (see
+    /// `common.wgsl`), so a tick needs no copies.
+    fn encode_tick(&self, pass: &mut wgpu::ComputePass<'_>, l: &Loaded) {
+        let cells = groups(l.layout.n as u32);
+        let mut dispatches = 0;
+        let mut dispatch = |pipeline: &wgpu::ComputePipeline, groups: u32| {
             pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(n), 1, 1);
+            pass.dispatch_workgroups(groups, 1, 1);
+            dispatches += 1;
         };
-        let lay = &l.layout;
+        let sim = &self.sim;
 
-        dispatch(enc, &self.sim.velocity);
-        copy(enc, lay.scratch_u(), lay.u(), lay.n);
-        copy(enc, lay.scratch_v(), lay.v(), lay.n);
-
-        dispatch(enc, &self.sim.divergence);
-        CommandCounter::add(&c.copies, 1);
-        enc.clear_buffer(&l.scratch, region(lay.scratch_q()), Some(region(lay.n)));
+        dispatch(&sim.velocity, cells);
+        dispatch(&sim.divergence, cells);
         for i in 0..self.params.jacobi_iterations {
             dispatch(
-                enc,
                 if i % 2 == 0 {
-                    &self.sim.jacobi_a
+                    &sim.jacobi_a
                 } else {
-                    &self.sim.jacobi_b
+                    &sim.jacobi_b
                 },
+                cells,
             );
         }
         if self.params.jacobi_iterations % 2 == 1 {
-            CommandCounter::add(&c.copies, 1);
-            enc.copy_buffer_to_buffer(
-                &l.scratch,
-                region(lay.scratch_q2()),
-                &l.scratch,
-                region(lay.scratch_q()),
-                region(lay.n),
-            );
+            dispatch(&sim.project_q2, cells);
+        } else {
+            dispatch(&sim.project, cells);
         }
-        dispatch(enc, &self.sim.project);
-        copy(enc, lay.scratch_u(), lay.u(), lay.n);
-        copy(enc, lay.scratch_v(), lay.v(), lay.n);
 
-        dispatch(enc, &self.sim.blur_h);
-        dispatch(enc, &self.sim.blur_v);
-        dispatch(enc, &self.sim.advect);
-        copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
-        copy(enc, lay.scratch_p(), lay.p(), lay.n);
+        dispatch(&sim.blur_h, cells);
+        dispatch(&sim.blur_v, cells);
+        dispatch(&sim.advect, cells);
 
+        let mut g_in_scratch = true;
         if self.params.swirl_speed > 0.0 && l.maybe_wet {
-            dispatch(enc, &self.sim.swirl_distance_h);
-            dispatch(enc, &self.sim.swirl_distance_v);
-            CommandCounter::add(&c.passes, 1);
-            CommandCounter::add(&c.dispatches, 1);
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-            pass.set_pipeline(&self.sim.swirl_stream);
-            pass.set_bind_group(0, &l.bind_group, &[]);
-            pass.dispatch_workgroups(groups(lay.corner_count() as u32), 1, 1);
-            drop(pass);
+            dispatch(&sim.swirl_distance_h, cells);
+            dispatch(&sim.swirl_distance_v, cells);
+            dispatch(&sim.swirl_stream, groups(l.layout.corner_count() as u32));
             for _ in 0..l.swirl_substeps {
-                dispatch(enc, &self.sim.swirl);
-                copy(enc, lay.scratch_g(0), lay.g(0), lay.n * lay.pigment_count);
+                dispatch(
+                    if g_in_scratch {
+                        &sim.swirl_from_scratch
+                    } else {
+                        &sim.swirl_from_state
+                    },
+                    cells,
+                );
+                g_in_scratch = !g_in_scratch;
             }
         }
 
-        dispatch(enc, &self.sim.transfer);
-
-        dispatch(enc, &self.sim.capillary);
-        dispatch(enc, &self.sim.capillary_wet);
-        copy(enc, lay.scratch_s(), lay.s(), lay.n);
-
-        CommandCounter::add(&c.passes, 1);
-        CommandCounter::add(&c.dispatches, 1);
-        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
-        pass.set_pipeline(&self.sim.clock);
-        pass.set_bind_group(0, &l.bind_group, &[]);
-        pass.dispatch_workgroups(1, 1, 1);
+        if g_in_scratch {
+            dispatch(&sim.transfer_g_scratch, cells);
+        } else {
+            dispatch(&sim.transfer, cells);
+        }
+        dispatch(&sim.capillary, cells);
+        dispatch(&sim.capillary_wet, cells);
+        CommandCounter::add(&self.counter.dispatches, dispatches);
     }
 
     fn write_state_region(&self, offset_elems: usize, data: &[f32]) -> Result<(), EngineError> {
@@ -852,6 +826,8 @@ impl GpuEngine {
             pass.set_bind_group(0, &l.bind_group, &[]);
             pass.dispatch_workgroups(groups(l.layout.n as u32), 1, 1);
         }
+        CommandCounter::add(&self.counter.passes, 1);
+        CommandCounter::add(&self.counter.dispatches, 1);
         self.submit(enc.finish())
     }
 
@@ -1425,7 +1401,6 @@ impl Simulator for GpuEngine {
             paper: scene.paper,
             paper_sim,
             state,
-            scratch,
             stamp,
             stroke,
             optics,
@@ -1577,8 +1552,16 @@ impl Simulator for GpuEngine {
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("ticks"),
                     });
-            for _ in 0..batch {
-                self.encode_tick(&mut enc, l);
+            {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("ticks"),
+                    timestamp_writes: None,
+                });
+                CommandCounter::add(&self.counter.passes, 1);
+                pass.set_bind_group(0, &l.bind_group, &[]);
+                for _ in 0..batch {
+                    self.encode_tick(&mut pass, l);
+                }
             }
             self.submit(enc.finish())?;
             remaining -= batch;
