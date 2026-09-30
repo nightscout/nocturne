@@ -23,13 +23,18 @@
     statusTooltip?: string;
     /** Callback when sync button is clicked (makes status text clickable) */
     onSyncClick?: () => void;
-    /** Size variant - 'xs' for collapsed sidebar, 'sm' for sidebar, 'lg' for dashboard */
-    size?: "xs" | "sm" | "lg";
+    /**
+     * Size variant - 'xs' for collapsed sidebar, 'sm' for sidebar, 'lg' for dashboard, 'xl' for a
+     * tile that fills its container's width
+     */
+    size?: "xs" | "sm" | "lg" | "xl";
     /**
      * Painted over the range fill and under the value, for a host that has artwork to lay there.
      * Skipped while stale or disconnected, so those keep the flat neutral look.
      */
     background?: Snippet;
+    /** Set after the value inside the tile, in the tile's own foreground, e.g. a trend arrow */
+    trailing?: Snippet;
     /** Additional CSS classes for the container */
     class?: string;
   }
@@ -46,6 +51,7 @@
     onSyncClick,
     size = "lg",
     background,
+    trailing,
     class: className = "",
   }: Props = $props();
 
@@ -93,12 +99,14 @@
   };
 
   const sizeClasses = $derived.by(() => {
+    if (size === "xl") return "flex flex-1 items-center justify-center gap-3 text-7xl leading-none tabular-nums px-6 py-5";
     if (size === "lg") return "text-4xl px-4 py-2";
     if (size === "xs") return "text-base px-1.5 py-1";
     return "text-3xl px-3 py-1.5";
   });
 
   const skeletonSizeClasses = $derived.by(() => {
+    if (size === "xl") return "h-28 flex-1";
     if (size === "lg") return "h-12 w-20";
     if (size === "xs") return "h-8 w-10";
     return "h-10 w-16";
@@ -110,10 +118,12 @@
   {#if isLoading}
     <!-- Loading skeleton -->
     <Skeleton class="rounded-lg {skeletonSizeClasses}" />
-    <div class="flex flex-col gap-1">
-      <Skeleton class="h-4 w-12" />
-      <Skeleton class="h-3 w-16" />
-    </div>
+    {#if size !== "xl"}
+      <div class="flex flex-col gap-1">
+        <Skeleton class="h-4 w-12" />
+        <Skeleton class="h-3 w-16" />
+      </div>
+    {/if}
   {:else}
     <!-- Actual value display -->
     <div
@@ -132,6 +142,9 @@
         <span class="relative">{displayValue}</span>
       {:else}
         {displayValue}
+      {/if}
+      {#if trailing}
+        <span class="relative inline-flex">{@render trailing()}</span>
       {/if}
     </div>
 
