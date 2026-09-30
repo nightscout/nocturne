@@ -24,6 +24,7 @@ vi.mock("$lib/stores/current-glucose-status.svelte", () => ({
   currentGlucoseStatus: () => undefined,
 }));
 
+import { setGlucoseUnits } from "$lib/stores/appearance-store.svelte";
 import CurrentGlucoseWidget from "./CurrentGlucoseWidget.svelte";
 
 const tile = () => page.getByTestId("current-glucose-tile");
@@ -33,6 +34,7 @@ describe("CurrentGlucoseWidget", () => {
     store.currentEntry.mills = now - 2 * 60_000;
     store.lastUpdated = now - 2 * 60_000;
     store.now = now;
+    setGlucoseUnits("mg/dl");
   });
 
   it("shows the reading with its unit, trend, change and age", async () => {
@@ -50,5 +52,28 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(page.getByText(/30 min/)).toBeVisible();
     await expect.element(tile()).toHaveTextContent(/^123\s*mg\/dL$/);
     await expect.element(page.getByText("+4", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it.each(["mg/dl", "mmol"] as const)("keeps the %s tile inside a narrow cell", async (units) => {
+    setGlucoseUnits(units);
+    store.currentBG = units === "mmol" ? 222 : 123;
+    for (const width of [155, 200, 240, 320, 440]) {
+      const { container, unmount } = render(CurrentGlucoseWidget);
+      container.style.width = `${width}px`;
+      await expect.element(tile()).toBeVisible();
+
+      const value = tile().element().querySelector<HTMLElement>('[data-slot="glucose-value-indicator"] > div')!;
+      const box = value.getBoundingClientRect();
+      const cell = container.getBoundingClientRect();
+      const label = `${units} ${width}px`;
+
+      expect(value.scrollWidth, label).toBeLessThanOrEqual(value.clientWidth);
+      expect(box.right, label).toBeLessThanOrEqual(cell.right);
+      for (const child of value.querySelectorAll("*")) {
+        expect(child.getBoundingClientRect().right, label).toBeLessThanOrEqual(box.right + 0.5);
+      }
+      unmount();
+    }
+    store.currentBG = 123;
   });
 });

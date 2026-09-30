@@ -99,7 +99,8 @@
   };
 
   const sizeClasses = $derived.by(() => {
-    if (size === "xl") return "flex flex-1 items-center justify-center gap-3 text-7xl leading-none tabular-nums px-6 py-5";
+    if (size === "xl")
+      return "flex min-w-0 flex-1 items-center justify-center gap-2 px-2 py-4 text-2xl leading-none tabular-nums @[9rem]:gap-3 @[9rem]:px-3 @[9rem]:text-4xl @[12rem]:text-5xl @[16rem]:px-6 @[16rem]:py-5 @[16rem]:text-6xl @[20rem]:text-7xl";
     if (size === "lg") return "text-4xl px-4 py-2";
     if (size === "xs") return "text-base px-1.5 py-1";
     return "text-3xl px-3 py-1.5";
@@ -114,7 +115,12 @@
 </script>
 
 <!-- Horizontal layout with grid overlay on status text to prevent layout shift when syncing -->
-<div data-slot="glucose-value-indicator" class="inline-flex items-center gap-2 {className}">
+<!-- The xl tile sizes its text from this box, not the viewport: a dashboard cell is as narrow as a
+     third of a tablet, and inline-size containment lets it shrink below its own text. -->
+<div
+  data-slot="glucose-value-indicator"
+  class="inline-flex items-center gap-2 {size === 'xl' ? '@container min-w-0' : ''} {className}"
+>
   {#if isLoading}
     <!-- Loading skeleton -->
     <Skeleton class="rounded-lg {skeletonSizeClasses}" />

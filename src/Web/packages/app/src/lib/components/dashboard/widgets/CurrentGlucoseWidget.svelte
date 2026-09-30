@@ -47,10 +47,14 @@
 {#snippet trend()}
   <span class="flex flex-col items-center gap-1">
     {#if !isStale}
-      <DirectionIcon class="size-10" strokeWidth={2.5} aria-hidden="true" />
+      <DirectionIcon
+        class="size-5 @[9rem]:size-6 @[12rem]:size-8 @[16rem]:size-10"
+        strokeWidth={2.5}
+        aria-hidden="true"
+      />
       <span class="sr-only">{directionInfo.label}</span>
     {/if}
-    <span class="text-sm font-semibold">{unitLabel}</span>
+    <span class="text-xs font-semibold @[9rem]:text-sm">{unitLabel}</span>
   </span>
 {/snippet}
 
@@ -80,13 +84,15 @@
       />
     </div>
 
-    <div class="flex min-h-5 items-center justify-between gap-3 text-sm">
-      {#if !isLoading && !isStale}
-        <p class="flex items-baseline gap-1.5 tabular-nums">
-          <span class="font-medium">{formatGlucoseDelta(realtimeStore.bgDelta, units)}</span>
-          <span class="text-xs text-muted-foreground">{unitLabel}</span>
-        </p>
-      {/if}
+    <div class="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+      <div class="flex items-center gap-3">
+        {#if !isLoading && !isStale}
+          <p class="flex items-baseline gap-1.5 tabular-nums">
+            <span class="font-medium">{formatGlucoseDelta(realtimeStore.bgDelta, units)}</span>
+            <span class="text-xs text-muted-foreground">{unitLabel}</span>
+          </p>
+        {/if}
+      </div>
 
       {#if !isLoading}
         {#if isDisconnected}
