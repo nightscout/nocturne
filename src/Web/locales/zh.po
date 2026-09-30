@@ -25883,7 +25883,7 @@ msgstr "Google 访问权限已过期或被撤销。重新连接。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google's request limit was reached. Nocturne will retry later."
-msgstr "已达到 Google 的请求限制。夜曲将稍后重试。"
+msgstr "已达到 Google 的请求限制。Nocturne 将稍后重试。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
@@ -26229,7 +26229,7 @@ msgstr "成立"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "夜曲目的地"
+msgstr "Nocturne 目的地"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte

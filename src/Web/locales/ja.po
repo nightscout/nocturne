@@ -25883,7 +25883,7 @@ msgstr "Google アクセスの有効期限が切れたか、取り消されま�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google's request limit was reached. Nocturne will retry later."
-msgstr "Google のリクエスト制限に達しました。ノクターンは後で再試行します。"
+msgstr "Google のリクエスト制限に達しました。Nocturne は後で再試行します。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
@@ -26229,7 +26229,7 @@ msgstr "見つかった"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "夜想曲の目的地"
+msgstr "Nocturne の宛先"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte

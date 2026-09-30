@@ -25883,7 +25883,7 @@ msgstr "Срок доступа к Google истек или был отозва�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google's request limit was reached. Nocturne will retry later."
-msgstr "Достигнут лимит запросов Google. Ноктюрн повторит попытку позже."
+msgstr "Достигнут лимит запросов Google. Nocturne повторит попытку позже."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
@@ -25967,11 +25967,11 @@ msgstr "Google вернул данные за пределами запроше�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne could not retrieve every page."
-msgstr "Ноктюрн не смог получить каждую страницу."
+msgstr "Nocturne не смог получить каждую страницу."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne could not complete the import. Check the server log for the technical code and stage."
-msgstr "Ноктюрн не смог завершить импорт. Проверьте журнал сервера на наличие технического кода и стадии."
+msgstr "Nocturne не смог завершить импорт. Проверьте журнал сервера на наличие технического кода и стадии."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -26229,7 +26229,7 @@ msgstr "Найденный"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "Ноктюрн назначения"
+msgstr "Назначение Nocturne"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte

@@ -26040,7 +26040,7 @@ msgstr "Validando os dados baixados"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Updating Nocturne health records"
-msgstr "Atualizando registros de saúde noturnos"
+msgstr "Atualizando registros de saúde do Nocturne"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Preparing the import"
@@ -26229,7 +26229,7 @@ msgstr "Encontrado"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "Destino noturno"
+msgstr "Destino do Nocturne"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte

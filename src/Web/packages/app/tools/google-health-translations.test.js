@@ -162,7 +162,7 @@ describe("Google Health production translations", () => {
   );
 
   it.each(supportedLocales)(
-    "keeps the Google Health product name untranslated in %s",
+    "keeps Google Health and Nocturne product names untranslated in %s",
     async (locale) => {
       const catalog = po.parse(
         await readFile(
@@ -177,6 +177,14 @@ describe("Google Health production translations", () => {
           !String(entry.msgstr?.[0] ?? "").includes("Google Health")
       );
       expect(translatedBrand).toEqual([]);
+      const translatedToolName = entries(catalog).filter(
+        (entry) =>
+          entry.msgid &&
+          /Nocturne/.test(entry.msgid) &&
+          isGoogleHealthEntry(entry) &&
+          !String(entry.msgstr?.[0] ?? "").includes("Nocturne")
+      );
+      expect(translatedToolName).toEqual([]);
     }
   );
 });

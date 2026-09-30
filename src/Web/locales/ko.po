@@ -25883,7 +25883,7 @@ msgstr "Google 액세스가 만료되었거나 취소되었습니다. 다시 연
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google's request limit was reached. Nocturne will retry later."
-msgstr "Google의 요청 한도에 도달했습니다. 녹턴은 나중에 다시 시도할 것입니다."
+msgstr "Google의 요청 한도에 도달했습니다. Nocturne은 나중에 다시 시도합니다."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
@@ -25967,11 +25967,11 @@ msgstr "Google에서 요청한 범위를 벗어난 데이터를 반환했습니�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne could not retrieve every page."
-msgstr "녹턴이 모든 페이지를 검색할 수 없습니다."
+msgstr "Nocturne이 모든 페이지를 가져오지 못했습니다."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne could not complete the import. Check the server log for the technical code and stage."
-msgstr "녹턴이 가져오기를 완료할 수 없습니다. 기술 코드 및 단계는 서버 로그를 확인하세요."
+msgstr "Nocturne에서 가져오기를 완료하지 못했습니다. 기술 코드와 단계는 서버 로그를 확인하세요."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
@@ -26040,7 +26040,7 @@ msgstr "다운로드한 데이터 유효성 검사"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Updating Nocturne health records"
-msgstr "녹턴 건강 기록 업데이트"
+msgstr "Nocturne 건강 기록 업데이트"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Preparing the import"
@@ -26061,7 +26061,7 @@ msgstr "Google이 요청한 읽기 액세스 권한을 부여하지 않았습니
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."
-msgstr "Google 리디렉션 후 녹턴 세션이 누락되었습니다. 동일한 브라우저에서 로그인하고 다시 연결하세요."
+msgstr "Google 리디렉션 후 Nocturne 세션이 누락되었습니다. 동일한 브라우저에서 로그인하고 다시 연결하세요."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Health · Connectors & Apps"
@@ -26229,7 +26229,7 @@ msgstr "설립하다"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "녹턴 목적지"
+msgstr "Nocturne 대상"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte

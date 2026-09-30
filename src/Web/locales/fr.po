@@ -26232,7 +26232,7 @@ msgstr "Trouvé"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Nocturne destination"
-msgstr "Destination nocturne"
+msgstr "Destination de Nocturne"
 
 #. 0: capability?.displayName ?? item.dataType
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
