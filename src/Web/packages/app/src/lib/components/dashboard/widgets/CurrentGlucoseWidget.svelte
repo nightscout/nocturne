@@ -16,8 +16,14 @@
     minutesAgo,
     time,
   } from "$lib/utils/formatting";
+  import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
   import { coachmark } from "@nocturne/coach";
   import History from "@lucide/svelte/icons/history";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
   import Wifi from "@lucide/svelte/icons/wifi";
   import WifiOff from "@lucide/svelte/icons/wifi-off";
 
@@ -36,6 +42,16 @@
   const isDisconnected = $derived(connection.isDisconnected);
   const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
   const DirectionIcon = $derived(directionInfo.icon);
+
+  const batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
+
+  function batteryIcon(level: number | undefined) {
+    if (!level) return BatteryWarning;
+    if (level >= 95) return BatteryFull;
+    if (level >= 50) return BatteryMedium;
+    if (level >= 25) return BatteryLow;
+    return BatteryWarning;
+  }
 </script>
 
 {#snippet rangeWash()}
@@ -92,6 +108,29 @@
             <span class="text-xs text-muted-foreground">{unitLabel}</span>
           </p>
         {/if}
+
+        {#await batteryStatusPromise then currentStatus}
+          {#if currentStatus?.min && Object.keys(currentStatus.devices ?? {}).length > 0}
+            {@const BatteryIcon = batteryIcon(currentStatus.level)}
+            <span
+              class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium {currentStatus.status ===
+              'urgent'
+                ? 'bg-destructive/20 text-destructive'
+                : currentStatus.status === 'warn'
+                  ? 'bg-warning/20 text-warning'
+                  : 'bg-success/20 text-success'}"
+            >
+              {#if currentStatus.min.isCharging}
+                <BatteryCharging class="size-3" aria-hidden="true" />
+              {:else}
+                <BatteryIcon class="size-3" aria-hidden="true" />
+              {/if}
+              {currentStatus.display}
+            </span>
+          {/if}
+        {:catch}
+          <!-- The battery chip is optional; the reading does not wait on it. -->
+        {/await}
       </div>
 
       {#if !isLoading}

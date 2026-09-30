@@ -19,6 +19,12 @@ vi.mock("$lib/stores/realtime-store.svelte", () => ({
   getRealtimeStore: () => store,
 }));
 
+const battery = vi.hoisted(() => ({ status: undefined as unknown }));
+
+vi.mock("$api/generated/batteries.generated.remote", () => ({
+  getCurrentBatteryStatus: () => Promise.resolve(battery.status),
+}));
+
 // Neutral keeps the watercolour engine out of the test.
 vi.mock("$lib/stores/current-glucose-status.svelte", () => ({
   currentGlucoseStatus: () => undefined,
@@ -34,6 +40,7 @@ describe("CurrentGlucoseWidget", () => {
     store.currentEntry.mills = now - 2 * 60_000;
     store.lastUpdated = now - 2 * 60_000;
     store.now = now;
+    battery.status = undefined;
     setGlucoseUnits("mg/dl");
   });
 
@@ -52,6 +59,19 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(page.getByText(/30 min/)).toBeVisible();
     await expect.element(tile()).toHaveTextContent(/^123\s*mg\/dL$/);
     await expect.element(page.getByText("+4", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("shows the uploader battery beside the change", async () => {
+    battery.status = {
+      level: 62,
+      display: "62%",
+      status: "ok",
+      devices: { uploader: {} },
+      min: { isCharging: false },
+    };
+    render(CurrentGlucoseWidget);
+
+    await expect.element(page.getByText("62%", { exact: true })).toBeVisible();
   });
 
   it.each(["mg/dl", "mmol"] as const)("keeps the %s tile inside a narrow cell", async (units) => {
