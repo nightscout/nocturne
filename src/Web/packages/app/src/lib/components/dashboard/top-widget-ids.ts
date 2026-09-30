@@ -40,25 +40,6 @@ export const DEFAULT_TOP_WIDGETS: TopWidgetId[] = [
   WidgetId.BgDelta,
 ];
 
-/**
- * The default before the Current glucose widget moved last. Saving any synced
- * preference writes the whole set, top widgets included, so a stored list equal
- * to this one almost always belongs to a user who never picked, and reads as
- * today's default.
- */
-const PREVIOUS_DEFAULT_TOP_WIDGETS: readonly WidgetId[] = [
-  WidgetId.BgDelta,
-  WidgetId.TirChart,
-  WidgetId.Tdd,
-];
-
-export function withCurrentDefault(ids: WidgetId[]): WidgetId[] {
-  return ids.length === PREVIOUS_DEFAULT_TOP_WIDGETS.length &&
-    ids.every((id, i) => id === PREVIOUS_DEFAULT_TOP_WIDGETS[i])
-    ? [...DEFAULT_TOP_WIDGETS]
-    : ids;
-}
-
 /** The grid shows at most this many; a longer stored list renders its head. */
 export const MAX_TOP_WIDGETS = 3;
 
