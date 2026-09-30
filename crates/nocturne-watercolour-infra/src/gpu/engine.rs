@@ -12,7 +12,10 @@ use nocturne_watercolour_core::application::{CheckpointId, EngineError, Simulato
 use nocturne_watercolour_core::domain::optics::RenderParams;
 use nocturne_watercolour_core::domain::paint::{self, StampParams, StampTarget, WET_THRESHOLD};
 use nocturne_watercolour_core::domain::palette::MAX_PIGMENTS;
-use nocturne_watercolour_core::domain::paper::render_pixel_scale;
+use nocturne_watercolour_core::domain::paper::{
+    POOL_WEIGHT, PaperTerms, grain_band_window, render_pixel_scale,
+};
+use nocturne_watercolour_core::domain::scene::isotropic_scale;
 use nocturne_watercolour_core::domain::sim::{self, PigmentCoefficients, SimParams};
 use nocturne_watercolour_core::domain::swirl;
 use nocturne_watercolour_core::domain::{
@@ -67,8 +70,8 @@ const SKIPPED_ZERO_RUN: usize = 1024;
 /// GPU bytes of render-resolution paper an engine and its forks keep after
 /// the instance that made them is gone. A remount at the same size (a tab
 /// switch, a re-hover, a list of same-seed accents) then skips generating
-/// the paper on the CPU, the main-thread cost of a first present; eight
-/// megabytes is two 1024^2 canvases or thirty-two 256^2 ones.
+/// it again; eight megabytes is two 1024^2 canvases or thirty-two 256^2
+/// ones.
 const PAPER_CACHE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// GPU bytes of buffers a scene leaves behind (state, scratch, stamp,
@@ -338,6 +341,13 @@ struct SimPipelines {
     dry_all: wgpu::ComputePipeline,
 }
 
+/// `generate_paper` in `paper.wgsl`.
+#[derive(Clone)]
+struct PaperPipeline {
+    layout: wgpu::BindGroupLayout,
+    pipeline: wgpu::ComputePipeline,
+}
+
 #[derive(Clone)]
 struct RenderPipeline {
     layout: wgpu::BindGroupLayout,
@@ -387,6 +397,62 @@ impl PaperKey {
             height,
             aspect: aspect.to_bits(),
             pixel_scale: pixel_scale.to_bits(),
+        }
+    }
+}
+
+/// `PaperParams` in `paper.wgsl`.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct PaperUniform {
+    seeds: [[u32; 4]; 4],
+    dims: [u32; 4],
+    geom: [f32; 4],
+    grain_freq: [f32; 4],
+    grain_amp: [f32; 4],
+    grain_band: [f32; 4],
+    terms: [f32; 4],
+    mix_weights: [f32; 4],
+    height: [f32; 4],
+    fence: [u32; 4],
+}
+
+impl PaperUniform {
+    /// The uniform for the pixels from `first` of the field `key` names.
+    fn new(paper: &Paper, key: PaperKey, first: u32) -> PaperUniform {
+        let (width, height) = (key.width, key.height);
+        let (ax, ay) = isotropic_scale(f32::from_bits(key.aspect));
+        let t = PaperTerms::new(
+            paper,
+            f32::from_bits(key.pixel_scale),
+            grain_band_window(width.max(height) as f32),
+        );
+        let mut seeds = [[0u32; 4]; 4];
+        for (i, seed) in t.seeds.iter().enumerate() {
+            seeds[i / 2][(i % 2) * 2] = *seed as u32;
+            seeds[i / 2][(i % 2) * 2 + 1] = (*seed >> 32) as u32;
+        }
+        PaperUniform {
+            seeds,
+            dims: [width, height, first, width * height],
+            geom: [
+                1.0 / width.max(1) as f32,
+                1.0 / height.max(1) as f32,
+                ax,
+                ay,
+            ],
+            grain_freq: t.grain_freq,
+            grain_amp: t.grain_amp,
+            grain_band: t.grain_band,
+            terms: [t.base, t.full_weight, t.fibre_band, 0.0],
+            mix_weights: [
+                1.0 - POOL_WEIGHT,
+                POOL_WEIGHT,
+                1.0 - t.fibre_weight,
+                t.fibre_weight,
+            ],
+            height: [paper.height_amplitude, 0.0, 0.0, 0.0],
+            fence: [0; 4],
         }
     }
 }
@@ -548,6 +614,7 @@ pub struct GpuEngine {
     sim: SimPipelines,
     render: RenderPipeline,
     present: PresentPipeline,
+    paper: PaperPipeline,
     loaded: Option<Loaded>,
     next_checkpoint: u64,
     checkpoint_budget: u64,
@@ -571,6 +638,7 @@ const SIM_SOURCES: [&str; 6] = [
     include_str!("shaders/apply.wgsl"),
 ];
 const RENDER_SOURCE: &str = include_str!("shaders/render.wgsl");
+const PAPER_SOURCE: &str = include_str!("shaders/paper.wgsl");
 
 fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
@@ -807,6 +875,29 @@ impl GpuEngine {
                 ..Default::default()
             });
 
+        let paper_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("watercolour-paper"),
+            source: wgpu::ShaderSource::Wgsl(PAPER_SOURCE.into()),
+        });
+        let paper_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("watercolour-paper"),
+            entries: &[uniform_entry(0), storage_entry(1, false)],
+        });
+        let paper_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("watercolour-paper"),
+                bind_group_layouts: &[Some(&paper_layout)],
+                ..Default::default()
+            });
+        let paper_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("generate_paper"),
+            layout: Some(&paper_pipeline_layout),
+            module: &paper_module,
+            entry_point: Some("generate_paper"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
         let validation = error_scope.pop();
         let timers = Timers::new(&ctx);
         let engine = GpuEngine {
@@ -826,6 +917,10 @@ impl GpuEngine {
                 pipeline_layout: present_pipeline_layout,
                 module: render_module,
                 cached: Arc::default(),
+            },
+            paper: PaperPipeline {
+                layout: paper_layout,
+                pipeline: paper_pipeline,
             },
             loaded: None,
             next_checkpoint: 1,
@@ -852,6 +947,7 @@ impl GpuEngine {
             sim: self.sim.clone(),
             render: self.render.clone(),
             present: self.present.clone(),
+            paper: self.paper.clone(),
             loaded: None,
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
@@ -1513,7 +1609,7 @@ impl GpuEngine {
     }
 
     /// The render-resolution paper for `key`, from the shared cache or
-    /// generated and uploaded (and cached when it fits the budget).
+    /// generated (and cached when it fits the budget).
     fn paper_buffer(&self, key: PaperKey, paper: &Paper) -> Result<wgpu::Buffer, EngineError> {
         {
             let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
@@ -1526,19 +1622,7 @@ impl GpuEngine {
                 return Ok(buffer);
             }
         }
-        let field = PaperField::generate_with_pixel_scale(
-            paper,
-            key.width,
-            key.height,
-            f32::from_bits(key.aspect),
-            f32::from_bits(key.pixel_scale),
-        );
-        let buffer = self.buffer(
-            "paper-out",
-            (field.height.len() * std::mem::size_of::<f32>()) as u64,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-        )?;
-        self.write_buffer(&buffer, 0, bytemuck::cast_slice(&field.height));
+        let buffer = self.generate_paper(key, paper)?;
         if buffer.size() <= PAPER_CACHE_BYTES {
             let mut cache = self.paper_cache.lock().unwrap_or_else(|p| p.into_inner());
             cache.push_back((key, buffer.clone()));
@@ -1551,6 +1635,99 @@ impl GpuEngine {
             }
         }
         Ok(buffer)
+    }
+
+    /// Generates the paper field `key` names on the GPU, in bands of at most
+    /// [`RENDER_PIXELS_PER_DISPATCH`] pixels, each its own submission. They
+    /// go out here rather than in the open batch because the buffer joins the
+    /// cache shared with every fork, and a fork that takes it may submit
+    /// before this engine's batch does.
+    fn generate_paper(&self, key: PaperKey, paper: &Paper) -> Result<wgpu::Buffer, EngineError> {
+        let pixels = key.width * key.height;
+        let buffer = self.buffer(
+            "paper-out",
+            u64::from(pixels) * std::mem::size_of::<f32>() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+        )?;
+        let band = RENDER_PIXELS_PER_DISPATCH as u32;
+        let mut first = 0;
+        while first < pixels {
+            let count = band.min(pixels - first);
+            let uniform = self.buffer(
+                "paper-params",
+                std::mem::size_of::<PaperUniform>() as u64,
+                wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            )?;
+            self.write_buffer(
+                &uniform,
+                0,
+                bytemuck::bytes_of(&PaperUniform::new(paper, key, first)),
+            );
+            let device = self.ctx.device();
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("watercolour-paper"),
+                layout: &self.paper.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: buffer.as_entire_binding(),
+                    },
+                ],
+            });
+            let mut enc = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paper"),
+            });
+            {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("paper"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(&self.paper.pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups(groups(count), 1, 1);
+            }
+            CommandCounter::add(&self.counter.passes, 1);
+            CommandCounter::add(&self.counter.dispatches, 1);
+            self.submit(enc.finish())?;
+            first += count;
+        }
+        Ok(buffer)
+    }
+
+    /// The render-resolution paper the optics pass samples for `paper` at
+    /// `width` x `height`, read back, for comparing against `PaperField`.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_paper(
+        &self,
+        paper: &Paper,
+        width: u32,
+        height: u32,
+        aspect: f32,
+        pixel_scale: f32,
+    ) -> Result<Vec<f32>, EngineError> {
+        let key = PaperKey::new(paper, width, height, aspect, pixel_scale);
+        let buffer = self.paper_buffer(key, paper)?;
+        let staging = self.buffer(
+            "paper-readback",
+            buffer.size(),
+            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        )?;
+        let mut enc = self
+            .ctx
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paper-readback"),
+            });
+        enc.copy_buffer_to_buffer(&buffer, 0, &staging, 0, buffer.size());
+        CommandCounter::add(&self.counter.copies, 1);
+        self.submit(enc.finish())?;
+        let data = self.map_read(&staging)?;
+        let floats: &[f32] = bytemuck::cast_slice(&data);
+        Ok(floats[..(width * height) as usize].to_vec())
     }
 
     /// The `out` buffer `render` writes and its host-visible copy, made on

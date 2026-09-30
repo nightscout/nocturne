@@ -46,7 +46,8 @@ Non-square scenes: the core measures paper grain, stamps and feathers in the iso
 metric of `Scene::aspect()` (see the core README). The GPU engine gets that for free
 once its three core calls take the aspect: `PaperField::generate_with_aspect(&scene.paper,
 res, res, scene.aspect())` in `load`, `PaperField::generate_with_pixel_scale(&paper, width,
-height, aspect, render_pixel_scale(width, height, aspect))` for the render paper (the
+height, aspect, render_pixel_scale(width, height, aspect))` for the render paper, which
+`paper.wgsl` reproduces on the GPU (the
 pixel scale sizes one output pixel; the grain band window `grain_band_window(max(w,h))`
 grows with the long edge, so large outputs drop fine octaves), and `paint::rasterize_path_aspect` /
 `rasterize_mask_aspect` with the same aspect where strokes and masks are rasterised.
@@ -69,6 +70,7 @@ target. Ticks are encoded in batches of up to 16 per command buffer.
 | `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`): symmetric pair transfer into `s2`, then bloom wetting | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp; stroke water scaled by `paint::stroke_water_factor(h)` | none |
+| `paper.wgsl` | `generate_paper` | `PaperField::generate_with_pixel_scale` for the render paper: splitmix64 lattice hash on `u32` pairs, every product that feeds a sum fenced through an integer round trip so no driver fuses it, divisions by integer long division rounded to nearest even, per-field terms from `PaperTerms` | none: bit-identical (`the_gpu_paper_is_bit_identical_to_the_cpu_paper`) |
 | `render.wgsl` | `render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; see `optics`' module doc), granulation, mixed KM layer, premultiplied conversion with `ALPHA_SOFTNESS` in the `CompositeMode` read from the state header (`StateLayout::composite_mode`, the float after `dry_rate`) | f32 transcendental precision only |
 
 Shared constants (`DRAIN_DEPTH`, `DRAIN_MIN`, `DRAIN_MAX`, `STROKE_WATER_PAPER_GAIN` in

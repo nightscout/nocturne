@@ -272,10 +272,16 @@ watchdog Windows resets the display driver at:
   (`RENDER_PIXELS_PER_DISPATCH`), each its own submission, so a large canvas or
   export raises the number of dispatches rather than the length of one. A
   presented frame is drawn in the same bands, scissored.
-- **Render paper is cached.** The render-resolution paper, generated on the
-  CPU, is kept as its GPU buffer in a cache the template engine shares with
-  every fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
+- **Render paper is generated on the GPU and cached.** The render-resolution
+  paper is written by `paper.wgsl` straight into its buffer, bit-identical to
+  `PaperField::generate_with_pixel_scale` (integer splitmix64, products fenced
+  against fused multiply-add, an integer round-to-nearest division), in bands
+  of at most 2^20 pixels, each its own submission, sent at once because the
+  buffer is shared. It is kept in a cache the template engine shares with every
+  fork, keyed by paper, size, aspect and pixel scale and bounded at 8 MB
   (`PAPER_CACHE_BYTES`), so a remount at the same size skips generating it.
+  The simulation-resolution paper stays on the CPU: stamp rasterisation reads
+  its height per cell on every stroke, and the state upload carries it.
 - **Buffers are pooled.** A scene's state, scratch, stamp, uniforms,
   checkpoints and render buffers go, when it is replaced or its engine is
   dropped, to a pool the template engine shares with every fork, and the next
@@ -322,5 +328,5 @@ backend of the same shape:
 
 The reference list in the infra README gives the same contract from the wgpu
 side: allocate the packed state/scratch buffers from `StateLayout`, port the
-seven `.wgsl` files (plain WGSL, no extensions), upload stamps from
+eight `.wgsl` files (plain WGSL, no extensions), upload stamps from
 `domain::paint`, and drive `Playback` from the frame clock.
