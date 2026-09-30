@@ -31,13 +31,105 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 public class GoogleHealthTests
 {
     [Fact]
-    public void Staging_migration_is_discovered_by_the_runtime_context()
+    public async Task Writer_uses_existing_native_tables_and_preserves_empty_types_and_other_tenants()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        var from = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        db.Tenants.AddRange(
+            new TenantEntity { Id = tenantId, Slug = "reconcile-test", DisplayName = "Synthetic", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = "reconcile-other", DisplayName = "Other", IsActive = true });
+        await db.SaveChangesAsync();
+        foreach (var tenant in new[] { tenantId, otherTenantId })
+        {
+            db.TenantId = tenant;
+            foreach (var identifier in new[] { "retained", "stale", "other-source", "outside" })
+            {
+                var timestamp = identifier == "outside" ? from.AddDays(2).UtcDateTime : from.AddHours(6).UtcDateTime;
+                var source = identifier == "other-source" ? "manual" : GoogleHealthReadingWriter.Source;
+                db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Bpm = 60, DataSource = source, SyncIdentifier = identifier });
+                db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = timestamp, Metric = 42, DataSource = source, SyncIdentifier = identifier });
+                db.BodyWeights.Add(new BodyWeightEntity { Id = Guid.NewGuid(), Mills = new DateTimeOffset(timestamp).ToUnixTimeMilliseconds(), WeightKg = 70, DataSource = source, SyncIdentifier = identifier });
+                db.SleepSessions.Add(new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = timestamp.AddHours(-8), EndTime = timestamp, Source = identifier == "other-source" ? "Manual" : "Google", SourceApp = "Google Health", OriginalId = identifier });
+            }
+            await db.SaveChangesAsync();
+        }
+        db.TenantId = tenantId;
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+        string[] types = ["heart-rate", "steps", "weight", "sleep"];
+        var emptyRun = await writer.BeginReconciliationAsync(types, from, from.AddDays(1), default);
+        foreach (var type in types) await writer.StageReconciliationIdsAsync(emptyRun, type, ["", " "], default);
+        await writer.CompleteReconciliationAsync(emptyRun, default);
+        Assert.Equal(4, await db.HeartRates.CountAsync());
+        Assert.Equal(4, await db.StepCounts.CountAsync());
+        Assert.Equal(4, await db.BodyWeights.CountAsync());
+        Assert.Equal(4, await db.SleepSessions.CountAsync());
+
+        var mixedRun = await writer.BeginReconciliationAsync(types, from, from.AddDays(1), default);
+        await writer.StageReconciliationIdsAsync(mixedRun, "steps", ["retained"], default);
+        await writer.CompleteReconciliationAsync(mixedRun, default);
+        Assert.Equal(3, await db.StepCounts.CountAsync());
+        Assert.Equal(4, await db.HeartRates.CountAsync());
+        Assert.Equal(4, await db.BodyWeights.CountAsync());
+        Assert.Equal(4, await db.SleepSessions.CountAsync());
+
+        var run = await writer.BeginReconciliationAsync(types, from, from.AddDays(1), default);
+        foreach (var type in types) await writer.StageReconciliationIdsAsync(run, type, ["retained", "retained"], default);
+        await writer.CompleteReconciliationAsync(run, default);
+        Assert.Equal(3, await db.HeartRates.CountAsync());
+        Assert.Equal(3, await db.StepCounts.CountAsync());
+        Assert.Equal(3, await db.BodyWeights.CountAsync());
+        Assert.Equal(3, await db.SleepSessions.CountAsync());
+        Assert.False(await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == tenantId && record.SyncIdentifier == "stale")
+            .Select(record => EF.Property<bool>(record, "DeletedByUser")).SingleAsync());
+        db.TenantId = otherTenantId;
+        Assert.Equal(4, await db.HeartRates.CountAsync());
+        Assert.Equal(4, await db.StepCounts.CountAsync());
+        Assert.Equal(4, await db.BodyWeights.CountAsync());
+        Assert.Equal(4, await db.SleepSessions.CountAsync());
+    }
+
+    [Fact]
+    public async Task Reconciliation_is_bounded_and_rejects_cross_tenant_runs()
+    {
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite("Data Source=:memory:").Options);
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        var from = DateTimeOffset.UtcNow.AddDays(-1);
+        db.TenantId = tenantId;
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
+        var run = await writer.BeginReconciliationAsync(["steps"], from, from.AddDays(1), default);
+        var identifiers = Enumerable.Range(0, 100_000).Select(index => "id-" + index).ToArray();
+        await writer.StageReconciliationIdsAsync(run, "steps", identifiers, default);
+        await writer.StageReconciliationIdsAsync(run, "steps", ["id-0", "", " "], default);
+        var limit = await Assert.ThrowsAsync<GoogleHealthException>(() =>
+            writer.StageReconciliationIdsAsync(run, "steps", ["over-limit"], default));
+        Assert.Equal("history_too_large", limit.Message);
+
+        db.TenantId = otherTenantId;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            writer.StageReconciliationIdsAsync(run, "steps", ["cross-tenant"], default));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => writer.CompleteReconciliationAsync(run, default));
+        await writer.AbandonReconciliationAsync(run, default);
+        db.TenantId = tenantId;
+        await writer.AbandonReconciliationAsync(run, default);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => writer.CompleteReconciliationAsync(run, default));
+    }
+
+    [Fact]
+    public void Google_health_does_not_add_database_migrations()
     {
         using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
             .UseNpgsql("Host=localhost;Database=migration_discovery", options => options.UseNocturneMigrations()).Options);
 
-        Assert.Contains("20260913000000_AddGoogleHealthReconciliationStaging", db.Database.GetMigrations());
-        Assert.Contains("20260913120000_SecureGoogleHealthReconciliationStaging", db.Database.GetMigrations());
+        Assert.DoesNotContain(db.Database.GetMigrations(), migration => migration.Contains("GoogleHealth"));
     }
 
     [Fact]
@@ -77,7 +169,6 @@ public class GoogleHealthTests
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
             Mock.Of<IBodyWeightService>(), Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
 
-        await CreateStagingTablesAsync(db);
         var run = await writer.BeginReconciliationAsync(["sleep"], from, to, default);
         await writer.StageReconciliationIdsAsync(run, "sleep", ["retained"], default);
         await writer.CompleteReconciliationAsync(run, default);
@@ -606,7 +697,6 @@ public class GoogleHealthTests
 
         var from = DateTimeOffset.UtcNow.AddDays(-1);
         var to = DateTimeOffset.UtcNow;
-        await CreateStagingTablesAsync(db);
         await writer.WriteAsync([], [], 2, default);
         var run = await writer.BeginReconciliationAsync(["weight", "steps", "heart-rate", "sleep"], from, to, default);
         foreach (var type in new[] { "weight", "steps", "heart-rate", "sleep" })
@@ -697,17 +787,6 @@ public class GoogleHealthTests
         var state = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query)["state"].ToString();
         await service.CompleteAsync(new GoogleHealthCallback { State = state, Code = "code" }, subject, default);
     }
-
-    private static Task CreateStagingTablesAsync(NocturneDbContext db) => db.Database.ExecuteSqlRawAsync("""
-        CREATE TABLE google_health_reconciliation_runs (
-            id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, from_time TEXT NOT NULL,
-            to_time TEXT NOT NULL, active_types TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE google_health_reconciliation_ids (
-            run_id TEXT NOT NULL REFERENCES google_health_reconciliation_runs(id) ON DELETE CASCADE,
-            tenant_id TEXT NOT NULL, data_type TEXT NOT NULL, identifier TEXT NOT NULL,
-            PRIMARY KEY(run_id, data_type, identifier));
-        """);
 
     private static GoogleHealthService Service(
         TestConnectorStore store,

@@ -483,13 +483,6 @@ jobs:
             --test-adapter-path .coverlet \
             --results-directory TestResults/integration \
             || exit 1
-      - name: Google Health staged reconciliation (PostgreSQL)
-        run: |
-          dotnet test tests/Integration/Nocturne.API.Tests/Nocturne.API.Tests.csproj \
-            --filter "FullyQualifiedName~GoogleHealthReconciliationTests" \
-            --logger "trx;LogFileName=google-health-db.trx" \
-            -p:GenerateNSwagClient=false \
-            || exit 1
       - name: Integration tests (API unit project, real Postgres)
         run: |
           dotnet test tests/Unit/Nocturne.API.Tests/Nocturne.API.Tests.csproj \

@@ -5,22 +5,23 @@ The connector requests read-only Google access and writes steps, heart rate,
 body weight and sleep directly to Nocturne's existing health histories. It does
 not introduce a separate health database or provide treatment recommendations.
 
-## Database deployment
+## Storage and first installation
 
-Deployment applies two EF Core migrations for reconciliation staging in the
-existing database. They create `google_health_reconciliation_runs` and
-`google_health_reconciliation_ids`, followed by tenant row-level security,
-cascading cleanup of staged IDs and an index for expiring abandoned runs.
-These tables hold temporary import administration, not native health histories.
+Google Health uses Nocturne's existing tenant-scoped health tables and encrypted
+connector settings. It adds no database tables, schema changes or EF migrations.
+There is no upgrade or repair path for earlier experimental Google Health builds.
 
-If the initial migration is not registered but either staging table already
-exists, it warns in the migration log and recreates only these two tables in
-the migration transaction. Staged IDs from an interrupted import are discarded;
-retrying the import rebuilds them. Native health data, connector credentials and
-settings are not removed. Unexpected external dependencies prevent replacement
-and roll back the transaction; the migration never uses `DROP ... CASCADE`.
-Already registered migrations are skipped on upgrades and restarts, so existing
-staging is not routinely reset. Back up the database before upgrading.
+During each import, reconciliation keeps only identifiers in the scoped writer's
+memory. Native services upsert records using stable identifiers. Cleanup runs in
+a transaction only after every page of that data type has been read and written
+successfully. Empty results preserve existing data. A cancelled or interrupted
+run discards its temporary identifiers without deleting history; its persisted
+cursor is not advanced, and the same window can be retried safely after restart.
+The identifier set and existing-record comparison are capped at 100,000 records
+per type and window. Reaching that limit retries the same period in smaller
+windows, down to one day, for both live catch-up and historical imports. A
+one-day period that still exceeds the limit fails explicitly without advancing
+the cursor.
 
 ## Google Cloud setup
 
@@ -80,13 +81,13 @@ by Google and covered by the granted scopes can be imported.
 - Each type is read page by page and written through its native Nocturne service.
   The maximum is 10,000 pages per type and operation; reaching the limit fails
   explicitly instead of reporting an incomplete history as complete.
-- The page-by-page reader and reconciliation staging are the same bounded import
+- The page-by-page reader and reconciliation are the same bounded import
   path used by the connector integration; Google Health does not maintain a
   second, competing chunking implementation. Each page is written before the
   next one is requested, so large histories do not have to fit in one request or
   one in-memory batch.
 - Heart rate is reduced to one average reading per UTC minute before it is
-  staged and written. Google Health commonly returns near-continuous samples;
+  written. Google Health commonly returns near-continuous samples;
   minute buckets keep the native history and reports responsive while retaining
   a deterministic, idempotent value for every minute.
 - An empty result is not an error and is not converted into a zero measurement.

@@ -500,6 +500,38 @@ public class GoogleHealthConnectorServiceTests
         Assert.False(fixture.Secrets.ContainsKey("refreshToken"));
     }
 
+    [Fact]
+    public async Task Native_reconciliation_limit_splits_windows_and_completes_backfill()
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            _ => Json("""{"dataPoints":[]}""")
+        });
+        var windows = new List<(DateTimeOffset From, DateTimeOffset To)>();
+        fixture.Writer.Setup(value => value.BeginReconciliationAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Returns<IReadOnlyCollection<string>, DateTimeOffset, DateTimeOffset, CancellationToken>(
+                (_, from, to, _) =>
+                {
+                    windows.Add((from, to));
+                    return to - from > TimeSpan.FromDays(1)
+                        ? Task.FromException<Guid>(new GoogleHealthException(
+                            "history_too_large", stage: "native_reconciliation_stage", dataType: "weight"))
+                        : Task.FromResult(Guid.NewGuid());
+                });
+        var config = fixture.Configuration();
+        config.ImportFrom = DateTimeOffset.UtcNow.AddDays(-3).ToString("O");
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+
+        Assert.True(result.Success);
+        Assert.True(fixture.ImportFromWasConsumed);
+        Assert.Contains(windows, window => window.To - window.From > TimeSpan.FromDays(1));
+        Assert.True(windows.Count(window => window.To - window.From <= TimeSpan.FromDays(1)) >= 4);
+    }
+
     private sealed class Fixture
     {
         private readonly Guid tenantId = Guid.NewGuid();

@@ -201,7 +201,6 @@ public sealed class GoogleHealthConnectorService(
             ? JsonSerializer.SerializeToElement(cursor.UtcDateTime.ToString("o"))
             : JsonSerializer.SerializeToElement<string?>(null);
         configuration[BackfillFloorKey] = JsonSerializer.SerializeToElement(state.FloorDate.UtcDateTime.ToString("o"));
-        configuration.Remove("backfillDaysSinceRefresh");
         configuration[BackfillCompleteKey] = JsonSerializer.SerializeToElement(state.Complete);
         if (state.ChunkDays is { } chunkDays)
             configuration[BackfillChunkDaysKey] = JsonSerializer.SerializeToElement(chunkDays);
@@ -428,10 +427,21 @@ public sealed class GoogleHealthConnectorService(
             SyncResult result,
             CancellationToken ct)
     {
+        var previousCounts = result.ItemsSynced.ToDictionary();
         try
         {
             await ReadOnceAsync(config, accessToken, active, from, to, tenantId, result, ct);
             return accessToken;
+        }
+        catch (GoogleHealthException error) when (error.Message == "history_too_large" &&
+            error.Stage?.StartsWith("native_reconciliation", StringComparison.Ordinal) == true &&
+            to - from > TimeSpan.FromDays(1))
+        {
+            var middle = new DateTimeOffset((from + (to - from) / 2).UtcDateTime.Date, TimeSpan.Zero);
+            if (middle <= from) middle = new DateTimeOffset(from.UtcDateTime.Date.AddDays(1), TimeSpan.Zero);
+            RestoreCounts();
+            var token = await ReadWithRefreshAsync(config, accessToken, active, from, middle, tenantId, result, ct);
+            return await ReadWithRefreshAsync(config, token, active, middle, to, tenantId, result, ct);
         }
         catch (GoogleHealthException first) when (first.Message == "access_token_rejected")
         {
@@ -440,7 +450,7 @@ public sealed class GoogleHealthConnectorService(
                 tenantId);
             coordinator.Report(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var refreshed = await SessionAsync(config, ct, forceRefresh: true);
-            result.ItemsSynced.Clear();
+            RestoreCounts();
             try
             {
                 await ReadOnceAsync(config, refreshed.AccessToken!, active, from, to, tenantId, result, ct);
@@ -452,6 +462,12 @@ public sealed class GoogleHealthConnectorService(
                     dataType: second.DataType, providerReason: second.ProviderReason,
                     providerStatus: second.ProviderStatus);
             }
+        }
+
+        void RestoreCounts()
+        {
+            result.ItemsSynced.Clear();
+            foreach (var (type, count) in previousCounts) result.ItemsSynced[type] = count;
         }
     }
 
@@ -502,7 +518,7 @@ public sealed class GoogleHealthConnectorService(
                         // Google Health reports heart rate at near-continuous (often per-beat) cadence.
                         // Storing every sample is not useful for reports and multiplies row counts far
                         // beyond what's needed, so readings are aggregated to one average-bpm value
-                        // per UTC minute before staging and writing them. The accumulator is bounded
+                        // per UTC minute before writing them. The accumulator is bounded
                         // by the number of minutes in the current historical window, not by the raw
                         // sample count, which keeps a dense multi-week import safe to retry.
                         var buckets = new Dictionary<long, HeartRateBucket>();
@@ -545,7 +561,7 @@ public sealed class GoogleHealthConnectorService(
                     }
                     catch (Exception cleanupException)
                     {
-                        logger.LogWarning(cleanupException, "Could not clean up Google Health staging run {RunId}", reconciliationRun);
+                        logger.LogWarning(cleanupException, "Could not discard Google Health reconciliation run {RunId}", reconciliationRun);
                     }
                 }
 
