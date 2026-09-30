@@ -119,7 +119,7 @@
      third of a tablet, and inline-size containment lets it shrink below its own text. -->
 <div
   data-slot="glucose-value-indicator"
-  class="inline-flex items-center gap-2 {size === 'xl' ? '@container min-w-0' : ''} {className}"
+  class="inline-flex items-center gap-2 {size === 'xl' ? '@container w-full min-w-0' : ''} {className}"
 >
   {#if isLoading}
     <!-- Loading skeleton -->
