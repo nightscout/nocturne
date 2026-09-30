@@ -14,7 +14,8 @@ using Xunit;
 namespace Nocturne.API.Integration.Tests.Health;
 
 [Trait("Category", "Integration")]
-public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
+public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture fixture)
+    : IClassFixture<GoogleHealthPostgresFixture>, IAsyncLifetime
 {
     private string connectionString = string.Empty;
     private readonly Guid tenantId = Guid.NewGuid();
@@ -23,12 +24,11 @@ public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health");
-        connectionString = database.SuperuserConnectionString;
+        connectionString = fixture.Database.SuperuserConnectionString;
         await using var db = Context();
         db.Tenants.AddRange(
-            new TenantEntity { Id = tenantId, Slug = "google-test", DisplayName = "Synthetic", IsActive = true },
-            new TenantEntity { Id = otherTenantId, Slug = "google-other", DisplayName = "Synthetic other", IsActive = true });
+            new TenantEntity { Id = tenantId, Slug = $"google-test-{tenantId:N}", DisplayName = "Synthetic", IsActive = true },
+            new TenantEntity { Id = otherTenantId, Slug = $"google-other-{otherTenantId:N}", DisplayName = "Synthetic other", IsActive = true });
         await db.SaveChangesAsync();
     }
 
@@ -133,4 +133,14 @@ public sealed class GoogleHealthReconciliationTests : IAsyncLifetime
         Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(), Mock.Of<IBodyWeightService>(),
         Mock.Of<ISleepService>(), db, NullLogger<GoogleHealthReadingWriter>.Instance);
 
+}
+
+public sealed class GoogleHealthPostgresFixture : IAsyncLifetime
+{
+    public TestDatabase Database { get; private set; } = null!;
+
+    public async Task InitializeAsync() =>
+        Database = await SharedPostgres.CreateMigratedDatabaseAsync("google_health");
+
+    public Task DisposeAsync() => Task.CompletedTask;
 }
