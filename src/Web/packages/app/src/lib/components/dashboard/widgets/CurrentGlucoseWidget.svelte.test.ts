@@ -74,6 +74,13 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(page.getByText("62%", { exact: true })).toBeVisible();
   });
 
+  it("says a stale reading is stale to a screen reader", async () => {
+    store.lastUpdated = now - 30 * 60_000;
+    render(CurrentGlucoseWidget);
+
+    await expect.element(page.getByText("Stale reading")).toBeInTheDocument();
+  });
+
   it.each(["mg/dl", "mmol"] as const)("keeps the %s tile inside a narrow cell", async (units) => {
     setGlucoseUnits(units);
     store.currentBG = units === "mmol" ? 222 : 123;

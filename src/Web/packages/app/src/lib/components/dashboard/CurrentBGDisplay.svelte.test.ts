@@ -36,6 +36,7 @@ import CurrentBGDisplay from "./current-bg-display-test-wrapper.svelte";
 
 describe("CurrentBGDisplay", () => {
   it("renders status text without reading a Symbol timeSinceReading value", () => {
+    dashboardTopWidgets.hydrate([WidgetId.TirChart, WidgetId.Tdd]);
     expect(() => render(CurrentBGDisplay, { showPills: false })).not.toThrow();
   });
 

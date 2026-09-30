@@ -77,7 +77,7 @@
 <WidgetCard title="Current Glucose">
   <div class="flex flex-col gap-3">
     <!-- The dashboard header hands this mark over while the widget carries the reading;
-         see CurrentBGDisplay. -->
+         see routes/(authenticated)/+page.svelte. -->
     <div
       data-testid="current-glucose-tile"
       {@attach coachmark({
@@ -146,6 +146,7 @@
           >
             {#if isStale}
               <History class="size-3.5" aria-hidden="true" />
+              <span class="sr-only">Stale reading</span>
             {:else}
               <Wifi class="size-3.5" aria-hidden="true" />
             {/if}
