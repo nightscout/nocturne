@@ -60,6 +60,18 @@
   // Once a stroke has faded its canvas unmounts, so a remount of the same reading never replays
   // an invisible reveal.
   let fadedSeed = $state<number | null>(null);
+  function markFaded(event: TransitionEvent) {
+    if (event.target === event.currentTarget && settledSeed === washSeed) fadedSeed = washSeed;
+  }
+  // A settled stroke unmounted mid-fade (the tile going neutral, or hidden below @md) counts as
+  // faded, or its remount would replay the reveal at opacity 0.
+  function fadedOnUnmount(_node: HTMLElement) {
+    return {
+      destroy: () => {
+        if (settledSeed === washSeed) fadedSeed = washSeed;
+      },
+    };
+  }
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -165,9 +177,9 @@
         <span
           class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[tileVariant]}"
           class:faded={settledSeed === washSeed}
-          ontransitionend={(event) => {
-            if (event.target === event.currentTarget && settledSeed === washSeed) fadedSeed = washSeed;
-          }}
+          ontransitionend={markFaded}
+          ontransitioncancel={markFaded}
+          use:fadedOnUnmount
         >
           <Artwork
             artwork="wash"
