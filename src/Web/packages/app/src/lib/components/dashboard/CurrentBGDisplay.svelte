@@ -50,6 +50,10 @@
   const tileVariant = $derived(
     getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
   );
+  // Each reading paints its own stroke, which settles and fades back to the bare fill well
+  // before the next reading arrives.
+  const washSeed = $derived((realtimeStore.currentEntry?.mills ?? 0) % 2_147_483_647);
+  let settledSeed = $state<number | null>(null);
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -148,15 +152,23 @@
        token's tone and the digits their contrast. The very-low and very-high tiles carry light
        digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
        fill toward the digits. Cropped to the wash's interior so its dried edge
-       falls outside the tile. Keyed on the variant: a new range repaints, a new reading does not. -->
-  {#key tileVariant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain {washBlend[tileVariant]}">
+       falls outside the tile. -->
+  {#key washSeed}
+    <span
+      class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[tileVariant]}"
+      class:faded={settledSeed === washSeed}
+    >
       <Artwork
         artwork="wash"
         palette="slate"
         surface="light"
-        durationMs={1600}
+        seed={washSeed}
+        durationMs={11600}
+        tail={0.86}
         releaseAfterFinish
+        onstatechange={(state) => {
+          if (state.finished) settledSeed = washSeed;
+        }}
         fit="fill"
         class="size-full"
       />
@@ -249,5 +261,17 @@
   /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
   .wash-grain {
     filter: grayscale(1) brightness(1.5) contrast(1.6);
+  }
+  .wash-fade {
+    transition: opacity 10s ease-out;
+  }
+  /* Outranks the blend's own opacity utility, so every variant fades to the bare fill. */
+  .wash-fade.faded {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wash-fade {
+      transition: none;
+    }
   }
 </style>
