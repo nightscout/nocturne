@@ -4,14 +4,14 @@
 // Exactness rests on three things. The lattice hash is integer splitmix64 on
 // `vec2<u32>` halves, so it is exact. Add, subtract and multiply are
 // correctly rounded in WGSL, but a driver may contract `a * b + c` into a
-// fused multiply-add the CPU does not do, and a trailing `* 1.0` from a
-// uniform does not stop every driver (it may reassociate the product first);
-// every product that feeds a sum therefore goes through `fenced`, an integer
-// round trip no compiler can see through, so the sum adds an already-rounded
-// product. Division is
-// only 2.5 ULP in WGSL, so the three divisions go through `div_rn`, an integer
-// long division rounded to nearest even. Every per-field constant is computed
-// on the CPU (`PaperTerms`) and uploaded, so none is re-derived here.
+// fused multiply-add the CPU does not do, or reassociate a chain of products,
+// and a trailing `* 1.0` from a uniform does not stop every driver. Every
+// product that feeds a sum or a further product therefore goes through
+// `fenced`, an integer round trip no compiler can see through, so each
+// operation sees the rounded value the CPU sees. Division is only 2.5 ULP in
+// WGSL, so the three divisions go through `div_rn`, an integer long division
+// rounded to nearest even. Every per-field constant is computed on the CPU
+// (`PaperTerms`) and uploaded, so none is re-derived here.
 
 struct PaperParams {
     // Lattice seeds as (lo, hi) pairs: grain 0..3, pool a, pool b, fibre.
@@ -20,7 +20,12 @@ struct PaperParams {
     dims: vec4<u32>,
     // 1/width, 1/height, isotropic x scale, isotropic y scale.
     geom: vec4<f32>,
-    grain_freq: vec4<f32>,
+    // Per noise term (grain 0..3, pool a, pool b, fibre): its lattice
+    // coordinate is `(u or u * base) * scale + offset` on each axis.
+    scale_x: array<vec4<f32>, 2>,
+    scale_y: array<vec4<f32>, 2>,
+    offset_x: array<vec4<f32>, 2>,
+    offset_y: array<vec4<f32>, 2>,
     grain_amp: vec4<f32>,
     grain_band: vec4<f32>,
     // base, full weight, fibre band, unused.
@@ -88,7 +93,7 @@ fn hash2(seed: vec2<u32>, x: i32, y: i32) -> f32 {
 }
 
 fn smooth_step01(t: f32) -> f32 {
-    return t * t * (3.0 - 2.0 * t);
+    return fenced(t * t) * (3.0 - 2.0 * t);
 }
 
 // `p`, rounded: the xor with a uniform zero keeps the product from being
@@ -108,8 +113,14 @@ fn value_noise(seed: vec2<u32>, x: f32, y: f32) -> f32 {
     let fy = smooth_step01(y - yf);
     let xi = i32(xf);
     let yi = i32(yf);
-    let top = lerp_exact(hash2(seed, xi, yi), hash2(seed, xi + 1, yi), fx);
-    let bottom = lerp_exact(hash2(seed, xi, yi + 1), hash2(seed, xi + 1, yi + 1), fx);
+    // One hash call site keeps the shader small; FXC compiles every inlined
+    // copy, and engine start-up waits for it.
+    var corner: array<f32, 4>;
+    for (var c = 0u; c < 4u; c = c + 1u) {
+        corner[c] = hash2(seed, xi + i32(c & 1u), yi + i32(c >> 1u));
+    }
+    let top = lerp_exact(corner[0], corner[1], fx);
+    let bottom = lerp_exact(corner[2], corner[3], fx);
     return lerp_exact(top, bottom, fy);
 }
 
@@ -158,26 +169,26 @@ fn generate_paper(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let width = P.dims.x;
-    let u = (f32(i % width) + 0.5) * P.geom.x * P.geom.z;
-    let v = (f32(i / width) + 0.5) * P.geom.y * P.geom.w;
-    let base = P.terms.x;
+    let u = fenced((f32(i % width) + 0.5) * P.geom.x) * P.geom.z;
+    let v = fenced((f32(i / width) + 0.5) * P.geom.y) * P.geom.w;
+    let ub = fenced(u * P.terms.x);
+    let vb = fenced(v * P.terms.x);
+    var noise: array<f32, 7>;
+    for (var t = 0u; t < 7u; t = t + 1u) {
+        let grain = t < 4u;
+        let x = fenced(select(ub, u, grain) * P.scale_x[t / 4u][t % 4u]) + P.offset_x[t / 4u][t % 4u];
+        let y = fenced(select(vb, v, grain) * P.scale_y[t / 4u][t % 4u]) + P.offset_y[t / 4u][t % 4u];
+        noise[t] = value_noise(seed_at(t), x, y);
+    }
 
     var deviation = 0.0;
     for (var octave = 0u; octave < 4u; octave = octave + 1u) {
-        let freq = P.grain_freq[octave];
-        let n = value_noise(seed_at(octave), u * freq, v * freq);
-        deviation = deviation + fenced(P.grain_amp[octave] * P.grain_band[octave] * (n - 0.5));
+        let weight = fenced(P.grain_amp[octave] * P.grain_band[octave]);
+        deviation = deviation + fenced(weight * (noise[octave] - 0.5));
     }
     let grain = 0.5 + div_rn(deviation, P.terms.y);
-    let pool_a = value_noise(seed_at(4u), u * base * 0.1, v * base * 0.1);
-    let pool_b = value_noise(
-        seed_at(5u),
-        fenced(u * base * 0.05) + 0.37,
-        fenced(v * base * 0.05) + 0.11,
-    );
-    let pool = div_rn(pool_a + fenced(0.7 * pool_b), 1.7);
-    let fibre_n = value_noise(seed_at(6u), u * base * 0.12, v * base * 1.6);
-    let fibre = 0.5 + fenced((fibre_n - 0.5) * P.terms.z);
+    let pool = div_rn(noise[4] + fenced(0.7 * noise[5]), 1.7);
+    let fibre = 0.5 + fenced((noise[6] - 0.5) * P.terms.z);
     let body = fenced(grain * P.mix_weights.x) + fenced(pool * P.mix_weights.y);
     let mixed = fenced(body * P.mix_weights.z) + fenced(fibre * P.mix_weights.w);
     paper_out[i] = 0.5 + fenced((mixed - 0.5) * P.height.x);

@@ -553,7 +553,7 @@ fn the_gpu_paper_is_bit_identical_to_the_cpu_paper() {
         (Paper::rough(Seed(7)), 1000, 250, 4.0),
         (Paper::hot_press(Seed(u64::MAX)), 150, 600, 0.25),
         (Paper::cold_press(Seed(3)), 1024, 1024, 1.0),
-        (Paper::rough(Seed(0x0005_EED0_FA11)), 1536, 700, 1536.0 / 700.0),
+        (Paper::rough(Seed(0xFA11)), 1536, 700, 1536.0 / 700.0),
     ];
     for (paper, width, height, aspect) in cases {
         for pixel_scale in [0.0, render_pixel_scale(width, height, aspect)] {
