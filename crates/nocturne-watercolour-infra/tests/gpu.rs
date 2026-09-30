@@ -9,9 +9,10 @@ use nocturne_watercolour_core::application::{
     CheckpointPolicy, CpuEngine, Playback, Renderer, Simulator,
 };
 use nocturne_watercolour_core::domain::optics::RenderParams;
+use nocturne_watercolour_core::domain::paper::{PaperField, render_pixel_scale};
 use nocturne_watercolour_core::domain::sim::SimParams;
 use nocturne_watercolour_core::domain::{
-    Background, CompositeMode, Palette, Scene, Seed, SimResolution, swirl,
+    Background, CompositeMode, Palette, Paper, Scene, Seed, SimResolution, swirl,
 };
 use nocturne_watercolour_infra::authoring::ArtworkCatalogue;
 use nocturne_watercolour_infra::export::linear_to_srgb;
@@ -538,5 +539,41 @@ fn the_presented_frame_is_the_rendered_frame_encoded_for_a_canvas() {
             worst <= 1,
             "{background:?}: a channel differs by {worst}/255"
         );
+    }
+}
+
+/// The optics pass samples the GPU-generated paper, so the render digests
+/// hold only while it matches `PaperField` bit for bit. The last case spans
+/// two dispatch bands.
+#[test]
+fn the_gpu_paper_is_bit_identical_to_the_cpu_paper() {
+    let Some(gpu) = gpu() else { return };
+    let cases = [
+        (Paper::cold_press(Seed(42)), 256, 256, 1.0),
+        (Paper::rough(Seed(7)), 1000, 250, 4.0),
+        (Paper::hot_press(Seed(u64::MAX)), 150, 600, 0.25),
+        (Paper::cold_press(Seed(3)), 1024, 1024, 1.0),
+        (Paper::rough(Seed(0xFA11)), 1536, 700, 1536.0 / 700.0),
+    ];
+    for (paper, width, height, aspect) in cases {
+        for pixel_scale in [0.0, render_pixel_scale(width, height, aspect)] {
+            let cpu =
+                PaperField::generate_with_pixel_scale(&paper, width, height, aspect, pixel_scale);
+            let got = gpu
+                .read_paper(&paper, width, height, aspect, pixel_scale)
+                .expect("gpu paper");
+            let differing = cpu
+                .height
+                .iter()
+                .zip(&got)
+                .filter(|(a, b)| a.to_bits() != b.to_bits())
+                .count();
+            assert_eq!(
+                differing,
+                0,
+                "{width}x{height} aspect {aspect} pixel scale {pixel_scale}: {differing} of {} differ",
+                got.len()
+            );
+        }
     }
 }
