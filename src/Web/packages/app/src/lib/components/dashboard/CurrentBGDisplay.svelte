@@ -13,7 +13,10 @@
   import { TrackerCompletionDialog } from "$lib/components/trackers";
   import { EntryEditDialog } from "$lib/components/entries";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
-  import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
+  import {
+    dashboardTopWidgets,
+    glucoseUnits,
+  } from "$lib/stores/appearance-store.svelte";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import {
@@ -28,6 +31,7 @@
   import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
   import GlucoseTileWash from "./GlucoseTileWash.svelte";
+  import { showsCurrentGlucoseWidget } from "./top-widget-ids";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -43,6 +47,10 @@
   const trackerPillsEnabled = $derived(
     settingsStore.features?.trackerPills?.enabled ?? true
   );
+
+  // The widget carries the reading (and its wash) when it is showing, which frees this row for
+  // the pills; otherwise the tile stays here so the reading never leaves the desktop dashboard.
+  const readingInWidget = $derived(showsCurrentGlucoseWidget(dashboardTopWidgets.current));
 
   const rawCurrentBG = $derived(realtimeStore.currentBG);
   const rawBgDelta = $derived(realtimeStore.bgDelta);
@@ -138,22 +146,24 @@
 <div class="@container">
   <h1 class="sr-only">Nocturne</h1>
   <div class="hidden @md:flex items-center gap-6">
-    <div class="flex shrink-0 items-center gap-3">
-      <GlucoseValueIndicator
-        displayValue={displayCurrentBG}
-        variant={tileVariant}
-        {isLoading}
-        {isStale}
-        {isDisconnected}
-        {statusText}
-        {statusTooltip}
-        size="lg"
-        background={rangeWash}
-      />
-      <div class="text-sm text-muted-foreground tabular-nums">
-        {displayBgDelta}
+    {#if !readingInWidget}
+      <div class="flex shrink-0 items-center gap-3">
+        <GlucoseValueIndicator
+          displayValue={displayCurrentBG}
+          variant={tileVariant}
+          {isLoading}
+          {isStale}
+          {isDisconnected}
+          {statusText}
+          {statusTooltip}
+          size="lg"
+          background={rangeWash}
+        />
+        <div class="text-sm text-muted-foreground tabular-nums">
+          {displayBgDelta}
+        </div>
       </div>
-    </div>
+    {/if}
 
     <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1" data-testid="status-pills">
       {#if displayDemoMode}

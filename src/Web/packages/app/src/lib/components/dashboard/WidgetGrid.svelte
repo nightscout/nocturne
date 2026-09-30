@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { WidgetId } from "$lib/api/generated/nocturne-api-client";
-  import { knownTopWidgets, loadTopWidget } from "./widget-registry";
+  import { MAX_TOP_WIDGETS, knownTopWidgets, loadTopWidget } from "./widget-registry";
   import WidgetCard from "./widgets/WidgetCard.svelte";
   import { Card } from "$lib/components/ui/card";
 
@@ -11,7 +11,7 @@
     maxWidgets?: number;
   }
 
-  let { widgets, maxWidgets = 3 }: Props = $props();
+  let { widgets, maxWidgets = MAX_TOP_WIDGETS }: Props = $props();
 
   const displayWidgets = $derived(knownTopWidgets(widgets).slice(0, maxWidgets));
 </script>
