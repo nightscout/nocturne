@@ -27,7 +27,7 @@
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import { Artwork } from "@nocturne/watercolour";
+  import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
 
   interface ComponentProps {
     /** Show status pills (COB, IOB, CAGE, SAGE, etc.) */
@@ -53,7 +53,13 @@
   // Each reading paints its own stroke, which settles and fades back to the bare fill well
   // before the next reading arrives.
   const washSeed = $derived((realtimeStore.currentEntry?.mills ?? 0) % 2_147_483_647);
+  // Reduced motion or the Still preference keep one settled wash per range instead: a per-reading
+  // stroke that fades would be animation they opted out of.
+  const washPerReading = !prefersReducedMotion();
   let settledSeed = $state<number | null>(null);
+  // Once a stroke has faded its canvas unmounts, so a remount of the same reading never replays
+  // an invisible reveal.
+  let fadedSeed = $state<number | null>(null);
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
 
@@ -153,27 +159,40 @@
        digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
        fill toward the digits. Cropped to the wash's interior so its dried edge
        falls outside the tile. -->
-  {#key washSeed}
-    <span
-      class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[tileVariant]}"
-      class:faded={settledSeed === washSeed}
-    >
-      <Artwork
-        artwork="wash"
-        palette="slate"
-        surface="light"
-        seed={washSeed}
-        durationMs={11600}
-        tail={0.86}
-        releaseAfterFinish
-        onstatechange={(state) => {
-          if (state.finished) settledSeed = washSeed;
-        }}
-        fit="fill"
-        class="size-full"
-      />
-    </span>
-  {/key}
+  {#if washPerReading}
+    {#key washSeed}
+      {#if fadedSeed !== washSeed}
+        <span
+          class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[tileVariant]}"
+          class:faded={settledSeed === washSeed}
+          ontransitionend={(event) => {
+            if (event.target === event.currentTarget && settledSeed === washSeed) fadedSeed = washSeed;
+          }}
+        >
+          <Artwork
+            artwork="wash"
+            palette="slate"
+            surface="light"
+            seed={washSeed}
+            durationMs={11600}
+            tail={0.86}
+            releaseAfterFinish
+            onstatechange={(state) => {
+              if (state.finished) settledSeed = washSeed;
+            }}
+            fit="fill"
+            class="size-full"
+          />
+        </span>
+      {/if}
+    {/key}
+  {:else}
+    {#key tileVariant}
+      <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain {washBlend[tileVariant]}">
+        <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" class="size-full" />
+      </span>
+    {/key}
+  {/if}
 {/snippet}
 
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->
@@ -268,10 +287,5 @@
   /* Outranks the blend's own opacity utility, so every variant fades to the bare fill. */
   .wash-fade.faded {
     opacity: 0;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .wash-fade {
-      transition: none;
-    }
   }
 </style>
