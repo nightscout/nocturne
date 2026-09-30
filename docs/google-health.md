@@ -112,9 +112,9 @@ the rest of the application. When copy is added or moved, run the Wuchale
 extraction and keep every locale's `msgstr` non-empty; the lightweight
 `google-health-translations.test.js` check compiles representative production
 strings for every locale and verifies that `{0}` and `<0/>` placeholders are
-preserved. Product names such as **Google Health**, **Nocturne**, and **eHbA1c**
-remain unchanged where the translation service would otherwise split or
-translate the name.
+preserved. Product names such as **Google Health**, **Google Cloud**, **Fitbit**,
+**Nocturne**, and **eHbA1c** remain unchanged where the translation service
+would otherwise split or translate the name.
 
 Sleep uses the session's **end time**, as required by the
 [Google Health filter contract](https://developers.google.com/health/filters).

@@ -26311,7 +26311,7 @@ msgstr "클라이언트 비밀을 비공개로 유지하세요."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Cloud setup"
-msgstr "Google 클라우드 설정"
+msgstr "Google Cloud 설정"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google setup documentation"

@@ -25875,7 +25875,7 @@ msgstr "Не все запрошенные разрешения были пре�
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google denied access."
-msgstr "Гугл закрыл доступ."
+msgstr "Google не предоставил доступ."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google access expired or was revoked. Reconnect."
@@ -25887,7 +25887,7 @@ msgstr "Достигнут лимит запросов Google. Nocturne повт
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
-msgstr "Гугл временно недоступен. Существующие данные были сохранены."
+msgstr "Google временно недоступен. Существующие данные были сохранены."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "This Google account is not linked to Fitbit."

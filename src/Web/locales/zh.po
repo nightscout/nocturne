@@ -25867,7 +25867,7 @@ msgstr "登录尝试已过期。重新开始。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google did not grant background access. Revoke access and reconnect."
-msgstr "谷歌没有授予后台访问权限。撤销访问并重新连接。"
+msgstr "Google 未授予后台访问权限。撤销访问并重新连接。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Not every requested permission was granted."
@@ -25875,7 +25875,7 @@ msgstr "并非所有请求的许可都被授予。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google denied access."
-msgstr "谷歌拒绝访问。"
+msgstr "Google 拒绝访问。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google access expired or was revoked. Reconnect."
@@ -25887,7 +25887,7 @@ msgstr "已达到 Google 的请求限制。Nocturne 将稍后重试。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google is temporarily unavailable. Existing data was preserved."
-msgstr "谷歌暂时无法使用。现有数据被保留。"
+msgstr "Google 暂时无法使用。现有数据被保留。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "This Google account is not linked to Fitbit."
@@ -25895,7 +25895,7 @@ msgstr "此 Google 帐户未链接到 Fitbit。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google rejected the data request."
-msgstr "谷歌拒绝了数据请求。"
+msgstr "Google 拒绝了数据请求。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "This account cannot access this API version."
@@ -25927,11 +25927,11 @@ msgstr "Google 无法识别此数据类型。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google could not reconcile the sources."
-msgstr "谷歌无法协调消息来源。"
+msgstr "Google 无法协调消息来源。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google returned an incomplete response."
-msgstr "谷歌返回了不完整的回复。"
+msgstr "Google 返回了不完整的回复。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google returned no measurements for this date range."
@@ -25959,7 +25959,7 @@ msgstr "Google 返回了意外的数据格式。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google returned overlapping measurements."
-msgstr "谷歌返回了重叠的测量结果。"
+msgstr "Google 返回了重叠的测量结果。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google returned data outside the requested range."
@@ -26311,11 +26311,11 @@ msgstr "保守客户秘密。"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Cloud setup"
-msgstr "谷歌云设置"
+msgstr "Google Cloud 设置"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google setup documentation"
-msgstr "谷歌设置文档"
+msgstr "Google 设置文档"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Delete imported Google Health data?"

@@ -31,6 +31,13 @@ const representativeCopy = [
   "The requested history is complete.",
   "Each sync refreshes today and imports one older calendar month.",
 ];
+const protectedProductNames = [
+  "Google Health",
+  "Google Cloud",
+  "Google",
+  "Fitbit",
+  "Nocturne",
+];
 
 function entries(catalog) {
   return Object.values(catalog.translations).flatMap((group) =>
@@ -162,29 +169,21 @@ describe("Google Health production translations", () => {
   );
 
   it.each(supportedLocales)(
-    "keeps Google Health and Nocturne product names untranslated in %s",
+    "keeps connector product names untranslated in %s",
     async (locale) => {
       const catalog = po.parse(
         await readFile(
           new URL(`../../../locales/${locale}.po`, import.meta.url)
         )
       );
-      const translatedBrand = entries(catalog).filter(
-        (entry) =>
-          entry.msgid &&
-          /Google Health/.test(entry.msgid) &&
-          isGoogleHealthEntry(entry) &&
-          !String(entry.msgstr?.[0] ?? "").includes("Google Health")
-      );
-      expect(translatedBrand).toEqual([]);
-      const translatedToolName = entries(catalog).filter(
-        (entry) =>
-          entry.msgid &&
-          /Nocturne/.test(entry.msgid) &&
-          isGoogleHealthEntry(entry) &&
-          !String(entry.msgstr?.[0] ?? "").includes("Nocturne")
-      );
-      expect(translatedToolName).toEqual([]);
+      const translatedProductName = entries(catalog).filter((entry) => {
+        if (!entry.msgid || !isGoogleHealthEntry(entry)) return false;
+        const translation = String(entry.msgstr?.[0] ?? "");
+        return protectedProductNames.some(
+          (name) => entry.msgid.includes(name) && !translation.includes(name)
+        );
+      });
+      expect(translatedProductName).toEqual([]);
     }
   );
 });

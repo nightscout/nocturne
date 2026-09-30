@@ -26314,7 +26314,7 @@ msgstr "Gardez le secret du client privé."
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google Cloud setup"
-msgstr "Configuration de Google Cloud"
+msgstr "Configuration de Google Cloud"
 
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Google setup documentation"
