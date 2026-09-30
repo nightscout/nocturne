@@ -4,8 +4,8 @@
 // Exactness rests on three things. The lattice hash is integer splitmix64 on
 // `vec2<u32>` halves, so it is exact. Add, subtract and multiply are
 // correctly rounded in WGSL, but a driver may contract `a * b + c` into a
-// fused multiply-add the CPU does not do, or reassociate a chain of products,
-// and a trailing `* 1.0` from a uniform does not stop every driver. Every
+// fused multiply-add the CPU does not do, or reassociate a chain of products.
+// Every
 // product that feeds a sum or a further product therefore goes through
 // `fenced`, an integer round trip no compiler can see through, so each
 // operation sees the rounded value the CPU sees. Division is only 2.5 ULP in
@@ -93,7 +93,7 @@ fn hash2(seed: vec2<u32>, x: i32, y: i32) -> f32 {
 }
 
 fn smooth_step01(t: f32) -> f32 {
-    return fenced(t * t) * (3.0 - 2.0 * t);
+    return fenced(fenced(t * t) * (3.0 - 2.0 * t));
 }
 
 // `p`, rounded: the xor with a uniform zero keeps the product from being
@@ -169,8 +169,8 @@ fn generate_paper(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let width = P.dims.x;
-    let u = fenced((f32(i % width) + 0.5) * P.geom.x) * P.geom.z;
-    let v = fenced((f32(i / width) + 0.5) * P.geom.y) * P.geom.w;
+    let u = fenced(fenced((f32(i % width) + 0.5) * P.geom.x) * P.geom.z);
+    let v = fenced(fenced((f32(i / width) + 0.5) * P.geom.y) * P.geom.w);
     let ub = fenced(u * P.terms.x);
     let vb = fenced(v * P.terms.x);
     var noise: array<f32, 7>;
