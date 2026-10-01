@@ -394,6 +394,56 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Heart_rate_limit_stops_pagination_before_accumulating_or_writing_more_samples()
+    {
+        var pagesRead = 0;
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            _ => HeartRatePage()
+        });
+        HttpResponseMessage HeartRatePage()
+        {
+            pagesRead++;
+            return Json("""
+                {"dataPoints":[
+                    {"name":"a","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:05Z"},"beatsPerMinute":"60"}},
+                    {"name":"b","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:45Z"},"beatsPerMinute":"70"}}
+                ],"nextPageToken":"more"}
+                """);
+        }
+        fixture.Writer.Setup(value => value.StageReconciliationIdsAsync(
+                It.IsAny<Guid>(), "heart-rate", It.IsAny<IReadOnlyCollection<string>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new GoogleHealthException("history_too_large",
+                stage: "native_reconciliation_stage", dataType: "heart-rate"));
+        var config = fixture.Configuration();
+        config.SyncBodyWeight = false;
+        config.SyncHeartRate = true;
+        var from = new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { From = from, To = from.AddDays(1) }, config, default);
+
+        Assert.False(result.Success);
+        Assert.Equal("history_too_large:heart-rate", result.Message);
+        Assert.Equal(1, pagesRead);
+        fixture.Writer.Verify(value => value.StageReconciliationIdsAsync(
+            It.IsAny<Guid>(), "heart-rate",
+            It.Is<IReadOnlyCollection<string>>(ids => ids.Count == 1),
+            It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Writer.Verify(value => value.WriteAsync(
+            It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
+            It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(value => value.CompleteReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(value => value.AbandonReconciliationAsync(
+            It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.DoesNotContain("lastSyncedTo", fixture.StoredConfiguration);
+    }
+
+    [Fact]
     public async Task Heart_rate_samples_are_aggregated_to_one_average_per_utc_minute()
     {
         var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch

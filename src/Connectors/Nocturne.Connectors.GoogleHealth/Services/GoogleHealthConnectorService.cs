@@ -503,20 +503,20 @@ public sealed class GoogleHealthConnectorService(
                         }
                     else if (type == "heart-rate")
                     {
-                        // Google Health reports heart rate at near-continuous (often per-beat) cadence.
-                        // Storing every sample is not useful for reports and multiplies row counts far
-                        // beyond what's needed, so readings are aggregated to one average-bpm value
-                        // per UTC minute before writing them. The accumulator is bounded
-                        // by the number of minutes in the current historical window, not by the raw
-                        // sample count, which keeps a dense multi-week import safe to retry.
+                        // Per-page staging enforces the reconciliation cap before the minute
+                        // accumulator grows, including when live catch-up spans years.
                         var buckets = new Dictionary<long, HeartRateBucket>();
                         await foreach (var page in google.ReadPagesAsync(accessToken, type, from, to, ct, PageRead))
+                        {
+                            var pageBuckets = new Dictionary<long, HeartRateBucket>();
+                            AddHeartRateBuckets(pageBuckets, page);
+                            stage = "native_reconciliation_stage";
+                            await writer.StageReconciliationIdsAsync(
+                                reconciliationRun, type,
+                                MaterializeHeartRateBuckets(pageBuckets).Select(GoogleHealthClient.Key).ToArray(), ct);
                             AddHeartRateBuckets(buckets, page);
+                        }
                         var unique = MaterializeHeartRateBuckets(buckets);
-                        stage = "native_reconciliation_stage";
-                        await writer.StageReconciliationIdsAsync(
-                            reconciliationRun, type,
-                            unique.Select(GoogleHealthClient.Key).ToArray(), ct);
                         stage = "native_write";
                         await writer.WriteAsync(unique, [], config.BatchSize, ct);
                         AddCount(result, type, unique.Count);
