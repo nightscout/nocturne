@@ -46,11 +46,13 @@ working for everyone you have already sent it to, so they will each need the new
 one.
 
 <Callout type="note">
+
 On some instances Nocturne cannot show you an existing link, and says so on the
 page. That happens if the link was created before this feature existed, if your
 instance has no encryption key set, or if that key has changed since the link was
 made. The link itself keeps working for anyone who has it; only showing it again
 is impossible, so regenerating is the only way to get a copy you can send.
+
 </Callout>
 
 ## Choosing what's visible
@@ -78,12 +80,14 @@ turn on and forget about never quietly widens.
 so older data is never exposed.
 
 <Callout type="tip" title="When to use it: a daycare">
+
   The daycare wants to keep your child's current glucose up on a tablet at the
   desk, and staff change shift through the day. Turn on public access, leave it on
   <em>Blood Glucose</em> only, and set the window to <em>Last 24 hours</em>.
   Everyone on shift sees the same screen with no logins to hand around, and they
   never see older history. If a device goes missing or the room changes,
   regenerate the link and the old one stops working.
+
 </Callout>
 
 ## What the visitor sees
@@ -107,10 +111,12 @@ end it:
   the new address.
 
 <Callout type="warning" title="Anyone with the link can open it">
+
   There's no sign-in on a public link, and you can't control who it gets forwarded
   to once it's out. Share the minimum categories the situation actually needs,
   keep the 24-hour window on, and regenerate the link if you ever think it has
   spread too far.
+
 </Callout>
 
 If only one person needs a look, and only once, a

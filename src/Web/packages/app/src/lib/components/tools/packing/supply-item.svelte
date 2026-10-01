@@ -24,6 +24,9 @@
     onenablechange,
   }: Props = $props();
 
+  // `quantity` is written to the parent through the binding, never read here.
+  void quantity;
+
   let interval = $state(config.defaultInterval ?? 0);
   let buffer = $state(config.defaultBuffer);
   let containerSize = $state(config.defaultContainerSize ?? 300);
@@ -67,21 +70,19 @@
 
 <div class="group rounded-lg transition-colors {enabled ? '' : 'opacity-40'}">
   <!-- Row 1: Checkbox + label + quantity -->
-  <button
-    type="button"
-    class="flex w-full items-center gap-3 py-2.5 text-left"
-    onclick={() => toggleEnabled(!enabled)}
-  >
-    <Checkbox checked={enabled} />
-    <span class="flex-1 text-sm font-medium">{config.label}</span>
-    {#if enabled && autoQuantity > 0}
-      <span
-        class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary"
-      >
-        &times;{autoQuantity}
-      </span>
-    {/if}
-  </button>
+  <div class="py-2.5">
+    <Label class="w-full">
+      <Checkbox checked={enabled} onCheckedChange={toggleEnabled} />
+      <span class="flex-1">{config.label}</span>
+      {#if enabled && autoQuantity > 0}
+        <span
+          class="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-sm font-semibold tabular-nums text-primary"
+        >
+          &times;{autoQuantity}
+        </span>
+      {/if}
+    </Label>
+  </div>
 
   <!-- Row 2: Config fields -->
   {#if enabled}
@@ -89,24 +90,26 @@
       {#if config.mode === "interval"}
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <div class="flex items-center gap-1.5">
-            <Label class="text-muted-foreground text-xs">Change every</Label>
+            <Label size="sm" variant="muted">Change every</Label>
             <Input
               type="number"
               bind:value={interval}
               min={0.5}
               step={0.5}
-              class="w-16 h-7 text-xs"
+              size="xs"
+              class="w-16"
             />
             <span class="text-muted-foreground text-xs">days</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <Label class="text-muted-foreground text-xs">+</Label>
+            <Label size="sm" variant="muted">+</Label>
             <Input
               type="number"
               bind:value={buffer}
               min={0}
               step={1}
-              class="w-14 h-7 text-xs"
+              size="xs"
+              class="w-14"
             />
             <span class="text-muted-foreground text-xs">spare</span>
           </div>
@@ -125,9 +128,10 @@
               bind:value={containerSize}
               min={1}
               step={10}
-              class="w-20 h-7 text-xs"
+              size="xs"
+              class="w-20"
             />
-            <Label class="text-muted-foreground text-xs">u per container</Label>
+            <Label size="sm" variant="muted">u per container</Label>
           </div>
           <div class="flex items-center gap-1.5">
             <Input
@@ -136,9 +140,10 @@
               min={0}
               max={2}
               step={0.1}
-              class="w-16 h-7 text-xs"
+              size="xs"
+              class="w-16"
             />
-            <Label class="text-muted-foreground text-xs">
+            <Label size="sm" variant="muted">
               ({Math.round(buffer * 100)}%) buffer
             </Label>
           </div>
@@ -155,13 +160,14 @@
 
       {:else}
         <div class="flex items-center gap-1.5 text-sm">
-          <Label class="text-muted-foreground text-xs">Quantity</Label>
+          <Label size="sm" variant="muted">Quantity</Label>
           <Input
             type="number"
             bind:value={flatQuantity}
             min={0}
             step={1}
-            class="w-16 h-7 text-xs"
+            size="xs"
+            class="w-16"
           />
         </div>
       {/if}

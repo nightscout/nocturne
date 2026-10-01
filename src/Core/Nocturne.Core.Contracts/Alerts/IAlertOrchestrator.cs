@@ -28,7 +28,15 @@ public interface IAlertOrchestrator
     /// (e.g. <c>tracker_age</c>) that must fire even when no new reading arrives.
     /// </summary>
     /// <param name="rules">The rule snapshots to evaluate. Rules from other tenants are a caller bug.</param>
+    /// <param name="enabledRuleIds">
+    /// Every enabled rule of the tenant, <paramref name="rules"/> or not. An <c>alert_state</c>
+    /// reference resolves when its target is in this set.
+    /// </param>
     /// <param name="context">The base <see cref="SensorContext"/> to enrich and evaluate against.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task EvaluateRulesAsync(IReadOnlyList<AlertRuleSnapshot> rules, SensorContext context, CancellationToken ct);
+    Task EvaluateRulesAsync(
+        IReadOnlyList<AlertRuleSnapshot> rules,
+        IReadOnlySet<Guid> enabledRuleIds,
+        SensorContext context,
+        CancellationToken ct);
 }

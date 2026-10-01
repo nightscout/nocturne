@@ -5,17 +5,16 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.API.Services.Migration;
 using Nocturne.API.Tests.Integration.Infrastructure;
-using Nocturne.Core.Constants;
 using Nocturne.Infrastructure.Data;
-using Npgsql;
+
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Nocturne.API.Tests.Integration.Migration;
 
-[Collection("AspireIntegration")]
+[Collection("ApiIntegration")]
 [Trait("Category", "Integration")]
-public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<MigrationTestFixture>, IAsyncLifetime
+public class MongoMigrationTests : ApiIntegrationTestBase, IClassFixture<MigrationTestFixture>
 {
     private readonly MigrationTestFixture _migration;
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -24,29 +23,11 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
     };
 
     public MongoMigrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         MigrationTestFixture migration,
         ITestOutputHelper output) : base(fixture, output)
     {
         _migration = migration;
-    }
-
-    public override async Task InitializeAsync()
-    {
-        await base.InitializeAsync();
-        // Clean up any data from previous tests
-        await CleanupMigratedDataAsync();
-    }
-
-    public override async Task DisposeAsync()
-    {
-        await CleanupMigratedDataAsync();
-        await base.DisposeAsync();
-    }
-
-    async Task IAsyncLifetime.DisposeAsync()
-    {
-        await DisposeAsync();
     }
 
     [Fact]
@@ -61,7 +42,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         };
 
         // Act
-        var response = await ApiClient.PostAsJsonAsync("/api/v4/migration/test", request);
+        var response = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/test", request);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -92,16 +73,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         status.CollectionProgress["entries"].IsComplete.Should().BeTrue();
         status.CollectionProgress["entries"].DocumentsMigrated.Should().Be(_migration.EntryCount);
 
-        // Verify data via V3 API with dataSource filtering
-        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
-        var entriesResponse = await ApiClient.GetAsync(
-            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit={_migration.EntryCount + 10}");
-
-        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
-        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
-
-        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        var entries = await GetV3EntriesAsync();
         entries.Count.Should().Be(_migration.EntryCount);
 
         var minSgv = entries.Min(e => e.GetProperty("sgv").GetDouble());
@@ -139,16 +111,8 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
             MigrationMode.MongoDb,
             collections: ["entries"]);
 
-        // Assert — query migrated entries via V3 API and check directions
-        var filter = JsonSerializer.Serialize(new { dataSource = DataSources.MongoDbImport });
-        var entriesResponse = await ApiClient.GetAsync(
-            $"/api/v3/entries?filter={Uri.EscapeDataString(filter)}&limit={_migration.EntryCount + 10}");
-
-        entriesResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var responseBody = await entriesResponse.Content.ReadAsStringAsync();
-        var v3Response = JsonSerializer.Deserialize<JsonElement>(responseBody, JsonOptions);
-
-        var entries = v3Response.GetProperty("result").EnumerateArray().ToList();
+        var entries = await GetV3EntriesAsync();
+        entries.Count.Should().Be(_migration.EntryCount);
         var directions = entries
             .Where(e => e.TryGetProperty("direction", out var dir) && dir.ValueKind == JsonValueKind.String)
             .Select(e => e.GetProperty("direction").GetString()!)
@@ -173,19 +137,23 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
             MigrationMode.MongoDb,
             collections: ["entries"]);
 
-        var firstCount = firstStatus.CollectionProgress["entries"].DocumentsMigrated;
+        firstStatus.State.Should().Be(MigrationJobState.Completed);
+        firstStatus.CollectionProgress["entries"].DocumentsMigrated.Should().Be(_migration.EntryCount);
 
         // Act — run migration second time with same data
         var secondStatus = await RunMigrationToCompletionAsync(
             MigrationMode.MongoDb,
             collections: ["entries"]);
 
-        // Assert — second run should find all duplicates and skip them
+        // Assert — a re-run updates each stored document in place, which counts as migrated
+        // exactly as in API mode, and creates no second row for any of them.
         secondStatus.State.Should().Be(MigrationJobState.Completed);
-        secondStatus.CollectionProgress["entries"].DocumentsMigrated.Should().Be(0,
-            "all entries already exist and should be detected as duplicates");
+        secondStatus.CollectionProgress["entries"].DocumentsMigrated.Should().Be(_migration.EntryCount);
+        secondStatus.CollectionProgress["entries"].DocumentsFailed.Should().Be(0);
 
-        Log($"First run migrated {firstCount}, second run migrated 0 (duplicates correctly skipped)");
+        await using var db = Fixture.CreateDbContext(Fixture.TenantId);
+        (await db.SensorGlucose.CountAsync()).Should().Be(_migration.EntryCount);
+        (await GetV3EntriesAsync()).Count.Should().Be(_migration.EntryCount);
     }
 
     [Fact]
@@ -224,7 +192,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         };
 
         // Act — start migration
-        var startResponse = await ApiClient.PostAsJsonAsync("/api/v4/migration/start", request);
+        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         jobInfo.Should().NotBeNull();
@@ -235,7 +203,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
 
         for (var i = 0; i < 60; i++)
         {
-            var statusResponse = await ApiClient.GetAsync(
+            var statusResponse = await AuthenticatedClient.GetAsync(
                 $"/api/v4/migration/{jobInfo!.Id}/status");
             statusResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -262,6 +230,14 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
 
     #region Helpers
 
+    private async Task<List<JsonElement>> GetV3EntriesAsync()
+    {
+        var response = await AuthenticatedClient.GetAsync($"/api/v3/entries?limit={_migration.EntryCount + 10}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync(), JsonOptions);
+        return body.GetProperty("result").EnumerateArray().ToList();
+    }
+
     private async Task<MigrationJobStatus> RunMigrationToCompletionAsync(
         MigrationMode mode,
         List<string>? collections = null)
@@ -274,7 +250,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
             Collections = collections ?? []
         };
 
-        var startResponse = await ApiClient.PostAsJsonAsync("/api/v4/migration/start", request);
+        var startResponse = await AuthenticatedClient.PostAsJsonAsync("/api/v4/migration/start", request);
         startResponse.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var jobInfo = await startResponse.Content.ReadFromJsonAsync<MigrationJobInfo>(JsonOptions);
         jobInfo.Should().NotBeNull();
@@ -283,7 +259,7 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         MigrationJobStatus? status = null;
         for (var i = 0; i < 120; i++)
         {
-            var statusResponse = await ApiClient.GetAsync(
+            var statusResponse = await AuthenticatedClient.GetAsync(
                 $"/api/v4/migration/{jobInfo!.Id}/status");
             status = await statusResponse.Content.ReadFromJsonAsync<MigrationJobStatus>(JsonOptions);
 
@@ -300,43 +276,6 @@ public class MongoMigrationTests : AspireIntegrationTestBase, IClassFixture<Migr
         }
 
         return status;
-    }
-
-    private async Task CleanupMigratedDataAsync()
-    {
-        try
-        {
-            var connStr = await GetPostgresConnectionStringAsync();
-            if (string.IsNullOrEmpty(connStr))
-            {
-                Log("Cleanup skipped: connection string is empty");
-                return;
-            }
-
-            await using var conn = new NpgsqlConnection(connStr);
-            await conn.OpenAsync();
-
-            // Delete entries
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $"DELETE FROM entries WHERE data_source = '{DataSources.MongoDbImport}'";
-                var entriesDeleted = await cmd.ExecuteNonQueryAsync();
-                Log($"Cleanup deleted {entriesDeleted} entries");
-            }
-
-            // Delete treatments
-            await using (var cmd = conn.CreateCommand())
-            {
-                cmd.CommandText = $"DELETE FROM treatments WHERE data_source = '{DataSources.MongoDbImport}'";
-                var treatmentsDeleted = await cmd.ExecuteNonQueryAsync();
-                Log($"Cleanup deleted {treatmentsDeleted} treatments");
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"Cleanup failed: {ex.Message}");
-            throw; // Re-throw to see the full error
-        }
     }
 
     #endregion

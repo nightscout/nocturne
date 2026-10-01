@@ -38,4 +38,23 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
         bool descending = true,
         CancellationToken ct = default
     );
+
+    /// <summary>The rows currently flagged <see cref="TherapySettings.IsDefault"/>, newest first.</summary>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The newest row decomposed from a profile document, leaving out profile-switch snapshots
+    /// (see <see cref="TherapySettings.ProfileSwitchStoreMarker"/>).
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Makes the row <paramref name="id"/> the tenant's only <see cref="TherapySettings.IsDefault"/> row,
+    /// or clears the flag on every row when <paramref name="id"/> is <c>null</c>.
+    /// </summary>
+    /// <param name="id">The therapy settings row to flag, or <c>null</c> for none.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task SetDefaultAsync(Guid? id, CancellationToken ct = default);
 }

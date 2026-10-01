@@ -9,10 +9,28 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Plus, Timer, Check, Trash2, Droplet } from "lucide-svelte";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Timer from "@lucide/svelte/icons/timer";
+  import Check from "@lucide/svelte/icons/check";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Droplet from "@lucide/svelte/icons/droplet";
   import { cn } from "$lib/utils";
   import { TrackerCategory } from "$api";
   import type { NotificationUrgency, TrackerDefinitionDto, TrackerInstanceDto } from "$api";
+
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    activeInstances: TrackerInstanceDto[];
+    openStartDialog: (def: TrackerDefinitionDto) => void;
+    openCompleteDialog: (id: string) => void;
+    openReservoirReportDialog: () => void;
+    openDeleteInstanceDialog: (id: string) => void;
+    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
+    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
+    getLevelStyle: (level: NotificationUrgency | null) => string;
+    formatAge: (hours: number) => string;
+    formatDate: (dateStr: Date | undefined | string) => string;
+  }
 
   let {
     definitions,
@@ -26,23 +44,11 @@
     getLevelStyle,
     formatAge,
     formatDate,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    activeInstances: TrackerInstanceDto[];
-    openStartDialog: (def: TrackerDefinitionDto) => void;
-    openCompleteDialog: (id: string) => void;
-    openReservoirReportDialog: () => void;
-    openDeleteInstanceDialog: (id: string) => void;
-    getInstanceLevel: (instance: TrackerInstanceDto) => NotificationUrgency | null;
-    getTimeRemaining: (instance: TrackerInstanceDto) => number | undefined;
-    getLevelStyle: (level: NotificationUrgency | null) => string;
-    formatAge: (hours: number) => string;
-    formatDate: (dateStr: Date | undefined | string) => string;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="active">
-  <Card>
+  <Card data-testid="active-trackers">
     <CardHeader class="flex flex-row items-center justify-between">
       <div>
         <CardTitle>Active Trackers</CardTitle>
@@ -57,7 +63,7 @@
             Start Tracker
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item
                 value={def.id ?? ""}
                 label={def.name ?? ""}
@@ -77,7 +83,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each activeInstances as instance}
+          {#each activeInstances as instance (instance.id)}
             {@const level = getInstanceLevel(instance)}
             {@const remaining = getTimeRemaining(instance)}
             <div
@@ -93,7 +99,7 @@
                     remaining !== undefined && remaining <= 0
                       ? "text-destructive"
                       : remaining !== undefined && remaining < 6
-                        ? "text-yellow-600 dark:text-yellow-400"
+                        ? "text-warning"
                         : ""
                   )}
                 >
@@ -132,6 +138,7 @@
                   variant="outline"
                   size="sm"
                   onclick={() => openCompleteDialog(instance.id!)}
+                  data-testid="tracker-complete"
                 >
                   <Check class="h-4 w-4 mr-1" />
                   Complete

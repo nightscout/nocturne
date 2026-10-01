@@ -8,14 +8,15 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { ExternalLink, Smartphone, Copy, Check } from "lucide-svelte";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Check from "@lucide/svelte/icons/check";
   import { buildXdripDeepLink } from "$lib/utils/xdrip-links";
-  import { copyToClipboard } from "$lib/utils";
+  import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
 
+  const copy = createCopyFeedback();
   let viewState: "redirecting" | "fallback" = $state("redirecting");
-  let copied = $state(false);
-  let copyFailed = $state(false);
-  let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const instanceUrl = typeof window !== "undefined" ? window.location.origin : "";
   const deepLink = buildXdripDeepLink(instanceUrl);
@@ -27,19 +28,11 @@
     }, 2000);
     return () => {
       clearTimeout(timeout);
-      if (copyTimeout) clearTimeout(copyTimeout);
     };
   });
 
   async function copyUrl() {
-    if (!(await copyToClipboard(instanceUrl))) {
-      copyFailed = true;
-      return;
-    }
-    copyFailed = false;
-    copied = true;
-    if (copyTimeout) clearTimeout(copyTimeout);
-    copyTimeout = setTimeout(() => (copied = false), 2000);
+    await copy.copy(instanceUrl);
   }
 </script>
 
@@ -75,19 +68,13 @@
               {instanceUrl}
             </code>
             <Button variant="ghost" size="icon" onclick={copyUrl}>
-              {#if copied}
+              {#if copy.isCopied()}
                 <Check class="h-4 w-4" />
               {:else}
                 <Copy class="h-4 w-4" />
               {/if}
             </Button>
           </div>
-          {#if copyFailed}
-            <p class="text-destructive text-sm">
-              Couldn't copy to the clipboard. Select the address above and copy it
-              manually.
-            </p>
-          {/if}
           <p class="text-muted-foreground text-sm">
             Then tap "Connect to Nocturne" to authorize.
           </p>
@@ -99,7 +86,7 @@
             href="https://github.com/NightscoutFoundation/xDrip/releases"
             target="_blank"
             variant="link"
-            class="px-0"
+            size="inline"
           >
             <ExternalLink class="mr-1 h-3 w-3" />
             Download xDrip+

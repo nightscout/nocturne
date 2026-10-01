@@ -1,11 +1,8 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
-  import { getToggleGroupCtx } from "./toggle-group.svelte";
+  import { getToggleGroupCtx, type ToggleGroupCtx } from "./toggle-group.svelte";
   import { cn } from "../../../utils";
-  import {
-    type ToggleVariants,
-    toggleVariants,
-  } from "../toggle/index.js";
+  import { toggleVariants } from "../toggle/index.js";
 
   let {
     ref = $bindable(null),
@@ -14,22 +11,34 @@
     size,
     variant,
     ...restProps
-  }: ToggleGroupPrimitive.ItemProps & ToggleVariants = $props();
+  }: ToggleGroupPrimitive.ItemProps & Omit<ToggleGroupCtx, "spacing"> = $props();
 
   const ctx = getToggleGroupCtx();
+  const resolvedVariant = $derived(ctx.variant || variant);
+  const resolvedSize = $derived(ctx.size || size);
+  const segmented = $derived(resolvedVariant === "segmented");
+  const toggleVariant = $derived(resolvedVariant === "segmented" ? "default" : resolvedVariant);
+  const joined = $derived(!segmented && !ctx.spacing);
 </script>
 
 <ToggleGroupPrimitive.Item
   bind:ref
   data-slot="toggle-group-item"
-  data-variant={ctx.variant || variant}
-  data-size={ctx.size || size}
+  data-variant={resolvedVariant}
+  data-size={resolvedSize}
+  data-spacing={ctx.spacing ?? 0}
   class={cn(
     toggleVariants({
-      variant: ctx.variant || variant,
-      size: ctx.size || size,
+      variant: toggleVariant,
+      size: resolvedSize,
     }),
-    "min-w-0 flex-1 shrink-0 rounded-none shadow-none first:rounded-l-md last:rounded-r-md focus:z-10 focus-visible:z-10 data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l",
+    "min-w-0 shrink-0 shadow-none focus:z-10 focus-visible:z-10",
+    // Joined and segmented items share the group's width; spaced chips size to their labels.
+    (joined || segmented) && "flex-1",
+    joined &&
+      "rounded-none first:rounded-l-md last:rounded-r-md data-[variant=outline]:border-l-0 data-[variant=outline]:first:border-l",
+    segmented &&
+      "min-w-fit text-muted-foreground hover:text-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-xs",
     className
   )}
   {value}

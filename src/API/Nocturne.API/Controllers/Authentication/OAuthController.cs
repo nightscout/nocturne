@@ -196,14 +196,16 @@ public class OAuthController : ControllerBase
 
             if (allSatisfied)
             {
-                // Silent approval: existing grant covers all requested scopes
+                // Silent approval: existing grant covers all requested scopes. Its history limit
+                // rides along, since the exchange writes the code's limit back onto the grant.
                 return await IssueAuthorizationCode(
                     client.Id,
                     subjectId,
                     normalizedScopes,
                     redirect_uri,
                     code_challenge,
-                    state
+                    state,
+                    HttpContext.InheritHistoryClamp(existingGrant.LimitTo24Hours)
                 );
             }
         }
@@ -308,7 +310,7 @@ public class OAuthController : ControllerBase
             request.RedirectUri,
             request.CodeChallenge,
             request.State,
-            request.LimitTo24Hours
+            HttpContext.InheritHistoryClamp(request.LimitTo24Hours)
         );
     }
 
@@ -573,7 +575,8 @@ public class OAuthController : ControllerBase
         }
 
         var success = request.Approved
-            ? await _deviceCodeService.ApproveDeviceCodeAsync(request.UserCode, subjectId)
+            ? await _deviceCodeService.ApproveDeviceCodeAsync(
+                request.UserCode, subjectId, HttpContext.IsCallerHistoryClamped())
             : await _deviceCodeService.DenyDeviceCodeAsync(request.UserCode);
 
         if (!success)

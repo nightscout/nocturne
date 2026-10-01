@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -249,7 +250,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToArrayAsync(cancellationToken);
@@ -268,7 +269,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => i.DefinitionId == definitionId && i.CompletedAt == null)
             .OrderByDescending(i => i.StartedAt)
             .ToListAsync(cancellationToken);
@@ -332,7 +333,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i => ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt != null)
             .OrderByDescending(i => i.CompletedAt)
             .Take(limit)
@@ -357,7 +358,7 @@ public class TrackerRepository : ITrackerRepository
         // Get active instances with lifespan defined
         var instances = await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .Where(i =>
                 ((userId != null && i.UserId == userId) || i.Definition.Visibility == TrackerVisibility.Public) && i.CompletedAt == null && i.Definition.LifespanHours != null
             )
@@ -386,7 +387,7 @@ public class TrackerRepository : ITrackerRepository
     {
         return await _context
             .TrackerInstances.AsNoTracking()
-            .Include(i => i.Definition)
+            .Include(i => i.Definition).ThenInclude(d => d.NotificationThresholds)
             .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
     }
 
@@ -425,22 +426,13 @@ public class TrackerRepository : ITrackerRepository
         _context.TrackerInstances.Add(instance);
         await _context.SaveChangesAsync(cancellationToken);
 
-        // Load the definition for the returned entity
         await _context.Entry(instance).Reference(i => i.Definition).LoadAsync(cancellationToken);
+        await _context.Entry(instance.Definition).Collection(d => d.NotificationThresholds).LoadAsync(cancellationToken);
 
         return instance;
     }
 
-    /// <summary>
-    /// Complete a tracker instance with reason and notes
-    /// </summary>
-    /// <param name="instanceId">The identifier of the instance to complete.</param>
-    /// <param name="reason">The reason for completion.</param>
-    /// <param name="completionNotes">Optional final notes.</param>
-    /// <param name="completeTreatmentId">Optional completion treatment ID.</param>
-    /// <param name="completedAt">Optional completion timestamp.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The completed tracker instance, or null if not found.</returns>
+    /// <inheritdoc />
     public virtual async Task<TrackerInstanceEntity?> CompleteInstanceAsync(
         Guid instanceId,
         CompletionReason reason,
@@ -450,21 +442,45 @@ public class TrackerRepository : ITrackerRepository
         CancellationToken cancellationToken = default
     )
     {
-        var instance = await _context
-            .TrackerInstances.Include(i => i.Definition)
-            .FirstOrDefaultAsync(i => i.Id == instanceId, cancellationToken);
+        var at = completedAt ?? DateTime.UtcNow;
+        var updated = await _context
+            .TrackerInstances.Where(i => i.Id == instanceId && i.CompletedAt == null)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(i => i.CompletedAt, at)
+                    .SetProperty(i => i.CompletionReason, reason)
+                    .SetProperty(i => i.CompletionNotes, completionNotes)
+                    .SetProperty(i => i.CompleteTreatmentId, completeTreatmentId),
+                cancellationToken
+            );
 
-        if (instance == null)
-            return null;
-
-        instance.CompletedAt = completedAt ?? DateTime.UtcNow;
-        instance.CompletionReason = reason;
-        instance.CompletionNotes = completionNotes;
-        instance.CompleteTreatmentId = completeTreatmentId;
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return instance;
+        return updated == 0 ? null : await GetInstanceByIdAsync(instanceId, cancellationToken);
     }
+
+    private const int SuccessionLockClass = 0x4E54_524B;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Runs under <see cref="RetryingTransactionExtensions.ExecuteInTransactionAsync{T}"/>, taking
+    /// the definition's lock (<see cref="AdvisoryLockExtensions"/>) before the work. Opening the
+    /// connection sets the tenant GUCs (TenantConnectionInterceptor), so every statement in the
+    /// transaction runs under the context's tenant.
+    /// </remarks>
+    public virtual Task<T> ExecuteUnderDefinitionLockAsync<T>(
+        Guid definitionId,
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        _context.ExecuteInTransactionAsync(
+            async ct =>
+            {
+                await _context.LockForTransactionAsync(SuccessionLockClass, definitionId, ct);
+                return await work(ct);
+            },
+            verifySucceeded,
+            ct: cancellationToken
+        );
 
     /// <summary>
     /// Acknowledge/snooze a tracker instance
@@ -576,37 +592,6 @@ public class TrackerRepository : ITrackerRepository
         await _context.SaveChangesAsync(cancellationToken);
 
         return preset;
-    }
-
-    /// <summary>
-    /// Apply a preset (creates a new instance from the preset's definition)
-    /// </summary>
-    /// <param name="presetId">The unique identifier of the preset to apply.</param>
-    /// <param name="userId">The user ID applying the preset.</param>
-    /// <param name="overrideNotes">Optional override notes for the starting instance.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The newly started tracker instance, or null if preset not found.</returns>
-    public virtual async Task<TrackerInstanceEntity?> ApplyPresetAsync(
-        Guid presetId,
-        string userId,
-        string? overrideNotes = null,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var preset = await _context
-            .TrackerPresets.Include(p => p.Definition)
-            .FirstOrDefaultAsync(p => p.Id == presetId, cancellationToken);
-
-        if (preset == null)
-            return null;
-
-        var notes = overrideNotes ?? preset.DefaultStartNotes;
-        return await StartInstanceAsync(
-            preset.DefinitionId,
-            userId,
-            notes,
-            cancellationToken: cancellationToken
-        );
     }
 
     /// <summary>

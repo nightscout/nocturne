@@ -23,12 +23,9 @@ public class CalibrationRepository : V4RepositoryBase<Calibration, CalibrationEn
     /// <summary>
     /// Initializes a new instance of the <see cref="CalibrationRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public CalibrationRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<CalibrationRepository> logger, IV4RecordBroadcaster<Calibration>? broadcaster = null, IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 

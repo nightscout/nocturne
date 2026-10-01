@@ -53,26 +53,29 @@
 			side="left"
 			sideOffset={-24}
 			align="start"
-			class="data-[side=left]:slide-in-from-right-56 fade-in-50 bg-popover flex max-h-120 min-h-8 max-w-56 flex-col gap-1.5 overflow-auto border duration-300"
+			variant="popover"
+			class="max-h-120 min-h-8 max-w-56 overflow-auto"
 			arrowClasses="hidden"
 			strategy="absolute"
 		>
 			{#if items === undefined || items.length === 0}
 				<div>No contents</div>
 			{:else}
-				{#each items as item (item.id)}
-					<a
-						href={`#${item.id}`}
-						onclick={(e) => onItemClick(e, item.id)}
-						class={cn(
-							'text-foreground text-sm text-wrap transition-all duration-500',
-							item.isScrolledOver && 'text-muted-foreground italic'
-						)}
-						style={`padding-left: calc(1rem * ${item.level - 1});`}
-					>
-						{item.textContent}
-					</a>
-				{/each}
+				<div class="flex flex-col gap-1.5">
+					{#each items as item (item.id)}
+						<a
+							href={`#${item.id}`}
+							onclick={(e) => onItemClick(e, item.id)}
+							class={cn(
+								'text-foreground pl-(--toc-indent) text-sm text-wrap transition-all duration-500',
+								item.isScrolledOver && 'text-muted-foreground italic'
+							)}
+							style:--toc-indent={`${item.level - 1}rem`}
+						>
+							{item.textContent}
+						</a>
+					{/each}
+				</div>
 			{/if}
 		</Tooltip.Content>
 	</Tooltip.Root>

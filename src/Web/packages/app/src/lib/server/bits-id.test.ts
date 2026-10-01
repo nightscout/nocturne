@@ -4,10 +4,14 @@ import {
 	withFreshBitsIdCounter,
 } from "./bits-id";
 
+declare global {
+	/** The counter bits-ui keeps on `globalThis`; see ./bits-id. */
+	var bitsIdCounter: { current: number };
+}
+
 /** What bits-ui's own `useId` does, verbatim. */
 function useId(prefix = "bits"): string {
-	const counter = (globalThis as unknown as { bitsIdCounter: { current: number } })
-		.bitsIdCounter;
+	const counter = globalThis.bitsIdCounter;
 	counter.current++;
 	return `${prefix}-${counter.current}`;
 }
@@ -59,8 +63,7 @@ describe("request-scoped bits-ui id counter", () => {
 		// `globalThis.bitsIdCounter ??= { current: 0 }` on import must neither
 		// throw nor replace the request-scoped accessor.
 		expect(() => {
-			(globalThis as unknown as { bitsIdCounter: { current: number } })
-				.bitsIdCounter ??= { current: 0 };
+			globalThis.bitsIdCounter ??= { current: 0 };
 		}).not.toThrow();
 
 		expect(withFreshBitsIdCounter(() => useId())).toBe("bits-1");

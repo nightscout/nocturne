@@ -19,9 +19,11 @@ requests like the examples in the [Connecting your app](/docs/connecting-apps) g
 <SdkList />
 
 <Callout type="info" title="Versions track releases">
+
   SDK versions follow Nocturne releases. Where the install line shows
   <code>&lt;version&gt;</code>, use the latest version listed on the package's
   registry page. The package links above always point to the current release.
+
 </Callout>
 
 ## How SDKs fit with authentication
@@ -38,8 +40,10 @@ mirror the V4 API exactly. For language-specific construction and method names, 
 generated README on the package's registry page (linked above).
 
 <Callout type="tip" title="No SDK for your stack?">
+
   Every SDK is generated from the same OpenAPI document. You can point any OpenAPI
   generator at the V4 spec to produce a client in a language we don't publish yet,
   or call the API directly over HTTP as shown in the
   [Connecting your app](/docs/connecting-apps) guide.
+
 </Callout>

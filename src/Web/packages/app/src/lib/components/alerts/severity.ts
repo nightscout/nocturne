@@ -1,4 +1,5 @@
 import type { AlertRuleSeverity } from "$api-clients";
+import { statusVar, type StatusToken } from "@nocturne/ui/tokens";
 
 export type SeveritySlot = "dot" | "chip" | "strip" | "text";
 
@@ -23,10 +24,15 @@ const CLASS_TABLE: Record<AlertRuleSeverity, Record<SeveritySlot, string>> = {
 	},
 };
 
-const VAR_TABLE: Record<AlertRuleSeverity, string> = {
-	critical: "var(--status-critical)",
-	warning: "var(--status-warning)",
-	info: "var(--status-info)",
+/**
+ * The design-system token each severity reads from. The annotation is what
+ * stops this drifting: a severity with no token of that name fails to compile,
+ * and the token's value lives once, in `@nocturne/ui/tokens`.
+ */
+const TOKEN_TABLE: Record<AlertRuleSeverity, StatusToken> = {
+	critical: "critical",
+	warning: "warning",
+	info: "info",
 };
 
 const LABEL_TABLE: Record<AlertRuleSeverity, string> = {
@@ -52,7 +58,7 @@ export function severity(
 
 /** Raw CSS variable reference. For chart fills and other non-class consumers. */
 export function severityVar(s: AlertRuleSeverity | string | undefined): string {
-	return isKnown(s) ? VAR_TABLE[s] : "var(--muted-foreground)";
+	return isKnown(s) ? statusVar(TOKEN_TABLE[s]) : "var(--muted-foreground)";
 }
 
 /** Human label. */

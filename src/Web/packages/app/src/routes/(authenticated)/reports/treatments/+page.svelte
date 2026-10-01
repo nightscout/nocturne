@@ -1,14 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { replaceState } from "$app/navigation";
+  import { Debounced } from "runed";
 
-  interface TreatmentSummary {
-    totals?: {
-      insulin?: { bolus?: number; basal?: number; scheduledBasal?: number; additionalBasal?: number };
-      food?: { carbs?: number };
-    };
-    treatmentCount?: number;
-  }
   import {
     TreatmentsDataTable,
     TreatmentEditDialog,
@@ -18,6 +12,9 @@
   import {
     mergeEntryRecords,
     countEntryRecords,
+    filterEntryRecords,
+    isEntryCategoryFilter,
+    TREATMENT_LOG_CATEGORY,
     type EntryCategoryId,
     type EntryRecord,
     ENTRY_CATEGORIES,
@@ -30,16 +27,14 @@
   import * as Card from "$lib/components/ui/card";
   import * as Alert from "$lib/components/ui/alert";
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import {
-    Calendar,
-    X,
-    Plus,
-    Syringe,
-    Utensils,
-    Droplet,
-    FileText,
-    Smartphone,
-  } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import X from "@lucide/svelte/icons/x";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Utensils from "@lucide/svelte/icons/utensils";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import FileText from "@lucide/svelte/icons/file-text";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
   import { bg, bgLabel, formatCarbDisplay, formatDateTimeCompact, formatInsulinDisplay, formatNumber, formatNumericDate } from "$lib/utils/formatting";
   import { toast } from "svelte-sonner";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -54,6 +49,7 @@
     createEntry,
   } from "./data.remote";
   import { toCreateEntryInput, toUpdateEntryInput } from "./entry-request";
+  import { getStats as getTreatmentLogStats } from "$lib/api/generated/treatmentLogs.generated.remote";
 
   // Get shared date params from context (set by reports layout)
   const reportsParams = requireDateParamsContext(7);
@@ -75,14 +71,6 @@
   );
   const dateInfo = $derived(reportsResource.date);
 
-  const treatmentSummary = $derived(
-    reportsResource.current?.treatmentSummary ??
-      ({
-        totals: { food: { carbs: 0 }, insulin: { bolus: 0, basal: 0 } },
-        treatmentCount: 0,
-      } as TreatmentSummary)
-  );
-
   const counts = $derived(countEntryRecords(allRows));
 
   // State
@@ -90,9 +78,33 @@
   const initialSearch = page.url.searchParams.get("search");
 
   let activeCategory = $state<EntryCategoryId | "all">(
-    (initialCategory as EntryCategoryId | "all") || "all"
+    isEntryCategoryFilter(initialCategory) ? initialCategory : "all"
   );
   let searchQuery = $state(initialSearch || "");
+  const debouncedSearch = new Debounced(() => searchQuery.trim(), 300);
+
+  // The stats endpoint takes the range getTreatmentsData resolved on the
+  // patient's calendar, so it waits for that range.
+  const pendingStats = { loading: true, error: null, current: undefined, refresh: () => {} };
+  const statsResource = contextResource(
+    () => {
+      const range = reportsResource.current?.dateRange;
+      if (!range) return pendingStats;
+      return getTreatmentLogStats({
+        from: range.from,
+        to: range.to,
+        dayCount: range.dayCount,
+        category: TREATMENT_LOG_CATEGORY[activeCategory],
+        search: debouncedSearch.current || undefined,
+      });
+    },
+    { errorTitle: "Error Loading Treatments" }
+  );
+
+  function refreshData() {
+    reportsResource.refresh();
+    statsResource.refresh();
+  }
 
   // Modal states
   let showDeleteConfirm = $state(false);
@@ -136,6 +148,7 @@
       // Stale / out-of-range link: drop the param so the URL isn't misleading.
       const url = new URL(page.url);
       url.searchParams.delete(EDIT_PARAM);
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL minus one param, already resolved
       replaceState(url, page.state);
     }
   });
@@ -152,57 +165,10 @@
   // Loading states
   let isLoading = $state(false);
 
-  // Filtered rows based on category and search
-  let filteredRows = $derived.by(() => {
-    let filtered = allRows;
+  const filteredRows = $derived(
+    filterEntryRecords(allRows, { category: activeCategory, search: searchQuery })
+  );
 
-    // Apply category filter
-    if (activeCategory !== "all") {
-      filtered = filtered.filter((r) => r.kind === activeCategory);
-    }
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter((r) => {
-        const searchable: string[] = [ENTRY_CATEGORIES[r.kind].name];
-
-        switch (r.kind) {
-          case "bolus":
-            if (r.data.bolusType) searchable.push(r.data.bolusType);
-            break;
-          case "carbs":
-            break;
-          case "bgCheck":
-            if (r.data.glucoseType) searchable.push(r.data.glucoseType);
-            break;
-          case "note":
-            if (r.data.text) searchable.push(r.data.text);
-            if (r.data.eventType) searchable.push(r.data.eventType);
-            break;
-          case "deviceEvent":
-            if (r.data.eventType) searchable.push(r.data.eventType);
-            if (r.data.notes) searchable.push(r.data.notes);
-            break;
-          case "basalInjection":
-            if (r.data.insulinContext?.insulinName)
-              searchable.push(r.data.insulinContext.insulinName);
-            if (r.data.notes) searchable.push(r.data.notes);
-            break;
-        }
-
-        if (r.data.dataSource) searchable.push(r.data.dataSource);
-        if (r.data.app) searchable.push(r.data.app);
-        if (r.data.device) searchable.push(r.data.device);
-
-        return searchable.join(" ").toLowerCase().includes(query);
-      });
-    }
-
-    return filtered;
-  });
-
-  let filteredCounts = $derived(countEntryRecords(filteredRows));
 
   // Handlers
   // Filters are reflected in the URL via SvelteKit shallow routing, so a filtered
@@ -212,6 +178,7 @@
     const url = new URL(page.url);
     if (value) url.searchParams.set(name, value);
     else url.searchParams.delete(name);
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with one param changed, already resolved
     replaceState(url, page.state);
   }
 
@@ -252,8 +219,21 @@
     const data = {
       mills: Date.now(),
       utcOffset: -new Date().getTimezoneOffset(),
-    } as EntryRecord["data"];
-    return { kind, data } as EntryRecord;
+    };
+    switch (kind) {
+      case "bolus":
+        return { kind, data };
+      case "carbs":
+        return { kind, data };
+      case "bgCheck":
+        return { kind, data };
+      case "note":
+        return { kind, data };
+      case "deviceEvent":
+        return { kind, data };
+      case "basalInjection":
+        return { kind, data };
+    }
   }
 
   function handleAddTreatment(kind: EntryCategoryId) {
@@ -287,7 +267,7 @@
       }
       editDialogOpen = false;
       editRecord = null;
-      reportsResource.refresh();
+      refreshData();
     } catch (error) {
       console.error("Save error:", error);
       toast.error(
@@ -356,9 +336,9 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <!-- Header -->
-  <div class="space-y-2">
+  <div class="space-y-2 print:hidden">
     <div
       class="flex items-center justify-center gap-2 text-sm text-muted-foreground"
     >
@@ -369,16 +349,25 @@
       <span class="text-muted-foreground/50">•</span>
       <span>{formatNumber(allRows.length)} records</span>
     </div>
-    <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
-      device events.<span class="print:hidden"> Use filters to find specific
-        records.</span>
+      device events. Use filters to find specific records.
     </p>
   </div>
+  {#if hasActiveFilters}
+    <p class="hidden text-sm print:block">
+      Showing {formatNumber(filteredRows.length)} of {formatNumber(allRows.length)} records
+      {#if activeCategory !== "all"}· {ENTRY_CATEGORIES[activeCategory].name}{/if}
+      {#if searchQuery.trim()}· matching "{searchQuery.trim()}"{/if}
+    </p>
+  {/if}
 
-  <!-- Summary Stats -->
-  <TreatmentStatsCard {treatmentSummary} counts={filteredCounts} dayCount={dateInfo.dayCount} />
+  {#if statsResource.current}
+    <TreatmentStatsCard
+      treatmentSummary={statsResource.current.treatmentSummary}
+      counts={statsResource.current.counts ?? {}}
+    />
+  {/if}
 
   <!-- Category Tabs — view toggle, print chaff -->
   <div class="print:hidden">
@@ -397,7 +386,7 @@
       >
         <div class="flex flex-1 flex-col gap-4 @lg:flex-row @lg:items-end">
           <div class="flex-1 max-w-sm">
-            <Label for="search" class="text-sm font-medium">Search</Label>
+            <Label for="search">Search</Label>
             <Input
               id="search"
               type="text"
@@ -426,10 +415,10 @@
               {/snippet}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
-              {#each Object.entries(ENTRY_CATEGORIES) as [id, cat]}
-                {@const Icon = addKindIcons[id as EntryCategoryId]}
+              {#each Object.values(ENTRY_CATEGORIES) as cat (cat.id)}
+                {@const Icon = addKindIcons[cat.id]}
                 <DropdownMenu.Item
-                  onclick={() => handleAddTreatment(id as EntryCategoryId)}
+                  onclick={() => handleAddTreatment(cat.id)}
                 >
                   <Icon class="mr-2 h-4 w-4 {cat.colorClass}" />
                   {cat.name}
@@ -450,26 +439,22 @@
           </span>
 
           {#if activeCategory !== "all"}
-            <Badge variant="secondary" class="gap-1">
+            <Badge
+              variant="secondary"
+              onremove={() => setCategory("all")}
+              removeLabel="Clear category filter"
+            >
               {ENTRY_CATEGORIES[activeCategory].name}
-              <button
-                onclick={() => setCategory("all")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
 
           {#if searchQuery.trim()}
-            <Badge variant="outline" class="gap-1">
+            <Badge
+              variant="outline"
+              onremove={() => setSearch("")}
+              removeLabel="Clear search"
+            >
               "{searchQuery}"
-              <button
-                onclick={() => setSearch("")}
-                class="ml-1 hover:text-foreground"
-              >
-                <X class="h-3 w-3" />
-              </button>
             </Badge>
           {/if}
         </div>
@@ -492,7 +477,7 @@
   </Card.Root>
 
   <!-- Footer -->
-  <div class="text-center text-xs text-muted-foreground">
+  <div class="text-center text-xs text-muted-foreground print:hidden">
     <p>
       Report generated from {formatNumber(allRows.length)} records between
       {formatNumericDate(dateInfo.from)} and {formatNumericDate(dateInfo.to)}
@@ -561,7 +546,7 @@
                 toast.success("Deleted successfully");
                 showDeleteConfirm = false;
                 rowToDelete = null;
-                reportsResource.refresh();
+                refreshData();
               } catch (error) {
                 console.error("Delete error:", error);
                 toast.error("Failed to delete");
@@ -569,7 +554,7 @@
                 isLoading = false;
               }
             })}
-          style="flex: 1;"
+          class="flex-1"
         >
           <input
             type="hidden"
@@ -618,7 +603,7 @@
           <Alert.Title>Selected Records</Alert.Title>
           <Alert.Description>
             <div class="max-h-48 space-y-2 overflow-y-auto text-sm">
-              {#each rowsToDelete.slice(0, 5) as row}
+              {#each rowsToDelete.slice(0, 5) as row (`${row.kind}-${row.data.id}`)}
                 <div
                   class="flex items-center justify-between border-b border-border py-1 last:border-b-0"
                 >
@@ -673,7 +658,7 @@
                 toast.success(result.message);
                 showBulkDeleteConfirm = false;
                 rowsToDelete = [];
-                reportsResource.refresh();
+                refreshData();
               } else {
                 toast.error(result.message);
               }

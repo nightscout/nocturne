@@ -59,7 +59,7 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
         }
 
         await using var cmd = connection.CreateCommand();
-        var clauses = new List<string>(5);
+        var clauses = new List<string>(6);
 
         if (ctx.TenantId != Guid.Empty)
         {
@@ -73,9 +73,9 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
             AddParameter(cmd, "subject_id", ctx.SubjectId.ToString());
         }
 
-        // app.is_share, app.visible_categories and app.share_full_history gate the
-        // public-share RLS policies. All are set on every open so a pooled connection never
-        // inherits a previous lessee's share state; for a share, a missing/empty
+        // app.is_share, app.visible_categories, app.share_full_history and app.history_clamped
+        // gate the share-category RLS policies. All are set on every open so a pooled connection
+        // never inherits a previous lessee's state; for a share, a missing/empty
         // visible_categories denies all categorized data and a missing share_full_history
         // clamps reads to the last 24 hours (fail-closed).
         clauses.Add("set_config('app.is_share', @is_share, false)");
@@ -86,6 +86,9 @@ public class TenantConnectionInterceptor : DbConnectionInterceptor
 
         clauses.Add("set_config('app.share_full_history', @share_full_history, false)");
         AddParameter(cmd, "share_full_history", ctx.ShareFullHistory ? "true" : "false");
+
+        clauses.Add("set_config('app.history_clamped', @history_clamped, false)");
+        AddParameter(cmd, "history_clamped", ctx.HistoryClamped ? "true" : "false");
 
         cmd.CommandText = "SELECT " + string.Join(", ", clauses);
         await cmd.ExecuteNonQueryAsync(cancellationToken);

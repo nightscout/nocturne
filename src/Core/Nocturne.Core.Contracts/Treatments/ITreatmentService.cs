@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.Core.Contracts.Treatments;
@@ -99,8 +100,11 @@ public interface ITreatmentService
     /// </summary>
     /// <param name="treatments">Treatments to create</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created treatments with assigned IDs</returns>
-    Task<IEnumerable<Treatment>> CreateTreatmentsAsync(
+    /// <returns>
+    /// Created treatments with assigned IDs, carrying how many of their records were not written
+    /// because the user had deleted them.
+    /// </returns>
+    Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments,
         CancellationToken cancellationToken = default
     );

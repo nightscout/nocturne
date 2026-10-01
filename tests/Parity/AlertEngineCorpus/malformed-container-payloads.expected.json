@@ -16,10 +16,6 @@
             {
               "leaf_id": 1,
               "value": false
-            },
-            {
-              "leaf_id": 2,
-              "value": false
             }
           ],
           "transition": "none",

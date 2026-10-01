@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.Connectors.Core.Utilities;
@@ -24,10 +25,15 @@ public static class JsonDefaults
     ///     worst offenders. Registering the converters here applies them to every type
     ///     these options touch (top-level and nested); property-level <c>[JsonConverter]</c>
     ///     attributes on the models still take precedence where present.
+    ///     A document's identity is its <c>_id</c>; see <see cref="UploaderIdJsonModifier"/>.
     /// </summary>
     public static readonly JsonSerializerOptions CaseInsensitive = new()
     {
         PropertyNameCaseInsensitive = true,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver
+        {
+            Modifiers = { UploaderIdJsonModifier.RemoveBaseIdProperty },
+        },
         Converters =
         {
             new FlexibleDoubleConverter(),

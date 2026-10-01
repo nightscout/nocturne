@@ -1,5 +1,6 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
   import { ModeWatcher } from "mode-watcher";
   import NavigationProgress from "$lib/components/ui/NavigationProgress.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
@@ -37,6 +38,12 @@
     layers: data.displayPreferences ?? [],
     language: data.displayLanguage,
   }));
+
+  // Children mount first, so this marks the whole page live. Server-rendered markup looks the
+  // same before it, but a click on it does nothing; a browser driver waits for this instead.
+  onMount(() => {
+    document.documentElement.dataset.hydrated = "";
+  });
 </script>
 
 <ModeWatcher />

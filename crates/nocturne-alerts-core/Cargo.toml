@@ -2,7 +2,7 @@
 name = "nocturne-alerts-core"
 version = "0.1.0"
 edition = "2024"
-description = "Pure-Rust port of the Nocturne leaf/node alert evaluation engine (behaviourally exact, corpus-pinned)"
+description = "Nocturne's alert condition engine: leaf and node evaluation, excursion tracking and replay, pinned by a golden corpus"
 license = "AGPL-3.0-only"
 publish = false
 
@@ -13,3 +13,6 @@ rust_decimal = { version = "1", features = ["serde"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 chrono-tz = "0.10"
 uuid = { version = "1", features = ["serde"] }
+
+[lints]
+workspace = true

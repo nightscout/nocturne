@@ -18,6 +18,8 @@
      * meal name is governed by `label` alone: pass null to withhold it.
      */
     showLabel?: boolean;
+    /** Laid out for paper: the labels print larger and in ink. */
+    printed?: boolean;
   }
 
   let {
@@ -28,6 +30,7 @@
     treatmentId,
     onMarkerClick,
     showLabel = true,
+    printed = false,
   }: Props = $props();
 </script>
 
@@ -44,7 +47,7 @@
       dy="-0.355em"
       text-anchor="middle"
       pointer-events="none"
-      class="text-[8px] fill-carbs font-medium"
+      class="{printed ? 'text-2xs fill-foreground' : 'text-3xs fill-entry-carbs'} font-medium"
     >
       {carbs}g
     </text>
@@ -61,7 +64,7 @@
       dy="0.35em"
       text-anchor="end"
       pointer-events="none"
-      class="text-[7px] fill-carbs font-medium opacity-80"
+      class="{printed ? 'text-2xs fill-foreground' : 'text-4xs fill-entry-carbs opacity-80'} font-medium"
     >
       {label}
     </text>

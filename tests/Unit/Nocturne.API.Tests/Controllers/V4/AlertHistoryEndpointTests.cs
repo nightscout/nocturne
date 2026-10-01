@@ -55,6 +55,7 @@ public class AlertHistoryEndpointTests
             _contextFactoryMock.Object,
             _acknowledgementServiceMock.Object,
             _deliveryServiceMock.Object,
+            Mock.Of<IAlertSnoozeService>(),
             _tenantAccessorMock.Object,
             _loggerMock.Object);
 

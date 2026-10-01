@@ -1,15 +1,6 @@
 // Store common type definitions for report components
 
-import type { Entry, Treatment } from '$lib/api';
-
-// Local type definitions
-export interface GlucoseAnalytics {
-  [key: string]: any;
-}
-
-export interface TreatmentSummary {
-  [key: string]: any;
-}
+import type { Entry, GlucoseAnalytics, Treatment, TreatmentSummary } from '$lib/api';
 
 export interface DayToDayDailyData {
   date: string; // YYYY-MM-DD format

@@ -111,11 +111,10 @@ public class NocturneRemoteBackgroundSyncAuthTests
 
     /// <summary>
     ///     A remote that accepts the connection and then says nothing reaches the connector as a
-    ///     client timeout, which is an <see cref="OperationCanceledException"/> — the one exception
-    ///     the shared run wrapper deliberately does not convert into a reported outcome, because a
-    ///     withdrawn run has none to report. Letting it escape the credential check leaves the
-    ///     tenant's connector badge on "syncing" until the page is reloaded, so the check ends the
-    ///     run with a result of its own instead.
+    ///     client timeout, which is an <see cref="OperationCanceledException"/>. The shared run
+    ///     wrapper reports any cancelled run with a terminal failure, but a source timeout is a
+    ///     real failure with a reason worth naming, so the credential check ends the run with a
+    ///     result of its own carrying "did not answer" instead.
     /// </summary>
     [Fact]
     public async Task RequestedSync_WhenTheRemoteStallsDuringTheCredentialCheck_FailsTheRunAndReportsATerminalMessage()
@@ -137,8 +136,8 @@ public class NocturneRemoteBackgroundSyncAuthTests
     }
 
     /// <summary>
-    ///     The distinction that must survive: a run the caller withdrew is genuinely cancelled, and
-    ///     owes no terminal message — unlike every other ending, which does.
+    ///     A withdrawn run still releases the tenant's in-progress indicator: the cancellation
+    ///     propagates, and the wrapper reports one terminal failure with no exception text.
     /// </summary>
     [Fact]
     public async Task RequestedSync_WhenTheCallerWithdrawsDuringTheCredentialCheck_PropagatesTheCancellation()
@@ -151,7 +150,9 @@ public class NocturneRemoteBackgroundSyncAuthTests
             GlucoseSince(), RemoteConfig, withdrawal.Token, Recording(reported));
 
         await run.Should().ThrowAsync<OperationCanceledException>();
-        reported.Should().NotContain(e => e.Phase == SyncPhase.Failed || e.Phase == SyncPhase.Completed);
+        reported.Where(e => e.Phase != SyncPhase.Syncing)
+            .Should().ContainSingle().Which.Phase.Should().Be(SyncPhase.Failed);
+        reported.Single(e => e.Phase == SyncPhase.Failed).ErrorMessage.Should().BeNull();
     }
 
     private static NocturneRemoteConnectorConfiguration RemoteConfig => new()

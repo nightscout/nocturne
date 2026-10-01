@@ -18,7 +18,7 @@ public static class TenantCommandExtensions
 
     public static IResourceBuilder<PostgresServerResource> WithListTenantsCommand(
         this IResourceBuilder<PostgresServerResource> postgres,
-        IResourceBuilder<ProjectResource> api)
+        IResourceBuilder<IResourceWithEndpoints> api)
     {
         postgres.WithCommand(
             name: "list-tenants",
@@ -36,7 +36,7 @@ public static class TenantCommandExtensions
 
     public static IResourceBuilder<PostgresServerResource> WithDeleteTenantCommand(
         this IResourceBuilder<PostgresServerResource> postgres,
-        IResourceBuilder<ProjectResource> api)
+        IResourceBuilder<IResourceWithEndpoints> api)
     {
         postgres.WithCommand(
             name: "delete-tenant",
@@ -54,7 +54,7 @@ public static class TenantCommandExtensions
 
     public static IResourceBuilder<PostgresServerResource> WithCreateTenantCommand(
         this IResourceBuilder<PostgresServerResource> postgres,
-        IResourceBuilder<ProjectResource> api)
+        IResourceBuilder<IResourceWithEndpoints> api)
     {
         postgres.WithCommand(
             name: "create-tenant",
@@ -72,7 +72,7 @@ public static class TenantCommandExtensions
 
     public static IResourceBuilder<PostgresServerResource> WithSeedTenantCommand(
         this IResourceBuilder<PostgresServerResource> postgres,
-        IResourceBuilder<ProjectResource> api)
+        IResourceBuilder<IResourceWithEndpoints> api)
     {
         postgres.WithCommand(
             name: "seed-tenant",
@@ -93,7 +93,7 @@ public static class TenantCommandExtensions
     // -----------------------------------------------------------------
 
     private static async Task<ExecuteCommandResult> OnListTenantsAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -178,7 +178,7 @@ public static class TenantCommandExtensions
     // -----------------------------------------------------------------
 
     private static async Task<ExecuteCommandResult> OnDeleteTenantAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -286,7 +286,7 @@ public static class TenantCommandExtensions
     // -----------------------------------------------------------------
 
     private static async Task<ExecuteCommandResult> OnCreateTenantAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -404,7 +404,7 @@ public static class TenantCommandExtensions
     // -----------------------------------------------------------------
 
     private static async Task<ExecuteCommandResult> OnSeedTenantAsync(
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         ExecuteCommandContext context)
     {
         var logger = context.ServiceProvider.GetRequiredService<ILogger<PostgresServerResource>>();
@@ -417,14 +417,14 @@ public static class TenantCommandExtensions
                 Name = "Slug",
                 InputType = InputType.Text,
                 Required = true,
-                Value = "test123",
+                Value = "sleepy",
             },
             new()
             {
                 Name = "Display Name",
                 InputType = InputType.Text,
                 Required = true,
-                Value = "Test",
+                Value = "Sleepy",
             },
             new()
             {

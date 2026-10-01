@@ -195,7 +195,7 @@
         <Tooltip.Item
           label="IOB"
           value={activeIob.value}
-          format={"decimal"}
+          format="decimal"
           color="var(--color-iob-basal)"
         />
       {/if}
@@ -223,14 +223,14 @@
           <Tooltip.Item
             label={basalLabel}
             value={activeBasal.rate}
-            format={"decimal"}
+            format="decimal"
             color={isAdjusted ||
             activeBasal.origin === BasalDeliveryOrigin.Suspended
               ? "var(--color-insulin-temp-basal)"
               : "var(--color-insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-status-warning font-bold"
                 : ""
             )}
           />
@@ -238,7 +238,7 @@
             <Tooltip.Item
               label="Scheduled"
               value={activeBasal.scheduledRate}
-              format={"decimal"}
+              format="decimal"
               color="var(--color-muted-foreground)"
             />
           {/if}
@@ -258,14 +258,14 @@
           <Tooltip.Item
             label={basalLabel}
             value={activeBasalDelivery.rate ?? 0}
-            format={"decimal"}
+            format="decimal"
             color={isAdjusted ||
             activeBasalDelivery.origin === BasalDeliveryOrigin.Suspended
               ? "var(--color-insulin-temp-basal)"
               : "var(--color-insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-status-warning font-bold"
                 : ""
             )}
           />
@@ -273,7 +273,7 @@
           <Tooltip.Item
             label="Temp Basal"
             value={activeTempBasal.rate}
-            format={"decimal"}
+            format="decimal"
             color="var(--color-insulin-temp-basal)"
           />
           {#if activeTempBasal.percent != null}

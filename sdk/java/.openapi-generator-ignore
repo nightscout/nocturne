@@ -3,3 +3,6 @@
 # API files with multipart upload bugs (OpenAPI Generator native library issue)
 **/AlertCustomSoundsApi.java
 **/AlertCustomSoundsApiTest.java
+# Apache Oltu (retired to the Attic) backs these; see sdk/java/templates/README.md
+**/auth/RetryingOAuth.java
+**/auth/OAuthOkHttpClient.java

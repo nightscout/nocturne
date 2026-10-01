@@ -1,35 +1,45 @@
-export interface JsonSchemaProperty {
-  type: string;
-  title?: string;
-  description?: string;
-  default?: unknown;
-  enum?: string[];
-  minimum?: number;
-  maximum?: number;
-  minLength?: number;
-  maxLength?: number;
-  pattern?: string;
-  format?: string;
-  /** Environment variable name for this property (x-envVar extension) */
-  "x-envVar"?: string;
-  /** Category for UI grouping (x-category extension) */
-  "x-category"?: string;
-  /** Whether this property is hidden from the UI (x-hidden extension) */
-  "x-hidden"?: boolean;
-  /** Whether this property holds a secret (x-secret extension) */
-  "x-secret"?: boolean;
-}
+import { z } from "zod";
+import { isRecord } from "./type-guards";
 
-export interface JsonSchema {
-  $schema?: string;
-  type: string;
-  title?: string;
-  description?: string;
-  properties: Record<string, JsonSchemaProperty>;
-  required?: string[];
-  categories?: Record<string, string[]>;
-  secrets?: string[];
-}
+/** Malformed optional keywords are dropped rather than failing the whole schema. */
+const optional = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined);
+
+const JsonSchemaPropertySchema = z.looseObject({
+  type: z.string(),
+  title: optional(z.string()),
+  description: optional(z.string()),
+  default: z.unknown().optional(),
+  enum: optional(z.array(z.string())),
+  minimum: optional(z.number()),
+  maximum: optional(z.number()),
+  minLength: optional(z.number()),
+  maxLength: optional(z.number()),
+  pattern: optional(z.string()),
+  format: optional(z.string()),
+  /** Environment variable name for this property (x-envVar extension) */
+  "x-envVar": optional(z.string()),
+  /** Category for UI grouping (x-category extension) */
+  "x-category": optional(z.string()),
+  /** Whether this property is hidden from the UI (x-hidden extension) */
+  "x-hidden": optional(z.boolean()),
+  /** Whether this property holds a secret (x-secret extension) */
+  "x-secret": optional(z.boolean()),
+});
+
+export type JsonSchemaProperty = z.infer<typeof JsonSchemaPropertySchema>;
+
+const JsonSchemaSchema = z.looseObject({
+  $schema: optional(z.string()),
+  type: z.string().catch("object"),
+  title: optional(z.string()),
+  description: optional(z.string()),
+  properties: z.record(z.string(), JsonSchemaPropertySchema),
+  required: optional(z.array(z.string())),
+  categories: optional(z.record(z.string(), z.array(z.string()))),
+  secrets: optional(z.array(z.string())),
+});
+
+export type JsonSchema = z.infer<typeof JsonSchemaSchema>;
 
 /**
  * The API returns `JsonDocument` for schemas. NSwag sometimes represents this as
@@ -42,20 +52,11 @@ export function normalizeConnectorJsonSchema(
   result: unknown,
   connectorName: string,
 ): JsonSchema {
-  const schema = (result &&
-    typeof result === "object" &&
-    "rootElement" in (result as any) &&
-    (result as any).rootElement != null
-    ? (result as any).rootElement
-    : result) as Partial<JsonSchema> | null;
+  const candidate =
+    isRecord(result) && result.rootElement != null ? result.rootElement : result;
+  const parsed = JsonSchemaSchema.safeParse(candidate);
 
-  if (
-    !schema ||
-    typeof schema !== "object" ||
-    !schema.properties ||
-    typeof schema.properties !== "object" ||
-    Object.keys(schema.properties).length === 0
-  ) {
+  if (!parsed.success || Object.keys(parsed.data.properties).length === 0) {
     return {
       type: "object",
       title: connectorName,
@@ -68,6 +69,5 @@ export function normalizeConnectorJsonSchema(
     };
   }
 
-  return schema as JsonSchema;
+  return parsed.data;
 }
-

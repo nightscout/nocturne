@@ -19,22 +19,22 @@
     ReservoirReportDialog,
     type TrackerNotification,
   } from "$lib/components/trackers";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
   import ActiveTrackersTab from "$lib/components/trackers/ActiveTrackersTab.svelte";
   import TrackerHistoryTab from "$lib/components/trackers/TrackerHistoryTab.svelte";
   import TrackerDefinitionsTab from "$lib/components/trackers/TrackerDefinitionsTab.svelte";
   import TrackerPresetsTab from "$lib/components/trackers/TrackerPresetsTab.svelte";
   import TrackerEditorDialog from "$lib/components/trackers/TrackerEditorDialog.svelte";
-  import {
-    Timer,
-    AlertTriangle,
-    History,
-    Settings2,
-    Bookmark,
-    Loader2,
-    Activity,
-  } from "lucide-svelte";
+  import Timer from "@lucide/svelte/icons/timer";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import History from "@lucide/svelte/icons/history";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Bookmark from "@lucide/svelte/icons/bookmark";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Activity from "@lucide/svelte/icons/activity";
   import { tick } from "svelte";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -45,6 +45,7 @@
     DashboardVisibility,
     TrackerVisibility,
     TrackerMode,
+    ReservoirReportKind,
     type TrackerDefinitionDto,
     type TrackerInstanceDto,
     type TrackerPresetDto,
@@ -117,10 +118,12 @@
   let formDashboardVisibility = $state<DashboardVisibility>(
     DashboardVisibility.Always
   );
-  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Public);
+  let formVisibility = $state<TrackerVisibility>(TrackerVisibility.Private);
   let formMode = $state<TrackerMode>(TrackerMode.Duration);
   let formStartEventType = $state<string | undefined>(undefined);
   let formCompletionEventType = $state<string | undefined>(undefined);
+  let formTriggerEventTypes = $state<string[]>([]);
+  let formTriggerNotesContains = $state("");
 
   // Helper to convert API format to notifications array
   function definitionToNotifications(
@@ -230,49 +233,21 @@
   }
 
   // Format date
-  function formatDate(dateStr: any): string {
+  function formatDate(dateStr: Date | string | undefined): string {
     if (!dateStr) return "";
     return formatDayTime(dateStr);
   }
 
   // Get time remaining for instance
   function getTimeRemaining(instance: TrackerInstanceDto): number | undefined {
-    const def = definitions.find((d) => d.id === instance.definitionId);
-    if (!def || !def.lifespanHours || instance.ageHours === undefined)
-      return undefined;
-    return def.lifespanHours - instance.ageHours;
+    if (!instance.expectedEndAt) return undefined;
+    return (Date.parse(instance.expectedEndAt) - Date.now()) / (60 * 60 * 1000);
   }
 
-  // Get notification level for instance
   function getInstanceLevel(
     instance: TrackerInstanceDto
   ): NotificationUrgency | null {
-    const def = definitions.find((d) => d.id === instance.definitionId);
-    if (!def || !instance.ageHours || !def.notificationThresholds) return null;
-
-    // Find the highest urgency threshold that the age exceeds
-    let highestUrgency: NotificationUrgency | null = null;
-    let highestLevel = -1;
-
-    const urgencyOrder: Record<NotificationUrgency, number> = {
-      [NotificationUrgency.Info]: 0,
-      [NotificationUrgency.Warn]: 1,
-      [NotificationUrgency.Hazard]: 2,
-      [NotificationUrgency.Urgent]: 3,
-    };
-
-    for (const threshold of def.notificationThresholds) {
-      if (threshold.hours && instance.ageHours >= threshold.hours) {
-        const level =
-          urgencyOrder[threshold.urgency ?? NotificationUrgency.Info];
-        if (level > highestLevel) {
-          highestLevel = level;
-          highestUrgency = threshold.urgency ?? NotificationUrgency.Info;
-        }
-      }
-    }
-
-    return highestUrgency;
+    return reachedUrgency(instance, Date.now());
   }
 
   // Level styling
@@ -295,7 +270,7 @@
   function requireAuth(): boolean {
     if (!isAuthenticated) {
       const returnUrl = encodeURIComponent(window.location.pathname);
-      goto(`/auth/login?returnUrl=${returnUrl}`);
+      goto(resolve(`/auth/login?returnUrl=${returnUrl}`));
       return false;
     }
     return true;
@@ -317,10 +292,12 @@
     formNotifications = [];
     formIsFavorite = false;
     formDashboardVisibility = DashboardVisibility.Always;
-    formVisibility = TrackerVisibility.Public;
+    formVisibility = TrackerVisibility.Private;
     formMode = TrackerMode.Duration;
     formStartEventType = undefined;
     formCompletionEventType = undefined;
+    formTriggerEventTypes = [];
+    formTriggerNotesContains = "";
     isDefinitionDialogOpen = true;
   }
 
@@ -341,10 +318,12 @@
     formIsFavorite = def.isFavorite ?? false;
     formDashboardVisibility =
       def.dashboardVisibility ?? DashboardVisibility.Always;
-    formVisibility = def.visibility ?? TrackerVisibility.Public;
+    formVisibility = def.visibility ?? TrackerVisibility.Private;
     formMode = def.mode ?? TrackerMode.Duration;
     formStartEventType = def.startEventType ?? undefined;
     formCompletionEventType = def.completionEventType ?? undefined;
+    formTriggerEventTypes = [...(def.triggerEventTypes ?? [])];
+    formTriggerNotesContains = def.triggerNotesContains ?? "";
     isDefinitionDialogOpen = true;
   }
 
@@ -482,7 +461,7 @@
       </div>
     {/snippet}
     {#snippet failed(error, reset)}
-      <Card class="border-destructive">
+      <Card variant="destructive">
         <CardContent class="py-6 text-center">
           <AlertTriangle class="h-8 w-8 text-destructive mx-auto mb-2" />
           <p class="text-destructive">
@@ -493,31 +472,31 @@
       </Card>
     {/snippet}
 
-    {@const _await = await Promise.all([
+    {void (await Promise.all([
       definitionsQuery,
       activeInstancesQuery,
       historyInstancesQuery,
       presetsQuery,
-    ])}
+    ]))}
 
     <Tabs.Root bind:value={activeTab} class="space-y-6">
       <Tabs.List class="grid w-full grid-cols-4">
-        <Tabs.Trigger value="active" class="gap-2">
+        <Tabs.Trigger value="active">
           <Activity class="h-4 w-4" />
           Active
           {#if activeCount > 0}
             <Badge variant="secondary" class="ml-1">{activeCount}</Badge>
           {/if}
         </Tabs.Trigger>
-        <Tabs.Trigger value="history" class="gap-2">
+        <Tabs.Trigger value="history">
           <History class="h-4 w-4" />
           History
         </Tabs.Trigger>
-        <Tabs.Trigger value="definitions" class="gap-2">
+        <Tabs.Trigger value="definitions">
           <Settings2 class="h-4 w-4" />
           Definitions
         </Tabs.Trigger>
-        <Tabs.Trigger value="presets" class="gap-2">
+        <Tabs.Trigger value="presets">
           <Bookmark class="h-4 w-4" />
           Presets
         </Tabs.Trigger>
@@ -591,6 +570,8 @@
   bind:formMode
   bind:formStartEventType
   bind:formCompletionEventType
+  bind:formTriggerEventTypes
+  bind:formTriggerNotesContains
   {categoryLabels}
   {loadData}
 />
@@ -627,7 +608,7 @@
 />
 
 <!-- Reservoir Report Dialog -->
-<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind="Fill" />
+<ReservoirReportDialog bind:open={isReservoirReportDialogOpen} defaultKind={ReservoirReportKind.Fill} />
 
 <!-- Delete Definition Confirmation Dialog -->
 <ConfirmDialog
@@ -688,7 +669,7 @@
               "Select a definition"}
           </Select.Trigger>
           <Select.Content>
-            {#each definitions as def}
+            {#each definitions as def (def.id)}
               <Select.Item value={def.id ?? ""} label={def.name ?? ""} />
             {/each}
           </Select.Content>

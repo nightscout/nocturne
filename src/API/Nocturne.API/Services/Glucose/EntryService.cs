@@ -3,7 +3,9 @@ using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Entries;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.API.Services.Glucose;
 
@@ -107,21 +109,18 @@ public class EntryService : IEntryService
     public async Task<Entry?> CheckForDuplicateEntryAsync(
         string? device,
         string type,
-        double? sgv,
         long mills,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default)
     {
-        return await _store.CheckDuplicateAsync(device, type, sgv, mills, windowMinutes, cancellationToken);
+        return await _store.CheckDuplicateAsync(device, type, mills, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry?>> CheckForDuplicateEntriesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default)
     {
-        return await _store.CheckDuplicatesAsync(probes, windowMinutes, cancellationToken);
+        return await _store.CheckDuplicatesAsync(probes, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -131,6 +130,13 @@ public class EntryService : IEntryService
             () => _store.GetCurrentAsync(cancellationToken),
             cancellationToken);
     }
+
+    /// <inheritdoc />
+    public Task<ModifiedSincePage<Entry>> GetEntriesModifiedSinceAsync(
+        long cursorMills,
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        _store.GetModifiedSinceAsync(cursorMills, limit, cancellationToken);
 
     /// <inheritdoc />
     public async Task<IEnumerable<Entry>> GetEntriesWithAdvancedFilterAsync(
@@ -179,7 +185,7 @@ public class EntryService : IEntryService
     /// real-time <c>entries</c> broadcast per-type-batch, so this service no longer emits events directly.
     /// Entries with unrecognised types are silently filtered out.
     /// </remarks>
-    public async Task<IEnumerable<Entry>> CreateEntriesAsync(
+    public async Task<BulkWrite<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
         WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default)
@@ -191,9 +197,9 @@ public class EntryService : IEntryService
         if (validEntries.Count == 0)
             return [];
 
-        await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
+        var result = await _decomposer.DecomposeBatchAsync(validEntries, origin, cancellationToken);
 
-        return validEntries;
+        return new BulkWrite<Entry>(validEntries, result.SkippedDeleted);
     }
 
     /// <inheritdoc />

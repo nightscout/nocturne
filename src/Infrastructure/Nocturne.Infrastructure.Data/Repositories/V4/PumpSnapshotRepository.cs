@@ -31,7 +31,7 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
         IAuditContext auditContext,
         ILogger<PumpSnapshotRepository> logger,
         IV4RecordBroadcaster<PumpSnapshot>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 
@@ -67,6 +67,18 @@ public class PumpSnapshotRepository : SyncUpsertRepositoryBase<PumpSnapshot, Pum
             .OrderByDescending(e => e.Timestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : PumpSnapshotMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CountUncorrelatedAsync(
+        DateTime? from, DateTime? to, string? device, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var aps = ApsSnapshotRepository.InWindow(ctx.ApsSnapshots.AsNoTracking(), from, to, device);
+
+        return await InWindow(ctx.PumpSnapshots.AsNoTracking(), from, to, device)
+            .Where(p => p.CorrelationId == null || !aps.Any(a => a.CorrelationId == p.CorrelationId))
+            .CountAsync(ct);
     }
 
     /// <summary>

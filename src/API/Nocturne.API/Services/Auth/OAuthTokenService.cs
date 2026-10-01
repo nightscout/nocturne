@@ -158,6 +158,7 @@ public class OAuthTokenService : IOAuthTokenService
             authCode.ClientEntityId,
             authCode.SubjectId,
             authCode.Scopes,
+            limitTo24Hours: authCode.LimitTo24Hours,
             ct: ct
         );
 
@@ -262,7 +263,6 @@ public class OAuthTokenService : IOAuthTokenService
             TenantId = oauthToken.Grant.TenantId,
             GrantId = oauthToken.GrantId,
             TokenHash = newTokenHash,
-            IssuedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(90),
         };
 
@@ -299,6 +299,7 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.Client?.ClientId,
+            limitTo24Hours: grant.LimitTo24Hours,
             tenantId: grant.TenantId,
             grantId: grant.Id
         );
@@ -482,6 +483,7 @@ public class OAuthTokenService : IOAuthTokenService
             LastUsedIp = grantEntity.LastUsedIp,
             LastUsedUserAgent = grantEntity.LastUsedUserAgent,
             IsRevoked = grantEntity.IsRevoked,
+            LimitTo24Hours = grantEntity.LimitTo24Hours,
         };
 
         var result = await MintTokenPairAsync(grantInfo, ct);
@@ -526,6 +528,7 @@ public class OAuthTokenService : IOAuthTokenService
             roles,
             grant.Scopes,
             grant.ClientId,
+            limitTo24Hours: grant.LimitTo24Hours,
             tenantId: grant.TenantId,
             grantId: grant.Id
         );
@@ -539,7 +542,6 @@ public class OAuthTokenService : IOAuthTokenService
             TenantId = grant.TenantId,
             GrantId = grant.Id,
             TokenHash = tokenHash,
-            IssuedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(90),
         };
 

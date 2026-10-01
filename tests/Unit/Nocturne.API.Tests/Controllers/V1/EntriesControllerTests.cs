@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +31,9 @@ public class EntriesControllerTests
     public EntriesControllerTests()
     {
         _mockEntryService = new Mock<IEntryService>();
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _mockDocumentProcessingService = new Mock<IDocumentProcessingService>();
         _mockProcessingStatusService = new Mock<IProcessingStatusService>();
         _mockAlertEvaluator = new Mock<ICanonicalAlertEvaluator>();
@@ -83,15 +87,15 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
-            .ReturnsAsync(new[] { expectedProcessedEntry });
+            .ReturnsAsync([expectedProcessedEntry]);
 
         // Act
         var result = await _controller.CreateEntries(rawEntry);
 
         // Assert
         result.Should().NotBeNull();
-        var statusCodeResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        statusCodeResult.StatusCode.Should().Be(201);
+        var statusCodeResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        statusCodeResult.StatusCode.Should().Be(200);
 
         // Verify ProcessDocuments was called with validEntries (which have IDs set)
         processedInput.Should().NotBeNull();
@@ -136,11 +140,10 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "1", Sgv = 120 },
                     new Entry { Id = "2", Sgv = 150 },
-                }
+                ]
             );
 
         // Act
@@ -193,11 +196,10 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "1", Sgv = 120 },
                     new Entry { Id = "2", Type = "cal" },
-                }
+                ]
             );
 
         // Act
@@ -241,10 +243,9 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "created-id", Sgv = 120 },
-                }
+                ]
             );
 
         // Act
@@ -285,10 +286,9 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .ReturnsAsync(
-                new[]
-                {
+                [
                     new Entry { Id = "created-id", Sgv = 120 },
-                }
+                ]
             );
 
         // Act
@@ -333,7 +333,7 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
-            .ReturnsAsync(new[] { new Entry { Id = "created-id", Sgv = 120 } });
+            .ReturnsAsync([new Entry { Id = "created-id", Sgv = 120 }]);
 
         // Act
         await _controller.CreateEntriesAsync(entryWithDate);
@@ -369,14 +369,14 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync(Array.Empty<Entry>());
+            .ReturnsAsync([]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -459,14 +459,14 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -514,14 +514,14 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -569,7 +569,7 @@ public class EntriesControllerTests
                 x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>())
             )
             .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         // Act
         var result = await _controller.CreateEntries(submitted);
@@ -577,7 +577,7 @@ public class EntriesControllerTests
         // Assert
         var body = result
             .Result.Should()
-            .BeOfType<ObjectResult>()
+            .BeOfType<OkObjectResult>()
             .Subject.Value.Should()
             .BeAssignableTo<IEnumerable<object>>()
             .Subject.Cast<EntryV1Response>()
@@ -593,12 +593,12 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task CreateEntries_EveryEntryRefused_StillReturnsBadRequest()
+    public async Task CreateEntries_EveryEntryRefused_EchoesEveryEntryWithoutWriting()
     {
-        // Echoing refusals does not turn a wholly unusable batch into a success.
         var result = await _controller.CreateEntries(new[] { new Entry(), new Entry() });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().HaveCount(2);
         _mockEntryService.Verify(
             x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never
@@ -641,9 +641,25 @@ public class EntriesControllerTests
         // Derived fields are now filled in before the refusal check, and NormalizeEntry defaults an
         // empty type to "sgv". That must not rescue an entry: HasMeaningfulData accepts a type only
         // when it is neither empty nor "sgv", so both forms have to land the same way.
-        var result = await _controller.CreateEntries(new[] { new Entry { Type = "" } });
+        await _controller.CreateEntries(new[] { new Entry { Type = "" } });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task CreateEntries_EmptyArray_AnswersOkWithEmptyArray()
+    {
+        var result = await _controller.CreateEntries(Array.Empty<Entry>());
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().BeEmpty();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
     }
 
     /// <summary>
@@ -733,11 +749,37 @@ public class EntriesControllerTests
             .ToArray());
         _mockEntryService
             .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => entries.ToList());
+            .ReturnsAsync((IEnumerable<Entry> entries, WriteOrigin _, CancellationToken _) => [.. entries]);
 
         await _controller.CreateEntries(submitted);
 
         VerifyInformationLogged("re-sending stored readings", Times.Never());
+    }
+
+    [Fact]
+    public async Task CreateEntries_JsonBatchWithStringTrend_ReadsEveryTrendAsANumber()
+    {
+        var body = JsonDocument.Parse("""
+            [
+                {"type": "sgv", "sgv": 120, "trend": "Flat", "direction": "NONE", "date": 1760000000000},
+                {"type": "sgv", "sgv": 125, "trend": 3, "direction": "FortyFiveUp", "date": 1760000300000}
+            ]
+            """).RootElement;
+
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+        List<Entry>? createInput = null;
+        _mockEntryService
+            .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<Entry>, WriteOrigin, CancellationToken>((entries, _, _) => createInput = entries.ToList())
+            .ReturnsAsync([]);
+
+        await _controller.CreateEntries(body);
+
+        createInput.Should().NotBeNull();
+        createInput!.Select(e => e.Trend).Should().Equal(4, 3);
     }
 
     /// <summary>
@@ -758,7 +800,7 @@ public class EntriesControllerTests
             .ToArray());
         _mockEntryService
             .Setup(x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Array.Empty<Entry>());
+            .ReturnsAsync([]);
 
         return submitted;
     }
@@ -772,6 +814,25 @@ public class EntriesControllerTests
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             times);
+
+    [Theory]
+    [InlineData("""{"_id":"6ab400000000000000000001","id":"B5E5A1C2-0000-4000-8000-000000000001","sgv":120,"date":1700000000000}""")]
+    [InlineData("""{"id":"B5E5A1C2-0000-4000-8000-000000000001","_id":"6ab400000000000000000001","sgv":120,"date":1700000000000}""")]
+    public async Task CreateEntries_UploaderLowercaseId_DoesNotReplaceObjectId(string body)
+    {
+        List<Entry>? processedInput = null;
+        _mockDocumentProcessingService
+            .Setup(x => x.ProcessDocuments(It.IsAny<IEnumerable<Entry>>()))
+            .Callback<IEnumerable<Entry>>(entries => processedInput = entries.ToList())
+            .Returns<IEnumerable<Entry>>(entries => entries);
+        StubNothingStored();
+
+        await _controller.CreateEntries(JsonDocument.Parse(body).RootElement.Clone());
+
+        var entry = processedInput.Should().ContainSingle().Subject;
+        entry.Id.Should().Be("6ab400000000000000000001");
+        entry.AdditionalProperties!["id"].ToString().Should().Be("B5E5A1C2-0000-4000-8000-000000000001");
+    }
 
     private void StubNothingStored() => StubStoredAt();
 
@@ -787,12 +848,11 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CheckForDuplicateEntriesAsync(
                     It.IsAny<IReadOnlyList<EntryDuplicateProbe>>(),
-                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(
-                (IReadOnlyList<EntryDuplicateProbe> probes, int _, CancellationToken _) =>
+                (IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken _) =>
                     probes
                         .Select(probe => byMills.GetValueOrDefault(probe.Mills))
                         .ToArray()

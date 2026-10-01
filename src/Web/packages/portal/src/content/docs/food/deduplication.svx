@@ -63,10 +63,12 @@ readings, notes or state spans, where repeating the same value inside ten
 minutes is ordinary rather than suspicious.
 
 <Callout type="info" title="What this means in practice">
+
   Two apps reporting your 45 g lunch, minutes apart, collapse into one meal. Two
   helpings of 45 g from the same app, half an hour apart, stay two meals — the
   drift rule refuses a second record from an app already in the group, so
   Nocturne never turns your afternoon snack into a copy of your lunch.
+
 </Callout>
 
 ## When it runs
@@ -92,10 +94,12 @@ second data source that overlaps with a first, or any time you are looking at
 doubled history from before both were set up.
 
 <Callout type="tip" title="After adding an overlapping data source">
+
   Turning on a second connector that covers ground the first already covered is
   the classic way to acquire duplicates in bulk. Add it, let the first sync
   finish, then run the full pass once. Ongoing duplicates from that point on are
   handled as records arrive.
+
 </Callout>
 
 ## What it will not do

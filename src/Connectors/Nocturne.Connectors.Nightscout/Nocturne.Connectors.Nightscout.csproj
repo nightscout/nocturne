@@ -6,6 +6,9 @@
         <Description>Nightscout data source connector service</Description>
     </PropertyGroup>
     <ItemGroup>
+        <InternalsVisibleTo Include="Nocturne.Connectors.Nightscout.Tests"/>
+    </ItemGroup>
+    <ItemGroup>
         <ProjectReference Include="..\..\Core\Nocturne.Core.Models\Nocturne.Core.Models.csproj"/>
         <ProjectReference Include="..\Nocturne.Connectors.Core\Nocturne.Connectors.Core.csproj"/>
     </ItemGroup>

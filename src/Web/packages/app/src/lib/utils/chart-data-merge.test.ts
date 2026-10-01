@@ -1,12 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { mergeChartData } from "./chart-data-merge";
 import type { TransformedChartData } from "./chart-data-transform";
+import { resolveChartThresholds } from "$lib/constants/glucose-thresholds";
+
+function thresholds(
+  overrides: Partial<TransformedChartData["thresholds"]> = {}
+): TransformedChartData["thresholds"] {
+  return { ...resolveChartThresholds(), ...overrides };
+}
 
 // The dashboard loads the most recent 6 hours blocking and streams hours 6→48
 // in a second payload, then merges the two. Anything the merge forgets is
 // silently truncated to the 6-hour window, so these tests assert on the
 // collections rather than on the merge helpers.
-function chartData(overrides: Partial<TransformedChartData> = {}): TransformedChartData {
+function chartData(
+  overrides: Partial<TransformedChartData> = {}
+): TransformedChartData {
   return {
     iobSeries: [],
     cobSeries: [],
@@ -28,12 +37,12 @@ function chartData(overrides: Partial<TransformedChartData> = {}): TransformedCh
     tempBasalSpans: [],
     basalDeliverySpans: [],
     defaultBasalRate: 1,
-    thresholds: { glucoseYMax: 300 } as TransformedChartData["thresholds"],
+    thresholds: thresholds(),
     maxIob: 0,
     maxCob: 0,
     maxBasalRate: 0,
     ...overrides,
-  } as TransformedChartData;
+  };
 }
 
 function injection(id: string, time: string, units: number) {
@@ -68,11 +77,18 @@ describe("mergeChartData basal injections", () => {
 
   it("keeps injections from both halves", () => {
     const merged = mergeChartData(
-      chartData({ basalInjectionMarkers: [injection("late", "2026-08-29T21:00:00Z", 4)] }),
-      chartData({ basalInjectionMarkers: [injection("early", "2026-08-29T00:16:00Z", 22)] })
+      chartData({
+        basalInjectionMarkers: [injection("late", "2026-08-29T21:00:00Z", 4)],
+      }),
+      chartData({
+        basalInjectionMarkers: [injection("early", "2026-08-29T00:16:00Z", 22)],
+      })
     );
 
-    expect(merged.basalInjectionMarkers.map((m) => m.id)).toEqual(["early", "late"]);
+    expect(merged.basalInjectionMarkers.map((m) => m.id)).toEqual([
+      "early",
+      "late",
+    ]);
   });
 });
 
@@ -97,8 +113,8 @@ describe("mergeChartData glucose axis", () => {
   // chart's yDomain clips above it, which would drop the excursion entirely.
   it("takes the taller glucose axis from either half", () => {
     const merged = mergeChartData(
-      chartData({ thresholds: { glucoseYMax: 300 } as never }),
-      chartData({ thresholds: { glucoseYMax: 370 } as never })
+      chartData({ thresholds: thresholds({ glucoseYMax: 300 }) }),
+      chartData({ thresholds: thresholds({ glucoseYMax: 370 }) })
     );
 
     expect(merged.thresholds.glucoseYMax).toBe(370);
@@ -106,8 +122,8 @@ describe("mergeChartData glucose axis", () => {
 
   it("keeps the initial half's other thresholds", () => {
     const merged = mergeChartData(
-      chartData({ thresholds: { glucoseYMax: 300, low: 70 } as never }),
-      chartData({ thresholds: { glucoseYMax: 280, low: 80 } as never })
+      chartData({ thresholds: thresholds({ glucoseYMax: 300, low: 70 }) }),
+      chartData({ thresholds: thresholds({ glucoseYMax: 280, low: 80 }) })
     );
 
     expect(merged.thresholds.low).toBe(70);

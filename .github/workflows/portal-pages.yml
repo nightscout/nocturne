@@ -12,6 +12,8 @@ on:
       - 'src/Web/packages/app/src/lib/stores/**'
       - 'src/Web/packages/app/src/lib/constants/**'
       - 'src/Web/packages/app/src/lib/components/dashboard/top-widget-ids.ts'
+      # The alerts docs run the alert engine, compiled to WebAssembly at build time.
+      - 'crates/**'
       - 'src/Web/pnpm-lock.yaml'
       - '.github/workflows/portal-pages.yml'
   workflow_dispatch:
@@ -34,15 +36,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -53,7 +55,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
 
@@ -66,6 +68,24 @@ jobs:
       - name: Generate API client
         working-directory: src/API/Nocturne.API
         run: dotnet build -c Release
+
+      # scripts/build-alerts-engine.mjs compiles the alert engine for the docs simulator, and
+      # installs the wasm-bindgen CLI matching crates/Cargo.lock into crates/target/tools.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          # Sources, not just the lockfile: cargo's path-package fingerprint is mtime-based, and
+          # a restored crates/target is newer than the checkout (see docker-publish.yml).
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
 
       - name: Sync SvelteKit packages
         working-directory: src/Web
@@ -84,8 +104,14 @@ jobs:
           VITE_PLAUSIBLE_DOMAIN: ${{ vars.PLAUSIBLE_PORTAL_DOMAIN }}
         run: pnpm run build
 
+      # A build whose translations compile empty still succeeds and prerenders
+      # blank pages, so this guard fails the deploy before upload.
+      - name: Check built pages have copy
+        working-directory: src/Web/packages/portal
+        run: pnpm run check:build
+
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: src/Web/packages/portal/build
 
@@ -98,4 +124,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -72,13 +72,18 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         EversenseConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
 
         var activeTypes = ResolveActiveTypes(request, config);
         if (!activeTypes.Contains(SyncDataType.Glucose))
         {
-            result.EndTime = DateTimeOffset.UtcNow;
             return result;
+        }
+
+        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
+        {
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+            return AuthenticationFailedResult();
         }
 
         try
@@ -91,8 +96,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                 // so the failure is visible rather than looking like a successful empty sync.
                 result.Success = false;
                 result.Errors.Add(
-                    "Could not reach Eversense. Check the Eversense account email and password, then sync again.");
-                result.EndTime = DateTimeOffset.UtcNow;
+                    "Could not reach Eversense. Nocturne will try again at the next sync.");
                 return result;
             }
 
@@ -103,7 +107,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                     "Connected to Eversense, but this account is not following anyone in Eversense NOW. " +
                     "In the Eversense NOW app, have the sensor wearer invite this account as a follower and " +
                     "accept the invite, then sync again.");
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -122,7 +125,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                     "This Eversense account follows multiple people (" +
                     string.Join(", ", patients.Select(p => p.UserName)) +
                     "). Set the patient username to the one you want to sync, then sync again.");
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -132,7 +134,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                     "[{ConnectorSource}] Transmitter not connected for patient {Patient}, skipping",
                     ConnectorSource,
                     patient.UserName);
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -143,7 +144,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
                     "[{ConnectorSource}] Mapper returned null for patient {Patient}",
                     ConnectorSource,
                     patient.UserName);
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -165,7 +165,6 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -180,7 +179,7 @@ public class EversenseConnectorService : BaseConnectorService<EversenseConnector
         if (string.IsNullOrEmpty(token))
         {
             _logger.LogWarning("[{ConnectorSource}] No valid token available for data fetch", ConnectorSource);
-            TrackFailedRequest("No valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 

@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Multitenancy;
 using Nocturne.API.Tests.Integration.Infrastructure;
 using Npgsql;
 using Xunit;
@@ -20,7 +23,7 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// the platform_admin role cannot reach the platform-admin API.
 /// </summary>
 [Trait("Category", "Integration")]
-public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
+public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantAId;
     private Guid _tenantBId;
@@ -33,7 +36,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     private string _baseDomain = null!;
 
     public MultitenantIsolationIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 
@@ -51,8 +54,10 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         _tenantAId = await AuthTestHelpers.GetTenantIdAsync(conn);
         (_subjectAId, _accessTokenA) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantAId, "Tenant A User");
 
-        // Create tenant B
-        _tenantBId = await AuthTestHelpers.SeedTenantAsync(conn, "tenant-b", "Tenant B");
+        // A fresh slug per test: tenant resolution is cached by slug, so a reused one could serve
+        // an earlier test's tenant B (or its inactive state) to this one.
+        _slugB = $"tenant-b-{Guid.NewGuid():N}"[..20];
+        _tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, _slugB, "Tenant B");
         (_subjectBId, _accessTokenB) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, _tenantBId, "Tenant B User");
 
         // Get the tenant A slug from DB
@@ -62,7 +67,6 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             cmd.Parameters.AddWithValue("id", _tenantAId);
             _slugA = (string)(await cmd.ExecuteScalarAsync())!;
         }
-        _slugB = "tenant-b";
 
         _baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
 
@@ -86,20 +90,14 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             }
         };
         var postResponse = await clientB.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read entries from tenant A
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
-        var getResponse = await clientA.GetAsync("/api/v1/entries?count=100");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var content = await getResponse.Content.ReadAsStringAsync();
-        var entries = JsonSerializer.Deserialize<JsonElement>(content);
-
-        // Assert - tenant A should not see the entry with sgv=180 that was seeded in B
-        var hasTenantBEntry = entries.EnumerateArray().Any(e =>
-            e.TryGetProperty("sgv", out var sgv) && sgv.GetInt32() == 180);
-        hasTenantBEntry.Should().BeFalse("tenant A must not see entries belonging to tenant B");
+        // Assert
+        (await ReadsEntryAsync(clientB, 180)).Should().BeTrue("tenant B must read back its own entry");
+        (await ReadsEntryAsync(clientA, 180)).Should().BeFalse("tenant A must not see entries belonging to tenant B");
     }
 
     [Fact]
@@ -119,20 +117,14 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             }
         };
         var postResponse = await clientA.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read entries from tenant B
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
-        var getResponse = await clientB.GetAsync("/api/v1/entries?count=100");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var content = await getResponse.Content.ReadAsStringAsync();
-        var entries = JsonSerializer.Deserialize<JsonElement>(content);
-
-        // Assert - tenant B should not see the entry with sgv=95 that was seeded in A
-        var hasTenantAEntry = entries.EnumerateArray().Any(e =>
-            e.TryGetProperty("sgv", out var sgv) && sgv.GetInt32() == 95);
-        hasTenantAEntry.Should().BeFalse("tenant B must not see entries belonging to tenant A");
+        // Assert
+        (await ReadsEntryAsync(clientA, 95)).Should().BeTrue("tenant A must read back its own entry");
+        (await ReadsEntryAsync(clientB, 95)).Should().BeFalse("tenant B must not see entries belonging to tenant A");
     }
 
     [Fact]
@@ -151,7 +143,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             }
         };
         var postResponse = await clientB.PostAsJsonAsync("/api/v1/treatments", treatmentPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read treatments from tenant A
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
@@ -159,8 +151,10 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var content = await getResponse.Content.ReadAsStringAsync();
+        var ownContent = await clientB.GetStringAsync("/api/v1/treatments?count=100");
 
         // Assert
+        ownContent.Should().Contain("tenant-b-isolation-marker", "tenant B must read back its own treatment");
         content.Should().NotContain("tenant-b-isolation-marker",
             "tenant A must not see treatments belonging to tenant B");
     }
@@ -219,20 +213,14 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             }
         };
         var postResponse = await clientA.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read from tenant B
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
-        var getResponse = await clientB.GetAsync("/api/v1/entries?count=100");
-        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var content = await getResponse.Content.ReadAsStringAsync();
-        var entries = JsonSerializer.Deserialize<JsonElement>(content);
 
         // Assert
-        var hasCrossTenantEntry = entries.EnumerateArray().Any(e =>
-            e.TryGetProperty("sgv", out var sgv) && sgv.GetInt32() == 222);
-        hasCrossTenantEntry.Should().BeFalse("entries written in tenant A must not be visible in tenant B");
+        (await ReadsEntryAsync(clientA, 222)).Should().BeTrue("tenant A must read back its own entry");
+        (await ReadsEntryAsync(clientB, 222)).Should().BeFalse("entries written in tenant A must not be visible in tenant B");
     }
 
     [Fact]
@@ -243,7 +231,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new
         {
             label = "Cross-Tenant Test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -253,12 +241,36 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
 
         // Act - try to activate via tenant B's subdomain
         using var clientB = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
-        var activateResponse = await clientB.PostAsJsonAsync("/api/v4/guest-links/activate", new { code });
+        var activateOnB = await clientB.PostAsJsonAsync("/api/v4/guest-links/activate", new { code });
 
-        // Assert - should fail (not found / bad request)
-        activateResponse.StatusCode.Should().BeOneOf(
-            new[] { HttpStatusCode.BadRequest, HttpStatusCode.NotFound, HttpStatusCode.Unauthorized },
+        // Assert - B does not know the code, and the refusal did not consume it: it still
+        // activates on the tenant that issued it.
+        activateOnB.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "guest link from tenant A must not be activatable on tenant B");
+
+        using var anonymousA = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        var activateOnA = await anonymousA.PostAsJsonAsync("/api/v4/guest-links/activate", new { code });
+        activateOnA.StatusCode.Should().Be(HttpStatusCode.OK,
+            "the same code must activate on tenant A, so B's refusal is the tenant boundary and not a bad code");
+    }
+
+    [Fact]
+    public async Task CrossTenant_PendingGuestCode_NotReported()
+    {
+        using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
+        var createResponse = await clientA.PostAsJsonAsync("/api/v4/guest-links", new { label = "Pending Probe" });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var anonymousA = AuthTestHelpers.CreateTenantClient(Fixture, _slugA, _baseDomain);
+        using var anonymousB = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
+
+        var pendingA = await anonymousA.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+        var pendingB = await anonymousB.GetFromJsonAsync<JsonElement>("/api/v4/guest-links/pending");
+
+        pendingA.GetProperty("pending").GetBoolean().Should().BeTrue(
+            "an anonymous visitor to tenant A should learn that A has a code waiting");
+        pendingB.GetProperty("pending").GetBoolean().Should().BeFalse(
+            "a code created in tenant A must not be reported on tenant B");
     }
 
     [Fact]
@@ -269,7 +281,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var createResponse = await clientA.PostAsJsonAsync("/api/auth/direct-grants", new
         {
             label = "cross-tenant-test",
-            scopes = new[] { "entries.read" }
+            scopes = new[] { "glucose.read" }
         });
         createResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -278,7 +290,7 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         var nocToken = createBody.GetProperty("token").GetString()!;
 
         // Act - use the noc_ token on tenant B's subdomain
-        using var clientB = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var clientB = Fixture.CreateHttpClient("nocturne-api", "http");
         clientB.DefaultRequestHeaders.Host = $"{_slugB}.{_baseDomain}";
         clientB.DefaultRequestHeaders.Add("Authorization", $"Bearer {nocToken}");
 
@@ -296,36 +308,45 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
         var clientId = await AuthTestHelpers.RegisterOAuthClientAsync(clientA);
 
-        // Act - try GET /api/oauth/authorize on tenant B with tenant A's client_id
-        using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
-        var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var noRedirectClient = new HttpClient(handler)
-        {
-            BaseAddress = clientB.BaseAddress
-        };
-        foreach (var header in clientB.DefaultRequestHeaders)
-        {
-            noRedirectClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
-        }
-
         var (_, codeChallenge) = AuthTestHelpers.GeneratePkceChallenge();
         var authorizeUrl = $"/api/oauth/authorize?response_type=code&client_id={clientId}" +
-                           $"&redirect_uri=http://localhost:9999/callback&scope=entries.read" +
+                           $"&redirect_uri=http://localhost:9999/callback&scope=glucose.read" +
                            $"&code_challenge={codeChallenge}&code_challenge_method=S256";
 
-        var response = await noRedirectClient.GetAsync(authorizeUrl);
+        // Act - the same authorize request on each tenant, each as that tenant's own member
+        using var onA = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, new HttpClientHandler { AllowAutoRedirect = false }, _slugA, _baseDomain, _accessTokenA);
+        using var onB = AuthTestHelpers.CreateAuthenticatedTenantClient(
+            Fixture, new HttpClientHandler { AllowAutoRedirect = false }, _slugB, _baseDomain, _accessTokenB);
+        var responseA = await onA.GetAsync(authorizeUrl);
+        var responseB = await onB.GetAsync(authorizeUrl);
 
-        // Assert - should fail because the client_id belongs to tenant A
-        response.StatusCode.Should().BeOneOf(
-            new[] { HttpStatusCode.BadRequest, HttpStatusCode.NotFound, HttpStatusCode.Unauthorized },
+        // Assert - A accepts the request; B does not know the client
+        responseA.StatusCode.Should().Be(HttpStatusCode.Found,
+            "the authorize request is valid on the tenant that registered the client");
+
+        responseB.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "an OAuth client registered on tenant A must not be usable on tenant B");
+        var errorB = await responseB.Content.ReadFromJsonAsync<JsonElement>();
+        errorB.GetProperty("error").GetString().Should().Be("invalid_client",
+            "tenant B must reject the request because the client is unknown to it");
+    }
+
+    /// <summary>Whether <paramref name="client"/>'s tenant lists an entry with this glucose value.</summary>
+    private static async Task<bool> ReadsEntryAsync(HttpClient client, int sgv)
+    {
+        var response = await client.GetAsync("/api/v1/entries?count=100");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var entries = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return entries.EnumerateArray().Any(e =>
+            e.TryGetProperty("sgv", out var value) && value.GetInt32() == sgv);
     }
 
     [Fact]
     public async Task UnknownSubdomain_Returns404()
     {
         // Arrange
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = $"nonexistent.{_baseDomain}";
 
         // Act
@@ -339,49 +360,23 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     [Fact]
     public async Task InactiveTenant_Returns403()
     {
-        // Arrange - deactivate tenant B via SQL
-        var connStr = await GetPostgresConnectionStringAsync();
-        await using var conn = new NpgsqlConnection(connStr);
-        await conn.OpenAsync();
+        await DeactivateTenantBAsync();
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
-            cmd.Parameters.AddWithValue("id", _tenantBId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        using var client = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
+        var response = await client.GetAsync("/api/v1/status");
 
-        try
-        {
-            // Act - request via tenant B's subdomain
-            using var client = AuthTestHelpers.CreateTenantClient(Fixture, _slugB, _baseDomain);
-            var response = await client.GetAsync("/api/v1/status");
-
-            // Assert
-            response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
-                "a request to an inactive tenant must return 403");
-        }
-        finally
-        {
-            // Reactivate tenant B to avoid polluting other tests
-            await using var reactivateCmd = conn.CreateCommand();
-            reactivateCmd.CommandText = "UPDATE tenants SET is_active = true WHERE id = @id;";
-            reactivateCmd.Parameters.AddWithValue("id", _tenantBId);
-            await reactivateCmd.ExecuteNonQueryAsync();
-        }
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "a request to an inactive tenant must return 403");
     }
 
     [Fact]
     public async Task ApexDomain_MultipleTenants_Returns404()
     {
-        // Arrange - both tenants are active (set up in InitializeAsync)
-        using var client = Fixture.CreateHttpClient("nocturne-api", "api");
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
         client.DefaultRequestHeaders.Host = _baseDomain;
 
-        // Act
         var response = await client.GetAsync("/api/v1/status");
 
-        // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound,
             "apex domain with multiple tenants must return 404");
     }
@@ -389,41 +384,34 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     [Fact]
     public async Task ApexDomain_SingleTenant_AutoResolves()
     {
-        // Arrange - deactivate tenant B so only tenant A remains active
+        await DeactivateTenantBAsync();
+
+        using var client = Fixture.CreateHttpClient("nocturne-api", "http");
+        client.DefaultRequestHeaders.Host = _baseDomain;
+
+        var response = await client.GetAsync("/api/v1/status");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK,
+            "apex domain with a single active tenant must auto-resolve to it");
+    }
+
+    /// <summary>
+    /// Deactivates tenant B on the database and drops its cached resolution, as a deactivation
+    /// through the product does. <see cref="ApiIntegrationTestFixture.CleanupDatabaseAsync"/>
+    /// deletes tenant B before the next test.
+    /// </summary>
+    private async Task DeactivateTenantBAsync()
+    {
         var connStr = await GetPostgresConnectionStringAsync();
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        await using (var cmd = conn.CreateCommand())
-        {
-            cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
-            cmd.Parameters.AddWithValue("id", _tenantBId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "UPDATE tenants SET is_active = false WHERE id = @id;";
+        cmd.Parameters.AddWithValue("id", _tenantBId);
+        await cmd.ExecuteNonQueryAsync();
 
-        try
-        {
-            // Act - request without subdomain (apex domain)
-            using var client = Fixture.CreateHttpClient("nocturne-api", "api");
-            client.DefaultRequestHeaders.Host = _baseDomain;
-
-            var response = await client.GetAsync("/api/v1/status");
-
-            // Assert - with only one active tenant, apex domain should auto-resolve
-            // Note: tenant cache has a 5-min TTL, so this may return 404 if the
-            // cache still sees two tenants. We accept either 200 or 404 for robustness.
-            response.StatusCode.Should().BeOneOf(
-                new[] { HttpStatusCode.OK, HttpStatusCode.NotFound },
-                "apex domain with a single active tenant should auto-resolve (or 404 if cache is stale)");
-        }
-        finally
-        {
-            // Reactivate tenant B
-            await using var reactivateCmd = conn.CreateCommand();
-            reactivateCmd.CommandText = "UPDATE tenants SET is_active = true WHERE id = @id;";
-            reactivateCmd.Parameters.AddWithValue("id", _tenantBId);
-            await reactivateCmd.ExecuteNonQueryAsync();
-        }
+        TenantResolutionMiddleware.EvictTenant(Fixture.Services.GetRequiredService<IMemoryCache>(), _slugB);
     }
 
     // ── Subject membership authorization gate ───────────────────────────────
@@ -482,8 +470,8 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         };
         var response = await client.PostAsJsonAsync("/api/v1/entries", entryPayload);
 
-        response.StatusCode.Should().BeOneOf(
-            new[] { HttpStatusCode.OK, HttpStatusCode.Created },
+        response.StatusCode.Should().Be(
+            HttpStatusCode.OK,
             "a subject must be able to write to a tenant it belongs to using its own access token");
     }
 
@@ -541,9 +529,9 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
     }
 
     [Fact]
-    public async Task RevokedMember_Token_IsDenied_OnOwnTenant()
+    public async Task RemovedMember_Token_IsDenied_OnOwnTenant()
     {
-        // Sanity: subject A is a member of tenant A and can write before revocation.
+        // Sanity: subject A is a member of tenant A and can write before removal.
         var now = DateTimeOffset.UtcNow;
         using (var before = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA))
         {
@@ -551,29 +539,29 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
             {
                 new { type = "sgv", sgv = 111, date = now.ToUnixTimeMilliseconds(), dateString = now.UtcDateTime.ToString("o") }
             });
-            ok.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+            ok.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
-        // Revoke subject A's membership in tenant A. No app path soft-revokes today, so simulate it
-        // directly, the same way other tests toggle tenants.is_active.
+        // Remove subject A's membership in tenant A the way RemoveMemberAsync does, directly on the
+        // database so the removal does not depend on the member-management endpoints.
         var connStr = await GetPostgresConnectionStringAsync();
         await using (var conn = new NpgsqlConnection(connStr))
         {
             await conn.OpenAsync();
             await using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE tenant_members SET revoked_at = now() WHERE subject_id = @s AND tenant_id = @t;";
+            cmd.CommandText = "DELETE FROM tenant_members WHERE subject_id = @s AND tenant_id = @t;";
             cmd.Parameters.AddWithValue("s", _subjectAId);
             cmd.Parameters.AddWithValue("t", _tenantAId);
             await cmd.ExecuteNonQueryAsync();
         }
 
         // The same previously-valid token is now rejected for both read and write — the membership
-        // gate (via the RevokedAt query filter) no longer sees subject A as a member of tenant A.
+        // gate no longer sees subject A as a member of tenant A.
         using var client = AuthTestHelpers.CreateTenantBearerClient(Fixture, _slugA, _baseDomain, _accessTokenA);
 
         var read = await client.GetAsync("/api/v1/entries/current");
         read.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
-            "a revoked member must not authenticate, even with a previously-valid access token");
+            "a removed member must not authenticate, even with a previously-valid access token");
 
         var write = await client.PostAsJsonAsync("/api/v1/entries", new[]
         {
@@ -581,6 +569,6 @@ public class MultitenantIsolationIntegrationTests : AspireIntegrationTestBase
         });
         write.StatusCode.Should().BeOneOf(
             new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden },
-            "a revoked member must not be able to write");
+            "a removed member must not be able to write");
     }
 }

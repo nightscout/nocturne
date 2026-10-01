@@ -7,6 +7,7 @@ using Nocturne.Core.Models;
 using Nocturne.Core.Models.Projections;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 namespace Nocturne.API.Services.Entries;
 
 /// <summary>
@@ -178,17 +179,15 @@ public class EntryReadService : IEntryStore
     }
 
     /// <inheritdoc />
-    public async Task<Entry?> CheckDuplicateAsync(string? device, string type, double? sgv, long mills,
-        int windowMinutes = 5, CancellationToken ct = default)
+    public async Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills,
+        CancellationToken ct = default)
     {
-        var windowMs = (long)windowMinutes * 60 * 1000;
-        var from = MillsToUtc(mills - windowMs);
-        var to = MillsToUtc(mills + windowMs);
+        var (from, to) = MillisecondOf(mills);
 
         return type switch
         {
-            "sgv" => await CheckSgvDuplicateAsync(device, sgv, from, to, ct),
-            "mbg" => await CheckMbgDuplicateAsync(device, sgv, from, to, ct),
+            "sgv" => await CheckSgvDuplicateAsync(device, from, to, ct),
+            "mbg" => await CheckMbgDuplicateAsync(device, from, to, ct),
             "cal" => await CheckCalDuplicateAsync(device, from, to, ct),
             _ => null,
         };
@@ -196,7 +195,7 @@ public class EntryReadService : IEntryStore
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
-        IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default)
+        IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default)
     {
         var results = new Entry?[probes.Count];
         var sgvProbes = new List<(EntryDuplicateProbe probe, int index)>();
@@ -210,17 +209,13 @@ public class EntryReadService : IEntryStore
                 continue;
             }
 
-            // Only sgv arrives in the thousands-per-cycle uploads this batching exists for. mbg and
-            // cal keep the per-entry probe: theirs reads a device-filtered page of the entry's own
-            // window, and a batch-wide read is a strict superset of that — it reports duplicates
-            // the per-entry probe does not, dropping a reading that would have been stored.
-            // Unknown types return null here without a query, as they always did.
-            results[i] = await CheckDuplicateAsync(
-                probe.Device, probe.Type, probe.Sgv, probe.Mills, windowMinutes, ct);
+            // Only sgv arrives in the thousands-per-cycle uploads this batching exists for, so mbg
+            // and cal keep the per-entry probe. Unknown types return null without a query.
+            results[i] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
         }
 
         foreach (var chunk in ChunkByTimeSpan(sgvProbes))
-            await ClassifySgvChunkAsync(chunk, windowMinutes, results, ct);
+            await ClassifySgvChunkAsync(chunk, results, ct);
 
         return results;
     }
@@ -311,6 +306,159 @@ public class EntryReadService : IEntryStore
         var mgCount = await _mgRepo.CountAsync(from, to, ct);
         var calCount = await _calRepo.CountAsync(from, to, ct);
         return sgCount + mgCount + calCount;
+    }
+
+    /// <summary>
+    /// Width, in canonical buckets, of the widest gap between two page readings that still share one
+    /// window read in <see cref="CanonicalIdsAsync"/>.
+    /// </summary>
+    private const int MaxWindowBucketGap = 12;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each glucose type pages through its own <see cref="HistoryPage"/>, and the merge cuts on raw
+    /// stamps before anything is withheld, for the reason given at
+    /// <see cref="V4.V4ToLegacyProjectionService.GetProjectedTreatmentsModifiedSinceAsync"/>. The cut
+    /// then decides the cursor, not the delivered rows. A full page that withholds every row is
+    /// followed by the next rather than returned: AAPS keeps its cursor on an empty page, so it
+    /// would request the same withheld rows forever.
+    /// </remarks>
+    public async Task<ModifiedSincePage<Entry>> GetModifiedSinceAsync(
+        long cursorMills, int limit, CancellationToken ct = default)
+    {
+        var (source, excludeDemo) = ResolveDemoFilter();
+        long? pageCursor = null;
+        var cursor = cursorMills;
+
+        while (true)
+        {
+            // Sequential to avoid DbContext thread-safety issues with scoped lifetime
+            var fetched = new List<IV4Record>();
+            fetched.AddRange(await _sgRepo.GetModifiedSinceAsync(cursor, limit, ct));
+            fetched.AddRange(await _mgRepo.GetModifiedSinceAsync(cursor, limit, ct));
+            fetched.AddRange(await _calRepo.GetModifiedSinceAsync(cursor, limit, ct));
+
+            var page = CutHistoryPage(fetched, limit);
+            if (page.Count == 0)
+                return new ModifiedSincePage<Entry>([], pageCursor);
+
+            pageCursor = HistoryPage.ToMilliseconds(page[^1].ModifiedAt);
+
+            var delivered = await VisibleHistoryEntriesAsync(page, source, excludeDemo, ct);
+            if (delivered.Count > 0 || page.Count < limit)
+                return new ModifiedSincePage<Entry>(delivered, pageCursor);
+
+            cursor = pageCursor.Value;
+        }
+    }
+
+    /// <summary>
+    /// The oldest <paramref name="limit"/> rows across the glucose types, extended to the end of the
+    /// last row's millisecond. Every type's own page ends on a millisecond boundary at or after the
+    /// cut, so the rows already fetched complete it.
+    /// </summary>
+    private static List<IV4Record> CutHistoryPage(IReadOnlyList<IV4Record> fetched, int limit)
+    {
+        var ordered = fetched
+            .OrderBy(r => r.ModifiedAt)
+            .ThenBy(HistoryTypeOrder)
+            .ThenBy(r => r.Id)
+            .ToList();
+
+        if (ordered.Count <= limit)
+            return ordered;
+
+        var lastMills = HistoryPage.ToMilliseconds(ordered[limit - 1].ModifiedAt);
+        return ordered
+            .TakeWhile((r, i) => i < limit || HistoryPage.ToMilliseconds(r.ModifiedAt) == lastMills)
+            .ToList();
+    }
+
+    private static int HistoryTypeOrder(IV4Record record) => record switch
+    {
+        SensorGlucose => 0,
+        MeterGlucose => 1,
+        _ => 2,
+    };
+
+    /// <summary>
+    /// Projects the page rows a regular entries read would return, in page order: demo filtering as
+    /// <see cref="ResolveDemoFilter"/> sets it, and only the canonical stream's sgv readings.
+    /// </summary>
+    private async Task<List<Entry>> VisibleHistoryEntriesAsync(
+        IReadOnlyList<IV4Record> page, string? source, bool excludeDemo, CancellationToken ct)
+    {
+        var visible = page
+            .Where(r => source is not null ? r.DataSource == source : !excludeDemo || !DataSources.IsEphemeral(r.DataSource))
+            .ToList();
+
+        var canonical = await CanonicalIdsAsync(visible.OfType<SensorGlucose>().ToList(), source, excludeDemo, ct);
+
+        return visible
+            .Where(r => r is not SensorGlucose sg || canonical.Contains(sg.Id))
+            .Select(r => r switch
+            {
+                SensorGlucose sg => EntryProjection.FromSensorGlucose(sg),
+                MeterGlucose mg => EntryProjection.FromMeterGlucose(mg),
+                _ => EntryProjection.FromCalibration((Calibration)r),
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Ids of the <paramref name="readings"/> that win canonical selection. A bucket's winner depends
+    /// on every stream that reported into it, and a modified-since page holds only the rows written
+    /// after the cursor — a late backfill from a second CGM arrives without the winner's readings
+    /// beside it — so selection runs over every stored reading in the buckets the page touches.
+    /// </summary>
+    private async Task<HashSet<Guid>> CanonicalIdsAsync(
+        IReadOnlyList<SensorGlucose> readings, string? source, bool excludeDemo, CancellationToken ct)
+    {
+        if (readings.Count == 0)
+            return [];
+
+        var window = new Dictionary<Guid, SensorGlucose>();
+        foreach (var (from, to) in CanonicalBucketRuns(readings))
+        {
+            var stored = await _sgRepo.GetAsync(from, to, device: null, source, MaxFilterFetch, 0, false, false, null, null, ct);
+            foreach (var reading in ExcludeDemoIfNeeded(stored, excludeDemo))
+                window.TryAdd(reading.Id, reading);
+        }
+
+        foreach (var reading in readings)
+            window[reading.Id] = reading;
+
+        var canonical = await _canonicalGlucose.SelectAsync(window.Values.ToList(), ct);
+        return canonical.Select(r => r.Id).ToHashSet();
+    }
+
+    /// <summary>
+    /// The canonical buckets holding <paramref name="readings"/>, as time ranges, joining buckets
+    /// no more than <see cref="MaxWindowBucketGap"/> apart so a contiguous page costs one read.
+    /// </summary>
+    private static List<(DateTime From, DateTime To)> CanonicalBucketRuns(IReadOnlyList<SensorGlucose> readings)
+    {
+        var size = CanonicalGlucoseStream.BucketSize.Ticks;
+        var buckets = readings.Select(r => r.Timestamp.Ticks / size).Distinct().Order().ToList();
+
+        DateTime At(long bucket) => new(bucket * size, DateTimeKind.Utc);
+
+        var runs = new List<(DateTime, DateTime)>();
+        var start = buckets[0];
+        var end = start;
+        foreach (var bucket in buckets.Skip(1))
+        {
+            if (bucket - end > MaxWindowBucketGap)
+            {
+                runs.Add((At(start), At(end + 1)));
+                start = bucket;
+            }
+
+            end = bucket;
+        }
+
+        runs.Add((At(start), At(end + 1)));
+        return runs;
     }
 
     #region Private — Query helpers
@@ -455,48 +603,42 @@ public class EntryReadService : IEntryStore
     #region Private — Duplicate check helpers
 
     private async Task<Entry?> CheckSgvDuplicateAsync(
-        string? device, double? sgv, DateTime from, DateTime to, CancellationToken ct)
+        string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         // Probe raw storage rather than the visibility-filtered GetAsync: copies linked as
         // non-primary cross-connector duplicates are hidden from reads, but they still mean the
         // reading is already stored — a filtered check re-inserts them on every upload.
-        var match = await _sgRepo.FindStoredDuplicateAsync(device, sgv, from, to, ct);
+        var match = await _sgRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromSensorGlucose(match);
     }
 
     private async Task<Entry?> CheckMbgDuplicateAsync(
-        string? device, double? mbg, DateTime from, DateTime to, CancellationToken ct)
+        string? device, DateTime from, DateTime to, CancellationToken ct)
     {
-        var results = await _mgRepo.GetAsync(from, to, device, source: null, limit: 100, offset: 0, descending: true, ct: ct);
-        var match = mbg.HasValue
-            ? results.FirstOrDefault(r => Math.Abs(r.Mgdl - mbg.Value) < 0.01)
-            : results.FirstOrDefault();
+        var match = await _mgRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromMeterGlucose(match);
     }
 
     private async Task<Entry?> CheckCalDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
-        var results = await _calRepo.GetAsync(from, to, device, source: null, limit: 100, offset: 0, descending: true, ct: ct);
-        var match = results.FirstOrDefault();
+        var match = await _calRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromCalibration(match);
     }
 
     /// <summary>
     /// Loads one chunk's stored readings in a single query and classifies every probe in it.
-    /// <paramref name="chunk"/> is ordered by timestamp, so its ends give the query's window.
+    /// <paramref name="chunk"/> is ordered by timestamp, so its ends give the query's range.
     /// </summary>
     private async Task ClassifySgvChunkAsync(
         List<(EntryDuplicateProbe probe, int index)> chunk,
-        int windowMinutes,
         Entry?[] results,
         CancellationToken ct)
     {
-        var windowMs = (long)windowMinutes * 60 * 1000;
-        var from = MillsToUtc(chunk[0].probe.Mills - windowMs);
-        var to = MillsToUtc(chunk[^1].probe.Mills + windowMs);
+        var (from, _) = MillisecondOf(chunk[0].probe.Mills);
+        var (_, to) = MillisecondOf(chunk[^1].probe.Mills);
 
-        // One row over the cap is enough to know the window held more than this may hold.
+        // One row over the cap is enough to know the range held more than this may hold.
         var candidates = await _sgRepo.FindStoredDuplicateCandidatesAsync(
             ResolveProbeDevices(chunk), from, to, MaxProbeChunkRows + 1, ct);
 
@@ -509,8 +651,7 @@ public class EntryReadService : IEntryStore
             foreach (var (probe, index) in chunk)
             {
                 ct.ThrowIfCancellationRequested();
-                results[index] = await CheckDuplicateAsync(
-                    probe.Device, probe.Type, probe.Sgv, probe.Mills, windowMinutes, ct);
+                results[index] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
             }
 
             return;
@@ -519,36 +660,32 @@ public class EntryReadService : IEntryStore
         foreach (var (probe, index) in chunk)
         {
             ct.ThrowIfCancellationRequested();
-            var match = MatchInWindow(candidates, probe, windowMs);
+            var match = MatchAtMillisecond(candidates, probe);
             results[index] = match is null ? null : EntryProjection.FromSensorGlucose(match);
         }
     }
 
     /// <summary>
-    /// The single-entry probe's match rule, applied in memory: the newest candidate inside the
-    /// probe's own window whose device and value match. <paramref name="candidates"/> arrive
-    /// newest-first in the order that probe resolved ties by, so the first match is the row it
-    /// returned.
+    /// The single-entry probe's match rule, applied in memory: the newest candidate at the probe's
+    /// millisecond whose device matches. <paramref name="candidates"/> arrive newest-first in the
+    /// order that probe resolved ties by, so the first match is the row it returned.
     /// </summary>
-    private static SensorGlucose? MatchInWindow(
-        IReadOnlyList<SensorGlucose> candidates, EntryDuplicateProbe probe, long windowMs)
+    private static SensorGlucose? MatchAtMillisecond(
+        IReadOnlyList<SensorGlucose> candidates, EntryDuplicateProbe probe)
     {
-        var from = MillsToUtc(probe.Mills - windowMs);
-        var to = MillsToUtc(probe.Mills + windowMs);
+        var (from, to) = MillisecondOf(probe.Mills);
 
-        for (var i = NewestAtOrBefore(candidates, to); i < candidates.Count; i++)
+        for (var i = NewestBefore(candidates, to); i < candidates.Count; i++)
         {
             var candidate = candidates[i];
             if (candidate.Timestamp < from)
                 break;
             // The search is a starting point, not the bound: a wrong index here would report a
-            // reading outside the probe's window as a duplicate and drop a real one.
-            if (candidate.Timestamp > to)
+            // reading at another time as a duplicate and drop a real one.
+            if (candidate.Timestamp >= to)
                 continue;
             if (probe.Device is not null
                 && !string.Equals(candidate.Device, probe.Device, StringComparison.Ordinal))
-                continue;
-            if (probe.Sgv.HasValue && Math.Abs(candidate.Mgdl - probe.Sgv.Value) >= 0.01)
                 continue;
             return candidate;
         }
@@ -557,12 +694,12 @@ public class EntryReadService : IEntryStore
     }
 
     /// <summary>
-    /// Index of the newest candidate at or before <paramref name="to"/>. A chunk's candidate list
-    /// covers every probe's window, so scanning it from the front for each probe is quadratic in
-    /// the batch; the list is sorted newest-first, so the probe's slice is a binary search away.
-    /// The caller re-checks the bound, so this is an optimisation and not a correctness dependency.
+    /// Index of the newest candidate before <paramref name="to"/>. A chunk's candidate list covers
+    /// every probe, so scanning it from the front for each probe is quadratic in the batch; the
+    /// list is sorted newest-first, so the probe's slice is a binary search away. The caller
+    /// re-checks the bound, so this is an optimisation and not a correctness dependency.
     /// </summary>
-    private static int NewestAtOrBefore(IReadOnlyList<SensorGlucose> candidates, DateTime to)
+    private static int NewestBefore(IReadOnlyList<SensorGlucose> candidates, DateTime to)
     {
         var low = 0;
         var high = candidates.Count;
@@ -570,7 +707,7 @@ public class EntryReadService : IEntryStore
         while (low < high)
         {
             var mid = low + ((high - low) / 2);
-            if (candidates[mid].Timestamp > to)
+            if (candidates[mid].Timestamp >= to)
                 low = mid + 1;
             else
                 high = mid;
@@ -595,6 +732,13 @@ public class EntryReadService : IEntryStore
         }
         return devices;
     }
+
+    /// <summary>
+    /// The half-open range <c>[mills, mills + 1 ms)</c>. A stored timestamp can carry sub-millisecond
+    /// precision that its <c>Mills</c> truncates away, so equality on the instant would miss it.
+    /// </summary>
+    private static (DateTime From, DateTime To) MillisecondOf(long mills) =>
+        (MillsToUtc(mills), MillsToUtc(mills + 1));
 
     private static DateTime MillsToUtc(long mills) =>
         DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;
@@ -647,9 +791,9 @@ public class EntryReadService : IEntryStore
 
         // DateString takes priority over Find-based time range. Both cannot be combined because
         // the V4 repos accept a single from/to window; DateString wins when both are present.
-        if (query.DateString is not null && DateTime.TryParse(query.DateString, out var parsedDate))
+        if (UploaderTimestamp.TryParse(query.DateString, out var parsedDate))
         {
-            from = parsedDate.ToUniversalTime();
+            from = parsedDate.UtcDateTime;
             to = from.Value.AddDays(1);
         }
 

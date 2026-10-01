@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Nightscout.Configurations;
@@ -17,6 +18,8 @@ public class NightscoutEntryWriteBackSink(
     ILogger<NightscoutEntryWriteBackSink> logger)
     : NightscoutWriteBackSink<Entry>(httpClient, configLoader, circuitBreaker, logger)
 {
+    protected override JsonSerializerOptions SerializerOptions => UpstreamIdentityJson.Options;
+
     protected override string Endpoint => "/api/v1/entries";
 
     protected override bool ShouldSkip(Entry item)

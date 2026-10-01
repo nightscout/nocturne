@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Identity;
 using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -25,155 +26,6 @@ public class TenantOverviewServiceTests
     private static readonly IReadOnlySet<string> FullTokenScopes =
         new HashSet<string> { Scope.FullAccess };
 
-    // ---- threshold resolution ----
-
-    [Fact]
-    public void ResolveThresholds_noRules_returnsDefaults()
-    {
-        TenantOverviewService.ResolveThresholds(Defaults, []).Should().Be(Defaults);
-    }
-
-    [Fact]
-    public void ResolveThresholds_overridesEachBucketFromRules()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 60, AlertRuleSeverity.Critical),
-            ("below", 90, AlertRuleSeverity.Warning),
-            ("above", 170, AlertRuleSeverity.Warning),
-            ("above", 250, AlertRuleSeverity.Critical),
-        ]);
-
-        resolved.Should().Be(new TenantOverviewThresholds(60, 90, 170, 250));
-    }
-
-    [Fact]
-    public void ResolveThresholds_infoSeverityFillsTheNonUrgentBuckets()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 85, AlertRuleSeverity.Info),
-            ("above", 190, AlertRuleSeverity.Info),
-        ]);
-
-        resolved.Should().Be(new TenantOverviewThresholds(55, 85, 190, 260));
-    }
-
-    [Fact]
-    public void ResolveThresholds_multipleRulesInABucket_mostConservativeWins()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            // below: highest value is most conservative
-            ("below", 70, AlertRuleSeverity.Warning),
-            ("below", 85, AlertRuleSeverity.Warning),
-            // above: lowest value is most conservative
-            ("above", 200, AlertRuleSeverity.Warning),
-            ("above", 170, AlertRuleSeverity.Warning),
-        ]);
-
-        resolved.Low.Should().Be(85);
-        resolved.High.Should().Be(170);
-    }
-
-    [Fact]
-    public void ResolveThresholds_clampsUrgentBoundsToOrdering()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-        [
-            ("below", 90, AlertRuleSeverity.Critical),  // urgent-low above default low (80)
-            ("above", 150, AlertRuleSeverity.Critical), // urgent-high below default high (180)
-        ]);
-
-        resolved.UrgentLow.Should().BeLessThanOrEqualTo(resolved.Low);
-        resolved.UrgentHigh.Should().BeGreaterThanOrEqualTo(resolved.High);
-        resolved.UrgentLow.Should().Be(80);
-        resolved.UrgentHigh.Should().Be(180);
-    }
-
-    [Fact]
-    public void ResolveThresholds_invertedBand_lowIsClampedToHigh()
-    {
-        // A Warning "below 200" with default High=180 would put Low above High.
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-            [("below", 200, AlertRuleSeverity.Warning)]);
-
-        resolved.Low.Should().Be(180);
-        resolved.High.Should().Be(180);
-        resolved.UrgentLow.Should().BeLessThanOrEqualTo(resolved.Low);
-
-        // A reading of 190 must not classify Low.
-        TenantOverviewService.Classify(190, Now.AddMinutes(-1), null, resolved, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.High);
-    }
-
-    [Fact]
-    public void ResolveThresholds_directionCasingIsIgnored()
-    {
-        var resolved = TenantOverviewService.ResolveThresholds(Defaults,
-            [("Below", 70, AlertRuleSeverity.Critical)]);
-
-        resolved.UrgentLow.Should().Be(70);
-    }
-
-    // ---- classification ----
-
-    private static readonly DateTime Now = new(2026, 07, 04, 12, 0, 0, DateTimeKind.Utc);
-    private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(25);
-
-    private static GlucoseStatus ClassifyValue(double mgdl) =>
-        TenantOverviewService.Classify(mgdl, Now.AddMinutes(-5), Now.AddMinutes(-5), Defaults, StaleAfter, Now);
-
-    [Theory]
-    [InlineData(54, GlucoseStatus.UrgentLow)]
-    [InlineData(55, GlucoseStatus.Low)]        // boundary: not urgent
-    [InlineData(79, GlucoseStatus.Low)]
-    [InlineData(80, GlucoseStatus.InRange)]    // boundary: in range
-    [InlineData(120, GlucoseStatus.InRange)]
-    [InlineData(180, GlucoseStatus.InRange)]   // boundary: in range
-    [InlineData(181, GlucoseStatus.High)]
-    [InlineData(260, GlucoseStatus.High)]      // boundary: not urgent
-    [InlineData(261, GlucoseStatus.UrgentHigh)]
-    public void Classify_valueAgainstThresholds(double mgdl, GlucoseStatus expected)
-    {
-        ClassifyValue(mgdl).Should().Be(expected);
-    }
-
-    [Fact]
-    public void Classify_readingOlderThanStaleWindow_isStale()
-    {
-        TenantOverviewService.Classify(120, Now.AddMinutes(-26), null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Stale);
-    }
-
-    [Fact]
-    public void Classify_readingAtExactlyTheStaleWindow_isNotStale()
-    {
-        TenantOverviewService.Classify(120, Now - StaleAfter, null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.InRange);
-    }
-
-    [Fact]
-    public void Classify_noReadingAndNoLastReadingAt_isUnknown()
-    {
-        TenantOverviewService.Classify(null, null, null, Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Unknown);
-    }
-
-    [Fact]
-    public void Classify_noReadingButStaleLastReadingAt_isStale()
-    {
-        TenantOverviewService.Classify(null, null, Now.AddHours(-2), Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Stale);
-    }
-
-    [Fact]
-    public void Classify_noReadingWithFreshLastReadingAt_isUnknown()
-    {
-        TenantOverviewService.Classify(null, null, Now.AddMinutes(-1), Defaults, StaleAfter, Now)
-            .Should().Be(GlucoseStatus.Unknown);
-    }
-
     // ---- membership filtering ----
 
     [Fact]
@@ -188,7 +40,6 @@ public class TenantOverviewServiceTests
         SeedMembership(options, subjectId, "direct-only", rolePermissions: null,
             directPermissions: [Scope.GlucoseRead]);
         SeedMembership(options, subjectId, "no-glucose", [Scope.TreatmentsRead]);
-        SeedMembership(options, subjectId, "revoked", [Scope.GlucoseRead], revoked: true);
         SeedMembership(options, subjectId, "inactive", [Scope.GlucoseRead], tenantActive: false);
         SeedMembership(options, Guid.NewGuid(), "other-subject", [Scope.GlucoseRead]);
 
@@ -540,6 +391,95 @@ public class TenantOverviewServiceTests
         item.Thresholds.Low.Should().Be(Defaults.Low);
     }
 
+    // ---- history clamp ----
+
+    [Fact]
+    public async Task GetOverview_readsEachTenantUnderTheCallersClampThere()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var oldReading = DateTime.UtcNow.AddDays(-3);
+        var clampedTenant = SeedMembership(options, subjectId, "clamped", [Scope.GlucoseRead],
+            limitTo24Hours: true, lastReadingAt: oldReading);
+        var fullTenant = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead],
+            lastReadingAt: oldReading);
+        var exemptTenant = SeedMembership(options, subjectId, "exempt", [Scope.TenantSettings, Scope.GlucoseRead],
+            limitTo24Hours: true, lastReadingAt: oldReading);
+        var ownerTenant = SeedMembership(options, subjectId, "owner", rolePermissions: null,
+            directPermissions: [Scope.FullAccess], limitTo24Hours: true, lastReadingAt: oldReading);
+
+        var (service, clampSeen) = NewClampObservingService(options);
+        var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie);
+
+        clampSeen[clampedTenant].Should().BeTrue("the glucose read must run under the membership's clamp");
+        clampSeen[fullTenant].Should().BeFalse();
+        clampSeen[exemptTenant].Should().BeFalse("a tenant.settings holder is never clamped");
+        clampSeen[ownerTenant].Should().BeFalse("an owner is never clamped by the membership flag");
+        response.Tenants.Single(t => t.Slug == "owner").LastReadingAt.Should().Be(oldReading);
+        response.Tenants.Single(t => t.Slug == "clamped").LastReadingAt.Should().BeNull(
+            "the denormalised last-reading time would reveal a reading older than 24 hours");
+        response.Tenants.Single(t => t.Slug == "full").LastReadingAt.Should().Be(oldReading);
+    }
+
+    [Fact]
+    public async Task GetOverview_aClampedCredential_isClampedOnEveryTenant()
+    {
+        var subjectId = Guid.NewGuid();
+        var options = NewOptions();
+        var tenantId = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead]);
+        var ownerTenant = SeedMembership(options, subjectId, "owner", [Scope.FullAccess]);
+
+        var (service, clampSeen) = NewClampObservingService(options);
+        await service.GetOverviewAsync(
+            subjectId, FullTokenScopes, AuthType.OAuthAccessToken, credentialLimitTo24Hours: true);
+
+        clampSeen[tenantId].Should().BeTrue();
+        clampSeen[ownerTenant].Should().BeTrue("the exemption covers the membership flag, not a limit on the token");
+    }
+
+    /// <summary>
+    /// A service whose per-tenant scopes carry a real <see cref="ICategoryReadContext"/>, recording
+    /// whether it was history-clamped when that tenant's latest glucose was read.
+    /// </summary>
+    private static (TenantOverviewService Service, Dictionary<Guid, bool> ClampSeen) NewClampObservingService(
+        DbContextOptions<NocturneDbContext> options)
+    {
+        var clampSeen = new Dictionary<Guid, bool>();
+        var services = new ServiceCollection();
+        services.AddScoped<ICategoryReadContext, Nocturne.Infrastructure.Data.Services.CategoryReadContext>();
+        services.AddScoped<ITenantAccessor>(_ => new RecordingTenantAccessor());
+        services.AddScoped(sp =>
+        {
+            var category = sp.GetRequiredService<ICategoryReadContext>();
+            var accessor = sp.GetRequiredService<ITenantAccessor>();
+            var canonical = new Mock<ICanonicalGlucoseService>();
+            canonical.Setup(s => s.GetLatestAsync(It.IsAny<CancellationToken>()))
+                .Returns(() =>
+                {
+                    clampSeen[accessor.TenantId] = category.IsHistoryClamped;
+                    return Task.FromResult<SensorGlucose?>(null);
+                });
+            return canonical.Object;
+        });
+        var provider = services.BuildServiceProvider();
+
+        var service = new TenantOverviewService(
+            new InMemoryContextFactory(options),
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new GlucoseStatusClassifier(
+                new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
+            NullLogger<TenantOverviewService>.Instance);
+        return (service, clampSeen);
+    }
+
+    private sealed class RecordingTenantAccessor : ITenantAccessor
+    {
+        public Guid TenantId => Context?.TenantId ?? Guid.Empty;
+        public bool IsResolved => Context is not null;
+        public TenantContext? Context { get; private set; }
+        public void SetTenant(TenantContext context) => Context = context;
+    }
+
     // ---- helpers ----
 
     private static DbContextOptions<NocturneDbContext> NewOptions() =>
@@ -553,8 +493,9 @@ public class TenantOverviewServiceTests
         string slug,
         List<string>? rolePermissions,
         List<string>? directPermissions = null,
-        bool revoked = false,
-        bool tenantActive = true)
+        bool tenantActive = true,
+        bool limitTo24Hours = false,
+        DateTime? lastReadingAt = null)
     {
         using var db = new NocturneDbContext(options);
         var tenant = new TenantEntity
@@ -563,6 +504,7 @@ public class TenantOverviewServiceTests
             Slug = slug,
             DisplayName = slug,
             IsActive = tenantActive,
+            LastReadingAt = lastReadingAt,
         };
         db.Tenants.Add(tenant);
 
@@ -572,7 +514,7 @@ public class TenantOverviewServiceTests
             TenantId = tenant.Id,
             SubjectId = subjectId,
             DirectPermissions = directPermissions,
-            RevokedAt = revoked ? DateTime.UtcNow.AddDays(-1) : null,
+            LimitTo24Hours = limitTo24Hours,
         };
         db.TenantMembers.Add(member);
 
@@ -650,7 +592,8 @@ public class TenantOverviewServiceTests
         return new TenantOverviewService(
             new InMemoryContextFactory(options),
             provider.GetRequiredService<IServiceScopeFactory>(),
-            new ConfigurationBuilder().Build(),
+            new GlucoseStatusClassifier(
+                new ConfigurationBuilder().Build(), NullLogger<GlucoseStatusClassifier>.Instance),
             NullLogger<TenantOverviewService>.Instance);
     }
 

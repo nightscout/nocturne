@@ -129,6 +129,43 @@ public class ScopeTests
     }
 
     [Fact]
+    public void NormalizeGuest_HealthRead_KeepsEveryAllowedHealthCategoryButNotFood()
+    {
+        var result = Scope.NormalizeGuest(new[] { Scope.HealthRead });
+
+        Assert.Equal(
+            Scope.HealthReadExpansion.Where(s => s != Scope.FoodRead).ToHashSet(),
+            result.ToHashSet());
+        Assert.Contains(Scope.HeartRateRead, result);
+        Assert.Contains(Scope.StepCountRead, result);
+        Assert.Contains(Scope.SleepRead, result);
+        Assert.DoesNotContain(Scope.FoodRead, result);
+        Assert.DoesNotContain(Scope.HealthRead, result);
+    }
+
+    [Fact]
+    public void NormalizeGuest_DropsEveryScopeOutsideTheGuestAllowList()
+    {
+        var result = Scope.NormalizeGuest(new[]
+        {
+            Scope.GlucoseRead, Scope.FoodRead, Scope.GlucoseReadWrite, Scope.HealthReadWrite,
+        });
+
+        Assert.Equal(new HashSet<string> { Scope.GlucoseRead }, result.ToHashSet());
+    }
+
+    [Fact]
+    public void NormalizeGuest_FullAccess_StaysWithinTheGuestAllowList()
+    {
+        var result = Scope.NormalizeGuest(new[] { Scope.FullAccess });
+
+        Assert.NotEmpty(result);
+        Assert.All(result, s => Assert.Contains(s, Scope.AllowedGuestScopes));
+        Assert.DoesNotContain(Scope.FullAccess, result);
+        Assert.DoesNotContain(Scope.FoodRead, result);
+    }
+
+    [Fact]
     public void Normalize_HealthReadWrite_ExpandsToAllHealthWriteScopes()
     {
         var result = Scope.Normalize(new[] { "health.readwrite" });

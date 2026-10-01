@@ -1,12 +1,13 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import * as Card from "$lib/components/ui/card";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import { getActiveInstances, getDefinitions, getInstanceHistory } from "$api/generated/trackers.generated.remote";
   import type { TrackerInstanceDto, TrackerDefinitionDto } from "$api";
-  import { NotificationUrgency as NotificationUrgencyEnum } from "$api";
+  import { reachedUrgency } from "$lib/components/trackers/schedule";
   import { Button } from "$lib/components/ui/button";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { getUnitLabel, formatLocale, formatMediumDateTime, time } from "$lib/utils/formatting";
@@ -20,6 +21,8 @@
   import CalendarMonthSummary from "$lib/components/calendar/CalendarMonthSummary.svelte";
   import CalendarDayCell from "$lib/components/calendar/CalendarDayCell.svelte";
   import { coachmark } from "@nocturne/coach";
+  import { groupBy, indexBy } from "$lib/utils/collections";
+  import { toDayString } from "$lib/utils/date-range";
 
   // Infer DayStats type from the query result
   type PunchCardMonth = NonNullable<
@@ -29,11 +32,12 @@
 
   // View mode: 'tir' for Time in Range bars, 'profile' for glucose line charts
   type ViewMode = "tir" | "profile";
-  let viewMode = $state<ViewMode>(
-    (typeof localStorage !== "undefined" &&
-      (localStorage.getItem("calendar-view-mode") as ViewMode)) ||
-      "tir"
-  );
+  function isViewMode(value: string | null): value is ViewMode {
+    return value === "tir" || value === "profile";
+  }
+  const storedViewMode =
+    typeof localStorage !== "undefined" ? localStorage.getItem("calendar-view-mode") : null;
+  let viewMode = $state<ViewMode>(isViewMode(storedViewMode) ? storedViewMode : "tir");
 
   // Persist view mode preference
   function setViewMode(mode: ViewMode) {
@@ -63,12 +67,15 @@
   const currentYear = $derived(viewDate.getFullYear());
 
   // Calculate date range for current view (full month)
-  // Pass ISO strings (not Date objects) so the hydration key is stable across SSR/client timezones
+  // Timezone-free strings keep the hydration key stable across SSR/client timezones.
+  // The endpoint takes these as calendar dates in the tenant's timezone.
   const dateRangeInput = $derived.by(() => {
-    const startDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
+    const month = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
     const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const endDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-    return { startDate, endDate };
+    return {
+      startDate: `${month}-01`,
+      endDate: `${month}-${String(lastDay).padStart(2, "0")}`,
+    };
   });
 
   // Query responses
@@ -100,6 +107,7 @@
       url.searchParams.set("year", String(date.getFullYear()));
       url.searchParams.set("month", String(date.getMonth() + 1)); // 1-indexed
     }
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- the current page's URL with its month params changed, already resolved
     goto(url.toString(), { invalidateAll: true });
   }
 
@@ -155,15 +163,8 @@
     const monthData = currentData?.months?.find(
       (m) => m.year === currentYear && m.month === currentMonth
     );
-    const daysMap = new Map<string, DayStats>();
-    if (monthData) {
-      for (const day of monthData?.days || []) {
-        if (!day.date) continue;
-        daysMap.set(day.date, day);
-      }
-    }
     return {
-      days: daysMap,
+      days: indexBy(monthData?.days ?? [], (day) => day.date, (day) => day),
       maxCarbs: monthData?.maxCarbs ?? 0,
       maxInsulin: monthData?.maxInsulin ?? 0,
       maxDiff: monthData?.maxCarbInsulinDiff ?? 0,
@@ -208,7 +209,7 @@
   });
 
   function handleDayClick(day: DayStats) {
-    goto(`/reports/day-in-review?date=${day.date}`);
+    goto(resolve(`/reports/day-in-review?date=${day.date}`));
   }
 
   const monthSummary = $derived.by(() => {
@@ -259,59 +260,30 @@
     return h > 0 ? `${days}d ${h}h` : `${days}d`;
   }
 
-  function getTrackerLevel(
-    instance: TrackerInstanceDto,
-    def: TrackerDefinitionDto | undefined
-  ): string {
-    if (!instance.ageHours || !def?.notificationThresholds) return "none";
-    const age = instance.ageHours;
-    const thresholds = def.notificationThresholds.sort(
-      (a, b) => (b.hours ?? 0) - (a.hours ?? 0)
-    );
-    for (const threshold of thresholds) {
-      if (threshold.hours && age >= threshold.hours) {
-        const urgency = threshold.urgency;
-        if (urgency === NotificationUrgencyEnum.Urgent) return "urgent";
-        if (urgency === NotificationUrgencyEnum.Hazard) return "hazard";
-        if (urgency === NotificationUrgencyEnum.Warn) return "warn";
-        if (urgency === NotificationUrgencyEnum.Info) return "info";
-      }
-    }
-    return "none";
+  function getTrackerLevel(instance: TrackerInstanceDto): string {
+    return reachedUrgency(instance, Date.now())?.toLowerCase() ?? "none";
   }
 
   function buildTrackerEvents(
     active: TrackerInstanceDto[],
     history: TrackerInstanceDto[]
   ): Map<string, TrackerEvent[]> {
-    const events = new Map<string, TrackerEvent[]>();
-    function addEvent(dateStr: string, event: TrackerEvent) {
-      if (!events.has(dateStr)) events.set(dateStr, []);
-      events.get(dateStr)!.push(event);
-    }
-    function toDateStr(date: Date | undefined): string | null {
-      if (!date) return null;
-      const d = new Date(date);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    }
-    for (const instance of active) {
-      const startDate = toDateStr(instance.startedAt);
-      if (startDate)
-        addEvent(startDate, { instance, eventType: "start", date: startDate });
-      const dueDate = toDateStr(instance.expectedEndAt);
-      if (dueDate)
-        addEvent(dueDate, { instance, eventType: "due", date: dueDate });
-    }
-    for (const instance of history) {
-      const completedDate = toDateStr(instance.completedAt);
-      if (completedDate)
-        addEvent(completedDate, {
-          instance,
-          eventType: "completed",
-          date: completedDate,
-        });
-    }
-    return events;
+    const event = (
+      instance: TrackerInstanceDto,
+      eventType: TrackerEventType,
+      at: string | undefined
+    ): TrackerEvent[] =>
+      at ? [{ instance, eventType, date: toDayString(new Date(at)) }] : [];
+    return groupBy(
+      [
+        ...active.flatMap((i) => [
+          ...event(i, "start", i.startedAt),
+          ...event(i, "due", i.expectedEndAt),
+        ]),
+        ...history.flatMap((i) => event(i, "completed", i.completedAt)),
+      ],
+      (e) => e.date
+    );
   }
 
   /**
@@ -324,7 +296,7 @@
     return level;
   }
 
-  function formatTrackerStartTime(startedAt: Date | undefined): string | null {
+  function formatTrackerStartTime(startedAt: string | undefined): string | null {
     if (!startedAt) return null;
     const date = new Date(startedAt);
     if (Number.isNaN(date.getTime())) return null;
@@ -365,6 +337,7 @@
     completingInstance = null;
     completingDefinition = null;
     completingDefaultDate = null;
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- reloads the current page's URL, already resolved
     goto(page.url.toString(), { invalidateAll: true });
   }
 </script>
@@ -373,7 +346,7 @@
   <CalendarSkeleton />
 {:else if punchCardError}
   <div class="flex items-center justify-center h-full p-6">
-    <Card.Root class="max-w-md border-destructive">
+    <Card.Root variant="destructive" class="max-w-md">
       <Card.Content class="py-8">
         <div class="text-center">
           <p class="font-medium text-destructive">
@@ -402,7 +375,7 @@
     </div>
 
     <div
-      class="print:hidden"
+      class="sticky top-(--app-sticky-top,0px) z-10 transition-all duration-300 print:hidden"
       {@attach coachmark({
         key: "feature-intro.calendar-views",
         title: "View modes",
@@ -444,7 +417,7 @@
             {/if}
             <div class="flex-1 overflow-x-auto print:overflow-visible flex flex-col">
               <div class="grid grid-cols-7 gap-1 mb-2 min-w-[28rem] @md:min-w-0">
-                {#each DAY_NAMES as dayName}
+                {#each DAY_NAMES as dayName, i (i)}
                   <div
                     class="text-center text-sm font-medium text-muted-foreground py-2"
                   >
@@ -462,9 +435,9 @@
                     "Tracker events appear on your calendar \u2014 colored by urgency.",
                 })}
               >
-                {#each calendarGrid as week}
+                {#each calendarGrid as week, idx (idx)}
                   <div class="grid grid-cols-7 gap-1">
-                    {#each week as day}
+                    {#each week as day, i (i)}
                       <CalendarDayCell
                       {day}
                       {viewMode}

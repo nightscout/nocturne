@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Globe } from "lucide-svelte";
+  import Globe from "@lucide/svelte/icons/globe";
 
   const { slug, size = 20 }: { slug?: string | null; size?: number } = $props();
 
@@ -12,8 +12,8 @@
 
 {#if isKnown && slug}
   <div
-    class="flex items-center justify-center"
-    style="width: {size}px; height: {size}px;"
+    class="flex size-(--icon-size) items-center justify-center"
+    style:--icon-size="{size}px"
   >
     <Globe {size} />
   </div>

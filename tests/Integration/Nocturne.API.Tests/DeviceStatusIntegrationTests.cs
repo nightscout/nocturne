@@ -10,14 +10,14 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for DeviceStatus and Health endpoints using Aspire-orchestrated infrastructure.
+/// Integration tests for DeviceStatus and Health endpoints against the API running in-process on real PostgreSQL.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
+public class DeviceStatusIntegrationTests : ApiIntegrationTestBase
 {
     public DeviceStatusIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -63,7 +63,7 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
         await client.PostAsJsonAsync("/api/v1/devicestatus", deviceStatus);
 
         // Act
-        var response = await ApiClient.GetAsync("/api/v1/devicestatus?count=10");
+        var response = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=10");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -88,7 +88,7 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
         var id = created![0].Id;
 
         // Act - use find query to locate by created_at since there is no GET by ID endpoint
-        var response = await ApiClient.GetAsync($"/api/v1/devicestatus?count=50");
+        var response = await AuthenticatedClient.GetAsync($"/api/v1/devicestatus?count=50");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -122,15 +122,66 @@ public class DeviceStatusIntegrationTests : AspireIntegrationTestBase
 
         // Assert
         deleteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await deleteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        status.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        status.GetProperty("deletedCount").GetInt64().Should().Be(1);
+        status.GetProperty("n").GetInt64().Should().Be(1);
 
         // Verify it no longer appears in the list
-        var listResponse = await ApiClient.GetAsync("/api/v1/devicestatus?count=50");
+        var listResponse = await AuthenticatedClient.GetAsync("/api/v1/devicestatus?count=50");
         var content = await listResponse.Content.ReadAsStringAsync();
         var entries = JsonSerializer.Deserialize<DeviceStatus[]>(content);
 
         entries.Should().NotContain(e => e.Id == id);
 
         Log($"Deleted device status with ID: {id}");
+    }
+
+    [Fact]
+    public async Task DeleteDeviceStatus_UnknownId_AnswersOkWithNoneDeleted()
+    {
+        var response = await CreateAuthenticatedClient().DeleteAsync("/api/v1/devicestatus/000000000000000000000000");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await response.Content.ReadFromJsonAsync<JsonElement>();
+        status.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        status.GetProperty("deletedCount").GetInt64().Should().Be(0);
+        status.GetProperty("n").GetInt64().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DeleteDeviceStatus_AnyIdWithFind_DeletesTheMatches()
+    {
+        var client = CreateAuthenticatedClient();
+        var device = $"test://wildcard-{Guid.NewGuid():N}";
+        var statuses = new[] { CreateTestDeviceStatus(), CreateTestDeviceStatus() };
+        statuses[1].Mills -= 60_000;
+        statuses[1].CreatedAt = DateTimeOffset.FromUnixTimeMilliseconds(statuses[1].Mills)
+            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        foreach (var status in statuses)
+        {
+            status.Device = device;
+            status.Pump = new PumpStatus { Clock = status.CreatedAt, Reservoir = 100 };
+        }
+        (await client.PostAsJsonAsync("/api/v1/devicestatus", statuses))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await client.DeleteAsync($"/api/v1/devicestatus/*?find[device]={device}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("deletedCount").GetInt64().Should().Be(2);
+        var remaining = JsonSerializer.Deserialize<DeviceStatus[]>(
+            await client.GetStringAsync("/api/v1/devicestatus?count=50"));
+        remaining.Should().NotContain(s => s.Device == device);
+    }
+
+    [Fact]
+    public async Task DeleteDeviceStatus_AnyIdWithoutQuery_IsRefused()
+    {
+        var response = await CreateAuthenticatedClient().DeleteAsync("/api/v1/devicestatus/*");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

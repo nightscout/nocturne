@@ -1,33 +1,32 @@
 <script lang="ts">
+  import { toggled } from "$lib/utils/collections";
   import { onMount, untrack } from "svelte";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Switch } from "$lib/components/ui/switch";
-  import {
-    ChevronRight,
-    Droplet,
-    TrendingUp,
-    Syringe,
-    Apple,
-    Clock,
-    AlertTriangle,
-    Battery,
-    BatteryLow,
-    Smartphone,
-    Fuel,
-    RotateCcw,
-    WifiOff,
-    PauseCircle,
-    Wand2,
-    ChartLine,
-    Activity,
-    Bell,
-    BellOff,
-    CalendarClock,
-    CalendarDays,
-    Moon,
-    Ban,
-    Timer,
-  } from "lucide-svelte";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Apple from "@lucide/svelte/icons/apple";
+  import Clock from "@lucide/svelte/icons/clock";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Battery from "@lucide/svelte/icons/battery";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import Fuel from "@lucide/svelte/icons/fuel";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
+  import PauseCircle from "@lucide/svelte/icons/circle-pause";
+  import Wand2 from "@lucide/svelte/icons/wand-sparkles";
+  import ChartLine from "@lucide/svelte/icons/chart-line";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Bell from "@lucide/svelte/icons/bell";
+  import BellOff from "@lucide/svelte/icons/bell-off";
+  import CalendarClock from "@lucide/svelte/icons/calendar-clock";
+  import CalendarDays from "@lucide/svelte/icons/calendar-days";
+  import Moon from "@lucide/svelte/icons/moon";
+  import Ban from "@lucide/svelte/icons/ban";
+  import Timer from "@lucide/svelte/icons/timer";
   import type { AlertRuleResponse } from "$api-clients";
   import type { ConditionNode } from "./types";
   import {
@@ -51,6 +50,10 @@
      * the sidebar renders without annotations when not provided. */
     factLog?: FactSnapshotLog;
     currentTimeMs: number;
+    /** Every rule starts expanded, not only the one under edit. */
+    expanded?: boolean;
+    /** Each rule has a switch to leave it out; off, the selection is neither shown nor stored. */
+    toggleable?: boolean;
     disabledRuleIds: Set<string>;
     availableRules: { id: string; name: string }[];
   }
@@ -63,6 +66,8 @@
     leafLog,
     factLog,
     currentTimeMs,
+    expanded = false,
+    toggleable = true,
     disabledRuleIds = $bindable(),
     availableRules,
   }: Props = $props();
@@ -84,7 +89,7 @@
   // Hydrate disabled-rule selection from sessionStorage on mount so the user's
   // ON/OFF preferences persist across replay runs within a tab.
   onMount(() => {
-    if (typeof sessionStorage === "undefined") return;
+    if (!toggleable || typeof sessionStorage === "undefined") return;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return;
@@ -102,7 +107,7 @@
   $effect(() => {
     const ids = [...disabledRuleIds];
     untrack(() => {
-      if (typeof sessionStorage === "undefined") return;
+      if (!toggleable || typeof sessionStorage === "undefined") return;
       try {
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
       } catch {
@@ -146,7 +151,7 @@
   });
 
   const ruleById = $derived(
-    new Map(rules.filter((r) => r.id).map((r) => [r.id as string, r])),
+    new Map(rules.flatMap((r): [string, AlertRuleResponse][] => (r.id ? [[r.id, r]] : []))),
   );
 
   function nameLookup(id: string): string | undefined {
@@ -228,10 +233,7 @@
   }
 
   function toggleDisabled(id: string, enabled: boolean): void {
-    const next = new Set(disabledRuleIds);
-    if (enabled) next.delete(id);
-    else next.add(id);
-    disabledRuleIds = next;
+    disabledRuleIds = toggled(disabledRuleIds, id, !enabled);
   }
 </script>
 
@@ -264,10 +266,10 @@
     {@const leaves = tree ? collectLeaves(rule, tree) : []}
     {@const isEditing = editingRuleId === id}
 
-    <Collapsible.Root open={isEditing} class="rounded-md border bg-background">
-      <div class="flex items-center gap-2 px-2 py-1.5">
+    <Collapsible.Root open={expanded || isEditing} variant="outline">
+      <div class="flex items-center gap-2 px-2 py-1.5 text-sm">
         <Collapsible.Trigger
-          class="group flex flex-1 min-w-0 items-center gap-2 text-left text-sm"
+          class="group flex flex-1 min-w-0 items-center gap-2 text-left"
         >
           <ChevronRight
             class="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90"
@@ -275,31 +277,34 @@
           <span
             data-testid="rule-status-pip"
             data-truth={truth ? "true" : "false"}
-            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+            class="inline-block h-2.5 w-2.5 shrink-0 rounded-full border-2 border-(--severity) {truth ? 'bg-(--severity)' : ''}"
             class:opacity-50={disabled}
-            style:background-color={truth ? severityVar(rule.severity) : "transparent"}
-            style:border={`1.5px solid ${severityVar(rule.severity)}`}
+            style:--severity={severityVar(rule.severity)}
             aria-hidden="true"
           ></span>
           <span class="flex-1 min-w-0 truncate">
             {rule.name ?? "(unnamed)"}
             {#if isEditing}
-              <span class="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <span class="ml-1 text-2xs uppercase tracking-wide text-muted-foreground">
                 (editing)
               </span>
             {/if}
           </span>
-          <span
-            class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
-          >
-            {disabled ? "Off" : "On"}
-          </span>
+          {#if toggleable}
+            <span
+              class="shrink-0 rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide {severitySlot(rule.severity, 'chip')}"
+            >
+              {disabled ? "Off" : "On"}
+            </span>
+          {/if}
         </Collapsible.Trigger>
-        <Switch
-          checked={!disabled}
-          onCheckedChange={(c: boolean) => id && toggleDisabled(id, c)}
-          aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
-        />
+        {#if toggleable}
+          <Switch
+            checked={!disabled}
+            onCheckedChange={(c: boolean) => id && toggleDisabled(id, c)}
+            aria-label={disabled ? `Enable ${rule.name}` : `Disable ${rule.name}`}
+          />
+        {/if}
       </div>
       <Collapsible.Content class="border-t px-2 py-1.5">
         {#if leaves.length === 0}

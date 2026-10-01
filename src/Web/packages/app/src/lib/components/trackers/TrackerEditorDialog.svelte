@@ -3,6 +3,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import * as Select from "$lib/components/ui/select";
   import { DurationInput } from "$lib/components/ui/duration-input";
   import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
@@ -21,27 +22,7 @@
   const createRemote = trackersRemote.createDefinition;
   const updateRemote = trackersRemote.updateDefinition;
 
-  let {
-    open = $bindable(false),
-    isNewDefinition,
-    editingDefinition,
-    formName = $bindable(""),
-    formDescription = $bindable(""),
-    formCategory = $bindable(TrackerCategory.Consumable),
-    formIcon = $bindable("activity"),
-    formLifespanHours = $bindable(undefined),
-    formLowReservoirUnits = $bindable(undefined),
-    formLowReservoirUrgency = $bindable(NotificationUrgency.Warn),
-    formNotifications = $bindable([]),
-    formIsFavorite = $bindable(false),
-    formDashboardVisibility = $bindable(DashboardVisibility.Always),
-    formVisibility = $bindable(TrackerVisibility.Public),
-    formMode = $bindable(TrackerMode.Duration),
-    formStartEventType = $bindable(undefined),
-    formCompletionEventType = $bindable(undefined),
-    categoryLabels,
-    loadData,
-  } = $props<{
+  interface Props {
     open?: boolean;
     isNewDefinition: boolean;
     editingDefinition: TrackerDefinitionDto | null;
@@ -59,9 +40,52 @@
     formMode?: TrackerMode;
     formStartEventType?: string | undefined;
     formCompletionEventType?: string | undefined;
+    formTriggerEventTypes?: string[];
+    formTriggerNotesContains?: string;
     categoryLabels: Record<TrackerCategory, string>;
     loadData: () => Promise<void>;
-  }>();
+  }
+
+  let {
+    open = $bindable(false),
+    isNewDefinition,
+    editingDefinition,
+    formName = $bindable(""),
+    formDescription = $bindable(""),
+    formCategory = $bindable(TrackerCategory.Consumable),
+    formIcon = $bindable("activity"),
+    formLifespanHours = $bindable(undefined),
+    formLowReservoirUnits = $bindable(undefined),
+    formLowReservoirUrgency = $bindable(NotificationUrgency.Warn),
+    formNotifications = $bindable([]),
+    formIsFavorite = $bindable(false),
+    formDashboardVisibility = $bindable(DashboardVisibility.Always),
+    formVisibility = $bindable(TrackerVisibility.Private),
+    formMode = $bindable(TrackerMode.Duration),
+    formStartEventType = $bindable(undefined),
+    formCompletionEventType = $bindable(undefined),
+    formTriggerEventTypes = $bindable([]),
+    formTriggerNotesContains = $bindable(""),
+    categoryLabels,
+    loadData,
+  }: Props = $props();
+
+  const triggerEventTypesQuery = trackersRemote.getTriggerEventTypes();
+  const triggerEventTypes = $derived(triggerEventTypesQuery.current ?? []);
+
+  // A trigger only ever restarts a Duration tracker, and an empty list has to be posted as one
+  // blank value: no field at all means "leave the stored triggers as they are".
+  const postedTriggers = $derived(
+    formMode === TrackerMode.Duration && formTriggerEventTypes.length > 0
+      ? formTriggerEventTypes
+      : [""]
+  );
+
+  function toggleTrigger(eventType: string, checked: boolean) {
+    formTriggerEventTypes = checked
+      ? [...formTriggerEventTypes, eventType]
+      : formTriggerEventTypes.filter((t) => t !== eventType);
+  }
 
   const createForm = $derived(createRemote.for("create"));
   const updateForm = $derived(updateRemote.for(editingDefinition?.id ?? ""));
@@ -224,6 +248,57 @@
     />
   {/if}
 
+  {#if formMode === TrackerMode.Duration}
+    <div class="space-y-3" data-testid="tracker-triggers">
+      <div>
+        <Label>Restart automatically on</Label>
+        <p class="text-xs text-muted-foreground">
+          When your pump, loop or a connector reports one of these, the running
+          tracker is completed and a new one starts at that moment.
+        </p>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        {#each triggerEventTypes as eventType (eventType)}
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="trigger-{eventType}"
+              checked={formTriggerEventTypes.includes(eventType)}
+              onCheckedChange={(checked) => toggleTrigger(eventType, checked === true)}
+            />
+            <Label for="trigger-{eventType}" variant="option" class="cursor-pointer">
+              {eventType}
+            </Label>
+          </div>
+        {/each}
+      </div>
+      {#if formTriggerEventTypes.length > 0}
+        <div class="space-y-2">
+          <Label for="triggerNotesContains" size="sm">
+            Only when the event's notes contain (optional)
+          </Label>
+          <Input
+            id="triggerNotesContains"
+            bind:value={formTriggerNotesContains}
+            placeholder="e.g., left"
+          />
+          <p class="text-xs text-muted-foreground">
+            Use this to keep two trackers that listen for the same event apart,
+            such as a left and a right site.
+          </p>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#each postedTriggers as eventType, i (i)}
+    <input type="hidden" name="{prefix}triggerEventTypes[]" value={eventType} />
+  {/each}
+  <input
+    type="hidden"
+    name="{prefix}triggerNotesContains"
+    value={formTriggerEventTypes.length > 0 ? formTriggerNotesContains : ""}
+  />
+
   <TrackerNotificationEditor
     bind:notifications={formNotifications}
     mode={formMode === TrackerMode.Duration ? "Duration" : "Event"}
@@ -232,7 +307,7 @@
       : undefined}
   />
 
-  {#each notificationsToApiFormat(formNotifications) as threshold, i}
+  {#each notificationsToApiFormat(formNotifications) as threshold, i (i)}
     <input
       type="hidden"
       name="{prefix}notificationThresholds[{i}].urgency"
@@ -334,17 +409,15 @@
     >
       <Select.Trigger>
         {#if formVisibility === TrackerVisibility.Public}
-          Public - Visible to everyone
-        {:else if formVisibility === TrackerVisibility.Private}
-          Private - Only you can see
+          Public - Other members can see it
         {:else}
-          Public - Visible to everyone
+          Private - Only you can see
         {/if}
       </Select.Trigger>
       <Select.Content>
         <Select.Item
           value={TrackerVisibility.Public}
-          label="Public - Visible to everyone"
+          label="Public - Other members can see it"
         />
         <Select.Item
           value={TrackerVisibility.Private}
@@ -353,19 +426,20 @@
       </Select.Content>
     </Select.Root>
     <p class="text-xs text-muted-foreground">
-      Controls whether this tracker is visible to unauthenticated users
+      Whether other people signed in to this site can see it running. Trackers
+      are never shown on a public share link.
     </p>
   </div>
 
   <div class="space-y-3 pt-2 border-t">
-    <Label class="text-sm font-medium">Event Integration (Nightscout)</Label>
+    <Label>Event Integration (Nightscout)</Label>
     <p class="text-xs text-muted-foreground -mt-1">
       Optionally create treatment events when this tracker starts or completes.
       This maintains compatibility with existing CAGE/SAGE pills.
     </p>
 
     <div class="space-y-2">
-      <Label for="startEventType" class="text-xs">Create event on start</Label>
+      <Label for="startEventType" size="sm">Create event on start</Label>
       <EventTypeCombobox
         bind:value={formStartEventType}
         onSelect={(type) => (formStartEventType = type)}
@@ -374,7 +448,7 @@
     </div>
 
     <div class="space-y-2">
-      <Label for="completionEventType" class="text-xs">
+      <Label for="completionEventType" size="sm">
         Create event on completion
       </Label>
       <EventTypeCombobox
@@ -387,7 +461,10 @@
 {/snippet}
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="@container max-w-2xl max-h-[90vh] overflow-y-auto">
+  <Dialog.Content
+    class="@container max-w-2xl max-h-[90vh] overflow-y-auto"
+    data-testid="tracker-editor"
+  >
     <Dialog.Header>
       <Dialog.Title>
         {isNewDefinition ? "New Tracker Definition" : "Edit Definition"}

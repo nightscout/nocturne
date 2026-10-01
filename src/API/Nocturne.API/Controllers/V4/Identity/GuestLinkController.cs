@@ -41,7 +41,7 @@ public class GuestLinkController : ControllerBase
     [DenyDemoSubject]
     [RemoteCommand(Invalidates = ["GetGuestLinks"])]
     [ProducesResponseType(typeof(GuestLinkCreationResult), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateGuestLink(
         [FromBody] CreateGuestLinkRequest request,
@@ -51,8 +51,7 @@ public class GuestLinkController : ControllerBase
         if (auth is not { IsAuthenticated: true, SubjectId: not null })
             return Unauthorized();
 
-        if (!HttpContext.HasScope(Scope.SharingGuest)
-            && auth.SubjectId != auth.EffectiveSubjectId)
+        if (!HttpContext.HasScope(Scope.SharingGuest))
             return Forbid();
 
         var effectiveSubjectId = auth.EffectiveSubjectId!.Value;
@@ -65,10 +64,19 @@ public class GuestLinkController : ControllerBase
                 auth.SubjectId.Value,
                 request.Label,
                 baseUrl,
+                HttpContext.GetGrantedScopes(),
                 request.Scopes,
-                ct);
+                limitTo24Hours: HttpContext.IsCallerHistoryClamped(),
+                ct: ct);
 
             return Ok(result);
+        }
+        catch (GrantCeilingViolationException ex)
+        {
+            return Problem(
+                detail: ex.Violation.Description,
+                statusCode: StatusCodes.Status403Forbidden,
+                title: ex.Violation.Code);
         }
         catch (ArgumentException ex)
         {
@@ -181,6 +189,18 @@ public class GuestLinkController : ControllerBase
         return Ok(new ActivateGuestLinkResponse(result.Session.ExpiresAt));
     }
 
+    /// <summary>
+    /// Whether this tenant has a guest code waiting to be redeemed, so the sign-in page can open
+    /// on code entry. Answers only yes or no: nothing about the code, its label or its owner.
+    /// </summary>
+    [HttpGet("pending")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(GuestCodePendingResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGuestCodePending(CancellationToken ct)
+    {
+        var pending = await _guestLinkService.HasRedeemableCodeAsync(ct);
+        return Ok(new GuestCodePendingResponse(pending));
+    }
 }
 
 /// <summary>
@@ -199,3 +219,8 @@ public record ActivateGuestLinkRequest(string Code);
 /// sniffing this shape for an error field.
 /// </summary>
 public record ActivateGuestLinkResponse(DateTime? ExpiresAt);
+
+/// <summary>
+/// Whether the tenant has an unredeemed guest code.
+/// </summary>
+public record GuestCodePendingResponse(bool Pending);

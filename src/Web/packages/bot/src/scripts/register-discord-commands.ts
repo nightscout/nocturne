@@ -14,6 +14,14 @@ import { DISCORD_COMMAND_MANIFEST } from "../commands/manifest.js";
 
 const DISCORD_API = "https://discord.com/api/v10";
 
+const isCommand = (value: unknown): value is { id: string; name: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  "id" in value &&
+  typeof value.id === "string" &&
+  "name" in value &&
+  typeof value.name === "string";
+
 async function main() {
   const applicationId = process.env.DISCORD_APPLICATION_ID;
   const botToken = process.env.DISCORD_BOT_TOKEN;
@@ -49,7 +57,8 @@ async function main() {
     process.exit(1);
   }
 
-  const registered = (await response.json()) as Array<{ id: string; name: string }>;
+  const body: unknown = await response.json();
+  const registered = Array.isArray(body) ? body.filter(isCommand) : [];
   console.log(`Success. Discord now has ${registered.length} global commands:`);
   for (const cmd of registered) {
     console.log(`  ${cmd.id}  /${cmd.name}`);

@@ -244,9 +244,12 @@ public class NightscoutConnectorServiceCatchUpBoundsTests
     {
         private readonly List<string> _requests = [];
 
-        /// <summary>The crawl request for <paramref name="collection"/>, as the source reads it.</summary>
+        /// <summary>
+        /// The crawl request for <paramref name="collection"/>, as the source reads it. A treatments
+        /// catch-up follows it with a re-read of the recent window, which is not the crawl.
+        /// </summary>
         internal string CrawlOf(string collection) =>
-            _requests.Single(u => u.Contains($"/api/v1/{collection}.json", StringComparison.Ordinal));
+            _requests.First(u => u.Contains($"/api/v1/{collection}.json", StringComparison.Ordinal));
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)

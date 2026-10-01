@@ -100,6 +100,7 @@ public class ProfileDecomposerTests
         repos.Written.Select(r => r.LegacyId).Should().OnlyContain(id => id == "profile1:Default");
         repos.Written.Should().HaveCount(5);
         result.CreatedRecords.Should().HaveCount(5);
+        result.SkippedDeleted.Should().Be(1, "the refused store is reported, not dropped silently");
     }
 
     /// <summary>
@@ -148,6 +149,113 @@ public class ProfileDecomposerTests
         byProfile["profile2"].Should().ContainSingle().Which.Should().NotBe(result.CorrelationId!.Value);
     }
 
+    private static IEnumerable<TherapySettings> WrittenDefaults(Repositories repos) =>
+        repos.Written.OfType<TherapySettings>().Where(t => t.IsDefault);
+
+    /// <summary>
+    /// Two documents whose default stores differ only by case must not both be the default: only the
+    /// newest document's claim stands, and it clears every other stored flag.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeBatchAsync_FlagsOnlyTheNewestDocumentsDefault_AndClearsTheRest()
+    {
+        var repos = new Repositories();
+        var profiles = new[]
+        {
+            BuildProfile(id: "relayed", stores: ["Default"], mills: 1700000000000, defaultProfile: "Default"),
+            BuildProfile(id: "current", stores: ["default", "Weekend"], mills: 1700000600000, defaultProfile: "default"),
+        };
+
+        await repos.Decomposer.DecomposeBatchAsync(profiles, WriteOrigin.Live);
+
+        var flagged = WrittenDefaults(repos).Should().ContainSingle().Subject;
+        flagged.LegacyId.Should().Be("current:default");
+        repos.SetDefaultCalls.Should().Equal([flagged.Id]);
+    }
+
+    /// <summary>
+    /// Nightscout looks the default up as <c>store[defaultProfile]</c>, an exact key: a newest document
+    /// naming no store it holds leaves no default, rather than a case-insensitive near miss.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_MatchesTheDefaultStoreExactly()
+    {
+        var repos = new Repositories();
+
+        await repos.Decomposer.DecomposeAsync(
+            BuildProfile(stores: ["default"], defaultProfile: "Default"), WriteOrigin.Live);
+
+        WrittenDefaults(repos).Should().BeEmpty();
+        repos.SetDefaultCalls.Should().Equal([(Guid?)null]);
+    }
+
+    /// <summary>
+    /// Re-syncing a document older than what is stored must neither take the default nor drop the
+    /// flag a stored row of its own already carries.
+    /// </summary>
+    [Fact]
+    public async Task DecomposeAsync_ForAnOlderDocument_KeepsTheStoredFlags()
+    {
+        var repos = new Repositories(storedSettings:
+        [
+            new TherapySettings
+            {
+                LegacyId = "older:Weekend", ProfileName = "Weekend", IsDefault = true,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            },
+            new TherapySettings
+            {
+                LegacyId = "newer:Night", ProfileName = "Night",
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000600000).UtcDateTime,
+            },
+        ]);
+
+        await repos.Decomposer.DecomposeAsync(
+            BuildProfile(id: "older", stores: ["Default", "Weekend"], mills: 1700000000000), WriteOrigin.Live);
+
+        WrittenDefaults(repos).Select(t => t.LegacyId).Should().Equal(["older:Weekend"]);
+        repos.SetDefaultCalls.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A profile switch carrying its profile inline (AAPS sends one on every switch) is not a
+    /// profile document: it must not take the default from the document before it, and its newer
+    /// snapshot must not stop that document from settling the default when it is re-synced.
+    /// </summary>
+    [Fact]
+    public async Task ProfileSwitchSnapshot_LeavesTheDocumentsDefault()
+    {
+        const string switchStore = "Day@@@@@1700000900000";
+        var repos = new Repositories(storedSettings:
+        [
+            new TherapySettings
+            {
+                LegacyId = "doc:Default", ProfileName = "Default", IsDefault = true,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000000000).UtcDateTime,
+            },
+            new TherapySettings
+            {
+                LegacyId = $"switch:{switchStore}", ProfileName = switchStore,
+                Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1700000900000).UtcDateTime,
+            },
+        ]);
+
+        await repos.Decomposer.DecomposeProfileSwitchAsync(
+            BuildProfile(id: "switch", stores: [switchStore], mills: 1700000900000, defaultProfile: switchStore),
+            WriteOrigin.Live);
+
+        repos.Written.OfType<TherapySettings>().Should().ContainSingle()
+            .Which.IsDefault.Should().BeFalse();
+        repos.SetDefaultCalls.Should().BeEmpty();
+
+        await repos.Decomposer.DecomposeAsync(
+            BuildProfile(id: "doc", stores: ["Default"], mills: 1700000000000), WriteOrigin.Live);
+
+        var flagged = WrittenDefaults(repos).Should().ContainSingle().Subject;
+        flagged.LegacyId.Should().Be("doc:Default");
+        repos.SetDefaultCalls.Should().Equal([flagged.Id]);
+    }
+
     [Fact]
     public async Task DecomposeBatchAsync_WithNoStoreEntries_WritesNothing()
     {
@@ -172,16 +280,35 @@ public class ProfileDecomposerTests
         public List<IV4Record> Written { get; } = [];
         public Dictionary<Type, bool> PreserveFlags { get; } = [];
         public List<int> Calls { get; } = [];
+        public List<Guid?> SetDefaultCalls { get; } = [];
 
         public Repositories(
             Guid? anchorCorrelationId = null,
             IReadOnlyCollection<string>? refusedLegacyIds = null,
-            Action? onUpsert = null)
+            Action? onUpsert = null,
+            IReadOnlyList<TherapySettings>? storedSettings = null)
         {
             var refused = refusedLegacyIds ?? [];
+            var stored = storedSettings ?? [];
+
+            var therapy = Mock<ITherapySettingsRepository, TherapySettings>(anchorCorrelationId, refused, onUpsert);
+            var therapyMock = Moq.Mock.Get(therapy);
+            therapyMock
+                .Setup(x => x.GetNewestDocumentRowAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(stored
+                    .Where(s => !s.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
+                    .OrderByDescending(s => s.Timestamp)
+                    .FirstOrDefault());
+            therapyMock
+                .Setup(x => x.GetDefaultsAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(stored.Where(s => s.IsDefault).ToList());
+            therapyMock
+                .Setup(x => x.SetDefaultAsync(It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+                .Callback((Guid? id, CancellationToken _) => SetDefaultCalls.Add(id))
+                .Returns(Task.CompletedTask);
 
             Decomposer = new ProfileDecomposer(
-                Mock<ITherapySettingsRepository, TherapySettings>(anchorCorrelationId, refused, onUpsert),
+                therapy,
                 Mock<IBasalScheduleRepository, BasalSchedule>(null, [], onUpsert),
                 Mock<ICarbRatioScheduleRepository, CarbRatioSchedule>(null, [], onUpsert),
                 Mock<ISensitivityScheduleRepository, SensitivitySchedule>(null, [], onUpsert),
@@ -205,26 +332,36 @@ public class ProfileDecomposerTests
                     Calls.Add(records.Count);
                     PreserveFlags[typeof(TRecord)] = preserve;
                     var outcomes = new Dictionary<string, LegacyUpsert<TRecord>>(StringComparer.Ordinal);
+                    var skippedDeleted = 0;
                     foreach (var record in records)
                     {
                         if (refused.Contains(record.LegacyId!))
+                        {
+                            skippedDeleted++;
                             continue;
+                        }
                         if (storedCorrelationId is { } stored)
                             record.CorrelationId = stored;
+                        if (record.Id == Guid.Empty)
+                            record.Id = Guid.CreateVersion7();
                         Written.Add(record);
                         outcomes[record.LegacyId!] = new LegacyUpsert<TRecord>(record, Created: true);
                     }
-                    return outcomes;
+                    return new LegacyUpsertBatch<TRecord>(outcomes, skippedDeleted);
                 });
             return repo.Object;
         }
     }
 
-    private static Profile BuildProfile(string id = "profile1", IReadOnlyList<string>? stores = null) => new()
+    private static Profile BuildProfile(
+        string id = "profile1",
+        IReadOnlyList<string>? stores = null,
+        long mills = 1700000000000,
+        string defaultProfile = "Default") => new()
     {
         Id = id,
-        Mills = 1700000000000,
-        DefaultProfile = "Default",
+        Mills = mills,
+        DefaultProfile = defaultProfile,
         EnteredBy = "test",
         Store = (stores ?? ["Default"]).ToDictionary(name => name, _ => new ProfileData
         {

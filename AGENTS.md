@@ -10,7 +10,9 @@ To run the application run the following command:
 aspire run
 ```
 
-If there is already an instance of the application running it will prompt to stop the existing instance. You only need to restart the application if code in `apphost.cs` is changed, but if you experience problems it can be useful to reset everything to the starting state.
+If there is already an instance of the application running it will prompt to stop the existing instance. The `nocturne-api` resource runs under `dotnet watch`: method-body edits hot-reload, and a rude edit restarts only the API process. You only need to restart the application if code under `src/Aspire/` is changed, but if you experience problems it can be useful to reset everything to the starting state.
+
+The Aspire dashboard is off by default (`Aspire__OptionalServices__AspireDashboard__Enabled=true aspire run` turns it on). Without it, use `aspire describe`, `aspire logs <resource>` and `aspire resource <resource> <command>` (e.g. `aspire resource nocturne-api restart`; the tenant commands such as seed-tenant live on `nocturne-postgres-server`). Dev auto-login is on by default; start with `NOCTURNE_DEV_AUTO_LOGIN=false` when testing auth itself.
 
 ## Development Commands
 
@@ -21,20 +23,25 @@ aspire run
 # Build solution
 dotnet build
 
-# Run unit tests (excludes integration/performance/E2E)
-dotnet test --filter "Category!=Integration&Category!=Performance&Category!=E2E"
+# Run unit tests (excludes integration/performance)
+dotnet test --filter "Category!=Integration&Category!=Performance"
 
 # Run integration tests (requires Docker; Testcontainers starts what each suite needs)
 dotnet test --filter "Category=Integration"
 
-# Run the end-to-end suite (opt-in; stands up the whole Aspire stack)
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
+# End-to-end suite: production images in docker compose, vitest API + Playwright web specs
+cd e2e && pnpm install && pnpm e2e     # build changed images, up, run all, down
+cd e2e && pnpm e2e:up                  # leave the stack up; prints URL, token, connection string
+cd e2e && pnpm e2e:upgrade             # latest release -> this checkout on one database
 
 # Type checking for frontend
 cd src/Web/packages/app && pnpm run check
+
+# Lint the frontend before pushing (CI gate: no errors, warnings capped in each package.json)
+cd src/Web && pnpm --recursive --no-bail run lint:ci
 ```
 
-Aspire creates the NSwag client on startup, and orchestrates everything. All you need to do to regenerate the NSwag client is `aspire start`.
+Aspire orchestrates everything. The API build regenerates the NSwag client when it is missing or older than the API's public surface (controllers, DTOs, attributes); `dotnet watch` rebuilds skip it. Force a regen with `dotnet build src/API/Nocturne.API/Nocturne.API.csproj -p:GenerateNSwagClient=true`.
 
 ## Architecture
 
@@ -61,7 +68,6 @@ src/
 tests/
 ├── Unit/                      # Unit tests
 ├── Integration/               # Integration tests (use Testcontainers)
-├── E2E/                       # Aspire-hosted end-to-end tests (opt-in, see Testing)
 └── Performance/               # Performance benchmarks
 ```
 
@@ -108,6 +114,7 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 
 - **PostgreSQL** via Entity Framework Core
 - Domain models (`Entry`) → Database entities (`EntryEntity`) via mappers in `Infrastructure.Data/Mappers/`
+- EF migrations live in `Nocturne.Infrastructure.Data.Migrations` (loaded by the API at runtime, not referenced at compile time): `dotnet ef migrations add <Name> -p src/Infrastructure/Nocturne.Infrastructure.Data.Migrations -s src/API/Nocturne.API`. `dotnet watch` does not see that project, so restart the API afterwards: `aspire resource nocturne-api restart`
 - Tables use snake_case: `entries`, `treatments`
 - UUID v7 for new records, preserve `OriginalId` for MongoDB migration compatibility
 
@@ -116,22 +123,19 @@ Domain models use **mills-first** timestamps - Unix milliseconds is canonical:
 - **xUnit** + **FluentAssertions** + **Moq**
 - Tests mirror source structure: `tests/Unit/Nocturne.{Project}.Tests/`
 - Use `[Trait("Category", "Integration")]` for integration tests
-- Integration tests use `WebApplicationFactory<Program>` and Testcontainers
+- Integration tests use `WebApplicationFactory` (see `ApiFactory`) and one shared Testcontainers Postgres per test process (`SharedPostgres`)
 
 ### End-to-end tests
 
-`tests/E2E/Nocturne.E2E.Tests` boots the whole Aspire stack from `AppHostFixture`, so it is
-excluded from test collection by default (`IsTestProject` is `$(RunE2E)`, which defaults to
-`false`) — a mistyped `--filter` cannot drag the stack into a unit run. It still compiles as
-part of `dotnet build nocturne.sln`. Opt in explicitly:
-
-```bash
-dotnet test tests/E2E/Nocturne.E2E.Tests -p:RunE2E=true
-```
-
-No workflow runs it: Aspire.Hosting.Testing's DCP orchestration never completes on
-GitHub-hosted runners (see the trailing note in `.github/workflows/tests.yml`). A workflow
-that revives it needs `-p:RunE2E=true` on the `dotnet test` invocation.
+`e2e/` is a standalone pnpm package (not in the `src/Web` workspace, whose lockfile
+`Dockerfile.web` installs with only `src/Web/packages` in the build context). It runs the API
+image from the SDK container build and the web image from `Dockerfile.web` in
+`e2e/docker-compose.yml`, with Postgres on tmpfs and a fake-vendor server (`e2e/mocks`), then
+vitest specs against the API (`e2e/src/api`) and Playwright specs against the web app
+(`e2e/src/web`). Each test seeds its own tenant through the dev-only seed endpoints, which the
+API image exposes only because the compose file sets `NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS=true`;
+it defaults off. No test anywhere starts Aspire. Details, including adding a fake vendor, are in
+`tests/README.md`.
 
 ## Web Frontend
 

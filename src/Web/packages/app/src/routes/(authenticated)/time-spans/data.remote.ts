@@ -239,16 +239,18 @@ export const getTimeSpansData = query(
     );
     const startTime = startOfRange.getTime();
     const endTime = endOfRange.getTime();
+    const rangeFrom = startOfRange.toISOString();
+    const rangeTo = endOfRange.toISOString();
 
     try {
       // Fetch all state span categories in parallel
       const [pumpModeRes, profileRes, tempBasalRes, overrideRes, activityRes] =
         await Promise.all([
-          apiClient.stateSpans.getPumpModes(startOfRange, endOfRange),
-          apiClient.stateSpans.getProfiles(startOfRange, endOfRange),
-          apiClient.stateSpans.getStateSpans(undefined, undefined, startOfRange, endOfRange),
-          apiClient.stateSpans.getOverrides(startOfRange, endOfRange),
-          apiClient.stateSpans.getActivities(startOfRange, endOfRange),
+          apiClient.stateSpans.getPumpModes(rangeFrom, rangeTo),
+          apiClient.stateSpans.getProfiles(rangeFrom, rangeTo),
+          apiClient.stateSpans.getStateSpans(undefined, undefined, rangeFrom, rangeTo),
+          apiClient.stateSpans.getOverrides(rangeFrom, rangeTo),
+          apiClient.stateSpans.getActivities(rangeFrom, rangeTo),
         ]);
 
       const pumpModeSpans = pumpModeRes?.data ?? [];

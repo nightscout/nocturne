@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Contracts.Entries;
 
 namespace Nocturne.Core.Contracts.Glucose;
@@ -55,21 +57,18 @@ public interface IEntryService
     Task<Entry?> GetEntryByIdAsync(string id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Check for duplicate entries in the database within a time window
+    /// Find the stored entry an upload would duplicate, by the rule
+    /// <see cref="IEntryStore.CheckDuplicateAsync(string?, string, long, CancellationToken)"/> defines
     /// </summary>
     /// <param name="device">Device identifier</param>
     /// <param name="type">Entry type (e.g., "sgv", "mbg", "cal")</param>
-    /// <param name="sgv">Sensor glucose value in mg/dL</param>
     /// <param name="mills">Timestamp in milliseconds since Unix epoch</param>
-    /// <param name="windowMinutes">Time window in minutes to check for duplicates (default: 5)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Existing entry if duplicate found, null otherwise</returns>
     Task<Entry?> CheckForDuplicateEntryAsync(
         string? device,
         string type,
-        double? sgv,
         long mills,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default
     );
 
@@ -78,17 +77,15 @@ public interface IEntryService
     /// </summary>
     /// <remarks>
     /// Same per-entry classification as
-    /// <see cref="CheckForDuplicateEntryAsync(string?, string, double?, long, int, CancellationToken)"/>,
+    /// <see cref="CheckForDuplicateEntryAsync(string?, string, long, CancellationToken)"/>,
     /// but the stored readings covering an <c>sgv</c> batch are loaded in one query rather than a
     /// query per entry. Other types are probed one at a time.
     /// </remarks>
     /// <param name="probes">Entries to classify, in submission order</param>
-    /// <param name="windowMinutes">Time window in minutes to check for duplicates (default: 5)</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>One result per probe in the order given: the existing entry, or null</returns>
     Task<IReadOnlyList<Entry?>> CheckForDuplicateEntriesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default
     );
 
@@ -101,8 +98,11 @@ public interface IEntryService
     /// the real-time broadcast so a historical import doesn't flood connected clients.
     /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Created entries with assigned IDs</returns>
-    Task<IEnumerable<Entry>> CreateEntriesAsync(
+    /// <returns>
+    /// The accepted entries, carrying how many of their records were not written because the user
+    /// had deleted them.
+    /// </returns>
+    Task<BulkWrite<Entry>> CreateEntriesAsync(
         IEnumerable<Entry> entries,
         WriteOrigin origin = WriteOrigin.Live,
         CancellationToken cancellationToken = default
@@ -164,6 +164,13 @@ public interface IEntryService
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Most recent entry if exists, null otherwise</returns>
     Task<Entry?> GetCurrentEntryAsync(CancellationToken cancellationToken = default);
+
+    /// <inheritdoc cref="IEntryStore.GetModifiedSinceAsync" />
+    Task<ModifiedSincePage<Entry>> GetEntriesModifiedSinceAsync(
+        long cursorMills,
+        int limit,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Get entries with advanced filtering capabilities

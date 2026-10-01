@@ -157,10 +157,10 @@ public class PropertiesService : IPropertiesService
     /// Build sandbox properties similar to the legacy JavaScript implementation
     /// This simulates the plugin system that sets properties on the sandbox
     /// </summary>
-    /// <param name="requested">
-    /// When set, only these property names were asked for. Used to skip building the
-    /// properties whose sources cost extra queries; null builds everything.
-    /// </param>
+    /// <remarks>
+    /// When <paramref name="requested"/> is set, only those property names were asked for, and
+    /// properties whose sources cost extra queries are skipped; null builds everything.
+    /// </remarks>
     private async Task<Dictionary<string, object>> BuildSandboxPropertiesAsync(
         CancellationToken cancellationToken,
         IReadOnlyCollection<string>? requested = null

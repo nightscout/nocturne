@@ -2,11 +2,7 @@
   import { formatGlucoseValue } from "$lib/utils/formatting";
   import type { GlucoseUnits } from "$lib/utils/formatting";
 
-  let {
-    monthSummary,
-    units,
-    unitLabel,
-  } = $props<{
+  interface Props {
     monthSummary: {
       totalReadings: number;
       inRangePercent: number;
@@ -16,7 +12,13 @@
     };
     units: GlucoseUnits;
     unitLabel: string;
-  }>();
+  }
+
+  let {
+    monthSummary,
+    units,
+    unitLabel,
+  }: Props = $props();
 </script>
 
 {#if monthSummary.totalReadings > 0}

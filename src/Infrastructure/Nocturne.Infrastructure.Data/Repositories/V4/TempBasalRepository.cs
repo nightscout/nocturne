@@ -16,16 +16,13 @@ using Nocturne.Core.Contracts.V4;
 namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
-/// Repository for managing temporary basal records in the database.
-/// Includes support for cross-connector deduplication.
+/// Repository for temporary basal records: a sync-key upsert participant and a DeduplicationService
+/// participant, keeping only the span-specific queries, the non-primary read filter, the post-commit
+/// dedup linking and the field preservation of <see cref="ApplySyncUpsert"/>.
 /// </summary>
-public class TempBasalRepository : ITempBasalRepository
+public class TempBasalRepository : SyncUpsertRepositoryBase<TempBasal, TempBasalEntity>, ITempBasalRepository
 {
-    private readonly ITenantDbContextFactory _contextFactory;
     private readonly IDeduplicationService _deduplicationService;
-    private readonly IAuditContext _auditContext;
-    private readonly ILogger<TempBasalRepository> _logger;
-    private readonly IV4RecordBroadcaster<TempBasal>? _broadcaster;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TempBasalRepository"/> class.
@@ -41,147 +38,80 @@ public class TempBasalRepository : ITempBasalRepository
         IAuditContext auditContext,
         ILogger<TempBasalRepository> logger,
         IV4RecordBroadcaster<TempBasal>? broadcaster = null)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
-        _contextFactory = contextFactory;
         _deduplicationService = deduplicationService;
-        _auditContext = auditContext;
-        _logger = logger;
-        _broadcaster = broadcaster;
     }
 
-    /// <summary>
-    /// Fires the native V4 broadcast for a just-committed write — but only for <see cref="WriteOrigin.Live"/>
-    /// writes (backfill imports stay silent). Mirrors the gate in <c>V4RepositoryBase.RaiseBroadcastAsync</c>.
-    /// </summary>
-    private Task RaiseBroadcastAsync(
-        IReadOnlyList<TempBasal> created,
-        IReadOnlyList<TempBasal> updated,
-        IReadOnlyList<Guid> deletedIds,
-        WriteOrigin origin,
-        CancellationToken ct)
-        => V4RecordBroadcast.RaiseAsync(_broadcaster, created, updated, deletedIds, origin, ct);
+    /// <inheritdoc />
+    protected override TempBasalEntity ToEntity(TempBasal model) => TempBasalMapper.ToEntity(model);
+
+    /// <inheritdoc />
+    protected override TempBasal ToDomain(TempBasalEntity entity) => TempBasalMapper.ToDomainModel(entity);
+
+    /// <inheritdoc />
+    protected override void ApplyUpdate(TempBasalEntity target, TempBasal source) => TempBasalMapper.UpdateEntity(target, source);
+
+    /// <inheritdoc />
+    protected internal override RecordType? DedupRecordType => RecordType.TempBasal;
 
     /// <summary>
-    /// Gets temporary basal records based on filter criteria.
-    /// Deduplicates records using the <see cref="IDeduplicationService"/>.
+    /// The base query with the non-primary LinkedRecords exclusion, which
+    /// <see cref="V4RepositoryBase{TModel,TEntity}.CountAsync"/> applies too.
     /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="device">Optional device filter.</param>
-    /// <param name="source">Optional data source filter.</param>
-    /// <param name="limit">The maximum number of records to return.</param>
-    /// <param name="offset">The number of records to skip.</param>
-    /// <param name="descending">Whether to sort by start timestamp in descending order.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of temporary basal records.</returns>
-    public async Task<IEnumerable<TempBasal>> GetAsync(
-        DateTime? from,
-        DateTime? to,
-        string? device,
-        string? source,
-        int limit = 100,
-        int offset = 0,
-        bool descending = true,
-        CancellationToken ct = default
-    )
+    public override async Task<IEnumerable<TempBasal>> GetAsync(
+        DateTime? from, DateTime? to, string? device, string? source,
+        int limit = 100, int offset = 0, bool descending = true,
+        CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var query = ctx.TempBasals.AsNoTracking().AsQueryable();
         if (from.HasValue)
-            query = query.Where(e => e.StartTimestamp >= from.Value);
+            query = query.Where(e => e.Timestamp >= from.Value);
         if (to.HasValue)
-            query = query.Where(e => e.StartTimestamp <= to.Value);
+            query = query.Where(e => e.Timestamp <= to.Value);
         if (device != null)
             query = query.Where(e => e.Device == device);
         if (source != null)
             query = query.Where(e => e.DataSource == source);
 
-        query = query.ExcludeNonPrimary(ctx, RecordType.TempBasal);
+        query = ApplyReadVisibility(query, ctx);
 
-        query = descending
-            ? query.OrderByDescending(e => e.StartTimestamp)
-            : query.OrderBy(e => e.StartTimestamp);
+        query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(TempBasalMapper.ToDomainModel);
     }
 
     /// <summary>
-    /// Gets a temporary basal record by its unique identifier.
+    /// Links committed inserts into canonical groups, best-effort: a failure is logged rather than
+    /// failing a committed write. Only the full dedup job links a row missed here; the reconcile
+    /// pass reads links, so it never sees one.
     /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The temporary basal record, or null if not found.</returns>
-    public async Task<TempBasal?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    protected override async Task PostCommitDedupAsync(
+        NocturneDbContext ctx, IReadOnlyList<TempBasalEntity> inserted, WriteOrigin origin, CancellationToken ct)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.TempBasals.FindAsync([id], ct);
-        return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
-    }
+        if (inserted.Count == 0)
+            return;
 
-    /// <inheritdoc />
-    public async Task<TempBasal?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.TempBasals
-            .Where(e => e.Id >= low && e.Id <= high)
-            .OrderBy(e => e.Id)
-            .FirstOrDefaultAsync(ct);
-        return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Gets a temporary basal record by its legacy (MongoDB) identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The temporary basal record, or null if not found.</returns>
-    public async Task<TempBasal?> GetByLegacyIdAsync(string legacyId, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.TempBasals.FirstOrDefaultAsync(e => e.LegacyId == legacyId, ct);
-        return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
-    }
-
-    /// <summary>
-    /// Creates a new temporary basal record. When <c>DataSource</c> and <c>SyncIdentifier</c>
-    /// match an existing live row for this tenant, the record is updated in place rather than
-    /// inserted — making the operation idempotent for uploader retries. Tenant scoping is
-    /// implicit via the DbContext's RLS-equivalent query filter. Mirrors SensorGlucoseRepository.
-    /// </summary>
-    /// <param name="model">The temporary basal record to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The created or updated temporary basal record.</returns>
-    public async Task<TempBasal> CreateAsync(TempBasal model, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        if (!string.IsNullOrEmpty(model.DataSource) && !string.IsNullOrEmpty(model.SyncIdentifier))
+        try
         {
-            var existing = await ctx.TempBasals
-                .FirstOrDefaultAsync(
-                    e => e.DataSource == model.DataSource && e.SyncIdentifier == model.SyncIdentifier,
-                    ct);
-            if (existing != null)
-            {
-                ApplySyncUpsert(existing, model);
-                await ctx.SaveChangesAsync(ct);
-                var upserted = TempBasalMapper.ToDomainModel(existing);
-                // A single explicit upsert always broadcasts (no material-change gate on the single path).
-                await RaiseBroadcastAsync([], [upserted], [], origin, ct);
-                return upserted;
-            }
-        }
+            var dedupInputs = inserted.Select(e => new DeduplicationInput(
+                RecordId: e.Id,
+                Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+                DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
+                Criteria: MatchCriteriaMapper.From(e)
+            )).ToList();
 
-        var entity = TempBasalMapper.ToEntity(model);
-        ctx.TempBasals.Add(entity);
-        await ctx.SaveChangesAsync(ct);
-        var created = TempBasalMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([created], [], [], origin, ct);
-        return created;
+            await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", inserted.Count);
+        }
     }
 
     /// <summary>
-    /// Applies an upserted record onto the row matched by (DataSource, SyncIdentifier), keeping the
-    /// stored value of every field the write path cannot express.
+    /// Keeps the stored value of every field the write path cannot express.
     /// </summary>
     /// <remarks>
     /// The match is made from the incoming record alone — the caller never read the stored row, so a
@@ -191,7 +121,7 @@ public class TempBasalRepository : ITempBasalRepository
     /// was removed, would unattribute a row that back-stamping had already resolved. Fields the request
     /// can carry stay unconditional, so an omitted one still means "clear it".
     /// </remarks>
-    private static void ApplySyncUpsert(TempBasalEntity entity, TempBasal model)
+    protected override void ApplySyncUpsert(TempBasalEntity entity, TempBasal model)
     {
         var deviceId = entity.DeviceId;
         var patientDeviceId = entity.PatientDeviceId;
@@ -208,212 +138,6 @@ public class TempBasalRepository : ITempBasalRepository
         entity.AdditionalPropertiesJson ??= additionalPropertiesJson;
     }
 
-    /// <summary>
-    /// Updates an existing temporary basal record.
-    /// </summary>
-    /// <param name="id">The unique identifier of the record to update.</param>
-    /// <param name="model">The updated record data.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The updated temporary basal record.</returns>
-    public async Task<TempBasal> UpdateAsync(Guid id, TempBasal model, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.TempBasals.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"TempBasal {id} not found");
-        TempBasalMapper.UpdateEntity(entity, model);
-        await ctx.SaveChangesAsync(ct);
-        var updated = TempBasalMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([], [updated], [], origin, ct);
-        return updated;
-    }
-
-    /// <summary>
-    /// Deletes a temporary basal record by its unique identifier.
-    /// </summary>
-    /// <param name="id">The unique identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    public async Task DeleteAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity =
-            await ctx.TempBasals.FindAsync([id], ct)
-            ?? throw new KeyNotFoundException($"TempBasal {id} not found");
-        entity.DeletedAt = DateTime.UtcNow;
-        await ctx.SaveChangesAsync(ct);
-        await RaiseBroadcastAsync([], [], [id], origin, ct);
-    }
-
-    /// <inheritdoc />
-    public async Task<TempBasal> RestoreAsync(Guid id, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var entity = await ctx.RestoreDeletedAsync<TempBasalEntity>(id, nameof(TempBasal), ct);
-        // A restored record reappears in the dataset: broadcast it as a create so clients re-add it.
-        var restored = TempBasalMapper.ToDomainModel(entity);
-        await RaiseBroadcastAsync([restored], [], [], origin, ct);
-        return restored;
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<TempBasal>> BulkRestoreAsync(IEnumerable<Guid> ids, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var restored = (await ctx.RestoreDeletedAsync<TempBasalEntity>(ids, ct))
-            .Select(TempBasalMapper.ToDomainModel).ToList();
-        await RaiseBroadcastAsync(restored, [], [], origin, ct);
-        return restored;
-    }
-
-    /// <inheritdoc />
-    public async Task<IEnumerable<TempBasal>> GetDeletedAsync(int limit, int offset, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return (await ctx.GetDeletedAsync<TempBasalEntity>(limit, offset, ct))
-            .Select(TempBasalMapper.ToDomainModel);
-    }
-
-    /// <inheritdoc />
-    public async Task<int> CountDeletedAsync(CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        return await ctx.CountDeletedAsync<TempBasalEntity>(ct);
-    }
-
-    /// <summary>
-    /// Deletes a temporary basal record by its legacy identifier.
-    /// </summary>
-    /// <param name="legacyId">The legacy identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The number of deleted records.</returns>
-    /// <remarks>
-    /// Above <see cref="AuditedBulkDeleteExtensions.BroadcastMaterializationCap"/> the ids are not
-    /// materialized and no delete event fires: temp basals ride only the native V4 port, which has no
-    /// coarse collection-level signal to fall back to (unlike the glucose family's entries sink).
-    /// </remarks>
-    public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var result = await ctx.AuditedSoftDeleteWithIdsAsync(
-            ctx.TempBasals.Where(e => e.LegacyId == legacyId), _auditContext, $"legacy_id={legacyId}", ct);
-        await RaiseBroadcastAsync([], [], result.Entities, origin, ct);
-        return result.Count;
-    }
-
-    /// <summary>
-    /// Returns the start timestamp of the most recently stored temp basal, optionally scoped to a data source.
-    /// Used by connectors to resume per-source sync without re-fetching already-stored data.
-    /// </summary>
-    public async Task<DateTime?> GetLatestTimestampAsync(string? source = null, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.TempBasals.AsNoTracking().AsQueryable();
-        if (source != null)
-            query = query.Where(e => e.DataSource == source);
-        return await query.MaxAsync(e => (DateTime?)e.StartTimestamp, ct);
-    }
-
-    /// <summary>
-    /// Counts temporary basal records within a timestamp range.
-    /// </summary>
-    /// <param name="from">Optional start timestamp filter.</param>
-    /// <param name="to">Optional end timestamp filter.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The count of matching records.</returns>
-    public async Task<int> CountAsync(DateTime? from, DateTime? to, CancellationToken ct = default)
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.TempBasals.AsNoTracking().AsQueryable();
-        if (from.HasValue)
-            query = query.Where(e => e.StartTimestamp >= from.Value);
-        if (to.HasValue)
-            query = query.Where(e => e.StartTimestamp <= to.Value);
-        return await query.CountAsync(ct);
-    }
-
-    /// <summary>
-    /// Performs a bulk creation of temporary basal records, handling deduplication.
-    /// </summary>
-    /// <param name="records">The collection of records to create.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>A collection of created records.</returns>
-    public async Task<IEnumerable<TempBasal>> BulkCreateAsync(
-        IEnumerable<TempBasal> records,
-        WriteOrigin origin, CancellationToken ct = default
-    )
-    {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var tx = await ctx.Database.BeginTransactionAsync(ct);
-            var entities = records.Select(TempBasalMapper.ToEntity).ToList();
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            // Batch-level dedup: keep first occurrence per LegacyId
-            entities = entities
-                .GroupBy(e => e.LegacyId ?? e.Id.ToString())
-                .Select(g => g.First())
-                .ToList();
-
-            // DB-level dedup: filter out records whose LegacyId already exists
-            var legacyIds = entities
-                .Where(e => !string.IsNullOrEmpty(e.LegacyId))
-                .Select(e => e.LegacyId!)
-                .ToHashSet();
-
-            if (legacyIds.Count > 0)
-            {
-                var blockedLegacyIds = await ctx.GetBlockingLegacyIdsAsync<TempBasalEntity>(legacyIds, ct);
-
-                entities = entities
-                    .Where(e => string.IsNullOrEmpty(e.LegacyId) || !blockedLegacyIds.Contains(e.LegacyId))
-                    .ToList();
-            }
-
-            if (entities.Count == 0)
-            {
-                await tx.CommitAsync(ct);
-                return [];
-            }
-
-            const int batchSize = 500;
-            foreach (var batch in entities.Chunk(batchSize))
-            {
-                ctx.TempBasals.AddRange(batch);
-                await ctx.SaveChangesAsync(ct);
-                ctx.ChangeTracker.Clear();
-            }
-
-            await tx.CommitAsync(ct);
-
-            // Cross-connector deduplication: link saved records to canonical groups
-            try
-            {
-                var dedupInputs = entities.Select(e => new DeduplicationInput(
-                    RecordId: e.Id,
-                    Mills: new DateTimeOffset(e.StartTimestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
-                    DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                    Criteria: MatchCriteriaMapper.From(e)
-                )).ToList();
-
-                await _deduplicationService.DeduplicateBatchAsync(RecordType.TempBasal, dedupInputs, ct);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "TempBasal", entities.Count);
-            }
-
-            var created = entities.Select(TempBasalMapper.ToDomainModel).ToList();
-            await RaiseBroadcastAsync(created, [], [], origin, ct);
-            return created;
-        });
-    }
-
     /// <inheritdoc />
     public async Task<int> SoftDeleteAbsentBySourceAndDateRangeAsync(
         string source,
@@ -423,26 +147,37 @@ public class TempBasalRepository : ITempBasalRepository
         CancellationToken ct = default
     )
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         // The global query filter already restricts to active (DeletedAt == null) rows for this
         // tenant. Soft-delete only the window's rows whose legacy id the source no longer reports;
         // a row with no legacy id can't be matched against the incoming set, so treat it as absent.
         return await ctx.AuditedSoftDeleteAsync(
-            ctx.TempBasals.Where(e => e.DataSource == source
-                && e.StartTimestamp >= from && e.StartTimestamp <= to
-                && (e.LegacyId == null || !keepLegacyIds.Contains(e.LegacyId))),
-            _auditContext, $"data_source={source}", ct);
+            AbsentFromSource(ctx, source, from, to, keepLegacyIds),
+            AuditContext, $"data_source={source}", ct);
+    }
+
+    /// <summary>
+    /// The rows <see cref="SoftDeleteAbsentBySourceAndDateRangeAsync"/> removes. The set is bound as
+    /// an array for the reason given on <see cref="DeduplicationService.PrimariesOf"/>.
+    /// </summary>
+    internal static IQueryable<TempBasalEntity> AbsentFromSource(
+        NocturneDbContext ctx, string source, DateTime from, DateTime to, IReadOnlySet<string> keepLegacyIds)
+    {
+        var keep = keepLegacyIds.ToArray();
+        return ctx.TempBasals.Where(e => e.DataSource == source
+            && e.Timestamp >= from && e.Timestamp <= to
+            && (e.LegacyId == null || !keep.Contains(e.LegacyId)));
     }
 
     /// <inheritdoc />
     public async Task<TempBasal?> GetActiveAtAsync(DateTime at, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         var entity = await ctx.TempBasals
             .AsNoTracking()
-            .Where(t => t.StartTimestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
+            .Where(t => t.Timestamp <= at && (t.EndTimestamp == null || t.EndTimestamp > at))
             .ExcludeNonPrimary(ctx, RecordType.TempBasal)
-            .OrderByDescending(t => t.StartTimestamp)
+            .OrderByDescending(t => t.Timestamp)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : TempBasalMapper.ToDomainModel(entity);
     }
@@ -451,19 +186,15 @@ public class TempBasalRepository : ITempBasalRepository
     /// <remarks>Windows on the span start, the timestamp temp basals are attributed by.</remarks>
     public async Task<IReadOnlyList<TempBasal>> GetUnattributedAsync(DateTime? from, DateTime? to, int limit, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
-        var query = ctx.TempBasals.AsNoTracking();
-        if (from.HasValue) query = query.Where(e => e.StartTimestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.StartTimestamp <= to.Value);
-
-        var entities = await query.UnattributedNewestFirstAsync(e => e.StartTimestamp, limit, ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx.GetUnattributedAsync<TempBasalEntity>(from, to, limit, ct);
         return entities.Select(TempBasalMapper.ToDomainModel).ToList();
     }
 
     /// <inheritdoc />
     public async Task<int> SetPatientDeviceIdsAsync(IReadOnlyDictionary<Guid, Guid> patientDeviceIdByRecordId, CancellationToken ct = default)
     {
-        await using var ctx = await _contextFactory.CreateAsync(ct);
+        await using var ctx = await ContextFactory.CreateAsync(ct);
         return await ctx.SetPatientDeviceIdsAsync<TempBasalEntity>(patientDeviceIdByRecordId, ct);
     }
 }

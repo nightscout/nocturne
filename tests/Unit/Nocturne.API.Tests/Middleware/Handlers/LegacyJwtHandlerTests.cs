@@ -104,6 +104,26 @@ public class LegacyJwtHandlerTests
         Assert.Empty(result.AuthContext.Scopes);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AuthenticateAsync_UnscopedJwt_CarriesItsHistoryLimit(bool limitTo24Hours)
+    {
+        // A limited token that reaches this handler must stay limited, whatever claim shape led
+        // OAuthAccessTokenHandler to pass it over.
+        var token = _jwtService.GenerateAccessToken(
+            TestSubject,
+            permissions: [],
+            roles: ["readable"],
+            scopes: [],
+            limitTo24Hours: limitTo24Hours);
+
+        var result = await _handler.AuthenticateAsync(CreateHttpContext(token));
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(limitTo24Hours, result.AuthContext!.LimitTo24Hours);
+    }
+
     [Fact]
     public async Task AuthenticateAsync_NoAuthorizationHeader_Skips()
     {

@@ -74,10 +74,12 @@ public class OAuthDeviceCodeServiceTests : IDisposable
                 It.IsAny<IEnumerable<string>>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
+                It.IsAny<bool>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, CancellationToken _) =>
+            .ReturnsAsync((Guid clientEntityId, Guid subjectId, IEnumerable<string> scopes, string _, string? _, bool limitTo24Hours, CancellationToken _) =>
                 new OAuthGrantInfo
                 {
+                    LimitTo24Hours = limitTo24Hours,
                     Id = _testGrantId,
                     ClientEntityId = clientEntityId,
                     ClientId = TestClientId,
@@ -329,6 +331,7 @@ public class OAuthDeviceCodeServiceTests : IDisposable
             It.IsAny<IEnumerable<string>>(),
             It.IsAny<string>(),
             It.IsAny<string?>(),
+            It.IsAny<bool>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -561,7 +564,8 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
         Guid? clientEntityId = null,
         Guid? subjectId = null,
         List<string>? scopes = null,
-        DateTime? revokedAt = null)
+        DateTime? revokedAt = null,
+        bool limitTo24Hours = false)
     {
         var grantId = id ?? _testGrantId;
         var entity = new OAuthGrantEntity
@@ -573,6 +577,7 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             GrantType = "app",
             CreatedAt = DateTime.UtcNow,
             RevokedAt = revokedAt,
+            LimitTo24Hours = limitTo24Hours,
         };
         db.OAuthGrants.Add(entity);
         await db.SaveChangesAsync();
@@ -659,6 +664,36 @@ public class OAuthDeviceCodeExchangeTests : IDisposable
             It.IsAny<string?>(),
             It.IsAny<string?>(),
             It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ExchangeDeviceCodeAsync_CarriesTheGrantsHistoryLimitIntoTheToken(bool limitTo24Hours)
+    {
+        using var db = CreateDbContext();
+        await SeedClientAsync(db);
+        await SeedSubjectAsync(db);
+        var grantId = await SeedGrantAsync(db, limitTo24Hours: limitTo24Hours);
+        await SeedDeviceCodeAsync(db,
+            approvedAt: DateTime.UtcNow.AddMinutes(-1),
+            grantId: grantId,
+            subjectId: _testSubjectId);
+
+        var result = await CreateService(db).ExchangeDeviceCodeAsync(TestDeviceCode, TestClientId);
+
+        Assert.True(result.Success);
+        _mockJwtService.Verify(j => j.GenerateAccessToken(
+            It.IsAny<SubjectInfo>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<IEnumerable<string>>(),
+            It.IsAny<string?>(),
+            limitTo24Hours,
+            It.IsAny<Guid?>(),
+            It.IsAny<TimeSpan?>(),
+            It.IsAny<bool>(),
+            It.IsAny<Guid?>()), Times.Once);
     }
 
     [Fact]

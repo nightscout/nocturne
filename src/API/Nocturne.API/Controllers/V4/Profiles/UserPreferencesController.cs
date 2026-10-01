@@ -96,17 +96,16 @@ public class UserPreferencesController : ControllerBase
         // Validate language code if provided
         if (request.PreferredLanguage != null && !SupportedLanguages.Contains(request.PreferredLanguage))
         {
-            return BadRequest(new
-            {
-                error = "invalid_language",
-                message = $"Language '{request.PreferredLanguage}' is not supported. Supported languages: {string.Join(", ", SupportedLanguages)}"
-            });
+            return Problem(
+                detail: $"Language '{request.PreferredLanguage}' is not supported. Supported languages: {string.Join(", ", SupportedLanguages)}",
+                statusCode: 400,
+                title: "Bad Request");
         }
 
         // Validate the constrained display-preference values if provided.
         if (request.Preferences?.Validate() is { } validationError)
         {
-            return BadRequest(new { error = "invalid_preference", message = validationError });
+            return Problem(detail: validationError, statusCode: 400, title: "Bad Request");
         }
 
         var subject = await _dbContext.Subjects

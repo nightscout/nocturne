@@ -3,8 +3,12 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Nocturne.Alerts.ParityCorpus.Generator.Harness;
+using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.API.Tests.TestDoubles;
+using Nocturne.Core.Alerts.Native;
 using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
@@ -46,15 +50,39 @@ public class ShadowAlertEngineTests
         LastReadingAt = T0,
     };
 
+    private static RustShadowRuleEvaluator RustShadow() => new(
+        new AlertEngineErrors(new TestMeterFactory(), TimeProvider.System),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<RustShadowRuleEvaluator>.Instance);
+
+    /// <summary>Only the per-rule evaluation; the node and auto-resolve shadows have their own tests.</summary>
+    private abstract class RuleOnlyShadowEvaluator : IShadowRuleEvaluator
+    {
+        public abstract string Name { get; }
+
+        public abstract Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct);
+
+        public Task<ShadowNodeOutcome> EvaluateNodeAsync(
+            Guid ruleId, ConditionNode node, string pathRoot, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, CancellationToken ct) =>
+            throw new NotSupportedException();
+
+        public Task<ShadowAutoResolveOutcome> EvaluateAutoResolveAsync(
+            AlertRuleSnapshot rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class FakeShadowEvaluator(
         Func<ShadowRuleOutcome>? outcome = null,
-        Exception? throws = null) : IShadowRuleEvaluator
+        Exception? throws = null) : RuleOnlyShadowEvaluator
     {
         public int Calls { get; private set; }
 
-        public string Name => "fake";
+        public override string Name => "fake";
 
-        public Task<ShadowRuleOutcome> EvaluateAsync(
+        public override Task<ShadowRuleOutcome> EvaluateAsync(
             AlertRule rule, SensorContext context, DateTime now,
             IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
         {
@@ -72,9 +100,10 @@ public class ShadowAlertEngineTests
         time.SetUtcNow(T0);
         var timerStore = new RecordingTimerStore();
         var trackerRepo = new InMemoryTrackerRepository([rule]);
-        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo);
+        var gate = new AlertRuleEvaluationGate();
+        var (managed, provider) = EngineTestHarness.BuildManagedEngine(time, timerStore, trackerRepo, gate);
         var logger = new ListLogger<ShadowAlertEngine>();
-        var engine = new ShadowAlertEngine(managed, shadowEvaluator, timerStore, trackerRepo, time, logger);
+        var engine = new ShadowAlertEngine(managed, shadowEvaluator, timerStore, trackerRepo, gate, time, logger);
         return (engine, logger, timerStore, trackerRepo, provider);
     }
 
@@ -82,13 +111,59 @@ public class ShadowAlertEngineTests
     private static ShadowRuleOutcome AgreeingOutcome() => new()
     {
         Root = true,
-        Transition = "opened",
+        Transition = ExcursionTransitionType.ExcursionOpened,
         AutoResolved = false,
         PostTimers = new Dictionary<string, DateTime>(),
         PostTrackerState = "active",
         PostConfirmationCount = 0,
         PostHasActiveExcursion = true,
     };
+
+    /// <summary>Records the pre-state each call received and holds the first call until released.</summary>
+    private sealed class HoldingShadowEvaluator : RuleOnlyShadowEvaluator
+    {
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FirstEntered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public List<string?> PreStates { get; } = [];
+
+        public override string Name => "holding";
+
+        public override async Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
+        {
+            lock (PreStates) PreStates.Add(trackerState?.State);
+            if (FirstEntered.TrySetResult())
+                await Release.Task;
+            return AgreeingOutcome();
+        }
+    }
+
+    [Fact]
+    public async Task A_concurrent_evaluation_waits_for_the_one_being_compared()
+    {
+        var rule = BuildThresholdRule();
+        var shadow = new HoldingShadowEvaluator();
+        var (engine, _, _, trackerRepo, provider) = BuildShadowEngine(rule, shadow);
+        await using var _ = provider;
+
+        var first = engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+        await shadow.FirstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var second = Task.Run(() => engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None));
+        await Task.Delay(50);
+
+        second.IsCompleted.Should().BeFalse("the first evaluation holds the rule until its comparison ends");
+        shadow.PreStates.Should().Equal([null]);
+
+        shadow.Release.SetResult();
+        await first.WaitAsync(TimeSpan.FromSeconds(5));
+        (await second.WaitAsync(TimeSpan.FromSeconds(5))).Transition.Type
+            .Should().Be(ExcursionTransitionType.ExcursionContinues);
+        shadow.PreStates.Should().Equal([null, "active"],
+            "the second snapshot is taken after the first evaluation committed");
+    }
 
     [Fact]
     public async Task Agreement_produces_no_divergence_log()
@@ -116,7 +191,7 @@ public class ShadowAlertEngineTests
         var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome
         {
             Root = false,
-            Transition = "none",
+            Transition = ExcursionTransitionType.None,
             AutoResolved = false,
             PostTimers = new Dictionary<string, DateTime>(),
             PostTrackerState = "idle",
@@ -187,7 +262,7 @@ public class ShadowAlertEngineTests
         var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome
         {
             Root = false,
-            Transition = "hysteresis_started",
+            Transition = ExcursionTransitionType.HysteresisStarted,
             AutoResolved = false,
             PostTimers = new Dictionary<string, DateTime>(),
             PostTrackerState = "hysteresis",
@@ -241,11 +316,104 @@ public class ShadowAlertEngineTests
         divergence.Message.Should().Contain("rust=threw InvalidOperationException");
     }
 
+    private sealed class CapturingShadowEvaluator : RuleOnlyShadowEvaluator
+    {
+        public AlertTrackerState? SeenTracker { get; private set; }
+
+        public override string Name => "capture";
+
+        public override Task<ShadowRuleOutcome> EvaluateAsync(
+            AlertRule rule, SensorContext context, DateTime now,
+            IReadOnlyDictionary<string, DateTime> timers, AlertTrackerState? trackerState, CancellationToken ct)
+        {
+            SeenTracker = trackerState;
+            return Task.FromResult(new ShadowRuleOutcome { Skipped = true });
+        }
+    }
+
+    [Fact]
+    public async Task The_shadow_sees_the_whole_pre_state_tracker()
+    {
+        var rule = BuildThresholdRule();
+        var capture = new CapturingShadowEvaluator();
+        var (engine, _, _, trackerRepo, provider) = BuildShadowEngine(rule, capture);
+        await using var _ = provider;
+        AlertTrackerState Pre() => new()
+        {
+            AlertRuleId = RuleId,
+            State = "hysteresis",
+            ConfirmationCount = 2,
+            ActiveExcursionId = Guid.Parse("00000000-0000-0000-0000-0000000000cc"),
+            UpdatedAt = T0.AddMinutes(-1),
+            HysteresisStartedAt = T0.AddMinutes(-4),
+        };
+        await trackerRepo.UpsertTrackerStateAsync(Pre(), CancellationToken.None);
+
+        await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        capture.SeenTracker.Should().BeEquivalentTo(Pre());
+    }
+
+    private static AlertRule BuildUnevaluableRule()
+    {
+        var rule = BuildThresholdRule();
+        rule.ConditionType = AlertConditionType.Composite;
+        rule.ConditionParams = """{"operator":"and"}""";
+        return rule;
+    }
+
+    [Fact]
+    public async Task Both_engines_skipping_an_unevaluable_rule_is_not_a_divergence()
+    {
+        var rule = BuildUnevaluableRule();
+        var fake = new FakeShadowEvaluator(throws: new RustAlertEngineException("malformed condition_params"));
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        fake.Calls.Should().Be(1);
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task A_shadow_skip_alongside_a_managed_throw_is_not_a_divergence()
+    {
+        var rule = BuildUnevaluableRule();
+        var fake = new FakeShadowEvaluator(() => new ShadowRuleOutcome { Skipped = true });
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, fake);
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
+    [NativeFact]
+    public async Task Real_rust_shadow_skips_an_unevaluable_rule_with_the_managed_engine()
+    {
+        var rule = BuildUnevaluableRule();
+        var (engine, logger, _, _, provider) = BuildShadowEngine(
+            rule, RustShadow());
+        await using var _ = provider;
+
+        var act = async () => await engine.EvaluateRuleAsync(
+            ToSnapshot(rule), LowGlucoseContext(), AlertEngineOptions.Default, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConditionTreeFaultException>();
+        logger.Entries.Should().NotContain(e => e.Level >= LogLevel.Warning);
+    }
+
     [NativeFact]
     public async Task Real_rust_shadow_agrees_with_the_managed_engine()
     {
         var rule = BuildThresholdRule();
-        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, new RustShadowRuleEvaluator());
+        var (engine, logger, _, _, provider) = BuildShadowEngine(rule, RustShadow());
         await using var _ = provider;
 
         // Two ticks: open at 60, hysteresis at 120 — both must agree end to end.

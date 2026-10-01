@@ -1,8 +1,7 @@
 <script lang="ts">
 	import commands from '../../../commands/toolbar-commands.ts';
-	import { buttonVariants } from '@nocturne/ui/ui/button';
 	import * as DropdownMenu from '@nocturne/ui/ui/dropdown-menu';
-	import { cn } from '@nocturne/ui/utils';
+	import { Toggle } from '@nocturne/ui/ui/toggle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Minus from '@lucide/svelte/icons/minus';
 	import type { Editor } from '@tiptap/core';
@@ -29,20 +28,18 @@
 
 <DropdownMenu.Root>
 	<EdraToolTip tooltip={strings.toolbar.list.buttonTitle}>
-		<DropdownMenu.Trigger
-			class={buttonVariants({
-				variant: 'ghost',
-				size: 'icon',
-				class: cn(
-					'gap-0 p-0',
-					'hover:bg-accent dark:hover:bg-accent/50! border-0 bg-transparent! ring-0 [&_svg]:size-2',
-					isActive && 'bg-muted!'
-				)
-			})}
-		>
-			<ListIcon class="stroke-primary size-4!" />
-			<ChevronDown class="text-muted-foreground size-2!" />
-		</DropdownMenu.Trigger>
+		{#snippet children({ props }: { props: Record<string, unknown> })}
+			<DropdownMenu.Trigger {...props}>
+				{#snippet child({ props }: { props: Record<string, unknown> })}
+					<Toggle {...props} bind:pressed={() => isActive, () => {}}>
+						<span class="flex items-center">
+							<ListIcon class="stroke-primary size-4!" />
+							<ChevronDown class="text-muted-foreground size-2!" />
+						</span>
+					</Toggle>
+				{/snippet}
+			</DropdownMenu.Trigger>
+		{/snippet}
 	</EdraToolTip>
 	<DropdownMenu.Content portalProps={{ to: document.getElementById('edra-editor') ?? 'undefined' }}>
 		<DropdownMenu.Label>{strings.toolbar.list.dropdownTitle}</DropdownMenu.Label>

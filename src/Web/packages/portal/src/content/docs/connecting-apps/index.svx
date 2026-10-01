@@ -18,9 +18,11 @@ which makes this flow safe for desktop apps and SPAs. For mobile apps or devices
 with limited input, see the [Device Authorization flow guide](/docs/connecting-apps/device-flow).
 
 <Callout type="tip" title="Prefer an SDK for API calls?">
+
   The code below uses raw HTTP requests to show the OAuth flow end to end. Once you
   have an access token, you don't have to hand-write API calls; official SDKs for
   the V4 API are available in several languages. See <a href="/docs/sdks">SDKs</a>.
+
 </Callout>
 
 ## 1. Register your app
@@ -60,9 +62,11 @@ on that Nocturne instance, you'll get the existing `client_id` back. Store the `
 you'll need it for every authorization request.
 
 <Callout type="tip" title="Well-known apps">
+
   Popular diabetes apps (Trio, Loop, AAPS, xDrip+) are pre-registered in Nocturne
   and get branded consent screens with logos. If you'd like your app added to
   this list, open an issue on the Nocturne GitHub repository.
+
 </Callout>
 
 ## 2. Authorize the user
@@ -170,10 +174,12 @@ const tokens = await tokenResponse.json();
 ```
 
 <Callout type="warning" title="Store tokens securely">
+
   The refresh token is long-lived and grants ongoing access. Store it in your
   platform's secure storage (Keychain on iOS, EncryptedSharedPreferences on Android,
   or an encrypted store on desktop). Never store tokens in plain text or localStorage
   in production.
+
 </Callout>
 
 The authorization code is single-use: if the exchange fails, you'll get an
@@ -243,9 +249,11 @@ const newTokens = await refreshResponse.json();
 ```
 
 <Callout type="danger" title="Refresh tokens rotate">
+
   Each refresh returns a <strong>new</strong> refresh token and invalidates the old one.
   Always store the latest refresh token. If you replay an old refresh token,
   the entire grant is revoked for security and the user will need to re-authorize.
+
 </Callout>
 
 ## 6. Revoking access
@@ -274,7 +282,9 @@ Scopes control what your app can access. Request only what you need.
 A `readwrite` scope always implies `read`; you don't need to request both.
 
 <Callout type="info" title="Scope expansion">
+
   <code>health.read</code> and <code>health.readwrite</code> are convenience aliases.
   When you request one, the consent screen shows the individual scopes it expands to:
   glucose, treatments, devices, therapy, heart rate, step count, and food.
+
 </Callout>

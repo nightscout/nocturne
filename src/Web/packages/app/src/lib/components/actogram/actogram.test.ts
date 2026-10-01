@@ -3,6 +3,7 @@ import {
 	sliceIntoRows,
 	sliceBgIntoRows,
 	findNearestPoint,
+	resolveTargetRange,
 	type ActogramPoint,
 	type GlucosePoint,
 	type RowDataPoint,
@@ -84,6 +85,35 @@ describe('findNearestPoint', () => {
 		];
 		const result = findNearestPoint(extended, 25.5);
 		expect(result?.point.mills).toBe(400);
+	});
+});
+
+describe('resolveTargetRange', () => {
+	const clinical = {
+		low: 70,
+		high: 180,
+		veryLow: 54,
+		veryHigh: 250,
+		glucoseYMax: 300,
+	};
+
+	it('prefers the personal target when the profile supplies one', () => {
+		expect(
+			resolveTargetRange({ ...clinical, targetLow: 95, targetHigh: 115 }),
+		).toEqual({
+			low: 95,
+			high: 115,
+		});
+	});
+
+	it('falls back to the clinical band when there is no target', () => {
+		expect(resolveTargetRange(clinical)).toEqual({ low: 70, high: 180 });
+		expect(
+			resolveTargetRange({ ...clinical, targetLow: null, targetHigh: null }),
+		).toEqual({
+			low: 70,
+			high: 180,
+		});
 	});
 });
 

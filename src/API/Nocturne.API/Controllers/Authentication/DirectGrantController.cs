@@ -68,8 +68,11 @@ public class DirectGrantController : ControllerBase
             return Problem(detail: "Authentication required", statusCode: 401, title: "Unauthorized");
         }
 
+        var limitTo24Hours = HttpContext.InheritHistoryClamp(request.LimitTo24Hours);
+
         var result = await _directGrantService.CreateAsync(
             _dbContext, auth.SubjectId.Value, request.Label, request.Scopes, request.ExpiresAt,
+            limitTo24Hours,
             HttpContext.Connection.RemoteIpAddress?.ToString(),
             Request.Headers.UserAgent.ToString(),
             ct: HttpContext.RequestAborted);
@@ -198,6 +201,11 @@ public class CreateDirectGrantRequest
     public string Label { get; set; } = string.Empty;
     public List<string> Scopes { get; set; } = new();
     public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>
+    /// Whether the grant may read only the last 24 hours of time-series data.
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -211,6 +219,7 @@ public class CreateDirectGrantResponse
     public List<string> Scopes { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? ExpiresAt { get; set; }
+    public bool LimitTo24Hours { get; set; }
 }
 
 /// <summary>
@@ -236,6 +245,11 @@ public class DirectGrantDto
     /// rather than as a scoped <c>noc_</c> token.
     /// </summary>
     public bool IsLegacy { get; set; }
+
+    /// <summary>
+    /// True when the grant may read only the last 24 hours of time-series data.
+    /// </summary>
+    public bool LimitTo24Hours { get; set; }
 }
 
 #endregion

@@ -21,7 +21,7 @@ public class PunchCardDay
     public double LowPercent { get; set; }
     public double HighPercent { get; set; }
 
-    /// <summary>Mean glucose across the in-range and low ranges, mg/dL.</summary>
+    /// <summary>Mean of every reading that day, mg/dL.</summary>
     public double AverageGlucose { get; set; }
 
     public double TotalCarbs { get; set; }

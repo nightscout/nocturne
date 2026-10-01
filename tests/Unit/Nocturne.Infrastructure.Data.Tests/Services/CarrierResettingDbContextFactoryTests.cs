@@ -18,6 +18,8 @@ public class CarrierResettingDbContextFactoryTests
             AuditContext = Mock.Of<IAuditContext>(),
             IsShareContext = true,
             VisibleCategories = "glucose.read,treatments.read",
+            ShareFullHistory = true,
+            HistoryClamped = true,
         };
 
     private static void ShouldBeFailClosed(NocturneDbContext context)
@@ -26,6 +28,8 @@ public class CarrierResettingDbContextFactoryTests
         context.AuditContext.Should().BeNull("a fresh lease must not inherit a prior audit context");
         context.IsShareContext.Should().BeFalse("a fresh lease must not inherit a prior share marker");
         context.VisibleCategories.Should().BeNull("a fresh lease must not inherit a prior share's category CSV");
+        context.ShareFullHistory.Should().BeFalse("a fresh lease must not inherit a prior share's history window");
+        context.HistoryClamped.Should().BeFalse("a fresh lease must not inherit a prior member's clamp");
     }
 
     [Fact]

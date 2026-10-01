@@ -32,6 +32,11 @@
   --glucose-very-low: oklch(0.55 0.25 29);   /* #FF0000 - AAPS red */
   --glucose-high: oklch(0.8 0.2 100);        /* #FFFF00 - AAPS yellow (high=warning) */
   --glucose-very-high: oklch(0.55 0.25 29);  /* #FF0000 - AAPS red */
+  --glucose-very-low-foreground: oklch(0.985 0.002 247.839);
+  --glucose-low-foreground: oklch(0.21 0.034 264.665);
+  --glucose-in-range-foreground: oklch(0.21 0.034 264.665);
+  --glucose-high-foreground: oklch(0.21 0.034 264.665);
+  --glucose-very-high-foreground: oklch(0.985 0.002 247.839);
 
   /* Insulin Types - AAPS blue (#3378C5) */
   --insulin: rgb(51, 120, 197);
@@ -40,6 +45,7 @@
   --insulin-temp-basal: rgba(64, 187, 170, 0.4); /* AAPS accent teal */
   --insulin-manual-temp-basal: rgba(51, 120, 197, 0.9);
   --insulin-scheduled-basal: rgb(81, 145, 210);
+  --basal: rgb(81, 145, 210);
   --insulin-additional-basal: rgb(64, 187, 170); /* AAPS accent teal */
 
   /* Carbohydrates - warm orange */
@@ -53,7 +59,8 @@
   --pred-zt: rgb(64, 187, 170);             /* AAPS accent teal */
   --pred-uam: rgb(201, 189, 96);            /* #c9bd60 - standard UAM */
 
-  /* Status Colors - AAPS traffic light */
+  /* Status Colors. Chat cards and e-mail use the default theme's values
+     (see @nocturne/ui/tokens); overrides here apply in-browser only. */
   --status-warning: oklch(0.8 0.2 100);     /* Yellow */
   --status-critical: oklch(0.55 0.25 29);   /* Red */
   --status-normal: oklch(0.75 0.3 142);     /* Green */

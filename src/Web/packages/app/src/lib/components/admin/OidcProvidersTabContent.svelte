@@ -10,18 +10,27 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
-  import {
-    Shield,
-    Plus,
-    Pencil,
-    Trash2,
-    Loader2,
-    AlertTriangle,
-    ToggleLeft,
-    ToggleRight,
-  } from "lucide-svelte";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import ToggleLeft from "@lucide/svelte/icons/toggle-left";
+  import ToggleRight from "@lucide/svelte/icons/toggle-right";
   import type { OidcProviderResponse } from "$api";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
+
+  interface Props {
+    providers: OidcProviderResponse[];
+    configManaged: boolean;
+    loading: boolean;
+    error: string | null;
+    onAdd: () => void;
+    onEdit: (provider: OidcProviderResponse) => void;
+    onDelete: (provider: OidcProviderResponse) => void;
+    onToggle: (provider: OidcProviderResponse) => void;
+  }
 
   let {
     providers,
@@ -32,16 +41,7 @@
     onEdit,
     onDelete,
     onToggle,
-  } = $props<{
-    providers: OidcProviderResponse[];
-    configManaged: boolean;
-    loading: boolean;
-    error: string | null;
-    onAdd: () => void;
-    onEdit: (provider: OidcProviderResponse) => void;
-    onDelete: (provider: OidcProviderResponse) => void;
-    onToggle: (provider: OidcProviderResponse) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 {#if !configManaged}
@@ -54,7 +54,7 @@
             Configure OpenID Connect providers for single sign-on.
           </CardDescription>
         </div>
-        <Button onclick={onAdd} class="gap-2">
+        <Button onclick={onAdd}>
           <Plus class="h-4 w-4" />
           Add Provider
         </Button>

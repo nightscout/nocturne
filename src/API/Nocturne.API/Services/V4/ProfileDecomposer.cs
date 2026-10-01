@@ -69,8 +69,17 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     /// id they would fork off the settings row they belong to rather than join it.
     /// </para>
     /// </remarks>
-    public async Task<V4Models.DecompositionResult> DecomposeBatchAsync(
+    public Task<V4Models.DecompositionResult> DecomposeBatchAsync(
         IReadOnlyList<Profile> profiles, WriteOrigin origin, CancellationToken ct = default)
+        => DecomposeCoreAsync(profiles, origin, settlesDefault: true, ct);
+
+    /// <inheritdoc />
+    public Task<V4Models.DecompositionResult> DecomposeProfileSwitchAsync(
+        Profile profile, WriteOrigin origin, CancellationToken ct = default)
+        => DecomposeCoreAsync([profile], origin, settlesDefault: false, ct);
+
+    private async Task<V4Models.DecompositionResult> DecomposeCoreAsync(
+        IReadOnlyList<Profile> profiles, WriteOrigin origin, bool settlesDefault, CancellationToken ct)
     {
         var firstMinted = Guid.CreateVersion7();
         var result = new V4Models.DecompositionResult { CorrelationId = firstMinted };
@@ -96,17 +105,31 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         if (entries.Count == 0)
             return result;
 
+        var claim = settlesDefault ? await ResolveDefaultClaimAsync(entries, ct) : new DefaultClaim(false, null);
+        var storedDefaults = claim.Claims || !settlesDefault
+            ? []
+            : (await _therapySettingsRepo.GetDefaultsAsync(ct))
+                .Select(d => d.LegacyId).OfType<string>().ToHashSet(StringComparer.Ordinal);
+
         var anchors = await _therapySettingsRepo.BulkUpsertByLegacyIdAsync(
             entries.Select(e => MapToTherapySettings(
                 e.Profile, e.Data, e.StoreName, e.LegacyId,
-                string.Equals(e.StoreName, e.Profile.DefaultProfile, StringComparison.OrdinalIgnoreCase),
+                claim.Claims ? e.LegacyId == claim.LegacyId : storedDefaults.Contains(e.LegacyId),
                 e.MintedCorrelationId)).ToList(),
             origin, preserveStoredCorrelationId: true, ct);
         Record(result, anchors);
 
+        if (claim.Claims)
+        {
+            var claimedId = claim.LegacyId is not null && anchors.Outcomes.TryGetValue(claim.LegacyId, out var claimed)
+                ? claimed.Record.Id
+                : (Guid?)null;
+            await _therapySettingsRepo.SetDefaultAsync(claimedId, ct);
+        }
+
         var groups = entries
-            .Where(e => anchors.ContainsKey(e.LegacyId))
-            .Select(e => (Entry: e, CorrelationId: anchors[e.LegacyId].Record.CorrelationId ?? e.MintedCorrelationId))
+            .Where(e => anchors.Outcomes.ContainsKey(e.LegacyId))
+            .Select(e => (Entry: e, CorrelationId: anchors.Outcomes[e.LegacyId].Record.CorrelationId ?? e.MintedCorrelationId))
             .ToList();
         if (groups.Count < entries.Count)
         {
@@ -134,15 +157,53 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
         return result;
     }
 
+    /// <summary>
+    /// Whether this batch settles the tenant's default profile (see <see cref="V4Models.TherapySettings.IsDefault"/>),
+    /// and which store it settles on.
+    /// </summary>
+    /// <remarks>
+    /// Nightscout reads the default from the newest profile document (<c>startDate</c> desc, then
+    /// <c>_id</c> desc) as <c>store[defaultProfile]</c>, an exact key lookup. So only the batch's
+    /// newest document claims, and only when nothing already stored is newer; a document whose
+    /// <c>defaultProfile</c> names none of its stores claims with no store, leaving no default, as
+    /// Nightscout finds none, and so does a claim whose store row was not written. A batch that does
+    /// not claim keeps the stored flags as they are, so re-syncing an older document neither takes
+    /// the default nor drops a user's choice.
+    /// Profile-switch snapshots are not documents, so they neither claim nor count as stored newer.
+    /// </remarks>
+    private async Task<DefaultClaim> ResolveDefaultClaimAsync(List<StoreEntry> entries, CancellationToken ct)
+    {
+        var newest = entries
+            .Select(e => e.Profile)
+            .Distinct()
+            .OrderByDescending(p => p.Mills)
+            .ThenByDescending(p => p.Id, StringComparer.Ordinal)
+            .First();
+
+        var storedNewest = await _therapySettingsRepo.GetNewestDocumentRowAsync(ct);
+        var claims = storedNewest is null
+            || storedNewest.Mills <= newest.Mills
+            || storedNewest.LegacyId?.StartsWith($"{newest.Id}:", StringComparison.Ordinal) == true;
+        if (!claims)
+            return new DefaultClaim(false, null);
+
+        var store = newest.Store.Keys.FirstOrDefault(k => string.Equals(k, newest.DefaultProfile, StringComparison.Ordinal));
+        return new DefaultClaim(true, store is null ? null : $"{newest.Id}:{store}");
+    }
+
+    /// <summary>The outcome of <see cref="ResolveDefaultClaimAsync"/>.</summary>
+    private sealed record DefaultClaim(bool Claims, string? LegacyId);
+
     /// <summary>One named profile inside one legacy profile document, with the id minted for that document.</summary>
     private sealed record StoreEntry(
         Profile Profile, string StoreName, ProfileData Data, string LegacyId, Guid MintedCorrelationId);
 
     private static void Record<TRecord>(
-        V4Models.DecompositionResult result, IReadOnlyDictionary<string, LegacyUpsert<TRecord>> outcomes)
+        V4Models.DecompositionResult result, LegacyUpsertBatch<TRecord> batch)
         where TRecord : class, V4Models.IV4Record
     {
-        foreach (var outcome in outcomes.Values)
+        result.SkippedDeleted += batch.SkippedDeleted;
+        foreach (var outcome in batch.Outcomes.Values)
         {
             if (outcome.Created)
                 result.CreatedRecords.Add(outcome.Record);

@@ -4,30 +4,25 @@
 </script>
 
 <div
-    class="rounded-[14px] border border-white/10 bg-[oklch(0.10_0.025_261)] p-6 flex flex-col gap-4 overflow-hidden relative"
-    style:height="{height}px"
+    class="rounded-xl border border-white/10 bg-sunken p-6 flex flex-col gap-4 overflow-hidden relative h-(--demo-h)"
+    style:--demo-h="{height}px"
 >
-    <!-- Soft glow -->
-    <div class="absolute -top-8 -right-8 size-56 rounded-full pointer-events-none"
-         style="background: radial-gradient(circle, oklch(0.6 0.118 184.704 / 18%), transparent 60%)"
-         aria-hidden="true"></div>
-
     <!-- Header -->
     <div class="relative">
-        <div class="font-mono text-[13px] tracking-[0.06em] uppercase text-glucose-in-range font-bold mb-1.5">
+        <div class="text-lg font-semibold text-foreground mb-1">
             Sign in to your Nocturne
         </div>
-        <div class="text-[14px] text-muted-foreground">No password to forget, leak, or reset.</div>
+        <div class="text-sm text-muted-foreground">No password to forget, leak, or reset.</div>
     </div>
 
     <!-- Passkey CTA -->
     <button
         type="button"
-        class="flex items-center justify-center gap-3 px-4 py-4 rounded-xl bg-[oklch(0.96_0.005_261)] text-[oklch(0.13_0.028_261)] font-semibold text-[16px] border-none cursor-pointer transition-colors hover:bg-white relative"
+        class="flex items-center justify-center gap-3 px-4 py-4 rounded-xl bg-foreground/95 text-background font-semibold text-base border-none cursor-pointer transition-colors hover:bg-foreground relative"
         tabindex="-1"
         aria-label="Continue with a passkey"
     >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="oklch(0.13 0.028 261)"
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="7.5" cy="15.5" r="5.5"/>
             <path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>
@@ -36,7 +31,7 @@
     </button>
 
     <!-- Divider -->
-    <div class="flex items-center gap-3 font-mono text-[12px] text-muted-foreground/60 tracking-[0.05em] uppercase relative">
+    <div class="flex items-center gap-3 text-xs text-muted-foreground relative">
         <span class="flex-1 h-px bg-white/10"></span>
         <span>or</span>
         <span class="flex-1 h-px bg-white/10"></span>
@@ -44,16 +39,16 @@
 
     <!-- OAuth row -->
     <div class="grid grid-cols-3 gap-2 relative">
-        <button type="button" class="oauth-btn" style="background:#fff; color:#1f1f1f; border:1px solid oklch(1 0 0 / 30%)" tabindex="-1">
+        <button type="button" class="oauth-btn oauth-google" tabindex="-1">
             <span class="font-bold">G</span> Google
         </button>
-        <button type="button" class="oauth-btn" style="background:#1f1f1f; color:#fff; border:1px solid oklch(1 0 0 / 10%)" tabindex="-1">
+        <button type="button" class="oauth-btn oauth-github" tabindex="-1">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.167 6.839 9.49.5.092.682-.217.682-.482 0-.237-.009-.866-.013-1.7-2.782.604-3.369-1.342-3.369-1.342-.454-1.155-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
             </svg>
             GitHub
         </button>
-        <button type="button" class="oauth-btn" style="background:oklch(0.22 0.03 261); color:#fff; border:1px solid oklch(1 0 0 / 14%)" tabindex="-1">
+        <button type="button" class="oauth-btn oauth-oidc" tabindex="-1">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="9"/>
                 <circle cx="12" cy="12" r="3.5"/>
@@ -68,9 +63,9 @@
             { label: "Nothing leaves your server",    icon: "shield" },
             { label: "Passkeys are device-locked",    icon: "key" },
             { label: "Open source · auditable code",  icon: "check" },
-        ] as b (b.label)}
-            <div class="flex items-center gap-2.5 text-[13px] text-foreground/80">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="oklch(0.6 0.118 184.704)"
+        ] as b (b.icon)}
+            <div class="flex items-center gap-2.5 text-sm text-foreground/80">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" class="stroke-brand"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     {#if b.icon === "shield"}
                         <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
@@ -100,5 +95,22 @@
         justify-content: center;
         gap: 6px;
         font-family: inherit;
+    }
+
+    /* Each provider's own sign-in button colours. */
+    .oauth-google {
+        background: #fff;
+        color: #1f1f1f;
+        border: 1px solid oklch(1 0 0 / 30%);
+    }
+    .oauth-github {
+        background: #1f1f1f;
+        color: #fff;
+        border: 1px solid oklch(1 0 0 / 10%);
+    }
+    .oauth-oidc {
+        background: var(--card);
+        color: var(--foreground);
+        border: 1px solid oklch(1 0 0 / 14%);
     }
 </style>

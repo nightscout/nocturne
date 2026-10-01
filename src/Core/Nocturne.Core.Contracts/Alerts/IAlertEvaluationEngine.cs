@@ -9,7 +9,7 @@ public sealed record AlertEngineOptions
 {
     /// <summary>
     /// When true, force-evaluate every leaf of the rule's condition tree in isolation
-    /// (no short-circuit) and return the per-leaf truths keyed by pre-order leaf id.
+    /// and return the per-leaf truths keyed by pre-order leaf id.
     /// Replay/leaf-log semantics; live evaluation leaves this off.
     /// </summary>
     public bool IncludeLeafValues { get; init; }
@@ -27,9 +27,8 @@ public sealed record AlertEngineOptions
 public sealed record AlertEngineEvaluation
 {
     /// <summary>
-    /// True when no evaluator exists for the rule's root condition type
-    /// (e.g. <c>signal_loss</c>): the rule was skipped entirely — no tracker call,
-    /// no auto-resolve, and every other field is default.
+    /// True when no evaluator exists for the rule's root condition type: the rule was
+    /// skipped entirely — no tracker call, no auto-resolve, and every other field is default.
     /// </summary>
     public bool Skipped { get; init; }
 

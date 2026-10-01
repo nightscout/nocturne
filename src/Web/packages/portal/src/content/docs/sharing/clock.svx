@@ -89,9 +89,11 @@ Delete it in the **Clock** section and its link stops working right away. Deleti
 and recreating a clock gives it a brand-new code, so the old link can't be reused.
 
 <Callout type="tip" title="When to use it: a glucose clock by the bed">
+
   You want your current number visible on a small screen on the nightstand, without
   unlocking a phone or signing in each time. Build a clock with the value and trend,
   open its link on that device, and leave it on. Anyone in the room can read it at a
   glance. If you'd rather it not be reachable any more, delete the clock and the
   link goes dead.
+
 </Callout>

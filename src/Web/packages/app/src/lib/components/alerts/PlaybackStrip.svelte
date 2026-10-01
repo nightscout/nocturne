@@ -1,7 +1,9 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
   import * as Select from "$lib/components/ui/select";
-  import { Play, Pause, RotateCcw } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
+  import Pause from "@lucide/svelte/icons/pause";
+  import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import { AlertReplayEventKind, type AlertRuleSeverity } from "$api-clients";
   import { severityVar } from "./severity";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
@@ -58,8 +60,8 @@
       })),
   );
 
-  function handleStripPointerDown(e: PointerEvent): void {
-    const target = e.currentTarget as SVGSVGElement;
+  function handleStripPointerDown(e: PointerEvent & { currentTarget: SVGSVGElement }): void {
+    const target = e.currentTarget;
     const rect = target.getBoundingClientRect();
     const pct = Math.max(
       0,
@@ -74,11 +76,12 @@
   }
 </script>
 
-<div class="flex items-center gap-2">
+<!-- Narrow, the strip takes a row of its own under the controls. -->
+<div class="flex flex-wrap items-center gap-2">
   <Button
     variant="outline"
-    size="icon"
-    class="h-8 w-8 shrink-0"
+    size="icon-sm"
+    class="shrink-0"
     onclick={onPlayPause}
     aria-label={playing ? "Pause" : "Play"}
   >
@@ -90,8 +93,8 @@
   </Button>
   <Button
     variant="outline"
-    size="icon"
-    class="h-8 w-8 shrink-0"
+    size="icon-sm"
+    class="shrink-0"
     onclick={onReset}
     aria-label="Reset"
   >
@@ -103,7 +106,7 @@
     value={String(speed)}
     onValueChange={handleSpeedChange}
   >
-    <Select.Trigger class="h-8 w-20 px-2 text-xs" aria-label="Playback speed">
+    <Select.Trigger size="sm" class="w-20" aria-label="Playback speed">
       {speed}x
     </Select.Trigger>
     <Select.Content>
@@ -118,7 +121,7 @@
   <svg
     role="presentation"
     data-testid="playback-tick-strip"
-    class="h-8 flex-1 cursor-pointer rounded border bg-muted/20"
+    class="order-last h-8 basis-full cursor-pointer rounded border bg-muted/20 @md:order-none @md:basis-0 @md:flex-1"
     viewBox="0 0 100 32"
     preserveAspectRatio="none"
     onpointerdown={handleStripPointerDown}
@@ -163,7 +166,7 @@
   </svg>
 
   <span
-    class="font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-32 text-right"
+    class="ml-auto font-mono text-xs text-muted-foreground tabular-nums shrink-0 w-32 text-right"
   >
     {currentDate ? formatDateTimeCompact(currentDate) : ""}
   </span>

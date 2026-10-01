@@ -1,14 +1,19 @@
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Connectors;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Notifications;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Configuration;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Entities;
 using Xunit;
@@ -62,6 +67,34 @@ public class MealMatchingServiceTests
             _settingsService.Object,
             Mock.Of<ILogger<MealMatchingService>>());
 
+    /// <summary>
+    /// The same service over a settings store that can no longer be read, which is what a failed
+    /// read looks like when it is produced rather than stubbed.
+    /// </summary>
+    private async Task<MealMatchingService> NewServiceOverABrokenSettingsStoreAsync()
+    {
+        var options = new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        var context = new NocturneDbContext(options)
+        {
+            TenantId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+        };
+        var settings = new MyFitnessPalMatchingSettingsService(
+            context,
+            NullLogger<MyFitnessPalMatchingSettingsService>.Instance);
+        await context.DisposeAsync();
+
+        return new MealMatchingService(
+            _foodEntryRepository.Object,
+            _carbIntakeRepository.Object,
+            _treatmentFoodService.Object,
+            _notificationService.Object,
+            _notificationRepository.Object,
+            settings,
+            Mock.Of<ILogger<MealMatchingService>>());
+    }
+
     private static ConnectorFoodEntry Entry(Guid id) => new()
     {
         Id = id,
@@ -71,6 +104,92 @@ public class MealMatchingServiceTests
         ConsumedAt = ConsumedAt,
         Status = ConnectorFoodEntryStatus.Pending,
     };
+
+    /// <summary>
+    /// The production read path, not a stubbed null: a store that cannot be read leaves matching
+    /// with no tenant answer at all, and the defaults it would otherwise fall back to have
+    /// notifications on and a 30-minute window.
+    /// </summary>
+    [Fact]
+    public async Task MatchingOverAnUnreadableSettingsStore_neitherNotifiesNorSuggests()
+    {
+        var id = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(id)]);
+        _foodEntryRepository
+            .Setup(r => r.GetPendingInTimeRangeAsync(
+                It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(id)]);
+        var service = await NewServiceOverABrokenSettingsStoreAsync();
+
+        await service.ProcessNewFoodEntriesAsync(UserId, [id]);
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        await service
+            .Invoking(s => s.GetSuggestionsAsync(ConsumedAt.AddHours(-1), ConsumedAt.AddHours(1)))
+            .Should()
+            .ThrowAsync<SettingsUnavailableException>();
+    }
+
+    /// <summary>
+    /// A failed settings read is not a tenant who left the defaults: notifications default to on
+    /// and the match window to 30 minutes, so processing on them notifies a tenant who switched
+    /// notifications off and offers matches their own window excludes.
+    /// </summary>
+    [Fact]
+    public async Task ProcessNewFoodEntriesAsync_RaisesNothingWhenTheSettingsReadFails()
+    {
+        _settingsService
+            .Setup(s => s.GetSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((MyFitnessPalMatchingSettings?)null);
+        var id = Guid.NewGuid();
+        _foodEntryRepository
+            .Setup(r => r.GetByIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(id)]);
+
+        await NewService().ProcessNewFoodEntriesAsync(UserId, [id]);
+
+        _notificationService.Verify(
+            n => n.CreateNotificationAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<NotificationCategory?>(), It.IsAny<NotificationUrgency?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<List<NotificationActionDto>?>(), It.IsAny<ResolutionConditions?>(),
+                It.IsAny<Dictionary<string, object>?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    /// <summary>
+    /// <see cref="MealMatchingService.GetSuggestionsAsync"/> scores against the tenant's own match
+    /// window and tolerances, and every suggestion it returns is one the reader can accept into
+    /// <c>treatment_foods</c>. Scoring on defaults would offer matches to accept that the tenant's
+    /// settings rule out, so the failure is reported rather than answered.
+    /// </summary>
+    [Fact]
+    public async Task GetSuggestionsAsync_reportsTheFailedSettingsReadRatherThanScoringOnDefaults()
+    {
+        _settingsService
+            .Setup(s => s.GetSettingsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync((MyFitnessPalMatchingSettings?)null);
+        _foodEntryRepository
+            .Setup(r => r.GetPendingInTimeRangeAsync(
+                It.IsAny<DateTimeOffset>(), It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Entry(Guid.NewGuid())]);
+
+        await NewService()
+            .Invoking(s => s.GetSuggestionsAsync(ConsumedAt.AddHours(-1), ConsumedAt.AddHours(1)))
+            .Should()
+            .ThrowAsync<SettingsUnavailableException>();
+    }
 
     [Fact]
     public async Task ProcessNewFoodEntriesAsync_KeepsGoingWhenOneEntryCannotBeNotified()

@@ -54,10 +54,10 @@ public class DataSourceService : IDataSourceService
         _logger = logger;
     }
 
-    /// <param name="Handle">
-    /// Which handle the bucket's key names, or <see langword="null"/> when no contributing table
-    /// could tell.
-    /// </param>
+    /// <remarks>
+    /// <paramref name="Handle"/> is which handle the bucket's key names, or <see langword="null"/>
+    /// when no contributing table could tell.
+    /// </remarks>
     private record TableStats(long Count, int CountLast24H, DateTime Latest, DateTime? Oldest, SourceHandle? Handle);
 
     private static void ApplyStatus(DataSourceInfo info, DateTimeOffset now, int activeMinutes, int staleMinutes)
@@ -212,13 +212,7 @@ public class DataSourceService : IDataSourceService
         await MergeTimeSeriesAsync<BolusCalculationEntity>();
         await MergeTimeSeriesAsync<ApsSnapshotEntity>();
 
-        // TempBasal is span-shaped, so it keys on StartTimestamp and stays off IV4TimeSeriesEntity.
-        var tbStats = await _context.TempBasals
-            .Where(t => t.StartTimestamp >= thirtyDaysAgo)
-            .GroupBy(t => t.DataSource ?? t.Device)
-            .Select(g => new { Key = g.Key, FromDataSource = g.Max(x => x.DataSource) != null, Count = g.LongCount(), Count24H = g.Count(x => x.StartTimestamp >= last24HoursDate), Latest = g.Max(x => x.StartTimestamp), Oldest = (DateTime?)g.Min(x => x.StartTimestamp) })
-            .ToListAsync(ct);
-        foreach (var s in tbStats) Merge(s.Key, s.Count, s.Count24H, s.Latest, s.Oldest, HandleOf(s.FromDataSource));
+        await MergeTimeSeriesAsync<TempBasalEntity>();
 
         // StateSpan records one undifferentiated origin: its writers populate Source from the
         // reported device string (DeviceStatusDecomposer) or from the row's data source, falling back
@@ -325,6 +319,22 @@ public class DataSourceService : IDataSourceService
             }
         }
 
+        void ApplyConnectorAndStatus(DataSourceInfo info, string key)
+        {
+            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
+            if (connectorMeta != null)
+            {
+                info.ConnectorId = connectorMeta.ConnectorId;
+                var connConfig = connectorConfigs.FirstOrDefault(c =>
+                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
+                if (connConfig?.LastSuccessfulSync != null)
+                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
+            }
+
+            var (activeMinutes, staleMinutes) = ResolveThresholds(key, thresholdOverrides);
+            ApplyStatus(info, now, activeMinutes, staleMinutes);
+        }
+
         foreach (var device in entryDevices)
         {
             var info = CreateDataSourceInfo(device.Device, device.DataSource, SourceHandle.Device);
@@ -341,18 +351,6 @@ public class DataSourceService : IDataSourceService
                 info.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(dsDevice.LastMills);
             }
 
-            // Set ConnectorId if this is a connector data source
-            var connectorKey = device.DataSource ?? device.Device;
-            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(connectorKey);
-            if (connectorMeta != null)
-            {
-                info.ConnectorId = connectorMeta.ConnectorId;
-                var connConfig = connectorConfigs.FirstOrDefault(c =>
-                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
-                if (connConfig?.LastSuccessfulSync != null)
-                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
-            }
-
             // Merge non-glucose stats
             var mergeKey = device.DataSource ?? device.Device;
             if (Claim(mergeKey) is { } ngStats)
@@ -364,9 +362,7 @@ public class DataSourceService : IDataSourceService
                 && Claim(device.Device) is { } ngDeviceStats)
                 MergeStats(info, ngDeviceStats);
 
-            // Apply status with resolved thresholds
-            var (activeMinutes, staleMinutes) = ResolveThresholds(connectorKey, thresholdOverrides);
-            ApplyStatus(info, now, activeMinutes, staleMinutes);
+            ApplyConnectorAndStatus(info, mergeKey);
 
             dataSources.Add(info);
         }
@@ -386,8 +382,7 @@ public class DataSourceService : IDataSourceService
                 if (Claim(dsDevice.Device) is { } ngStats)
                     MergeStats(info, ngStats);
 
-                var (activeMinutes, staleMinutes) = ResolveThresholds(dsDevice.Device, thresholdOverrides);
-                ApplyStatus(info, now, activeMinutes, staleMinutes);
+                ApplyConnectorAndStatus(info, dsDevice.DataSource ?? dsDevice.Device);
 
                 dataSources.Add(info);
             }
@@ -404,18 +399,7 @@ public class DataSourceService : IDataSourceService
             info.TotalEntries = stats.Count;
             info.EntriesLast24Hours = stats.CountLast24H;
 
-            var connectorMeta = ConnectorMetadataService.GetByDataSourceId(key);
-            if (connectorMeta != null)
-            {
-                info.ConnectorId = connectorMeta.ConnectorId;
-                var connConfig = connectorConfigs.FirstOrDefault(c =>
-                    c.ConnectorName.Equals(connectorMeta.ConnectorName, StringComparison.OrdinalIgnoreCase));
-                if (connConfig?.LastSuccessfulSync != null)
-                    info.LastSuccessfulSync = new DateTimeOffset(connConfig.LastSuccessfulSync.Value, TimeSpan.Zero);
-            }
-
-            var (activeMinutes, staleMinutes) = ResolveThresholds(key, thresholdOverrides);
-            ApplyStatus(info, now, activeMinutes, staleMinutes);
+            ApplyConnectorAndStatus(info, key);
 
             dataSources.Add(info);
         }
@@ -500,6 +484,7 @@ public class DataSourceService : IDataSourceService
         {
             SupportedDataTypes = registration.SupportedDataTypes
                 ?.Select(type => type.ToString())
+                .Distinct()
                 .ToList()
                 ?? new List<string>(),
             SupportsHistoricalSync = registration.SupportsHistoricalSync,
@@ -1245,7 +1230,7 @@ public class DataSourceService : IDataSourceService
         var tempBasals24h = tempBasalsTotal > 0
             ? await _context.TempBasals
                 .FromSource(dataSource)
-                .Where(t => t.StartTimestamp >= oneDayAgoDate)
+                .Where(t => t.Timestamp >= oneDayAgoDate)
                 .CountAsync(cancellationToken)
             : 0;
 
@@ -1340,7 +1325,7 @@ public class DataSourceService : IDataSourceService
             await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.Notes.AsNoTracking().FromSource(dataSource).OrderByDescending(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderByDescending(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.StartTimestamp).Select(t => (DateTime?)t.StartTimestamp).FirstOrDefaultAsync(cancellationToken),
+            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderByDescending(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderByDescending(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Max() is var max && max == default ? null : max;
@@ -1357,7 +1342,7 @@ public class DataSourceService : IDataSourceService
             await _context.BGChecks.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.Notes.AsNoTracking().FromSource(dataSource).OrderBy(n => n.Timestamp).Select(n => (DateTime?)n.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.DeviceEvents.AsNoTracking().FromSource(dataSource).OrderBy(d => d.Timestamp).Select(d => (DateTime?)d.Timestamp).FirstOrDefaultAsync(cancellationToken),
-            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.StartTimestamp).Select(t => (DateTime?)t.StartTimestamp).FirstOrDefaultAsync(cancellationToken),
+            await _context.TempBasals.AsNoTracking().FromSource(dataSource).OrderBy(t => t.Timestamp).Select(t => (DateTime?)t.Timestamp).FirstOrDefaultAsync(cancellationToken),
             await _context.BolusCalculations.AsNoTracking().FromSource(dataSource).OrderBy(b => b.Timestamp).Select(b => (DateTime?)b.Timestamp).FirstOrDefaultAsync(cancellationToken),
         };
         return timestamps.Where(t => t.HasValue).Select(t => t!.Value).DefaultIfEmpty().Min() is var min && min == default ? null : min;

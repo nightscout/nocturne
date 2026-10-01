@@ -26,8 +26,6 @@ public class EversenseAuthTokenProvider(
 
     protected override int TokenLifetimeBufferMinutes => 5;
 
-    protected override string ConnectorName => "Eversense";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         EversenseConnectorConfiguration config, CancellationToken cancellationToken)
     {
@@ -91,7 +89,7 @@ public class EversenseAuthTokenProvider(
         var response = await _httpClient.SendAsync(request, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
-            return (null, await HandleErrorResponseAsync(response, "Eversense token request", cancellationToken));
+            return (null, await HandleOAuthErrorResponseAsync(response, "Eversense token request", cancellationToken));
 
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
         var tokenResponse = JsonSerializer.Deserialize<EversenseTokenResponse>(json);

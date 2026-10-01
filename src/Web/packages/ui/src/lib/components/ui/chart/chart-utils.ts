@@ -17,47 +17,36 @@ export type ExtractSnippetParams<T> = T extends Snippet<[infer P]> ? P : never;
 
 export type TooltipPayload = Tooltip.TooltipSeries;
 
+/** `source[key]` when `source` is an object holding a string there. */
+function stringAt(source: unknown, key: string): string | undefined {
+  if (typeof source !== "object" || source === null) return undefined;
+  const value: unknown = Reflect.get(source, key);
+  return typeof value === "string" ? value : undefined;
+}
+
+/** The colour a config entry takes under `theme`, one of the keys of {@link THEMES}. */
+export function themeColor(itemConfig: ChartConfig[string], theme: string): string | undefined {
+  const themed = itemConfig.theme ? new Map(Object.entries(itemConfig.theme)).get(theme) : undefined;
+  return themed || itemConfig.color;
+}
+
 // Helper to extract item config from a payload.
 export function getPayloadConfigFromPayload(
   config: ChartConfig,
   payload: TooltipPayload,
   key: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: Record<string, any> | null
+  data?: unknown
 ) {
   if (typeof payload !== "object" || payload === null) return undefined;
 
-  const payloadConfig =
-    "config" in payload &&
-    typeof payload.config === "object" &&
-    payload.config !== null
-      ? payload.config
-      : undefined;
+  const payloadConfig = "config" in payload ? payload.config : undefined;
 
-  let configLabelKey: string = key;
+  const configLabelKey =
+    payload.key === key || payload.label === key
+      ? key
+      : (stringAt(payload, key) ?? stringAt(payloadConfig, key) ?? stringAt(data, key) ?? key);
 
-  if (payload.key === key) {
-    configLabelKey = payload.key;
-  } else if (payload.label === key) {
-    configLabelKey = payload.label;
-  } else if (
-    key in payload &&
-    typeof payload[key as keyof typeof payload] === "string"
-  ) {
-    configLabelKey = payload[key as keyof typeof payload] as string;
-  } else if (
-    payloadConfig !== undefined &&
-    key in payloadConfig &&
-    typeof payloadConfig[key as keyof typeof payloadConfig] === "string"
-  ) {
-    configLabelKey = payloadConfig[key as keyof typeof payloadConfig] as string;
-  } else if (data != null && key in data && typeof data[key] === "string") {
-    configLabelKey = data[key] as string;
-  }
-
-  return configLabelKey in config
-    ? config[configLabelKey]
-    : config[key as keyof typeof config];
+  return configLabelKey in config ? config[configLabelKey] : config[key];
 }
 
 type ChartContextValue = {

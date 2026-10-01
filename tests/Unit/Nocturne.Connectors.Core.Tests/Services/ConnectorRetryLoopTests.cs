@@ -36,6 +36,23 @@ public class ConnectorRetryLoopTests
     }
 
     [Fact]
+    public async Task RunAsync_PassesItsTokenToTheDelayStrategy()
+    {
+        var delays = new RecordingRetryDelayStrategy();
+        using var cts = new CancellationTokenSource();
+
+        await ConnectorRetryLoop.RunAsync<string>(
+            (_, _) => Task.FromResult(RetryStep<string>.RetryAfterDelay),
+            delays,
+            maxAttempts: 2,
+            _ => null,
+            cts.Token);
+
+        delays.Tokens.Should().Equal([cts.Token],
+            "the strategy sleeps with the loop's token, so a withdrawn run stops the sleep");
+    }
+
+    [Fact]
     public async Task RunAsync_RetryImmediately_SpendsAnAttemptWithoutDelaying()
     {
         var delays = new RecordingRetryDelayStrategy();

@@ -16,16 +16,6 @@ public sealed class DevTenantMemberSelectionTests
     private static readonly Guid OwnerRoleId = Guid.CreateVersion7();
 
     [Fact]
-    public void PickOwnerOrFirst_skipsARevokedOwner()
-    {
-        var revoked = Member(isOwner: true, revokedAt: DateTime.UtcNow);
-        var owner = Member(isOwner: true);
-
-        DevTenantMemberSelection.PickOwnerOrFirst([revoked, owner], TenantId)
-            .Should().BeSameAs(owner);
-    }
-
-    [Fact]
     public void PickOwnerOrFirst_takesTheOldestOwner()
     {
         var newer = Member(isOwner: true, createdAt: new DateTime(2024, 1, 1));
@@ -49,13 +39,11 @@ public sealed class DevTenantMemberSelectionTests
         bool isOwner = false,
         bool isActive = true,
         bool isSystemSubject = false,
-        DateTime? revokedAt = null,
         DateTime? createdAt = null) => new()
     {
         Id = Guid.CreateVersion7(),
         TenantId = TenantId,
         SubjectId = Guid.CreateVersion7(),
-        RevokedAt = revokedAt,
         SysCreatedAt = createdAt ?? DateTime.UtcNow,
         Subject = new SubjectEntity
         {

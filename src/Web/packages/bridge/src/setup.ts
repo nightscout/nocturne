@@ -6,15 +6,11 @@ import SocketIOServer from './lib/socketio-server.js';
 import SignalRClient from './lib/signalr-client.js';
 import MessageTranslator from './lib/message-translator.js';
 import logger from './lib/logger.js';
+import { isRecord, stringField } from './lib/payload.js';
 
 /** Derive the API base URL from a SignalR hub URL (".../hubs/data" -> "..."). */
 function apiBaseFromHubUrl(hubUrl: string): string {
   return hubUrl.replace(/\/hubs\/\w+$/, '');
-}
-
-interface TenantInfo {
-  slug: string;
-  isActive: boolean;
 }
 
 /** Discover active tenants from the Nocturne admin API. */
@@ -40,10 +36,14 @@ async function discoverTenants(
     );
   }
 
-  const tenants = (await response.json()) as TenantInfo[];
-  const activeSlugs = tenants
-    .filter((t) => t.isActive)
-    .map((t) => t.slug);
+  const tenants: unknown = await response.json();
+  if (!Array.isArray(tenants)) {
+    throw new Error('Tenant discovery returned no tenant list');
+  }
+  const activeSlugs = tenants.flatMap((t) => {
+    const slug = stringField(t, 'slug');
+    return isRecord(t) && t.isActive && slug ? [slug] : [];
+  });
 
   logger.info(`Discovered ${activeSlugs.length} active tenant(s): ${activeSlugs.join(', ')}`);
   return activeSlugs;

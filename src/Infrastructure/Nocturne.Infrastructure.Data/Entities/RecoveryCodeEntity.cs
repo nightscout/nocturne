@@ -24,7 +24,7 @@ public class RecoveryCodeEntity
     public Guid SubjectId { get; set; }
 
     /// <summary>
-    /// HMAC-SHA256 hash of the recovery code
+    /// Self-describing salted PBKDF2 hash of the recovery code
     /// </summary>
     [Required]
     [MaxLength(128)]
@@ -36,6 +36,13 @@ public class RecoveryCodeEntity
     /// </summary>
     [Column("used_at")]
     public DateTime? UsedAt { get; set; }
+
+    /// <summary>
+    /// When this code was invalidated without being used, such as by the migration that
+    /// retired the HMAC-keyed hashes (null if still live)
+    /// </summary>
+    [Column("invalidated_at")]
+    public DateTime? InvalidatedAt { get; set; }
 
     /// <summary>
     /// When this recovery code was generated

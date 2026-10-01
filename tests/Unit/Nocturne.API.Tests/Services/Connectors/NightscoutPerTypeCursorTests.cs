@@ -99,8 +99,9 @@ public class NightscoutPerTypeCursorTests
             .Add(TimeSpan.FromHours(14));
     }
 
+    /// <summary>The catch-up crawl, which a re-read of the recent window follows.</summary>
     private static string TreatmentsUrl(SequentialMockHandler handler) =>
-        handler.RequestUrls.Single(u => u.Contains("treatments.json"));
+        handler.RequestUrls.First(u => u.Contains("treatments.json"));
 
     private static string DeviceStatusUrl(SequentialMockHandler handler) =>
         handler.RequestUrls.Single(u => u.Contains("devicestatus.json"));

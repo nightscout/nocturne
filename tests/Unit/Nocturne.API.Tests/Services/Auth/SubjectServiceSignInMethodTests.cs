@@ -49,13 +49,22 @@ public class SubjectServiceSignInMethodTests : IDisposable
         await _db.SaveChangesAsync();
     }
 
-    private async Task SeedOidcIdentityAsync()
+    private async Task SeedOidcIdentityAsync(bool providerEnabled = true)
     {
+        var providerId = Guid.CreateVersion7();
+        _db.OidcProviders.Add(new OidcProviderEntity
+        {
+            Id = providerId,
+            Name = "Provider",
+            IssuerUrl = "https://issuer.example",
+            ClientId = "nocturne",
+            IsEnabled = providerEnabled,
+        });
         _db.SubjectOidcIdentities.Add(new SubjectOidcIdentityEntity
         {
             Id = Guid.CreateVersion7(),
             SubjectId = _subjectId,
-            ProviderId = Guid.CreateVersion7(),
+            ProviderId = providerId,
             OidcSubjectId = "ext-sub",
             Issuer = "https://issuer.example",
             LinkedAt = DateTime.UtcNow,
@@ -115,6 +124,27 @@ public class SubjectServiceSignInMethodTests : IDisposable
         GiveRecoveryCodes(0);
 
         (await _service.HasSingleSignInMethodAsync(_subjectId)).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task OnePasskeyAndIdentityOnDisabledProvider_IsASingleMethod()
+    {
+        await SeedPasskeysAsync(1);
+        await SeedOidcIdentityAsync(providerEnabled: false);
+        GiveRecoveryCodes(0);
+
+        (await _service.HasSingleSignInMethodAsync(_subjectId)).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public async Task IdentityOnDisabledProviderAndNoRecoveryCodes_IsNotASingleMethod()
+    {
+        await SeedOidcIdentityAsync(providerEnabled: false);
+        GiveRecoveryCodes(0);
+
+        (await _service.HasSingleSignInMethodAsync(_subjectId)).Should().BeFalse();
     }
 
     [Fact]

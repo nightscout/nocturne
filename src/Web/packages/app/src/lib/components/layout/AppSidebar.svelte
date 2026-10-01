@@ -12,8 +12,10 @@
   import { updateLanguagePreference } from "$api/user-preferences.remote";
   import { hasLanguagePreference } from "$lib/stores/appearance-store.svelte";
   import { getMyTenants } from "$lib/api/generated/myTenants.generated.remote";
-  import { ChevronDown, Shield, Eye } from "lucide-svelte";
-  import { buildAppNavigation, type NavItem } from "$lib/navigation/app-navigation";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Eye from "@lucide/svelte/icons/eye";
+  import { buildAppNavigation, type NavItem, type NavLink } from "$lib/navigation/app-navigation.svelte";
   import {
     goToTenant,
     resolveTenantSwitcher,
@@ -53,8 +55,11 @@
   // Defer localStorage check to after hydration so SSR and client initial render
   // both produce the same DOM (avoids hydration mismatch from conditional rendering).
   // $derived would read localStorage during hydration and reintroduce the mismatch.
+  // Starts true so the picker stays out of the server render and the pre-hydration
+  // DOM: shown there it is a control nobody can click yet, and it disappears again
+  // for everyone who already has a preference.
   // eslint-disable-next-line svelte/prefer-writable-derived -- $effect defers the localStorage read past hydration; $derived would not
-  let langPrefKnown = $state(false);
+  let langPrefKnown = $state(true);
   $effect(() => {
     langPrefKnown = hasLanguagePreference();
   });
@@ -133,7 +138,7 @@
   // Track which collapsible menus are open
   let openMenus = $state<Record<string, boolean>>({});
 
-  const isActive = (item: NavItem): boolean => {
+  const isActive = (item: NavItem | NavLink): boolean => {
     if (item.href && item?.strict) {
       return page.url.pathname === item.href;
     }
@@ -142,7 +147,7 @@
       return page.url.pathname.startsWith(item.href);
     }
 
-    if (item.children) {
+    if ("children" in item && item.children) {
       return item.children.some((child) => isActive(child));
     }
 
@@ -153,13 +158,13 @@
   $effect(() => {
     navigation.forEach((item) => {
       if (item.children && isActive(item)) {
-        openMenus[item.title] = true;
+        openMenus[item.id] = true;
       }
     });
   });
 
-  function toggleMenu(title: string) {
-    openMenus[title] = !openMenus[title];
+  function toggleMenu(id: string) {
+    openMenus[id] = !openMenus[id];
   }
 </script>
 
@@ -198,10 +203,10 @@
        via a short-lived platform-access grant (distinct from the member switcher). -->
   {#if isPlatformAccessView}
     <div
-      class="border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 group-data-[collapsible=icon]:hidden"
+      class="border-b border-warning/40 bg-warning/10 px-3 py-2 group-data-[collapsible=icon]:hidden"
     >
       <p
-        class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
+        class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-warning"
       >
         <Shield class="h-3 w-3 shrink-0" />
         Platform admin access
@@ -214,7 +219,7 @@
         >
       </p>
       {#if grantExpiresInMin !== null && grantExpiresInMin > 0}
-        <p class="mt-0.5 text-[11px] text-muted-foreground">
+        <p class="mt-0.5 text-xs text-muted-foreground">
           Access expires in ~{grantExpiresInMin} min
         </p>
       {/if}
@@ -259,17 +264,17 @@
       <Sidebar.GroupLabel>Navigation</Sidebar.GroupLabel>
       <Sidebar.GroupContent>
         <Sidebar.Menu>
-          {#each navigation as item (item.title)}
+          {#each navigation as item (item.id)}
             {#if item.children}
               <!-- Collapsible submenu -->
               <Collapsible.Root
-                open={openMenus[item.title]}
-                onOpenChange={() => toggleMenu(item.title)}
+                open={openMenus[item.id]}
+                onOpenChange={() => toggleMenu(item.id)}
               >
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton
                     isActive={isActive(item)}
-                    onclick={() => toggleMenu(item.title)}
+                    onclick={() => toggleMenu(item.id)}
                   >
                     <item.icon class="h-4 w-4" />
                     <span class="group-data-[collapsible=icon]:hidden">
@@ -277,7 +282,7 @@
                     </span>
                     <ChevronDown
                       class="ml-auto h-4 w-4 transition-transform duration-200 group-data-[collapsible=icon]:hidden {openMenus[
-                        item.title
+                        item.id
                       ]
                         ? 'rotate-180'
                         : ''}"
@@ -286,7 +291,7 @@
                 </Sidebar.MenuItem>
                 <Collapsible.Content>
                   <Sidebar.MenuSub>
-                    {#each item.children as child (child.title)}
+                    {#each item.children as child (child.href)}
                       <Sidebar.MenuSubItem>
                         {#if child.href === "/alerts/dnd"}
                           <SidebarDndToggle />
@@ -326,7 +331,7 @@
     </Sidebar.Group>
   </Sidebar.Content>
 
-  <Sidebar.Footer class="p-2">
+  <Sidebar.Footer>
     <Sidebar.Menu>
       {#if !langPrefKnown}
         <Sidebar.MenuItem class="group-data-[collapsible=icon]:hidden">

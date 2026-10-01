@@ -168,6 +168,12 @@ public class StateSpanService : IStateSpanService
         => _repository.GetLatestActivityTimestampAsync(source, cancellationToken);
 
     /// <inheritdoc />
+    public Task<DateTime?> GetLatestNonActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default)
+        => _repository.GetLatestNonActivityTimestampAsync(source, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<Activity?> GetActivityByIdAsync(
         string id,
         CancellationToken cancellationToken = default)

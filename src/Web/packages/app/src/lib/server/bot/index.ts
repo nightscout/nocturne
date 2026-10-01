@@ -137,7 +137,7 @@ async function initBot(): Promise<Bot> {
 	}
 	registerAllCommands(bot, baseDomain);
 
-	const enabledPlatforms = (Object.entries(options.platforms ?? {}) as [string, PlatformCredentials | boolean][])
+	const enabledPlatforms = Object.entries(options.platforms ?? {})
 		.filter(([, val]) => val !== false && val !== undefined)
 		.map(([name]) => name);
 

@@ -344,6 +344,76 @@ public class V4ToLegacyProjectionServiceTests
     }
 
     [Fact]
+    public async Task GetProjectedTreatments_ReportsServerClockNotEventTime()
+    {
+        // A meal is created when its first constituent was and modified when its last one was, so
+        // srvCreated never runs ahead of srvModified.
+        var correlationId = Guid.CreateVersion7();
+        var eventTime = new DateTime(2025, 01, 01, 12, 0, 0, DateTimeKind.Utc);
+        var mealBolus = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = correlationId,
+            Timestamp = eventTime,
+            Insulin = 4.0,
+            CreatedAt = eventTime.AddDays(2),
+            ModifiedAt = eventTime.AddDays(4),
+        };
+        var carb = new CarbIntake
+        {
+            Id = Guid.CreateVersion7(),
+            CorrelationId = correlationId,
+            Timestamp = eventTime,
+            Carbs = 30.0,
+            CreatedAt = eventTime.AddDays(1),
+            ModifiedAt = eventTime.AddDays(3),
+        };
+        var correction = new Bolus
+        {
+            Id = Guid.CreateVersion7(),
+            Timestamp = eventTime.AddHours(1),
+            Insulin = 1.0,
+            CreatedAt = eventTime.AddDays(5),
+            ModifiedAt = eventTime.AddDays(6),
+        };
+        SetupBoluses(new[] { mealBolus, correction });
+        SetupCarbs(new[] { carb });
+
+        var result = (await _service.GetProjectedTreatmentsAsync(null, null, 100)).ToList();
+
+        var meal = result.Single(t => t.EventType == TreatmentTypes.MealBolus);
+        meal.SrvCreated.Should().Be(ToMills(carb.CreatedAt));
+        meal.SrvModified.Should().Be(ToMills(mealBolus.ModifiedAt));
+
+        var single = result.Single(t => t.EventType == TreatmentTypes.CorrectionBolus);
+        single.SrvCreated.Should().Be(ToMills(correction.CreatedAt));
+        single.SrvModified.Should().Be(ToMills(correction.ModifiedAt));
+        single.Mills.Should().Be(ToMills(correction.Timestamp));
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_ReportsSrvCreatedAsTheRowCreationTime()
+    {
+        var bolus = new BolusEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            Timestamp = Cursor.AddYears(-1),
+            Insulin = 1.0,
+        };
+        await AddModifiedAsync((bolus, Cursor.AddMinutes(1)));
+
+        var result = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 100)).ToList();
+
+        result.Should().ContainSingle();
+        result[0].SrvCreated.Should().Be(ToMills(bolus.SysCreatedAt));
+        result[0].SrvCreated.Should().NotBe(result[0].Mills);
+    }
+
+    private static long ToMills(DateTime value) =>
+        new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
+
+    [Fact]
     public async Task GetProjectedTreatmentsModifiedSince_ExcludesRecordAtCursor()
     {
         // AAPS passes the timestamp of the newest record it already holds as the cursor.
@@ -656,6 +726,97 @@ public class V4ToLegacyProjectionServiceTests
         var delivered = await WalkHistoryAsync(limit: 3, mealCarbIntakeId: carb.Id);
 
         delivered.Should().BeEquivalentTo(new[] { bolus.Id, carb.Id, notes[0].Id });
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_MillisecondWithMoreThanLimitRows_ComesBackInOnePage()
+    {
+        // A millisecond holding at least `limit` rows must not be re-served: the cursor is that
+        // millisecond, so a page cut inside it never advances. The page is extended to the end of
+        // the millisecond instead.
+        var after = Cursor.AddMinutes(1);
+        var notes = Enumerable.Range(1, 7)
+            .Select(i => (Entity: (object)new NoteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Text = $"note-{i}",
+            }, Modified: after.AddTicks(i)))
+            .ToList();
+        await AddModifiedAsync([.. notes]);
+
+        var first = (await _service.GetProjectedTreatmentsModifiedSinceAsync(CursorMills, 2)).ToList();
+
+        first.Should().HaveCount(7);
+        first.Select(t => Guid.Parse(t.Id!)).Should().BeEquivalentTo(
+            notes.Select(n => ((NoteEntity)n.Entity).Id));
+
+        var cursor = first.Max(t => t.SrvModified ?? t.Mills);
+        var second = (await _service.GetProjectedTreatmentsModifiedSinceAsync(cursor, 2)).ToList();
+
+        second.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_TieGroupSplitByLimit_DeliveredOnceAcrossPages()
+    {
+        // Three rows share a millisecond; limit 2 would cut the group and, on the old strictly-greater
+        // query, re-serve its rows while the cursor stayed put.
+        var after = Cursor.AddMinutes(1);
+        var tieGroup = Enumerable.Range(1, 3)
+            .Select(i => Guid.CreateVersion7())
+            .ToList();
+        var later = Guid.CreateVersion7();
+        await AddModifiedAsync(
+            (new NoteEntity { Id = tieGroup[0], TenantId = TenantId, Timestamp = after, Text = "a" }, after.AddTicks(10)),
+            (new NoteEntity { Id = tieGroup[1], TenantId = TenantId, Timestamp = after, Text = "b" }, after.AddTicks(20)),
+            (new NoteEntity { Id = tieGroup[2], TenantId = TenantId, Timestamp = after, Text = "c" }, after.AddTicks(30)),
+            (new NoteEntity { Id = later, TenantId = TenantId, Timestamp = after, Text = "d" }, after.AddMinutes(1)));
+
+        var delivered = await WalkHistoryAsync(limit: 2);
+
+        delivered.Should().BeEquivalentTo(tieGroup.Append(later));
+        delivered.Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task GetProjectedTreatmentsModifiedSince_MergeDoesNotCutOneTablesTieGroupWhileAnotherFillsThePage()
+    {
+        // The merged page is cut to `limit`; BGChecks fill it, so the Note tie group in the same
+        // millisecond is left behind the cut. The extension must still deliver it, or the next
+        // request (cursor at that millisecond) skips it forever.
+        var after = Cursor.AddMinutes(1);
+        var notes = Enumerable.Range(1, 2)
+            .Select(i => new NoteEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Text = $"note-{i}",
+            })
+            .ToList();
+        var bgChecks = Enumerable.Range(1, 3)
+            .Select(i => new BGCheckEntity
+            {
+                Id = Guid.CreateVersion7(),
+                TenantId = TenantId,
+                Timestamp = after,
+                Glucose = 100 + i,
+            })
+            .ToList();
+        await AddModifiedAsync(
+            (notes[0], after.AddTicks(10)),
+            (notes[1], after.AddTicks(20)),
+            (bgChecks[0], after.AddTicks(1)),
+            (bgChecks[1], after.AddTicks(2)),
+            (bgChecks[2], after.AddTicks(3)));
+
+        var delivered = await WalkHistoryAsync(limit: 2);
+
+        delivered.Should().BeEquivalentTo(
+            notes.Select(n => n.Id).Concat(bgChecks.Select(b => b.Id)));
+        delivered.Should().OnlyHaveUniqueItems();
     }
 
     /// <summary>

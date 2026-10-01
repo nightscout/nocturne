@@ -38,8 +38,7 @@ public class SensorGlucoseController(
     IGlucoseProcessingResolver glucoseResolver,
     ICanonicalAlertEvaluator alertEvaluator,
     IPatientDeviceRepository patientDevices,
-    IPatientDeviceStamper deviceStamper,
-    ILogger<SensorGlucoseController> logger)
+    IPatientDeviceStamper deviceStamper)
     : V4CrudControllerBase<SensorGlucose, UpsertSensorGlucoseRequest, UpsertSensorGlucoseRequest, ISensorGlucoseRepository>(repo)
 {
     /// <inheritdoc/>
@@ -113,6 +112,7 @@ public class SensorGlucoseController(
         Device = request.Device,
         App = request.App,
         DataSource = request.DataSource,
+        SyncIdentifier = request.SyncIdentifier,
         Mgdl = request.Mgdl,
         Direction = request.Direction,
         TrendRate = request.TrendRate,
@@ -137,6 +137,7 @@ public class SensorGlucoseController(
         Filtered = request.Filtered,
         Unfiltered = request.Unfiltered,
         Delta = request.Delta,
+        SyncIdentifier = existing.SyncIdentifier,
         CorrelationId = existing.CorrelationId,
         LegacyId = existing.LegacyId,
         CreatedAt = existing.CreatedAt,

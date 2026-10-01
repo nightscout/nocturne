@@ -10,15 +10,15 @@ using Xunit.Abstractions;
 namespace Nocturne.API.Tests.Integration;
 
 /// <summary>
-/// Integration tests for Treatment CRUD operations using Aspire-orchestrated infrastructure.
+/// Integration tests for Treatment CRUD operations against the API running in-process on real PostgreSQL.
 /// Tests the complete request/response cycle for v1 treatment endpoints.
 /// </summary>
 [Trait("Category", "Integration")]
 [Parity]
-public class TreatmentsIntegrationTests : AspireIntegrationTestBase
+public class TreatmentsIntegrationTests : ApiIntegrationTestBase
 {
     public TreatmentsIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }
@@ -306,13 +306,61 @@ public class TreatmentsIntegrationTests : AspireIntegrationTestBase
         var deleteResponse = await client.DeleteAsync($"/api/v1/treatments/{id}");
 
         // Assert
-        deleteResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NoContent);
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await deleteResponse.Content.ReadFromJsonAsync<JsonElement>();
+        status.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        status.GetProperty("deletedCount").GetInt64().Should().Be(1);
+        status.GetProperty("n").GetInt64().Should().Be(1);
 
         // Verify the treatment is gone
         var getResponse = await client.GetAsync($"/api/v1/treatments/{id}");
         getResponse.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.OK);
 
         Log($"DELETE treatment '{id}' returned: {deleteResponse.StatusCode}");
+    }
+
+    [Fact]
+    public async Task DeleteTreatment_UnknownId_AnswersOkWithNoneDeleted()
+    {
+        var response = await CreateAuthenticatedClient().DeleteAsync("/api/v1/treatments/000000000000000000000000");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var status = await response.Content.ReadFromJsonAsync<JsonElement>();
+        status.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        status.GetProperty("deletedCount").GetInt64().Should().Be(0);
+        status.GetProperty("n").GetInt64().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DeleteTreatment_AnyIdWithFind_DeletesTheMatches()
+    {
+        var client = CreateAuthenticatedClient();
+        var enteredBy = $"wildcard-{Guid.NewGuid():N}";
+        var treatments = new[] { CreateTestTreatment("first"), CreateTestTreatment("second") };
+        foreach (var treatment in treatments)
+            treatment.EnteredBy = enteredBy;
+        treatments[1].Mills -= 60_000;
+        treatments[1].Created_at = DateTimeOffset.FromUnixTimeMilliseconds(treatments[1].Mills)
+            .ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        (await client.PostAsJsonAsync("/api/v1/treatments", treatments))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await client.DeleteAsync($"/api/v1/treatments/*?find[enteredBy]={enteredBy}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("deletedCount").GetInt64().Should().Be(2);
+        var remaining = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/treatments?find[enteredBy]={enteredBy}");
+        remaining.GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task DeleteTreatment_AnyIdWithoutFind_IsRefused()
+    {
+        var response = await CreateAuthenticatedClient().DeleteAsync("/api/v1/treatments/*");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -327,6 +375,44 @@ public class TreatmentsIntegrationTests : AspireIntegrationTestBase
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         Log("DELETE without auth correctly returned Unauthorized");
+    }
+
+    #endregion
+
+    #region Trio lowercase id
+
+    [Fact]
+    public async Task TrioCarb_DeleteByFindId_ThenReupload_LeavesOneCarb()
+    {
+        var client = CreateAuthenticatedClient();
+        var createdAt = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
+        var originalId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var replacementId = Guid.NewGuid().ToString().ToUpperInvariant();
+
+        object TrioCarb(string id, int carbs) => new[]
+        {
+            new Dictionary<string, object>
+            {
+                ["id"] = id, ["enteredBy"] = "Trio", ["eventType"] = "Carb Correction",
+                ["carbs"] = carbs, ["fat"] = 0, ["protein"] = 0, ["created_at"] = createdAt,
+            },
+        };
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", TrioCarb(originalId, 30)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var delete = await client.DeleteAsync($"/api/v1/treatments?find[id][$eq]={originalId}");
+        delete.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await delete.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("n").GetInt64().Should().Be(1);
+
+        (await client.PostAsJsonAsync("/api/v1/treatments", TrioCarb(replacementId, 45)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var carbs = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/v1/treatments?find[created_at][$eq]={createdAt}&find[carbs][$exists]=true");
+        carbs.GetArrayLength().Should().Be(1);
+        carbs[0].GetProperty("carbs").GetDouble().Should().Be(45);
+        carbs[0].GetProperty("id").GetString().Should().Be(replacementId);
     }
 
     #endregion

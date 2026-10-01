@@ -12,10 +12,11 @@ namespace Nocturne.API.Authorization;
 /// applies this before delegating to the service.
 /// </summary>
 /// <remarks>
-/// The category that matters most here is <see cref="StateSpanCategory.DataExclusion"/>. Excluding
-/// a window marks glucose readings as not to be counted, so it changes what analytics and reports
-/// show — it is a glucose-integrity write, not a treatment annotation, and gating it on the
-/// treatments scope would let a treatments-only credential hide a hypo from every report.
+/// The category that matters most here is <see cref="StateSpanCategory.DataExclusion"/>, which
+/// marks a window of glucose readings as not to be counted. No statistic or report filters on it
+/// yet, so every reading still counts; it is still a glucose-integrity record rather than a
+/// treatment annotation, and gating it on the treatments scope would let a treatments-only
+/// credential mark a hypo for exclusion.
 /// <para>
 /// Connector publishing writes state spans through <c>IStateSpanService</c> directly rather than
 /// through this controller, so it is not gated here — the same carve-out
@@ -35,8 +36,8 @@ internal static class StateSpanWriteScopeGuard
     /// surface use.</item>
     /// <item><see cref="StateSpanCategory.Profile"/> is a profile switch, which V1/V3 profile
     /// writes gate on the therapy scope.</item>
-    /// <item><see cref="StateSpanCategory.DataExclusion"/> governs which glucose readings count,
-    /// so it is the glucose category.</item>
+    /// <item><see cref="StateSpanCategory.DataExclusion"/> marks glucose readings, so it is the
+    /// glucose category.</item>
     /// <item><see cref="StateSpanCategory.Override"/>, <see cref="StateSpanCategory.Exercise"/>,
     /// <see cref="StateSpanCategory.Illness"/>, <see cref="StateSpanCategory.Travel"/> and
     /// <see cref="StateSpanCategory.TemporaryTarget"/> are the decomposed form of the legacy

@@ -18,7 +18,8 @@
     startOfWeek,
     today,
   } from "@internationalized/date";
-  import { ChevronLeft, ChevronRight } from "lucide-svelte";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Button } from "$lib/components/ui/button";
   import { getPunchCardData } from "$api/generated/statistics.generated.remote";
   import GlucosePickerCell from "$lib/components/alerts/GlucosePickerCell.svelte";
@@ -96,8 +97,8 @@
   type EntriesByDate = Record<string, { mills: number; mgdl: number }[]>;
   const punchCardQuery = $derived(
     getPunchCardData({
-      startDate: startOfMonth(viewMonth).toDate(tz),
-      endDate: endOfMonth(viewMonth).toDate(tz),
+      startDate: startOfMonth(viewMonth).toString(),
+      endDate: endOfMonth(viewMonth).toString(),
     })
   );
   const entriesByDate = $derived.by<EntriesByDate>(() => {
@@ -155,8 +156,7 @@
   <div class="flex items-center justify-between mb-2">
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoPrevMonth}
       aria-label="Previous month"
     >
@@ -172,8 +172,7 @@
     </div>
     <Button
       variant="ghost"
-      size="icon"
-      class="h-7 w-7"
+      size="icon-xs"
       onclick={gotoNextMonth}
       disabled={!canGoNext}
       aria-label="Next month"
@@ -185,7 +184,7 @@
   <div class="grid grid-cols-7 gap-1 mb-1">
     {#each weekdayLabels as label, i (i)}
       <div
-        class="text-[10px] text-center text-muted-foreground uppercase tracking-wide font-medium"
+        class="text-2xs text-center text-muted-foreground uppercase tracking-wide font-medium"
       >
         {label}
       </div>

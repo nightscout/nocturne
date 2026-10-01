@@ -3,7 +3,7 @@
   import { Label } from "$lib/components/ui/label";
   import { Textarea } from "$lib/components/ui/textarea";
   import { Checkbox } from "$lib/components/ui/checkbox";
-  import { FileText } from "lucide-svelte";
+  import FileText from "@lucide/svelte/icons/file-text";
 
   interface Props {
     form: {
@@ -17,7 +17,7 @@
 </script>
 
 <div class="space-y-2">
-  <Label for="text" class="flex items-center gap-1.5">
+  <Label for="text">
     <FileText class="h-3.5 w-3.5" />
     Text
   </Label>
@@ -45,7 +45,8 @@
   />
   <Label
     for="isAnnouncement"
-    class="text-sm font-normal cursor-pointer"
+    variant="option"
+    class="cursor-pointer"
   >
     Announcement
   </Label>

@@ -2,7 +2,10 @@ using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
+using Nocturne.API.Services.Alerts.Evaluators;
 using Nocturne.API.Services.Realtime;
+using Nocturne.Core.Alerts.Native;
 
 namespace Nocturne.API.Services.Alerts;
 
@@ -19,8 +22,9 @@ namespace Nocturne.API.Services.Alerts;
 /// persistence (sustained timers, tracker state, excursion rows); which engine runs
 /// (managed C# evaluators, Rust over FFI, or shadow) is selected by <c>Alerts:Engine</c>.
 /// Errors from individual rule evaluations are caught and logged without aborting the rest of
-/// the evaluation pass. Escalation chains are no longer first-class — express delayed escalation
-/// as a separate alert rule whose tree references the parent via the <c>alert_state</c> condition.
+/// the evaluation pass. A rule whose stored condition tree cannot be evaluated fails the same way
+/// on every pass, so that is logged once per version of the condition. Delayed escalation is a
+/// separate rule whose tree references the parent through an <c>alert_state</c> condition.
 /// </remarks>
 /// <seealso cref="IAlertOrchestrator"/>
 /// <seealso cref="IAlertEvaluationEngine"/>
@@ -33,6 +37,7 @@ internal sealed class AlertOrchestrator(
     ISensorContextEnricher contextEnricher,
     IAlertAcknowledgementService acknowledgementService,
     IExcursionResolutionHandler resolutionHandler,
+    ConditionVersionLog conditionLog,
     TimeProvider timeProvider,
     ILogger<AlertOrchestrator> logger)
     : IAlertOrchestrator
@@ -43,17 +48,20 @@ internal sealed class AlertOrchestrator(
         if (tenantId == Guid.Empty) return;
 
         var rules = await repository.GetEnabledRulesAsync(tenantId, ct);
-        await EvaluateRulesAsync(rules, context, ct);
+        await EvaluateRulesAsync(rules, rules.Select(r => r.Id).ToHashSet(), context, ct);
     }
 
     public async Task EvaluateRulesAsync(
-        IReadOnlyList<AlertRuleSnapshot> rules, SensorContext context, CancellationToken ct)
+        IReadOnlyList<AlertRuleSnapshot> rules,
+        IReadOnlySet<Guid> enabledRuleIds,
+        SensorContext context,
+        CancellationToken ct)
     {
         var tenantId = tenantAccessor.TenantId;
         if (tenantId == Guid.Empty || rules.Count == 0) return;
 
         // Drop chained rules whose alert_state references resolve to disabled/deleted parents.
-        var evaluable = RuleReferenceResolver.FilterEvaluable(rules);
+        var evaluable = RuleReferenceResolver.FilterEvaluable(rules, logger, enabledRuleIds);
         if (evaluable.Count == 0) return;
 
         // One enrichment pass for the whole batch — RuleDataNeeds only fetches what any rule
@@ -65,6 +73,16 @@ internal sealed class AlertOrchestrator(
             try
             {
                 await EvaluateRuleAsync(rule, enriched, tenantId, ct);
+            }
+            catch (Exception ex) when (ex is ConditionTreeFaultException
+                                       or RustAlertEngineException { IsConditionRejection: true })
+            {
+                if (conditionLog.FirstFor(rule.Id, rule.ConditionType, rule.ConditionParams))
+                {
+                    logger.LogWarning(ex,
+                        "Condition tree of alert rule {AlertRuleId} cannot be evaluated; the rule is skipped until it is edited",
+                        rule.Id);
+                }
             }
             catch (Exception ex)
             {
@@ -98,7 +116,8 @@ internal sealed class AlertOrchestrator(
 
             case ExcursionTransitionType.ExcursionContinues:
                 // Nothing to do per-reading. The dispatch happened at open; subsequent
-                // notifications-while-firing are a separate-rule concern (alert_state).
+                // notifications-while-firing are a separate-rule concern (alert_state), and
+                // re-notifying after a snooze is AlertSnoozeService.ResumeAsync's.
                 break;
         }
 
@@ -139,21 +158,8 @@ internal sealed class AlertOrchestrator(
         var activeExcursionCount = await repository.CountActiveExcursionsAsync(tenantId, ct);
         var tenant = await repository.GetTenantAlertContextAsync(tenantId, ct);
 
-        var payload = new AlertPayload
-        {
-            AlertType = rule.ConditionType,
-            RuleName = rule.Name,
-            GlucoseValue = context.LatestValue,
-            Trend = null,
-            TrendRate = context.TrendRate,
-            ReadingTimestamp = context.LatestTimestamp ?? now,
-            ExcursionId = excursionId,
-            InstanceId = instance.Id,
-            TenantId = tenantId,
-            SubjectName = tenant?.SubjectName ?? tenant?.DisplayName ?? "Unknown",
-            ActiveExcursionCount = activeExcursionCount,
-            Severity = rule.Severity,
-        };
+        var payload = AlertPayloads.Build(
+            rule, context, tenantId, excursionId, instance.Id, tenant, activeExcursionCount, now);
 
         // Scoped DND suppression (ADR 0004): when an active DND scope covers this rule's class,
         // a non-Critical rule without an explicit "allow through DND" opt-in still gets a history
@@ -190,7 +196,8 @@ internal sealed class AlertOrchestrator(
         if (rule.Severity == AlertRuleSeverity.Info && suppressingScope is null)
         {
             await acknowledgementService.AcknowledgeExcursionAsync(
-                tenantId, excursionId, "system:auto-ack-on-trigger", broadcast: false, ct);
+                tenantId, excursionId, "system:auto-ack-on-trigger", AlertAcknowledgementAuthority.System,
+                broadcast: false, ct);
         }
     }
 

@@ -99,9 +99,12 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
     /// confirms the affected window. Runs synchronously; the window is bounded.
     /// </summary>
     /// <param name="request">Optional lower bound (UTC). When null, the connector's default window is used.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("recorrect")]
     [RequireDeclaredWriteScope]
     [RemoteCommand]
+    [ProducesResponseType(typeof(RecorrectResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<RecorrectResult>> Recorrect(
         [FromBody] RecorrectRequest request,
         CancellationToken cancellationToken)
@@ -117,9 +120,36 @@ public class TimezoneTimelineController : ControllerBase, IWriteScopedController
             "Timezone re-correction requested: re-syncing Glooko from {From} to now", request.From?.ToString("o") ?? "default");
 
         var result = await _syncService.TriggerSyncAsync(GlookoConnectorId, syncRequest, cancellationToken);
+
+        if (result.AlreadyRunning)
+            return Problem(detail: result.Message, statusCode: 409, title: "Conflict");
+
         return Ok(new RecorrectResult(result.Success, result.Message));
     }
+
+    /// <summary>
+    /// Diagnostic view of the device-clock evidence behind automatic corrections: the stored
+    /// observations and the deviation segments they currently derive. Read-only; segments are a pure
+    /// function of the observations, so this never changes anything.
+    /// </summary>
+    [HttpGet("device-clock")]
+    [RemoteQuery]
+    public async Task<ActionResult<DeviceClockDiagnostics>> GetDeviceClock(
+        [FromServices] IDeviceClockService deviceClock,
+        CancellationToken cancellationToken)
+    {
+        var observations = await deviceClock.GetObservationsAsync(connector: null, cancellationToken);
+        var segments = await deviceClock.GetSegmentsAsync(GlookoConnectorId, cancellationToken: cancellationToken);
+        return Ok(new DeviceClockDiagnostics(observations, segments));
+    }
 }
+
+/// <summary>Device-clock evidence and what it currently derives.</summary>
+/// <param name="Observations">Stored offset evidence, oldest first.</param>
+/// <param name="Segments">Deviation segments the evidence confirms right now.</param>
+public record DeviceClockDiagnostics(
+    IReadOnlyList<DeviceClockObservation> Observations,
+    IReadOnlyList<DeviceClockSegment> Segments);
 
 /// <summary>Request to create or update a timezone timeline entry.</summary>
 /// <param name="Id">Existing entry id to update, or null to create.</param>

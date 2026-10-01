@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Models.V4;
@@ -23,7 +24,8 @@ public class DeviceStatusExtrasRepositoryBulkCreateTests : IDisposable
         _context = TestDbContextFactory.CreateInMemoryContext(dbName);
         _context.TenantId = TenantA;
         _repository = new DeviceStatusExtrasRepository(
-            new TestTenantDbContextFactory(_context), new SystemAuditContext());
+            new TestTenantDbContextFactory(_context), new SystemAuditContext(),
+            NullLogger<DeviceStatusExtrasRepository>.Instance);
     }
 
     public void Dispose()

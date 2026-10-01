@@ -1,3 +1,7 @@
+<script lang="ts">
+  import { resolve } from "$app/paths";
+</script>
+
 <svelte:head>
   <title>Privacy Policy - Nocturne</title>
 </svelte:head>
@@ -204,7 +208,7 @@
 </p>
 
 <p>
-  See also: <a href="/terms">Terms of Service</a>
+  See also: <a href={resolve("/terms")}>Terms of Service</a>
 </p>
 
 <hr />

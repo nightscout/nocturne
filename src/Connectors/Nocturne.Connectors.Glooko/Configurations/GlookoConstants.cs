@@ -59,6 +59,8 @@ public static class GlookoConstants
     public const string SuspendBasalsPath = "/api/v2/pumps/suspend_basals";
     public const string TemporaryBasalsPath = "/api/v2/pumps/temporary_basals";
     public const string V3UsersPath = "/api/v3/session/users";
+    public const string V2UsersPath = "/api/v2/users";
+    public const string V2CgmEgvsPath = "/api/v2/cgm/egvs";
     public const string V3GraphDataPath = "/api/v3/graph/data";
     public const string V3DeviceSettingsPath = "/api/v3/devices_and_settings";
     public const string V3HistoriesPath = "/api/v3/users/summary/histories";

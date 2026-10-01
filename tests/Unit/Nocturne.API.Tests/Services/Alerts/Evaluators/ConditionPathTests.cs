@@ -159,6 +159,30 @@ public class ConditionPathTests
         walked.Should().Be(built);
     }
 
+    [Fact]
+    public void Walk_SkipsMissingChildrenAndUntypedNodes()
+    {
+        var root = new ConditionNode(
+            "composite",
+            Composite: new CompositeCondition("and", new List<ConditionNode>
+            {
+                null!,
+                new(null!),
+                new("not", Not: new NotCondition(null!)),
+                new("sustained", Sustained: new SustainedCondition(5, null!)),
+                new("composite", Composite: new CompositeCondition("or", null!)),
+            }));
+        var paths = new List<string>();
+
+        Walker.Collect(root, paths);
+
+        paths.Should().Equal(
+            "composite",
+            "composite[2].not",
+            "composite[3].sustained",
+            "composite[4].composite");
+    }
+
     private static ConditionNode BuildSampleTree() => new(
         "composite",
         Composite: new CompositeCondition("and", new List<ConditionNode>

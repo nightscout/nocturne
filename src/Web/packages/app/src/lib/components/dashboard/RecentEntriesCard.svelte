@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Entry } from "$lib/api";
-  import { Card, CardContent, CardHeader } from "$lib/components/ui/card";
+  import { Card, CardContent, CardHeader, CardTitle } from "$lib/components/ui/card";
 
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -31,19 +31,19 @@
 </script>
 
 <Card class="@container">
-  <CardHeader class="px-3 @md:px-6">Recent Entries</CardHeader>
+  <CardHeader class="px-3 @md:px-6">
+    <CardTitle>Recent readings</CardTitle>
+  </CardHeader>
   <CardContent class="px-3 @md:px-6">
     {#if recentEntries.length > 0}
-      <div class="space-y-2 @md:space-y-3">
+      <ul class="m-0 list-none divide-y divide-border p-0">
         {#each recentEntries as entry, i (entry._id || `${entry.mills}-${i}`)}
           {@const directionInfo = getDirectionInfo(entry.direction)}
           {@const Icon = directionInfo.icon}
-          <div
-            class="flex items-center justify-between p-2 @md:p-3 bg-muted rounded-lg"
-          >
+          <li class="flex items-center justify-between py-2.5">
             <div class="flex items-center gap-2 @md:gap-3">
               <div>
-                <div class="font-medium">
+                <div class="font-medium tabular-nums">
                   {#if entry.sgv}
                     {formatGlucoseValue(entry.sgv, units)} {unitLabel}
                   {/if}
@@ -64,9 +64,9 @@
               {/if}
               <Icon class="h-4 w-4 {directionInfo.css}" />
             </div>
-          </div>
+          </li>
         {/each}
-      </div>
+      </ul>
     {:else}
       <p class="text-muted-foreground text-center py-8">No recent entries</p>
     {/if}

@@ -5,17 +5,6 @@
 import { z } from 'zod';
 import { getRequestEvent, form, command, query } from '$app/server';
 import { invalid } from '@sveltejs/kit';
-import type {
-	CreateBolusRequest,
-	UpdateBolusRequest,
-	CreateCarbIntakeRequest,
-	UpdateCarbIntakeRequest,
-	UpsertBGCheckRequest,
-	UpsertNoteRequest,
-	UpsertDeviceEventRequest,
-	CreateBasalInjectionRequest,
-	UpdateBasalInjectionRequest,
-} from '$lib/api';
 import {
 	CreateBolusRequestSchema,
 	UpdateBolusRequestSchema,
@@ -29,56 +18,50 @@ import {
 } from '$lib/api/generated/schemas';
 import { DateRangeSchema, resolveReportRange } from '$api/report-range';
 
+async function fetchEntries(startDate: string, endDate: string) {
+	const { apiClient } = getRequestEvent().locals;
+	const [
+		bolusResponse,
+		carbResponse,
+		bgCheckResponse,
+		noteResponse,
+		deviceEventResponse,
+		basalInjectionResponse,
+	] = await Promise.all([
+		apiClient.bolus.getAll(startDate, endDate, 10000),
+		apiClient.nutrition.getCarbIntakes(startDate, endDate, 10000),
+		apiClient.bGCheck.getAll(startDate, endDate, 10000),
+		apiClient.note.getAll(startDate, endDate, 10000),
+		apiClient.deviceEvent.getAll(startDate, endDate, 10000),
+		apiClient.basalInjection.getAll(startDate, endDate, 10000),
+	]);
+
+	return {
+		boluses: bolusResponse.data ?? [],
+		carbIntakes: carbResponse.data ?? [],
+		bgChecks: bgCheckResponse.data ?? [],
+		notes: noteResponse.data ?? [],
+		deviceEvents: deviceEventResponse.data ?? [],
+		basalInjections: basalInjectionResponse.data ?? [],
+	};
+}
+
 /**
  * Get all v4 entry types for the treatments page.
- * Fetches boluses, carb intakes, BG checks, notes, and device events in parallel.
- * Treatment summary comes from the backend via calculateTreatmentSummary.
+ * Fetches boluses, carb intakes, BG checks, notes, device events and basal injections in parallel.
  */
 export const getTreatmentsData = query(
 	DateRangeSchema.optional(),
 	async (input) => {
-		const { locals } = getRequestEvent();
-		const { apiClient } = locals;
-		const { startDate, endDate } = await resolveReportRange(input);
-		const [
-			bolusResponse,
-			carbResponse,
-			bgCheckResponse,
-			noteResponse,
-			deviceEventResponse,
-			basalInjectionResponse,
-		] = await Promise.all([
-			apiClient.bolus.getAll(startDate, endDate, 10000),
-			apiClient.nutrition.getCarbIntakes(startDate, endDate, 10000),
-			apiClient.bGCheck.getAll(startDate, endDate, 10000),
-			apiClient.note.getAll(startDate, endDate, 10000),
-			apiClient.deviceEvent.getAll(startDate, endDate, 10000),
-			apiClient.basalInjection.getAll(startDate, endDate, 10000),
-		]);
-
-		const boluses = bolusResponse.data ?? [];
-		const carbIntakes = carbResponse.data ?? [];
-		const bgChecks = bgCheckResponse.data ?? [];
-		const notes = noteResponse.data ?? [];
-		const deviceEvents = deviceEventResponse.data ?? [];
-		const basalInjections = basalInjectionResponse.data ?? [];
-
-		const treatmentSummary =
-			boluses.length > 0 || carbIntakes.length > 0
-				? await apiClient.statistics.calculateTreatmentSummary({ boluses, carbIntakes })
-				: null;
+		const { startDate, endDate, dayCount } = await resolveReportRange(input);
+		const entries = await fetchEntries(startDate, endDate);
 
 		return {
-			boluses,
-			carbIntakes,
-			bgChecks,
-			notes,
-			deviceEvents,
-			basalInjections,
-			treatmentSummary,
+			...entries,
 			dateRange: {
-				from: startDate.toISOString(),
-				to: endDate.toISOString(),
+				from: startDate,
+				to: endDate,
+				dayCount,
 			},
 		};
 	}
@@ -214,17 +197,17 @@ export const updateEntry = command(
 		const { apiClient } = getRequestEvent().locals;
 		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.update(input.id, input.data as UpdateBolusRequest);
+				return await apiClient.bolus.update(input.id, input.data);
 			case 'carbs':
-				return await apiClient.nutrition.updateCarbIntake(input.id, input.data as UpdateCarbIntakeRequest);
+				return await apiClient.nutrition.updateCarbIntake(input.id, input.data);
 			case 'bgCheck':
-				return await apiClient.bGCheck.update(input.id, input.data as UpsertBGCheckRequest);
+				return await apiClient.bGCheck.update(input.id, input.data);
 			case 'note':
-				return await apiClient.note.update(input.id, input.data as UpsertNoteRequest);
+				return await apiClient.note.update(input.id, input.data);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.update(input.id, input.data as UpsertDeviceEventRequest);
+				return await apiClient.deviceEvent.update(input.id, input.data);
 			case 'basalInjection':
-				return await apiClient.basalInjection.update(input.id, input.data as UpdateBasalInjectionRequest);
+				return await apiClient.basalInjection.update(input.id, input.data);
 		}
 	}
 );
@@ -254,17 +237,17 @@ export const createEntry = command(
 		const { apiClient } = getRequestEvent().locals;
 		switch (input.kind) {
 			case 'bolus':
-				return await apiClient.bolus.create(input.data as CreateBolusRequest);
+				return await apiClient.bolus.create(input.data);
 			case 'carbs':
-				return await apiClient.nutrition.createCarbIntake(input.data as CreateCarbIntakeRequest);
+				return await apiClient.nutrition.createCarbIntake(input.data);
 			case 'bgCheck':
-				return await apiClient.bGCheck.create(input.data as UpsertBGCheckRequest);
+				return await apiClient.bGCheck.create(input.data);
 			case 'note':
-				return await apiClient.note.create(input.data as UpsertNoteRequest);
+				return await apiClient.note.create(input.data);
 			case 'deviceEvent':
-				return await apiClient.deviceEvent.create(input.data as UpsertDeviceEventRequest);
+				return await apiClient.deviceEvent.create(input.data);
 			case 'basalInjection':
-				return await apiClient.basalInjection.create(input.data as CreateBasalInjectionRequest);
+				return await apiClient.basalInjection.create(input.data);
 		}
 	}
 );

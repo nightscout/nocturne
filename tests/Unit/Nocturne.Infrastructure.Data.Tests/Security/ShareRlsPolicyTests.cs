@@ -35,6 +35,7 @@ public class ShareRlsPolicyTests
         sql.Should().Contain("current_setting('app.is_share', true) IS DISTINCT FROM 'true'");
         sql.Should().NotContain("visible_categories");
         sql.Should().NotContain("ANY(");
+        sql.Should().NotContain("history_clamped", "a member sees a table no share can reach in full");
     }
 
     [Theory]
@@ -56,14 +57,24 @@ public class ShareRlsPolicyTests
     }
 
     [Fact]
-    public void BuildPolicySql_RecencyColumn_AddsThe24HourClampBehindFullHistory()
+    public void BuildPolicySql_RecencyColumn_ClampsSharesAndHistoryClampedConnectionsOutsideTheCategoryGate()
     {
         var sql = ShareRlsPolicy.BuildPolicySql("boluses", Scope.TreatmentsRead, "timestamp");
 
-        sql.Should().Contain("current_setting('app.share_full_history', true) = 'true'");
-        sql.Should().Contain("\"timestamp\" >= now() - interval '24 hours'");
-        // The clamp narrows the category unlock; it must never widen the is_share gate.
-        sql.Should().Contain("current_setting('app.is_share', true) IS DISTINCT FROM 'true'");
+        // The recency conjunct sits beside the category gate rather than inside its share branch,
+        // so it can narrow a non-share connection too. A share is clamped unless it has full
+        // history (fail-closed); anything else only when history_clamped says so (fail-open).
+        // IS [NOT] DISTINCT FROM keeps each test non-null when its GUC is unset, so an unset
+        // history_clamped cannot hide a row from an unclamped member.
+        const string expected =
+            "USING ((current_setting('app.is_share', true) IS DISTINCT FROM 'true'" +
+            " OR 'treatments.read' = ANY(string_to_array(current_setting('app.visible_categories', true), ',')))" +
+            " AND (\"timestamp\" >= now() - interval '24 hours'" +
+            " OR NOT ((current_setting('app.is_share', true) IS NOT DISTINCT FROM 'true'" +
+            " AND current_setting('app.share_full_history', true) IS DISTINCT FROM 'true')" +
+            " OR current_setting('app.history_clamped', true) IS NOT DISTINCT FROM 'true')));";
+
+        sql.Should().Contain(expected);
     }
 
     [Fact]
@@ -72,6 +83,7 @@ public class ShareRlsPolicyTests
         var sql = ShareRlsPolicy.BuildPolicySql("foods", Scope.FoodRead);
 
         sql.Should().NotContain("share_full_history");
+        sql.Should().NotContain("history_clamped");
         sql.Should().NotContain("interval");
     }
 

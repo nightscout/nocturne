@@ -22,7 +22,14 @@ const RECORD_SEPARATOR: u8 = 0x1e;
 
 /// Collections passed to `Subscribe`: the native V4 categories plus the legacy v1 collections, so
 /// realtime fires whether the tenant writes V4 or legacy shapes. Matches the Windows widget.
-const COLLECTIONS: [&str; 6] = ["glucose", "care", "device", "entries", "treatments", "devicestatus"];
+const COLLECTIONS: [&str; 6] = [
+    "glucose",
+    "care",
+    "device",
+    "entries",
+    "treatments",
+    "devicestatus",
+];
 
 /// Server events broadcast for the subscribed collections; each means "data changed". Consumers
 /// re-fetch over HTTP rather than parsing payloads, so the event name is all a subscriber needs.
@@ -166,7 +173,12 @@ impl HubConnection {
         });
         send_record(&mut ws, subscribe.to_string().as_bytes()).await?;
 
-        Ok(Self { ws, buffer: String::new(), pending: VecDeque::new(), subscribed })
+        Ok(Self {
+            ws,
+            buffer: String::new(),
+            pending: VecDeque::new(),
+            subscribed,
+        })
     }
 
     /// Waits for the next hub event, answering pings transparently. Returns `HubEvent::Closed` when
@@ -212,7 +224,12 @@ impl HubConnection {
                 _ => continue,
             };
 
-            buffer_payload(&mut self.buffer, &mut self.pending, &payload, self.subscribed);
+            buffer_payload(
+                &mut self.buffer,
+                &mut self.pending,
+                &payload,
+                self.subscribed,
+            );
         }
     }
 }
@@ -281,7 +298,7 @@ fn dispatch_record(record: &str, subscribed: &[&str]) -> RecordAction {
             None => RecordAction::Ignore,
         },
         // A caller-subscribed data event — arriving is the whole signal; the payload is dropped.
-        Some(1) if target.is_some_and(|t| subscribed.iter().any(|s| *s == t)) => RecordAction::Named,
+        Some(1) if target.is_some_and(|t| subscribed.contains(&t)) => RecordAction::Named,
         // Unsubscribed type-1 targets and all other frames (e.g. invocation completions) are ignored.
         _ => RecordAction::Ignore,
     }
@@ -290,7 +307,10 @@ fn dispatch_record(record: &str, subscribed: &[&str]) -> RecordAction {
 /// Parses `arguments[0]` of an invocation into a `DeviceNotificationMirror`. Logs and returns `None`
 /// on a missing or shape-mismatched argument rather than dropping it silently.
 fn parse_first_arg(value: &serde_json::Value) -> Option<DeviceNotificationMirror> {
-    let arg = value.get("arguments").and_then(|a| a.as_array()).and_then(|a| a.first())?;
+    let arg = value
+        .get("arguments")
+        .and_then(|a| a.as_array())
+        .and_then(|a| a.first())?;
     match serde_json::from_value::<DeviceNotificationMirror>(arg.clone()) {
         Ok(mirror) => Some(mirror),
         Err(e) => {
@@ -313,7 +333,10 @@ async fn negotiate(server: &str, token: &str) -> Result<String, String> {
         .map_err(|e| format!("negotiate request failed: {e}"))?;
 
     if !resp.status().is_success() {
-        return Err(format!("negotiate returned HTTP {}", resp.status().as_u16()));
+        return Err(format!(
+            "negotiate returned HTTP {}",
+            resp.status().as_u16()
+        ));
     }
 
     let body: NegotiateResponse = resp
@@ -387,7 +410,9 @@ fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -400,8 +425,14 @@ mod tests {
 
     #[test]
     fn ws_scheme_mapping() {
-        assert_eq!(to_ws_scheme("https://t.nocturne.run").unwrap(), "wss://t.nocturne.run");
-        assert_eq!(to_ws_scheme("http://localhost:8080").unwrap(), "ws://localhost:8080");
+        assert_eq!(
+            to_ws_scheme("https://t.nocturne.run").unwrap(),
+            "wss://t.nocturne.run"
+        );
+        assert_eq!(
+            to_ws_scheme("http://localhost:8080").unwrap(),
+            "ws://localhost:8080"
+        );
         assert!(to_ws_scheme("t.nocturne.run").is_err());
     }
 
@@ -419,11 +450,19 @@ mod tests {
     #[test]
     fn coalesced_records_in_one_chunk_all_drain() {
         let mut buf = String::new();
-        buf.push_str(&format!("{{\"type\":6}}{RS}{{\"type\":1,\"target\":\"device_action\"}}{RS}"));
+        buf.push_str(&format!(
+            "{{\"type\":6}}{RS}{{\"type\":1,\"target\":\"device_action\"}}{RS}"
+        ));
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 2);
-        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::Pong));
-        assert!(matches!(dispatch_record(&records[1], NO_SUBS), RecordAction::DeviceAction));
+        assert!(matches!(
+            dispatch_record(&records[0], NO_SUBS),
+            RecordAction::Pong
+        ));
+        assert!(matches!(
+            dispatch_record(&records[1], NO_SUBS),
+            RecordAction::DeviceAction
+        ));
         // Both records were terminated, so nothing carries forward.
         assert!(buf.is_empty());
     }
@@ -477,7 +516,10 @@ mod tests {
         buf.push_str(&full[split..]);
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 1);
-        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::DeviceAction));
+        assert!(matches!(
+            dispatch_record(&records[0], NO_SUBS),
+            RecordAction::DeviceAction
+        ));
         assert!(buf.is_empty());
     }
 
@@ -487,14 +529,20 @@ mod tests {
         buf.push_str(&format!("{{\"type\":6}}{RS}{{\"type\":1,\"tar"));
         let records = drain_complete_records(&mut buf);
         assert_eq!(records.len(), 1);
-        assert!(matches!(dispatch_record(&records[0], NO_SUBS), RecordAction::Pong));
+        assert!(matches!(
+            dispatch_record(&records[0], NO_SUBS),
+            RecordAction::Pong
+        ));
         // The unterminated second record is retained for the next frame.
         assert_eq!(buf, "{\"type\":1,\"tar");
     }
 
     #[test]
     fn dispatch_classifies_frame_types() {
-        assert!(matches!(dispatch_record(r#"{"type":7}"#, NO_SUBS), RecordAction::Close));
+        assert!(matches!(
+            dispatch_record(r#"{"type":7}"#, NO_SUBS),
+            RecordAction::Close
+        ));
         // A type-1 invocation for an unsubscribed target is ignored.
         assert!(matches!(
             dispatch_record(r#"{"type":1,"target":"other"}"#, NO_SUBS),
@@ -544,7 +592,10 @@ mod tests {
                 assert_eq!(m.user_id, "user-1");
                 assert_eq!(m.notification.id, "n1");
                 assert_eq!(m.notification.title, "Sync complete");
-                assert_eq!(m.notification.subtitle.as_deref(), Some("3 devices updated"));
+                assert_eq!(
+                    m.notification.subtitle.as_deref(),
+                    Some("3 devices updated")
+                );
             }
             other => panic!("expected DeviceNotification, got {other:?}"),
         }

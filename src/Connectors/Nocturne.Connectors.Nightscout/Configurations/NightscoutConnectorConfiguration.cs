@@ -1,5 +1,6 @@
 using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Connectors.Core.Models;
+using Nocturne.Connectors.Core.Services;
 using Nocturne.Core.Constants;
 
 namespace Nocturne.Connectors.Nightscout.Configurations;
@@ -41,10 +42,16 @@ public class NightscoutConnectorConfiguration : BaseConnectorConfiguration
     [ConnectorProperty(ConnectorPropertyKey.Url, Required = true, Format = "uri")]
     public string Url { get; set; } = string.Empty;
 
+    [ConnectorProperty(ConnectorPropertyKey.RealtimeUrl, Format = "uri")]
+    public string RealtimeUrl { get; set; } = string.Empty;
+
     [ConnectorProperty(ConnectorPropertyKey.ApiSecret, Required = true, Secret = true)]
     public string ApiSecret { get; set; } = string.Empty;
 
-    [ConnectorProperty(ConnectorPropertyKey.MaxCount, DefaultValue = "1000", MinValue = 100, MaxValue = 10000)]
+    /// <summary>The largest page the connector asks the source for.</summary>
+    public const int MaxPageSize = BackwardTimePager.MaxWidestPageSize;
+
+    [ConnectorProperty(ConnectorPropertyKey.MaxCount, DefaultValue = "1000", MinValue = 100, MaxValue = MaxPageSize)]
     public int MaxCount { get; set; } = 1000;
 
     [ConnectorProperty(ConnectorPropertyKey.WriteBackEnabled, DefaultValue = "false")]

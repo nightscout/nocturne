@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Utilities;
@@ -44,6 +45,11 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
     /// Override to filter items that should not be written back (e.g. loop prevention).
     /// </summary>
     protected virtual bool ShouldSkip(T item) => false;
+
+    /// <summary>
+    /// Options the payload is serialized with; null keeps <see cref="JsonContent"/>'s web defaults.
+    /// </summary>
+    protected virtual JsonSerializerOptions? SerializerOptions => null;
 
     public async Task OnCreatedAsync(IReadOnlyList<T> items, CancellationToken ct = default)
     {
@@ -142,7 +148,7 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
             request.Headers.Add(
                 "api-secret",
                 NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
-            request.Content = JsonContent.Create(payload);
+            request.Content = JsonContent.Create(payload, options: SerializerOptions);
 
             using var response = await _httpClient.SendAsync(request, ct);
             response.EnsureSuccessStatusCode();

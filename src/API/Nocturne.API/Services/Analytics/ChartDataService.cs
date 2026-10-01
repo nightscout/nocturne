@@ -284,7 +284,7 @@ public class ChartDataService : IChartDataService
                 State = "TempBasal",
                 StartMills = tb.StartMills,
                 EndMills = tb.EndMills,
-                Color = ChartColor.InsulinBasal,
+                Color = ChartColor.InsulinTempBasal,
                 Metadata = null,
             })
             .ToList();

@@ -4,11 +4,12 @@
 import { z } from 'zod';
 import { getRequestEvent, query } from '$app/server';
 import { error } from '@sveltejs/kit';
-import type { ResponseMatchType } from '$lib/api/generated/nocturne-api-client';
+import { ResponseMatchType } from '$lib/api/generated/nocturne-api-client';
+import { errorStatus } from '$lib/forms/submit-error';
 
 const CompatibilityFiltersSchema = z.object({
 	requestPath: z.string().optional(),
-	overallMatch: z.number().optional(),
+	overallMatch: z.enum(ResponseMatchType).optional().catch(undefined),
 	requestMethod: z.string().optional(),
 	count: z.number().optional(),
 	skip: z.number().optional(),
@@ -25,7 +26,7 @@ export const getCompatibilityData = query(
 
 		try {
 			const requestPath = filters?.requestPath;
-			const overallMatch = filters?.overallMatch as ResponseMatchType | undefined;
+			const overallMatch = filters?.overallMatch;
 			const requestMethod = filters?.requestMethod;
 			const count = filters?.count ?? 100;
 			const skip = filters?.skip ?? 0;
@@ -61,7 +62,7 @@ export const getCompatibilityData = query(
 			};
 		} catch (err) {
 			console.error('Error loading compatibility data:', err);
-			if ((err as any).status) {
+			if (errorStatus(err)) {
 				throw err;
 			}
 			throw error(500, 'Failed to load compatibility data');
@@ -82,10 +83,10 @@ export const getAnalysisDetail = query(z.string(), async (analysisId) => {
 		return { analysis };
 	} catch (err) {
 		console.error('Error loading analysis detail:', err);
-		if ((err as any).status === 404) {
+		if (errorStatus(err) === 404) {
 			throw error(404, 'Analysis not found');
 		}
-		if ((err as any).status) {
+		if (errorStatus(err)) {
 			throw err;
 		}
 		throw error(500, 'Failed to load analysis detail');
@@ -118,7 +119,7 @@ export const getCompatibilityAnalyses = query(
 		const { apiClient } = locals;
 		try {
 			const requestPath = filters?.requestPath;
-			const overallMatch = filters?.overallMatch as ResponseMatchType | undefined;
+			const overallMatch = filters?.overallMatch;
 			const requestMethod = filters?.requestMethod;
 			const count = filters?.count ?? 100;
 			const skip = filters?.skip ?? 0;

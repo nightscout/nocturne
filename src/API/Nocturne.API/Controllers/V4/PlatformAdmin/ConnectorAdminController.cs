@@ -78,12 +78,16 @@ public class ConnectorAdminController : ControllerBase
     [HttpPost("{tenantId:guid}/reset-cursors")]
     [RemoteCommand]
     [ProducesResponseType(typeof(ConnectorResetJobInfo), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ConnectorResetJobInfo>> ResetTenantCursors(
         Guid tenantId,
         [FromBody] AdminResetCursorsRequest request,
         CancellationToken ct)
     {
+        if (new SyncRequest { From = request.From, To = DateTime.UtcNow }.WindowError() is { } windowError)
+            return Problem(detail: windowError, statusCode: 400, title: "Bad Request");
+
         _logger.LogInformation(
             "Platform admin cursor reset requested for tenant {TenantId} (from {From})",
             tenantId, request.From?.ToString("o") ?? "beginning");
@@ -100,6 +104,7 @@ public class ConnectorAdminController : ControllerBase
     /// Get the progress of a connector cursor reset job, including per-connector outcomes as they land.
     /// </summary>
     /// <param name="jobId">The job id returned by <see cref="ResetTenantCursors"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpGet("jobs/{jobId:guid}")]
     [RemoteQuery]
     [ProducesResponseType(typeof(ConnectorResetJobStatus), StatusCodes.Status200OK)]
@@ -120,7 +125,8 @@ public class ConnectorAdminController : ControllerBase
     /// Request cancellation of a running connector cursor reset job. Connectors already re-pulled
     /// keep their committed data; the fan-out simply stops before the next connector.
     /// </summary>
-    /// <param name="jobId">The job id to cancel.</param>
+    /// <param name="jobId">The job id returned by <see cref="ResetTenantCursors"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
     [HttpPost("jobs/{jobId:guid}/cancel")]
     [RemoteCommand(Invalidates = ["GetResetJobStatus"])]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -652,16 +652,16 @@ public class EntryServiceTests
     {
         // Arrange
         _store
-            .Setup(x => x.CheckDuplicateAsync("dev", "sgv", 120.0, 1234567890L, 5, It.IsAny<CancellationToken>()))
+            .Setup(x => x.CheckDuplicateAsync("dev", "sgv", 1234567890L, It.IsAny<CancellationToken>()))
             .ReturnsAsync((Entry?)null);
 
         // Act
-        var result = await _sut.CheckForDuplicateEntryAsync("dev", "sgv", 120.0, 1234567890L, 5, CancellationToken.None);
+        var result = await _sut.CheckForDuplicateEntryAsync("dev", "sgv", 1234567890L, CancellationToken.None);
 
         // Assert
         Assert.Null(result);
         _store.Verify(
-            x => x.CheckDuplicateAsync("dev", "sgv", 120.0, 1234567890L, 5, It.IsAny<CancellationToken>()),
+            x => x.CheckDuplicateAsync("dev", "sgv", 1234567890L, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -673,11 +673,11 @@ public class EntryServiceTests
         var duplicateEntry = new Entry { Id = "dup-id", Device = "dev", Type = "sgv", Sgv = 120, Mills = 1234567830 };
 
         _store
-            .Setup(x => x.CheckDuplicateAsync("dev", "sgv", 120.0, 1234567890L, 5, It.IsAny<CancellationToken>()))
+            .Setup(x => x.CheckDuplicateAsync("dev", "sgv", 1234567890L, It.IsAny<CancellationToken>()))
             .ReturnsAsync(duplicateEntry);
 
         // Act
-        var result = await _sut.CheckForDuplicateEntryAsync("dev", "sgv", 120.0, 1234567890L, 5, CancellationToken.None);
+        var result = await _sut.CheckForDuplicateEntryAsync("dev", "sgv", 1234567890L, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);

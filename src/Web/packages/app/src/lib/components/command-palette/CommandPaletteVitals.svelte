@@ -7,34 +7,33 @@
   } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
 
   const realtimeStore = getRealtimeStore();
 
   const units = $derived(glucoseUnits.current);
-  const currentBG = $derived(realtimeStore.currentBG);
-  const bgDelta = $derived(realtimeStore.bgDelta);
+  const glucose = displayedGlucose(realtimeStore);
+  const currentBG = $derived(glucose.currentBG);
+  const bgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
-  const isConnected = $derived(realtimeStore.isConnected);
   const currentTime = $derived(realtimeStore.now);
   const timeSince = $derived(realtimeStore.timeSinceReading);
 
   const displayBG = $derived(formatGlucoseValue(currentBG, units));
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
-  const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
+  const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
-  const isDisconnected = $derived(!isConnected);
+  const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
+  const isDisconnected = $derived(connection.isDisconnected);
   const isDimmed = $derived(isStale || isDisconnected);
   const hasData = $derived(currentBG > 0);
 
-  /** Text color class based on raw BG in mg/dL */
-  function getBGTextColor(bg: number): string {
-    if (bg < 70) return "text-red-500";
-    if (bg < 80) return "text-yellow-500";
-    if (bg > 250) return "text-red-500";
-    if (bg > 180) return "text-orange-500";
-    return "text-green-500";
-  }
+  const statusClass = $derived(
+    getGlucoseStatusClass(glucose.status)
+  );
 
   const statusText = $derived(isDisconnected ? "Connection Error" : timeSince);
 </script>
@@ -44,7 +43,7 @@
   class:opacity-50={isDimmed}
 >
   {#if hasData}
-    <span class="font-mono font-semibold {getBGTextColor(currentBG)}">
+    <span class="font-mono font-semibold {statusClass}">
       {displayBG}
     </span>
     <span class="flex items-center gap-1 text-muted-foreground">

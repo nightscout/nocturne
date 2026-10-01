@@ -17,6 +17,7 @@ using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4.Repositories;
+using Nocturne.API.Tests.Controllers.V1;
 
 namespace Nocturne.API.Tests.Authorization;
 
@@ -167,9 +168,9 @@ public class ActivityReadScopeGuardTests
         httpContext.Items["GrantedScopes"] = Scope.Normalize(granted);
 
         var controller = new CountController(
-            Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IEntryStore>(), Mock.Of<ITreatmentStore>(), CountControllerTests.DeviceStatusProjection(new Mock<IApsSnapshotRepository>(), new Mock<IPumpSnapshotRepository>()),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
-            activityService.Object, NullLogger<CountController>.Instance)
+            activityService.Object, TimeProvider.System, NullLogger<CountController>.Instance)
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };

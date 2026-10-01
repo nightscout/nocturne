@@ -72,7 +72,14 @@ public class SupportDiagnosticsService(
     /// <inheritdoc />
     public async Task<SupportDiagnosticsResponse> GetAsync(CancellationToken ct = default)
     {
+        // Support reads this as a statement of how the tenant is configured, so a settings read
+        // that failed costs those fields rather than filling them with the defaults nobody chose.
         var settings = await uiSettings.GetSettingsAsync(ct);
+        if (settings == null)
+        {
+            logger.LogWarning("Support diagnostics could not read the tenant's UI settings");
+        }
+
         var statuses = await connectorHealth.GetConnectorStatusesAsync(ct);
 
         await using var db = await contextFactory.CreateAsync(ct);
@@ -93,10 +100,10 @@ public class SupportDiagnosticsService(
 
         return new SupportDiagnosticsResponse
         {
-            GlucoseUnits = settings.Features.Display.Units,
-            TimeFormat = settings.Features.Display.TimeFormat,
+            GlucoseUnits = settings?.Features.Display.Units,
+            TimeFormat = settings?.Features.Display.TimeFormat,
             PatientTimeZone = timeZone,
-            DataSourcePriority = settings.Devices.CgmConfiguration.DataSourcePriority,
+            DataSourcePriority = settings?.Devices.CgmConfiguration.DataSourcePriority,
             AlertRuleCount = alertRuleCount,
             Connectors = statuses
                 .Select(s => new SupportConnectorSummary

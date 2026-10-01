@@ -80,6 +80,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     [HttpGet]
     [ProducesResponseType(typeof(UISettingsConfiguration), 200)]
     [ProducesResponseType(500)]
+    [ProducesResponseType(503)]
     public async Task<ActionResult<UISettingsConfiguration>> GetUISettings(
         CancellationToken cancellationToken = default
     )
@@ -130,7 +131,21 @@ public class UISettingsController : ControllerBase, IWriteScopedController
             // defaults when the tenant has never saved. Returning freshly generated
             // defaults here instead meant a saved setting never came back on the
             // next load, so every settings page appeared to revert on reload.
+            //
+            // A null is a read the service could not make. Serving defaults instead would not
+            // merely mislead the reader: saving one section is a read-modify-write over this body
+            // (saveUiSettingsSection), so a defaults document handed out here is written back over
+            // every section the tenant owns. 503 keeps that write from ever being composed, and
+            // says the condition is transient.
             var settings = await _settingsService.GetSettingsAsync(cancellationToken);
+            if (settings == null)
+            {
+                return Problem(
+                    detail: "Settings could not be read and have not been changed. Try again.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Settings Unavailable"
+                );
+            }
 
             // The connector catalog is static metadata, not persisted tenant state.
             settings.Services ??= new ServicesSettings();
@@ -155,6 +170,7 @@ public class UISettingsController : ControllerBase, IWriteScopedController
     [ProducesResponseType(200)]
     [ProducesResponseType(404)]
     [ProducesResponseType(500)]
+    [ProducesResponseType(503)]
     public async Task<ActionResult<object>> GetSectionSettings(
         string section,
         CancellationToken cancellationToken = default

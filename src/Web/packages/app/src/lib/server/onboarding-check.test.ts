@@ -7,15 +7,17 @@ function createCookies(initial: Record<string, string> = {}): {
   store: Map<string, string>;
 } {
   const store = new Map(Object.entries(initial));
-  const cookies = {
-    get: (name: string) => store.get(name),
-    set: (name: string, value: string) => {
+  const cookies: Cookies = {
+    get: (name) => store.get(name),
+    getAll: () => [...store].map(([name, value]) => ({ name, value })),
+    set: (name, value) => {
       store.set(name, value);
     },
-    delete: (name: string) => {
+    delete: (name) => {
       store.delete(name);
     },
-  } as unknown as Cookies;
+    serialize: (name, value) => `${name}=${value}`,
+  };
   return { cookies, store };
 }
 

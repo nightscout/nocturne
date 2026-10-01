@@ -54,8 +54,14 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         TwiistConnectorConfiguration config,
         CancellationToken cancellationToken)
     {
-        var result = new SyncResult { StartTime = DateTimeOffset.UtcNow, Success = true };
+        var result = new SyncResult { Success = true };
         var activeTypes = ResolveActiveTypes(request, config);
+
+        if (string.IsNullOrEmpty(await _tokenProvider.GetValidTokenAsync(config, cancellationToken)))
+        {
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
+            return AuthenticationFailedResult();
+        }
 
         try
         {
@@ -64,7 +70,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             {
                 result.Success = false;
                 result.Errors.Add(resolveError!);
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -77,7 +82,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
                 result.Errors.Add(
                     "Connected to Twiist, but no data was returned for the followed patient. " +
                     "If this persists, confirm the Twiist app is set up and sharing data.");
-                result.EndTime = DateTimeOffset.UtcNow;
                 return result;
             }
 
@@ -117,7 +121,6 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
             result.Errors.Add($"Sync error: {ex.Message}");
         }
 
-        result.EndTime = DateTimeOffset.UtcNow;
         return result;
     }
 
@@ -191,7 +194,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         var overviews = await FetchOverviewsAsync(config, cancellationToken);
 
         if (overviews == null)
-            return (null, "Could not reach Twiist. Check the Twiist account email and password, then sync again.");
+            return (null, "Could not reach Twiist. Nocturne will try again at the next sync.");
 
         if (overviews.Count == 0)
             return (null,
@@ -223,7 +226,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for overviews fetch", ConnectorSource);
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 
@@ -275,7 +278,7 @@ public class TwiistConnectorService : BaseConnectorService<TwiistConnectorConfig
         if (string.IsNullOrEmpty(accessToken))
         {
             _logger.LogWarning("[{Source}] Failed to get valid token for package fetch", ConnectorSource);
-            TrackFailedRequest("Failed to get valid token");
+            TrackFailedAuthentication(_tokenProvider.SignInFailureReason);
             return null;
         }
 

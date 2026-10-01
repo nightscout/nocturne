@@ -6,10 +6,15 @@
 // in-flight session. Attaching any 'unhandledRejection' listener overrides that
 // fatal default; we still surface non-benign rejections to the logs.
 // Guarded against HMR re-registration in dev.
-if (!(globalThis as { __nocturneRejectionGuard?: boolean }).__nocturneRejectionGuard) {
-	(globalThis as { __nocturneRejectionGuard?: boolean }).__nocturneRejectionGuard = true;
+declare global {
+	var __nocturneRejectionGuard: boolean | undefined;
+}
+
+if (!globalThis.__nocturneRejectionGuard) {
+	globalThis.__nocturneRejectionGuard = true;
 	process.on('unhandledRejection', (reason) => {
-		const name = (reason as { name?: string } | null)?.name;
+		const name =
+			typeof reason === 'object' && reason !== null && 'name' in reason ? reason.name : undefined;
 		// Aborted requests / timed-out probes are expected when clients disconnect —
 		// nothing actionable, so don't spam the logs.
 		if (name === 'AbortError' || name === 'TimeoutError') return;

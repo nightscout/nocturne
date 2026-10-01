@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 
 namespace Nocturne.Infrastructure.Data.Repositories;
 
@@ -59,6 +60,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
                 ConfirmationCount = state.ConfirmationCount,
                 ActiveExcursionId = state.ActiveExcursionId,
                 UpdatedAt = state.UpdatedAt,
+                HysteresisStartedAt = state.HysteresisStartedAt,
+                AwaitingRearm = state.AwaitingRearm,
             });
         }
         else
@@ -67,6 +70,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
             existing.ConfirmationCount = state.ConfirmationCount;
             existing.ActiveExcursionId = state.ActiveExcursionId;
             existing.UpdatedAt = state.UpdatedAt;
+            existing.HysteresisStartedAt = state.HysteresisStartedAt;
+            existing.AwaitingRearm = state.AwaitingRearm;
         }
 
         await _context.SaveChangesAsync(ct);
@@ -83,9 +88,19 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         CancellationToken ct = default)
     {
         var entity = await _context.AlertRules
+            .AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == alertRuleId, ct);
 
         return entity == null ? null : MapAlertRule(entity);
+    }
+
+    /// <inheritdoc/>
+    public virtual async Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default)
+    {
+        var entity = await _context.AlertExcursions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == excursionId, ct);
+        return entity is null ? null : MapAlertExcursion(entity);
     }
 
     /// <summary>
@@ -173,6 +188,32 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         }
     }
 
+    private const int TransitionLockClass = 0x4E41_5254;
+
+    /// <inheritdoc/>
+    /// <remarks>See <see cref="AdvisoryLockExtensions"/>.</remarks>
+    /// <exception cref="InvalidOperationException">No transaction is open on the context.</exception>
+    public virtual Task LockRuleAsync(Guid alertRuleId, CancellationToken ct = default) =>
+        _context.LockForTransactionAsync(TransitionLockClass, alertRuleId, ct);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Runs under <see cref="RetryingTransactionExtensions.ExecuteInTransactionAsync{T}"/>. Opening
+    /// the connection sets the tenant GUCs (TenantConnectionInterceptor), so every statement in the
+    /// transaction runs under the context's tenant. Tracker state and excursions are detached before
+    /// each attempt even when tracked before the call, so the work reads them fresh under the rule's
+    /// lock.
+    /// </remarks>
+    public virtual Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
+        CancellationToken ct = default) =>
+        _context.ExecuteInTransactionAsync(
+            work,
+            verifySucceeded,
+            entity => entity is AlertTrackerStateEntity or AlertExcursionEntity,
+            ct);
+
     private static AlertTrackerState MapTrackerState(AlertTrackerStateEntity entity) => new()
     {
         AlertRuleId = entity.AlertRuleId,
@@ -180,6 +221,8 @@ public class AlertTrackerRepository : IAlertTrackerRepository
         ConfirmationCount = entity.ConfirmationCount,
         ActiveExcursionId = entity.ActiveExcursionId,
         UpdatedAt = entity.UpdatedAt,
+        HysteresisStartedAt = entity.HysteresisStartedAt,
+        AwaitingRearm = entity.AwaitingRearm,
     };
 
     private static AlertRule MapAlertRule(AlertRuleEntity entity) => new()

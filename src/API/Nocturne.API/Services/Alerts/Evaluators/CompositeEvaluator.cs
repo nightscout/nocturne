@@ -57,29 +57,16 @@ public class CompositeEvaluator : IConditionEvaluator
 
         var op = condition.Operator.ToLowerInvariant();
 
-        // Manual short-circuit foreach: LINQ All/Any don't compose with async predicates without
-        // additional libraries, and we want to await each child before deciding to recurse.
-        if (op == "and")
-        {
-            for (var i = 0; i < condition.Conditions.Count; i++)
-            {
-                if (!await EvaluateNodeAsync(condition.Conditions[i], i, context, ct))
-                    return false;
-            }
-            return true;
-        }
-
-        if (op == "or")
-        {
-            for (var i = 0; i < condition.Conditions.Count; i++)
-            {
-                if (await EvaluateNodeAsync(condition.Conditions[i], i, context, ct))
-                    return true;
-            }
+        if (op != "and" && op != "or")
             return false;
-        }
 
-        return false;
+        // Every child is evaluated, in document order, whatever an earlier one returned, so a
+        // sustained child's timer tracks its own condition wherever it sits (engine-semantics.md §2.4).
+        var results = new bool[condition.Conditions.Count];
+        for (var i = 0; i < condition.Conditions.Count; i++)
+            results[i] = await EvaluateNodeAsync(condition.Conditions[i], i, context, ct);
+
+        return op == "and" ? results.All(r => r) : results.Any(r => r);
     }
 
     private Task<bool> EvaluateNodeAsync(ConditionNode node, int index, SensorContext context, CancellationToken ct)

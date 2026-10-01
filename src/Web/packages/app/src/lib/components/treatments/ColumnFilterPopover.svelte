@@ -3,7 +3,9 @@
   import { Button } from "$lib/components/ui/button";
   import * as Popover from "$lib/components/ui/popover";
   import * as Command from "$lib/components/ui/command";
-  import { Filter, X, Check } from "lucide-svelte";
+  import Filter from "@lucide/svelte/icons/funnel";
+  import X from "@lucide/svelte/icons/x";
+  import Check from "@lucide/svelte/icons/check";
   import { cn } from "$lib/utils";
   import type { Component } from "svelte";
 
@@ -35,18 +37,20 @@
   });
 </script>
 
+<span class="hidden print:inline">{label}</span>
+<span class="print:hidden">
 <Popover.Root bind:open>
   <Popover.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
         variant="ghost"
         size="sm"
-        class="-ml-3 h-8 data-[state=open]:bg-accent gap-1"
+        class="-ml-3"
         {...props}
       >
         {label}
         {#if selected.length > 0}
-          <Badge variant="secondary" class="ml-1 h-5 px-1 text-xs">
+          <Badge variant="secondary" size="sm" class="ml-1 h-5">
             {selected.length}
           </Badge>
         {/if}
@@ -70,7 +74,7 @@
           <Command.Empty>No options found.</Command.Empty>
         {/if}
         <Command.Group>
-          {#each filteredOptions as option}
+          {#each filteredOptions as option (option.value)}
             <Command.Item
               value={option.value}
               onSelect={() => onToggle(option.value)}
@@ -112,3 +116,4 @@
     </Command.Root>
   </Popover.Content>
 </Popover.Root>
+</span>

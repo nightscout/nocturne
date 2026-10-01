@@ -12,10 +12,9 @@
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
     <h1
-      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-      style="font-size: clamp(32px, 4vw, 48px);"
+      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >
-      Point us at your <em class="not-italic font-light" style="color: var(--onb-accent);">Nightscout</em>.
+      Point us at your <em class="not-italic font-light text-(--onb-accent)">Nightscout</em>.
     </h1>
     <p class="max-w-140 text-base leading-relaxed text-white/50">
       Enter the URL and API secret for the Nightscout instance you want to copy

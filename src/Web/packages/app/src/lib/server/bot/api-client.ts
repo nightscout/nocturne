@@ -1,10 +1,40 @@
-import type { BotApiClient, DirectoryCandidate } from "@nocturne/bot";
+import type {
+  AcknowledgementOutcome,
+  AcknowledgementResult,
+  BotApiClient,
+  DirectoryCandidate,
+} from "@nocturne/bot";
 import type { ApiClient } from "$lib/api";
 import {
   createServerApiClient,
   getApiBaseUrl,
 } from "$lib/server/api-client-factory";
 import { getHashedInstanceKey } from "$lib/server/instance-key";
+import { AlertAcknowledgementOutcome, ChannelType } from "$api-clients";
+import { errorStatus } from "$lib/forms/submit-error";
+
+const CHANNEL_TYPES: readonly ChannelType[] = Object.values(ChannelType);
+
+/** The bot names channels by their wire strings; one this API does not know
+ *  cannot match a delivery, so it is dropped rather than sent. */
+function toChannelType(value: string): ChannelType[] {
+  const known = CHANNEL_TYPES.find((type) => type === value);
+  return known ? [known] : [];
+}
+
+/** A response with no outcome cannot be reported as any of them, so it fails the acknowledge. */
+function toOutcome(outcome: AlertAcknowledgementOutcome | undefined): AcknowledgementOutcome {
+  switch (outcome) {
+    case AlertAcknowledgementOutcome.Acknowledged:
+      return "acknowledged";
+    case AlertAcknowledgementOutcome.Muted:
+      return "muted";
+    case AlertAcknowledgementOutcome.Closed:
+      return "closed";
+    default:
+      throw new Error("Acknowledge response carried no outcome");
+  }
+}
 
 /**
  * Adapts a NocturneApiClient to the BotApiClient interface used by @nocturne/bot.
@@ -33,15 +63,27 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
     },
     alerts: {
       getActiveAlerts: (signal) => api.alerts.getActiveAlerts(signal),
-      acknowledge: (request, signal) => api.alerts.acknowledge(request, signal),
-      acknowledgeExcursion: (excursionId, request, signal) =>
-        api.alerts.acknowledgeExcursion(excursionId, request, signal),
+      acknowledgeAsLinkedMember: async (linkId, request, signal) => {
+        const res = await api.chatIdentityDirectory.acknowledgeAsLinkedMember(
+          linkId,
+          { ...request, excursionId: request.excursionId ?? undefined },
+          signal,
+        );
+        const outcome = toOutcome(res.outcome);
+        return outcome === "acknowledged"
+          ? {
+              outcome,
+              acknowledgedBy: res.acknowledgedBy ?? null,
+              alreadyAcknowledged: res.alreadyAcknowledged ?? false,
+            }
+          : ({ outcome } satisfies AcknowledgementResult);
+      },
       markDelivered: (deliveryId, request, signal) =>
         api.alerts.markDelivered(deliveryId, request, signal),
       markFailed: (deliveryId, request, signal) =>
         api.alerts.markFailed(deliveryId, request, signal),
       getPendingDeliveries: (channelType, signal) =>
-        api.alerts.getPendingDeliveries(channelType as import('$api-clients').ChannelType[] | undefined, signal),
+        api.alerts.getPendingDeliveries(channelType?.flatMap(toChannelType), signal),
     },
     system: {
       heartbeat: (request, signal) => api.system.heartbeat(request, signal),
@@ -59,12 +101,7 @@ export function buildBotApiClient(api: ApiClient): BotApiClient {
         } catch (err: unknown) {
           // 404 means "no entries" — return null so the bot can distinguish
           // "not linked" from "error".
-          if (
-            err &&
-            typeof err === "object" &&
-            "status" in err &&
-            (err as { status: number }).status === 404
-          ) {
+          if (errorStatus(err) === 404) {
             return null;
           }
           throw err;

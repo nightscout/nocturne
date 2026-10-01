@@ -1,3 +1,23 @@
 [workspace]
 resolver = "3"
 members = ["nocturne-alerts-core", "nocturne-alerts-ffi"]
+
+# A panic is caught at the FFI boundary and fails one rule; a silently wrapped
+# integer evaluates to wrong truth.
+[profile.release]
+overflow-checks = true
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
+as_conversions = "deny"
+undocumented_unsafe_blocks = "deny"
+missing_safety_doc = "deny"
+must_use_candidate = "warn"

@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Tooltip, getChartContext } from "layerchart";
   import { cn } from "$lib/utils";
-  import { goto } from "$app/navigation";
-  import { BasalDeliveryOrigin, ChartSpanKind } from "$lib/api";
+  import { BasalDeliveryOrigin, ChartSpanKind } from "$api-clients";
   import {
     bg,
     bgLabel,
@@ -12,7 +11,7 @@
   } from "$lib/utils/formatting";
   import { getGlucoseChartContext } from "./chart-context.svelte";
   import { isBasalAdjusted } from "./engine/basal-presentation";
-  import type { GlucosePoint } from "./engine/chart-data-engine.svelte";
+  import type { GlucosePoint } from "./engine/chart-data-view.svelte";
 
   interface Props {
     /**
@@ -21,9 +20,11 @@
      * events near that instant without forking the tooltip.
      */
     tooltipExtras?: import("svelte").Snippet<[{ time: Date }]>;
+    /** Makes the time label a link; the app passes `openDayInReview`. */
+    onTimeClick?: (time: Date | undefined) => void;
   }
 
-  let { tooltipExtras }: Props = $props();
+  let { tooltipExtras, onTimeClick }: Props = $props();
 
   const ctx = getGlucoseChartContext();
   const chartCtx = getChartContext<GlucosePoint>();
@@ -163,7 +164,7 @@
               : "var(--insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-warning font-bold"
                 : ""
             )}
           />
@@ -198,7 +199,7 @@
               : "var(--insulin-basal)"}
             class={cn(
               staleBasalData && data.time >= staleBasalData.start
-                ? "text-yellow-500 font-bold"
+                ? "text-warning font-bold"
                 : ""
             )}
           />
@@ -279,7 +280,7 @@
     <Tooltip.Item
       value={data?.time}
       format={(v) => (v instanceof Date ? time(v) : String(v))}
-      onclick={() => goto(`/reports/day-in-review?date=${data?.time}`)}
+      onclick={onTimeClick && (() => onTimeClick(data?.time))}
     />
   {/snippet}
 </Tooltip.Root>

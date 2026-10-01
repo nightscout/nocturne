@@ -1,3 +1,4 @@
+using Nocturne.Connectors.Core.Models;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -114,6 +115,8 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
             Mock.Of<ITenantOwnerResolver>(),
             Mock.Of<ITenantAccessor>(),
             _context,
+            Mock.Of<IAuditContext>(),
+            new PublishSkipTally(),
             NullLogger<MetadataPublisher>.Instance);
     }
 
@@ -285,6 +288,45 @@ public class ActivityWatermarkSourceScopeTests : IDisposable
 
         ownSource.Source.Should().Be(SourceB);
         ownSource.Metadata.Should().BeNull();
+    }
+
+    private static StateSpan PumpMode(DateTime at, string id) => new()
+    {
+        Category = StateSpanCategory.PumpMode,
+        State = "Automatic",
+        StartTimestamp = at,
+        OriginalId = id,
+    };
+
+    [Fact]
+    public async Task State_span_watermark_ignores_activity_spans()
+    {
+        await _publisher.PublishStateSpansAsync([PumpMode(EarlyJune, "pump-early")], SourceA, WriteOrigin.Live);
+        await _publisher.PublishActivityAsync([Exercise(LateJune)], SourceA, WriteOrigin.Live);
+
+        (await _publisher.GetLatestStateSpanTimestampAsync(SourceA)).Should().Be(EarlyJune);
+        (await _stateSpanService.GetLatestNonActivityTimestampAsync(SourceA)).Should().Be(EarlyJune);
+    }
+
+    [Fact]
+    public async Task State_span_watermark_is_the_newest_non_activity_span_of_its_own_source()
+    {
+        await _publisher.PublishStateSpansAsync(
+            [PumpMode(EarlyJune, "a-early"), PumpMode(MidJune, "a-mid")], SourceA, WriteOrigin.Live);
+        await _publisher.PublishStateSpansAsync([PumpMode(LateJune, "b-late")], SourceB, WriteOrigin.Live);
+
+        (await _publisher.GetLatestStateSpanTimestampAsync(SourceA)).Should().Be(MidJune);
+        (await _publisher.GetLatestStateSpanTimestampAsync(SourceB)).Should().Be(LateJune);
+    }
+
+    [Fact]
+    public async Task State_span_watermark_is_null_for_a_source_with_only_activity_or_no_spans()
+    {
+        await _publisher.PublishActivityAsync([Exercise(LateJune)], SourceA, WriteOrigin.Live);
+        await _publisher.PublishStateSpansAsync([PumpMode(LateJune, "b-late")], SourceB, WriteOrigin.Live);
+
+        (await _publisher.GetLatestStateSpanTimestampAsync(SourceA)).Should().BeNull();
+        (await _publisher.GetLatestStateSpanTimestampAsync(SourceMirror)).Should().BeNull();
     }
 
     [Fact]

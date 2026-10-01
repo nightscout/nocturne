@@ -35,10 +35,12 @@ Store app, or on the Widgets Board itself. Store installs are signed by Microsof
 update automatically, and need no extra setup.
 
 <Callout type="info" title="Before the Store listing is live">
+
   While the Store listing is being prepared, you can build and sideload the widget
   from source. See the
   <a href="https://github.com/nightscout/nocturne/tree/main/src/Widgets/Nocturne.Widget.Windows11">widget README</a>
   for the developer install steps.
+
 </Callout>
 
 ## Add the widget to your board
@@ -64,8 +66,10 @@ device status, and therapy settings used for display. It can never change anythi
 on your server.
 
 <Callout type="tip" title="Connecting more than one widget">
+
   You only need to do this once. After the first widget is connected, additional
   Nocturne widgets on the same PC use the same connection.
+
 </Callout>
 
 ## What each size shows

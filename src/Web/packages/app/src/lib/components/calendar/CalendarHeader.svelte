@@ -1,9 +1,22 @@
 <script lang="ts">
-  import { Calendar, ChevronLeft, ChevronRight } from "lucide-svelte";
+  import Calendar from "@lucide/svelte/icons/calendar";
+  import ChevronLeft from "@lucide/svelte/icons/chevron-left";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import { Button } from "$lib/components/ui/button";
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
 
   type ViewMode = "tir" | "profile";
+
+  interface Props {
+    viewDate: Date;
+    viewMode: ViewMode;
+    isCurrentMonth: boolean;
+    MONTH_NAMES: string[];
+    previousMonth: () => void;
+    nextMonth: () => void;
+    goToToday: () => void;
+    setViewMode: (mode: ViewMode) => void;
+  }
 
   let {
     viewDate,
@@ -14,23 +27,14 @@
     nextMonth,
     goToToday,
     setViewMode,
-  } = $props<{
-    viewDate: Date;
-    viewMode: ViewMode;
-    isCurrentMonth: boolean;
-    MONTH_NAMES: string[];
-    previousMonth: () => void;
-    nextMonth: () => void;
-    goToToday: () => void;
-    setViewMode: (mode: ViewMode) => void;
-  }>();
+  }: Props = $props();
 
   const currentMonth = $derived(viewDate.getMonth());
   const currentYear = $derived(viewDate.getFullYear());
 </script>
 
 <div
-  class="@container border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 sticky top-0 z-10"
+  class="@container border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60"
 >
   <div class="flex flex-wrap items-center justify-between gap-2 p-4">
     <div class="flex items-center gap-4">
@@ -39,11 +43,11 @@
     </div>
 
     <!-- Navigation Controls -->
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <Button variant="outline" size="icon" onclick={previousMonth}>
         <ChevronLeft class="h-4 w-4" />
       </Button>
-      <div class="text-lg font-semibold min-w-[180px] text-center">
+      <div class="text-lg font-semibold text-center @md:min-w-[180px]">
         {MONTH_NAMES[currentMonth]}
         {currentYear}
       </div>
@@ -66,13 +70,14 @@
         type="single"
         value={viewMode}
         onValueChange={(value: string) =>
-          value && setViewMode(value as ViewMode)}
-        class="border rounded-md"
+          (value === "tir" || value === "profile") && setViewMode(value)}
+        variant="segmented"
+        size="xs"
       >
-        <ToggleGroup.Item value="tir" class="text-xs px-3">
+        <ToggleGroup.Item value="tir">
           TIR
         </ToggleGroup.Item>
-        <ToggleGroup.Item value="profile" class="text-xs px-3">
+        <ToggleGroup.Item value="profile">
           Profile
         </ToggleGroup.Item>
       </ToggleGroup.Root>

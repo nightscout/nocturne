@@ -600,10 +600,16 @@ public class StatusService : IStatusService
 
         // Each query gets its own short-lived DbContext via the factory so they can
         // run concurrently — a single DbContext is not thread-safe.
-        var entriesTask = LastModifiedAsync(ctx => ctx.SensorGlucose.AsNoTracking()
-            .OrderByDescending(e => e.SysUpdatedAt)
-            .Select(e => (DateTime?)e.SysUpdatedAt)
-            .FirstOrDefaultAsync());
+        var entriesTask = LastModifiedAsync(async ctx =>
+        {
+            var timestamps = new[]
+            {
+                await ctx.SensorGlucose.AsNoTracking().OrderByDescending(e => e.SysUpdatedAt).Select(e => (DateTime?)e.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.MeterGlucose.AsNoTracking().OrderByDescending(m => m.SysUpdatedAt).Select(m => (DateTime?)m.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.Calibrations.AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
+            };
+            return timestamps.Where(d => d.HasValue).Max();
+        });
 
         var treatmentsTask = LastModifiedAsync(async ctx =>
         {
@@ -620,10 +626,18 @@ public class StatusService : IStatusService
             return timestamps.Where(d => d.HasValue).Max();
         });
 
-        var profileTask = LastModifiedAsync(ctx => ctx.TherapySettings.AsNoTracking()
-            .OrderByDescending(t => t.SysUpdatedAt)
-            .Select(t => (DateTime?)t.SysUpdatedAt)
-            .FirstOrDefaultAsync());
+        var profileTask = LastModifiedAsync(async ctx =>
+        {
+            var timestamps = new[]
+            {
+                await ctx.TherapySettings.AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.BasalSchedules.AsNoTracking().OrderByDescending(b => b.SysUpdatedAt).Select(b => (DateTime?)b.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.CarbRatioSchedules.AsNoTracking().OrderByDescending(c => c.SysUpdatedAt).Select(c => (DateTime?)c.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.SensitivitySchedules.AsNoTracking().OrderByDescending(s => s.SysUpdatedAt).Select(s => (DateTime?)s.SysUpdatedAt).FirstOrDefaultAsync(),
+                await ctx.TargetRangeSchedules.AsNoTracking().OrderByDescending(t => t.SysUpdatedAt).Select(t => (DateTime?)t.SysUpdatedAt).FirstOrDefaultAsync(),
+            };
+            return timestamps.Where(d => d.HasValue).Max();
+        });
 
         var deviceStatusTask = LastModifiedAsync(ctx => ctx.ApsSnapshots.AsNoTracking()
             .OrderByDescending(d => d.SysUpdatedAt)

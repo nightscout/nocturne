@@ -1,14 +1,13 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import {
-    ArrowRight,
-    ArrowLeft,
-    Sprout,
-    Cable,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import Sprout from "@lucide/svelte/icons/sprout";
+  import Cable from "@lucide/svelte/icons/cable";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import { Button } from "$lib/components/ui/button";
   import { markSetupComplete } from "./setup.remote";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
@@ -152,41 +151,7 @@
   const connectors = $derived(servicesData?.availableConnectors ?? []);
   const uploaderApps = $derived(servicesData?.uploaderApps ?? []);
 
-  // ── Onboarding CSS variables ──────────────────────────────────────────
-  // Path-independent surface/utility tokens
-  const BASE_VARS = [
-    "--onb-navy: oklch(0.08 0.025 261.692)",
-    "--onb-navy-60: oklch(0.08 0.025 261.692 / 0.6)",
-    "--onb-navy-50: oklch(0.08 0.025 261.692 / 0.5)",
-    "--onb-panel: oklch(0.09 0.022 261.692)",
-    "--onb-surface: oklch(0.1 0.025 261.692)",
-    "--onb-surface-60: oklch(0.1 0.025 261.692 / 0.6)",
-    "--onb-teal: oklch(0.72 0.14 184)",
-    "--onb-ok: oklch(0.72 0.17 150)",
-    "--onb-green: oklch(0.78 0.21 145)",
-    "--onb-green-soft: oklch(0.85 0.21 145)",
-    "--onb-green-dim: oklch(0.78 0.21 145 / 0.12)",
-    "--onb-lavender: oklch(0.78 0.09 265)",
-    "--onb-lavender-soft: oklch(0.86 0.08 265)",
-    "--onb-lavender-dim: oklch(0.78 0.09 265 / 0.14)",
-    "--onb-border: rgb(255 255 255 / 0.08)",
-  ].join("; ");
-
-  // Path-dependent accent tokens
-  const accentVars = $derived(
-    path === "migration"
-      ? "--onb-accent: var(--onb-lavender); --onb-accent-soft: var(--onb-lavender-soft); --onb-accent-dim: var(--onb-lavender-dim)"
-      : "--onb-accent: var(--onb-green); --onb-accent-soft: var(--onb-green-soft); --onb-accent-dim: var(--onb-green-dim)"
-  );
-
-  const styleVars = $derived(`${BASE_VARS}; ${accentVars}`);
-
   // ── Navigation ──────────────────────────────────────────────────────
-  function handlePathSelect(selected: "fresh" | "migration") {
-    path = selected;
-    stepIndex = 1;
-  }
-
   function handleBack() {
     if (stepIndex > 0) stepIndex--;
   }
@@ -201,11 +166,12 @@
 
   async function handleEnterDashboard() {
     await markSetupComplete();
-    await goto("/", { invalidateAll: true });
+    await goto(resolve("/"), { invalidateAll: true });
   }
 
   async function handleNavigateWithCoach(url: string) {
     await markSetupComplete();
+    // eslint-disable-next-line svelte/no-navigation-without-resolve -- url is one of Finish.svelte's literal in-app paths with a ?coach= param
     await goto(url, { invalidateAll: true });
   }
 
@@ -262,7 +228,8 @@
       if (existing?.id) {
         migrationJobId = existing.id;
       } else {
-        const job = await migrationRemote.startFromConnector(MIGRATION_CONNECTOR);
+        const job =
+          await migrationRemote.startFromConnector(MIGRATION_CONNECTOR);
         if (job?.id) migrationJobId = job.id;
       }
     } catch {
@@ -286,14 +253,11 @@
      shadcn children (inputs, recovery-code chips, buttons) render with dark tokens even
      when the user's system theme — applied by ModeWatcher on <html> — is light. -->
 <div
-  class="dark relative min-h-screen grid grid-rows-[auto_1fr_auto] text-white"
-  style="{styleVars}; background: var(--onb-navy);"
+  class="onb dark relative min-h-screen grid grid-rows-[auto_1fr_auto] bg-(--onb-navy) text-white"
+  class:onb-migration={path === "migration"}
 >
   <!-- Background gradient -->
-  <div
-    class="fixed inset-0 z-0 pointer-events-none"
-    style="background: radial-gradient(ellipse 50% 35% at 50% 0%, oklch(0.16 0.05 265 / 0.6), transparent 70%), linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));"
-  ></div>
+  <div class="onb-backdrop fixed inset-0 z-0 pointer-events-none"></div>
 
   <!-- Constellation background (above gradient so stars are visible) -->
   <div class="fixed inset-0 z-1 pointer-events-none">
@@ -302,8 +266,7 @@
 
   <!-- Header -->
   <header
-    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b border-white/8 backdrop-blur-sm max-[900px]:px-5 max-[900px]:py-3.5"
-    style="background: var(--onb-navy-60); backdrop-filter: blur(14px) saturate(1.3);"
+    class="relative z-50 flex items-center justify-between px-8 py-5.5 border-b border-white/8 bg-(--onb-navy-60) backdrop-blur-md backdrop-saturate-130 max-[900px]:px-5 max-[900px]:py-3.5"
   >
     <div class="flex items-center gap-3">
       <!-- Logo mark -->
@@ -329,9 +292,7 @@
           <circle cx="82" cy="60" r="1.6" />
         </g>
       </svg>
-      <span
-        class="font-[Montserrat] text-xl font-light tracking-wide text-white"
-      >
+      <span class="font-brand text-xl font-light tracking-wide text-white">
         nocturne
       </span>
     </div>
@@ -339,12 +300,12 @@
     <div class="flex items-center gap-5">
       {#if setupRequired}
         <!-- Step counter for setup phase -->
-        <span class="hidden font-mono text-[13px] text-white/40 sm:inline">
+        <span class="hidden font-mono text-xs text-white/40 sm:inline">
           Step {setupStepIndex + 1} of {SETUP_STEPS.length}
         </span>
       {:else}
         <!-- Step counter -->
-        <span class="hidden font-mono text-[13px] text-white/40 sm:inline">
+        <span class="hidden font-mono text-xs text-white/40 sm:inline">
           Step {stepIndex + 1} of {steps.length}
         </span>
 
@@ -354,24 +315,20 @@
             class="flex items-center gap-2.5 rounded-full border border-white/8 bg-white/3 py-1 pl-1 pr-3"
           >
             <span
-              class="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold"
-              style="background: linear-gradient(135deg, var(--onb-teal), var(--onb-accent)); color: var(--onb-navy);"
+              class="onb-avatar flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-(--onb-navy)"
             >
               {userInitials}
             </span>
-            <span class="hidden text-[13px] text-white/40 sm:inline">
+            <span class="hidden text-xs text-white/40 sm:inline">
               {userEmail}
             </span>
           </div>
         {/if}
 
         <!-- Save & exit -->
-        <button
-          class="text-[13px] text-white/40 transition-colors hover:text-white"
-          onclick={handleEnterDashboard}
-        >
+        <Button variant="ghost-muted" size="xs" onclick={handleEnterDashboard}>
           Save & exit
-        </button>
+        </Button>
       {/if}
     </div>
   </header>
@@ -382,8 +339,10 @@
   >
     {#if httpsRequired}
       <div class="w-full max-w-lg mx-auto text-center py-20">
-        <div class="rounded-2xl border border-red-500/20 bg-red-500/5 p-8">
-          <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-red-400" />
+        <div
+          class="rounded-2xl border border-destructive/20 bg-destructive/5 p-8"
+        >
+          <ShieldAlert class="mx-auto mb-4 h-12 w-12 text-destructive" />
           <h2 class="text-xl font-semibold text-white mb-3">HTTPS Required</h2>
           <p class="text-white/60 text-sm leading-relaxed">
             Nocturne requires a secure connection. Please access this site using <strong
@@ -391,7 +350,7 @@
             >
               https://
             </strong>
-             instead of http://.
+            instead of http://.
           </p>
           <p class="text-white/40 text-xs mt-4">
             Passkey authentication and secure cookies require HTTPS to function.
@@ -417,8 +376,7 @@
 
         <!-- Step card -->
         <section
-          class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
-          style="background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75)); box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 30px 80px -30px rgb(0 0 0 / 0.6);"
+          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
         >
           <!-- Strip -->
           <div
@@ -439,8 +397,8 @@
               <!-- Progress bar -->
               <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
-                  style="width: {setupProgressPct}%; background: var(--onb-teal); box-shadow: 0 0 10px var(--onb-teal);"
+                  class="h-full w-(--progress) rounded-full bg-(--onb-teal) shadow-(--onb-glow-teal) transition-all duration-500"
+                  style:--progress="{setupProgressPct}%"
                 ></div>
               </div>
             </div>
@@ -473,8 +431,7 @@
 
         <!-- Step card -->
         <section
-          class="step-card relative rounded-[22px] border border-white/8 backdrop-blur-[18px] overflow-hidden min-h-135 flex flex-col"
-          style="background: linear-gradient(180deg, oklch(0.14 0.03 261.692 / 0.85), oklch(0.12 0.025 261.692 / 0.75)); box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 30px 80px -30px rgb(0 0 0 / 0.6);"
+          class="step-card relative rounded-3xl border border-white/8 backdrop-blur-lg overflow-hidden min-h-135 flex flex-col"
         >
           <!-- Strip -->
           <div
@@ -494,8 +451,7 @@
             <div class="flex items-center gap-3">
               <!-- Path badge -->
               <span
-                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-semibold tracking-[0.06em] uppercase"
-                style="background: var(--onb-accent-dim); color: var(--onb-accent); border: 1px solid var(--onb-accent-dim);"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold tracking-wider uppercase border border-(--onb-accent-dim) bg-(--onb-accent-dim) text-(--onb-accent)"
               >
                 {#if path === "migration"}
                   <Cable class="h-2.5 w-2.5" />
@@ -508,8 +464,8 @@
               <!-- Progress bar -->
               <div class="h-0.75 w-30 overflow-hidden rounded-full bg-white/8">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
-                  style="width: {progressPct}%; background: var(--onb-accent); box-shadow: 0 0 10px var(--onb-accent);"
+                  class="h-full w-(--progress) rounded-full bg-(--onb-accent) shadow-(--onb-glow-accent) transition-all duration-500"
+                  style:--progress="{progressPct}%"
                 ></div>
               </div>
             </div>
@@ -518,19 +474,17 @@
           <!-- Step body -->
           <div class="relative z-2 flex-1 px-5 py-3 max-[900px]:px-4">
             {#if currentStep?.id === "path"}
-              <PathChoice currentPath={path} onSelect={handlePathSelect} />
+              <PathChoice bind:path />
             {:else if currentStep?.id === "connect"}
               <NightscoutConnect onComplete={handleMigrationConnected} />
             {:else if currentStep?.id === "cgm"}
               <div class="flex flex-col gap-8 px-4 py-8">
                 <div class="flex flex-col items-center gap-4 text-center">
                   <h1
-                    class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                    style="font-size: clamp(32px, 4vw, 48px);"
+                    class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                   >
                     Connect a <em
-                      class="not-italic font-light"
-                      style="color: var(--onb-accent);"
+                      class="not-italic font-light text-(--onb-accent)"
                     >
                       data source
                     </em>
@@ -557,12 +511,10 @@
                 {#if selectedConnectorId}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                      style="font-size: clamp(32px, 4vw, 48px);"
+                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Configure your <em
-                        class="not-italic font-light"
-                        style="color: var(--onb-accent);"
+                        class="not-italic font-light text-(--onb-accent)"
                       >
                         connection
                       </em>
@@ -586,12 +538,10 @@
                 {:else if selectedUploader}
                   <div class="flex flex-col items-center gap-4 text-center">
                     <h1
-                      class="font-[Montserrat] font-[250] leading-tight tracking-tight text-white"
-                      style="font-size: clamp(32px, 4vw, 48px);"
+                      class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
                     >
                       Set up your <em
-                        class="not-italic font-light"
-                        style="color: var(--onb-accent);"
+                        class="not-italic font-light text-(--onb-accent)"
                       >
                         app
                       </em>
@@ -637,8 +587,7 @@
 
           <!-- Actions bar -->
           <div
-            class="relative z-2 flex justify-between items-center px-7 py-4.5 border-t border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5"
-            style="background: var(--onb-surface-60);"
+            class="relative z-2 flex justify-between items-center px-7 py-4.5 border-t border-white/8 max-[900px]:px-5.5 max-[900px]:py-3.5 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-surface-60)"
           >
             <div>
               {#if stepIndex > 0 && currentStep?.id !== "finish"}
@@ -663,7 +612,12 @@
                   Save and continue
                   <ArrowRight class="h-4 w-4" />
                 </Button>
-              {:else if currentStep?.id !== "path"}
+              {:else if currentStep?.id === "path"}
+                <Button onclick={handleNext}>
+                  Continue
+                  <ArrowRight class="h-4 w-4" />
+                </Button>
+              {:else}
                 <Button variant="ghost" onclick={handleSkip}>
                   Skip for now
                 </Button>
@@ -683,13 +637,12 @@
 
   <!-- Footer -->
   <footer
-    class="relative z-50 px-8 py-5 border-t border-white/8 flex justify-between items-center text-xs text-white/30 max-[900px]:flex-wrap max-[900px]:gap-2.5"
-    style="background: var(--onb-navy-50); backdrop-filter: blur(8px);"
+    class="relative z-50 px-8 py-5 border-t border-white/8 flex justify-between items-center text-xs text-white/30 max-[900px]:flex-wrap max-[900px]:gap-2.5 bg-(--onb-navy-50) backdrop-blur-sm"
   >
     <div class="flex flex-wrap items-center gap-5">
       <span>&copy; 2026 Nocturne</span>
-      <a href="/privacy" class="hover:text-white/60">Privacy</a>
-      <a href="/docs" class="hover:text-white/60">Docs</a>
+      <a href={resolve("/privacy")} class="hover:text-white/60">Privacy</a>
+      <a href="/docs" rel="external" class="hover:text-white/60">Docs</a>
     </div>
     <div class="flex flex-wrap items-center gap-5">
       <span class="font-mono">v1.4.2</span>
@@ -707,6 +660,56 @@
 </div>
 
 <style>
+  .onb {
+    --onb-navy: oklch(0.08 0.025 261.692);
+    --onb-navy-60: oklch(0.08 0.025 261.692 / 0.6);
+    --onb-navy-50: oklch(0.08 0.025 261.692 / 0.5);
+    --onb-surface-60: oklch(0.1 0.025 261.692 / 0.6);
+    --onb-teal: oklch(0.72 0.14 184);
+    --onb-ok: oklch(0.72 0.17 150);
+    --onb-warn: oklch(0.769 0.188 70.08);
+    --onb-green: oklch(0.78 0.21 145);
+    --onb-green-dim: oklch(0.78 0.21 145 / 0.12);
+    --onb-lavender: oklch(0.78 0.09 265);
+    --onb-lavender-dim: oklch(0.78 0.09 265 / 0.14);
+    --onb-border: rgb(255 255 255 / 0.08);
+    --onb-accent: var(--onb-green);
+    --onb-accent-dim: var(--onb-green-dim);
+    --onb-glow-teal: 0 0 10px var(--onb-teal);
+    --onb-glow-accent: 0 0 10px var(--onb-accent);
+    --onb-step-glow: 0 0 12px var(--onb-accent-dim);
+  }
+
+  .onb.onb-migration {
+    --onb-accent: var(--onb-lavender);
+    --onb-accent-dim: var(--onb-lavender-dim);
+  }
+
+  .onb-backdrop {
+    background:
+      radial-gradient(
+        ellipse 50% 35% at 50% 0%,
+        oklch(0.16 0.05 265 / 0.6),
+        transparent 70%
+      ),
+      linear-gradient(180deg, var(--onb-navy), oklch(0.07 0.03 261.692));
+  }
+
+  .onb-avatar {
+    background: linear-gradient(135deg, var(--onb-teal), var(--onb-accent));
+  }
+
+  .step-card {
+    background: linear-gradient(
+      180deg,
+      oklch(0.14 0.03 261.692 / 0.85),
+      oklch(0.12 0.025 261.692 / 0.75)
+    );
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.05) inset,
+      0 30px 80px -30px rgb(0 0 0 / 0.6);
+  }
+
   /* Pseudo-element for step-card accent glow — cannot be expressed with Tailwind's before: variant
      because it uses a CSS custom property in the radial-gradient. */
   .step-card::before {

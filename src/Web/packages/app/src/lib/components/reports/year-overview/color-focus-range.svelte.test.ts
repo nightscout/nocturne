@@ -3,6 +3,15 @@ import { render } from "vitest-browser-svelte";
 import { page, userEvent } from "vitest/browser";
 import Harness from "./ColorFocusRange.test-harness.svelte";
 
+function elementOf<T extends Element>(
+  locator: { element(): Element },
+  type: new () => T
+): T {
+  const element = locator.element();
+  if (!(element instanceof type)) throw new TypeError(`Expected a ${type.name}`);
+  return element;
+}
+
 const minimumInput = (metric = "TDD") =>
   page.getByRole("spinbutton", { name: `${metric} minimum color value` });
 const maximumInput = (metric = "TDD") =>
@@ -56,9 +65,7 @@ describe("year overview color focus", () => {
     await expect
       .element(maximumSlider())
       .toHaveAttribute("aria-valuemax", "500");
-    const background = (
-      page.getByTestId("color-focus-track").element() as HTMLElement
-    ).style.background;
+    const background = elementOf(page.getByTestId("color-focus-track"), HTMLElement).style.getPropertyValue("--scale-gradient");
     expect(background).toContain("2%");
     expect(background).toMatch(/14(?:\.0+2)?%/);
   });
@@ -89,8 +96,8 @@ describe("year overview color focus", () => {
         .toHaveTextContent("null");
       if (observedMax === 0.5) {
         expect(
-          (page.getByTestId("color-focus-track").element() as HTMLElement)
-            .style.background
+          elementOf(page.getByTestId("color-focus-track"), HTMLElement)
+            .style.getPropertyValue("--scale-gradient")
         ).toContain("50%");
       }
       await screen.rerender({ observedMax: observedMax + 1 });
@@ -121,7 +128,7 @@ describe("year overview color focus", () => {
   it("moves handles by keyboard without crossing or collapsing the range", async () => {
     render(Harness, { initialRange: [10, 10.2] });
 
-    (minimumSlider().element() as HTMLElement).focus();
+    elementOf(minimumSlider(), HTMLElement).focus();
     await userEvent.keyboard("{ArrowRight}");
     await expect
       .element(minimumSlider())
@@ -131,7 +138,7 @@ describe("year overview color focus", () => {
       .element(minimumSlider())
       .toHaveAttribute("aria-valuenow", "10.1");
 
-    (maximumSlider().element() as HTMLElement).focus();
+    elementOf(maximumSlider(), HTMLElement).focus();
     await userEvent.keyboard("{ArrowLeft}{Home}");
     await expect
       .element(maximumSlider())
@@ -147,7 +154,7 @@ describe("year overview color focus", () => {
     try {
       render(Harness, { initialRange: [10, 70] });
       const track = page.getByTestId("color-focus-track");
-      const bounds = (track.element() as HTMLElement).getBoundingClientRect();
+      const bounds = elementOf(track, HTMLElement).getBoundingClientRect();
       expect(bounds.width).toBeGreaterThan(300);
       expect(bounds.height).toBeGreaterThan(10);
 
@@ -157,7 +164,7 @@ describe("year overview color focus", () => {
       });
 
       await expect.element(minimumInput()).toHaveValue(10);
-      const maximum = (maximumInput().element() as HTMLInputElement)
+      const maximum = elementOf(maximumInput(), HTMLInputElement)
         .valueAsNumber;
       expect(maximum).toBeGreaterThan(299);
       expect(maximum).toBeLessThan(301);

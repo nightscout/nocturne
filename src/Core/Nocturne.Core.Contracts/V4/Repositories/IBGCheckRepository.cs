@@ -13,7 +13,7 @@ namespace Nocturne.Core.Contracts.V4.Repositories;
 /// </remarks>
 /// <seealso cref="BGCheck"/>
 /// <seealso cref="IV4Repository{T}"/>
-public interface IBGCheckRepository : ILegacyKeyedRepository<BGCheck>
+public interface IBGCheckRepository : ILegacyKeyedRepository<BGCheck>, ISyncKeyedRepository<BGCheck>
 {
     /// <summary>
     /// Retrieve a page of <see cref="BGCheck"/> records filtered by time range, device, source, and origin.

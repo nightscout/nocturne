@@ -1,13 +1,11 @@
-import {
-  Droplet,
-  Syringe,
-  Cpu,
-  HeartPulse,
-  Footprints,
-  Utensils,
-  FileText,
-} from "lucide-svelte";
-import type { ComponentType } from "svelte";
+import Droplet from "@lucide/svelte/icons/droplet";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Cpu from "@lucide/svelte/icons/cpu";
+import HeartPulse from "@lucide/svelte/icons/heart-pulse";
+import Footprints from "@lucide/svelte/icons/footprints";
+import Utensils from "@lucide/svelte/icons/utensils";
+import FileText from "@lucide/svelte/icons/file-text";
+import type { Component } from "svelte";
 
 /**
  * A data category that can be shared with anonymous (public-link) viewers. Each maps to a single
@@ -20,7 +18,7 @@ export interface PublicDataCategory {
   readonly scope: string;
   readonly name: string;
   readonly description: string;
-  readonly icon: ComponentType;
+  readonly icon: Component;
 }
 
 export const publicDataCategories: PublicDataCategory[] = [

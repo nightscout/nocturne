@@ -165,7 +165,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
         // Set appropriate headers
         Response.Headers["ETag"] = FormatCursorETag(entry.Mills);
-        Response.Headers["Cache-Control"] = "public, max-age=60";
+        Response.Headers["Cache-Control"] = "private, max-age=60";
 
         return Ok(entry.ToV3Response());
     }
@@ -177,9 +177,9 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The created <see cref="Entry"/> in V3 format.</returns>
     /// <remarks>
-    /// Supports AAPS deduplication: if an entry with the same device, type, SGV value,
-    /// and timestamp (within a 1-minute window) already exists, returns a 200 response
-    /// with <c>isDeduplication: true</c> instead of creating a duplicate.
+    /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
+    /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
+    /// duplicate.
     /// After creation, alerts are evaluated via <see cref="IAlertOrchestrator"/> for the new reading.
     /// </remarks>
     /// <response code="201">Entry created successfully.</response>
@@ -218,10 +218,8 @@ public class EntriesController : BaseV3Controller<Entry>
                 var existingEntry = await _entryService.CheckForDuplicateEntryAsync(
                     entry.Device,
                     entry.Type ?? "sgv",
-                    entry.Sgv,
                     entry.Mills,
-                    windowMinutes: 1,
-                    cancellationToken: cancellationToken
+                    cancellationToken
                 );
                 if (existingEntry != null)
                 {
@@ -239,7 +237,7 @@ public class EntriesController : BaseV3Controller<Entry>
             }
 
             // Process the entry
-            var processedEntry = _documentProcessingService.ProcessEntry(entry); // Save to database
+            var processedEntry = WithIdentifier(_documentProcessingService.ProcessEntry(entry));
             var createdEntries = await _entryService.CreateEntriesAsync(
                 new[] { processedEntry },
                 cancellationToken: cancellationToken
@@ -320,7 +318,7 @@ public class EntriesController : BaseV3Controller<Entry>
 
             // Process all entries
             var processedEntries = entries
-                .Select(entry => _documentProcessingService.ProcessEntry(entry))
+                .Select(entry => WithIdentifier(_documentProcessingService.ProcessEntry(entry)))
                 .ToList();
 
             // Save to database
@@ -522,29 +520,18 @@ public class EntriesController : BaseV3Controller<Entry>
 
         limit = Math.Min(Math.Max(limit, 1), 1000);
 
-        // Build a find query for entries strictly newer than the cursor. Strictly-greater
-        // (not $gte) so the cursor record AAPS already holds is not re-returned, which
-        // would otherwise loop the incremental sync.
-        var findQuery = $"{{\"date\":{{\"$gt\":{lastModified}}}}}";
-        // Page oldest-first (reverseResults: true -> ascending) so a backlog larger than one
-        // page advances the cursor forward record by record. Newest-first would set the
-        // cursor to the newest of the first page and skip every older unsynced entry.
-        var entries = (await _entryService.GetEntriesWithAdvancedFilterAsync(
-            type: null,
-            count: limit,
-            skip: 0,
-            findQuery: findQuery,
-            dateString: null,
-            reverseResults: true,
-            cancellationToken: cancellationToken
-        )).ToList();
+        var page = await _entryService.GetEntriesModifiedSinceAsync(
+            lastModified,
+            limit,
+            cancellationToken
+        );
 
-        if (entries.Count > 0)
+        if (page.CursorMills is { } cursor)
         {
-            SetHistoryCursorHeaders(entries.Max(e => e.Mills));
+            SetHistoryCursorHeaders(cursor);
         }
 
-        var v3Entries = entries.ToV3Responses().ToList();
+        var v3Entries = page.Records.ToV3Responses().ToList();
         return CreateV3SuccessResponse(v3Entries);
     }
 
@@ -672,4 +659,15 @@ public class EntriesController : BaseV3Controller<Entry>
     }
 
     #endregion
+
+    /// <summary>
+    /// Gives an entry uploaded without an identifier a fresh ObjectId, stored as its legacy id, so
+    /// the create response, the socket event and later lookups all carry the same id.
+    /// </summary>
+    private static Entry WithIdentifier(Entry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Id))
+            entry.Id = MongoObjectId.NewObjectId();
+        return entry;
+    }
 }

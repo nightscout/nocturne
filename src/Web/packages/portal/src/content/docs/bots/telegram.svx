@@ -19,8 +19,10 @@ environment-variable workflow that all platforms share, see [Chat Bots](/docs/bo
 3. BotFather replies with a **bot token** (looks like `123456:ABC-DEF...`). Copy it.
 
 <Callout type="warning" title="Keep the token secret">
+
   Anyone with the bot token can control the bot. If it leaks, send <code>/revoke</code> to
   BotFather to issue a new one.
+
 </Callout>
 
 ## 2. Configure Nocturne
@@ -68,10 +70,12 @@ curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
 ```
 
 <Callout type="tip" title="Check the webhook">
+
   Confirm it registered with
   <code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getWebhookInfo</code>. The
   <code>url</code> should match your instance and <code>last_error_message</code> should be
   empty.
+
 </Callout>
 
 ## 4. Test it

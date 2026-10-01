@@ -2,7 +2,8 @@
     import DocsSidebar from "$lib/components/DocsSidebar.svelte";
     import DocsScrollDepth from "$lib/components/docs/DocsScrollDepth.svelte";
     import { Button } from "@nocturne/ui/ui/button";
-    import { Menu, X } from "@lucide/svelte";
+    import Menu from "@lucide/svelte/icons/menu";
+    import X from "@lucide/svelte/icons/x";
 
     let { children } = $props();
     let sidebarOpen = $state(false);
@@ -12,12 +13,11 @@
 
 <div class="container mx-auto px-4 py-8">
     <div class="flex gap-8">
-        <!-- Mobile sidebar toggle -->
         <div class="lg:hidden fixed bottom-4 right-4 z-50">
-            <Button
+            <!-- eslint-disable-next-line shadcn/no-restyle -- the site's only floating action button, pinned over the page on narrow screens -->
+            <Button class="rounded-full shadow-lg"
                 variant="default"
                 size="icon"
-                class="rounded-full shadow-lg"
                 onclick={() => (sidebarOpen = !sidebarOpen)}
             >
                 {#if sidebarOpen}
@@ -28,7 +28,6 @@
             </Button>
         </div>
 
-        <!-- Mobile sidebar overlay -->
         {#if sidebarOpen}
             <div
                 class="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 lg:hidden"
@@ -39,7 +38,6 @@
             ></div>
         {/if}
 
-        <!-- Sidebar -->
         <aside
             class="fixed lg:sticky top-0 left-0 z-50 lg:z-0 h-screen lg:h-auto w-64 shrink-0
                    bg-background lg:bg-transparent border-r lg:border-0 border-border/40
@@ -56,12 +54,11 @@
             </div>
         </aside>
 
-        <!-- Main content -->
-        <main class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0">
             <article class="prose prose-neutral dark:prose-invert max-w-none">
                 {@render children()}
             </article>
-        </main>
+        </div>
     </div>
 </div>
 
@@ -73,5 +70,11 @@
         display: block;
         max-width: 100%;
         overflow-x: auto;
+    }
+
+    /* Typography wraps inline code in literal backticks; the code tint already marks it. */
+    article.prose :global(code::before),
+    article.prose :global(code::after) {
+        content: none;
     }
 </style>

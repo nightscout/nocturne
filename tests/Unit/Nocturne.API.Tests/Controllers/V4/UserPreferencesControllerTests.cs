@@ -84,7 +84,10 @@ public class UserPreferencesControllerTests
             Preferences = new UserDisplayPreferences { GlucoseUnits = "mgdl" },
         });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var problem = result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(400);
+        problem.Detail.Should().StartWith("glucoseUnits: 'mgdl' is not allowed.");
     }
 
     [Fact]
@@ -130,7 +133,10 @@ public class UserPreferencesControllerTests
             Preferences = new UserDisplayPreferences { RegionFormat = "en-XX" },
         });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var problem = result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(400);
+        problem.Detail.Should().StartWith("regionFormat: 'en-XX' is not allowed.");
     }
 
     [Fact]

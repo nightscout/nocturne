@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Connectors.Core.Constants;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -23,11 +24,12 @@ internal sealed record LegacyTreatmentRepositories(
 );
 
 /// <summary>The time window, page size and provenance filter of one time-range projection read.</summary>
-/// <param name="NativeOnly">
-/// When <see langword="true"/>, records that mirror a legacy v1/v2/v3 write (<c>LegacyId</c> set) are
-/// dropped. Treatments have no legacy table left to double up against, so every caller passes
-/// <see langword="false"/>; the filter survives for callers that want V4-native records only.
-/// </param>
+/// <remarks>
+/// When <paramref name="NativeOnly"/> is <see langword="true"/>, records that mirror a legacy
+/// v1/v2/v3 write (<c>LegacyId</c> set) are dropped. Treatments have no legacy table left to double
+/// up against, so every caller passes <see langword="false"/>; the filter survives for callers that
+/// want V4-native records only.
+/// </remarks>
 internal readonly record struct LegacyTreatmentRange(
     DateTime? From,
     DateTime? To,
@@ -36,14 +38,14 @@ internal readonly record struct LegacyTreatmentRange(
 );
 
 /// <summary>
-/// One record fetched for projection, carrying the table that owns it and the <c>SysUpdatedAt</c> of
-/// the row it came from — the latter on the modified-since path only; the time-range path does not
-/// surface <see cref="Treatment.SrvModified"/>.
+/// One record fetched for projection, carrying the table that owns it and the <c>SysCreatedAt</c> and
+/// <c>SysUpdatedAt</c> of the row it came from.
 /// </summary>
 internal readonly record struct FetchedRecord(
     ILegacyTreatmentTable Table,
     object Record,
-    DateTime? Modified
+    DateTime Created,
+    DateTime Modified
 );
 
 /// <summary>Food breakdown rows for the carb intakes of one projected page, keyed by carb intake.</summary>
@@ -88,13 +90,15 @@ internal interface ILegacyTreatmentTable
     );
 
     /// <summary>
-    /// The oldest <paramref name="limit"/> records whose <c>SysUpdatedAt</c> is strictly after
-    /// <paramref name="threshold"/>, oldest first.
+    /// A page of records changed at or after <paramref name="cursorMills"/>, oldest first, ending on
+    /// a millisecond boundary.
     /// </summary>
+    /// <remarks>The boundary rule is <see cref="HistoryPage"/>'s.</remarks>
     Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
         NocturneDbContext context,
-        DateTime threshold,
+        long cursorMills,
         int limit,
+        ILogger logger,
         CancellationToken ct
     );
 
@@ -116,10 +120,8 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     Func<TRecord, CarbFoodIndex, Treatment> project
 ) : ILegacyTreatmentTable
     where TRecord : class
-    where TEntity : class, ISystemTimestamped
+    where TEntity : class, ISystemTimestamped, IIdentified
 {
-    private const string ModifiedProperty = nameof(ISystemTimestamped.SysUpdatedAt);
-
     /// <inheritdoc />
     public string RecordType { get; } = typeof(TRecord).Name;
 
@@ -135,26 +137,40 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
         if (range.NativeOnly)
             records = records.Where(r => legacyId(r) is null);
 
-        return records.Select(r => new FetchedRecord(this, r, null)).ToList();
+        return records.Select(r => new FetchedRecord(this, r, CreatedAt(r), ModifiedAt(r))).ToList();
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
         NocturneDbContext context,
-        DateTime threshold,
+        long cursorMills,
         int limit,
+        ILogger logger,
         CancellationToken ct
     )
     {
-        var entities = await table(context)
-            .AsNoTracking()
-            .Where(e => EF.Property<DateTime>(e, ModifiedProperty) > threshold)
-            .OrderBy(e => EF.Property<DateTime>(e, ModifiedProperty))
-            .Take(limit)
-            .ToListAsync(ct);
+        var entities = await HistoryPage.GetAsync(
+            table(context).AsNoTracking(),
+            e => e.SysUpdatedAt,
+            e => e.Id,
+            cursorMills,
+            limit,
+            logger,
+            RecordType,
+            ct);
 
-        return entities.Select(e => new FetchedRecord(this, toRecord(e), e.SysUpdatedAt)).ToList();
+        return entities
+            .Select(e => (Record: toRecord(e), e.SysUpdatedAt))
+            .Select(x => new FetchedRecord(this, x.Record, CreatedAt(x.Record), x.SysUpdatedAt))
+            .ToList();
     }
+
+    // TempBasal is the one projected type that is not an IV4Record.
+    private static DateTime CreatedAt(TRecord record) =>
+        record is TempBasal tempBasal ? tempBasal.CreatedAt : ((IV4Record)record).CreatedAt;
+
+    private static DateTime ModifiedAt(TRecord record) =>
+        record is TempBasal tempBasal ? tempBasal.ModifiedAt : ((IV4Record)record).ModifiedAt;
 
     /// <inheritdoc />
     public Treatment Project(object record, CarbFoodIndex foods) => project((TRecord)record, foods);
@@ -236,6 +252,12 @@ internal static class LegacyTreatmentTables
             (r, _) => ProjectBolusCalculation(r)),
     ];
 
+    private static readonly Dictionary<ILegacyTreatmentTable, int> Order =
+        All.Select((table, index) => (table, index)).ToDictionary(x => x.table, x => x.index);
+
+    /// <summary>Position in <see cref="All"/>, the tiebreak after the modification stamp.</summary>
+    internal static int OrderOf(ILegacyTreatmentTable table) => Order[table];
+
     /// <summary>
     /// Turns a page of rows into legacy treatments: a bolus and a carb intake sharing a correlation
     /// become one Meal Bolus, and everything else projects through its own table. Pairing only ever
@@ -252,7 +274,7 @@ internal static class LegacyTreatmentTables
             if (paired.Contains(row.Record))
                 continue;
 
-            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Modified));
+            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Created, row.Modified));
         }
 
         return treatments;
@@ -299,13 +321,14 @@ internal static class LegacyTreatmentTables
             // meal on the next request without ever advancing.
             treatments.Add(Stamp(
                 ProjectMealBolus(bolus.Record, carb.Record, foods.For(carb.Record.Id)),
+                Oldest(bolus.Record.CreatedAt, carb.Record.CreatedAt),
                 Newest(bolus.Modified, carb.Modified)));
         }
 
         return paired;
     }
 
-    private static ILookup<Guid, (T Record, DateTime? Modified)> Correlated<T>(
+    private static ILookup<Guid, (T Record, DateTime Modified)> Correlated<T>(
         IReadOnlyList<FetchedRecord> records
     )
         where T : class, IV4Record =>
@@ -314,15 +337,14 @@ internal static class LegacyTreatmentTables
             .Where(r => r.Record?.CorrelationId is not null)
             .ToLookup(r => r.Record!.CorrelationId!.Value, r => (r.Record!, r.Modified));
 
-    private static DateTime? Newest(DateTime? left, DateTime? right) =>
-        left > right ? left : right ?? left;
+    private static DateTime Newest(DateTime left, DateTime right) => left > right ? left : right;
 
-    private static Treatment Stamp(Treatment treatment, DateTime? modifiedAt)
+    private static DateTime Oldest(DateTime left, DateTime right) => left < right ? left : right;
+
+    private static Treatment Stamp(Treatment treatment, DateTime createdAt, DateTime modifiedAt)
     {
-        if (modifiedAt.HasValue)
-            treatment.SrvModified = new DateTimeOffset(modifiedAt.Value, TimeSpan.Zero)
-                .ToUnixTimeMilliseconds();
-
+        treatment.SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        treatment.SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
         return treatment;
     }
 
@@ -330,6 +352,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             EventType = TreatmentTypes.MealBolus,
             Mills = bolus.Mills,
             Insulin = bolus.Insulin,
@@ -351,6 +374,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bolus.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(bolus.AdditionalProperties),
             EventType = TreatmentTypes.CorrectionBolus,
             Mills = bolus.Mills,
             Insulin = bolus.Insulin,
@@ -370,6 +394,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = carb.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(carb.AdditionalProperties),
             EventType = TreatmentTypes.CarbCorrection,
             Mills = carb.Mills,
             Carbs = carb.Carbs,
@@ -416,6 +441,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bgCheck.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(bgCheck.AdditionalProperties),
             EventType = TreatmentTypes.BgCheck,
             Mills = bgCheck.Mills,
             Glucose = bgCheck.Glucose,
@@ -433,6 +459,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = note.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(note.AdditionalProperties),
             EventType = note.EventType ?? "Note",
             Mills = note.Mills,
             Notes = note.Text,
@@ -449,6 +476,7 @@ internal static class LegacyTreatmentTables
         return new Treatment
         {
             Id = deviceEvent.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(deviceEvent.AdditionalProperties),
             EventType = eventTypeString ?? deviceEvent.EventType.ToString(),
             Mills = deviceEvent.Mills,
             Notes = deviceEvent.Notes,
@@ -463,6 +491,7 @@ internal static class LegacyTreatmentTables
         new()
         {
             Id = bc.Id.ToString(),
+            AdditionalProperties = TreatmentClientId.ToTreatment(bc.AdditionalProperties),
             EventType = "Bolus Wizard",
             Mills = bc.Mills,
             BloodGlucoseInput = bc.BloodGlucoseInput,

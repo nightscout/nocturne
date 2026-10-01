@@ -163,12 +163,14 @@ public static class SessionCookieExtensions
     /// Written at the same <c>Domain</c> as the session cookies, so one answer serves a tenant
     /// subdomain, its siblings and the apex alike.
     /// </summary>
-    /// <param name="method">One of <see cref="SignInMethods"/>.</param>
-    /// <param name="providerId">The identity provider, for <see cref="SignInMethods.Oidc"/>.</param>
     /// <remarks>
+    /// <paramref name="method"/> is one of <see cref="SignInMethods"/>; <paramref name="providerId"/>
+    /// names the identity provider for <see cref="SignInMethods.Oidc"/>.
+    /// <para>
     /// Not folded into <see cref="SetSessionCookies(HttpResponse, string, string, DateTimeOffset, OidcOptions)"/>:
     /// a silent token refresh writes session cookies too and knows nothing about how the session
     /// began, so it would overwrite the hint with a guess. Deliberately not cleared on sign-out.
+    /// </para>
     /// </remarks>
     public static void SetLastSignInCookie(
         this HttpResponse response, string method, string? providerId, OidcOptions options)

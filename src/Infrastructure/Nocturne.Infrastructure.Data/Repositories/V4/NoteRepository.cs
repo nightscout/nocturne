@@ -16,32 +16,26 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing note records in the database. A DeduplicationService participant on top of
-/// the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only the
+/// the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only the
 /// extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
 /// <c>CountAsync</c>, and the post-commit dedup linking.
 /// </summary>
-public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRepository
+public class NoteRepository : SyncUpsertRepositoryBase<Note, NoteEntity>, INoteRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<NoteRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NoteRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     public NoteRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<NoteRepository> logger,
         IV4RecordBroadcaster<Note>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -146,14 +140,14 @@ public class NoteRepository : SyncKeyedRepositoryBase<Note, NoteEntity>, INoteRe
                 RecordId: e.Id,
                 Mills: new DateTimeOffset(e.Timestamp, TimeSpan.Zero).ToUnixTimeMilliseconds(),
                 DataSource: e.DataSource ?? DeduplicationInput.UnknownDataSource,
-                Criteria: MatchCriteriaMapper.ForNote()
+                Criteria: MatchCriteriaMapper.From(e)
             )).ToList();
 
             await _deduplicationService.DeduplicateBatchAsync(RecordType.Note, dedupInputs, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "Note", inserted.Count);
         }
     }
 }

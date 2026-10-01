@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -18,23 +19,32 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
 public abstract class SyncKeyedRepositoryBase<TModel, TEntity> : V4RepositoryBase<TModel, TEntity>
     where TModel : class, IV4Record
-    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISyncDedupable
+    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISystemTimestamped, ISyncDedupable
 {
     /// <inheritdoc />
     protected SyncKeyedRepositoryBase(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
+        ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 
     /// <summary>
-    /// Soft-deletes every live record matching the given (data source, sync identifier) pair. The
-    /// global query filter scopes the lookup to the current tenant and skips rows already
-    /// soft-deleted, so a repeat call for the same key returns 0.
+    /// Soft-deletes the live record holding the given (data source, sync identifier) pair — at most
+    /// one, because every entity served here carries the partial unique index of
+    /// <see cref="NocturneDbContext.SyncDedupedEntities"/>. The global query filter scopes the
+    /// lookup to the current tenant and skips rows already soft-deleted, so a repeat call for the
+    /// same key returns 0.
     /// </summary>
+    /// <remarks>
+    /// Declared only on the contracts whose callers delete by the upstream key (boluses, carb
+    /// intakes, basal injections, notes, device events). No writer deletes a BG check, temp basal
+    /// or device-status snapshot that way; a snapshot goes with the devicestatus document it was
+    /// decomposed from, which <c>DeviceStatusDecomposer</c> deletes by legacy id.
+    /// </remarks>
     /// <param name="dataSource">The external data source name.</param>
     /// <param name="syncIdentifier">The external sync identifier.</param>
     /// <param name="origin">Whether the write is live or a backfill import.</param>

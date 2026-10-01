@@ -1,4 +1,5 @@
 using System.Globalization;
+using Nocturne.API.Services.Analytics;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Sleep.Report;
 using Nocturne.Core.Models.V4;
@@ -134,55 +135,33 @@ internal static class SleepReportCalculator
             : session.StartTime;
         var readings = allGlucose
             .Where(g => g.Timestamp >= asleepAt && g.Timestamp <= session.EndTime)
-            .OrderBy(g => g.Timestamp)
+            .Where(g => GlucoseStatistics.IsPlausibleReading(g.Mgdl))
+            .OrderBy(g => g.Mills)
             .ToList();
 
         var stageList = stages.ToList();
-        var events    = new List<SleepHypoEvent>();
-        SensorGlucose? runStart = null;
-        SensorGlucose? nadir    = null;
-        SensorGlucose? prev     = null;
-
-        foreach (var g in readings)
-        {
-            if (g.Mgdl < thresholds.Low)
-            {
-                runStart ??= g;
-                if (nadir == null || g.Mgdl < nadir.Mgdl) nadir = g;
-            }
-            else if (runStart != null && nadir != null && prev != null)
-            {
-                events.Add(BuildHypoEvent(runStart, prev, nadir, stageList, thresholds));
-                runStart = nadir = null;
-            }
-            prev = g;
-        }
-
-        if (runStart != null && nadir != null && prev != null)
-            events.Add(BuildHypoEvent(runStart, prev, nadir, stageList, thresholds));
-
-        return events;
+        return GlucoseEpisodeDetector.Detect(readings, thresholds)
+            .Where(episode => episode.BelowRange)
+            .Select(episode => BuildHypoEvent(episode, stageList))
+            .ToList();
     }
 
     private static SleepHypoEvent BuildHypoEvent(
-        SensorGlucose start, SensorGlucose end, SensorGlucose nadir,
-        IEnumerable<SleepStageInterval> stages, GlycemicThresholds thresholds)
+        GlucoseEpisode episode, IEnumerable<SleepStageInterval> stages)
     {
+        var nadir = episode.Extreme;
         var stage = stages.FirstOrDefault(s =>
             s.StartTime <= nadir.Timestamp && s.EndTime >= nadir.Timestamp)?.Stage
             ?? SleepStageType.Unknown;
 
         return new SleepHypoEvent
         {
-            StartAt         = start.Timestamp,
-            EndAt           = end.Timestamp,
-            DurationMinutes = (int)(end.Timestamp - start.Timestamp).TotalMinutes,
+            StartAt         = episode.StartAt,
+            EndAt           = episode.EndAt,
+            DurationMinutes = (int)Math.Round(episode.DurationMinutes),
             LowestBg        = (int)Math.Round(nadir.Mgdl),
             Stage           = stage,
-            // Strict < matches StatisticsService.CalculateEpisodes' VeryLow classification.
-            Severity        = nadir.Mgdl < thresholds.VeryLow
-                                ? SleepHypoSeverity.VeryLow
-                                : SleepHypoSeverity.Low,
+            Severity        = episode.Severe ? SleepHypoSeverity.VeryLow : SleepHypoSeverity.Low,
         };
     }
 

@@ -4,6 +4,7 @@ import Harness from "./ChartTextLabelHarness.test.svelte";
 import BasalRateChart from "$lib/components/reports/BasalRateChart.svelte";
 import GlucoseResponseChart from "$lib/components/dashboard/glucose-chart/dialogs/GlucoseResponseChart.svelte";
 import type { PredictionData } from "$api/predictions.remote";
+import { PREDICTIONS_UNAVAILABLE } from "$lib/api/predictions-messages";
 
 /**
  * layerchart's <Text> renders its `value` prop and ignores snippet children, so
@@ -41,10 +42,10 @@ describe("prediction overlay labels", () => {
 			track: "predictions",
 			predictionError: "upstream down",
 		});
-		await textsIn(container, "Prediction unavailable");
+		await textsIn(container, "upstream down");
 	});
 
-	it("renders the boundary failure label with the thrown message", async () => {
+	it("renders the boundary failure label for a render-time throw", async () => {
 		const { container } = render(Harness, {
 			track: "predictions",
 			predictionData: {
@@ -69,7 +70,9 @@ describe("prediction overlay labels", () => {
 			},
 		});
 
-		await textsIn(container, "Prediction unavailable: scale exploded");
+		// A thrown Error carries no server-written reason, so the boundary falls
+		// back to the shared sentence rather than the exception text.
+		await textsIn(container, PREDICTIONS_UNAVAILABLE);
 	});
 });
 

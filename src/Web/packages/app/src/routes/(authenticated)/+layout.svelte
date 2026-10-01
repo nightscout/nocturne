@@ -1,10 +1,15 @@
 <script lang="ts">
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
+  import {
+    displayedGlucose,
+    refreshSummaryOnNewReading,
+  } from "$lib/stores/current-glucose-status.svelte";
+  import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
   import { createSettingsStore } from "$lib/stores/settings-store.svelte";
   import { createAuthStore } from "$lib/stores/auth-store.svelte";
   import { authInterceptorState } from "$lib/api/auth-interceptor";
   import { remoteErrorMessage } from "$lib/api/remote-error";
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, type Snippet } from "svelte";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { AppSidebar, MobileHeader } from "$lib/components/layout";
   import type { LayoutData } from "./$types";
@@ -13,16 +18,17 @@
   import type { AlarmVisualSettings } from "$lib/types/alarm-profile";
   import type { TitleFaviconSettings } from "$lib/stores/serverSettings";
   import { browser, dev } from "$app/environment";
-  import { beforeNavigate } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import AlertSurfaces from "$lib/components/alerts/AlertSurfaces.svelte";
   import DemoBanner from "$lib/components/layout/DemoBanner.svelte";
   import GuestBanner from "$lib/components/layout/GuestBanner.svelte";
   import BackupSignInPrompt from "$lib/components/layout/BackupSignInPrompt.svelte";
+  import SessionExpiryWatcher from "$lib/components/layout/SessionExpiryWatcher.svelte";
   import MembershipRequestAutoSubmit from "$lib/components/members/MembershipRequestAutoSubmit.svelte";
   import { CommandPalette } from "$lib/components/command-palette";
-  import { CoachMarkProvider } from "@nocturne/coach";
+  import { CoachMarkProvider, type CoachRouter } from "@nocturne/coach";
   import "@nocturne/coach/theme.css";
   import "../../styles/coach-theme-overrides.css";
   import { createCoachMarkAdapter } from "$lib/coach-marks/adapter";
@@ -30,6 +36,7 @@
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
+  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -44,7 +51,12 @@
     pingInterval: 25000,
   };
 
-  const { data, children } = $props<{ data: LayoutData; children: any }>();
+  interface Props {
+    data: LayoutData;
+    children: Snippet;
+  }
+
+  const { data, children }: Props = $props();
 
   // A tenantless host leaves the tenant-scoped surfaces below unmounted; see
   // tenantless-navigation. Read once: the host cannot change without a fresh load.
@@ -52,6 +64,7 @@
   const tenantless: boolean = data.tenantless === true;
 
   const realtimeStore = createRealtimeStore(config);
+  refreshSummaryOnNewReading(() => realtimeStore.currentEntry?.mills);
   createAuthStore(); // Initialize auth store in context
 
   // Suppress the auth interceptor's login redirect for guest and public
@@ -65,8 +78,10 @@
   createSettingsStore(!tenantless);
 
   let commandPaletteOpen = $state(false);
+  let bannerStripHeight = $state(0);
 
   const coachMarkAdapter = createCoachMarkAdapter(tenantless);
+  const coachRouter: CoachRouter = { beforeNavigate, goto };
 
   // Title/Favicon service for dynamic updates
   const titleFaviconService = getTitleFaviconService();
@@ -141,18 +156,23 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const timeSinceReading = $derived(realtimeStore.timeSinceReading);
 
-  const isDisconnected = $derived(!realtimeStore.isConnected);
+  const connection = createConnectionIndicator(
+    () => realtimeStore.connectionStatus
+  );
+  const isDisconnected = $derived(connection.isDisconnected);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
+  const glucose = displayedGlucose(realtimeStore);
 
   $effect(() => {
     // Determine if we should update
     const enabled = titleFaviconSettings.enabled;
-    const bg = realtimeStore.currentBG;
+    const bg = glucose.currentBG;
 
     // Explicit dependencies for visual updates
     const title = timeSinceReading;
-    const delta = realtimeStore.bgDelta;
-    const dir = realtimeStore.direction;
+    const delta = glucose.bgDelta;
+    const dir = glucose.direction;
+    const variant = getGlucoseTileVariant(glucose.status);
 
     if (enabled && bg > 0) {
       titleFaviconService.update(
@@ -160,7 +180,7 @@
         dir,
         delta,
         titleFaviconSettings,
-        defaultSettings.thresholds,
+        variant,
         isDisconnected,
         isStale,
         title
@@ -168,57 +188,56 @@
     }
   });
 
-  // Handle alarm events for flashing
-  // When an alarm is active, start flashing with the alarm's visual settings
+  const alarmVisual: AlarmVisualSettings = {
+    screenFlash: true,
+    flashColor: "",
+    flashIntervalMs: 1000,
+    persistentBanner: true,
+    wakeScreen: true,
+    showEmergencyContacts: false,
+  };
+
   $effect(() => {
-    const bg = realtimeStore.currentBG;
+    const bg = glucose.currentBG;
     if (
       bg &&
       titleFaviconSettings.enabled &&
       titleFaviconSettings.flashOnAlarm
     ) {
-      const status = titleFaviconService.getGlucoseStatus(
-        bg,
-        defaultSettings.thresholds
-      );
-      if (status === "very-low" || status === "very-high") {
-        // Start flashing with default alarm visual settings if not already flashing
-        if (!titleFaviconService.isFlashing) {
-          const alarmVisual: AlarmVisualSettings = {
-            screenFlash: true,
-            flashColor: "",
-            flashIntervalMs: 1000,
-            persistentBanner: true,
-            wakeScreen: true,
-            showEmergencyContacts: false,
-          };
-          titleFaviconService.startFlashing(alarmVisual);
-        }
-      } else {
-        // Stop flashing if no longer in alarm state
-        if (titleFaviconService.isFlashing) {
-          titleFaviconService.stopFlashing();
-        }
-      }
+      titleFaviconService.syncAlarmFlash(glucose.status, alarmVisual);
     }
   });
 </script>
 
-<CoachMarkProvider adapter={coachMarkAdapter} {sequences} onBeforeNavigate={beforeNavigate}>
+<CoachMarkProvider adapter={coachMarkAdapter} {sequences} router={coachRouter}>
   <CoachParamHandler />
   <ChartPrintPatterns />
   <Sidebar.Provider>
     <AppSidebar user={data.user} isPlatformAdmin={data.isPlatformAdmin} isPlatformAccessGrant={data.isPlatformAccessGrant} isGuestSession={data.isGuestSession} currentSlug={data.tenantSlug} baseDomain={data.baseDomain} tenantless={data.tenantless} />
-    <Sidebar.Inset>
+    <!-- --app-sticky-top is the top of the usable viewport below the app chrome (the visible
+         MobileHeader plus the banner strip); page-level sticky bars pin to it with the
+         header's 300ms transition. -->
+    <Sidebar.Inset
+      class="min-w-0 [--app-sticky-top:calc(var(--mobile-header-offset,0px)_+_var(--app-banner-height))] md:[--app-sticky-top:var(--app-banner-height)]"
+      style="--app-banner-height: {bannerStripHeight}px"
+    >
       <MobileHeader />
-      {#if data.isDemo}
-        <DemoBanner nextResetAt={data.nextResetAt} />
-      {/if}
-      {#if data.isGuestSession && data.guestExpiresAt}
-        <GuestBanner expiresAt={data.guestExpiresAt} />
-      {/if}
-      {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
-        <BackupSignInPrompt />
+      <div
+        class="sticky top-(--mobile-header-offset,0px) z-40 transition-all duration-300 md:top-0"
+        bind:offsetHeight={bannerStripHeight}
+      >
+          {#if data.isDemo}
+            <DemoBanner nextResetAt={data.nextResetAt} />
+          {/if}
+          {#if data.isGuestSession && data.guestExpiresAt}
+            <GuestBanner expiresAt={data.guestExpiresAt} />
+          {/if}
+          {#if !tenantless && data.user && !data.isGuestSession && !data.isDemo}
+            <BackupSignInPrompt />
+          {/if}
+      </div>
+      {#if data.user && !data.isGuestSession}
+        <SessionExpiryWatcher />
       {/if}
       {#if !tenantless}
         <MembershipRequestAutoSubmit
@@ -227,7 +246,7 @@
         />
         <AlertSurfaces />
       {/if}
-      <main class="flex-1 overflow-auto">
+      <main class="flex-1 overflow-x-clip">
         <svelte:boundary>
           {@render children()}
 

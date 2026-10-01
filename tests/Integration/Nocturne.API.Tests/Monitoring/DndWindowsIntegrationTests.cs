@@ -14,7 +14,7 @@ namespace Nocturne.API.Tests.Integration.Monitoring;
 /// the manual-DND toggle on <c>tenant-alert-settings</c> backed by a <c>scope=all</c> window.
 /// </summary>
 [Trait("Category", "Integration")]
-public class DndWindowsIntegrationTests : AspireIntegrationTestBase
+public class DndWindowsIntegrationTests : ApiIntegrationTestBase
 {
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -26,7 +26,7 @@ public class DndWindowsIntegrationTests : AspireIntegrationTestBase
     private const string ActiveWindows = "/api/v4/alerts/dnd/windows/active";
     private const string Settings = "/api/v4/tenant-alert-settings";
 
-    public DndWindowsIntegrationTests(AspireIntegrationTestFixture fixture, ITestOutputHelper output)
+    public DndWindowsIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
         : base(fixture, output) { }
 
     [Fact]

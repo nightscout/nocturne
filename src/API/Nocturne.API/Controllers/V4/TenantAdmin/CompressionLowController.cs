@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -13,10 +14,9 @@ namespace Nocturne.API.Controllers.V4.TenantAdmin;
 /// <remarks>
 /// Every write here is the glucose category and requires <see cref="Scope.GlucoseReadWrite"/>.
 /// Accepting a suggestion writes a <see cref="StateSpanCategory.DataExclusion"/> span
-/// (<c>CompressionLowService.AcceptSuggestionAsync</c>), which decides whether the flagged readings
-/// count towards analytics and reports — the same category-to-scope mapping
-/// <c>StateSpanWriteScopeGuard</c> applies — and dismiss, delete and detection all write the
-/// suggestions that propose one. Each write therefore carries its own
+/// (<c>CompressionLowService.AcceptSuggestionAsync</c>) marking the flagged readings, which is the
+/// glucose category for the reason <c>StateSpanWriteScopeGuard</c> gives, and dismiss, delete and
+/// detection all write the suggestions that propose one. Each write therefore carries its own
 /// <see cref="Scope.GlucoseReadWrite"/> requirement, and the class-level gate gives the reads
 /// the matching <see cref="Scope.GlucoseRead"/>.
 /// <para>
@@ -38,6 +38,13 @@ public class CompressionLowController : ControllerBase
 {
     private readonly ICompressionLowService _compressionLowService;
     private readonly ICompressionLowDetectionService _detectionService;
+
+    /// <summary>
+    /// What a read tells the reader when the tenant's settings could not be read. The condition is
+    /// transient, so the page is worth retrying. <see cref="SettingsUnavailableException"/>.
+    /// </summary>
+    private const string SettingsUnavailable =
+        "Your settings could not be read just now, so this cannot be shown. Try again in a moment.";
 
     /// <summary>
     /// What accepting or dismissing tells the reader when the suggestion has already been acted on
@@ -87,10 +94,20 @@ public class CompressionLowController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var suggestion = await _compressionLowService.GetSuggestionWithEntriesAsync(id, cancellationToken);
-        if (suggestion == null)
-            return NotFound();
-        return Ok(suggestion);
+        try
+        {
+            var suggestion = await _compressionLowService.GetSuggestionWithEntriesAsync(id, cancellationToken);
+            if (suggestion == null)
+                return NotFound();
+            return Ok(suggestion);
+        }
+        catch (SettingsUnavailableException)
+        {
+            return Problem(
+                detail: SettingsUnavailable,
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Settings Unavailable");
+        }
     }
 
     /// <summary>

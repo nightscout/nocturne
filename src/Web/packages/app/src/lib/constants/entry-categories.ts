@@ -1,10 +1,11 @@
-import type {
-  Bolus,
-  CarbIntake,
-  BGCheck,
-  Note,
-  DeviceEvent,
-  BasalInjection,
+import {
+  TreatmentLogCategory,
+  type Bolus,
+  type CarbIntake,
+  type BGCheck,
+  type Note,
+  type DeviceEvent,
+  type BasalInjection,
 } from "$lib/api";
 
 export const ENTRY_CATEGORIES = {
@@ -13,54 +14,48 @@ export const ENTRY_CATEGORIES = {
     name: "Insulin",
     description: "Bolus insulin deliveries",
     icon: "syringe" as const,
-    colorClass: "text-blue-600 dark:text-blue-400",
-    bgClass: "bg-blue-100 dark:bg-blue-900/30",
-    borderClass: "border-blue-200 dark:border-blue-700",
+    colorClass: "text-entry-bolus",
+    badge: "entry-bolus" as const,
   },
   carbs: {
     id: "carbs" as const,
     name: "Carbs",
     description: "Carbohydrate intake records",
     icon: "utensils" as const,
-    colorClass: "text-green-600 dark:text-green-400",
-    bgClass: "bg-green-100 dark:bg-green-900/30",
-    borderClass: "border-green-200 dark:border-green-700",
+    colorClass: "text-entry-carbs",
+    badge: "entry-carbs" as const,
   },
   bgCheck: {
     id: "bgCheck" as const,
     name: "BG Checks",
     description: "Blood glucose measurements",
     icon: "droplet" as const,
-    colorClass: "text-red-600 dark:text-red-400",
-    bgClass: "bg-red-100 dark:bg-red-900/30",
-    borderClass: "border-red-200 dark:border-red-700",
+    colorClass: "text-entry-bg-check",
+    badge: "entry-bg-check" as const,
   },
   note: {
     id: "note" as const,
     name: "Notes",
     description: "User annotations and announcements",
     icon: "file-text" as const,
-    colorClass: "text-gray-600 dark:text-gray-400",
-    bgClass: "bg-gray-100 dark:bg-gray-800/50",
-    borderClass: "border-gray-200 dark:border-gray-600",
+    colorClass: "text-muted-foreground",
+    badge: "secondary" as const,
   },
   deviceEvent: {
     id: "deviceEvent" as const,
     name: "Device Events",
     description: "Sensor, pump, and site changes",
     icon: "smartphone" as const,
-    colorClass: "text-orange-600 dark:text-orange-400",
-    bgClass: "bg-orange-100 dark:bg-orange-900/30",
-    borderClass: "border-orange-200 dark:border-orange-700",
+    colorClass: "text-entry-device-event",
+    badge: "entry-device-event" as const,
   },
   basalInjection: {
     id: "basalInjection" as const,
     name: "Long-acting injection",
     description: "Basal insulin injections (pen / syringe)",
     icon: "syringe" as const,
-    colorClass: "text-indigo-600 dark:text-indigo-400",
-    bgClass: "bg-indigo-100 dark:bg-indigo-900/30",
-    borderClass: "border-indigo-200 dark:border-indigo-700",
+    colorClass: "text-entry-basal-injection",
+    badge: "entry-basal-injection" as const,
   },
 } as const;
 
@@ -113,4 +108,79 @@ export function countEntryRecords(records: EntryRecord[]): Record<EntryCategoryI
   };
   for (const r of records) counts[r.kind]++;
   return counts;
+}
+
+export type EntryCategoryFilter = EntryCategoryId | "all";
+
+/** The Treatment Log's filter: one category (or all) and a free-text search. */
+export interface EntryFilter {
+  category: EntryCategoryFilter;
+  search: string;
+}
+
+export function isEntryCategoryFilter(value: string | null): value is EntryCategoryFilter {
+  return value === "all" || (value !== null && Object.hasOwn(ENTRY_CATEGORIES, value));
+}
+
+/** The backend's name for each filter category, for the Treatment Log stats endpoint. */
+export const TREATMENT_LOG_CATEGORY: Record<EntryCategoryFilter, TreatmentLogCategory> = {
+  all: TreatmentLogCategory.All,
+  bolus: TreatmentLogCategory.Bolus,
+  carbs: TreatmentLogCategory.Carbs,
+  bgCheck: TreatmentLogCategory.BgCheck,
+  note: TreatmentLogCategory.Note,
+  deviceEvent: TreatmentLogCategory.DeviceEvent,
+  basalInjection: TreatmentLogCategory.BasalInjection,
+};
+
+/**
+ * The rows a Treatment Log filter keeps. Mirrors the backend's `TreatmentLogFilter`,
+ * which selects the records behind the stats card, so the rows and the card's
+ * figures cover the same records; a change to one must be made to the other.
+ */
+export function filterEntryRecords(records: EntryRecord[], filter: EntryFilter): EntryRecord[] {
+  let filtered = records;
+
+  if (filter.category !== "all") {
+    filtered = filtered.filter((r) => r.kind === filter.category);
+  }
+
+  const query = filter.search.trim().toLowerCase();
+  if (query) {
+    filtered = filtered.filter((r) => {
+      const searchable: string[] = [ENTRY_CATEGORIES[r.kind].name];
+
+      switch (r.kind) {
+        case "bolus":
+          if (r.data.bolusType) searchable.push(r.data.bolusType);
+          break;
+        case "carbs":
+          break;
+        case "bgCheck":
+          if (r.data.glucoseType) searchable.push(r.data.glucoseType);
+          break;
+        case "note":
+          if (r.data.text) searchable.push(r.data.text);
+          if (r.data.eventType) searchable.push(r.data.eventType);
+          break;
+        case "deviceEvent":
+          if (r.data.eventType) searchable.push(r.data.eventType);
+          if (r.data.notes) searchable.push(r.data.notes);
+          break;
+        case "basalInjection":
+          if (r.data.insulinContext?.insulinName)
+            searchable.push(r.data.insulinContext.insulinName);
+          if (r.data.notes) searchable.push(r.data.notes);
+          break;
+      }
+
+      if (r.data.dataSource) searchable.push(r.data.dataSource);
+      if (r.data.app) searchable.push(r.data.app);
+      if (r.data.device) searchable.push(r.data.device);
+
+      return searchable.join(" ").toLowerCase().includes(query);
+    });
+  }
+
+  return filtered;
 }

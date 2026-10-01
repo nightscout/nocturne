@@ -9,21 +9,20 @@ import type {
 // Re-export API client types for convenience
 export type { Entry, Treatment };
 
-// Local type definitions for WebSocket events
-export type WebSocketEvents = {
-  [key: string]: any;
-};
-
-export type WebSocketEventsMetadata = {
-  [key: string]: any;
-};
-
 // WebSocket connection states
 export type WebSocketConnectionStatus =
+  // No connection has been attempted yet. Distinct from 'disconnected', which
+  // is a connection that was attempted and is now down: the store connects only
+  // after its historical fetch resolves, and reporting that wait as a drop is
+  // what made the dashboard flash "Connection Error" on a slow page load.
+  | 'idle'
   | 'connecting'
   | 'connected'
   | 'disconnected'
   | 'reconnecting'
+  // The API's read policy denied this viewer realtime for the tenant. Terminal,
+  // and not a fault: the UI shows "no live updates" rather than an error.
+  | 'unauthorized'
   | 'error';
 
 // WebSocket client configuration
@@ -50,7 +49,8 @@ export interface DataUpdateEvent {
 
 export interface StorageEvent {
   colName: string;
-  doc: Entry | Treatment | any;
+  /** Unvalidated: the collection decides the shape, so consumers narrow it. */
+  doc: unknown;
 }
 
 export interface AnnouncementEvent {
@@ -76,7 +76,7 @@ export interface StatusEvent {
 }
 
 export interface TrackerUpdateEvent {
-  action: 'create' | 'update' | 'delete' | 'complete' | 'ack';
+  action: 'create' | 'delete' | 'complete' | 'ack';
   instance: TrackerInstanceDto;
 }
 
@@ -151,5 +151,5 @@ export interface WebSocketError {
   type: 'connection' | 'authentication' | 'message' | 'timeout';
   message: string;
   timestamp: number;
-  details?: any;
+  details?: unknown;
 }

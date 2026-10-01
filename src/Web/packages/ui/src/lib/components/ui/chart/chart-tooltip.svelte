@@ -79,12 +79,12 @@
       chart.config,
       item,
       key,
-      tooltipData as Record<string, unknown> | null
+      tooltipData
     );
 
     let value: unknown;
     if (!labelKey && typeof label === "string") {
-      value = chart.config[label as keyof typeof chart.config]?.label ?? label;
+      value = chart.config[label]?.label ?? label;
     } else if (labelKey) {
       value = itemConfig?.label ?? dataLabel;
     } else {

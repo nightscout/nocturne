@@ -144,8 +144,6 @@ public class OAuthClientService : IOAuthClientService
                 DisplayName = entry.DisplayName,
                 IsKnown = true,
                 RedirectUris = JsonSerializer.Serialize(entry.RedirectUris),
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
             });
             added++;
         }
@@ -223,8 +221,6 @@ public class OAuthClientService : IOAuthClientService
             IsKnown = known != null,
             RedirectUris = JsonSerializer.Serialize(redirectUris),
             CreatedFromIp = createdFromIp,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow,
         };
 
         _dbContext.OAuthClients.Add(entity);

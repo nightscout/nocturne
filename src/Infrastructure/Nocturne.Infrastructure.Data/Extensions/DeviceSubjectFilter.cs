@@ -92,8 +92,6 @@ public static class DeviceSubjectFilter
             TenantId = tenantId,
             SubjectId = subjectId,
             DirectPermissions = [Scope.FullAccess],
-            SysCreatedAt = DateTime.UtcNow,
-            SysUpdatedAt = DateTime.UtcNow,
         });
 
         await db.SaveChangesAsync(ct);

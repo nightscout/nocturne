@@ -2,12 +2,13 @@
 //!
 //! Uses the WinRT toast API (`tauri-winrt-notification`) rather than the generic tauri notification
 //! plugin. Two distinct paths:
-//! - `show` — device-action *alerts*: actionable (an Acknowledge button) and, for critical severity,
+//! - `show` — device-action *alerts*: actionable (an Acknowledge or Mute for me button, see
+//!   [`AckAction`]) and, for critical severity,
 //!   persistent (`Scenario::Alarm` pre-expands, stays until dismissed, loops alarm audio).
 //! - `show_notification` — ambient in-app *notification mirrors* (`device_notification`): a plain
 //!   banner with a normal duration, no alarm scenario and no action buttons.
 //!
-//! The Acknowledge button's activation runs on a WinRT event-handler thread, so the closure owns the
+//! The action button's activation runs on a WinRT event-handler thread, so the closure owns the
 //! server URL and excursion id and spawns the ack HTTP call on the provided Tokio runtime handle
 //! (`on_activated` requires a `'static` closure). The bearer token is deliberately NOT captured:
 //! critical toasts persist until dismissed, which can be long past the reconcile-time token's expiry,
@@ -37,9 +38,66 @@ pub struct AckContext {
     pub runtime: tokio::runtime::Handle,
 }
 
+/// What pressing the toast's button does, as the server reported it for this user on the snapshot
+/// (`acknowledgesForEveryone`). A user without `alerts.readwrite` only mutes the alert for
+/// themselves; everyone else keeps being alerted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AckAction {
+    Acknowledge,
+    Mute,
+}
+
+impl AckAction {
+    /// An intent without the flag came from a server that acknowledges every press for everyone.
+    fn for_intent(intent: &DeviceActionIntent) -> Self {
+        match intent.acknowledges_for_everyone {
+            Some(false) => AckAction::Mute,
+            _ => AckAction::Acknowledge,
+        }
+    }
+
+    fn button_label(self) -> &'static str {
+        match self {
+            AckAction::Acknowledge => "Acknowledge",
+            AckAction::Mute => "Mute for me",
+        }
+    }
+
+    /// `(title, body)` of the notification shown when the request fails.
+    fn failure_lines(self) -> (&'static str, &'static str) {
+        match self {
+            AckAction::Acknowledge => (
+                "Alert not acknowledged",
+                "The acknowledge request failed. Acknowledge it in Nocturne.",
+            ),
+            AckAction::Mute => (
+                "Alert not muted",
+                "The mute request failed. Mute it in Nocturne.",
+            ),
+        }
+    }
+
+    /// `(title, body)` of a notification for a press the server handled differently from the
+    /// button's label: the user's permissions changed after the toast was shown. `None` when the
+    /// outcome matches the label, or the alert had already closed.
+    fn outcome_mismatch_lines(self, outcome: &str) -> Option<(&'static str, &'static str)> {
+        match (self, outcome) {
+            (AckAction::Acknowledge, "muted") => Some((
+                "Alert muted for you only",
+                "You can no longer acknowledge alerts for everyone, so others are still being alerted.",
+            )),
+            (AckAction::Mute, "acknowledged") => Some((
+                "Alert acknowledged for everyone",
+                "This alert has stopped for everyone, not just you.",
+            )),
+            _ => None,
+        }
+    }
+}
+
 /// Shows a toast for `intent`. Critical severity gets the persistent alarm scenario; others a
-/// long-duration banner. When `ack` is provided, an Acknowledge button calls the ack endpoint on
-/// click. Best-effort: a WinRT failure is returned as an error string and never panics.
+/// long-duration banner. When `ack` is provided, a button labelled by [`AckAction`] calls the ack
+/// endpoint on click. Best-effort: a WinRT failure is returned as an error string and never panics.
 pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), String> {
     let critical = intent.severity == "critical";
 
@@ -54,18 +112,21 @@ pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), 
     };
 
     if let Some(ack) = ack {
-        toast = toast.add_button("Acknowledge", ACK_ACTION);
+        let ack_action = AckAction::for_intent(intent);
+        toast = toast.add_button(ack_action.button_label(), ACK_ACTION);
         toast = toast.on_activated(move |action| {
             if action.as_deref() == Some(ACK_ACTION) {
                 let ack = ack.clone();
                 let runtime = ack.runtime.clone();
-                runtime.spawn(async move { acknowledge_excursion(&ack).await });
+                runtime.spawn(async move { acknowledge_excursion(&ack, ack_action).await });
             }
             Ok(())
         });
     }
 
-    toast.show().map_err(|e| format!("could not show toast: {e}"))
+    toast
+        .show()
+        .map_err(|e| format!("could not show toast: {e}"))
 }
 
 /// Posts the acknowledge for `ack`, resolving a fresh token at click time. The fresh token is only
@@ -73,26 +134,38 @@ pub fn show(intent: &DeviceActionIntent, ack: Option<AckContext>) -> Result<(), 
 /// persisted, the ack is dropped (the new server's bearer must not go to the old server's URL, and
 /// the old server's excursion can't be acknowledged with the new credential anyway) and the failure
 /// notification shown. On failure the error is logged and a plain notification toast reports that
-/// the acknowledge did not go through.
-async fn acknowledge_excursion(ack: &AckContext) {
+/// the press did not go through; on success a notification appears only when the server's outcome
+/// differs from what the button said.
+async fn acknowledge_excursion(ack: &AckContext, action: AckAction) {
     let result = async {
         let client = crate::http::client()?;
-        let (server, token) =
-            crate::auth::get_valid_token(&client).await.map_err(|e| e.to_string())?;
+        let (server, token) = crate::auth::get_valid_token(&client)
+            .await
+            .map_err(|e| e.to_string())?;
         check_ack_server(&server, &ack.server)?;
         crate::client_devices::acknowledge(&client, &server, &token, &ack.excursion_id, ACK_BY)
             .await
     }
     .await;
 
-    if let Err(e) = result {
-        eprintln!("alert ack: {e}");
-        let _ = show_notification(&InAppNotification {
-            id: format!("ack-failed-{}", ack.excursion_id),
-            title: "Alert not acknowledged".to_string(),
-            subtitle: Some("The acknowledge request failed. Acknowledge it in Nocturne.".to_string()),
-        });
-    }
+    let (id, (title, body)) = match result {
+        Ok(response) => match action.outcome_mismatch_lines(&response.outcome) {
+            Some(lines) => (format!("ack-outcome-{}", ack.excursion_id), lines),
+            None => return,
+        },
+        Err(e) => {
+            eprintln!("alert ack: {e}");
+            (
+                format!("ack-failed-{}", ack.excursion_id),
+                action.failure_lines(),
+            )
+        }
+    };
+    let _ = show_notification(&InAppNotification {
+        id,
+        title: title.to_string(),
+        subtitle: Some(body.to_string()),
+    });
 }
 
 /// Guards against cross-server token disclosure: `current` is the server the fresh token belongs
@@ -141,7 +214,11 @@ fn notification_lines(notification: &InAppNotification) -> (String, String) {
 
 /// Title line: rule name, prefixed with a severity marker for critical/warning.
 fn title_line(intent: &DeviceActionIntent) -> String {
-    let name = if intent.rule_name.is_empty() { "Glucose alert" } else { &intent.rule_name };
+    let name = if intent.rule_name.is_empty() {
+        "Glucose alert"
+    } else {
+        &intent.rule_name
+    };
     match intent.severity.as_str() {
         "critical" => format!("\u{26A0} {name}"),
         "warning" => format!("\u{26A0} {name}"),
@@ -176,6 +253,7 @@ mod tests {
             severity: severity.into(),
             capabilities: vec!["notify".into()],
             acknowledged: false,
+            acknowledges_for_everyone: None,
             glucose_value: glucose,
             trend: None,
         }
@@ -245,5 +323,46 @@ mod tests {
             .expect_err("the new server's bearer must not be posted to the old server");
         assert!(err.contains("old.nocturne.run"));
         assert!(err.contains("new.nocturne.run"));
+    }
+
+    #[test]
+    fn member_without_alerts_readwrite_gets_a_mute_button_and_mute_failure_copy() {
+        let mut i = intent("critical", None);
+        i.acknowledges_for_everyone = Some(false);
+        let action = AckAction::for_intent(&i);
+        assert_eq!(action.button_label(), "Mute for me");
+        assert_eq!(action.failure_lines().0, "Alert not muted");
+    }
+
+    #[test]
+    fn member_with_alerts_readwrite_or_an_unflagged_intent_gets_acknowledge() {
+        let mut i = intent("warning", None);
+        assert_eq!(AckAction::for_intent(&i).button_label(), "Acknowledge");
+        i.acknowledges_for_everyone = Some(true);
+        let action = AckAction::for_intent(&i);
+        assert_eq!(action.button_label(), "Acknowledge");
+        assert_eq!(action.failure_lines().0, "Alert not acknowledged");
+    }
+
+    #[test]
+    fn outcome_notice_only_when_the_server_did_something_else() {
+        assert_eq!(AckAction::Mute.outcome_mismatch_lines("muted"), None);
+        assert_eq!(
+            AckAction::Acknowledge.outcome_mismatch_lines("acknowledged"),
+            None
+        );
+        assert_eq!(AckAction::Mute.outcome_mismatch_lines("closed"), None);
+        assert_eq!(
+            AckAction::Acknowledge
+                .outcome_mismatch_lines("muted")
+                .map(|l| l.0),
+            Some("Alert muted for you only")
+        );
+        assert_eq!(
+            AckAction::Mute
+                .outcome_mismatch_lines("acknowledged")
+                .map(|l| l.0),
+            Some("Alert acknowledged for everyone")
+        );
     }
 }

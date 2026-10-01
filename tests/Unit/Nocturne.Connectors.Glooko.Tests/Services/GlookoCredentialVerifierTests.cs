@@ -67,9 +67,9 @@ public class GlookoCredentialVerifierTests
 
     /// <summary>
     /// A retryable provider failure ends the verification rather than entering the sync path's
-    /// backoff: ProductionRetryDelayStrategy waits two and a half minutes before the second
-    /// attempt, so honouring the submitted attempt budget would hold the caller's request for
-    /// minutes to hours for an answer they asked for interactively.
+    /// backoff: ProductionRetryDelayStrategy waits 30 seconds before the second attempt, so
+    /// honouring the submitted attempt budget would hold the caller's request for minutes for an
+    /// answer they asked for interactively.
     /// </summary>
     [Fact]
     public async Task VerifyAsync_RetryableProviderFailure_TriesOnceAndDoesNotBackOff()
@@ -109,7 +109,7 @@ public class GlookoCredentialVerifierTests
         SignInHandler handler, Mock<IRetryDelayStrategy>? retryDelayStrategy = null)
     {
         var retryDelay = retryDelayStrategy ?? new Mock<IRetryDelayStrategy>();
-        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var tokenProvider = new GlookoAuthTokenProvider(
             new HttpClient(handler),

@@ -91,6 +91,11 @@ public record MatchCriteria
     public double RateTolerance { get; init; } = 0.05;
 
     /// <summary>
+    /// Note text, whitespace-normalised, for note matching
+    /// </summary>
+    public string? Text { get; init; }
+
+    /// <summary>
     /// Metadata for additional matching criteria
     /// </summary>
     public Dictionary<string, object>? Metadata { get; init; }

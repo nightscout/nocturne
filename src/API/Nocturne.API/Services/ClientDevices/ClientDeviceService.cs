@@ -29,6 +29,7 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         RegisterDeviceRequest request,
         IReadOnlySet<string> grantedScopes,
+        Guid? grantId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.InstallId))
@@ -60,11 +61,11 @@ public class ClientDeviceService : IClientDeviceService
 
         if (existing is not null)
         {
-            return await UpdateExistingAsync(existing, subjectId, request, accepted, cancellationToken);
+            return await UpdateExistingAsync(existing, subjectId, request, accepted, grantId, cancellationToken);
         }
 
         var entity = new ClientDeviceEntity { InstallId = request.InstallId };
-        Apply(entity, subjectId, request, accepted);
+        Apply(entity, subjectId, request, accepted, grantId);
         _dbContext.ClientDevices.Add(entity);
 
         try
@@ -90,7 +91,7 @@ public class ClientDeviceService : IClientDeviceService
             _logger.LogWarning(
                 "Concurrent registration for install {InstallId}; folding into an update.",
                 request.InstallId);
-            return await UpdateExistingAsync(raced, subjectId, request, accepted, cancellationToken);
+            return await UpdateExistingAsync(raced, subjectId, request, accepted, grantId, cancellationToken);
         }
     }
 
@@ -105,6 +106,7 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         RegisterDeviceRequest request,
         string[] capabilities,
+        Guid? grantId,
         CancellationToken cancellationToken)
     {
         if (existing.SubjectId != subjectId)
@@ -113,7 +115,7 @@ public class ClientDeviceService : IClientDeviceService
                 $"Install id '{request.InstallId}' is already registered to another user.");
         }
 
-        Apply(existing, subjectId, request, capabilities);
+        Apply(existing, subjectId, request, capabilities, grantId);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return ToDto(existing);
     }
@@ -123,12 +125,37 @@ public class ClientDeviceService : IClientDeviceService
         Guid subjectId,
         CancellationToken cancellationToken = default)
     {
-        var devices = await _dbContext.ClientDevices
+        var rows = await _dbContext.ClientDevices
             .Where(d => d.SubjectId == subjectId)
             .OrderByDescending(d => d.LastSeenAt)
+            .Select(d => new
+            {
+                Device = d,
+                AppName = _dbContext.OAuthGrants
+                    .Where(g => g.Id == d.GrantId)
+                    .Select(g => g.Client!.DisplayName)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
 
-        return devices.Select(ToDto).ToList();
+        return rows.Select(r => ToDto(r.Device, r.AppName)).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, int>> GetDeviceCountsByGrantAsync(
+        IReadOnlyCollection<Guid> grantIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (grantIds.Count == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        return await _dbContext.ClientDevices
+            .Where(d => d.GrantId != null && grantIds.Contains(d.GrantId.Value))
+            .GroupBy(d => d.GrantId!.Value)
+            .Select(g => new { GrantId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.GrantId, x => x.Count, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -195,12 +222,19 @@ public class ClientDeviceService : IClientDeviceService
             .AsNoTracking()
             .Include(e => e.AlertRule)
                 .ThenInclude(r => r!.Channels)
+            .Include(e => e.Instances)
             .Where(e => (e.EndedAt == null || e.EndedAt > now)
                 && e.AlertRule!.IsEnabled
                 && e.AlertRule.Channels.Any(c =>
                     c.ChannelType == ChannelType.DeviceAction && c.Destination == device.Kind))
             .OrderByDescending(e => e.StartedAt)
             .ToListAsync(cancellationToken);
+
+        var mutedByOwner = await _dbContext.AlertExcursionMutes
+            .AsNoTracking()
+            .Where(m => m.SubjectId == subjectId)
+            .Select(m => m.AlertExcursionId)
+            .ToHashSetAsync(cancellationToken);
 
         var intents = new List<DeviceActionIntent>(excursions.Count);
         foreach (var e in excursions)
@@ -216,15 +250,19 @@ public class ClientDeviceService : IClientDeviceService
                 .Where(deviceCaps.Contains)
                 .ToList();
 
+            // A mute is the owner's own acknowledgement, so their devices read it as one.
+            var acknowledged = e.AcknowledgedAt is not null || mutedByOwner.Contains(e.Id);
+            var snoozed = e.Instances.Any(i => i.ResolvedAt == null && AlertSnooze.IsSnoozed(i.SnoozedUntil, now));
+
             intents.Add(new DeviceActionIntent
             {
-                Intent = e.AcknowledgedAt is not null ? "acknowledged" : "opened",
+                Intent = acknowledged ? "acknowledged" : snoozed ? "snoozed" : "opened",
                 ExcursionId = e.Id,
                 RuleName = e.AlertRule.Name,
                 Severity = e.AlertRule.Severity,
                 TargetKind = device.Kind,
                 Capabilities = effective,
-                Acknowledged = e.AcknowledgedAt is not null,
+                Acknowledged = acknowledged,
                 StartedAt = e.StartedAt,
             });
         }
@@ -236,23 +274,27 @@ public class ClientDeviceService : IClientDeviceService
         ClientDeviceEntity entity,
         Guid subjectId,
         RegisterDeviceRequest request,
-        string[] capabilities)
+        string[] capabilities,
+        Guid? grantId)
     {
         var now = DateTime.UtcNow;
         entity.SubjectId = subjectId;
         entity.Kind = request.Kind;
         entity.Label = request.Label;
         entity.Capabilities = capabilities;
+        entity.GrantId = grantId;
         entity.LastSeenAt = now;
         entity.UpdatedAt = now;
     }
 
-    internal static ClientDeviceDto ToDto(ClientDeviceEntity e) => new()
+    internal static ClientDeviceDto ToDto(ClientDeviceEntity e, string? appName = null) => new()
     {
         Id = e.Id,
         InstallId = e.InstallId,
         Kind = e.Kind,
         Label = e.Label,
+        AppName = appName,
+        LinkedToApp = e.GrantId is not null,
         Capabilities = [.. e.Capabilities],
         LastSeenAt = e.LastSeenAt,
         CreatedAt = e.CreatedAt,

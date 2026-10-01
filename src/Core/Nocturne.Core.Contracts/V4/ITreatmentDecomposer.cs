@@ -48,6 +48,37 @@ public interface ITreatmentDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Soft-deletes <paramref name="source"/>'s records decomposed from <paramref name="legacyIds"/>,
+    /// leaving every other source's rows under those ids alone. A deleted row that was a dedup
+    /// group's primary hands the flag to a surviving member, so another source's copy of the
+    /// event stays visible.
+    /// </summary>
+    /// <returns>Total number of v4 records deleted across all tables.</returns>
+    Task<int> DeleteFromSourceAsync(string source, IReadOnlySet<string> legacyIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The legacy ids of <paramref name="source"/>'s live records whose event time falls in
+    /// [<paramref name="from"/>, <paramref name="to"/>], each with that event time.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, DateTime>> GetLegacyIdsFromSourceAsync(
+        string source, DateTime from, DateTime to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves <paramref name="source"/>'s records stored under a treatment's client id
+    /// (<see cref="TreatmentClientId"/>) onto the treatment's own id, when nothing is stored under that
+    /// id yet. Of treatments sharing a client id, the one at the records' time takes them (the first when
+    /// none is). Records the user deleted stay under the client id and are copied onto every one of
+    /// them, so they keep blocking equivalents delivered in a later call too.
+    /// </summary>
+    /// <returns>Total number of v4 records moved.</returns>
+    Task<int> RekeyClientIdRecordsAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
+    /// <summary>Of treatments <paramref name="source"/> delivered again, the ones to decompose again.</summary>
+    Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
+        string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
+
+    /// <summary>
     /// Bulk-deletes V4 treatment records matching the optional find filter (time range).
     /// </summary>
     /// <param name="find">Optional Nightscout-compatible find query for time range filtering.</param>

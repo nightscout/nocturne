@@ -4,7 +4,12 @@
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
-  import { Globe, Plus, Trash2, Loader2, RefreshCw } from "lucide-svelte";
+  import TimezoneCombobox from "$lib/components/patient/TimezoneCombobox.svelte";
+  import Globe from "@lucide/svelte/icons/globe";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import * as tz from "$api/generated/timezoneTimelines.generated.remote";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import type { TimezoneTimelineEntry } from "$api";
@@ -12,10 +17,7 @@
   const timelineQuery = tz.getTimeline();
   const entries = $derived<TimezoneTimelineEntry[]>(timelineQuery.current ?? []);
 
-  // All IANA zones for the picker, with the browser's current zone as the default.
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const zones: string[] =
-    "supportedValuesOf" in Intl ? (Intl as typeof Intl & { supportedValuesOf(k: string): string[] }).supportedValuesOf("timeZone") : [browserZone];
 
   let newZone = $state(browserZone);
   let newDate = $state(""); // datetime-local "YYYY-MM-DDTHH:mm"
@@ -137,15 +139,7 @@
       <div class="grid gap-3 sm:grid-cols-2">
         <div class="space-y-1.5">
           <Label for="tz-zone">Location (timezone)</Label>
-          <select
-            id="tz-zone"
-            bind:value={newZone}
-            class="border-input bg-background ring-offset-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:outline-none"
-          >
-            {#each zones as zone (zone)}
-              <option value={zone}>{zone}</option>
-            {/each}
-          </select>
+          <TimezoneCombobox id="tz-zone" bind:value={newZone} />
         </div>
         <div class="space-y-1.5">
           <Label for="tz-date">Arrived (local date & time)</Label>

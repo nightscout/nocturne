@@ -7,11 +7,10 @@ namespace Nocturne.Infrastructure.Data.Extensions;
 /// The one predicate for "the people who own this tenant".
 /// </summary>
 /// <remarks>
-/// Holding the owner role is not enough on its own. A revoked membership has been removed from the
-/// tenant, a deactivated subject cannot sign in, and the Public subject a share link runs as is a
-/// system row with no person behind it — a caller that reaches for "the owner" to notify them, or
-/// to read a setting of theirs, means none of those. Ordered by join time so a tenant with several
-/// owners resolves the same one on every call.
+/// Holding the owner role is not enough on its own. A deactivated subject cannot sign in, and the
+/// Public subject a share link runs as is a system row with no person behind it — a caller that
+/// reaches for "the owner" to notify them, or to read a setting of theirs, means neither of those.
+/// Ordered by join time so a tenant with several owners resolves the same one on every call.
 /// </remarks>
 public static class TenantOwnerFilter
 {
@@ -20,7 +19,6 @@ public static class TenantOwnerFilter
         this IQueryable<TenantMemberEntity> members, Guid tenantId) =>
         members
             .Where(m => m.TenantId == tenantId
-                && m.RevokedAt == null
                 && !m.Subject!.IsSystemSubject
                 && m.Subject.IsActive
                 && m.MemberRoles.Any(mr => mr.TenantRole!.Slug == RoleSeeds.Owner))

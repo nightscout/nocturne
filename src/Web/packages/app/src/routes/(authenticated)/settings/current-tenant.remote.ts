@@ -6,6 +6,7 @@ import { getRequestEvent, query } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
 import { classifyRequestHost } from "$lib/server/tenantless-host";
 import { activeTenants } from "$lib/utils/tenant-host";
+import { errorStatus } from "$lib/forms/submit-error";
 
 /**
  * Get the tenant the request's host serves, of those the authenticated user can reach.
@@ -28,7 +29,7 @@ export const getCurrentTenantId = query(async () => {
 
     return (tenants.find((t) => t.slug === slug) ?? tenants[0])?.id ?? null;
   } catch (err) {
-    const status = (err as any)?.status;
+    const status = errorStatus(err);
     if (status === 401) {
       throw redirect(302, `/auth/login?returnUrl=${encodeURIComponent(url.pathname + url.search)}`);
     }

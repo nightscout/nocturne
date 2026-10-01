@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Hubs;
+using V3DeviceStatusController = Nocturne.API.Controllers.V3.DeviceStatusController;
 using Nocturne.API.Services.Effects;
 using Nocturne.API.Services.Health;
 using Nocturne.API.Services.Realtime;
@@ -174,7 +175,7 @@ public class StorageDeleteBroadcastContractTests
 
     /// <summary>
     /// <see cref="Entry"/> carries an <c>identifier</c> of its own; <see cref="DeviceStatus"/> carries
-    /// none, so its delete falls back to <c>_id</c>. Neither model coerces, so both send the uuid.
+    /// none, so its delete falls back to <c>_id</c>. Both coerce, so both send the ObjectId form.
     /// </summary>
     public static TheoryData<string, object> LegacyRecords =>
         new()
@@ -194,8 +195,13 @@ public class StorageDeleteBroadcastContractTests
 
         await CreateSideEffects(capture).OnDeletedAsync(collection, record);
 
-        Identifier(capture.Delete).Should().Be(RecordGuid);
-        capture.Delete.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
+        Identifier(capture.Delete).Should().Be(MongoObjectId.Coerce(RecordGuid));
+        capture
+            .Delete.GetProperty("doc")
+            .GetProperty("_id")
+            .GetString()
+            .Should()
+            .Be(MongoObjectId.Coerce(RecordGuid));
     }
 
     [Fact]
@@ -282,35 +288,74 @@ public class StorageDeleteBroadcastContractTests
         Identifier(capture.Delete).Should().Be(RestIdentifier(treatment));
     }
 
-    /// <summary>
-    /// Entries do not have one identifier everywhere: the REST wrapper coerces its id to an ObjectId
-    /// and the model the socket serializes does not. Delete follows the socket, because that is the
-    /// half this event has to agree with, which leaves a client that only ever loaded the reading over
-    /// REST unable to resolve the delete. Pinned so the divergence is deliberate and so this test
-    /// fails the day the two are unified.
-    /// </summary>
     [Fact]
-    public async Task DeleteIdentifier_DivergesFromTheV3RestProjection_ForEntries()
+    public async Task DeleteIdentifier_MatchesTheV3RestProjection_ForEntries()
     {
         var entry = new Entry { Id = RecordGuid, Sgv = 120 };
 
         var capture = new BroadcastCapture();
         await CreateSideEffects(capture).OnDeletedAsync("entries", entry);
 
-        Identifier(capture.Delete).Should().Be(RecordGuid);
-        RestIdentifier(new EntryV3Response(entry)).Should().Be(MongoObjectId.Coerce(RecordGuid));
+        Identifier(capture.Delete).Should().Be(RestIdentifier(new EntryV3Response(entry)));
     }
 
+    /// <summary>
+    /// A client that ingests a record over the socket and later reconciles it over REST dedupes on
+    /// the id; AAPS stores whichever <c>identifier</c> delivered the record and looks deletes up by
+    /// it. Every id-bearing key the create event carries must therefore be the id REST serves for the
+    /// same record — a record id kept in a non-uuid <c>LegacyId</c> included, which coerces by hash.
+    /// </summary>
+    [Theory]
+    [InlineData(RecordGuid)]
+    [InlineData("dexcom_1722945600000")]
+    public async Task CreateIds_MatchTheRestProjections_ForEntries(string recordId)
+    {
+        var entry = new Entry { Id = recordId, Sgv = 120 };
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnCreatedAsync("entries", new[] { entry });
+
+        var v1 = Rest(new EntryV1Response(entry)).GetProperty("_id").GetString();
+        var v3 = RestIdentifier(new EntryV3Response(entry));
+        v1.Should().Be(v3);
+        IdKeys(capture.Create.GetProperty("doc"))
+            .Should()
+            .BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = v3, ["identifier"] = v3 });
+    }
+
+    [Fact]
+    public async Task CreateIds_MatchTheRestProjections_ForDeviceStatus()
+    {
+        var status = new DeviceStatus { Id = RecordGuid, Device = "openaps://phone" };
+        var capture = new BroadcastCapture();
+
+        await CreateSideEffects(capture).OnCreatedAsync("devicestatus", new[] { status });
+
+        var v1 = Rest(status).GetProperty("_id").GetString();
+        var v3 = RestIdentifier(V3DeviceStatusController.MapToV3Dto(status));
+        v1.Should().Be(v3);
+        IdKeys(capture.Create.GetProperty("doc"))
+            .Should()
+            .BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = v3 });
+    }
+
+    /// <summary>The keys a client could take for the record's own id, under the hub's naming.</summary>
+    private static Dictionary<string, string?> IdKeys(JsonElement doc) =>
+        doc.EnumerateObject()
+            .Where(p => p.Name is "_id" or "id" or "Id" or "identifier" or "Identifier")
+            .ToDictionary(p => p.Name, p => p.Value.GetString());
+
+    /// <summary>A REST projection as the API writes it, under ASP.NET Core's web defaults.</summary>
+    private static JsonElement Rest(object projection) =>
+        JsonSerializer.SerializeToElement(projection, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
     private static string? RestIdentifier(object projection) =>
-        JsonSerializer
-            .Deserialize<JsonElement>(JsonSerializer.Serialize(projection))
-            .GetProperty("identifier")
-            .GetString();
+        Rest(projection).GetProperty("identifier").GetString();
 
     /// <summary>
     /// A record whose two id spellings disagree, to pin which one the delete follows. No shipping
-    /// model does this today — <see cref="Treatment"/> coerces both, <see cref="Entry"/> neither —
-    /// so the precedence is only observable here.
+    /// model does this today — <see cref="Treatment"/> and <see cref="Entry"/> coerce both — so the
+    /// precedence is only observable here.
     /// </summary>
     private sealed class DisagreeingIds
     {
@@ -475,25 +520,6 @@ public class StorageDeleteBroadcastContractTests
         doc.TryGetProperty("_id", out _).Should().BeFalse();
         doc.TryGetProperty("identifier", out _).Should().BeFalse();
         Identifier(capture.Delete).Should().Be(RecordGuid);
-    }
-
-    /// <summary>
-    /// The web app's realtime store matches a create against a delete on <c>doc._id</c> alone, and
-    /// the entries it holds come from the V4 REST DTO, whose <c>_id</c> is the record's full uuid.
-    /// A broadcast that shortens <c>_id</c> leaves a deleted reading on the chart until reload.
-    /// </summary>
-    [Fact]
-    public async Task EntriesBroadcastDocId_StaysTheFullUuid()
-    {
-        var entry = new Entry { Id = RecordGuid, Sgv = 120 };
-        var capture = new BroadcastCapture();
-        var sideEffects = CreateSideEffects(capture);
-
-        await sideEffects.OnCreatedAsync("entries", new[] { entry });
-        await sideEffects.OnDeletedAsync("entries", entry);
-
-        capture.Create.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
-        capture.Delete.GetProperty("doc").GetProperty("_id").GetString().Should().Be(RecordGuid);
     }
 
     /// <summary>

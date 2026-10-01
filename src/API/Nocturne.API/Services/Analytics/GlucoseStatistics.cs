@@ -1,3 +1,6 @@
+using Nocturne.Core.Constants;
+using Nocturne.Core.Models;
+
 namespace Nocturne.API.Services.Analytics;
 
 /// <summary>
@@ -10,7 +13,7 @@ public enum VarianceMode
     /// <summary>Bessel-corrected: <c>n - 1</c>, and zero for fewer than two readings.</summary>
     Sample,
 
-    /// <summary>Uncorrected: <c>n</c>, and <see cref="double.NaN"/> for no readings.</summary>
+    /// <summary>Uncorrected: <c>n</c>, and zero for no readings.</summary>
     Population,
 }
 
@@ -23,11 +26,12 @@ public static class GlucoseStatistics
     /// <summary>
     /// Variance of <paramref name="values"/> about <paramref name="mean"/>. The mean is supplied
     /// rather than derived because callers differ on whether they centre on the raw average or on
-    /// the rounded one <c>StatisticsService.CalculateMean</c> returns.
+    /// the rounded one <c>StatisticsService.CalculateMean</c> returns. A series too short for
+    /// <paramref name="mode"/> to divide by has no spread to report and gives zero, never NaN.
     /// </summary>
     public static double Variance(IReadOnlyCollection<double> values, double mean, VarianceMode mode)
     {
-        if (mode == VarianceMode.Sample && values.Count < 2)
+        if (values.Count < (mode == VarianceMode.Sample ? 2 : 1))
             return 0;
 
         var sumOfSquares = values.Sum(value => Math.Pow(value - mean, 2));
@@ -42,10 +46,11 @@ public static class GlucoseStatistics
     ) => Math.Sqrt(Variance(values, mean, mode));
 
     /// <summary>
-    /// Standard deviation about the raw arithmetic mean of <paramref name="values"/>.
+    /// Standard deviation about the raw arithmetic mean of <paramref name="values"/>, and zero for
+    /// an empty series.
     /// </summary>
     public static double StandardDeviation(IReadOnlyCollection<double> values, VarianceMode mode) =>
-        StandardDeviation(values, values.Average(), mode);
+        values.Count == 0 ? 0 : StandardDeviation(values, values.Average(), mode);
 
     /// <summary>
     /// Median of an already-sorted, non-empty series: the middle reading, or the midpoint of the
@@ -67,12 +72,48 @@ public static class GlucoseStatistics
     public static bool IsReading(double mgdl) => mgdl > 0 && !double.IsNaN(mgdl);
 
     /// <summary>
+    /// Whether a reading is admitted to the glucose statistics: a reading at all, and below
+    /// <see cref="GlucoseConstants.MaxPlausibleMgdl"/>. Every glucose statistic filters with this
+    /// one predicate, so two endpoints never report different denominators for one upload.
+    /// </summary>
+    public static bool IsPlausibleReading(double mgdl) =>
+        IsReading(mgdl) && mgdl < GlucoseConstants.MaxPlausibleMgdl;
+
+    /// <summary>
+    /// The <see cref="ExcludingZone"/> scale for <paramref name="thresholds"/>.
+    /// </summary>
+    internal static GlucoseZoneScale ExcludingZones(GlycemicThresholds thresholds) =>
+        new(
+            GlucoseZoneBound.Under(thresholds.VeryLow),
+            GlucoseZoneBound.Under(thresholds.Low),
+            GlucoseZoneBound.Over(thresholds.VeryHigh),
+            GlucoseZoneBound.Over(thresholds.TargetTop)
+        );
+
+    /// <summary>
     /// Estimated A1C as a percentage from mean glucose in mg/dL, by the ADAG regression
     /// <c>(mean + 46.7) / 28.7</c>. A mean of zero means there were no readings, and reports zero
     /// rather than the 1.6% the regression would give.
     /// </summary>
     public static double EstimatedA1C(double meanGlucose) =>
         meanGlucose == 0 ? 0 : (meanGlucose + 46.7) / 28.7;
+}
+
+/// <summary>
+/// The mutually excluding zones time in range and its episodes count against, listed in the order
+/// <see cref="StatisticsService.CalculateTimeInRange"/> has always tested them: very-high before
+/// high, so a tenant who configures <c>VeryHigh</c> below <c>TargetTop</c> keeps seeing the
+/// reading reported as very high. <see cref="Target"/> is the remainder and is not reported from
+/// here: the target percentage comes from the closed <c>TargetBottom</c>..<c>TargetTop</c> band,
+/// which overlaps <see cref="Low"/> when the two are configured apart.
+/// </summary>
+internal enum ExcludingZone
+{
+    VeryLow,
+    Low,
+    VeryHigh,
+    High,
+    Target,
 }
 
 /// <summary>

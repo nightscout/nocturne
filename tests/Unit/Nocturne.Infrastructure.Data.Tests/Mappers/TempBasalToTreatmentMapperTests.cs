@@ -49,6 +49,20 @@ public class TempBasalToTreatmentMapperTests
 
     [Fact]
     [Trait("Category", "Unit")]
+    public void ToTreatment_ReportsServerClockNotEventTime()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.2);
+        tempBasal.CreatedAt = tempBasal.StartTimestamp.AddDays(2);
+        tempBasal.ModifiedAt = tempBasal.StartTimestamp.AddDays(3);
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.SrvCreated.Should().Be(new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
+        result.SrvModified.Should().Be(new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds());
+    }
+
+    [Fact]
+    [Trait("Category", "Unit")]
     public void ToTreatment_SuspendedOrigin_RateIsZero()
     {
         // Arrange - suspended origin should always result in rate=0 regardless of Rate value
@@ -241,6 +255,20 @@ public class TempBasalToTreatmentMapperTests
     }
 
     #endregion
+
+    [Fact]
+    [Trait("Category", "Unit")]
+    public void ToTreatment_CarriesClientIdAlongsideDisplayFields()
+    {
+        var tempBasal = CreateTempBasal(TempBasalOrigin.Algorithm, 1.2);
+        tempBasal.AdditionalProperties = new() { ["id"] = "A1B2C3D4-0000-4000-8000-000000000001", ["other"] = "dropped" };
+
+        var result = TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        result.AdditionalProperties.Should().ContainKey("id").WhoseValue.Should().Be("A1B2C3D4-0000-4000-8000-000000000001");
+        result.AdditionalProperties.Should().ContainKey("basalOrigin");
+        result.AdditionalProperties.Should().NotContainKey("other");
+    }
 
     #region Helper Methods
 

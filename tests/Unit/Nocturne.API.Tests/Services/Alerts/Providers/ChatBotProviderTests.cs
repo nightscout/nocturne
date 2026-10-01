@@ -18,7 +18,8 @@ namespace Nocturne.API.Tests.Services.Alerts.Providers;
 [Trait("Category", "Unit")]
 public class ChatBotProviderTests
 {
-    private static AlertPayload CreateTestPayload() => new()
+    private static AlertPayload CreateTestPayload(
+        AlertRuleSeverity severity = AlertRuleSeverity.Critical) => new()
     {
         AlertType = AlertConditionType.Threshold,
         RuleName = "Low glucose",
@@ -31,7 +32,7 @@ public class ChatBotProviderTests
         TenantId = Guid.NewGuid(),
         SubjectName = "Test",
         ActiveExcursionCount = 1,
-        Severity = AlertRuleSeverity.Critical,
+        Severity = severity,
     };
 
     private const string TestInstanceKey = "test-instance-key";
@@ -111,6 +112,37 @@ public class ChatBotProviderTests
         root.GetProperty("channelType").GetString().Should().Be("slack_dm");
         root.GetProperty("destination").GetString().Should().Be("dest-1");
         root.TryGetProperty("payload", out _).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(AlertRuleSeverity.Critical, "critical")]
+    [InlineData(AlertRuleSeverity.Warning, "warning")]
+    [InlineData(AlertRuleSeverity.Info, "info")]
+    public async Task SendAsync_SpellsSeverityForTheChatBot(AlertRuleSeverity severity, string expected)
+    {
+        // Arrange -- the chat bot matches these names literally to pick a card treatment,
+        // and an unrecognised one degrades to a severity-less card rather than failing, so
+        // a change of spelling here is silent on both sides of the boundary.
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK);
+        var provider = CreateProvider(handler);
+
+        // Act
+        await provider.SendAsync(
+            Guid.NewGuid(), ChannelType.DiscordDm, "u1", CreateTestPayload(severity), CancellationToken.None);
+
+        // Assert
+        var payload = JsonDocument.Parse(handler.CapturedContent!).RootElement.GetProperty("payload");
+        var value = payload.GetProperty("severity");
+        value.ValueKind.Should().Be(JsonValueKind.String);
+        value.GetString().Should().Be(expected);
+    }
+
+    [Fact]
+    public void EverySeverityHasADispatchSpelling()
+    {
+        // A severity added to the enum without a case above would reach the chat bot
+        // unrecognised, which renders as no severity at all.
+        Enum.GetValues<AlertRuleSeverity>().Should().HaveCount(3);
     }
 
     [Fact]

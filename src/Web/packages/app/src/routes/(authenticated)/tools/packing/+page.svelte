@@ -1,19 +1,18 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Luggage,
-    Syringe,
-    Activity,
-    Cpu,
-    TestTube,
-    ShieldAlert,
-    Info,
-    ListChecks,
-  } from "lucide-svelte";
+  import Luggage from "@lucide/svelte/icons/luggage";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Cpu from "@lucide/svelte/icons/cpu";
+  import TestTube from "@lucide/svelte/icons/test-tube";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
+  import Info from "@lucide/svelte/icons/info";
+  import ListChecks from "@lucide/svelte/icons/list-checks";
   import SupplyCategory from "$lib/components/tools/packing/supply-category.svelte";
   import { categories } from "$lib/components/tools/packing/packing-config";
   import { getPackingHints } from "./packing.remote";
@@ -55,7 +54,7 @@
     });
 
     const encoded = encodeBase64Utf8(JSON.stringify(items));
-    goto(`/tools/packing/list?d=${encodeURIComponent(encoded)}`);
+    goto(resolve(`/tools/packing/list?d=${encodeURIComponent(encoded)}`));
   }
 
   const totalItems = $derived(
@@ -79,14 +78,14 @@
       </p>
     </div>
     <div class="flex items-center gap-2">
-      <Label class="text-sm font-medium whitespace-nowrap">Trip</Label>
+      <Label class="whitespace-nowrap">Trip</Label>
       <Input
         type="number"
         bind:value={tripDays}
         min={1}
         max={365}
         step={1}
-        class="w-20 h-9"
+        class="w-20"
       />
       <span class="text-sm text-muted-foreground">days</span>
     </div>
@@ -104,7 +103,7 @@
   {/if}
 
   <!-- Category Cards -->
-  {#each categories as category, ci}
+  {#each categories as category, ci (category.id)}
     <SupplyCategory
       config={category}
       icon={iconMap[category.icon]}
@@ -116,7 +115,7 @@
   {/each}
 
   <!-- Generate Button -->
-  <Card class="border-primary/20 bg-primary/5">
+  <Card variant="primary">
     <CardContent class="pt-6 flex flex-col items-center gap-3 text-center">
       <p class="text-sm text-muted-foreground">
         {#if totalItems > 0}
@@ -125,7 +124,7 @@
           Enable some supplies above to generate your list
         {/if}
       </p>
-      <Button size="lg" disabled={totalItems === 0} onclick={generateList} class="gap-2">
+      <Button size="lg" disabled={totalItems === 0} onclick={generateList}>
         <ListChecks class="h-4 w-4" />
         Generate Packing List
       </Button>

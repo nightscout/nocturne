@@ -75,7 +75,9 @@ public sealed class AuthenticationMiddlewareInviteIdentityTests
             !isValid,
             false,
             DateTime.UtcNow,
-            []);
+            [],
+            [],
+            [Scope.GlucoseRead]);
 
     private sealed record Harness(
         AuthenticationMiddleware Middleware,

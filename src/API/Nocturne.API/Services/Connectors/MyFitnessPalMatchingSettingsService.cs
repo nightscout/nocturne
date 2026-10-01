@@ -34,7 +34,7 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task<MyFitnessPalMatchingSettings> GetSettingsAsync(
+    public async Task<MyFitnessPalMatchingSettings?> GetSettingsAsync(
         CancellationToken cancellationToken = default
     )
     {
@@ -61,6 +61,7 @@ public class MyFitnessPalMatchingSettingsService : IMyFitnessPalMatchingSettings
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving MyFitnessPal matching settings");
+            return null;
         }
 
         return new MyFitnessPalMatchingSettings();

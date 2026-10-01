@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Nocturne.API.Extensions;
 using Nocturne.Core.Contracts.Multitenancy;
 
 namespace Nocturne.API.Hubs;
@@ -18,17 +19,11 @@ namespace Nocturne.API.Hubs;
 public abstract class TenantAwareHub : Hub
 {
     /// <summary>
-    /// Key used to store/retrieve the tenant context from HttpContext.Items.
-    /// Matches the key set by TenantResolutionMiddleware.
-    /// </summary>
-    internal const string TenantContextKey = "TenantContext";
-
-    /// <summary>
     /// Gets the tenant context for the current connection.
     /// Available after OnConnectedAsync has validated the connection.
     /// </summary>
     protected TenantContext? TenantContext =>
-        Context.GetHttpContext()?.Items[TenantContextKey] as TenantContext;
+        Context.GetHttpContext()?.GetTenantContext();
 
     /// <summary>
     /// Creates a tenant-scoped SignalR group name using the pattern "{tenantId}:{groupName}".
@@ -62,7 +57,7 @@ public abstract class TenantAwareHub : Hub
     public override async Task OnConnectedAsync()
     {
         var httpContext = Context.GetHttpContext();
-        var tenantContext = httpContext?.Items[TenantContextKey] as TenantContext;
+        var tenantContext = httpContext?.GetTenantContext();
 
         if (tenantContext == null)
         {

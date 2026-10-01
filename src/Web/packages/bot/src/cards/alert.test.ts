@@ -3,6 +3,7 @@ import { AcknowledgedCard, ActiveAlertsCard, AlertCard } from "./alert.js";
 import {
   cardButtons,
   cardFields,
+  cardStyles,
   cardTexts,
   cardTitle,
 } from "./card.test-utils.js";
@@ -78,7 +79,7 @@ describe("ActiveAlertsCard", () => {
   ): ActiveExcursion => ({
     id,
     ruleName,
-    startedAt: new Date(Date.now() - 12 * 60_000),
+    startedAt: new Date(Date.now() - 12 * 60_000).toISOString(),
     ...over,
   });
 
@@ -86,7 +87,7 @@ describe("ActiveAlertsCard", () => {
     const card = ActiveAlertsCard({
       excursions: [
         excursion("e1", "Urgent low"),
-        excursion("e2", "High", { acknowledgedAt: new Date() }),
+        excursion("e2", "High", { acknowledgedAt: new Date().toISOString() }),
       ],
     });
 
@@ -97,6 +98,30 @@ describe("ActiveAlertsCard", () => {
     ]);
   });
 
+  it("marks a snoozed excursion with the time the server resumes it", () => {
+    const until = new Date(Date.now() + 20 * 60_000);
+    const card = ActiveAlertsCard({
+      excursions: [excursion("e1", "Low", { snoozedUntil: until.toISOString() })],
+    });
+
+    expect(cardFields(card)).toEqual([
+      `Low: Snoozed until ${until.toLocaleTimeString()}, started 12 min ago`,
+    ]);
+  });
+
+  it("reads an acknowledged excursion as acknowledged even while snoozed", () => {
+    const card = ActiveAlertsCard({
+      excursions: [
+        excursion("e1", "Low", {
+          acknowledgedAt: new Date().toISOString(),
+          snoozedUntil: new Date(Date.now() + 60_000).toISOString(),
+        }),
+      ],
+    });
+
+    expect(cardFields(card)).toEqual(["Low: Acknowledged, started 12 min ago"]);
+  });
+
   it("says so rather than printing a bogus age when the start time is missing", () => {
     const card = ActiveAlertsCard({
       excursions: [excursion("e1", "Urgent low", { startedAt: undefined })],
@@ -105,5 +130,42 @@ describe("ActiveAlertsCard", () => {
     expect(cardFields(card)).toEqual([
       "Urgent low: Firing, started at an unknown time",
     ]);
+  });
+});
+
+describe("AlertCard severity", () => {
+  const card = (severity: unknown) =>
+    AlertCard({ payload: { ...payload, severity } as unknown as AlertPayload });
+
+  const rendering = (severity: unknown) =>
+    JSON.stringify({
+      title: cardTitle(card(severity)),
+      texts: cardTexts(card(severity)),
+      fields: cardFields(card(severity)),
+      styles: cardStyles(card(severity)),
+    });
+
+  it("tells a critical alert apart from a warning", () => {
+    expect(rendering("critical")).not.toBe(rendering("warning"));
+  });
+
+  it("marks every severity the API sends, each one distinctly", () => {
+    expect(cardTitle(card("critical"))).toBe("CRITICAL: Urgent low");
+    expect(cardTitle(card("warning"))).toBe("Warning: Urgent low");
+    expect(cardTitle(card("info"))).toBe("Info: Urgent low");
+  });
+
+  it("emphasises the reading only when the alert is critical", () => {
+    expect(cardStyles(card("critical"))).toContain("bold");
+    for (const severity of ["warning", "info", undefined, "meltdown"]) {
+      expect(cardStyles(card(severity))).not.toContain("bold");
+    }
+  });
+
+  it("falls back to a plain alert when the severity is missing or unrecognised", () => {
+    for (const severity of [undefined, null, "", "meltdown", 7, {}]) {
+      expect(cardTitle(card(severity))).toBe("Alert: Urgent low");
+      expect(cardButtons(card(severity))).toHaveLength(1);
+    }
   });
 });

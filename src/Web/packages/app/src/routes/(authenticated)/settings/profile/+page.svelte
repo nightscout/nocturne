@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { distinct } from "$lib/utils/collections";
   import { page } from "$app/state";
+  import { resolve } from "$app/paths";
   import {
     Card,
     CardContent,
@@ -9,16 +11,14 @@
   } from "$lib/components/ui/card";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import {
-    User,
-    Activity,
-    Droplet,
-    TrendingUp,
-    Clock,
-    Settings,
-    ChevronRight,
-    Lock,
-  } from "lucide-svelte";
+  import User from "@lucide/svelte/icons/user";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplet from "@lucide/svelte/icons/droplet";
+  import TrendingUp from "@lucide/svelte/icons/trending-up";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Settings from "@lucide/svelte/icons/settings";
+  import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import Lock from "@lucide/svelte/icons/lock";
   import * as Alert from "$lib/components/ui/alert";
   import { bgLabel } from "$lib/utils/formatting";
   import { getProfileSummary, setDefaultProfile } from "$api/generated/profiles.generated.remote";
@@ -54,50 +54,48 @@
 
   // Extract unique profile names from therapy settings (the canonical source)
   function getProfileNames(data: Summary): string[] {
-    const names = new Set<string>();
-    for (const ts of (data?.therapySettings ?? []) as any[]) {
-      names.add(String(ts.profileName ?? "Default"));
-    }
-    return [...names];
+    return distinct(
+      (data?.therapySettings ?? []).map((ts) => String(ts.profileName ?? "Default"))
+    );
   }
 
   // Determine the default (active) profile name
   function getDefaultProfileName(data: Summary): string | null {
-    const settings = (data?.therapySettings ?? []) as any[];
-    const defaultSettings = settings.find((ts: any) => ts.isDefault) ?? settings[0] ?? null;
+    const settings = data?.therapySettings ?? [];
+    const defaultSettings = settings.find((ts) => ts.isDefault) ?? settings[0] ?? null;
     return defaultSettings?.profileName ?? null;
   }
 
   // Helper to extract data from the summary for a given profile name
   function getTherapyForProfile(data: Summary, profileName: string) {
-    return ((data?.therapySettings ?? []) as any[]).find((ts: any) => ts.profileName === profileName) ?? null;
+    return (data?.therapySettings ?? []).find((ts) => ts.profileName === profileName) ?? null;
   }
 
   function getBasalForProfile(data: Summary, profileName: string) {
-    return ((data?.basalSchedules ?? []) as any[]).find((b: any) => b.profileName === profileName) ?? null;
+    return (data?.basalSchedules ?? []).find((b) => b.profileName === profileName) ?? null;
   }
 
   function getCarbRatioForProfile(data: Summary, profileName: string) {
-    return ((data?.carbRatioSchedules ?? []) as any[]).find((c: any) => c.profileName === profileName) ?? null;
+    return (data?.carbRatioSchedules ?? []).find((c) => c.profileName === profileName) ?? null;
   }
 
   function getSensitivityForProfile(data: Summary, profileName: string) {
-    return ((data?.sensitivitySchedules ?? []) as any[]).find((s: any) => s.profileName === profileName) ?? null;
+    return (data?.sensitivitySchedules ?? []).find((s) => s.profileName === profileName) ?? null;
   }
 
   // Newest record wins: manual edits create new timestamped records (history-preserving),
   // and reports/alerts also evaluate against the most recent schedule.
   function getTargetRangeForProfile(data: Summary, profileName: string) {
-    const matches = ((data?.targetRangeSchedules ?? []) as any[]).filter(
-      (t: any) => t.profileName === profileName
+    const matches = (data?.targetRangeSchedules ?? []).filter(
+      (t) => t.profileName === profileName
     );
     if (matches.length === 0) return null;
-    return matches.reduce((newest: any, t: any) =>
+    return matches.reduce((newest, t) =>
       new Date(t.timestamp ?? 0) > new Date(newest.timestamp ?? 0) ? t : newest
     );
   }
 
-  function formatRelativeTime(dateString: string | undefined): string {
+  function formatRelativeTime(dateString: Date | string | undefined): string {
     if (!dateString) return "";
     try {
       const date = new Date(dateString);
@@ -127,7 +125,7 @@
 
 {#if loadError}
   <div class="@container container mx-auto max-w-4xl p-3 @md:p-6 space-y-6">
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="py-8">
         <div class="text-center space-y-2">
           <p class="text-destructive font-medium">Failed to load profiles</p>
@@ -173,7 +171,7 @@
           </p>
         </div>
       </div>
-      <Badge variant="secondary" class="gap-1">
+      <Badge variant="secondary">
         <Clock class="h-3 w-3" />
         {profileNames.length} profile{profileNames.length !== 1 ? "s" : ""}
       </Badge>
@@ -181,7 +179,7 @@
 
     {#if profileNames.length === 0}
       <!-- Empty State -->
-      <Card class="border-dashed">
+      <Card variant="dashed">
         <CardContent class="py-12">
           <div class="text-center space-y-4">
             <div
@@ -221,13 +219,13 @@
           </CardHeader>
           <CardContent>
             <div class="grid gap-2 @xl:grid-cols-2 @4xl:grid-cols-3">
-              {#each profileNames as profileName}
+              {#each profileNames as profileName (profileName)}
                 {@const profileTherapy = getTherapyForProfile(data, profileName)}
                 {@const isSelected = selectedProfileName === profileName}
                 {@const isDefault = profileTherapy?.isDefault === true}
                 {@const isExternal = profileTherapy?.isExternallyManaged === true}
                 <a
-                  href="?name={encodeURIComponent(profileName)}"
+                  href={resolve(`/settings/profile?name=${encodeURIComponent(profileName)}`)}
                   data-sveltekit-noscroll
                   data-sveltekit-replacestate
                   class="flex items-center gap-3 p-3 rounded-lg border text-left transition-colors
@@ -259,17 +257,13 @@
                         {profileName}
                       </span>
                       {#if isDefault}
-                        <Badge
-                          variant="default"
-                          class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs"
-                        >
+                        <Badge variant="success">
                           Active
                         </Badge>
                       {:else}
                         <Button
-                          variant="link"
-                          size="sm"
-                          class="h-auto p-0 text-xs text-muted-foreground"
+                          variant="subtle"
+                          size="inline-xs"
                           onclick={(e: MouseEvent) => { e.preventDefault(); handleSetActive(profileName); }}
                           disabled={switchingProfile !== null}
                         >
@@ -277,7 +271,7 @@
                         </Button>
                       {/if}
                       {#if isExternal}
-                        <Badge variant="outline" class="text-xs gap-1">
+                        <Badge variant="outline">
                           <Lock class="h-3 w-3" />
                           {profileTherapy?.enteredBy ?? "External"}
                         </Badge>
@@ -304,7 +298,7 @@
       <!-- Selected Profile Details -->
       {#if selectedProfileName && therapy}
         {#if therapy.isExternallyManaged}
-          <Alert.Root class="border-muted-foreground/25 bg-muted/50">
+          <Alert.Root>
             <Lock class="h-4 w-4" />
             <Alert.Title>Managed by {therapy.enteredBy ?? "an external source"}</Alert.Title>
             <Alert.Description>
@@ -321,15 +315,12 @@
                 <CardTitle class="flex items-center gap-2">
                   {selectedProfileName}
                   {#if therapy.isDefault}
-                    <Badge
-                      variant="default"
-                      class="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                    >
+                    <Badge variant="success">
                       Active
                     </Badge>
                   {/if}
                   {#if therapy.isExternallyManaged}
-                    <Badge variant="outline" class="gap-1">
+                    <Badge variant="outline">
                       <Lock class="h-3 w-3" />
                       Read-only
                     </Badge>
@@ -384,7 +375,6 @@
               description="Background insulin delivery rates"
               unit="U/hr"
               icon={Activity}
-              iconClass="text-blue-600"
               entries={basal.entries}
             />
           {/if}
@@ -395,7 +385,7 @@
               description="Grams of carbs per unit of insulin"
               unit="g/U"
               icon={Droplet}
-              iconClass="text-green-600"
+              iconClass="text-success"
               entries={carbRatio.entries}
             />
           {/if}
@@ -406,7 +396,6 @@
               description="BG drop per unit of insulin"
               unit="{bgLabel()}/U"
               icon={TrendingUp}
-              iconClass="text-purple-600"
               entries={sensitivity.entries}
               sourceUnits="mg/dl"
             />
@@ -420,7 +409,7 @@
         </div>
 
         <!-- Additional Therapy Metadata -->
-        <Card class="bg-muted/30">
+        <Card variant="muted">
           <CardHeader class="pb-3">
             <CardTitle class="text-sm font-medium">
               Profile Settings
@@ -449,7 +438,7 @@
         </Card>
       {:else if selectedProfileName}
         <!-- Profile selected but no therapy settings found -->
-        <Card class="border-dashed">
+        <Card variant="dashed">
           <CardContent class="py-8">
             <div class="text-center text-muted-foreground">
               <p>

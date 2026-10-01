@@ -85,7 +85,6 @@ public class LoginCodeService : ILoginCodeService
             SubjectId = subjectId,
             CodeHash = HashUtils.Sha256Hex(code),
             ExpiresAt = now.Add(Lifetime),
-            CreatedAt = now,
         };
 
         dbContext.LoginCodes.Add(entity);

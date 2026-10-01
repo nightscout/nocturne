@@ -5,16 +5,14 @@
   import { formatGlucoseDelta, getUnitLabel, time } from "$lib/utils/formatting";
   import { timeAgo } from "$lib/utils";
   import { Now } from "$lib/hooks/now.svelte";
-  import {
-    BatteryCharging,
-    BatteryFull,
-    BatteryLow,
-    BatteryMedium,
-    BatteryWarning,
-    Zap,
-    Wifi,
-    WifiOff,
-  } from "lucide-svelte";
+  import BatteryCharging from "@lucide/svelte/icons/battery-charging";
+  import BatteryFull from "@lucide/svelte/icons/battery-full";
+  import BatteryLow from "@lucide/svelte/icons/battery-low";
+  import BatteryMedium from "@lucide/svelte/icons/battery-medium";
+  import BatteryWarning from "@lucide/svelte/icons/battery-warning";
+  import Zap from "@lucide/svelte/icons/zap";
+  import Wifi from "@lucide/svelte/icons/wifi";
+  import WifiOff from "@lucide/svelte/icons/wifi-off";
   import { getCurrentBatteryStatus } from "$api/generated/batteries.generated.remote";
 
   interface Props {
@@ -59,14 +57,14 @@
   const connectionColor = $derived.by(() => {
     switch (connectionStatus) {
       case "connected":
-        return "bg-green-500";
+        return "bg-success";
       case "connecting":
       case "reconnecting":
-        return "bg-yellow-500";
+        return "bg-warning";
       case "disconnected":
         return "bg-gray-500";
       case "error":
-        return "bg-red-500";
+        return "bg-destructive";
       default:
         return "bg-gray-500";
     }
@@ -76,10 +74,10 @@
 <WidgetCard title="BG Delta">
   <div class="flex items-center justify-between">
     <div>
-      <div class="text-2xl font-bold">
-        {displayBgDelta}
-      </div>
-      <p class="text-xs text-muted-foreground">{unitLabel}</p>
+      <p class="flex items-baseline gap-1.5">
+        <span class="text-xl font-semibold tabular-nums">{displayBgDelta}</span>
+        <span class="text-xs text-muted-foreground">{unitLabel}</span>
+      </p>
     </div>
 
     <!-- Connection indicator -->
@@ -130,10 +128,10 @@
           <span
             class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-medium {currentStatus.status ===
             'urgent'
-              ? 'bg-red-500/20 text-red-400'
+              ? 'bg-destructive/20 text-destructive'
               : currentStatus.status === 'warn'
-                ? 'bg-yellow-500/20 text-yellow-400'
-                : 'bg-green-500/20 text-green-400'}"
+                ? 'bg-warning/20 text-warning'
+                : 'bg-success/20 text-success'}"
           >
             {#if currentStatus.min.isCharging}
               <BatteryCharging class="h-3 w-3" />

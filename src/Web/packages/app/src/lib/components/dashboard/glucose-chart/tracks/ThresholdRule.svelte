@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Rule } from "layerchart";
   import { getGlucoseChartContext } from "../chart-context.svelte";
+  import { dashOf } from "$lib/components/charts/print/chart-print-patterns";
 
   interface Props {
     level: "high" | "low" | "veryHigh" | "veryLow" | "targetLow" | "targetHigh";
@@ -8,7 +9,7 @@
     strokeDasharray?: string;
   }
 
-  let { level, class: className = "", strokeDasharray = "4,4" }: Props = $props();
+  let { level, class: className = "", strokeDasharray = dashOf("target-range-limit") }: Props = $props();
 
   const ctx = getGlucoseChartContext();
   // Use the same glucose scale as GlucoseTrack's Spline — maps threshold
@@ -19,5 +20,6 @@
 </script>
 
 {#if y != null}
-  <Rule {y} class={className} stroke-dasharray={strokeDasharray} />
+  <!-- layerchart's Line writes its own stroke-dasharray from `dashArray`, overriding a passed attribute. -->
+  <Rule {y} class={className} dashArray={strokeDasharray} />
 {/if}

@@ -110,7 +110,7 @@ public class MyLifeAuthTokenProviderRetryTests
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
-        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var provider = new MyLifeAuthTokenProvider(
             httpClient,

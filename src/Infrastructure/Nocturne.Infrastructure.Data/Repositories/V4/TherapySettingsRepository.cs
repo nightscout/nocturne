@@ -23,12 +23,9 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// <summary>
     /// Initializes a new instance of the <see cref="TherapySettingsRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     // logger is unused for this LegacyId-only type but retained for DI + direct test construction.
     public TherapySettingsRepository(ITenantDbContextFactory contextFactory, IAuditContext auditContext, ILogger<TherapySettingsRepository> logger, IV4RecordBroadcaster<TherapySettings>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
     }
 
@@ -85,8 +82,6 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
     /// <summary>
     /// Deletes therapy settings by legacy identifier prefix.
     /// </summary>
-    /// <param name="prefix">The legacy identifier prefix.</param>
-    /// <param name="ct">The cancellation token.</param>
     /// <returns>The number of deleted records.</returns>
     public async Task<int> DeleteByLegacyIdPrefixAsync(string prefix, WriteOrigin origin, CancellationToken ct = default)
     {
@@ -113,5 +108,43 @@ public class TherapySettingsRepository : V4RepositoryBase<TherapySettings, Thera
             .Where(e => e.CorrelationId == correlationId)
             .ToListAsync(ct);
         return entities.Select(TherapySettingsMapper.ToDomainModel);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TherapySettings>> GetDefaultsAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entities = await ctx
+            .TherapySettings.AsNoTracking()
+            .Where(e => e.IsDefault)
+            .OrderByDescending(e => e.Timestamp)
+            .ToListAsync(ct);
+        return entities.Select(TherapySettingsMapper.ToDomainModel).ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var entity = await ctx
+            .TherapySettings.AsNoTracking()
+            .Where(e => !e.ProfileName.Contains(TherapySettings.ProfileSwitchStoreMarker))
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : TherapySettingsMapper.ToDomainModel(entity);
+    }
+
+    /// <inheritdoc />
+    public async Task SetDefaultAsync(Guid? id, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var affected = await ctx
+            .TherapySettings
+            .Where(e => e.IsDefault || (id != null && e.Id == id))
+            .ToListAsync(ct);
+        foreach (var entity in affected)
+            entity.IsDefault = entity.Id == id;
+        await ctx.SaveChangesAsync(ct);
     }
 }

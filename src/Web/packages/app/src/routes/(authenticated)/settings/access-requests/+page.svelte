@@ -6,15 +6,13 @@
   import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import PermissionCategorySelector from "$lib/components/rbac/PermissionCategorySelector.svelte";
-  import {
-    Loader2,
-    CheckCircle2,
-    XCircle,
-    Clock,
-    UserPlus,
-    ChevronDown,
-    ChevronUp,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import CheckCircle2 from "@lucide/svelte/icons/circle-check";
+  import XCircle from "@lucide/svelte/icons/circle-x";
+  import Clock from "@lucide/svelte/icons/clock";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import {
     getPendingRequests,
     approve,
@@ -150,12 +148,12 @@
 
   {#if successMessage}
     <div
-      class="flex items-start gap-3 rounded-md border border-green-200 bg-green-50 p-3 dark:border-green-900/50 dark:bg-green-900/20"
+      class="flex items-start gap-3 rounded-md border border-success/30 bg-success/10 p-3"
     >
       <CheckCircle2
-        class="mt-0.5 h-4 w-4 shrink-0 text-green-600 dark:text-green-400"
+        class="mt-0.5 h-4 w-4 shrink-0 text-success"
       />
-      <p class="text-sm text-green-800 dark:text-green-200">
+      <p class="text-sm text-success">
         {successMessage}
       </p>
     </div>
@@ -235,13 +233,17 @@
               onOpenChange={(open: boolean) =>
                 (showPermissions[subjectId] = open)}
             >
-              <Collapsible.Trigger class="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full">
-                {#if showPermissions[subjectId]}
-                  <ChevronUp class="h-4 w-4" />
-                {:else}
-                  <ChevronDown class="h-4 w-4" />
-                {/if}
-                Direct Permissions (optional)
+              <Collapsible.Trigger>
+                {#snippet child({ props }: { props: Record<string, unknown> })}
+                  <Button {...props} variant="subtle" size="inline" class="w-full justify-start">
+                    {#if showPermissions[subjectId]}
+                      <ChevronUp class="h-4 w-4" />
+                    {:else}
+                      <ChevronDown class="h-4 w-4" />
+                    {/if}
+                    Direct Permissions (optional)
+                  </Button>
+                {/snippet}
               </Collapsible.Trigger>
               <Collapsible.Content>
                 <div class="mt-3">
@@ -304,9 +306,8 @@
                 {#snippet trigger(props)}
                   <Button
                     {...props}
-                    variant="outline"
+                    variant="outline-destructive"
                     size="sm"
-                    class="text-destructive border-destructive/30 hover:bg-destructive/10"
                     disabled={denyingId === subjectId}
                   >
                     {#if denyingId === subjectId}

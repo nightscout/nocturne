@@ -14,7 +14,7 @@ namespace Nocturne.API.Controllers.V4.Monitoring;
 /// <summary>
 /// Tenant-level alert configuration: Do Not Disturb (manual toggle with optional
 /// auto-expire and a recurring scheduled window). The schedule is interpreted in the
-/// patient's timezone (<see cref="V4.PatientRecord.Timezone"/>) — set there, not here.
+/// patient's timezone (<see cref="Nocturne.Core.Models.V4.PatientRecord.Timezone"/>) — set there, not here.
 /// The row is created lazily on first access.
 /// </summary>
 /// <remarks>

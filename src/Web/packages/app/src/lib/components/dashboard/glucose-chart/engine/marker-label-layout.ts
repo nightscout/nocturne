@@ -27,6 +27,8 @@ export interface LabelCandidate<T> {
 const AMOUNT_CHAR_WIDTH = 4.6;
 /** Approximate advance of one glyph in the 7px meal-name labels. */
 const NAME_CHAR_WIDTH = 4;
+/** Approximate advance of one glyph on paper, where every label prints at 9px. */
+export const PRINT_LABEL_CHAR_WIDTH = 5.2;
 /** Breathing room between two neighbouring labels. */
 const LABEL_GAP = 4;
 
@@ -47,13 +49,14 @@ function byPriorityThenX<T>(
  */
 export function placeCenteredLabels<T>(
   candidates: readonly LabelCandidate<T>[],
-  obstacles: readonly Interval[] = []
+  obstacles: readonly Interval[] = [],
+  charWidth = AMOUNT_CHAR_WIDTH
 ): Set<T> {
   const placed: Interval[] = [...obstacles];
   const visible = new Set<T>();
 
   for (const c of [...candidates].sort(byPriorityThenX)) {
-    const half = (c.text.length * AMOUNT_CHAR_WIDTH + LABEL_GAP) / 2;
+    const half = (c.text.length * charWidth + LABEL_GAP) / 2;
     const span = { left: c.x - half, right: c.x + half };
     if (placed.some((p) => overlaps(p, span))) continue;
     placed.push(span);
@@ -77,14 +80,15 @@ export function placeTrailingLabels<T>(
   candidates: readonly LabelCandidate<T>[],
   glyphXs: readonly number[],
   halfWidth: number,
-  gap: number
+  gap: number,
+  charWidth = NAME_CHAR_WIDTH
 ): Set<T> {
   const placed: Interval[] = [];
   const visible = new Set<T>();
 
   for (const c of [...candidates].sort(byPriorityThenX)) {
     const right = c.x - (halfWidth + gap);
-    const span = { left: right - c.text.length * NAME_CHAR_WIDTH, right };
+    const span = { left: right - c.text.length * charWidth, right };
 
     // Its own glyph column ends at x - halfWidth, right of the name, so a
     // paired bolus at the same x is never counted as an obstacle here.

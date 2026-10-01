@@ -159,6 +159,9 @@ public interface IStateSpanRepository
 
     /// <summary>
     /// Returns state spans grouped by category for multiple categories within an optional time range.
+    /// Open spans that started before <paramref name="from"/> are limited per category. An exclusive
+    /// category returns its newest span from before <paramref name="from"/> only if that span is open,
+    /// per state for PumpMode. Other categories return at most 10.
     /// </summary>
     /// <param name="categories">The set of <see cref="StateSpanCategory"/> values to query.</param>
     /// <param name="from">Optional start of the time range (inclusive).</param>
@@ -200,6 +203,18 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the latest <c>StartTimestamp</c> across the state spans written by
+    /// <paramref name="source"/> outside the activity categories, or <c>null</c> when that source
+    /// has written none. Activity spans are left out because they carry their own watermark
+    /// (<see cref="GetLatestActivityTimestampAsync"/>) and would otherwise advance this one.
+    /// </summary>
+    /// <param name="source">The data source to scope to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<DateTime?> GetLatestNonActivityTimestampAsync(
+        string source,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns a single activity state span by its identifier.
     /// </summary>
     /// <param name="id">The state span identifier.</param>
@@ -207,16 +222,6 @@ public interface IStateSpanRepository
     /// <returns>The activity <see cref="StateSpan"/> if found, or <c>null</c>.</returns>
     Task<StateSpan?> GetActivityStateSpanByIdAsync(
         string id,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Creates or updates an activity as a state span.
-    /// </summary>
-    /// <param name="stateSpan">The <see cref="StateSpan"/> representing the activity.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The persisted <see cref="StateSpan"/>.</returns>
-    Task<StateSpan> UpsertActivityAsStateSpanAsync(
-        StateSpan stateSpan,
         CancellationToken cancellationToken = default);
 
     /// <summary>

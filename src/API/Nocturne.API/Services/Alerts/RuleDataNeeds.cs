@@ -70,14 +70,22 @@ public static class RuleDataNeeds
 {
     /// <summary>
     /// Walks <paramref name="rules"/> and returns a <see cref="DataNeedsSet"/> with a flag
-    /// set for every kind of optional context any rule depends on.
+    /// set for every kind of optional context any rule depends on. A rule whose tree cannot be
+    /// walked contributes no needs rather than failing the pass for every other rule.
     /// </summary>
-    public static DataNeedsSet Walk(IEnumerable<AlertRuleSnapshot> rules)
+    public static DataNeedsSet Walk(IEnumerable<AlertRuleSnapshot> rules, ILogger? logger = null)
     {
         var b = new NeedsBuilder();
         foreach (var rule in rules)
         {
-            VisitTopLevel(rule, b);
+            try
+            {
+                VisitTopLevel(rule, b);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Could not walk the condition tree of alert rule {AlertRuleId}", rule.Id);
+            }
         }
         return b.Build();
     }
@@ -90,7 +98,7 @@ public static class RuleDataNeeds
                 {
                     var composite = TryDeserialize<CompositeCondition>(rule.ConditionParams);
                     if (composite is null) return;
-                    foreach (var child in composite.Conditions)
+                    foreach (var child in composite.Conditions ?? [])
                     {
                         VisitNode(child, b);
                     }
@@ -137,7 +145,7 @@ public static class RuleDataNeeds
         }
     }
 
-    private static void VisitNode(ConditionNode node, NeedsBuilder b)
+    private static void VisitNode(ConditionNode? node, NeedsBuilder b)
     {
         // ConditionPath.Walk recurses through composite/not/sustained wrappers and visits every
         // node; we only need the node's Type to update flags. The builder closes over the call

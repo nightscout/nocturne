@@ -64,7 +64,6 @@ public partial class TenantRoleService(
         List<string> permissions,
         CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
         var entity = new TenantRoleEntity
         {
             Id = Guid.CreateVersion7(),
@@ -74,8 +73,6 @@ public partial class TenantRoleService(
             Description = description,
             Permissions = permissions,
             IsSystem = false,
-            SysCreatedAt = now,
-            SysUpdatedAt = now,
         };
 
         context.TenantRoles.Add(entity);
@@ -155,14 +152,7 @@ public partial class TenantRoleService(
 
             foreach (var member in affectedMembers)
             {
-                // Compute remaining permissions without this role
-                var remainingPermissions = member.MemberRoles
-                    .Where(mr => mr.TenantRoleId != roleId)
-                    .SelectMany(mr => mr.TenantRole.Permissions)
-                    .Union(member.DirectPermissions ?? [])
-                    .ToList();
-
-                if (remainingPermissions.Count == 0)
+                if (!member.EffectivePermissions(excludingRoleId: roleId).Any())
                 {
                     return new DeleteRoleResult(
                         false,
@@ -200,8 +190,6 @@ public partial class TenantRoleService(
             .Select(r => r.Slug)
             .ToListAsync(ct);
 
-        var now = DateTime.UtcNow;
-
         foreach (var (slug, permissions) in RoleSeeds.Permissions)
         {
             if (existingSlugs.Contains(slug))
@@ -217,8 +205,6 @@ public partial class TenantRoleService(
                 Description = null,
                 Permissions = new List<string>(permissions),
                 IsSystem = true,
-                SysCreatedAt = now,
-                SysUpdatedAt = now,
             });
         }
 
@@ -272,14 +258,22 @@ public partial class TenantRoleService(
         if (member is null)
             return [];
 
-        var rolePermissions = member.MemberRoles
-            .SelectMany(mr => mr.TenantRole.Permissions);
+        return member.EffectivePermissions().ToList();
+    }
 
-        var directPermissions = member.DirectPermissions ?? [];
+    /// <inheritdoc />
+    public async Task<List<string>> GetRolePermissionsAsync(
+        Guid tenantId, IReadOnlyCollection<Guid> roleIds, CancellationToken ct = default)
+    {
+        if (roleIds.Count == 0)
+            return [];
 
-        return rolePermissions
-            .Union(directPermissions)
-            .ToList();
+        var permissionSets = await context.TenantRoles
+            .Where(r => r.TenantId == tenantId && roleIds.Contains(r.Id))
+            .Select(r => r.Permissions)
+            .ToListAsync(ct);
+
+        return permissionSets.SelectMany(permissions => permissions).Distinct().ToList();
     }
 
     private static string GenerateSlug(string name)

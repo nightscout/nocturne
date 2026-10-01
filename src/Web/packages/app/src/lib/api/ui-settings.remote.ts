@@ -8,11 +8,7 @@
  */
 import { getRequestEvent, query, command } from "$app/server";
 import { error, redirect } from "@sveltejs/kit";
-import type {
-  DataQualitySettings,
-  FeatureSettings,
-  UISettingsConfiguration,
-} from "$lib/api/generated/nocturne-api-client";
+import type { UISettingsConfiguration } from "$lib/api/generated/nocturne-api-client";
 import {
   DataQualitySettingsSchema,
   FeatureSettingsSchema,
@@ -29,12 +25,8 @@ export const getUiSettings = query(async () => {
     // Same 401 handling as a generated query: the settings pages are behind the
     // authenticated layout, so an expired session has to reach the login route.
     if (errorStatus(err) === 401) {
-      const { request, url } = getRequestEvent();
-      const host =
-        request.headers.get("x-forwarded-host") ??
-        request.headers.get("host") ??
-        "";
-      if (/^[^.]+\.share\./i.test(host)) throw error(401, "Unauthorized");
+      const { url } = getRequestEvent();
+      if (locals.isShareHost) throw error(401, "Unauthorized");
 
       throw redirect(
         302,
@@ -70,8 +62,7 @@ export const saveDataQualitySettings = command(
   DataQualitySettingsSchema,
   async (dataQuality) =>
     saveUiSettingsSection({
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- z.fromJSONSchema infers unknown; DataQualitySettingsSchema validates the shape at runtime
-      dataQuality: dataQuality as DataQualitySettings,
+      dataQuality,
     })
 );
 
@@ -80,7 +71,6 @@ export const saveFeatureSettings = command(
   FeatureSettingsSchema,
   async (features) =>
     saveUiSettingsSection({
-      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- z.fromJSONSchema infers unknown; FeatureSettingsSchema validates the shape at runtime
-      features: features as FeatureSettings,
+      features,
     })
 );

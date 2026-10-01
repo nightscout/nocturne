@@ -6,4 +6,5 @@ export { default as MobileHeader } from "./MobileHeader.svelte";
 export { default as EditorActionBar } from "./EditorActionBar.svelte";
 export { default as UserMenu } from "./UserMenu.svelte";
 export { default as SessionExpiryWarning } from "./SessionExpiryWarning.svelte";
+export { default as SessionExpiryWatcher } from "./SessionExpiryWatcher.svelte";
 export { default as BackupSignInPrompt } from "./BackupSignInPrompt.svelte";

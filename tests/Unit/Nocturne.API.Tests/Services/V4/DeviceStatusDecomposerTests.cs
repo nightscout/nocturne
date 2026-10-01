@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Nocturne.API.Services.Devices;
 using Nocturne.API.Services.V4;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Devices;
@@ -12,6 +13,7 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Repositories.V4;
 using Nocturne.Infrastructure.Data.Services;
 using Nocturne.Tests.Shared.Infrastructure;
+using Nocturne.Tests.Shared.Mocks;
 using Xunit;
 
 using V4Models = Nocturne.Core.Models.V4;
@@ -35,7 +37,7 @@ public class DeviceStatusDecomposerTests : IDisposable
         var apsRepo = new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance);
         var pumpRepo = new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance);
         var uploaderRepo = new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance);
-        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext());
+        _extrasRepo = new DeviceStatusExtrasRepository(ctxFactory, new SystemAuditContext(), NullLogger<DeviceStatusExtrasRepository>.Instance);
         _stateSpanServiceMock = new Mock<IStateSpanService>();
         _deviceServiceMock = new Mock<IDeviceService>();
 
@@ -374,7 +376,7 @@ public class DeviceStatusDecomposerTests : IDisposable
             {
                 Active = true,
                 Name = "Exercise",
-                Duration = 60.0,
+                Duration = 3600,
                 Multiplier = 1.5,
                 CurrentCorrectionRange = new CorrectionRange { MinValue = 140, MaxValue = 160 }
             }
@@ -409,7 +411,9 @@ public class DeviceStatusDecomposerTests : IDisposable
                     && ss.Metadata.ContainsKey("name")
                     && ss.Metadata.ContainsKey("multiplier")
                     && ss.Metadata.ContainsKey("currentCorrectionRange.minValue")
-                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")),
+                    && ss.Metadata.ContainsKey("currentCorrectionRange.maxValue")
+                    && ss.Metadata.TryReadString(StateSpanMetadataExtensions.CollectionKey)
+                        == StateSpanMetadataExtensions.DeviceStatusCollection),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -1008,18 +1012,18 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     [Fact]
-    public async Task DecomposeAsync_OverrideWithDuration_CalculatesEndMills()
+    public async Task DecomposeAsync_OverrideWithDuration_ReadsDurationAsSeconds()
     {
         var ds = new DeviceStatus
         {
             Id = "override-with-duration",
-            Mills = 1700000000000,
+            Mills = 1780000000000,
             Device = "Loop/3.0",
             Override = new OverrideStatus
             {
                 Active = true,
                 Name = "Pre-Meal",
-                Duration = 60.0 // 60 minutes
+                Duration = 3600
             }
         };
 
@@ -1033,7 +1037,93 @@ public class DeviceStatusDecomposerTests : IDisposable
         _stateSpanServiceMock.Verify(
             s => s.UpsertStateSpanAsync(
                 It.Is<StateSpan>(ss =>
-                    ss.EndMills == 1700000000000 + (long)(60.0 * 60000)),
+                    ss.EndTimestamp - ss.StartTimestamp == TimeSpan.FromHours(1)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideWithDuration_CountsFromTheOverrideTimestamp()
+    {
+        var overrideAt = new DateTime(2026, 5, 28, 21, 5, 0, DateTimeKind.Utc);
+        var ds = new DeviceStatus
+        {
+            Id = "override-with-own-timestamp",
+            Mills = new DateTimeOffset(overrideAt.AddMinutes(-5)).ToUnixTimeMilliseconds(),
+            Device = "Loop/3.0",
+            Override = new OverrideStatus
+            {
+                Active = true,
+                Name = "Pre-Meal",
+                Timestamp = "2026-05-28T21:05:00Z",
+                Duration = 3600
+            }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.EndTimestamp == overrideAt.AddHours(1)),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideEndingBeforeTheStatus_LeavesTheSpanOpen()
+    {
+        var statusAt = new DateTime(2026, 5, 28, 21, 5, 0, DateTimeKind.Utc);
+        var ds = new DeviceStatus
+        {
+            Id = "override-stale-timestamp",
+            Mills = new DateTimeOffset(statusAt).ToUnixTimeMilliseconds(),
+            Device = "Loop/3.0",
+            Override = new OverrideStatus
+            {
+                Active = true,
+                Name = "Pre-Meal",
+                Timestamp = "2026-05-28T19:05:00Z",
+                Duration = 3600
+            }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.StartTimestamp == statusAt && ss.EndTimestamp == null),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_OverrideWithoutDuration_IsIndefinite()
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "override-no-duration",
+            Mills = 1700000000000,
+            Device = "Loop/3.0",
+            Override = new OverrideStatus { Active = true, Name = "Indefinite", Duration = null }
+        };
+
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StateSpan { Id = "ss-1", Category = StateSpanCategory.Override });
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        _stateSpanServiceMock.Verify(
+            s => s.UpsertStateSpanAsync(
+                It.Is<StateSpan>(ss => ss.EndTimestamp == null),
                 It.IsAny<CancellationToken>()),
             Times.Once);
     }
@@ -1735,6 +1825,154 @@ public class DeviceStatusDecomposerTests : IDisposable
 
     #endregion
 
+    #region Device Resolution Time
+
+    private static readonly DateTime LoopStatusAt = new(2026, 3, 10, 14, 30, 0, DateTimeKind.Utc);
+
+    private static DeviceStatus MakeCreatedAtOnlyLoopStatus(string id, DateTime createdAt) => new()
+    {
+        Id = id,
+        CreatedAt = createdAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+        Device = "loop://iPhone",
+        Pump = new PumpStatus { Manufacturer = "Insulet", Model = "Omnipod DASH", Reservoir = 80 },
+        Uploader = new UploaderStatus { Name = "iPhone", Type = "phone", Battery = 60 },
+        Cgm = new CgmStatus { Manufacturer = "Dexcom", Serial = "8G1234" },
+        Loop = new LoopStatus { Iob = new LoopIob { Iob = 1.2 } },
+    };
+
+    /// <summary>
+    /// A decomposer over a real <see cref="DeviceService"/>, so first/last seen and patient-device
+    /// attribution come from the service's own date handling rather than a mock.
+    /// </summary>
+    private DeviceStatusDecomposer CreateDecomposerWithDeviceService(
+        List<V4Models.Device> devices, V4Models.PatientDevice patientDevice)
+    {
+        var deviceRepo = new Mock<IDeviceRepository>();
+        deviceRepo
+            .Setup(r => r.FindByCategoryTypeAndSerialAsync(
+                It.IsAny<V4Models.DeviceCategory>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.DeviceCategory category, string type, string serial, CancellationToken _) =>
+                devices.SingleOrDefault(d => d.Category == category && d.Type == type && d.Serial == serial));
+        deviceRepo
+            .Setup(r => r.CreateAsync(It.IsAny<V4Models.Device>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((V4Models.Device device, WriteOrigin _, CancellationToken _) =>
+            {
+                devices.Add(device);
+                return device;
+            });
+        deviceRepo
+            .Setup(r => r.WidenSeenWindowAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var patientDeviceRepo = new Mock<IPatientDeviceRepository>();
+        patientDeviceRepo
+            .Setup(r => r.GetByDeviceIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { patientDevice });
+
+        var ctxFactory = new TestTenantDbContextFactory(_context);
+        return new DeviceStatusDecomposer(
+            new ApsSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<ApsSnapshotRepository>.Instance),
+            new PumpSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<PumpSnapshotRepository>.Instance),
+            new UploaderSnapshotRepository(ctxFactory, new SystemAuditContext(), NullLogger<UploaderSnapshotRepository>.Instance),
+            _extrasRepo,
+            _stateSpanServiceMock.Object,
+            new DeviceService(deviceRepo.Object, patientDeviceRepo.Object, MockTenantAccessor.Create().Object),
+            Mock.Of<IAuditContext>(),
+            NullLogger<DeviceStatusDecomposer>.Instance);
+    }
+
+    private static V4Models.PatientDevice MakeDatedPatientDevice() => new()
+    {
+        Id = Guid.CreateVersion7(),
+        DeviceCategory = V4Models.DeviceCategory.InsulinPump,
+        Manufacturer = "Insulet",
+        Model = "Omnipod DASH",
+        StartDate = new DateOnly(2026, 3, 1),
+    };
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtOnlyStatus_AttributesPumpAndApsAtTheStatusTime()
+    {
+        var patientDevice = MakeDatedPatientDevice();
+        var decomposer = CreateDecomposerWithDeviceService([], patientDevice);
+
+        await decomposer.DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-created-at", LoopStatusAt), WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "loop-created-at").PatientDeviceId.Should().Be(patientDevice.Id);
+        _context.ApsSnapshots.Single(a => a.LegacyId == "loop-created-at").PatientDeviceId.Should().Be(patientDevice.Id);
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CreatedAtOnlyStatus_AttributesPumpAndApsAtTheStatusTime()
+    {
+        var patientDevice = MakeDatedPatientDevice();
+        var decomposer = CreateDecomposerWithDeviceService([], patientDevice);
+
+        await decomposer.DecomposeBatchAsync(
+            [MakeCreatedAtOnlyLoopStatus("loop-created-at-batch", LoopStatusAt)], source: null, WriteOrigin.Live);
+
+        _context.PumpSnapshots.Single(p => p.LegacyId == "loop-created-at-batch").PatientDeviceId.Should().Be(patientDevice.Id);
+        _context.ApsSnapshots.Single(a => a.LegacyId == "loop-created-at-batch").PatientDeviceId.Should().Be(patientDevice.Id);
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_CreatedAtOnlyStatus_StampsDevicesWithTheStatusTime()
+    {
+        var devices = new List<V4Models.Device>();
+        var decomposer = CreateDecomposerWithDeviceService(devices, MakeDatedPatientDevice());
+
+        await decomposer.DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-first-seen", LoopStatusAt), WriteOrigin.Live);
+
+        devices.Select(d => d.Category).Should().BeEquivalentTo(
+            [V4Models.DeviceCategory.InsulinPump, V4Models.DeviceCategory.Uploader, V4Models.DeviceCategory.CGM]);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(LoopStatusAt);
+        });
+    }
+
+    [Fact]
+    public async Task DecomposeBatchAsync_CreatedAtOnlyStatus_StampsDevicesWithTheStatusTime()
+    {
+        var devices = new List<V4Models.Device>();
+        var decomposer = CreateDecomposerWithDeviceService(devices, MakeDatedPatientDevice());
+
+        await decomposer.DecomposeBatchAsync(
+            [MakeCreatedAtOnlyLoopStatus("loop-first-seen-batch", LoopStatusAt)], source: null, WriteOrigin.Live);
+
+        devices.Select(d => d.Category).Should().BeEquivalentTo(
+            [V4Models.DeviceCategory.InsulinPump, V4Models.DeviceCategory.Uploader, V4Models.DeviceCategory.CGM]);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(LoopStatusAt);
+        });
+    }
+
+    [Fact]
+    public async Task DecomposeAsync_LaterCreatedAtOnlyStatus_AdvancesDeviceLastSeen()
+    {
+        var devices = new List<V4Models.Device>();
+        var patientDevice = MakeDatedPatientDevice();
+        var later = LoopStatusAt.AddMinutes(5);
+
+        // A fresh service per status, as each ingest request gets its own scoped DeviceService.
+        await CreateDecomposerWithDeviceService(devices, patientDevice)
+            .DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-seen-1", LoopStatusAt), WriteOrigin.Live);
+        await CreateDecomposerWithDeviceService(devices, patientDevice)
+            .DecomposeAsync(MakeCreatedAtOnlyLoopStatus("loop-seen-2", later), WriteOrigin.Live);
+
+        devices.Should().HaveCount(3);
+        devices.Should().AllSatisfy(d =>
+        {
+            d.FirstSeenTimestamp.Should().Be(LoopStatusAt);
+            d.LastSeenTimestamp.Should().Be(later);
+        });
+    }
+
+    #endregion
+
     #region AAPS Date Normalization
 
     [Fact]
@@ -1863,6 +2101,41 @@ public class DeviceStatusDecomposerTests : IDisposable
         aps.Timestamp.Year.Should().Be(2026);
         aps.Timestamp.Month.Should().Be(4);
         aps.Timestamp.Day.Should().Be(12);
+    }
+
+    [Theory]
+    [InlineData("2026-04-12T09:35:00Z", "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 35)]
+    [InlineData(null, "2026-04-12T09:33:00Z", "2026-04-12T09:36:00.000Z", 33)]
+    [InlineData(null, null, "2026-04-12T09:36:00.000Z", 36)]
+    [InlineData(null, null, null, 30)]
+    public async Task DecomposeAsync_LoopWithMillsZero_PrefersTheLoopCycleTimeToThePredictionStart(
+        string? loopTimestamp, string? pumpClock, string? createdAt, int expectedMinute)
+    {
+        var ds = new DeviceStatus
+        {
+            Id = "loop-cycle-time",
+            Mills = 0,
+            CreatedAt = createdAt,
+            Device = "loop://iPhone",
+            Loop = new LoopStatus
+            {
+                Timestamp = loopTimestamp,
+                Predicted = new LoopPredicted { StartDate = "2026-04-12T09:30:00Z" },
+            },
+            Pump = new PumpStatus { Clock = pumpClock },
+            Override = new OverrideStatus { Active = true, Duration = 30.0 },
+        };
+        _stateSpanServiceMock
+            .Setup(s => s.UpsertStateSpanAsync(It.IsAny<StateSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StateSpan span, CancellationToken _) => span);
+        var expected = new DateTime(2026, 4, 12, 9, expectedMinute, 0, DateTimeKind.Utc);
+
+        var result = await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        result.CreatedRecords.OfType<V4Models.ApsSnapshot>().Single().Timestamp.Should().Be(expected);
+        result.CreatedRecords.OfType<V4Models.PumpSnapshot>().Single().Timestamp.Should().Be(expected);
+        result.CreatedRecords.OfType<StateSpan>().Single(s => s.Category == StateSpanCategory.Override)
+            .StartTimestamp.Should().Be(expected);
     }
 
     #endregion

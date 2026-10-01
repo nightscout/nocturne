@@ -10,8 +10,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.TempBasal
 /// </summary>
 [Table("temp_basals")]
-public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Entity, ISourcedEntity, IDeviceAttributedEntity, ISystemTimestamped
+public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4TimeSeriesEntity, ISyncDedupable, IDeviceAttributedEntity, ISystemTimestamped, IUpstreamFingerprinted
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("upstream_fingerprint")]
+    public string? UpstreamFingerprint { get; set; }
+
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
     /// </summary>
@@ -25,10 +30,11 @@ public class TempBasalEntity : ITenantScoped, IAuditable, ISoftDeletable, IV4Ent
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Start timestamp as UTC DateTime (timestamptz)
+    /// Span start as UTC DateTime (timestamptz) — the instant the shared V4 repository base
+    /// filters, orders and watermarks on, hence its <see cref="IObservationTimestamped"/> name.
     /// </summary>
     [Column("start_timestamp")]
-    public DateTime StartTimestamp { get; set; }
+    public DateTime Timestamp { get; set; }
 
     /// <summary>
     /// End timestamp as UTC DateTime (timestamptz, null if still active)

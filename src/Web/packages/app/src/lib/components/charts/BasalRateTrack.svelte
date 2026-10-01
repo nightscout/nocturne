@@ -169,15 +169,14 @@
   </ChartClipPath>
   <AnnotationLine
     x={staleBasalData.start}
-    class="stroke-yellow-500/50 stroke-1"
-    stroke-dasharray="2,2"
+    props={{ line: { class: "stroke-warning/50 stroke-1", dashArray: "2,2" } }}
   />
   <AnnotationPoint
     x={staleBasalData.start.getTime()}
     y={basalScale(maxBasalRate)}
     label="Last pump sync"
     labelPlacement="bottom-right"
-    fill="yellow"
+    fill="var(--warning)"
     class="hover:bg-background hover:text-foreground"
   />
 {/if}
@@ -201,7 +200,7 @@
     scale={basalAxisScale}
     ticks={2}
     tickLabelProps={{
-      class: "text-[9px] fill-muted-foreground",
+      class: "text-2xs fill-muted-foreground",
     }}
   />
 {/if}
@@ -212,7 +211,7 @@
     x={4}
     y={trackTop + 12}
     dy="-0.355em"
-    class="text-[8px] fill-muted-foreground font-medium"
+    class="text-3xs fill-muted-foreground font-medium"
   >
     BASAL
   </text>

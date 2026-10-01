@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Services.Devices;
@@ -220,6 +221,10 @@ public class DeviceStatusController : ControllerBase
                 {
                     deviceStatus.Device = string.Empty;
                 }
+                if (string.IsNullOrEmpty(deviceStatus.Id))
+                {
+                    deviceStatus.Id = MongoObjectId.NewObjectId();
+                }
             }
 
             // Decompose each device status directly into V4 snapshot tables
@@ -283,8 +288,9 @@ public class DeviceStatusController : ControllerBase
     [Authorize]
     [RequireScope(Scope.DevicesReadWrite)]
     [NightscoutEndpoint("/api/v1/devicestatus/:id")]
-    [ProducesResponseType(200)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(403)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> DeleteDeviceStatus(
         string id,
@@ -305,13 +311,18 @@ public class DeviceStatusController : ControllerBase
                 return BadRequest("Device status ID is required");
             }
 
-            // Get the projected record before deleting (for broadcast)
+            if (id == LegacyDeleteStatus.AnyId)
+            {
+                return HttpContext?.HasScope(Scope.FullAccess) == true
+                    ? await BulkDeleteDeviceStatus(cancellationToken)
+                    : Forbid();
+            }
+
+            // The path's wire form may only resolve to the stored id; the projection is also the broadcast.
             var deviceStatusToDelete = await _projection.GetByIdAsync(id, cancellationToken);
 
-            // Delete V4 snapshot records by legacy ID
-            var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
-
-            if (deleted > 0 || deviceStatusToDelete != null)
+            if (deviceStatusToDelete?.Id is { } storedId
+                && await _decomposer.DeleteStoredAsync(storedId, WriteOrigin.Live, cancellationToken) > 0)
             {
                 await _sideEffects.OnDeletedAsync(
                     CollectionName,
@@ -323,13 +334,11 @@ public class DeviceStatusController : ControllerBase
                 await _events.OnDeletedAsync(deviceStatusToDelete, cancellationToken);
 
                 _logger.LogDebug("Successfully deleted device status with ID: {Id}", id);
-                return Ok();
+                return Ok(LegacyDeleteStatus.For(1));
             }
-            else
-            {
-                _logger.LogDebug("Device status not found for deletion with ID: {Id}", id);
-                return NotFound();
-            }
+
+            _logger.LogDebug("Device status not found for deletion with ID: {Id}", id);
+            return Ok(LegacyDeleteStatus.For(0));
         }
         catch (Exception ex)
         {
@@ -365,20 +374,18 @@ public class DeviceStatusController : ControllerBase
             // Build find query from query string parameters
             var findQuery = HttpContext?.Request?.QueryString.Value ?? string.Empty;
 
-            if (string.IsNullOrWhiteSpace(findQuery))
-            {
-                _logger.LogWarning(
-                    "Bulk delete device status requested without query parameters - this would delete all entries!"
-                );
-                return BadRequest(
-                    "Query parameters are required for bulk delete to prevent accidental deletion of all entries"
-                );
-            }
-
             // Remove the leading '?' if present
             if (findQuery.StartsWith("?"))
             {
                 findQuery = findQuery.Substring(1);
+            }
+
+            if (DeviceStatusProjectionService.ParseDeleteFind(findQuery) is null)
+            {
+                _logger.LogWarning("Bulk delete device status refused: the query names no find it can apply");
+                return BadRequest(
+                    "A find on device or created_at is required for bulk delete, and every find key must be one of those"
+                );
             }
 
             // Find matching records via V4 projection, then delete each by legacy ID.
@@ -401,7 +408,7 @@ public class DeviceStatusController : ControllerBase
             {
                 if (!string.IsNullOrEmpty(record.Id))
                 {
-                    var count = await _decomposer.DeleteByLegacyIdAsync(record.Id, WriteOrigin.Live, cancellationToken);
+                    var count = await _decomposer.DeleteStoredAsync(record.Id, WriteOrigin.Live, cancellationToken);
                     if (count > 0)
                         deletedCount++;
                 }
@@ -421,13 +428,7 @@ public class DeviceStatusController : ControllerBase
                 deletedCount
             );
 
-            // Return response compatible with Nightscout format
-            return Ok(new Dictionary<string, object>
-            {
-                ["result"] = new { n = deletedCount, ok = 1 },
-                ["n"] = deletedCount,
-                ["ok"] = 1
-            });
+            return Ok(LegacyDeleteStatus.For(deletedCount));
         }
         catch (Exception ex)
         {

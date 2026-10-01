@@ -7,7 +7,11 @@
 	import { Switch } from '$lib/components/ui/switch';
 	import { Label } from '$lib/components/ui/label';
 	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
-	import { Moon, Activity, AlertCircle, Globe, Weight } from 'lucide-svelte';
+	import Moon from '@lucide/svelte/icons/moon';
+	import Activity from '@lucide/svelte/icons/activity';
+	import AlertCircle from '@lucide/svelte/icons/circle-alert';
+	import Globe from '@lucide/svelte/icons/globe';
+	import Weight from '@lucide/svelte/icons/weight';
 	import SettingsPageSkeleton from '$lib/components/settings/SettingsPageSkeleton.svelte';
 	import DataMaintenanceCard from '$lib/components/settings/DataMaintenanceCard.svelte';
 	import SettingsLinkCard from '$lib/components/settings/SettingsLinkCard.svelte';
@@ -38,9 +42,6 @@
 	const bedtimeHour = $derived(dataQuality?.sleepSchedule?.bedtimeHour ?? 23);
 	const wakeTimeHour = $derived(dataQuality?.sleepSchedule?.wakeTimeHour ?? 7);
 	const detectionEnabled = $derived(dataQuality?.compressionLowDetection?.enabled ?? true);
-	const excludeFromStatistics = $derived(
-		dataQuality?.compressionLowDetection?.excludeFromStatistics ?? true
-	);
 
 	// Hour options for bedtime (evening hours)
 	const bedtimeHours = [
@@ -109,7 +110,7 @@
 	{#if settingsQuery.loading}
 		<SettingsPageSkeleton cardCount={2} />
 	{:else if settingsQuery.error}
-		<Card class="border-destructive">
+		<Card variant="destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
 				<p class="font-medium">
@@ -143,7 +144,7 @@
 								{formatHour(bedtimeHour)}
 							</SelectTrigger>
 							<SelectContent>
-								{#each bedtimeHours as hour}
+								{#each bedtimeHours as hour (hour.value)}
 									<SelectItem value={String(hour.value)}>{hour.label}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -161,7 +162,7 @@
 								{formatHour(wakeTimeHour)}
 							</SelectTrigger>
 							<SelectContent>
-								{#each wakeTimeHours as hour}
+								{#each wakeTimeHours as hour (hour.value)}
 									<SelectItem value={String(hour.value)}>{hour.label}</SelectItem>
 								{/each}
 							</SelectContent>
@@ -198,25 +199,11 @@
 					/>
 				</div>
 
-				<div class="flex items-center justify-between">
-					<div class="space-y-0.5">
-						<Label>Exclude from statistics</Label>
-						<p class="text-sm text-muted-foreground">
-							Don't include accepted compression lows when calculating Time in Range and other
-							statistics
-						</p>
-					</div>
-					<Switch
-						checked={excludeFromStatistics}
-						onCheckedChange={(checked: boolean) =>
-							save({ compressionLowDetection: { excludeFromStatistics: checked } })}
-					/>
-				</div>
-
 				<div class="rounded-lg border border-muted bg-muted/50 p-4">
 					<p class="text-sm text-muted-foreground">
 						Compression lows are falsely low CGM readings caused by sleeping on your sensor. When
-						detected, you'll be notified to review and confirm them.
+						detected, you'll be notified to review and confirm them. Reviewing keeps a record for
+						you; it does not remove the readings from your reports or statistics.
 					</p>
 				</div>
 			</CardContent>

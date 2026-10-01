@@ -16,6 +16,12 @@ public class OrefPhysiologySimulator
     private readonly List<InsulinDose> _activeDoses = new();
     private readonly List<CarbDose> _activeCarbs = new();
 
+    // Sums of each curve over its 5-minute sampling grid. Dividing by them makes
+    // a unit of insulin lower glucose by exactly Sens in total. A gram of carbs
+    // then raises it by exactly Sens / CarbRatio, whatever the curve's shape.
+    private readonly double _insulinCurveSum;
+    private readonly Dictionary<double, double> _carbCurveSums = new();
+
     public OrefPhysiologySimulator(
         ILogger<OrefPhysiologySimulator> logger,
         OrefProfile? profile = null
@@ -23,6 +29,10 @@ public class OrefPhysiologySimulator
     {
         _logger = logger;
         _profile = profile ?? CreateDefaultProfile();
+
+        var diaMinutes = _profile.Dia * 60;
+        for (var t = 0.0; t <= diaMinutes; t += 5)
+            _insulinCurveSum += CalculateExponentialActivity(t, _profile.Peak, diaMinutes);
     }
 
     /// <summary>
@@ -158,13 +168,7 @@ public class OrefPhysiologySimulator
             // Calculate activity (derivative of IOB curve)
             var activity = CalculateExponentialActivity(minutesSince, peakMinutes, diaMinutes);
 
-            // Convert to glucose effect per 5-minute interval
-            // ISF represents total glucose drop per unit over entire DIA
-            // Activity curve integrates to 1 over DIA, so we multiply by ISF directly
-            // and scale by the number of 5-minute intervals in DIA
-            var intervalsInDia = diaMinutes / 5.0;
-            var effectPerUnit = activity * _profile.Sens * intervalsInDia * (5.0 / 60.0);
-            totalActivity += dose.Units * effectPerUnit;
+            totalActivity += dose.Units * _profile.Sens * activity / _insulinCurveSum;
         }
 
         return totalActivity;
@@ -186,39 +190,39 @@ public class OrefPhysiologySimulator
             if (hoursSince < 0 || hoursSince > absorptionTimeHours * 1.5)
                 continue;
 
-            // Gamma-like curve for carb absorption (peaks at ~1/3 of absorption time)
-            var peakTime = absorptionTimeHours / 3.0;
-            var normalizedTime = hoursSince / peakTime;
-
-            double absorptionRate;
-            if (normalizedTime > 0)
-            {
-                // Gamma distribution with k=2 shape
-                var k = 2.0;
-                absorptionRate =
-                    Math.Pow(normalizedTime, k - 1) * Math.Exp(-normalizedTime * (k - 1) / 1.2);
-                absorptionRate = Math.Max(0, absorptionRate);
-            }
-            else
-            {
-                absorptionRate = 0;
-            }
-
-            // Convert carbs to glucose rise
-            // 1g carb raises BG by approximately ISF/CarbRatio (by definition)
-            var carbSensitivity = _profile.Sens / _profile.CarbRatio; // ~4.5 mg/dL per gram
-            var totalExpectedRise = carb.Carbs * carbSensitivity;
-
-            // Spread over absorption time, convert to 5-minute interval
-            var intervalsInAbsorption = absorptionTimeHours * 12; // 12 five-minute intervals per hour
-            // Use 1.2 multiplier for realistic glucose rise (was 2.5 which caused max spikes)
-            var risePerInterval =
-                absorptionRate * (totalExpectedRise / intervalsInAbsorption) * 1.2;
+            var carbSensitivity = _profile.Sens / _profile.CarbRatio;
+            var risePerInterval = carb.Carbs * carbSensitivity
+                * CarbAbsorptionShape(hoursSince, absorptionTimeHours)
+                / CarbCurveSum(absorptionTimeHours);
 
             totalEffect += risePerInterval;
         }
 
         return totalEffect;
+    }
+
+    /// <summary>
+    /// Gamma-like (k = 2) absorption shape peaking at a third of the absorption
+    /// time, unnormalised; absorption ends at 1.5x the nominal time.
+    /// </summary>
+    private static double CarbAbsorptionShape(double hoursSince, double absorptionTimeHours)
+    {
+        if (hoursSince <= 0 || hoursSince > absorptionTimeHours * 1.5)
+            return 0;
+
+        var normalizedTime = hoursSince / (absorptionTimeHours / 3.0);
+        return normalizedTime * Math.Exp(-normalizedTime / 1.2);
+    }
+
+    private double CarbCurveSum(double absorptionTimeHours)
+    {
+        if (_carbCurveSums.TryGetValue(absorptionTimeHours, out var sum))
+            return sum;
+
+        for (var h = 0.0; h <= absorptionTimeHours * 1.5; h += 5.0 / 60.0)
+            sum += CarbAbsorptionShape(h, absorptionTimeHours);
+        _carbCurveSums[absorptionTimeHours] = sum;
+        return sum;
     }
 
     /// <summary>

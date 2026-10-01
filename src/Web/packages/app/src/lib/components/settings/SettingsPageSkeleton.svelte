@@ -18,7 +18,7 @@
   </div>
 
   <!-- Card Skeletons -->
-  {#each Array(cardCount) as _, i}
+  {#each Array(cardCount) as _, i (i)}
     <Card>
       <CardHeader>
         <div class="flex items-center gap-3">
@@ -63,7 +63,7 @@
         {:else}
           <!-- List items -->
           <div class="space-y-3">
-            {#each Array(3) as _}
+            {#each Array(3) as _, i (i)}
               <div class="flex items-center gap-4 p-3 rounded-lg border">
                 <Skeleton class="h-10 w-10 rounded-lg" />
                 <div class="flex-1 space-y-2">

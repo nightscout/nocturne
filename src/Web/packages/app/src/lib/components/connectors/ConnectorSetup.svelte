@@ -1,12 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type {
-    AvailableConnector,
-    ConnectorConfigurationResponse,
-    ConnectorStatusInfo,
-    ConnectorDataSummary,
-    ConnectorCapabilities,
-  } from "$lib/api/generated/nocturne-api-client";
+  import type { AvailableConnector } from "$lib/api/generated/nocturne-api-client";
   import {
     getAllConnectorStatus,
     getConfiguration as getConnectorConfiguration,
@@ -24,6 +18,8 @@
     getConnectorCapabilities,
     getConnectorDataSummary,
   } from "$lib/api/generated/services.generated.remote";
+  import { getMyPermissions } from "$lib/api/generated/myPermissions.generated.remote";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
   import { describeSubmitError } from "$lib/forms/submit-error";
   import {
     Card,
@@ -40,7 +36,9 @@
   import CareLinkConnectPanel from "$lib/components/connectors/CareLinkConnectPanel.svelte";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
 
-  import { AlertCircle, ExternalLink } from "lucide-svelte";
+  import AlertCircle from "@lucide/svelte/icons/circle-alert";
+  import Lock from "@lucide/svelte/icons/lock";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
   import ConnectorSelectionGrid from "$lib/components/connectors/ConnectorSelectionGrid.svelte";
   import ConnectorDangerZone from "$lib/components/connectors/ConnectorDangerZone.svelte";
   import { retainQuery } from "$lib/api/retain-query.svelte";
@@ -88,11 +86,25 @@
   let manuallySelectedId = $state<string | undefined>(undefined);
   const activeId = $derived(manuallySelectedId ?? connectorId);
 
+  // Asked here rather than read from the layout: the setup wizard signs the owner in without a
+  // navigation, so the layout's grant is the anonymous one until the next page load.
+  const permissionsQuery = getMyPermissions();
+  const canManage = $derived(
+    canManageConnectors(
+      permissionsQuery.current?.scopes,
+      permissionsQuery.current?.refusedAsDemoSubject
+    )
+  );
+
   // --- Reactive queries ---
   const servicesOverviewQuery = getServicesOverview();
   const schemaQuery = $derived(activeId ? getConnectorSchema(activeId) : null);
-  const configQuery = $derived(activeId ? getConnectorConfiguration(activeId) : null);
-  const effectiveConfigQuery = $derived(activeId ? getConnectorEffectiveConfig(activeId) : null);
+  const configQuery = $derived(
+    activeId && canManage ? getConnectorConfiguration(activeId) : null
+  );
+  const effectiveConfigQuery = $derived(
+    activeId && canManage ? getConnectorEffectiveConfig(activeId) : null
+  );
   const dataSummaryQuery = $derived(activeId ? getConnectorDataSummary(activeId) : null);
   const capabilitiesQuery = $derived(activeId ? getConnectorCapabilities(activeId) : null);
   retainQuery(() => schemaQuery);
@@ -100,7 +112,8 @@
   retainQuery(() => effectiveConfigQuery);
   retainQuery(() => dataSummaryQuery);
   retainQuery(() => capabilitiesQuery);
-  const statusQuery = getAllConnectorStatus();
+  const statusQuery = $derived(canManage ? getAllConnectorStatus() : null);
+  retainQuery(() => statusQuery);
 
   // --- Derived data from queries ---
   const servicesOverview = $derived(servicesOverviewQuery.current ?? null);
@@ -119,15 +132,15 @@
       : null
   );
 
-  const existingConfig = $derived((configQuery?.current ?? null) as ConnectorConfigurationResponse | null);
-  const effectiveConfig = $derived((effectiveConfigQuery?.current ?? null) as Record<string, unknown> | null);
-  const dataSummary = $derived((dataSummaryQuery?.current ?? null) as ConnectorDataSummary | null);
-  const connectorCapabilities = $derived((capabilitiesQuery?.current ?? null) as ConnectorCapabilities | null);
+  const existingConfig = $derived(configQuery?.current ?? null);
+  const effectiveConfig = $derived(effectiveConfigQuery?.current ?? null);
+  const dataSummary = $derived(dataSummaryQuery?.current ?? null);
+  const connectorCapabilities = $derived(capabilitiesQuery?.current ?? null);
 
   const connectorStatus = $derived.by(() => {
-    const statuses = statusQuery.current;
+    const statuses = statusQuery?.current;
     if (!statuses || !activeId) return null;
-    return (statuses as ConnectorStatusInfo[]).find(
+    return statuses.find(
       (s) => s.connectorName?.toLowerCase() === activeId!.toLowerCase()
     ) ?? null;
   });
@@ -167,7 +180,7 @@
   const isLoading = $derived.by(() => {
     if (step === "selection") return servicesOverviewQuery.loading;
     // In configure mode, we need overview + schema at minimum
-    if (servicesOverviewQuery.loading) return true;
+    if (servicesOverviewQuery.loading || permissionsQuery.loading) return true;
     if (activeId && (schemaQuery?.loading ?? true)) return true;
     return false;
   });
@@ -241,7 +254,7 @@
     try {
       await saveConfiguration({
         connectorName: connectorInfo.id,
-        request: config as any,
+        request: config,
       });
 
       if (Object.keys(newSecrets).length > 0) {
@@ -334,7 +347,7 @@
   {#if isLoading}
     <SettingsPageSkeleton cardCount={2} />
   {:else if error}
-    <Card class="border-destructive">
+    <Card variant="destructive">
       <CardContent class="flex items-center gap-3 pt-6">
         <AlertCircle class="h-5 w-5 text-destructive" />
         <div>
@@ -353,27 +366,25 @@
             <p class="text-muted-foreground">{connectorInfo.description}</p>
           {/if}
         </div>
-        <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
-          {isActive ? "Active" : "Inactive"}
-        </Badge>
+        {#if canManage}
+          <Badge variant={isActive ? "default" : "secondary"} class="shrink-0">
+            {isActive ? "Active" : "Inactive"}
+          </Badge>
+        {/if}
       </div>
 
       <!-- Save Message -->
       {#if saveMessage}
-        <Card
-          class={saveMessage.type === "error"
-            ? "border-destructive"
-            : "border-green-500"}
-        >
+        <Card variant={saveMessage.type === "error" ? "destructive" : "success"}>
           <CardContent class="flex items-center gap-3 py-3">
             {#if saveMessage.type === "error"}
               <AlertCircle class="h-5 w-5 text-destructive" />
             {:else}
               <div
-                class="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center"
+                class="h-5 w-5 rounded-full bg-success flex items-center justify-center"
               >
                 <svg
-                  class="h-3 w-3 text-white"
+                  class="h-3 w-3 text-success-foreground"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -393,11 +404,11 @@
       {/if}
 
       <!-- Enable/Disable Toggle -->
-      {#if showToggle}
+      {#if showToggle && canManage}
         <Card data-testid="connector-enable">
           <CardContent class="flex items-center justify-between gap-4 py-4">
             <div class="space-y-0.5 min-w-0">
-              <Label class="text-base">Enable Connector</Label>
+              <Label size="lg">Enable Connector</Label>
               <p class="text-sm text-muted-foreground">
                 When enabled, the connector will actively sync data
               </p>
@@ -412,12 +423,22 @@
       {/if}
 
       <!-- CareLink browser-based sign-in -->
-      {#if isCareLink}
+      {#if isCareLink && canManage}
         <CareLinkConnectPanel onConnected={onCareLinkConnected} />
       {/if}
 
       <!-- Configuration Form -->
-      {#if hasRuntimeConfig}
+      {#if !canManage}
+        <Card data-testid="connector-read-only">
+          <CardContent class="flex items-center gap-3 py-4">
+            <Lock class="h-5 w-5 shrink-0 text-muted-foreground" />
+            <p class="text-sm text-muted-foreground">
+              Only members who can manage this site's settings can configure or
+              enable this connector.
+            </p>
+          </CardContent>
+        </Card>
+      {:else if hasRuntimeConfig}
         <ConnectorConfigForm
           {schema}
           bind:configuration
@@ -475,7 +496,7 @@
               <div class="flex flex-wrap gap-1 justify-end">
                 {#if connectorCapabilities.supportedDataTypes && connectorCapabilities.supportedDataTypes.length > 0}
                   {#each connectorCapabilities.supportedDataTypes as dataType (dataType)}
-                    <Badge variant="outline" class="text-xs">
+                    <Badge variant="outline">
                       {dataType}
                     </Badge>
                   {/each}
@@ -492,7 +513,6 @@
                 variant={connectorCapabilities.supportsHistoricalSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsHistoricalSync
                   ? "Supported"
@@ -515,7 +535,6 @@
                 variant={connectorCapabilities.supportsManualSync
                   ? "default"
                   : "secondary"}
-                class="text-xs"
               >
                 {connectorCapabilities.supportsManualSync
                   ? "Enabled"
@@ -533,7 +552,7 @@
             <a
               href={connectorInfo.documentationUrl}
               target="_blank"
-              rel="noopener noreferrer"
+              rel="external noopener noreferrer"
               class="flex items-center gap-2 text-sm text-primary hover:underline"
             >
               <ExternalLink class="h-4 w-4" />

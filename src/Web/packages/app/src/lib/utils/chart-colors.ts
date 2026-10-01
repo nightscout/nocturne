@@ -4,7 +4,7 @@
  */
 // Type-only so the generated client is not loaded at runtime; this module is imported by
 // code whose tests run without codegen.
-import type { ChartColor } from '$lib/api';
+import type { ChartColor } from '$api-clients';
 
 /**
  * Resolve a ChartColor enum value to a CSS variable reference

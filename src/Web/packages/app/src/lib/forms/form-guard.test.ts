@@ -15,7 +15,9 @@ vi.mock("runed", () => ({
 
 import { beforeNavigate } from "$app/navigation";
 import { z } from "zod";
-import { FormGuard } from "./form-guard.svelte";
+import type { Mock } from "vitest";
+import type { BeforeNavigate } from "@sveltejs/kit";
+import { FormGuard, type GuardedForm } from "./form-guard.svelte";
 import { GENERIC_SUBMIT_ERROR } from "./submit-error";
 
 const schema = z.object({
@@ -28,15 +30,23 @@ const schema = z.object({
  * and false when the server returned validation issues, and rejects when the
  * handler threw — the three outcomes the real client runtime produces.
  */
+interface MockForm extends GuardedForm {
+  pending: number;
+  result: unknown;
+  for(key: string): MockForm;
+  _triggerEnhance(): Promise<void>;
+  _submitSpy: Mock<() => Promise<boolean>>;
+}
+
 function createMockForm(
-  submitOutcome: (() => Promise<boolean>) | undefined = async () => true
-) {
-  let enhanceCallback: any;
+  submitOutcome: () => Promise<boolean> = async () => true
+): MockForm {
+  let enhanceCallback: Parameters<GuardedForm["enhance"]>[0] | undefined;
   const submitSpy = vi.fn(submitOutcome);
   return {
     pending: 0,
-    result: null as any,
-    enhance(cb: any) {
+    result: null,
+    enhance(cb) {
       enhanceCallback = cb;
       return { action: "/mock", method: "POST" };
     },
@@ -253,13 +263,21 @@ describe("FormGuard", () => {
 
     it("cancels navigation when dirty and touched", () => {
       const cancelSpy = vi.fn();
-      vi.mocked(beforeNavigate).mockImplementation((cb: any) => {
+      vi.mocked(beforeNavigate).mockImplementation((cb) => {
         // Simulate navigation event
-        cb({ cancel: cancelSpy });
+        const navigation: BeforeNavigate = {
+          type: "goto",
+          from: null,
+          to: null,
+          willUnload: false,
+          complete: Promise.resolve(),
+          cancel: cancelSpy,
+        };
+        cb(navigation);
       });
 
       // Use confirm mock that returns false (user declines to leave)
-      globalThis.confirm = vi.fn().mockReturnValue(false) as any;
+      vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
 
       // Values differ from initial so dirty=true
       // touched is set by $effect when dirty, but $effect doesn't run in

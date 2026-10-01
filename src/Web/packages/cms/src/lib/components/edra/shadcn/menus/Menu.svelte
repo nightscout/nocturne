@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { Button } from '@nocturne/ui/ui/button';
 	import { cn } from '@nocturne/ui/utils';
 	import { isTextSelection } from '@tiptap/core';
 	import commands from '../../commands/toolbar-commands.ts';
@@ -47,9 +46,7 @@
 			}
 		} = editor;
 		// check if the selection is a table grip
-		const domAtPos = view.domAtPos(from || 0).node as HTMLElement;
-		const nodeDOM = view.nodeDOM(from || 0) as HTMLElement;
-		const node = nodeDOM || domAtPos;
+		const node = view.nodeDOM(from || 0) || view.domAtPos(from || 0).node;
 
 		if (isTableGripSelected(node)) {
 			return false;
@@ -64,17 +61,13 @@
 		return !editor.state.selection.empty;
 	}
 
-	const isTableGripSelected = (node: HTMLElement) => {
-		let container = node;
-		while (container && !['TD', 'TH'].includes(container.tagName)) {
-			container = container.parentElement!;
-		}
-		const gripColumn =
-			container && container.querySelector && container.querySelector('a.grip-column.selected');
-		const gripRow =
-			container && container.querySelector && container.querySelector('a.grip-row.selected');
-		if (gripColumn || gripRow) {
-			return true;
+	const isTableGripSelected = (node: Node) => {
+		let current: Node | null = node;
+		while (current) {
+			if (current instanceof HTMLElement && ['TD', 'TH'].includes(current.tagName)) {
+				return !!current.querySelector('a.grip-column.selected, a.grip-row.selected');
+			}
+			current = current.parentElement;
 		}
 		return false;
 	};
@@ -86,7 +79,7 @@
 	pluginKey="edra-bubble-menu"
 	{shouldShow}
 	class={cn(
-		'edra-bubble-menu bg-popover z-50! flex h-fit w-fit items-center gap-0.5 rounded-lg border p-0',
+		'bg-popover z-50! flex h-fit w-fit items-center gap-0.5 rounded-lg border p-0',
 		className
 	)}
 	options={{

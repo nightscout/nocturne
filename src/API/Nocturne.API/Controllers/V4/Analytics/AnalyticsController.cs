@@ -271,7 +271,7 @@ public class AnalyticsController : ControllerBase
         {
             if (!_analyticsService.IsAnalyticsEnabled())
             {
-                return BadRequest(new { error = "Analytics collection is disabled" });
+                return Problem(detail: "Analytics collection is disabled", statusCode: 400, title: "Bad Request");
             }
 
             await _analyticsService.TrackCustomEventAsync(eventData);

@@ -18,7 +18,7 @@
             <tr>
                 <td>{sdk.name}</td>
                 <td>
-                    <a href={sdk.registryUrl} target="_blank" rel="noreferrer">
+                    <a href={sdk.registryUrl} target="_blank" rel="external noreferrer">
                         <code>{sdk.package}</code>
                     </a>
                     <br />

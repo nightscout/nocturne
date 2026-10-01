@@ -294,7 +294,7 @@ public class DeviceStatusProjectionServiceTests
         result.Override!.Name.Should().Be("Exercise");
         result.Override.Active.Should().BeFalse(); // Has end timestamp, so not active
         result.Override.Multiplier.Should().Be(0.8);
-        result.Override.Duration.Should().Be(60);
+        result.Override.Duration.Should().Be(3600);
         result.Override.CurrentCorrectionRange.Should().NotBeNull();
         result.Override.CurrentCorrectionRange!.MinValue.Should().Be(140.0);
         result.Override.CurrentCorrectionRange.MaxValue.Should().Be(160.0);
@@ -335,12 +335,14 @@ public class DeviceStatusProjectionServiceTests
     }
 
     [Fact]
-    public void ProjectAsync_WithSrvTimestampsInExtras_AssignsTypedPropertiesNotExtensionData()
+    public void ProjectAsync_WithClientSrvTimestampsInExtras_ReportsServerClockAndDoesNotReEmit()
     {
-        // NS-migrated docs carry srvModified/srvCreated in extras. Splatting them into
-        // ExtensionData would serialize each key twice (typed Mills fallback + extras
-        // value); strict client parsers reject duplicate keys.
+        // The record reports the server clock, so client-supplied srvCreated/srvModified must not
+        // override it. Re-emitting the extras would also serialize each key twice, which strict
+        // client parsers reject.
         var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.CreatedAt = ReferenceTime.AddMinutes(3);
+        aps.ModifiedAt = ReferenceTime.AddMinutes(5);
         aps.SuggestedJson = JsonSerializer.Serialize(new OpenApsSuggested { Bg = 120 }, JsonOptions);
 
         var extras = new DeviceStatusExtras
@@ -357,10 +359,49 @@ public class DeviceStatusProjectionServiceTests
 
         var result = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, extras);
 
-        result.SrvModified.Should().Be(1_722_945_600_000L);
-        result.SrvCreated.Should().Be(1_722_945_500_000L);
+        result.SrvModified.Should().Be(Mills(aps.ModifiedAt));
+        result.SrvCreated.Should().Be(Mills(aps.CreatedAt));
         result.ExtensionData.Should().NotContainKey("srvModified");
         result.ExtensionData.Should().NotContainKey("srvCreated");
+    }
+
+    [Fact]
+    public void ProjectAsync_WrittenLongAfterTheEvent_ReportsCreatedAtAsTheEventTime()
+    {
+        var aps = CreateApsSnapshot(AidAlgorithm.OpenAps);
+        aps.CreatedAt = ReferenceTime.AddDays(400);
+        aps.ModifiedAt = ReferenceTime.AddDays(400);
+        var pump = CreatePumpSnapshot();
+        pump.CreatedAt = ReferenceTime.AddDays(30);
+
+        var fromAps = DeviceStatusProjectionService.ProjectFromSnapshots(aps, null, null, null, null);
+        fromAps.CreatedAt.Should().Be("2024-01-15T12:00:00.000Z");
+        fromAps.Mills.Should().Be(ReferenceMillis);
+        fromAps.SrvCreated.Should().Be(Mills(aps.CreatedAt));
+
+        DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, null, null, null)
+            .CreatedAt.Should().Be("2024-01-15T12:00:00.000Z");
+    }
+
+    [Fact]
+    public void ProjectAsync_WithoutApsSnapshot_ReportsAnchorServerClock()
+    {
+        // Orphan pump/uploader records (xDrip+) have no APS anchor; the server clock comes from the
+        // same anchor the timestamp uses, in the same precedence.
+        var pump = CreatePumpSnapshot();
+        pump.CreatedAt = ReferenceTime.AddMinutes(1);
+        pump.ModifiedAt = ReferenceTime.AddMinutes(2);
+        var uploader = CreateUploaderSnapshot();
+        uploader.CreatedAt = ReferenceTime.AddMinutes(8);
+        uploader.ModifiedAt = ReferenceTime.AddMinutes(9);
+
+        var fromPump = DeviceStatusProjectionService.ProjectFromSnapshots(null, pump, uploader, null, null);
+        fromPump.SrvCreated.Should().Be(Mills(pump.CreatedAt));
+        fromPump.SrvModified.Should().Be(Mills(pump.ModifiedAt));
+
+        var fromUploader = DeviceStatusProjectionService.ProjectFromSnapshots(null, null, uploader, null, null);
+        fromUploader.SrvCreated.Should().Be(Mills(uploader.CreatedAt));
+        fromUploader.SrvModified.Should().Be(Mills(uploader.ModifiedAt));
     }
 
     [Fact]
@@ -558,6 +599,7 @@ public class DeviceStatusProjectionServiceTests
         results[0].OpenAps.Should().NotBeNull();
         results[0].Pump.Should().NotBeNull();
         results[0].Pump!.Reservoir.Should().Be(60.0);
+        results[0].SrvModified.Should().Be(Mills(aps.ModifiedAt));
     }
 
     #endregion
@@ -724,15 +766,14 @@ public class DeviceStatusProjectionServiceTests
     public async Task CountAsync_WithNoFilter_ReturnsSumOfApsAndOrphanPump()
     {
         _apsRepo
-            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .Setup(r => r.CountAsync(null, null, null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(10);
         _pumpRepo
-            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(12);
+            .Setup(r => r.CountUncorrelatedAsync(null, null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(2);
 
         var count = await _service.CountAsync(null, CancellationToken.None);
 
-        // 10 APS + max(0, 12 - 10) orphan pumps = 12
         count.Should().Be(12);
     }
 
@@ -743,12 +784,14 @@ public class DeviceStatusProjectionServiceTests
             .Setup(r => r.CountAsync(
                 It.Is<DateTime?>(d => d.HasValue),
                 It.Is<DateTime?>(d => d.HasValue),
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(5);
         _pumpRepo
-            .Setup(r => r.CountAsync(
+            .Setup(r => r.CountUncorrelatedAsync(
                 It.Is<DateTime?>(d => d.HasValue),
                 It.Is<DateTime?>(d => d.HasValue),
+                null,
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
 
@@ -756,24 +799,22 @@ public class DeviceStatusProjectionServiceTests
             "find[created_at][$gte]=2024-01-15T00:00:00Z&find[created_at][$lt]=2024-01-16T00:00:00Z",
             CancellationToken.None);
 
-        // 5 APS + max(0, 3 - 5) orphan pumps = 5
-        count.Should().Be(5);
+        count.Should().Be(8);
     }
 
     [Fact]
-    public async Task CountAsync_WhenPumpsExceedAps_IncludesOrphanEstimate()
+    public async Task CountAsync_WithDeviceFilter_PassesDeviceToRepos()
     {
         _apsRepo
-            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
+            .Setup(r => r.CountAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
         _pumpRepo
-            .Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(8);
+            .Setup(r => r.CountUncorrelatedAsync(null, null, "openaps://rpi", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
 
-        var count = await _service.CountAsync(null, CancellationToken.None);
+        var count = await _service.CountAsync("find[device]=openaps://rpi", CancellationToken.None);
 
-        // 3 APS + max(0, 8 - 3) orphan pumps = 8
-        count.Should().Be(8);
+        count.Should().Be(4);
     }
 
     #endregion
@@ -824,6 +865,9 @@ public class DeviceStatusProjectionServiceTests
     #endregion
 
     #region Helpers
+
+    private static long Mills(DateTime value) =>
+        new DateTimeOffset(value, TimeSpan.Zero).ToUnixTimeMilliseconds();
 
     private static ApsSnapshot CreateApsSnapshot(AidAlgorithm algorithm)
     {

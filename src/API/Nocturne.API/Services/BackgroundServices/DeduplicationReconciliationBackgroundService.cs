@@ -1,9 +1,7 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Infrastructure;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
 
 namespace Nocturne.API.Services.BackgroundServices;
 
@@ -24,18 +22,22 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
     private static readonly int MaxBatchesPerTick = 4;
 
     private readonly IServiceProvider _serviceProvider;
+    private readonly ActiveTenantSnapshot _activeTenants;
     private readonly ILogger<DeduplicationReconciliationBackgroundService> _logger;
 
     /// <summary>
     /// Initialises a new <see cref="DeduplicationReconciliationBackgroundService"/>.
     /// </summary>
     /// <param name="serviceProvider">Root DI service provider; a new scope is created per tenant.</param>
+    /// <param name="activeTenants">The active tenants to reconcile.</param>
     /// <param name="logger">Logger instance.</param>
     public DeduplicationReconciliationBackgroundService(
         IServiceProvider serviceProvider,
+        ActiveTenantSnapshot activeTenants,
         ILogger<DeduplicationReconciliationBackgroundService> logger)
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        _activeTenants = activeTenants ?? throw new ArgumentNullException(nameof(activeTenants));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -76,13 +78,7 @@ internal sealed class DeduplicationReconciliationBackgroundService : BackgroundS
     /// <param name="ct">Cancellation token.</param>
     internal async Task ReconcileAllTenantsAsync(CancellationToken ct)
     {
-        using var lookupScope = _serviceProvider.CreateScope();
-        var factory = lookupScope.ServiceProvider.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-        await using var lookupContext = await factory.CreateDbContextAsync(ct);
-        var tenants = await lookupContext.Tenants.AsNoTracking()
-            .Where(t => t.IsActive)
-            .Select(t => new { t.Id, t.Slug, t.DisplayName })
-            .ToListAsync(ct);
+        var tenants = await _activeTenants.GetAsync(ct);
 
         foreach (var tenant in tenants)
         {

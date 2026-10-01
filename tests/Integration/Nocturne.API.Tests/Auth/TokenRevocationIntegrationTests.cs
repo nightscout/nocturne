@@ -13,14 +13,14 @@ namespace Nocturne.API.Tests.Integration.Auth;
 /// Token Introspection (RFC 7662) endpoints.
 /// </summary>
 [Trait("Category", "Integration")]
-public class TokenRevocationIntegrationTests : AspireIntegrationTestBase
+public class TokenRevocationIntegrationTests : ApiIntegrationTestBase
 {
     private Guid _tenantId;
     private Guid _subjectId;
     private string _accessToken = null!;
 
     public TokenRevocationIntegrationTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output)
         : base(fixture, output) { }
 

@@ -38,6 +38,8 @@ public class OverviewHubAuthorizeTests
     private static GlucoseReadTenant Tenant(Guid id) =>
         new(
             new TenantEntity { Id = id, Slug = id.ToString("N")[..8], DisplayName = "T", IsActive = true },
+            new HashSet<string> { Scope.GlucoseRead },
+            MembershipLimitTo24Hours: false,
             new HashSet<string> { Scope.GlucoseRead });
 
     private static (OverviewHub hub,

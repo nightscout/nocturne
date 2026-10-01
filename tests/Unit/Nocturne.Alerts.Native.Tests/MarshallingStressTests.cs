@@ -152,13 +152,30 @@ public class MarshallingStressTests
         var rule = new RustAlertRule
         {
             Id = RuleId,
-            ConditionType = "threshold",
+            ConditionType = "iob",
             ConditionParams = Element(new JsonObject()),
         };
 
         var response = RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         JsonNode.Parse(response.Result!.Value.GetRawText())!["root"]!.GetValue<bool>().Should().BeFalse();
+    }
+
+    [NativeFact]
+    public void Condition_params_whose_defaults_cannot_be_evaluated_throw_typed_exception()
+    {
+        var rule = new RustAlertRule
+        {
+            Id = RuleId,
+            ConditionType = "threshold",
+            ConditionParams = Element(new JsonObject()),
+        };
+
+        var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
+
+        act.Should().Throw<RustAlertEngineException>()
+            .WithMessage("*malformed condition_params for 'threshold': direction_missing at 'threshold'*")
+            .Which.IsConditionRejection.Should().BeTrue();
     }
 
     [NativeFact]
@@ -174,7 +191,8 @@ public class MarshallingStressTests
         var act = () => RustAlertEngine.Evaluate(rule, EmptyContext(), new DateTime(2026, 1, 5, 12, 0, 0, DateTimeKind.Utc));
 
         act.Should().Throw<RustAlertEngineException>()
-            .WithMessage("*unknown condition_type 'definitely_not_a_condition'*");
+            .WithMessage("*unknown condition_type 'definitely_not_a_condition'*")
+            .Which.IsConditionRejection.Should().BeTrue();
     }
 
     [NativeFact]
@@ -195,7 +213,8 @@ public class MarshallingStressTests
 
         var act = () => RustAlertEngine.Evaluate(request);
 
-        act.Should().Throw<RustAlertEngineException>().WithMessage("*unsupported schema_version 42*");
+        act.Should().Throw<RustAlertEngineException>().WithMessage("*unsupported schema_version 42*")
+            .Which.IsConditionRejection.Should().BeFalse();
     }
 
     [NativeFact]

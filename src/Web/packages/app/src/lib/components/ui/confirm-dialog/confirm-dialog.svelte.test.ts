@@ -2,6 +2,7 @@ import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { describe, it, expect, vi } from "vitest";
 import ConfirmDialog from "./confirm-dialog.svelte";
+import { buttonVariants } from "$lib/components/ui/button";
 
 const base = { open: true, title: "Delete this entry?", confirmLabel: "Delete" };
 
@@ -60,17 +61,16 @@ describe("ConfirmDialog", () => {
   it("dresses a destructive confirm in the destructive button variant", async () => {
     render(ConfirmDialog, { ...base, destructive: true });
 
-    const classes = page.getByRole("button", { name: "Delete" }).element()
-      .className;
+    const classes = page
+      .getByRole("button", { name: "Delete" })
+      .element()
+      .className.split(/\s+/);
 
-    // The theme defines --color-destructive but no --color-destructive-foreground,
-    // so `text-destructive-foreground` compiles to nothing while still winning the
-    // tailwind-merge conflict against the default variant's foreground.
-    expect(classes).not.toContain("text-destructive-foreground");
-    expect(classes).toContain("text-white");
-    expect(classes).toContain("bg-destructive");
-    expect(classes).toContain("dark:bg-destructive/60");
-    expect(classes).toContain("focus-visible:ring-destructive/20");
+    // Every class of the variant survives the merge, so nothing layered on at the
+    // call site overrides its colours.
+    for (const token of buttonVariants({ variant: "destructive" }).split(/\s+/)) {
+      expect(classes).toContain(token);
+    }
   });
 
   it("leaves a non-destructive confirm on the default variant", async () => {

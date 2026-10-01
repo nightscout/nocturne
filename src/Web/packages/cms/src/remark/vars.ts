@@ -28,11 +28,7 @@ export const remarkVars: Plugin<[], Root> = () => {
       }
 
       if (parts.length > 0 && parent && typeof index === 'number') {
-        const newNodes = parts.map((part) => ({
-          type: part.type as 'text' | 'html',
-          value: part.value,
-        }));
-        parent.children.splice(index, 1, ...newNodes);
+        parent.children.splice(index, 1, ...parts);
       }
     });
   };

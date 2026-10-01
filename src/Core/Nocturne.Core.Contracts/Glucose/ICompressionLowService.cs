@@ -29,7 +29,8 @@ public interface ICompressionLowService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Accept a suggestion with adjusted bounds, creating a DataExclusion StateSpan
+    /// Accept a suggestion with adjusted bounds, creating a DataExclusion StateSpan that marks the
+    /// range. Nothing filters on the span yet, so the readings still count in every statistic.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when the suggestion is not found or is not pending.</exception>
     Task<StateSpan> AcceptSuggestionAsync(

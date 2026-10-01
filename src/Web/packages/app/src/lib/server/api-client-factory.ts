@@ -47,9 +47,9 @@ export interface ServerHttpClient {
  * any auth-cookie rotation back onto the outgoing SvelteKit response.
  *
  * Exposed separately from {@link createServerApiClient} so callers that need a
- * raw request against the backend (e.g. probing a legacy `/api/v1/*` endpoint
- * the typed client doesn't surface) reuse the exact same auth-forwarding and
- * token-rotation handling instead of reimplementing it.
+ * raw request against the backend (for example one that needs the raw status
+ * and its own timeout, as the realtime ticket does) reuse the exact same
+ * auth-forwarding and token-rotation handling instead of reimplementing it.
  */
 export function createServerHttpClient(
   fetchFn: typeof fetch,

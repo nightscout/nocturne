@@ -2,7 +2,7 @@ import type { Entry, Treatment } from "$lib/api";
 
 // Local type definition for device status
 export interface DeviceStatus {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ServerSettings {
@@ -39,19 +39,12 @@ export interface ServerSettings {
       bgTargetBottom?: number;
       bgLow?: number;
     };
-    extendedSettings?: any;
+    extendedSettings?: unknown;
   };
-  extendedSettings?: any;
+  extendedSettings?: unknown;
   authorized?: {
     role?: string[];
   };
-}
-
-export interface ClientThresholds {
-  high: number;
-  targetTop: number;
-  targetBottom: number;
-  low: number;
 }
 
 /**
@@ -106,7 +99,6 @@ export interface ClientSettings {
   heartbeat: number;
   baseURL: string;
   authDefaultRoles: string;
-  thresholds: ClientThresholds;
   demoMode: DemoModeSettings;
   titleFavicon: TitleFaviconSettings;
 }

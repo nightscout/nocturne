@@ -103,39 +103,7 @@ public class SystemEventRepository : ISystemEventRepository
     public async Task<SystemEvent> UpsertSystemEventAsync(
         SystemEvent systemEvent,
         CancellationToken cancellationToken = default)
-    {
-        SystemEventEntity? entity = null;
-
-        // Check for existing by originalId
-        if (!string.IsNullOrEmpty(systemEvent.OriginalId))
-        {
-            entity = await _context.SystemEvents.FirstOrDefaultAsync(
-                e => e.OriginalId == systemEvent.OriginalId,
-                cancellationToken);
-        }
-
-        if (entity != null)
-        {
-            // Update existing
-            entity.EventType = systemEvent.EventType.ToString();
-            entity.Category = systemEvent.Category.ToString();
-            entity.Code = systemEvent.Code;
-            entity.Description = systemEvent.Description;
-            entity.Mills = systemEvent.Mills;
-            entity.Source = systemEvent.Source;
-            entity.MetadataJson = systemEvent.Metadata != null
-                ? System.Text.Json.JsonSerializer.Serialize(systemEvent.Metadata)
-                : null;
-        }
-        else
-        {
-            entity = SystemEventMapper.ToEntity(systemEvent);
-            _context.SystemEvents.Add(entity);
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
-        return SystemEventMapper.ToDomainModel(entity);
-    }
+        => (await UpsertBatchAsync([systemEvent], cancellationToken))[0];
 
     /// <summary>
     /// Bulk upsert system events (for connector imports)
@@ -146,14 +114,64 @@ public class SystemEventRepository : ISystemEventRepository
     public async Task<int> BulkUpsertAsync(
         IEnumerable<SystemEvent> events,
         CancellationToken cancellationToken = default)
+        => (await UpsertBatchAsync(events.ToList(), cancellationToken)).Count;
+
+    /// <summary>
+    /// Upserts <paramref name="events"/> by <c>OriginalId</c> with one save, leaving the rows a save
+    /// per event in input order would: a repeated <c>OriginalId</c> updates the row its first
+    /// occurrence inserted. Every row it loaded or added is detached afterwards so a long connector
+    /// sync does not pay change detection over every earlier batch; only those rows, since the scoped
+    /// context may also track entities the caller still holds.
+    /// </summary>
+    private async Task<List<SystemEvent>> UpsertBatchAsync(
+        IReadOnlyList<SystemEvent> events,
+        CancellationToken cancellationToken)
     {
-        var count = 0;
-        foreach (var evt in events)
+        if (events.Count == 0)
+            return [];
+
+        var originalIds = events
+            .Select(e => e.OriginalId)
+            .Where(id => !string.IsNullOrEmpty(id))
+            .Distinct()
+            .ToList();
+        var existingRows = originalIds.Count == 0
+            ? []
+            : await _context.SystemEvents
+                .Where(e => originalIds.Contains(e.OriginalId))
+                .ToListAsync(cancellationToken);
+        var loaded = new HashSet<SystemEventEntity>(existingRows, ReferenceEqualityComparer.Instance);
+        var existingByOriginalId = existingRows
+            .GroupBy(e => e.OriginalId!)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var written = new List<SystemEventEntity>(events.Count);
+        foreach (var systemEvent in events)
         {
-            await UpsertSystemEventAsync(evt, cancellationToken);
-            count++;
+            var hasOriginalId = !string.IsNullOrEmpty(systemEvent.OriginalId);
+            if (hasOriginalId && existingByOriginalId.TryGetValue(systemEvent.OriginalId!, out var entity))
+            {
+                SystemEventMapper.UpdateEntity(entity, systemEvent);
+            }
+            else
+            {
+                entity = SystemEventMapper.ToEntity(systemEvent);
+                _context.SystemEvents.Add(entity);
+                loaded.Add(entity);
+                if (hasOriginalId)
+                    existingByOriginalId[systemEvent.OriginalId!] = entity;
+            }
+
+            written.Add(entity);
         }
-        return count;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var results = written.Select(SystemEventMapper.ToDomainModel).ToList();
+        foreach (var entity in loaded)
+            _context.Entry(entity).State = EntityState.Detached;
+
+        return results;
     }
 
     /// <summary>

@@ -17,33 +17,26 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing blood glucose check records in the database. A DeduplicationService
-/// participant, so it inherits the shared CRUD/soft-delete surface from
-/// <see cref="V4RepositoryBase{TModel,TEntity}"/> and keeps only the dedup-specific behaviour as
-/// overrides (extended <c>GetAsync</c> with the non-primary LinkedRecords filter, dedup
-/// <c>BulkCreateAsync</c>). Soft-deletes inherit the base's audited path.
+/// participant on top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>,
+/// so it keeps only the dedup-specific behaviour as overrides (extended <c>GetAsync</c> with the
+/// non-primary LinkedRecords filter, post-commit dedup linking).
 /// </summary>
-public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
+public class BGCheckRepository : SyncUpsertRepositoryBase<BGCheck, BGCheckEntity>, IBGCheckRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<BGCheckRepository> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BGCheckRepository"/> class.
     /// </summary>
-    /// <param name="contextFactory">The tenant database context factory.</param>
-    /// <param name="deduplicationService">The deduplication service.</param>
-    /// <param name="auditContext">The audit context for tracking mutations (used by the base soft-delete path).</param>
-    /// <param name="logger">The logger instance.</param>
     public BGCheckRepository(
         ITenantDbContextFactory contextFactory,
         IDeduplicationService deduplicationService,
         IAuditContext auditContext,
         ILogger<BGCheckRepository> logger,
         IV4RecordBroadcaster<BGCheck>? broadcaster = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -155,7 +148,7 @@ public class BGCheckRepository : V4RepositoryBase<BGCheck, BGCheckEntity>, IBGCh
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "BGCheck", inserted.Count);
         }
     }
 }

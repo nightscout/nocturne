@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -30,7 +31,8 @@ public class BasalInjectionRepositoryTests : IDisposable
 
         _repo = new BasalInjectionRepository(
             new TestTenantDbContextFactory(_context),
-            new Mock<IAuditContext>().Object);
+            new Mock<IAuditContext>().Object,
+            NullLogger<BasalInjectionRepository>.Instance);
     }
 
     public void Dispose()

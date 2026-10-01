@@ -12,7 +12,9 @@ public interface IGuestLinkService
         Guid createdBySubjectId,
         string label,
         string baseUrl,
+        IReadOnlySet<string> creatorScopes,
         IEnumerable<string>? scopes = null,
+        bool limitTo24Hours = false,
         CancellationToken ct = default);
 
     Task<GuestLinkActivationResult> ActivateAsync(
@@ -33,6 +35,12 @@ public interface IGuestLinkService
     Task<bool> DismissAsync(Guid grantId, Guid requestingSubjectId, CancellationToken ct = default);
 
     Task<int> GetActiveCountAsync(Guid dataOwnerSubjectId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether the current tenant has a guest code that can still be redeemed: not yet used,
+    /// revoked or expired.
+    /// </summary>
+    Task<bool> HasRedeemableCodeAsync(CancellationToken ct = default);
 }
 
 public record GuestLinkCreationResult(string Code, string FullUrl, GuestLinkInfo Info);
@@ -50,7 +58,8 @@ public record GuestSessionInfo(
     Guid DataOwnerSubjectId,
     IReadOnlyList<string> Scopes,
     string? Label,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt,
+    bool LimitTo24Hours = false);
 
 public record GuestLinkInfo
 {

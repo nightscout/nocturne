@@ -1,30 +1,30 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { isRecord } from './payload.js';
 
 /**
  * HMAC-signed handshake ticket for the Socket.IO realtime bridge.
  *
- * Why: the bridge runs in the same Node process as the SvelteKit web app, but a
- * browser's Socket.IO handshake reaches the bridge directly — it does NOT pass
- * through the app's BFF proxy. That proxy is where the browser's short-lived
- * (15-minute) access token is transparently refreshed and the service instance
- * key is attached, so replaying the raw handshake cookie against the API fails
- * once the access token turns over (and can corrupt the session by triggering a
- * refresh-token rotation the bridge can't return to the browser).
+ * A browser's Socket.IO handshake reaches the bridge directly, not through the
+ * app's BFF proxy, so the bridge cannot refresh the browser's short-lived
+ * access token. Replaying the raw cookie would fail once the token turns over,
+ * and could trigger a refresh-token rotation the bridge cannot return to the
+ * browser.
  *
- * Instead, the web app's `/realtime/ticket` endpoint — which DOES run inside the
- * BFF — replays the connection's read against the API's per-tenant read policy
- * and, only on success, mints one of these tickets. The browser presents it in
- * the Socket.IO `auth` payload; the bridge verifies it locally with the shared
- * INSTANCE_KEY. No per-connection API call, no cookie replay, no rotation.
+ * Instead the web app's `/realtime/ticket` endpoint, which runs inside the BFF,
+ * asks the API for the connection's realtime admission and, only on success,
+ * mints one of these tickets. The browser presents it in the Socket.IO `auth`
+ * payload and the bridge verifies it locally with the shared INSTANCE_KEY.
  *
  * Wire format: `base64url(json).hexSig`.
- * Payload: `{ h, exp }` — `h` is the normalized host the ticket authorizes,
- * `exp` is a unix-ms deadline. Binding to the host (not just the tenant slug)
- * means a ticket minted for one tenant cannot be replayed on a connection that
- * arrives on a different host. It requires the minting endpoint to sign the same
- * host the browser's handshake will present; both derive it from the connection
- * host (X-Forwarded-Host behind the gateway), so they agree for normal tenant
- * subdomains and the apex single-tenant case alike.
+ * Payload: `{ h, exp, tenantRelay, subjectId? }`. `h` is the normalized host
+ * the ticket authorizes, `exp` is a unix-ms deadline, and `tenantRelay` is the
+ * API's admission for the credential the ticket was minted for. `subjectId` is
+ * the subject whose per-subject room the socket may join, present only when the
+ * credential belongs to one. Binding to the host (not just the tenant slug) means a ticket
+ * minted for one tenant cannot be replayed on a connection that arrives on a
+ * different host. The minting endpoint and the handshake both derive the host
+ * from X-Forwarded-Host behind the gateway, so they agree for tenant subdomains
+ * and the apex single-tenant case alike.
  * Signature: HMAC-SHA256 over the base64url payload using INSTANCE_KEY.
  */
 
@@ -33,7 +33,34 @@ export interface HandshakeTicketPayload {
   h: string;
   /** Expiration timestamp in unix milliseconds. */
   exp: number;
+  /**
+   * Whether the socket may join the tenant-wide room, as the API decided it at
+   * {@link REALTIME_ADMISSION_PATH}. Inside the signed payload so a client
+   * cannot grant itself the room; a ticket without it verifies as false.
+   */
+  tenantRelay: boolean;
+  /**
+   * The subject whose per-subject room the socket may join, as the API returned
+   * it at {@link REALTIME_ADMISSION_PATH}. Present only when the credential
+   * belongs to a subject; a guest link or share has none.
+   */
+  subjectId?: string;
 }
+
+const CANONICAL_SUBJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The value as a subject id in canonical lowercase `D` GUID form, the only form the bridge rooms on, else undefined. */
+export function canonicalSubjectId(value: unknown): string | undefined {
+  return typeof value === 'string' && CANONICAL_SUBJECT_ID.test(value) ? value : undefined;
+}
+
+/**
+ * The API endpoint answering whether a credential may read glucose live and
+ * whether it may join the tenant-wide room. The ticket endpoint and the legacy
+ * `authorize` path both admit a socket on it, so the bridge applies the same
+ * rule as the API's SignalR hub.
+ */
+export const REALTIME_ADMISSION_PATH = '/api/v4/me/realtime-admission';
 
 /** Tickets are short-lived; the client fetches a fresh one on every (re)connect. */
 export const HANDSHAKE_TICKET_LIFETIME_MS = 2 * 60 * 1000; // 2 minutes
@@ -47,13 +74,17 @@ export function normalizeHandshakeHost(host: string): string {
 export function signHandshakeTicket(
   secret: string,
   host: string,
+  tenantRelay: boolean,
+  subjectId?: string,
   ttlMs: number = HANDSHAKE_TICKET_LIFETIME_MS,
   now: number = Date.now(),
 ): string {
   const payload: HandshakeTicketPayload = {
     h: normalizeHandshakeHost(host),
     exp: now + ttlMs,
+    tenantRelay,
   };
+  if (subjectId) payload.subjectId = subjectId;
   const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
   const sig = createHmac('sha256', secret).update(payloadB64).digest('hex');
   return `${payloadB64}.${sig}`;
@@ -90,15 +121,22 @@ export function verifyHandshakeTicket(
     return null;
   }
 
-  let payload: HandshakeTicketPayload;
+  let parsed: unknown;
   try {
-    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8')) as HandshakeTicketPayload;
+    parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf-8'));
   } catch {
     return null;
   }
 
-  if (typeof payload.h !== 'string' || typeof payload.exp !== 'number') return null;
-  if (payload.exp < now) return null;
+  if (!isRecord(parsed)) return null;
+  const { h, exp, subjectId } = parsed;
+  if (typeof h !== 'string' || typeof exp !== 'number') return null;
+  if (exp < now) return null;
 
-  return payload;
+  return {
+    h,
+    exp,
+    tenantRelay: parsed.tenantRelay === true,
+    subjectId: canonicalSubjectId(subjectId),
+  };
 }

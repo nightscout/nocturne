@@ -54,6 +54,36 @@ public class ScopeReadTierTests
         Scope.IsReadScope(Scope.FullAccess).Should().BeFalse();
     }
 
+    /// <summary>
+    /// The Viewer role holds <see cref="Scope.DeviceNotify"/>, which acknowledges an alert. That
+    /// changes no record, treatment setting or access, which is all this predicate claims.
+    /// </summary>
+    [Fact]
+    public void A_viewer_seed_role_views_without_changing_records_or_access()
+    {
+        Scope.IsViewOnlyForRecordsAndAccess(RoleSeeds.Permissions[RoleSeeds.Viewer]).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(Scope.TreatmentsReadWrite)]
+    [InlineData(Scope.TherapyReadWrite)]
+    [InlineData(Scope.AlertsReadWrite)]
+    [InlineData(Scope.TenantSettings)]
+    [InlineData(Scope.MembersInvite)]
+    [InlineData(Scope.AuditManage)]
+    [InlineData(Scope.FullAccess)]
+    public void A_grant_that_changes_records_settings_or_access_is_not_view_only(string authority)
+    {
+        Scope.IsViewOnlyForRecordsAndAccess([Scope.GlucoseRead, authority]).Should().BeFalse();
+    }
+
+    [Fact]
+    public void A_grant_with_nothing_to_view_is_not_view_only()
+    {
+        Scope.IsViewOnlyForRecordsAndAccess([]).Should().BeFalse();
+        Scope.IsViewOnlyForRecordsAndAccess([Scope.DeviceNotify, Scope.DeviceActuate]).Should().BeFalse();
+    }
+
     private static List<string> AllDeclaredScopes() =>
         typeof(Scope)
             .GetFields(BindingFlags.Public | BindingFlags.Static)

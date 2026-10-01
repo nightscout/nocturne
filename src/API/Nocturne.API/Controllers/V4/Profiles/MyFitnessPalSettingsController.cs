@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Connectors;
+using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.Configuration;
 
@@ -34,9 +35,21 @@ public class MyFitnessPalSettingsController : ControllerBase
     [HttpGet]
     [Authorize]
     [ProducesResponseType(typeof(MyFitnessPalMatchingSettings), 200)]
+    [ProducesResponseType(503)]
     public async Task<ActionResult<MyFitnessPalMatchingSettings>> GetSettings()
     {
+        // Defaults served for a read that failed are what the settings form then saves back.
+        // <see cref="SettingsUnavailableException"/>.
         var settings = await _settingsService.GetSettingsAsync(HttpContext.RequestAborted);
+        if (settings == null)
+        {
+            return Problem(
+                detail: "Settings could not be read and have not been changed. Try again.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Settings Unavailable"
+            );
+        }
+
         return Ok(settings);
     }
 

@@ -129,7 +129,7 @@ public class DemoDataPurgeParityTests : IDisposable
         db.TempBasals.Add(new TempBasalEntity
         {
             Id = Guid.CreateVersion7(), TenantId = TenantId, DataSource = DataSources.DemoService,
-            StartTimestamp = timestamp, Rate = 0.5, Origin = "pump", DeletedAt = deletedAt,
+            Timestamp = timestamp, Rate = 0.5, Origin = "pump", DeletedAt = deletedAt,
         });
         db.StateSpans.Add(new StateSpanEntity
         {

@@ -118,4 +118,22 @@ public class CanonicalGlucoseServiceTests
 
         (await _sut.GetLatestAsync()).Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetRecentAsync_QueriesFromSince_AndDropsEphemeralSources()
+    {
+        var deviceId = Guid.NewGuid();
+        var since = Now.AddMinutes(-25);
+        var real = Reading(deviceId, 1, mgdl: 90);
+        var ephemeral = Reading(deviceId, 2, mgdl: 300);
+        ephemeral.DataSource = Nocturne.Core.Constants.DataSources.DemoService;
+        _sgRepo.Setup(r => r.GetAsync(
+                since, null, null, null,
+                It.IsAny<int>(), 0, true, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([real, ephemeral]);
+
+        var recent = await _sut.GetRecentAsync(since);
+
+        recent.Should().ContainSingle().Which.Mgdl.Should().Be(90);
+    }
 }

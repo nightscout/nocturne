@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Extensions;
 using OpenApi.Remote.Attributes;
+using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Models.Authorization;
 
 namespace Nocturne.API.Controllers.V4.Identity;
@@ -22,6 +23,7 @@ public class ConnectedAppsController : ControllerBase
 {
     private readonly IOAuthGrantService _grantService;
     private readonly IOAuthTokenService _tokenService;
+    private readonly IClientDeviceService _deviceService;
     private readonly ILogger<ConnectedAppsController> _logger;
 
     /// <summary>
@@ -30,10 +32,12 @@ public class ConnectedAppsController : ControllerBase
     public ConnectedAppsController(
         IOAuthGrantService grantService,
         IOAuthTokenService tokenService,
+        IClientDeviceService deviceService,
         ILogger<ConnectedAppsController> logger)
     {
         _grantService = grantService;
         _tokenService = tokenService;
+        _deviceService = deviceService;
         _logger = logger;
     }
 
@@ -55,9 +59,15 @@ public class ConnectedAppsController : ControllerBase
 
         var grants = await _grantService.GetGrantsForSubjectAsync(subjectId.Value, ct);
 
-        var result = grants
+        var apps = grants
             .Where(g => g.GrantType == OAuthGrantTypes.App && !g.IsRevoked)
             .OrderByDescending(g => g.LastUsedAt ?? g.CreatedAt)
+            .ToList();
+
+        var deviceCounts = await _deviceService.GetDeviceCountsByGrantAsync(
+            apps.Select(g => g.Id).ToList(), ct);
+
+        var result = apps
             .Select(g => new ConnectedAppDto
             {
                 GrantId = g.Id,
@@ -70,6 +80,7 @@ public class ConnectedAppsController : ControllerBase
                 Label = g.Label,
                 CreatedAt = g.CreatedAt,
                 LastUsedAt = g.LastUsedAt,
+                DeviceCount = deviceCounts.GetValueOrDefault(g.Id),
             })
             .ToList();
 
@@ -145,4 +156,8 @@ public class ConnectedAppDto
 
     [JsonPropertyName("lastUsedAt")]
     public DateTime? LastUsedAt { get; set; }
+
+    /// <summary>Devices currently paired under this grant; revoked with it.</summary>
+    [JsonPropertyName("deviceCount")]
+    public int DeviceCount { get; set; }
 }

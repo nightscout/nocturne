@@ -7,14 +7,12 @@
     CardDescription,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Loader2,
-    Plug,
-    KeyRound,
-    Download,
-    ArrowRight,
-    Wifi,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Plug from "@lucide/svelte/icons/plug";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Download from "@lucide/svelte/icons/download";
+  import ArrowRight from "@lucide/svelte/icons/arrow-right";
+  import Wifi from "@lucide/svelte/icons/wifi";
   import { resolve } from "$app/paths";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
@@ -101,7 +99,7 @@
             </div>
           </div>
         {/each}
-        <Button variant="outline" href={connectorsPath} class="gap-2">
+        <Button variant="outline" href={connectorsPath}>
           <Plug class="h-4 w-4" />
           Manage connectors
           <ArrowRight class="h-4 w-4" />

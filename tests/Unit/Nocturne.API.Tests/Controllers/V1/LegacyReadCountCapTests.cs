@@ -161,6 +161,7 @@ public class LegacyReadCountCapTests
         var controller = new TreatmentsController(
             treatmentService.Object,
             Mock.Of<IDocumentProcessingService>(),
+            TimeProvider.System,
             Mock.Of<ILogger<TreatmentsController>>()
         )
         {

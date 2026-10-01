@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
@@ -25,6 +26,7 @@ public class TreatmentsController : ControllerBase
 {
     private readonly ITreatmentService _treatmentService;
     private readonly IDocumentProcessingService _documentProcessingService;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<TreatmentsController> _logger;
 
     /// <summary>
@@ -32,15 +34,18 @@ public class TreatmentsController : ControllerBase
     /// </summary>
     /// <param name="treatmentService">Service handling treatment CRUD operations.</param>
     /// <param name="treatmentProcessingService">Service for async document ingestion and processing.</param>
+    /// <param name="timeProvider">Clock for the legacy default find window.</param>
     /// <param name="logger">Logger instance.</param>
     public TreatmentsController(
         ITreatmentService treatmentService,
         IDocumentProcessingService treatmentProcessingService,
+        TimeProvider timeProvider,
         ILogger<TreatmentsController> logger
     )
     {
         _treatmentService = treatmentService;
         _documentProcessingService = treatmentProcessingService;
+        _timeProvider = timeProvider;
         _logger = logger;
     }
 
@@ -67,28 +72,7 @@ public class TreatmentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        // Get the full query string to handle multiple find parameters correctly
-        var queryString = HttpContext?.Request?.QueryString.ToString() ?? string.Empty;
-
-        // Strip the leading '?' if present
-        if (queryString.StartsWith("?"))
-        {
-            queryString = queryString.Substring(1);
-        }
-
-        // Extract find query from the query string (handles multiple find parameters)
-        string? findQuery = null;
-        if (
-            !string.IsNullOrEmpty(queryString)
-            && (queryString.Contains("find[") || queryString.Contains("find%5B"))
-        )
-        {
-            findQuery = queryString;
-        }
-        else if (!string.IsNullOrEmpty(find))
-        {
-            findQuery = find;
-        }
+        var findQuery = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
 
         _logger.LogDebug(
             "Treatments endpoint requested with count: {Count}, skip: {Skip}, findQuery: {FindQuery} from {RemoteIpAddress}",
@@ -115,7 +99,7 @@ public class TreatmentsController : ControllerBase
             }
 
             var treatments = await _treatmentService.GetTreatmentsAsync(
-                find: findQuery,
+                find: LegacyTreatmentDateWindow.Apply(findQuery, _timeProvider.GetUtcNow()),
                 count: LegacyReadLimits.ClampCount(count),
                 skip: skip,
                 cancellationToken: cancellationToken
@@ -387,9 +371,9 @@ public class TreatmentsController : ControllerBase
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(403)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> DeleteTreatment(
         string id,
@@ -410,17 +394,18 @@ public class TreatmentsController : ControllerBase
                 return BadRequest("Treatment ID cannot be null or empty");
             }
 
-            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
-
-            if (!deleted)
+            if (id == LegacyDeleteStatus.AnyId)
             {
-                _logger.LogDebug("Treatment not found for deletion with ID: {Id}", id);
-                return NotFound($"Treatment with ID '{id}' not found");
+                return HttpContext?.HasScope(Scope.FullAccess) == true
+                    ? await BulkDeleteTreatments(cancellationToken)
+                    : Forbid();
             }
 
-            _logger.LogDebug("Successfully deleted treatment with ID: {Id}", id);
+            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
 
-            return NoContent();
+            _logger.LogDebug("Deleted treatment with ID {Id}: {Deleted}", id, deleted);
+
+            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
         }
         catch (Exception ex)
         {
@@ -472,22 +457,13 @@ public class TreatmentsController : ControllerBase
             }
 
             var deletedCount = await _treatmentService.DeleteTreatmentsAsync(
-                queryString,
+                LegacyTreatmentDateWindow.Apply(queryString, _timeProvider.GetUtcNow()),
                 cancellationToken
             );
 
             _logger.LogDebug("Successfully deleted {Count} treatments", deletedCount);
 
-            // Return result in the same format as Nightscout legacy API
-            // Nightscout returns MongoDB driver result which includes result object, n, and ok
-            // Use Dictionary to ensure 'n' is always serialized even when 0 (WhenWritingDefault would omit it)
-            var response = new Dictionary<string, object>
-            {
-                ["result"] = new Dictionary<string, object> { ["n"] = deletedCount, ["ok"] = 1 },
-                ["n"] = deletedCount,
-                ["ok"] = 1
-            };
-            return Ok(response);
+            return Ok(LegacyDeleteStatus.For(deletedCount));
         }
         catch (Exception ex)
         {

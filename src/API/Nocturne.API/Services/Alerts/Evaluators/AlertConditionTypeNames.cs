@@ -15,7 +15,7 @@ namespace Nocturne.API.Services.Alerts.Evaluators;
 internal static class AlertConditionTypeNames
 {
     /// <summary>
-    /// Reserved <see cref="SensorContext.CurrentPath"/> roots used by non-rule-body evaluation
+    /// Reserved <see cref="Nocturne.Core.Models.SensorContext.CurrentPath"/> roots used by non-rule-body evaluation
     /// scopes (auto-resolve, smart-snooze conditions). Sustained-condition timer rows are keyed
     /// by <c>(ruleId, currentPath)</c>; these prefixes prevent rule-body timers from colliding
     /// with auxiliary-scope timers that also walk the same condition tree shape. Adding a new
@@ -40,6 +40,14 @@ internal static class AlertConditionTypeNames
     /// </summary>
     public static AlertConditionType? FromWireString(string wire) =>
         FromWire.TryGetValue(wire, out var t) ? t : null;
+
+    /// <summary>
+    /// Resolves a <see cref="Nocturne.Core.Models.ConditionNode.Type"/> the way node dispatch does: the wire string
+    /// first, then the enum member name or ordinal, case-insensitively.
+    /// </summary>
+    public static AlertConditionType? Resolve(string type) =>
+        FromWireString(type)
+        ?? (Enum.TryParse<AlertConditionType>(type, ignoreCase: true, out var parsed) ? parsed : null);
 
     private static Dictionary<AlertConditionType, string> BuildToWire()
     {

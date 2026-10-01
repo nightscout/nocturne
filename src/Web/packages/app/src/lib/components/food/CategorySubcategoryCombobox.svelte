@@ -2,7 +2,10 @@
   import * as Command from "$lib/components/ui/command";
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
-  import { Check, ChevronsUpDown, Plus, SquarePlus } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import Plus from "@lucide/svelte/icons/plus";
+  import SquarePlus from "@lucide/svelte/icons/square-plus";
   import { cn } from "$lib/utils";
   import { tick } from "svelte";
 
@@ -148,8 +151,8 @@
     <Popover.Trigger bind:ref={comboboxTriggerRef}>
       {#snippet child({ props }: { props: Record<string, unknown> })}
         <Button
-          variant="outline"
-          class="w-full justify-between font-normal"
+          variant="combobox"
+          class="w-full justify-between"
           {...props}
           role="combobox"
           aria-expanded={comboboxOpen}
@@ -190,7 +193,7 @@
           <!-- Categories and their subcategories -->
           {#each allCategories.filter((cat) => !searchValue || cat
                 .toLowerCase()
-                .includes(searchValue.toLowerCase())) as cat}
+                .includes(searchValue.toLowerCase())) as cat (cat)}
             <Command.Group>
               <Command.Item
                 value={cat}
@@ -209,12 +212,12 @@
               {#if categories[cat]}
                 {#each Object.keys(categories[cat]).filter((sub) => !searchValue || sub
                       .toLowerCase()
-                      .includes(searchValue.toLowerCase())) as sub}
+                      .includes(searchValue.toLowerCase())) as sub (sub)}
                   <Command.Item
                     value={`${cat} > ${sub}`}
                     onSelect={() =>
                       selectCategorySubcategory(`${cat} > ${sub}`)}
-                    class="pl-6"
+                    inset
                   >
                     <Check
                       class={cn(
@@ -254,6 +257,7 @@
                 <Command.Item
                   value={`create-category-${searchTerm}`}
                   onSelect={handleCreateNewCategory}
+                  variant="create"
                 >
                   <Plus class="mr-2 size-4" />
                   Create category "{searchTerm}"
@@ -262,7 +266,7 @@
                 <Command.Item
                   value={`create-subcategory-${searchTerm}`}
                   onSelect={handleCreateNewSubcategory}
-                  class="pl-0"
+                  variant="create"
                 >
                   <SquarePlus class="mr-2 size-4" />
                   Create subcategory "{searchTerm}"
@@ -299,7 +303,7 @@
           </Command.Group>
           <Command.Separator />
           <Command.Group>
-            {#each allCategories as cat}
+            {#each allCategories as cat (cat)}
               <Command.Item
                 value={cat}
                 onSelect={() => handleCategorySelectionForSubcategory(cat)}

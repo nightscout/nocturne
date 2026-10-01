@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { getAlertHistory } from "$api/generated/alerts.generated.remote";
   import { remoteErrorMessage } from "$lib/api/remote-error";
   import type { HistoryExcursionResponse } from "$api-clients";
@@ -11,7 +12,9 @@
     CardHeader,
     CardTitle,
   } from "$lib/components/ui/card";
-  import { ArrowLeft, History as HistoryIcon, Loader2 } from "lucide-svelte";
+  import ArrowLeft from "@lucide/svelte/icons/arrow-left";
+  import HistoryIcon from "@lucide/svelte/icons/history";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import { formatElapsedDuration } from "$lib/utils/duration";
   import { formatDateTimeCompact } from "$lib/utils/formatting";
   import { severity, severityLabel } from "$lib/components/alerts/severity";
@@ -28,7 +31,7 @@
       type="button"
       variant="ghost"
       size="icon"
-      onclick={() => goto("/alerts")}
+      onclick={() => goto(resolve("/alerts"))}
       aria-label="Back to alerts"
     >
       <ArrowLeft class="h-4 w-4" />
@@ -129,11 +132,11 @@
         <span class="text-sm font-semibold truncate">{h.ruleName ?? "Alert"}</span>
         <!-- Named as well as coloured, so history reads the same to a screen
              reader as it does on screen. -->
-        <Badge variant="outline" class="text-[10px] shrink-0">
+        <Badge variant="outline" size="sm" class="shrink-0">
           {severityLabel(h.severity)}
         </Badge>
         {#if h.acknowledgedAt}
-          <Badge variant="secondary" class="text-[10px]">Acknowledged</Badge>
+          <Badge variant="secondary" size="sm">Acknowledged</Badge>
         {/if}
       </div>
       <div class="text-xs text-muted-foreground">

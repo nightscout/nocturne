@@ -17,14 +17,13 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 
 /// <summary>
 /// Repository for managing device event records in the database. A DeduplicationService participant on
-/// top of the keyed delete of <see cref="SyncKeyedRepositoryBase{TModel,TEntity}"/>, so it keeps only
+/// top of the sync-key upsert of <see cref="SyncUpsertRepositoryBase{TModel,TEntity}"/>, so it keeps only
 /// the extended <c>GetAsync</c> (non-primary LinkedRecords filter), the read-visibility filter behind
 /// <c>CountAsync</c>, the post-commit dedup linking, and the event-type query helpers.
 /// </summary>
-public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
+public class DeviceEventRepository : SyncUpsertRepositoryBase<DeviceEvent, DeviceEventEntity>, IDeviceEventRepository
 {
     private readonly IDeduplicationService _deduplicationService;
-    private readonly ILogger<DeviceEventRepository> _logger;
     private readonly IDeviceEventReactor? _reactor;
 
     /// <summary>
@@ -44,10 +43,9 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         ILogger<DeviceEventRepository> logger,
         IV4RecordBroadcaster<DeviceEvent>? broadcaster = null,
         IDeviceEventReactor? reactor = null)
-        : base(contextFactory, auditContext, broadcaster)
+        : base(contextFactory, auditContext, logger, broadcaster)
     {
         _deduplicationService = deduplicationService;
-        _logger = logger;
         _reactor = reactor;
     }
 
@@ -69,7 +67,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
+            Logger.LogError(ex, "Device event reaction failed for {Count} created event(s)", created.Count);
         }
     }
 
@@ -186,7 +184,7 @@ public class DeviceEventRepository : SyncKeyedRepositoryBase<DeviceEvent, Device
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
+            Logger.LogWarning(ex, "Failed to deduplicate {Type} batch of {Count}", "DeviceEvent", inserted.Count);
         }
     }
 

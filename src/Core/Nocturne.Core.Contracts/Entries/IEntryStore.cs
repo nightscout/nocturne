@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Core.Contracts.Entries;
 
@@ -36,18 +37,20 @@ public interface IEntryStore
     Task<Entry?> GetByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// Checks for a duplicate entry within a time window to prevent re-ingestion
-    /// of the same reading from a data source.
+    /// Finds the stored entry an upload would duplicate: one of the same type, from the same
+    /// device, at the same millisecond.
     /// </summary>
-    /// <param name="device">Device identifier to match.</param>
+    /// <remarks>
+    /// A duplicate has the same type, device and millisecond, whatever its value. Nightscout keys an
+    /// entry on its exact time and type, and uploaders post one reading at a time, so on a flat
+    /// trace consecutive readings carry the same value and any window would discard real ones.
+    /// </remarks>
+    /// <param name="device">Device identifier to match, or <c>null</c> to match any device.</param>
     /// <param name="type">Entry type (e.g., "sgv", "mbg", "cal").</param>
-    /// <param name="sgv">Sensor glucose value in mg/dL.</param>
     /// <param name="mills">Timestamp in Unix milliseconds.</param>
-    /// <param name="windowMinutes">Time window in minutes to check for duplicates. Defaults to 5.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The existing <see cref="Entry"/> if a duplicate is found, or <c>null</c>.</returns>
-    Task<Entry?> CheckDuplicateAsync(string? device, string type, double? sgv, long mills,
-        int windowMinutes = 5, CancellationToken ct = default);
+    Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills, CancellationToken ct = default);
 
     /// <summary>
     /// Checks a whole upload batch for duplicates, returning one result per probe in the order
@@ -58,14 +61,13 @@ public interface IEntryStore
     /// the only type that arrives in thousands-per-cycle uploads — the stored readings covering the
     /// batch are loaded in one query instead of a query per entry, so a 1,000-entry upload costs
     /// one query rather than a thousand, each of which carried its own context, connection lease
-    /// and plan. Other types are probed one at a time, as before.
+    /// and plan. Other types are probed one at a time.
     /// </remarks>
     /// <param name="probes">The entries to classify, in submission order.</param>
-    /// <param name="windowMinutes">Time window in minutes to check for duplicates. Defaults to 5.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Positionally aligned results: the stored <see cref="Entry"/>, or <c>null</c>.</returns>
     Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
-        IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default);
+        IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default);
 
     /// <summary>
     /// Counts entries matching the optional filter and type.
@@ -75,4 +77,14 @@ public interface IEntryStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>Total count of matching entries across all V4 repositories.</returns>
     Task<long> CountAsync(string? find = null, string? type = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Entries whose <c>srvModified</c> falls after <paramref name="cursorMills"/>, oldest
+    /// modification first, for the v3 <c>history/{lastModified}</c> endpoint. Readings a regular
+    /// read hides (demo rows, losing canonical streams) are withheld but still advance the cursor.
+    /// </summary>
+    /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
+    /// <param name="limit">The page size; a page may exceed it to finish its last millisecond.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<ModifiedSincePage<Entry>> GetModifiedSinceAsync(long cursorMills, int limit, CancellationToken ct = default);
 }

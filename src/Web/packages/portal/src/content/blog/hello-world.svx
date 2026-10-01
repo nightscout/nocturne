@@ -7,4 +7,4 @@ category: announcements
 author: Rhys
 summary: Welcome to the Nocturne blog.
 ---
-<p># Hello, World Welcome to the Nocturne blog. We'll be posting updates, guides, and announcements here. More content is on the way.</p><h2 id="24e777b8-9b6c-46c7-a2c0-9798b209ec3f" data-toc-id="24e777b8-9b6c-46c7-a2c0-9798b209ec3f">Subheading</h2><ol class="list-decimal"><li><p>Order</p></li><li><p>Is</p></li><li><p>Good</p></li></ol><p></p>
+<p>Welcome to the Nocturne blog. We'll be posting updates, guides, and announcements here. More content is on the way.</p><h2 id="24e777b8-9b6c-46c7-a2c0-9798b209ec3f" data-toc-id="24e777b8-9b6c-46c7-a2c0-9798b209ec3f">Subheading</h2><ol class="list-decimal"><li><p>Order</p></li><li><p>Is</p></li><li><p>Good</p></li></ol><p></p>

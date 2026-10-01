@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using Nocturne.API.Controllers.V4.Monitoring;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Identity;
@@ -258,7 +259,7 @@ public class TenantIsolationTests
     private static (SignalRBroadcastService service, Mock<IHubClients> dataClients,
         Mock<IHubClients> alarmClients, Mock<IHubClients> configClients,
         Mock<IClientProxy> dataProxy, Mock<IClientProxy> alarmProxy, Mock<IClientProxy> configProxy)
-        CreateBroadcastService(TenantContext? tenantContext)
+        CreateBroadcastService(TenantContext? tenantContext, Mock<IHubClients>? haClients = null)
     {
         var mockDataHub = new Mock<IHubContext<DataHub>>();
         var mockAlarmHub = new Mock<IHubContext<AlarmHub>>();
@@ -300,7 +301,7 @@ public class TenantIsolationTests
         alertClients.Setup(x => x.Group(It.IsAny<string>())).Returns(alertProxy.Object);
 
         var mockHaHub = new Mock<IHubContext<HomeAssistantHub>>();
-        var haClients = new Mock<IHubClients>();
+        haClients ??= new Mock<IHubClients>();
         var haProxy = new Mock<IClientProxy>();
         mockHaHub.Setup(x => x.Clients).Returns(haClients.Object);
         haClients.Setup(x => x.Group(It.IsAny<string>())).Returns(haProxy.Object);
@@ -454,7 +455,12 @@ public class TenantIsolationTests
     {
         var (service, dataClients, _, _, _, _, _) = CreateBroadcastService(TenantA);
 
-        await service.BroadcastTrackerUpdateAsync("created", new { id = "tracker-1" });
+        await service.BroadcastTrackerUpdateAsync(
+            "created",
+            new TrackerInstanceDto { Id = Guid.NewGuid() },
+            "owner-123",
+            TrackerVisibility.Public
+        );
 
         dataClients.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Once);
         dataClients.Verify(c => c.Group("authorized"), Times.Never);
@@ -474,6 +480,26 @@ public class TenantIsolationTests
 
         dataClientsB.Verify(c => c.Group($"{TenantBId}:authorized"), Times.Once);
         dataClientsB.Verify(c => c.Group($"{TenantAId}:authorized"), Times.Never);
+    }
+
+    [Fact]
+    public async Task Broadcast_HomeAssistantGlucose_TwoTenants_DoNotCross()
+    {
+        var haClientsA = new Mock<IHubClients>();
+        var haClientsB = new Mock<IHubClients>();
+        var (serviceA, _, _, _, _, _, _) = CreateBroadcastService(TenantA, haClientsA);
+        var (serviceB, _, _, _, _, _, _) = CreateBroadcastService(TenantB, haClientsB);
+
+        await serviceA.BroadcastDataUpdateAsync(new { from = "A" });
+        await serviceB.BroadcastDataUpdateAsync(new { from = "B" });
+
+        haClientsA.Verify(c => c.Group($"{TenantAId}:ha-glucose"), Times.Once);
+        haClientsA.Verify(c => c.Group($"{TenantBId}:ha-glucose"), Times.Never);
+        haClientsA.Verify(c => c.Group("ha-glucose"), Times.Never);
+
+        haClientsB.Verify(c => c.Group($"{TenantBId}:ha-glucose"), Times.Once);
+        haClientsB.Verify(c => c.Group($"{TenantAId}:ha-glucose"), Times.Never);
+        haClientsB.Verify(c => c.Group("ha-glucose"), Times.Never);
     }
 
     [Fact]
@@ -905,7 +931,8 @@ public class TenantIsolationTests
                 tenantContext.TenantId,
                 new HashSet<string> { Nocturne.Core.Models.Authorization.Scope.FullAccess },
                 Nocturne.API.Hubs.HubCredentialKind.Subject,
-                Guid.NewGuid()));
+                Guid.NewGuid(),
+                HistoryClamped: false));
 
         var mockGroups = new Mock<IGroupManager>();
         var mockClients = new Mock<IHubCallerClients>();

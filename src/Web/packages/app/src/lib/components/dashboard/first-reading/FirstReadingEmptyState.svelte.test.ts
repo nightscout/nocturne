@@ -66,8 +66,8 @@ describe("FirstReadingEmptyState", () => {
     render(FirstReadingEmptyState, {
       connectors: [
         connector({
-          lastSuccessfulSync: new Date(),
-          lastSyncAttempt: new Date(),
+          lastSuccessfulSync: new Date().toISOString(),
+          lastSyncAttempt: new Date().toISOString(),
           totalEntries: 0,
         }),
       ],
@@ -85,7 +85,7 @@ describe("FirstReadingEmptyState", () => {
     render(FirstReadingEmptyState, {
       connectors: [
         connector({
-          lastSyncAttempt: new Date(),
+          lastSyncAttempt: new Date().toISOString(),
           stateMessage: "Authentication failed",
         }),
       ],

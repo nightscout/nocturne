@@ -33,7 +33,7 @@
   );
 </script>
 
-<div class="basal-chart h-[60px] w-full">
+<div class="h-[60px] w-full">
   {#if data.length > 0}
     <Chart
       {data}
@@ -51,21 +51,21 @@
             <Rule
               y={defaultRate}
               class="stroke-muted-foreground/50"
-              stroke-dasharray="4,4"
+              dashArray="4,4"
             />
           {/if}
 
           <Area
             y0={0}
             curve={curveStepAfter}
-            class="fill-cyan-500/30 stroke-cyan-400 stroke-1"
+            class="fill-basal/30 stroke-basal stroke-1"
           />
 
           <text
             x={4}
             y={4}
             dy="-0.355em"
-            class="text-[10px] fill-muted-foreground font-medium"
+            class="text-2xs fill-muted-foreground font-medium"
           >
             BASAL
           </text>
@@ -76,7 +76,7 @@
               y={context.yScale(defaultRate) - 2}
               dy="-0.355em"
               text-anchor="end"
-              class="text-[8px] fill-muted-foreground"
+              class="text-3xs fill-muted-foreground"
             >
               {defaultRate.toFixed(2)} U/hr
             </text>

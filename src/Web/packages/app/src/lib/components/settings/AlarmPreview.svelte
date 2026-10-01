@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { Button } from "$lib/components/ui/button";
   import {
     previewAlarmSound,
     stopPreview,
@@ -10,7 +11,9 @@
     AlarmProfileConfiguration,
     EmergencyContactConfig,
   } from "$lib/types/alarm-profile";
-  import { Volume2, VolumeX, Square } from "lucide-svelte";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import VolumeX from "@lucide/svelte/icons/volume-x";
+  import Square from "@lucide/svelte/icons/square";
   import AlarmWaveform from "./AlarmWaveform.svelte";
   import AlarmActiveView from "./alarm-preview/AlarmActiveView.svelte";
   import EmergencyOverlay from "./alarm-preview/EmergencyOverlay.svelte";
@@ -141,22 +144,18 @@
 
   <!-- Preview button -->
   <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="flex items-center gap-2 px-4 py-2 rounded-lg border transition-all
-        {previewState.isPlaying
-        ? 'bg-primary text-primary-foreground border-primary'
-        : 'bg-background hover:bg-muted border-input'}"
+    <Button
+      variant={previewState.isPlaying ? "default" : "outline"}
       onclick={handlePreview}
     >
       {#if previewState.isPlaying}
         <Square class="h-4 w-4 fill-current" />
-        <span class="text-sm font-medium">Stop</span>
+        Stop
       {:else}
         <Volume2 class="h-4 w-4" />
-        <span class="text-sm font-medium">Play Preview</span>
+        Play Preview
       {/if}
-    </button>
+    </Button>
 
     {#if profile.audio.ascendingVolume}
       <span class="text-xs text-muted-foreground">

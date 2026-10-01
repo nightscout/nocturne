@@ -35,12 +35,6 @@ public class LibreLinkAuthTokenProvider(
     /// </summary>
     protected override int TokenLifetimeBufferMinutes => 60;
 
-    // Must match the ConnectorRegistration on LibreLinkUpConnectorConfiguration: everything that
-    // reads this cache by connector — invalidation on a credential change, the background sync's
-    // health bookkeeping — keys off the registered name, and a key only this writer uses is a key
-    // nothing else can find.
-    protected override string ConnectorName => "LibreLinkUp";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         LibreLinkUpConnectorConfiguration config, CancellationToken cancellationToken)
     {
@@ -93,6 +87,21 @@ public class LibreLinkAuthTokenProvider(
                 );
 
                 if (loginResponse?.Data?.AuthTicket?.Token != null) return (loginResponse.Data.AuthTicket.Token, false);
+
+                if (loginResponse?.Status == LibreLinkUpConstants.RejectedCredentialStatus)
+                {
+                    RecordLoginAnswer(credentialsRefused: true);
+                    _logger.LogError("LibreLinkUp authentication failed: credentials were not accepted");
+                    return (null, false);
+                }
+
+                if (loginResponse?.Status == LibreLinkUpConstants.AccountActionRequiredStatus)
+                {
+                    RecordLoginAnswer(credentialsRefused: true);
+                    _logger.LogError(
+                        "LibreLinkUp authentication failed: the account must accept updated terms in the LibreLinkUp app");
+                    return (null, false);
+                }
 
                 _logger.LogError("LibreLinkUp authentication failed: Invalid response structure");
                 return (null, false);
@@ -148,6 +157,7 @@ public class LibreLinkAuthTokenProvider(
 
     private class LibreLoginResponse
     {
+        public int? Status { get; set; }
         public LibreLoginData? Data { get; set; }
     }
 

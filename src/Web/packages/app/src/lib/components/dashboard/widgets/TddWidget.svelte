@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import WidgetCard from "./WidgetCard.svelte";
-  import { Text, PieChart } from "layerchart";
+  import { PieChart } from "layerchart";
   import { getMultiPeriodStatistics } from "$api/generated/statistics.generated.remote";
   import { Button } from "$lib/components/ui/button";
   import ReliabilityBadge from "$lib/components/reports/ReliabilityBadge.svelte";
@@ -27,9 +27,9 @@
 <WidgetCard title="Total Daily Dose">
   {#snippet subtitleSnippet()}
     <Button
-      variant="ghost"
-      size="sm"
-      class="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground -ml-1.5"
+      variant="ghost-muted"
+      size="xs"
+      class="-mr-2"
       onclick={toggleView}
     >
       {showAverage ? "90-Day Avg" : "Today"}
@@ -74,74 +74,45 @@
       {@const segmentData = [
         { key: "Bolus", value: bolus, color: "var(--iob-bolus)" },
         { key: "Auto", value: auto, color: "var(--iob-temporary)" },
-        { key: "Basal", value: basal, color: "var(--iob-basal)" },
+        { key: "Basal", value: basal, color: "var(--basal)" },
       ].filter(s => s.value > 0)}
 
-      <div class="flex items-center justify-center">
-        <div class="h-[100px] w-[100px]">
+      <div class="flex items-center justify-between gap-4">
+        <div class="min-w-0">
           {#if total > 0}
+            <p class="flex items-baseline gap-1">
+              <span class="text-xl font-semibold tabular-nums">{total.toFixed(1)}</span>
+              <span class="text-xs text-muted-foreground">U</span>
+            </p>
+          {:else}
+            <p class="text-sm text-muted-foreground">No insulin</p>
+          {/if}
+          <dl class="mt-1 grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 text-xs tabular-nums">
+            <dt class="flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full bg-iob-bolus"></span>Bolus</dt>
+            <dd class="m-0 text-right">{bolus.toFixed(1)} U</dd>
+            {#if auto > 0}
+              <dt class="flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full bg-iob-temporary"></span>Auto</dt>
+              <dd class="m-0 text-right">{auto.toFixed(1)} U</dd>
+            {/if}
+            <dt class="flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full bg-basal"></span>Basal</dt>
+            <dd class="m-0 text-right">{basal.toFixed(1)} U</dd>
+            <dt class="flex items-center gap-1.5 text-muted-foreground"><span class="size-2 rounded-full bg-carbs"></span>Carbs</dt>
+            <dd class="m-0 text-right">{carbs.toFixed(0)} g</dd>
+          </dl>
+        </div>
+        {#if total > 0}
+          <div class="size-16 shrink-0" aria-hidden="true">
             <PieChart
               data={segmentData}
               key="key"
               value="value"
               cRange={segmentData.map(s => s.color)}
-              innerRadius={-20}
+              innerRadius={-10}
               cornerRadius={2}
               padAngle={0.02}
-            >
-              {#snippet aboveMarks()}
-                <Text
-                  value={`${total.toFixed(1)}U`}
-                  textAnchor="middle"
-                  verticalAnchor="middle"
-                  class="fill-foreground font-bold text-lg tabular-nums"
-                />
-              {/snippet}
-            </PieChart>
-          {:else}
-            <div class="flex items-center justify-center h-full text-muted-foreground text-sm">
-              No insulin
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Legend -->
-      <div class="flex justify-between text-xs mt-2">
-        <span class="flex items-center gap-1.5">
-          <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--iob-bolus);"
-          ></span>
-          Bolus {bolus.toFixed(1)}U
-        </span>
-        {#if auto > 0}
-          <span class="flex items-center gap-1.5">
-            <span
-              class="w-2 h-2 rounded-full"
-              style="background-color: var(--iob-temporary);"
-            ></span>
-            Auto {auto.toFixed(1)}U
-          </span>
+            />
+          </div>
         {/if}
-        <span class="flex items-center gap-1.5">
-          <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--iob-basal);"
-          ></span>
-          Basal {basal.toFixed(1)}U
-        </span>
-      </div>
-
-      <!-- Carbs -->
-      <div class="flex justify-center text-xs mt-2 pt-2 border-t border-border">
-        <span class="flex items-center gap-1.5 text-muted-foreground">
-          <span
-            class="w-2 h-2 rounded-full"
-            style="background-color: var(--cob-carbs, hsl(var(--chart-3)));"
-          ></span>
-          Carbs {carbs.toFixed(0)}g
-        </span>
       </div>
       <ReliabilityBadge reliability={showAverage ? stats?.last90Days?.reliability : stats?.lastDay?.reliability} />
     {:else}

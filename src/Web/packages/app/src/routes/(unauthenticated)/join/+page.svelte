@@ -1,18 +1,17 @@
 <script lang="ts">
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import {
-    Loader2,
-    Check,
-    AlertTriangle,
-    UserPlus,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Check from "@lucide/svelte/icons/check";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import UserPlus from "@lucide/svelte/icons/user-plus";
   import {
     startRegistration,
     type PublicKeyCredentialCreationOptionsJSON,
   } from "@simplewebauthn/browser";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import {
     getInviteInfo,
     acceptInvite,
@@ -28,6 +27,7 @@
   import RecoveryCodes from "$lib/components/auth/RecoveryCodes.svelte";
   import OidcProviderButtons from "$lib/components/auth/OidcProviderButtons.svelte";
   import PasskeyRegistrationForm from "$lib/components/auth/PasskeyRegistrationForm.svelte";
+  import InviteSummary from "$lib/components/members/InviteSummary.svelte";
   import {
     describePasskeyError,
     parseCeremonyOptions,
@@ -77,7 +77,7 @@
     acceptError = null;
     try {
       await acceptInvite(token);
-      await goto("/", { replaceState: true });
+      await goto(resolve("/"), { replaceState: true });
     } catch (err) {
       console.error("Accepting the invite failed:", err);
       acceptError = describeSubmitError(
@@ -96,9 +96,10 @@
   function loginWithProvider(providerId: string) {
     isRedirecting = true;
     selectedProvider = providerId;
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    params.set("returnUrl", `/join?token=${encodeURIComponent(token)}`);
+    const params = new URLSearchParams({
+      provider: providerId,
+      returnUrl: `/join?token=${encodeURIComponent(token)}`,
+    });
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
   }
 
@@ -155,7 +156,7 @@
   }
 
   function goHome() {
-    goto("/", { replaceState: true });
+    goto(resolve("/"), { replaceState: true });
   }
 </script>
 
@@ -190,9 +191,9 @@
       <!-- Passkey registration complete — show recovery codes -->
       <Card.Header class="space-y-1 text-center">
         <div
-          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10"
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-success/10"
         >
-          <Check class="h-6 w-6 text-green-600" />
+          <Check class="h-6 w-6 text-success" />
         </div>
         <Card.Title class="text-2xl font-bold">You're In</Card.Title>
         <Card.Description>
@@ -237,37 +238,35 @@
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
         <Card.Title class="text-2xl font-bold">Accept Invite</Card.Title>
-        <Card.Description>
-          {#if inviteInfo.createdByName}
-            <strong>{inviteInfo.createdByName}</strong> has invited you to join
-          {:else}
-            You've been invited to join
-          {/if}
-          <strong>{inviteInfo.tenantName ?? "a site"}</strong>
-          {#if viewer?.name}
-            as <strong>{viewer.name}</strong>
-          {/if}.
-        </Card.Description>
+        {#if viewer?.name}
+          <Card.Description>
+            You're signed in as <strong>{viewer.name}</strong>
+          </Card.Description>
+        {/if}
       </Card.Header>
 
       <Card.Content>
         <div class="space-y-4">
-          <FormError issues={acceptError} focusOnShow />
+          <InviteSummary invite={inviteInfo} signedIn />
 
-          <Button
-            class="w-full"
-            size="lg"
-            disabled={isAccepting}
-            onclick={handleAcceptInvite}
-          >
-            {#if isAccepting}
-              <Loader2 class="mr-2 h-5 w-5 animate-spin" />
-              Joining...
-            {:else}
-              <UserPlus class="mr-2 h-5 w-5" />
-              Accept Invite
-            {/if}
-          </Button>
+          {#if inviteInfo.grantsAccess}
+            <FormError issues={acceptError} focusOnShow />
+
+            <Button
+              class="w-full"
+              size="lg"
+              disabled={isAccepting}
+              onclick={handleAcceptInvite}
+            >
+              {#if isAccepting}
+                <Loader2 class="mr-2 h-5 w-5 animate-spin" />
+                Joining...
+              {:else}
+                <UserPlus class="mr-2 h-5 w-5" />
+                Accept Invite
+              {/if}
+            </Button>
+          {/if}
         </div>
       </Card.Content>
     {:else}
@@ -279,36 +278,31 @@
           <UserPlus class="h-6 w-6 text-primary" />
         </div>
         <Card.Title class="text-2xl font-bold">Join Nocturne</Card.Title>
-        <Card.Description>
-          {#if inviteInfo.createdByName}
-            <strong>{inviteInfo.createdByName}</strong> has invited you to join
-          {:else}
-            You've been invited to join
-          {/if}
-          <strong>{inviteInfo.tenantName ?? "a site"}</strong>.
-          Create an account or sign in to accept.
-        </Card.Description>
       </Card.Header>
 
       <Card.Content>
         <div class="space-y-4">
-          <FormError issues={passkeyError} focusOnShow />
+          <InviteSummary invite={inviteInfo} signedIn={false} />
 
-          {#if hasOidc && oidc}
-            <OidcProviderButtons
-              providers={oidc.providers}
-              disabled={isRedirecting || isRegistering}
-              onLogin={loginWithProvider}
-              {isRedirecting}
-              {selectedProvider}
+          {#if inviteInfo.grantsAccess}
+            <FormError issues={passkeyError} focusOnShow />
+
+            {#if hasOidc && oidc}
+              <OidcProviderButtons
+                providers={oidc.providers}
+                disabled={isRedirecting || isRegistering}
+                onLogin={loginWithProvider}
+                {isRedirecting}
+                {selectedProvider}
+              />
+            {/if}
+
+            <PasskeyRegistrationForm
+              onRegister={handlePasskeyRegister}
+              disabled={isRedirecting}
+              {isRegistering}
             />
           {/if}
-
-          <PasskeyRegistrationForm
-            onRegister={handlePasskeyRegister}
-            disabled={isRedirecting}
-            {isRegistering}
-          />
         </div>
       </Card.Content>
     {/if}

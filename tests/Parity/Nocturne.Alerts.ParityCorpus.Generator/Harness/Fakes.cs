@@ -130,6 +130,9 @@ public sealed class InMemoryTrackerRepository : IAlertTrackerRepository
         return Task.FromResult(excursion);
     }
 
+    public Task<AlertExcursion?> GetExcursionAsync(Guid excursionId, CancellationToken ct = default) =>
+        Task.FromResult(_excursions.GetValueOrDefault(excursionId));
+
     public Task CloseExcursionAsync(Guid excursionId, DateTime endedAt, CancellationToken ct = default)
     {
         if (_excursions.TryGetValue(excursionId, out var e)) e.EndedAt = endedAt;

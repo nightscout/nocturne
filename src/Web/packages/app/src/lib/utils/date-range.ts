@@ -27,7 +27,8 @@ export type DayRangeInput = {
  * groups by whatever shape the region format produces, so changing the format
  * mid-session re-buckets every group, and two days that format alike merge.
  */
-export function toDayString(date: Date = new Date()): string {
+export function toDayString(at: Date | number = new Date()): string {
+  const date = typeof at === "number" ? new Date(at) : at;
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
@@ -116,4 +117,12 @@ export function dayCount(from: string | Date, to: string | Date): number {
   const start = parseDate(toDay(from)).toDate("UTC").getTime();
   const end = parseDate(toDay(to)).toDate("UTC").getTime();
   return Math.max(1, Math.round((end - start) / MS_PER_DAY) + 1);
+}
+
+/** Every `YYYY-MM-DD` day in an inclusive range, in calendar order. */
+export function daysBetween(from: string | Date, to: string | Date): string[] {
+  const start = parseDate(toDay(from));
+  return Array.from({ length: dayCount(from, to) }, (_, i) =>
+    start.add({ days: i }).toString()
+  );
 }

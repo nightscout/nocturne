@@ -28,6 +28,14 @@ describe("satisfiesScope", () => {
     );
   });
 
+  it("accepts audit.manage for audit.read", () => {
+    expect(satisfiesScope(["audit.manage"], "audit.read")).toBe(true);
+  });
+
+  it("does not accept audit.read for audit.manage", () => {
+    expect(satisfiesScope(["audit.read"], "audit.manage")).toBe(false);
+  });
+
   it("refuses everything on an empty grant", () => {
     expect(satisfiesScope([], "glucose.read")).toBe(false);
   });

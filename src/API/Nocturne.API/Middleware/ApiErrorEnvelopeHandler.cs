@@ -27,9 +27,6 @@ internal sealed class ApiErrorEnvelopeHandler : IExceptionHandler
 {
     private const string Detail = "Internal server error";
     private const string Title = "Internal Server Error";
-    private const string ContentType = "application/json; charset=utf-8";
-
-    private static readonly JsonSerializerOptions NightscoutOptions = NightscoutJsonOptions.Create();
 
     private readonly ILogger<ApiErrorEnvelopeHandler> _logger;
     private readonly ProblemDetailsFactory _problemDetailsFactory;
@@ -70,42 +67,25 @@ internal sealed class ApiErrorEnvelopeHandler : IExceptionHandler
             httpContext.Request.Path
         );
 
-        var (body, options) = NightscoutApiPath.Version(httpContext.Request.Path) switch
-        {
-            1 => (
-                (object)new
-                {
-                    status = StatusCodes.Status500InternalServerError,
-                    message = Detail,
-                    type = "internal",
-                    error = exception.Message,
-                },
-                NightscoutOptions
-            ),
-            3 => (
-                new { status = StatusCodes.Status500InternalServerError, message = Detail },
-                NightscoutOptions
-            ),
-            2 => (CreateProblem(httpContext), NightscoutOptions),
-            _ => (CreateProblem(httpContext), _mvcOptions),
-        };
+        var (body, options) = ApiErrorEnvelope.Create(
+            httpContext,
+            _problemDetailsFactory,
+            _mvcOptions,
+            StatusCodes.Status500InternalServerError,
+            Title,
+            Detail,
+            type: "internal",
+            error: exception.Message
+        );
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;
         await httpContext.Response.WriteAsJsonAsync(
             body,
             options,
-            contentType: ContentType,
+            contentType: ApiErrorEnvelope.ContentType,
             cancellationToken
         );
 
         return true;
     }
-
-    private ProblemDetails CreateProblem(HttpContext httpContext) =>
-        _problemDetailsFactory.CreateProblemDetails(
-            httpContext,
-            statusCode: StatusCodes.Status500InternalServerError,
-            title: Title,
-            detail: Detail
-        );
 }

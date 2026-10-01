@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
-  import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-svelte";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
 
   let {
     label,
@@ -20,7 +22,7 @@
 <Button
   variant="ghost"
   size="sm"
-  class="-ml-3 h-8"
+  class="-ml-3"
   onclick={() => onSort(column)}
 >
   {label}

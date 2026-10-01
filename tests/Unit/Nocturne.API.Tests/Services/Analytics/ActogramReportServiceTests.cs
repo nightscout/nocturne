@@ -53,27 +53,31 @@ public class ActogramReportServiceTests
         result.Thresholds.Low.Should().Be(70);
         result.Thresholds.High.Should().Be(180);
         result.Thresholds.VeryHigh.Should().Be(250);
+        result.Thresholds.TargetLow.Should().BeNull();
+        result.Thresholds.TargetHigh.Should().BeNull();
         result.Thresholds.GlucoseYMax.Should().Be(300);
     }
 
     [Fact]
-    public async Task GetAsync_WithProfile_ResolvesThresholdsFromProfile()
+    public async Task GetAsync_WithProfile_KeepsClinicalBandsAndCarriesProfileTarget()
     {
         SetupEmpty();
         _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(true);
         _targetRange
             .Setup(t => t.GetLowBGTargetAsync(EndMills, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(80.0);
+            .ReturnsAsync(95.0);
         _targetRange
             .Setup(t => t.GetHighBGTargetAsync(EndMills, null, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(160.0);
+            .ReturnsAsync(115.0);
 
         var result = await CreateService().GetAsync(StartMills, EndMills);
 
-        result.Thresholds.Low.Should().Be(80.0);
-        result.Thresholds.High.Should().Be(160.0);
+        result.Thresholds.Low.Should().Be(70);
+        result.Thresholds.High.Should().Be(180);
         result.Thresholds.VeryLow.Should().Be(54);
         result.Thresholds.VeryHigh.Should().Be(250);
+        result.Thresholds.TargetLow.Should().Be(95.0);
+        result.Thresholds.TargetHigh.Should().Be(115.0);
     }
 
     [Fact]
@@ -227,6 +231,26 @@ public class ActogramReportServiceTests
     }
 
     [Fact]
+    public async Task GetAsync_PossibleRunningTotals_AreLeftOutOfBubblesAndDayTotals()
+    {
+        SetupEmpty();
+        SetupSteps(
+            (StartMills + 30 * 60_000, 300, 0),
+            (StartMills + 40 * 60_000, 9_000, StepCount.PossibleRunningTotalFlag),
+            (StartMills + 50 * 60_000, 9_400, StepCount.PossibleRunningTotalFlag | 1),
+            (StartMills + 60 * 60_000, 500, 1));
+        _therapy.Setup(t => t.HasDataAsync(It.IsAny<CancellationToken>())).ReturnsAsync(false);
+
+        var result = await CreateService().GetAsync(StartMills, EndMills);
+
+        result.StepCounts.Select(s => (s.Time, s.Steps)).Should().Equal(
+            (StartMills + 30 * 60_000, 300),
+            (StartMills + 60 * 60_000, 500));
+        result.StepDayTotals["2023-11-14"].Should().Be(800);
+        result.StepDayTotals.Values.Sum().Should().Be(800);
+    }
+
+    [Fact]
     public async Task GetAsync_DoesNotInvokeBasalRateResolver()
     {
         // Guard rail: the actogram must not pull anything from the IOB/COB/basal pipeline.
@@ -243,6 +267,9 @@ public class ActogramReportServiceTests
     }
 
     private void SetupSteps(params (long Mills, int Metric)[] samples) =>
+        SetupSteps(samples.Select(s => (s.Mills, s.Metric, 0)).ToArray());
+
+    private void SetupSteps(params (long Mills, int Metric, int Source)[] samples) =>
         _steps
             .Setup(s => s.GetStepCountsByDateRangeAsync(It.IsAny<DateTime>(), It.IsAny<DateTime>(),
                 It.IsAny<int?>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
@@ -251,6 +278,7 @@ public class ActogramReportServiceTests
                 {
                     Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(s.Mills).UtcDateTime,
                     Metric = s.Metric,
+                    Source = s.Source,
                 })
                 .ToArray());
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Services;
 
@@ -66,10 +67,8 @@ public class SleepSessionRepository : ISleepSessionRepository
     public async Task<SleepSession> UpsertSessionAsync(SleepSession session, CancellationToken cancellationToken = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        return await ctx.ExecuteInTransactionAsync(async token =>
         {
-            await using var tx = await ctx.Database.BeginTransactionAsync(cancellationToken);
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
 
             // Dedup by Source + OriginalId. When a prior sync of the same source
@@ -83,7 +82,7 @@ public class SleepSessionRepository : ISleepSessionRepository
                     .Include(s => s.BiometricSamples)
                     .FirstOrDefaultAsync(
                         s => s.Source == entity.Source && s.OriginalId == entity.OriginalId,
-                        cancellationToken);
+                        token);
             }
 
             // Dedup by primary key. The mapper derives a deterministic entity Id
@@ -93,7 +92,7 @@ public class SleepSessionRepository : ISleepSessionRepository
             existing ??= await ctx.SleepSessions
                 .Include(s => s.Stages)
                 .Include(s => s.BiometricSamples)
-                .FirstOrDefaultAsync(s => s.Id == entity.Id, cancellationToken);
+                .FirstOrDefaultAsync(s => s.Id == entity.Id, token);
 
             if (existing is not null)
             {
@@ -101,46 +100,41 @@ public class SleepSessionRepository : ISleepSessionRepository
                 ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
                 ctx.SleepStages.RemoveRange(existing.Stages);
                 ctx.SleepSessions.Remove(existing);
-                await ctx.SaveChangesAsync(cancellationToken);
+                await ctx.SaveChangesAsync(token);
             }
 
             ctx.SleepSessions.Add(entity);
-            await ctx.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+            await ctx.SaveChangesAsync(token);
             return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
-        });
+        }, ct: cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default)
     {
         await using var ctx = await _contextFactory.CreateAsync(cancellationToken);
-        var strategy = ctx.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
+        return await ctx.ExecuteInTransactionAsync<SleepSession?>(async token =>
         {
             var existing = await ctx.SleepSessions
                 .Include(s => s.Stages)
                 .Include(s => s.BiometricSamples)
-                .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+                .FirstOrDefaultAsync(s => s.Id == id, token);
 
             if (existing is null)
                 return null;
-
-            await using var tx = await ctx.Database.BeginTransactionAsync(cancellationToken);
 
             // Remove old entity and children, then insert updated version preserving the original ID
             ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
             ctx.SleepStages.RemoveRange(existing.Stages);
             ctx.SleepSessions.Remove(existing);
-            await ctx.SaveChangesAsync(cancellationToken);
+            await ctx.SaveChangesAsync(token);
 
             var entity = SleepSessionMapper.ToEntity(session, ctx.TenantId);
             entity.Id = id;
             ctx.SleepSessions.Add(entity);
-            await ctx.SaveChangesAsync(cancellationToken);
-            await tx.CommitAsync(cancellationToken);
+            await ctx.SaveChangesAsync(token);
             return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
-        });
+        }, ct: cancellationToken);
     }
 
     /// <inheritdoc />

@@ -1,3 +1,5 @@
+import { toDayString } from "$lib/utils/date-range";
+
 /**
  * A wall clock for text that ages on screen ("3m ago", "today").
  *
@@ -29,9 +31,6 @@ export class Now {
 
   /** The current local date as `YYYY-MM-DD`, for date inputs and day filters. */
   get localDate(): string {
-    const d = new Date(this.#current);
-    const month = `${d.getMonth() + 1}`.padStart(2, "0");
-    const day = `${d.getDate()}`.padStart(2, "0");
-    return `${d.getFullYear()}-${month}-${day}`;
+    return toDayString(this.#current);
   }
 }

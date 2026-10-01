@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using FluentAssertions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -13,7 +12,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Connectors.Nightscout.Services;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
-using Nocturne.Infrastructure.Data;
+using Nocturne.Tests.Shared.Infrastructure;
 using Nocturne.Tests.Shared.Mocks;
 using SocketIOClient;
 using Xunit;
@@ -30,13 +29,13 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_NoTenants_DoesNotThrow()
     {
         // Arrange — empty database (no tenants)
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: false);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite();
 
-        var serviceProvider = BuildServiceProvider(connectionString);
+        var serviceProvider = BuildServiceProvider(db);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -51,13 +50,13 @@ public class NightscoutRealtimeListenerTests
     public async Task StopRealtimeListenersAsync_NoListenersStarted_DoesNotThrow()
     {
         // Arrange
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: false);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite();
 
-        var serviceProvider = BuildServiceProvider(connectionString);
+        var serviceProvider = BuildServiceProvider(db);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw
@@ -71,13 +70,13 @@ public class NightscoutRealtimeListenerTests
     public async Task StopRealtimeListenersAsync_CalledTwice_DoesNotThrow()
     {
         // Arrange
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: false);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite();
 
-        var serviceProvider = BuildServiceProvider(connectionString);
+        var serviceProvider = BuildServiceProvider(db);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should not throw on repeated calls
@@ -93,8 +92,7 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_DisabledConnector_SkipsTenant()
     {
         // Arrange — one tenant with a disabled connector config
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -102,10 +100,11 @@ public class NightscoutRealtimeListenerTests
             Url = "http://nightscout.example.com",
         };
 
-        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -120,8 +119,7 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_EmptyUrl_SkipsTenant()
     {
         // Arrange — one tenant with no URL configured
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -129,10 +127,11 @@ public class NightscoutRealtimeListenerTests
             Url = "",
         };
 
-        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         // Act & Assert — should skip the tenant without throwing
@@ -165,8 +164,7 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_UnreachableInstance_DoesNotFailOnReconnectionBudget()
     {
         // Arrange — one tenant pointing at a closed port (discard service)
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -175,8 +173,8 @@ public class NightscoutRealtimeListenerTests
         };
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
-        var serviceProvider = BuildServiceProvider(connectionString, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), logger);
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -195,8 +193,7 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_SchemelessUrl_ConnectsToResolvedOrigin()
     {
         // Arrange — a bare host, as three production tenants have stored
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -205,8 +202,8 @@ public class NightscoutRealtimeListenerTests
         };
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
-        var serviceProvider = BuildServiceProvider(connectionString, config);
-        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), logger);
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
 
         // Act
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
@@ -218,6 +215,34 @@ public class NightscoutRealtimeListenerTests
     }
 
     /// <summary>
+    /// A deployment can keep polling behind a restricted REST adapter while connecting the
+    /// listener to the original Nightscout Socket.IO origin.
+    /// </summary>
+    [Fact]
+    public async Task StartRealtimeListenersAsync_RealtimeUrlConfigured_UsesRealtimeOrigin()
+    {
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
+
+        var config = new NightscoutConnectorConfiguration
+        {
+            Enabled = true,
+            Url = "http://rest-adapter.invalid",
+            RealtimeUrl = "http://127.0.0.1:9",
+        };
+
+        var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var serviceProvider = BuildServiceProvider(db, config);
+        var sut = new NightscoutConnectorBackgroundService(serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
+
+        await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
+
+        logger.Entries.Should().Contain(e =>
+            e.Message.Contains("Failed to connect Socket.IO")
+            && e.Message.Contains("http://127.0.0.1:9"));
+        logger.Entries.Should().NotContain(e => e.Message.Contains("rest-adapter.invalid"));
+    }
+
+    /// <summary>
     /// A socket that exhausts its reconnection budget stops trying and reports Connected == false, but
     /// stays in the tracking dictionary. A repeat listener-startup pass must evict and dispose it so a
     /// fresh client can take its place, rather than treating the tenant as already covered.
@@ -226,8 +251,8 @@ public class NightscoutRealtimeListenerTests
     public async Task StartRealtimeListenersAsync_TrackedClientDisconnected_EvictsDeadClient()
     {
         // Arrange — one tenant with an already-tracked client that is not connected
-        var (cleanup, connectionString, tenantId) = CreateSqliteDbWithTenantId(addTenant: true);
-        using var _ = cleanup;
+        var tenantId = Guid.NewGuid();
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(tenantId, "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -235,10 +260,11 @@ public class NightscoutRealtimeListenerTests
             Url = "http://127.0.0.1:9",
         };
 
-        var serviceProvider = BuildServiceProvider(connectionString, config);
+        var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NightscoutConnectorBackgroundService(
             serviceProvider,
             new ConnectorSyncBudget(),
+            serviceProvider.GetRequiredService<ActiveTenantSnapshot>(),
             NullLogger<NightscoutConnectorBackgroundService>.Instance);
 
         var dead = new SocketIO(new Uri("http://127.0.0.1:9"));
@@ -258,8 +284,7 @@ public class NightscoutRealtimeListenerTests
     [Fact]
     public async Task StartRealtimeListenersAsync_UnresolvableUrl_ReportsItAndSkipsTenant()
     {
-        var (cleanup, connectionString) = CreateSqliteDb(addTenant: true);
-        using var _ = cleanup;
+        using var db = TestDbContextFactory.CreateSqlite().SeedTenant(Guid.NewGuid(), "test-tenant");
 
         var config = new NightscoutConnectorConfiguration
         {
@@ -268,8 +293,9 @@ public class NightscoutRealtimeListenerTests
         };
 
         var logger = new ListLogger<NightscoutConnectorBackgroundService>();
+        var serviceProvider = BuildServiceProvider(db, config);
         var sut = new NightscoutConnectorBackgroundService(
-            BuildServiceProvider(connectionString, config), new ConnectorSyncBudget(), logger);
+            serviceProvider, new ConnectorSyncBudget(), serviceProvider.GetRequiredService<ActiveTenantSnapshot>(), logger);
 
         await InvokeStartRealtimeListenersAsync(sut, CancellationToken.None);
 
@@ -317,71 +343,18 @@ public class NightscoutRealtimeListenerTests
     }
 
     /// <summary>
-    /// Creates an in-memory SQLite database, optionally seeding one active tenant.
-    /// </summary>
-    private static (IDisposable cleanup, string connectionString) CreateSqliteDb(bool addTenant)
-    {
-        var (cleanup, connectionString, _) = CreateSqliteDbWithTenantId(addTenant);
-        return (cleanup, connectionString);
-    }
-
-    /// <inheritdoc cref="CreateSqliteDb"/>
-    private static (IDisposable cleanup, string connectionString, Guid tenantId) CreateSqliteDbWithTenantId(bool addTenant)
-    {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"NsRealtimeTest_{Guid.NewGuid():N}.db");
-        var connectionString = $"Data Source={dbPath}";
-        var cleanup = new TempFileCleanup(dbPath);
-        var tenantId = Guid.Empty;
-
-        var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseSqlite(connectionString)
-            .Options;
-
-        using var context = new NocturneDbContext(options);
-        context.Database.ExecuteSqlRaw(@"
-            CREATE TABLE tenants (
-                Id TEXT PRIMARY KEY,
-                slug TEXT NOT NULL,
-                display_name TEXT NOT NULL,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                last_reading_at TEXT,
-                allow_access_requests INTEGER NOT NULL DEFAULT 1,
-                onboarding_completed_at TEXT,
-                sys_created_at TEXT NOT NULL,
-                sys_updated_at TEXT NOT NULL
-            )");
-
-        if (addTenant)
-        {
-            tenantId = Guid.NewGuid();
-            context.Database.ExecuteSqlRaw(
-                "INSERT INTO tenants (Id, slug, display_name, is_active, allow_access_requests, sys_created_at, sys_updated_at) VALUES ({0}, {1}, {2}, 1, 1, {3}, {4})",
-                tenantId.ToString(), "test-tenant", "Test Tenant",
-                DateTime.UtcNow.ToString("O"), DateTime.UtcNow.ToString("O"));
-        }
-
-        return (cleanup, connectionString, tenantId);
-    }
-
-    /// <summary>
     /// Builds a service provider wired up for the NightscoutConnectorBackgroundService.
     /// When <paramref name="config"/> is null, no config loader is registered (used for
     /// the "no tenants" scenario where it's never resolved).
     /// </summary>
     private static IServiceProvider BuildServiceProvider(
-        string connectionString,
+        SqliteTestDatabase db,
         NightscoutConnectorConfiguration? config = null)
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<IDbContextFactory<NocturneDbContext>>(
-            new SqliteDbContextFactory(connectionString));
-
-        services.AddScoped(sp =>
-        {
-            var factory = sp.GetRequiredService<IDbContextFactory<NocturneDbContext>>();
-            return factory.CreateDbContext();
-        });
+        db.AddToServices(services);
+        services.AddActiveTenantSnapshot();
 
         services.AddScoped<ITenantAccessor>(_ =>
         {
@@ -410,28 +383,6 @@ public class NightscoutRealtimeListenerTests
     {
         public Task<NightscoutConnectorConfiguration> LoadForTenantAsync(CancellationToken ct)
             => Task.FromResult(config);
-    }
-
-    private sealed class SqliteDbContextFactory(string connectionString)
-        : IDbContextFactory<NocturneDbContext>
-    {
-        public NocturneDbContext CreateDbContext()
-        {
-            var options = new DbContextOptionsBuilder<NocturneDbContext>()
-                .UseSqlite(connectionString)
-                .Options;
-            return new NocturneDbContext(options);
-        }
-    }
-
-    private sealed class TempFileCleanup(string path) : IDisposable
-    {
-        public void Dispose()
-        {
-            try { File.Delete(path); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-        }
     }
 
     #endregion

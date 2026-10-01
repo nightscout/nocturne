@@ -8,8 +8,19 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import { Bookmark, Plus, Play, Trash2 } from "lucide-svelte";
+  import Bookmark from "@lucide/svelte/icons/bookmark";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Play from "@lucide/svelte/icons/play";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { TrackerDefinitionDto, TrackerPresetDto } from "$api";
+
+  interface Props {
+    definitions: TrackerDefinitionDto[];
+    presets: TrackerPresetDto[];
+    openNewPreset: () => void;
+    applyPresetHandler: (id: string) => void;
+    openDeletePresetDialog: (id: string) => void;
+  }
 
   let {
     definitions,
@@ -17,13 +28,7 @@
     openNewPreset,
     applyPresetHandler,
     openDeletePresetDialog,
-  } = $props<{
-    definitions: TrackerDefinitionDto[];
-    presets: TrackerPresetDto[];
-    openNewPreset: () => void;
-    applyPresetHandler: (id: string) => void;
-    openDeletePresetDialog: (id: string) => void;
-  }>();
+  }: Props = $props();
 </script>
 
 <Tabs.Content value="presets">
@@ -61,7 +66,7 @@
         </div>
       {:else}
         <div class="space-y-3">
-          {#each presets as preset}
+          {#each presets as preset (preset.id)}
             <div
               class="flex items-center justify-between p-4 rounded-lg border"
             >

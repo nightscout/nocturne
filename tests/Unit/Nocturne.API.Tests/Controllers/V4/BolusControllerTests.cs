@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Options;
 using Nocturne.API.Controllers.V4.Treatments;
 using Nocturne.API.Filters;
 using Nocturne.API.Models.Requests.V4;
@@ -328,7 +329,7 @@ public class BolusControllerTests
         _repoMock
             .Setup(r => r.BulkCreateAsync(It.IsAny<IEnumerable<Bolus>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback<IEnumerable<Bolus>, WriteOrigin, CancellationToken>((b, _, _) => persisted = b.ToList())
-            .ReturnsAsync((IEnumerable<Bolus> b, WriteOrigin _, CancellationToken _) => b);
+            .ReturnsAsync((IEnumerable<Bolus> b, WriteOrigin _, CancellationToken _) => [.. b]);
 
         await CreateController().CreateBulk(requests);
 
@@ -506,7 +507,7 @@ public class BolusControllerTests
             Exception = exception,
         };
 
-        new RecreationBlockedFilter(EchoingProblemDetailsFactory()).OnException(context);
+        new RecreationBlockedFilter(EchoingProblemDetailsFactory(), Options.Create(new JsonOptions())).OnException(context);
 
         context.ExceptionHandled.Should().BeTrue();
         return context.Result.Should().BeOfType<ObjectResult>().Subject;

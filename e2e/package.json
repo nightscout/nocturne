@@ -1,0 +1,29 @@
+{
+  "name": "@nocturne/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end suite: production images in docker compose, vitest API specs, Playwright web specs",
+  "type": "module",
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "e2e": "node scripts/stack.ts run all",
+    "e2e:api": "node scripts/stack.ts run api",
+    "e2e:web": "node scripts/stack.ts run web",
+    "e2e:up": "node scripts/stack.ts up",
+    "e2e:down": "node scripts/stack.ts down",
+    "e2e:build": "node scripts/stack.ts build",
+    "e2e:upgrade": "node scripts/migration-upgrade.ts",
+    "test:api": "vitest run",
+    "test:web": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  }
+}

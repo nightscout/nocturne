@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "../../../utils";
-  import { alertVariants, type AlertVariant } from "./alert-variants";
+  import { alertVariants, type AlertVariant } from "./index.js";
 
   let {
     ref = $bindable(null),

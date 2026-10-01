@@ -100,7 +100,7 @@ public class V4CrudBulkCreateTests
             {
                 var batch = models.ToList();
                 written.Add(batch);
-                return batch;
+                return [.. batch];
             });
 
         CreateBolusRequest[] Payload() =>
@@ -190,7 +190,7 @@ public class V4CrudBulkCreateTests
             {
                 var batch = models.ToList();
                 written.Add(batch);
-                return batch;
+                return [.. batch];
             });
 
         UpsertNoteRequest[] Payload() =>

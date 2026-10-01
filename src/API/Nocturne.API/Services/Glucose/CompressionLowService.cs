@@ -71,8 +71,11 @@ public class CompressionLowService : ICompressionLowService
         if (suggestion == null)
             return null;
 
-        // Get sleep schedule from settings
-        var settings = await _uiSettingsService.GetSettingsAsync(cancellationToken);
+        // The overnight window is cut from the tenant's own bedtime and wake time, and a null
+        // return from this method already means "no such suggestion".
+        // <see cref="SettingsUnavailableException"/>.
+        var settings = await _uiSettingsService.GetSettingsAsync(cancellationToken)
+            ?? throw new SettingsUnavailableException("UI settings");
         var sleepSchedule = settings.DataQuality.SleepSchedule;
 
         // Get user's timezone: prefer UI settings, fall back to profile, then UTC

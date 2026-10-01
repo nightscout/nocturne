@@ -37,7 +37,8 @@
           "transition": "opened",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
+            "confirmation_count": 0,
+            "awaiting_rearm": true
           },
           "auto_resolved": true
         }
@@ -55,12 +56,12 @@
               "value": true
             }
           ],
-          "transition": "opened",
+          "transition": "none",
           "tracker": {
             "state": "idle",
-            "confirmation_count": 0
-          },
-          "auto_resolved": true
+            "confirmation_count": 0,
+            "awaiting_rearm": true
+          }
         }
       ]
     }

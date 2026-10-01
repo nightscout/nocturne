@@ -17,6 +17,12 @@ const LABEL_MAP: Record<string, string> = {
   share_link_reset: "Your sharing link has been replaced",
   share_link_reset_subtitle:
     "The previous link no longer opens your data. Go to Public access in settings to create a new link, then send it to anyone who was using the old one.",
+  device_clock_deviation: "Device clock deviation corrected",
+  device_clock_deviation_subtitle:
+    "A connected account's device clock ran at a different offset from its timezone for a while. Affected timestamps are adjusted as that data syncs, so some historical entries may shift.",
+  declared_zone_changed: "Timezone updated from your connected account",
+  declared_zone_changed_subtitle:
+    "Your connected account now reports a different timezone, so a matching entry was added to your timezone timeline. You can review or edit it in settings.",
 };
 
 /** Resolve a notification title/subtitle/action label, mapping known i18n keys

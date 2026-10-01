@@ -1,7 +1,8 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
   import { cn } from "$lib/utils";
-  import { Check, Settings2 } from "@lucide/svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
   import * as Item from "../item/index.js";
   import { Badge } from "../badge/index.js";
   import { Button } from "../button/index.js";

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -60,6 +61,7 @@ public class MigrationController : ControllerBase
     [RemoteForm]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<MigrationJobInfo>> StartMigration(
         [FromBody] StartMigrationRequest request,
         CancellationToken ct)
@@ -70,6 +72,10 @@ public class MigrationController : ControllerBase
             if (string.IsNullOrEmpty(request.NightscoutUrl))
             {
                 return Problem(detail: "Nightscout URL is required for API mode", statusCode: 400, title: "Bad Request");
+            }
+            if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out _))
+            {
+                return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
             }
         }
         else
@@ -84,8 +90,18 @@ public class MigrationController : ControllerBase
             }
         }
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
-        return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        try
+        {
+            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        }
+        catch (MigrationAlreadyRunningException ex)
+        {
+            return Problem(
+                detail: $"A migration is already running for this tenant (job {ex.JobId}).",
+                statusCode: 409,
+                title: "Conflict");
+        }
     }
 
     /// <summary>
@@ -95,6 +111,7 @@ public class MigrationController : ControllerBase
     [RemoteCommand(Invalidates = ["GetHistory"])]
     [ProducesResponseType(typeof(MigrationJobInfo), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<MigrationJobInfo>> StartFromConnector(
         string connectorName, CancellationToken ct)
     {
@@ -115,6 +132,11 @@ public class MigrationController : ControllerBase
             return Problem(detail: "Nightscout URL not found in connector configuration", statusCode: 400, title: "Bad Request");
         }
 
+        if (!NightscoutBaseUri.TryFor(url, out _))
+        {
+            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+        }
+
         var request = new StartMigrationRequest
         {
             Mode = MigrationMode.Api,
@@ -122,8 +144,18 @@ public class MigrationController : ControllerBase
             NightscoutApiSecret = apiSecret,
         };
 
-        var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
-        return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        try
+        {
+            var jobInfo = await _migrationService.StartMigrationAsync(request, _tenantAccessor.Context, ct);
+            return AcceptedAtAction(nameof(GetStatus), new { jobId = jobInfo.Id }, jobInfo);
+        }
+        catch (MigrationAlreadyRunningException ex)
+        {
+            return Problem(
+                detail: $"A migration is already running for this tenant (job {ex.JobId}).",
+                statusCode: 409,
+                title: "Conflict");
+        }
     }
 
     /// <inheritdoc cref="IMigrationJobService.GetStatusAsync"/>

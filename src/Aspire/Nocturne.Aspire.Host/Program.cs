@@ -9,23 +9,29 @@ using Microsoft.Extensions.Hosting;
 using Nocturne.Aspire.Host;
 using Nocturne.Aspire.Host.Publishing;
 using Nocturne.Aspire.Hosting;
-using Nocturne.Aspire.Scalar;
 using Nocturne.Core.Constants;
 using Yarp.ReverseProxy.Transforms;
+using PersistenceMode = Nocturne.Aspire.Host.PersistenceMode;
 
 class Program
 {
     static async Task Main(string[] args)
     {
-        var builder = DistributedApplication.CreateBuilder(args);
+        // The Aspire dashboard is off by default in run mode; turn it back on with
+        // Aspire:OptionalServices:AspireDashboard:Enabled=true (apphost appsettings,
+        // user-secrets or Aspire__OptionalServices__AspireDashboard__Enabled=true).
+        // It has to be decided before the builder exists, hence the early read.
+        var options = new DistributedApplicationOptions { Args = args };
+        options.DisableDashboard = !IsDashboardEnabledBeforeBuild(options);
+        var builder = DistributedApplication.CreateBuilder(options);
 
         // ------------------------------------------------------------------
         // Optional services (orchestration flags — not Aspire parameters).
         // Configured under "Aspire:OptionalServices" in apphost appsettings.
         // ------------------------------------------------------------------
         var includeDashboard = builder.Configuration.GetValue(
-            "Aspire:OptionalServices:AspireDashboard:Enabled",
-            true
+            DashboardEnabledKey,
+            !builder.ExecutionContext.IsRunMode
         );
         var enableWatchtower = builder.Configuration.GetValue(
             "Aspire:OptionalServices:Watchtower:Enabled",
@@ -46,6 +52,22 @@ class Program
         {
             compose.WithDashboard(enabled: false);
         }
+
+        // ------------------------------------------------------------------
+        // Published compose defaults: restart policy and log rotation.
+        // ------------------------------------------------------------------
+        compose.ConfigureComposeFile(file =>
+        {
+            foreach (var service in file.Services.Values)
+            {
+                service.Restart ??= "unless-stopped";
+                service.Logging ??= new()
+                {
+                    Driver = "json-file",
+                    Options = { ["max-size"] = "10m", ["max-file"] = "3" },
+                };
+            }
+        });
 
         // ------------------------------------------------------------------
         // PostgreSQL: managed local container vs external/remote DB.
@@ -124,6 +146,9 @@ class Program
 
             var postgres = builder
                 .AddPostgres(ServiceNames.PostgreSql + "-server")
+                // Aspire's default moves with its releases (18.x from 13.5); a major
+                // Postgres upgrade cannot reuse an existing data volume.
+                .WithImageTag("17.6")
                 .WithUserName(postgresUsername)
                 .WithPassword(postgresPassword)
                 .WithBindMount(pgInitPath, "/docker-entrypoint-initdb.d", isReadOnly: true)
@@ -270,6 +295,10 @@ class Program
             "",
             secret: false
         );
+        var resendApiKey = builder.AddParameter("resend-api-key", "", secret: true);
+        var resendFromAddress = builder.AddParameter("resend-from-address", "", secret: false);
+        var resendFromName = builder.AddParameter("resend-from-name", "", secret: false);
+        var resendWebhookSecret = builder.AddParameter("resend-webhook-secret", "", secret: true);
 
         // OpenTelemetry export. Optional and off by default: the OTLP exporters
         // (API .NET SDK and web Node SDK) only start when the endpoint is set, so
@@ -291,45 +320,65 @@ class Program
         // ------------------------------------------------------------------
         // Nocturne API
         // ------------------------------------------------------------------
-        var api = builder
-            // Run mode: pin host port 1610 (main checkout only — worktrees stay
-            // dynamic) so dev tooling and docs can target a stable
-            // http://localhost:1610 across restarts. Publish mode: pin the
-            // in-container listen port so the generated compose bakes a
-            // concrete http://nocturne-api:8080 (mirrors the web service's fixed
-            // internal port) instead of an empty NOCTURNE_API_PORT placeholder.
-            // In publish mode this port is never host-published — YARP is the
-            // only entry point.
-            .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
-            .WithHttpEndpoint(
-                name: "http",
-                port: builder.ExecutionContext.IsRunMode
-                    && persistence == PersistenceMode.Persistent ? 1610 : null,
-                targetPort: builder.ExecutionContext.IsPublishMode ? 8080 : null)
-            .PublishAsDockerComposeService((_, _) => { })
-            .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
-            .WithRemoteImageTag("latest")
-            .WithPublishImageMetadata(
-                imageLabel: "API image",
-                imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest")
-            .WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
-
+        // Run mode: the API runs under its own dotnet watch, so the AppHost itself is not
+        // watched and a rude edit restarts the API alone (see AddDotnetWatchProject). Its
+        // host port is pinned to 1610 (main checkout only — worktrees stay dynamic) so dev
+        // tooling and docs can target a stable http://localhost:1610 across restarts.
+        //
         // Run mode is a dev tool: force Development so the dev-only surface
         // (api/v4/dev-only/*, seed-tenant, dashboard tenant commands) exists
-        // regardless of shell environment. launchProfileName: null skips
+        // regardless of shell environment. --no-launch-profile skips
         // launchSettings.json, and shell env propagation to the child process
-        // is unreliable across restarts. Publish mode (production images) is
-        // untouched and defaults to Production.
+        // is unreliable across restarts.
+        //
+        // Publish mode: the project resource, with the in-container listen port
+        // pinned so the generated compose bakes a concrete
+        // http://nocturne-api:8080 (mirrors the web service's fixed internal
+        // port) instead of an empty NOCTURNE_API_PORT placeholder. This port is
+        // never host-published — YARP is the only entry point. Production images
+        // default to Production.
+        IResourceBuilder<IResourceWithServiceDiscovery> api;
         if (builder.ExecutionContext.IsRunMode)
         {
-            api.WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+            var watchedApi = builder
+                .AddDotnetWatchProject(
+                    ServiceNames.NocturneApi,
+                    new Projects.Nocturne_API().ProjectPath,
+                    Path.Combine(solutionRoot, "dev", "msbuild", "dev-fast.targets"))
+                .WithHttpEndpoint(
+                    name: "http",
+                    port: persistence == PersistenceMode.Persistent ? 1610 : null)
+                .WithAspNetCoreUrls("http")
+                .WithHttpHealthCheck("/alive")
+                .WithEnvironment("ASPNETCORE_ENVIRONMENT", "Development");
+            // Without a dashboard there is no collector, and the exporter would retry every second.
+            if (includeDashboard)
+            {
+                watchedApi.WithOtlpExporter();
+            }
+            api = watchedApi;
         }
+        else
+        {
+            api = builder
+                .AddProject<Projects.Nocturne_API>(ServiceNames.NocturneApi, launchProfileName: null)
+                .WithHttpEndpoint(name: "http", targetPort: 8080)
+                .PublishAsDockerComposeService((_, _) => { })
+                .WithRemoteImageName("ghcr.io/nightscout/nocturne/nocturne-api")
+                .WithRemoteImageTag("latest")
+                .WithPublishImageMetadata(
+                    imageLabel: "API image",
+                    imageDefault: "ghcr.io/nightscout/nocturne/nocturne-api:latest");
+        }
+
+        var apiEnvironment = (IResourceBuilder<IResourceWithEnvironment>)api;
+        apiEnvironment.WithEnvironment(ServiceNames.ConfigKeys.InstanceKey, instanceKey);
 
         // Operator-supplied OTLP export (publish mode only — run mode uses
         // Aspire's auto-injected dashboard endpoint). Empty endpoint = disabled.
         if (builder.ExecutionContext.IsPublishMode)
         {
-            api.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
+            apiEnvironment.WithEnvironment("OTEL_EXPORTER_OTLP_ENDPOINT", otelExporterEndpoint)
                 .WithEnvironment("OTEL_EXPORTER_OTLP_PROTOCOL", otelExporterProtocol);
         }
 
@@ -340,17 +389,17 @@ class Program
             && postgresMigratorPassword != null
         )
         {
-            api.WaitFor(managedDatabase)
-                .WithNocturneDatabase(
-                    postgresServer,
-                    dbName,
-                    postgresAppPassword,
-                    postgresMigratorPassword
-                );
+            ((IResourceBuilder<IResourceWithWaitSupport>)api).WaitFor(managedDatabase);
+            apiEnvironment.WithNocturneDatabase(
+                postgresServer,
+                dbName,
+                postgresAppPassword,
+                postgresMigratorPassword
+            );
         }
         else if (remoteAppConnectionString != null && remoteMigratorConnectionString != null)
         {
-            api.WithNocturneRemoteDatabase(
+            apiEnvironment.WithNocturneRemoteDatabase(
                 remoteAppConnectionString,
                 remoteMigratorConnectionString
             );
@@ -426,7 +475,11 @@ class Program
                 .WithEnvironment("WHATSAPP_ACCESS_TOKEN", whatsappAccessToken)
                 .WithEnvironment("WHATSAPP_VERIFY_TOKEN", whatsappVerifyToken)
                 .WithEnvironment("WHATSAPP_APP_SECRET", whatsappAppSecret)
-                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId);
+                .WithEnvironment("WHATSAPP_PHONE_NUMBER_ID", whatsappPhoneNumberId)
+                .WithEnvironment("RESEND_API_KEY", resendApiKey)
+                .WithEnvironment("RESEND_FROM_ADDRESS", resendFromAddress)
+                .WithEnvironment("RESEND_FROM_NAME", resendFromName)
+                .WithEnvironment("RESEND_WEBHOOK_SECRET", resendWebhookSecret);
             // PUBLIC_DEFAULT_LANGUAGE comes from the web app's own .env.
             // OTEL_EXPORTER_OTLP_ENDPOINT: in run mode Aspire injects the
             // dashboard endpoint automatically; in publish mode the operator-
@@ -457,13 +510,13 @@ class Program
 
             ConfigureWebEnvironment(viteWeb);
 
-            // Dev auto-login opt-in: when NOCTURNE_DEV_AUTO_LOGIN is true — set
-            // in apphost appsettings or the host environment (e.g.
-            // `NOCTURNE_DEV_AUTO_LOGIN=true aspire start`) — the web login page
+            // Dev auto-login, on unless NOCTURNE_DEV_AUTO_LOGIN is false (apphost
+            // appsettings or the host environment, e.g.
+            // `NOCTURNE_DEV_AUTO_LOGIN=false aspire start`): the web login page
             // redirects through /api/v4/dev-only/auth/login instead of the
-            // passkey UI. Run mode only — the backing controller exists only in
-            // Development.
-            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", false))
+            // passkey UI, since a seeded tenant's passkey is held by no one. Run
+            // mode only — the backing controller exists only in Development.
+            if (builder.Configuration.GetValue("NOCTURNE_DEV_AUTO_LOGIN", true))
             {
                 viteWeb.WithEnvironment("NOCTURNE_DEV_AUTO_LOGIN", "true");
             }
@@ -530,8 +583,7 @@ class Program
         }
 
         // API needs WEB_URL to POST chat bot alert dispatches to the SvelteKit app
-        api.WithEnvironment("WEB_URL", web.GetEndpoint("http"));
-        api.WithEnvironment("SCALAR_CUSTOM_CSS", NocturneScalarTheme.Build(solutionRoot));
+        apiEnvironment.WithEnvironment("WEB_URL", web.GetEndpoint("http"));
 
         var webEndpoints = (IResourceBuilder<IResourceWithEndpoints>)web;
 
@@ -771,7 +823,7 @@ class Program
         if (!builder.ExecutionContext.IsRunMode)
         {
             // Publish mode: inject from the user-supplied parameter
-            api.WithEnvironment("BASE_DOMAIN", baseDomain);
+            apiEnvironment.WithEnvironment("BASE_DOMAIN", baseDomain);
         }
 
         if (builder.ExecutionContext.IsRunMode)
@@ -788,7 +840,7 @@ class Program
                 );
 
             // Single source of truth for both API and web
-            api.WithEnvironment("BASE_DOMAIN", baseDomainExpr);
+            apiEnvironment.WithEnvironment("BASE_DOMAIN", baseDomainExpr);
 
             ((IResourceBuilder<IResourceWithEnvironment>)web).WithEnvironment(
                 "BASE_DOMAIN",
@@ -856,5 +908,35 @@ class Program
 
         var app = builder.Build();
         await app.RunAsync();
+    }
+
+    private const string DashboardEnabledKey = "Aspire:OptionalServices:AspireDashboard:Enabled";
+
+    /// <summary>
+    /// Reads <see cref="DashboardEnabledKey"/> from the sources the builder will load, with the
+    /// same run/publish rule it applies (<c>--operation</c> / <c>--publisher</c>). Publish mode
+    /// always reports true: there the flag decides the compose file's dashboard service, not
+    /// whether this process starts one.
+    /// </summary>
+    private static bool IsDashboardEnabledBeforeBuild(DistributedApplicationOptions options)
+    {
+        var args = options.Args ?? [];
+        var environment = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production";
+        var contentRoot = options.ProjectDirectory ?? Directory.GetCurrentDirectory();
+        var config = new ConfigurationBuilder()
+            .AddJsonFile(Path.Combine(contentRoot, "appsettings.json"), optional: true)
+            .AddJsonFile(Path.Combine(contentRoot, $"appsettings.{environment}.json"), optional: true)
+            .AddUserSecrets(typeof(Program).Assembly, optional: true)
+            .AddEnvironmentVariables()
+            .AddCommandLine(args, new Dictionary<string, string>
+            {
+                ["--operation"] = "AppHost:Operation",
+                ["--publisher"] = "Publishing:Publisher",
+            })
+            .Build();
+
+        var isPublish = string.Equals(config["AppHost:Operation"], "publish", StringComparison.OrdinalIgnoreCase)
+            || !string.IsNullOrEmpty(config["Publishing:Publisher"]);
+        return isPublish || config.GetValue(DashboardEnabledKey, false);
     }
 }

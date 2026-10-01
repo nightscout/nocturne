@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Nocturne.Alerts.ParityCorpus.Generator.Harness;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using Nocturne.API.Configuration;
 using Nocturne.API.Services.Alerts;
+using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Glucose;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Alerts;
@@ -40,6 +42,7 @@ public class AlertReplayServiceTests
     private readonly Mock<IUploaderSnapshotRepository> _uploaderSnapshotRepository = new();
     private readonly Mock<IStateSpanService> _stateSpanService = new();
     private readonly Mock<Nocturne.API.Services.Devices.IReservoirEstimationService> _reservoirEstimation = new();
+    private readonly SensorContextEnricher _enricher;
     private readonly AlertReplayService _sut;
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -77,21 +80,23 @@ public class AlertReplayServiceTests
             new Mock<Nocturne.Infrastructure.Data.Abstractions.ITrackerRepository>().Object,
             _reservoirEstimation.Object,
             Options.Create(new AlertEvaluationOptions()));
-        var enricher = new SensorContextEnricher(
+        _enricher = new SensorContextEnricher(
             enricherDeps,
             new ServiceCollection().BuildServiceProvider(),
             TimeProvider.System,
             NullLogger<SensorContextEnricher>.Instance);
 
-        _sut = new AlertReplayService(
-            _alertRepository.Object,
-            _glucoseRepository.Object,
-            TestDoubles.CanonicalGlucosePassThrough.Create(),
-            enricher,
-            _tenantAccessor.Object,
-            Options.Create(new AlertEvaluationOptions()),
-            NullLogger<AlertReplayService>.Instance);
+        _sut = Service(new ManagedAlertReplayEngine(NullLogger<ManagedAlertReplayEngine>.Instance));
     }
+
+    private AlertReplayService Service(IAlertReplayEngine engine) => new(
+        _alertRepository.Object,
+        _glucoseRepository.Object,
+        TestDoubles.CanonicalGlucosePassThrough.Create(),
+        _enricher,
+        _tenantAccessor.Object,
+        Options.Create(new AlertEvaluationOptions()),
+        engine);
 
     private static AlertRuleSnapshot ThresholdRule(Guid id, string direction, decimal value,
         AlertRuleSeverity severity = AlertRuleSeverity.Warning) =>
@@ -540,6 +545,36 @@ public class AlertReplayServiceTests
     }
 
     /// <summary>
+    /// The Rust engine replays the rule snapshots it is handed, so a dry-run override that tightens
+    /// a stored rule's threshold is what it evaluates, not the stored row.
+    /// </summary>
+    [NativeFact]
+    public async Task DryRunOverride_OfAStoredRule_ReplaysAsWritten_OnTheRustEngine()
+    {
+        var ruleId = Guid.NewGuid();
+        var dayStart = new DateTime(2026, 4, 28, 0, 0, 0, DateTimeKind.Utc);
+        _alertRepository.Setup(r => r.GetEnabledRulesAsync(_tenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { ThresholdRule(ruleId, "below", 70m) });
+        _glucoseRepository.Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), null, null,
+                It.IsAny<int>(), It.IsAny<int>(), false, false, It.IsAny<DateTime?>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { Reading(dayStart.AddHours(1), 90) });
+        var ruleOverride = new ReplayRuleOverride(
+            ruleId, "tightened", AlertConditionType.Threshold, """{"direction":"below","value":100}""",
+            AlertRuleSeverity.Warning, AllowThroughDnd: false, AutoResolveEnabled: false, AutoResolveParams: null);
+        var rust = Service(new RustAlertReplayEngine(new AlertEngineErrors(
+            new ServiceCollection().AddMetrics().BuildServiceProvider()
+                .GetRequiredService<System.Diagnostics.Metrics.IMeterFactory>(),
+            TimeProvider.System)));
+
+        var result = await rust.ReplayDryRunAsync(
+            null, null, dayStart, dayStart.AddHours(2), ruleOverride, CancellationToken.None);
+
+        result.Events.Should().ContainSingle().Which.Should().Be(new AlertReplayEvent(
+            dayStart.AddHours(1), ruleId, "tightened", AlertRuleSeverity.Warning, AlertReplayEventKind.Fired));
+    }
+
+    /// <summary>
     /// Drift guard: every <see cref="AlertConditionType"/> evaluable at runtime must resolve to
     /// an evaluator in the replay container. Replay used to hand-maintain its own evaluator
     /// list and silently dropped any new condition kind (Sustained around a missing kind cleared
@@ -550,16 +585,12 @@ public class AlertReplayServiceTests
     [Fact]
     public void BuildReplayServices_ResolvesEveryRuntimeConditionType()
     {
-        using var sp = AlertReplayService.BuildReplayServices(
+        using var sp = ManagedAlertReplayEngine.BuildReplayServices(
             new InMemoryConditionTimerStore(), TimeProvider.System);
         var registry = sp.GetRequiredService<Nocturne.API.Services.Alerts.Evaluators.ConditionEvaluatorRegistry>();
 
-        // SignalLoss is not condition-evaluator-driven — AlertSweepService handles it directly.
-        var skipped = new[] { AlertConditionType.SignalLoss };
-
         foreach (var type in Enum.GetValues<AlertConditionType>())
         {
-            if (skipped.Contains(type)) continue;
             registry.GetEvaluator(type).Should().NotBeNull(
                 "replay must support every runtime condition type, but {0} has no evaluator", type);
         }

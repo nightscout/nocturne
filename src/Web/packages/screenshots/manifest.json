@@ -1,4 +1,181 @@
 {
+	"alert-rule-add-picker": {
+		"alt": "The list that opens from Add condition, grouped under headings. The top of it shows the glucose conditions: Glucose, Glucose bucket, Predicted glucose, Rate of change, Trend and Sensor stale, each with a coloured icon and a line saying what it checks, with the insulin group starting below.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-add-picker.light.webp",
+				"width": 640,
+				"height": 768
+			},
+			"dark": {
+				"file": "images/alert-rule-add-picker.dark.webp",
+				"width": 640,
+				"height": 768
+			}
+		}
+	},
+	"alert-rule-auto-resolve": {
+		"alt": "The Auto-resolve card switched on, with a Suggest button beside the switch. Its condition reads Notify when all of these are true, with one line: rate of change falling at least 1 mg/dL a minute, for at least 15 minutes.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-auto-resolve.light.webp",
+				"width": 1632,
+				"height": 528
+			},
+			"dark": {
+				"file": "images/alert-rule-auto-resolve.dark.webp",
+				"width": 1632,
+				"height": 528
+			}
+		}
+	},
+	"alert-rule-channels": {
+		"alt": "The Channels card of an alert rule, listing where the alert is sent. An In-App entry notes it is routed to your account automatically, a Browser Push entry carries the label Bedroom laptop, and an Add channel button sits underneath.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-channels.light.webp",
+				"width": 1632,
+				"height": 872
+			},
+			"dark": {
+				"file": "images/alert-rule-channels.dark.webp",
+				"width": 1632,
+				"height": 872
+			}
+		}
+	},
+	"alert-rule-editor": {
+		"alt": "The page for editing one alert rule, here the Low rule. The main column starts with an Identity card for its name, description and how serious it is, then a Condition card that reads Notify when all of these are true, with one line saying glucose below 70. Down the right side, a Test alert panel offers Fire saved rule and Replay against history, and under it a list of the times this rule has actually gone off.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-editor.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/alert-rule-editor.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"alert-rule-identity": {
+		"alt": "The Identity card of an alert rule. It holds boxes for the name of the rule and an optional description, a Severity menu set to Warning, an Enabled switch in the top corner, and a tick box for Allow through Do Not Disturb with a note that critical rules always get through.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-identity.light.webp",
+				"width": 1632,
+				"height": 896
+			},
+			"dark": {
+				"file": "images/alert-rule-identity.dark.webp",
+				"width": 1632,
+				"height": 896
+			}
+		},
+		"anchors": {
+			"severity": {
+				"x": 50,
+				"y": 614,
+				"width": 199,
+				"height": 72
+			},
+			"allow-dnd": {
+				"x": 50,
+				"y": 718,
+				"width": 1532,
+				"height": 128
+			},
+			"enabled": {
+				"x": 1518,
+				"y": 52,
+				"width": 64,
+				"height": 37
+			}
+		}
+	},
+	"alert-rule-nested-group": {
+		"alt": "The Condition card of a rule called Falling toward low. It reads Notify when any of these are true, then a line for glucose below 70, then an indented group box matching all of two lines inside it: glucose below 100, and a rate of change falling at least 2 mg/dL a minute.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-nested-group.light.webp",
+				"width": 1632,
+				"height": 856
+			},
+			"dark": {
+				"file": "images/alert-rule-nested-group.dark.webp",
+				"width": 1632,
+				"height": 856
+			}
+		},
+		"anchors": {
+			"group": {
+				"x": 50,
+				"y": 358,
+				"width": 1532,
+				"height": 372
+			}
+		}
+	},
+	"alert-rule-row-actions": {
+		"alt": "The actions menu opened from the three-dot button at the end of a condition line. It offers Wrap in AND group, Wrap in OR group, Wrap in NOT, Make sustained, and Remove.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-row-actions.light.webp",
+				"width": 1632,
+				"height": 856
+			},
+			"dark": {
+				"file": "images/alert-rule-row-actions.dark.webp",
+				"width": 1632,
+				"height": 856
+			}
+		}
+	},
+	"alert-rule-smart-snooze": {
+		"alt": "The Smart snooze card switched on. It extends a snooze by 15 minutes at a time while its condition holds, here glucose trending upward, and explains which alerts are extended when no condition is set.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-smart-snooze.light.webp",
+				"width": 1632,
+				"height": 912
+			},
+			"dark": {
+				"file": "images/alert-rule-smart-snooze.dark.webp",
+				"width": 1632,
+				"height": 912
+			}
+		}
+	},
+	"alert-rule-sustained-low": {
+		"alt": "The Condition card of a rule called Low overnight. It reads Notify when all of these are true, then two lines: glucose below 70 for at least 20 minutes, and a time of day from 10:00 PM to 07:00 AM in the time zone on the patient record.",
+		"variants": {
+			"light": {
+				"file": "images/alert-rule-sustained-low.light.webp",
+				"width": 1632,
+				"height": 584
+			},
+			"dark": {
+				"file": "images/alert-rule-sustained-low.dark.webp",
+				"width": 1632,
+				"height": 584
+			}
+		},
+		"anchors": {
+			"operator": {
+				"x": 211,
+				"y": 182,
+				"width": 186,
+				"height": 64
+			},
+			"sustained": {
+				"x": 950,
+				"y": 276,
+				"width": 128,
+				"height": 56
+			}
+		}
+	},
 	"alerts-configuration": {
 		"alt": "The Alerts page of a newly created site. It has no alert rules yet, and offers a New rule button to add the first one.",
 		"variants": {
@@ -9,6 +186,51 @@
 			},
 			"dark": {
 				"file": "images/alerts-configuration.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"alerts-dnd": {
+		"alt": "The Do Not Disturb page. The Manual card has its switch on, with an optional box for when it should switch itself off. The Schedule card has quiet hours switched on from 10:00 PM to 07:00 AM, with a note that the times follow the time zone on your patient record.",
+		"variants": {
+			"light": {
+				"file": "images/alerts-dnd.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/alerts-dnd.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"alerts-history": {
+		"alt": "The Alert history page. Under Recent fires, each row names the rule that went off with a coloured dot and a label for how serious it was, marks the ones someone acknowledged, and gives when the alert started and ended and how long it lasted.",
+		"variants": {
+			"light": {
+				"file": "images/alerts-history.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/alerts-history.dark.webp",
+				"width": 2880,
+				"height": 1800
+			}
+		}
+	},
+	"alerts-simulator": {
+		"alt": "The Simulator page after a replay of the last 24 hours. A glucose graph fills the top with a marker wherever an alert would have gone off, a playback strip under it shows each event as a tick, a list names every alert and the time it would have fired, and a panel beside them lists your rules.",
+		"variants": {
+			"light": {
+				"file": "images/alerts-simulator.light.webp",
+				"width": 2880,
+				"height": 1800
+			},
+			"dark": {
+				"file": "images/alerts-simulator.dark.webp",
 				"width": 2880,
 				"height": 1800
 			}
@@ -433,6 +655,119 @@
 				"file": "images/totp-setup.dark.webp",
 				"width": 1024,
 				"height": 1312
+			}
+		}
+	},
+	"tracker-complete-dialog": {
+		"alt": "The Complete box for a tracker. It asks when the change happened, the reason it ended, and optional notes, with a tick box to start a fresh one straight away.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-complete-dialog.light.webp",
+				"width": 1024,
+				"height": 956
+			},
+			"dark": {
+				"file": "images/tracker-complete-dialog.dark.webp",
+				"width": 1024,
+				"height": 956
+			}
+		}
+	},
+	"tracker-editor": {
+		"alt": "The Edit Definition box for a tracker. It asks for a name and a category, an optional description, whether the tracker runs for a length of time or is booked for a date, and the expected lifespan, here 240 hours. Under that is the list of device events that restart the tracker automatically, with Sensor Start ticked.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-editor.light.webp",
+				"width": 1024,
+				"height": 1620
+			},
+			"dark": {
+				"file": "images/tracker-editor.dark.webp",
+				"width": 1024,
+				"height": 1620
+			}
+		}
+	},
+	"tracker-pill-bar": {
+		"alt": "The row of status pills beside the current reading on the home screen. After the pills your pump and loop report comes one pill per running tracker, each giving its name and how long it has been running, with a thin line underneath showing how much of its expected life is used up.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-pill-bar.light.webp",
+				"width": 1738,
+				"height": 184
+			},
+			"dark": {
+				"file": "images/tracker-pill-bar.dark.webp",
+				"width": 1738,
+				"height": 184
+			}
+		},
+		"anchors": {
+			"trackers": {
+				"x": 1002,
+				"y": 0,
+				"width": 206,
+				"height": 88
+			}
+		}
+	},
+	"tracker-pill-popover": {
+		"alt": "The panel that opens when you tap a tracker pill. It shows how long the tracker has been running, its expected lifespan, the time remaining and when it was started, with a Complete Tracker button at the bottom.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-pill-popover.light.webp",
+				"width": 576,
+				"height": 472
+			},
+			"dark": {
+				"file": "images/tracker-pill-popover.dark.webp",
+				"width": 576,
+				"height": 472
+			}
+		}
+	},
+	"tracker-thresholds": {
+		"alt": "The Notification Thresholds list inside the tracker editor, with three steps: an Info notice a day before the sensor ends, a Warning two hours before, and an Urgent alert once it has run its full ten days. Each step has a level, a number of hours, a Channels button for choosing where it is delivered, and a message on the line below.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-thresholds.light.webp",
+				"width": 924,
+				"height": 1156
+			},
+			"dark": {
+				"file": "images/tracker-thresholds.dark.webp",
+				"width": 924,
+				"height": 984
+			}
+		}
+	},
+	"tracker-triggers": {
+		"alt": "The Restart automatically on section of the tracker editor. It lists the device events a tracker can restart on, from Sensor Start to Pump Battery Change, each with a tick box; Sensor Start is ticked. Under the list is an optional box for words the event notes must contain.",
+		"variants": {
+			"light": {
+				"file": "images/tracker-triggers.light.webp",
+				"width": 924,
+				"height": 616
+			},
+			"dark": {
+				"file": "images/tracker-triggers.dark.webp",
+				"width": 924,
+				"height": 616
+			}
+		}
+	},
+	"trackers-active": {
+		"alt": "The Active tab of the trackers page. Each running tracker is a row: a CGM sensor, an infusion site, an insulin reservoir and a pump battery, each with the time left before it is due in large type, how old it is and when it was started. Every row has a Complete button and a delete button, the reservoir row also has Record Level, and a Start Tracker menu sits in the top corner.",
+		"variants": {
+			"light": {
+				"file": "images/trackers-active.light.webp",
+				"width": 1744,
+				"height": 916
+			},
+			"dark": {
+				"file": "images/trackers-active.dark.webp",
+				"width": 1744,
+				"height": 916
 			}
 		}
 	}

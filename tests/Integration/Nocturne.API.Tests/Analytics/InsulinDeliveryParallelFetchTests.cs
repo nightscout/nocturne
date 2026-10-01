@@ -20,7 +20,7 @@ namespace Nocturne.API.Tests.Integration.Analytics;
 /// returns a consistent answer under concurrency.
 /// </summary>
 [Trait("Category", "Integration")]
-public class InsulinDeliveryParallelFetchTests : AspireIntegrationTestBase
+public class InsulinDeliveryParallelFetchTests : ApiIntegrationTestBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -29,7 +29,7 @@ public class InsulinDeliveryParallelFetchTests : AspireIntegrationTestBase
     };
 
     public InsulinDeliveryParallelFetchTests(
-        AspireIntegrationTestFixture fixture,
+        ApiIntegrationTestFixture fixture,
         ITestOutputHelper output
     )
         : base(fixture, output) { }

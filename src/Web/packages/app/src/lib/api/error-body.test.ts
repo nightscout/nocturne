@@ -33,6 +33,36 @@ describe("parseErrorBody", () => {
     expect(body?.title).toBe("Forbidden");
   });
 
+  it("recovers an OAuth endpoint's error_description as the detail", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description:
+            "Device code is invalid, expired, or already processed.",
+        }),
+        400
+      )
+    );
+
+    expect(body?.detail).toBe(
+      "Device code is invalid, expired, or already processed."
+    );
+  });
+
+  it("prefers an RFC 7807 detail to an error_description beside it", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({
+          detail: "This share does not include treatment data.",
+          error_description: "access_denied",
+        })
+      )
+    );
+
+    expect(body?.detail).toBe("This share does not include treatment data.");
+  });
+
   it("recovers the validation map of an undeclared 400", () => {
     const body = parseErrorBody(
       apiException(
@@ -42,6 +72,36 @@ describe("parseErrorBody", () => {
     );
 
     expect(body?.errors).toEqual({ Label: ["The Label field is required."] });
+  });
+
+  it("recovers the structured issues beside the validation map", () => {
+    const issues = [
+      { scope: "condition", path: "root", reason: "conditions_empty", field: null },
+    ];
+    const body = parseErrorBody(
+      apiException(JSON.stringify({ detail: "Rejected.", issues }), 400)
+    );
+
+    expect(body?.issues).toEqual(issues);
+  });
+
+  it("drops an issues entry that is not a validation issue", () => {
+    const body = parseErrorBody(
+      apiException(
+        JSON.stringify({ issues: [{ reason: "conditions_empty" }, "boom"] }),
+        400
+      )
+    );
+
+    expect(body?.issues).toBeUndefined();
+  });
+
+  it("drops issues the far end sent as the wrong type", () => {
+    const body = parseErrorBody(
+      apiException(JSON.stringify({ issues: "conditions_empty" }), 400)
+    );
+
+    expect(body?.issues).toBeUndefined();
   });
 
   it("answers undefined for a body that is not JSON", () => {

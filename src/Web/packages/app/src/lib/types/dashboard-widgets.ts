@@ -8,20 +8,18 @@
 import { WidgetId, type WidgetConfig } from "$lib/api/generated/nocturne-api-client";
 import type { TopWidgetId } from "$lib/components/dashboard/top-widget-ids";
 
-import {
-  TrendingUp,
-  Clock,
-  Wifi,
-  UtensilsCrossed,
-  ListChecks,
-  BarChart3,
-  CalendarDays,
-  PieChart,
-} from "lucide-svelte";
-import type { ComponentType } from "svelte";
+import TrendingUp from "@lucide/svelte/icons/trending-up";
+import Clock from "@lucide/svelte/icons/clock";
+import Wifi from "@lucide/svelte/icons/wifi";
+import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
+import ListChecks from "@lucide/svelte/icons/list-checks";
+import BarChart3 from "@lucide/svelte/icons/chart-column";
+import CalendarDays from "@lucide/svelte/icons/calendar-days";
+import PieChart from "@lucide/svelte/icons/chart-pie";
+import type { Component } from "svelte";
 
 /** Keyed by the registry's ids, so an icon and a loader cannot exist without each other. */
-export const WIDGET_ICONS: Record<TopWidgetId, ComponentType> = {
+export const WIDGET_ICONS: Record<TopWidgetId, Component> = {
   [WidgetId.BgDelta]: TrendingUp,
   [WidgetId.LastUpdated]: Clock,
   [WidgetId.ConnectionStatus]: Wifi,

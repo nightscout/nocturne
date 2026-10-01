@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
 using Nocturne.API.Extensions;
+using Nocturne.Core.Contracts.Alerts;
 using Nocturne.Core.Contracts.ClientDevices;
+using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Models.ClientDevices;
 
@@ -20,14 +22,20 @@ namespace Nocturne.API.Controllers.V4.ClientDevices;
 public class ClientDevicesController : ControllerBase
 {
     private readonly IClientDeviceService _deviceService;
+    private readonly IAlertAcknowledgementService _acknowledgementService;
+    private readonly ITenantAccessor _tenantAccessor;
     private readonly ILogger<ClientDevicesController> _logger;
 
     /// <summary>Initializes a new instance of the <see cref="ClientDevicesController"/> class.</summary>
     public ClientDevicesController(
         IClientDeviceService deviceService,
+        IAlertAcknowledgementService acknowledgementService,
+        ITenantAccessor tenantAccessor,
         ILogger<ClientDevicesController> logger)
     {
         _deviceService = deviceService;
+        _acknowledgementService = acknowledgementService;
+        _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
 
@@ -58,6 +66,7 @@ public class ClientDevicesController : ControllerBase
                 subjectId.Value,
                 request,
                 HttpContext.GetGrantedScopes(),
+                HttpContext.GetGrantId(),
                 cancellationToken);
 
             _logger.LogDebug(
@@ -68,12 +77,12 @@ public class ClientDevicesController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 400, title: "Bad Request");
         }
         catch (InvalidOperationException ex)
         {
             // The install id is already owned by another subject in this tenant.
-            return Conflict(new { error = ex.Message });
+            return Problem(detail: ex.Message, statusCode: 409, title: "Conflict");
         }
     }
 
@@ -153,7 +162,9 @@ public class ClientDevicesController : ControllerBase
     /// <summary>
     /// The actuation intents currently active for this device — the reconcile snapshot a push-mode
     /// device reads on (re)connect to start anything still active and drop anything resolved. Empty
-    /// for a local-engine device or one the caller does not own.
+    /// for a local-engine device or one the caller does not own. Each intent carries
+    /// <see cref="DeviceActionIntent.AcknowledgesForEveryone"/> so the device labels its acknowledge
+    /// action as the acknowledge endpoint will treat it.
     /// </summary>
     [HttpGet("{id:guid}/active-intents")]
     [RemoteQuery]
@@ -171,7 +182,17 @@ public class ClientDevicesController : ControllerBase
             return Unauthorized();
         }
 
-        var intents = await _deviceService.GetActiveIntentsAsync(id, subjectId.Value, cancellationToken);
-        return Ok(intents.ToList());
+        var intents = (await _deviceService.GetActiveIntentsAsync(id, subjectId.Value, cancellationToken)).ToList();
+        if (intents.Count > 0)
+        {
+            var forEveryone = await _acknowledgementService.AcknowledgesForEveryoneAsync(
+                _tenantAccessor.TenantId, HttpContext.GetAlertAcknowledgementAuthority(), cancellationToken);
+            foreach (var intent in intents)
+            {
+                intent.AcknowledgesForEveryone = forEveryone;
+            }
+        }
+
+        return Ok(intents);
     }
 }

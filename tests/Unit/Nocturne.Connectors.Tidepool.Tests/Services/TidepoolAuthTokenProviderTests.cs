@@ -31,7 +31,7 @@ public class TidepoolAuthTokenProviderTests
         tenantAccessor.Setup(t => t.TenantId).Returns(Guid.NewGuid());
 
         var retryDelay = new Mock<IRetryDelayStrategy>();
-        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>())).Returns(Task.CompletedTask);
+        retryDelay.Setup(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var provider = new TidepoolAuthTokenProvider(
             httpClient,
@@ -48,7 +48,7 @@ public class TidepoolAuthTokenProviderTests
         token.Should().BeNull();
         handler.CallCount.Should().Be(1,
             "a non-retryable 401 must fail fast, not burn three attempts with backoff");
-        retryDelay.Verify(r => r.ApplyRetryDelayAsync(It.IsAny<int>()), Times.Never,
+        retryDelay.Verify(r => r.ApplyRetryDelayAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never,
             "no backoff delay should be applied for a non-retryable error");
     }
 

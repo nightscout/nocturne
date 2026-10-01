@@ -44,8 +44,8 @@ export const getIdpData = query(DateRangeSchema.optional(), async (input) => {
     averagedStats: rangeAnalytics.averagedStats,
     aidSystemMetrics,
     dateRange: {
-      from: startDate.toISOString(),
-      to: endDate.toISOString(),
+      from: startDate,
+      to: endDate,
       lastUpdated: new Date().toISOString(),
     },
   };

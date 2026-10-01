@@ -2,7 +2,9 @@
   import * as Command from "$lib/components/ui/command";
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
-  import { Check, ChevronsUpDown, Plus } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import Plus from "@lucide/svelte/icons/plus";
   import {
     getEventTypeStyle,
     TREATMENT_CATEGORIES,
@@ -51,7 +53,7 @@
   // Get all known event types from categories + additional provided
   let allEventTypes = $derived.by(() => {
     const categoryTypes = Object.values(TREATMENT_CATEGORIES).flatMap(
-      (cat) => cat.eventTypes as readonly string[]
+      (cat): readonly string[] => cat.eventTypes
     );
     const combined = new Set([...categoryTypes, ...additionalEventTypes]);
     return Array.from(combined).sort();
@@ -100,10 +102,10 @@
   <Popover.Trigger>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         role="combobox"
         aria-expanded={popoverOpen}
-        class={cn("w-full justify-between font-normal", className)}
+        class={cn("w-full justify-between", className)}
         {disabled}
         {...props}
       >
@@ -125,13 +127,14 @@
       <Command.List>
         <Command.Empty>
           {#if isCustomValue}
-            <button
-              type="button"
-              class="w-full p-2 text-left text-sm hover:bg-accent rounded"
+            <Button
+              variant="ghost"
+              size="sm"
+              class="w-full justify-start"
               onclick={() => selectEventType(searchValue.trim())}
             >
               Use "{searchValue.trim()}" as custom type
-            </button>
+            </Button>
           {:else}
             No event types found.
           {/if}
@@ -141,7 +144,7 @@
             <Command.Item
               value="__create_new__"
               onSelect={handleCreateNew}
-              class="cursor-pointer text-primary"
+              variant="create" class="cursor-pointer"
             >
               <Plus class="mr-2 h-4 w-4" />
               Create new event type...
@@ -151,7 +154,7 @@
             <Command.Item
               value="__none__"
               onSelect={clearSelection}
-              class="cursor-pointer text-muted-foreground"
+              variant="muted" class="cursor-pointer"
             >
               <Check
                 class={cn("mr-2 h-4 w-4", !value ? "opacity-100" : "opacity-0")}
@@ -159,7 +162,7 @@
               None (don't create event)
             </Command.Item>
           {/if}
-          {#each filteredEventTypes as type}
+          {#each filteredEventTypes as type (type)}
             {@const typeStyle = getEventTypeStyle(type)}
             <Command.Item
               value={type}

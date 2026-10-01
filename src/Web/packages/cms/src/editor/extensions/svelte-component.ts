@@ -1,5 +1,17 @@
-import { Node, mergeAttributes, type Editor, type RawCommands } from '@tiptap/core';
+import { Node, mergeAttributes, type Editor } from '@tiptap/core';
+import { parseComponentProps } from './svelte-component-svx.ts';
 import { registerComponentActions, ComponentIcon } from '../../lib/components/edra/extensions/slash-command/groups.ts';
+
+export { parseComponentProps, serializeComponentToSvx } from './svelte-component-svx.ts';
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    svelteComponent: {
+      insertSvelteComponent: (name: string, props?: Record<string, string>) => ReturnType;
+      updateSvelteComponentProps: (props: Record<string, string>) => ReturnType;
+    };
+  }
+}
 
 export interface ComponentDefinition {
   name: string;
@@ -20,7 +32,7 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
       icon: ComponentIcon,
       tooltip: comp.label,
       onClick: (editor: Editor) => {
-        (editor.commands as any).insertSvelteComponent(comp.name, comp.defaultProps);
+        editor.commands.insertSvelteComponent(comp.name, comp.defaultProps);
       },
     })),
   );
@@ -54,7 +66,7 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
 
     renderHTML({ HTMLAttributes }) {
       const { componentName, props: propsJson, ...rest } = HTMLAttributes;
-      const props = JSON.parse(propsJson || '{}') as Record<string, string>;
+      const props = parseComponentProps(propsJson);
       const propsDisplay = Object.entries(props)
         .map(([k, v]) => `${k}="${v}"`)
         .join(' ');
@@ -71,10 +83,10 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
     },
 
     addCommands() {
-      return ({
+      return {
         insertSvelteComponent:
-          (name: string, props?: Record<string, string>) =>
-          ({ commands }: { commands: Record<string, (...args: any[]) => any> }) => {
+          (name, props) =>
+          ({ commands }) => {
             return commands.insertContent({
               type: this.name,
               attrs: {
@@ -84,46 +96,22 @@ export const SvelteComponentExtension = (components: ComponentDefinition[]) => {
             });
           },
         updateSvelteComponentProps:
-          (props: Record<string, string>) =>
-          ({ tr, state }: { tr: any; state: any }) => {
+          (props) =>
+          ({ tr, state }) => {
             const { selection } = state;
             const node = state.doc.nodeAt(selection.from);
             if (node?.type.name !== 'svelteComponent') return false;
-            const existing = JSON.parse(node.attrs.props || '{}');
+            const existing = parseComponentProps(node.attrs.props);
             tr.setNodeMarkup(selection.from, undefined, {
               ...node.attrs,
               props: JSON.stringify({ ...existing, ...props }),
             });
             return true;
           },
-      }) as Partial<RawCommands>;
+      };
     },
   });
 };
-
-/**
- * Serialize a SvelteComponent node to .svx component syntax.
- */
-export function serializeComponentToSvx(
-  componentName: string,
-  propsJson: string,
-  content?: string,
-): string {
-  const props = JSON.parse(propsJson || '{}') as Record<string, string>;
-  const propsStr = Object.entries(props)
-    .map(([key, value]) => {
-      if (value === 'true') return key;
-      return `${key}="${value}"`;
-    })
-    .join(' ');
-
-  const tag = propsStr ? `<${componentName} ${propsStr}` : `<${componentName}`;
-
-  if (content) {
-    return `${tag}>\n${content}\n</${componentName}>`;
-  }
-  return `${tag} />`;
-}
 
 /**
  * Collect unique imports needed for the .svx file based on which components are used.

@@ -12,8 +12,8 @@ const SAFETY_LIMIT = 200000;
 /** Paginate through all sensor glucose readings for a date range. */
 export async function fetchAllGlucose(
   apiClient: ApiClient,
-  startDate: Date,
-  endDate: Date
+  startDate: string,
+  endDate: string
 ) {
   type GlucoseItem = NonNullable<
     Awaited<ReturnType<typeof apiClient.sensorGlucose.getAll>>["data"]

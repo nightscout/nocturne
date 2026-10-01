@@ -105,6 +105,64 @@ public class TrackersController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
+    /// A manual start replaces the running instance, as a device-event start does; see
+    /// <see cref="TrackerSuccession"/>.
+    /// </summary>
+    private Task<TrackerSuccessionResult> StartSuccessorAsync(
+        TrackerDefinitionEntity definition,
+        string userId,
+        string? startNotes,
+        string? startTreatmentId,
+        DateTime startedAt,
+        DateTime? scheduledAt) =>
+        TrackerSuccession.StartAsync(
+            _repository,
+            _broadcast,
+            _logger,
+            definition,
+            startedAt,
+            completionNotes: null,
+            completeTreatmentId: null,
+            ct => _repository.StartInstanceAsync(
+                definition.Id,
+                userId,
+                startNotes,
+                startTreatmentId,
+                startedAt,
+                scheduledAt,
+                ct
+            ),
+            HttpContext.RequestAborted
+        );
+
+    private static List<string> StoredTriggers(TrackerDefinitionEntity definition)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(definition.TriggerEventTypes) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static string? NullIfBlank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private ObjectResult SuccessionConflict(TrackerDefinitionEntity definition, TrackerSuccessionOutcome outcome) =>
+        Problem(
+            detail: outcome == TrackerSuccessionOutcome.CompletedElsewhere
+                ? $"The running {definition.Name} was completed while this one was starting. Try again."
+                : $"A {definition.Name} started at or after this time is already running. Complete it first, or start this one later.",
+            statusCode: StatusCodes.Status409Conflict,
+            title: "Conflict"
+        );
+
+    private ObjectResult AlreadyCompleted() =>
+        Problem(detail: "Instance already completed", statusCode: 400, title: "Bad Request");
+
+    /// <summary>
     /// Validate notification thresholds for a definition
     /// </summary>
     private static string? ValidateThresholds(
@@ -171,7 +229,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
         foreach (var excursionId in excursions)
         {
             await _acknowledgementService.AcknowledgeExcursionAsync(
-                db.TenantId, excursionId, userId, broadcast: true, ct);
+                db.TenantId, excursionId, userId, HttpContext.GetAlertAcknowledgementAuthority(),
+                broadcast: true, ct);
         }
     }
 
@@ -223,6 +282,15 @@ public class TrackersController : ControllerBase, IWriteScopedController
     }
 
     /// <summary>
+    /// The device event types a tracker can be set to restart on.
+    /// </summary>
+    [HttpGet("trigger-event-types")]
+    [RemoteQuery]
+    [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
+    public ActionResult<string[]> GetTriggerEventTypes() =>
+        Ok(TrackerTriggerService.TriggerableEventTypes.ToArray());
+
+    /// <summary>
     /// Get a specific tracker definition
     /// </summary>
     [HttpGet("definitions/{id:guid}")]
@@ -271,6 +339,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (lowReservoirError != null)
             return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
 
+        if (!TrackerTriggerService.TryNormaliseTriggers(request.TriggerEventTypes, [], out var triggers, out var triggerError))
+            return Problem(detail: triggerError, statusCode: 400, title: "Bad Request");
+
         var entity = new TrackerDefinitionEntity
         {
             UserId = userId,
@@ -278,8 +349,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
             Description = request.Description,
             Category = request.Category,
             Icon = request.Icon ?? "activity",
-            TriggerEventTypes = JsonSerializer.Serialize(request.TriggerEventTypes ?? []),
-            TriggerNotesContains = request.TriggerNotesContains,
+            TriggerEventTypes = JsonSerializer.Serialize(triggers ?? []),
+            TriggerNotesContains = NullIfBlank(request.TriggerNotesContains),
             LifespanHours = request.LifespanHours,
             LowReservoirUnits = request.LowReservoirUnits,
             LowReservoirUrgency = request.LowReservoirUrgency,
@@ -374,16 +445,25 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (lowReservoirError != null)
             return Problem(detail: lowReservoirError, statusCode: 400, title: "Bad Request");
 
+        var storedTriggers = request.TriggerEventTypes is null ? [] : StoredTriggers(existing);
+        if (!TrackerTriggerService.TryNormaliseTriggers(request.TriggerEventTypes, storedTriggers, out var triggers, out var triggerError))
+            return Problem(detail: triggerError, statusCode: 400, title: "Bad Request");
+
         existing.Name = request.Name ?? existing.Name;
         existing.Description = request.Description ?? existing.Description;
         existing.Category = request.Category ?? existing.Category;
         existing.Icon = request.Icon ?? existing.Icon;
-        existing.TriggerEventTypes =
-            request.TriggerEventTypes != null
-                ? JsonSerializer.Serialize(request.TriggerEventTypes)
-                : existing.TriggerEventTypes;
-        existing.TriggerNotesContains =
-            request.TriggerNotesContains ?? existing.TriggerNotesContains;
+        // The notes filter travels with the trigger list: the editor always posts the list, but a
+        // cleared filter arrives as no field at all, so null-means-keep could never clear it.
+        if (triggers != null)
+        {
+            existing.TriggerEventTypes = JsonSerializer.Serialize(triggers);
+            existing.TriggerNotesContains = NullIfBlank(request.TriggerNotesContains);
+        }
+        else if (request.TriggerNotesContains != null)
+        {
+            existing.TriggerNotesContains = NullIfBlank(request.TriggerNotesContains);
+        }
         existing.LifespanHours = request.LifespanHours ?? existing.LifespanHours;
         // Applied as-is (not null-means-keep): the tracker editor posts the whole
         // definition, and null must clear the level rule. Forced null for any
@@ -549,6 +629,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TrackerInstanceDto>> StartInstance(
         [FromBody] StartTrackerInstanceRequest request
     )
@@ -572,15 +653,16 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition.Mode == TrackerMode.Duration && request.ScheduledAt.HasValue)
             return Problem(detail: "Duration mode trackers should not have a ScheduledAt datetime", statusCode: 400, title: "Bad Request");
 
-        var instance = await _repository.StartInstanceAsync(
-            request.DefinitionId,
+        var succession = await StartSuccessorAsync(
+            definition,
             userId,
             request.StartNotes,
             request.StartTreatmentId,
-            request.StartedAt,
-            request.ScheduledAt,
-            HttpContext.RequestAborted
+            request.StartedAt ?? DateTime.UtcNow,
+            request.ScheduledAt
         );
+        if (succession.Started is not { } instance)
+            return SuccessionConflict(definition, succession.Outcome);
 
         _logger.LogInformation(
             "Started tracker instance {Id} for definition {DefinitionId}",
@@ -591,7 +673,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
             "create",
-            TrackerInstanceDto.FromEntity(instance)
+            TrackerInstanceDto.FromEntity(instance),
+            instance.UserId,
+            definition.Visibility
         );
 
         return CreatedAtAction(nameof(GetActiveInstances), TrackerInstanceDto.FromEntity(instance));
@@ -619,7 +703,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return Forbid();
 
         if (existing.CompletedAt != null)
-            return Problem(detail: "Instance already completed", statusCode: 400, title: "Bad Request");
+            return AlreadyCompleted();
 
         var completed = await _repository.CompleteInstanceAsync(
             id,
@@ -629,6 +713,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
             request.CompletedAt,
             HttpContext.RequestAborted
         );
+        if (completed is null)
+            return AlreadyCompleted();
 
         _logger.LogInformation(
             "Completed tracker instance {Id} with reason {Reason}",
@@ -639,10 +725,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
             "complete",
-            TrackerInstanceDto.FromEntity(completed!)
+            TrackerInstanceDto.FromEntity(completed),
+            existing.UserId,
+            existing.Definition.Visibility
         );
 
-        return Ok(TrackerInstanceDto.FromEntity(completed!));
+        return Ok(TrackerInstanceDto.FromEntity(completed));
     }
 
     /// <summary>
@@ -681,7 +769,9 @@ public class TrackersController : ControllerBase, IWriteScopedController
             {
                 await _broadcast.BroadcastTrackerUpdateAsync(
                     "ack",
-                    TrackerInstanceDto.FromEntity(updated)
+                    TrackerInstanceDto.FromEntity(updated),
+                    updated.UserId,
+                    updated.Definition.Visibility
                 );
             }
         }
@@ -712,7 +802,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         await _repository.DeleteInstanceAsync(id, HttpContext.RequestAborted);
 
         // Broadcast via SignalR
-        await _broadcast.BroadcastTrackerUpdateAsync("delete", dto);
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "delete",
+            dto,
+            existing.UserId,
+            existing.Definition.Visibility
+        );
 
         return NoContent();
     }
@@ -787,6 +882,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
     [Authorize]
     [RemoteCommand(Invalidates = ["GetActiveInstances"])]
     [ProducesResponseType(typeof(TrackerInstanceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TrackerInstanceDto>> ApplyPreset(
         Guid id,
         [FromBody] ApplyPresetRequest? request = null
@@ -794,20 +890,33 @@ public class TrackersController : ControllerBase, IWriteScopedController
     {
         var userId = HttpContext.GetSubjectIdString()!;
 
-        var instance = await _repository.ApplyPresetAsync(
-            id,
-            userId,
-            request?.OverrideNotes,
-            HttpContext.RequestAborted
-        );
-
-        if (instance == null)
+        var preset = await _repository.GetPresetByIdAsync(id, HttpContext.RequestAborted);
+        if (preset == null)
             return NotFound();
+        if (preset.UserId != userId && !HttpContext.IsAdmin())
+            return Forbid();
+        var succession = await StartSuccessorAsync(
+            preset.Definition,
+            userId,
+            request?.OverrideNotes ?? preset.DefaultStartNotes,
+            startTreatmentId: null,
+            DateTime.UtcNow,
+            scheduledAt: null
+        );
+        if (succession.Started is not { } instance)
+            return SuccessionConflict(preset.Definition, succession.Outcome);
 
         _logger.LogInformation(
             "Applied preset {PresetId}, created instance {InstanceId}",
             id,
             instance.Id
+        );
+
+        await _broadcast.BroadcastTrackerUpdateAsync(
+            "create",
+            TrackerInstanceDto.FromEntity(instance),
+            instance.UserId,
+            preset.Definition.Visibility
         );
 
         return Ok(TrackerInstanceDto.FromEntity(instance));
@@ -862,7 +971,15 @@ public class NotificationThresholdDto
     /// </summary>
     public Guid? AlertRuleId { get; set; }
 
-    public static NotificationThresholdDto FromEntity(TrackerNotificationThresholdEntity entity) =>
+    /// <summary>
+    /// Minutes from a run's reference time (start, or the scheduled time for an Event tracker) at
+    /// which this threshold fires, resolved by <see cref="TrackerSchedule.OffsetMinutes"/>. Null when
+    /// it can never fire. <see cref="Hours"/> is what the user typed; this is what it means.
+    /// </summary>
+    public int? OffsetMinutes { get; set; }
+
+    public static NotificationThresholdDto FromEntity(
+        TrackerNotificationThresholdEntity entity, TrackerDefinitionEntity definition) =>
         new()
         {
             Id = entity.Id,
@@ -877,6 +994,7 @@ public class NotificationThresholdDto
             VibrateEnabled = entity.VibrateEnabled,
             RespectQuietHours = entity.RespectQuietHours,
             AlertRuleId = entity.AlertRuleId,
+            OffsetMinutes = TrackerSchedule.OffsetMinutes(definition.Mode, definition.LifespanHours, entity.Hours),
         };
 }
 
@@ -944,7 +1062,10 @@ public class TrackerDefinitionDto
             Category = entity.Category,
             Icon = entity.Icon,
             TriggerEventTypes =
-                JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [],
+            [
+                .. (JsonSerializer.Deserialize<List<string>>(entity.TriggerEventTypes) ?? [])
+                    .Select(n => TrackerTriggerService.CanonicalTrigger(n) ?? n),
+            ],
             TriggerNotesContains = entity.TriggerNotesContains,
             LifespanHours = entity.LifespanHours,
             LowReservoirUnits = entity.LowReservoirUnits,
@@ -953,7 +1074,7 @@ public class TrackerDefinitionDto
             NotificationThresholds =
                 entity
                     .NotificationThresholds?.OrderBy(t => t.DisplayOrder)
-                    .Select(NotificationThresholdDto.FromEntity)
+                    .Select(t => NotificationThresholdDto.FromEntity(t, entity))
                     .ToList() ?? [],
             IsFavorite = entity.IsFavorite,
             DashboardVisibility = entity.DashboardVisibility,
@@ -985,6 +1106,16 @@ public class TrackerInstanceDto
     public DateTime? LastAckedAt { get; set; }
     public int? AckSnoozeMins { get; set; }
 
+    /// <summary>
+    /// When each of the definition's notification thresholds fires for this run, resolved by
+    /// <see cref="TrackerSchedule"/> with the rule the threshold's alert rule uses. The alert follows
+    /// only a definition's newest run, so for an Event tracker with several bookings an older one's
+    /// schedule has no alert behind it. A client finds the level a running tracker has reached by
+    /// comparing these against the clock, never by re-deriving them from the thresholds' hours.
+    /// Thresholds that can never fire are omitted.
+    /// </summary>
+    public TrackerThresholdTimeDto[] Schedule { get; set; } = [];
+
     public static TrackerInstanceDto FromEntity(TrackerInstanceEntity entity) =>
         new()
         {
@@ -1004,7 +1135,27 @@ public class TrackerInstanceDto
             IsActive = entity.IsActive,
             LastAckedAt = entity.LastAckedAt,
             AckSnoozeMins = entity.AckSnoozeMins,
+            Schedule = entity.Definition is null
+                ? []
+                : [.. entity.Definition.NotificationThresholds
+                    .OrderBy(t => t.DisplayOrder)
+                    .Select(t => (Threshold: t, FiresAt: TrackerSchedule.FiresAt(entity, t)))
+                    .Where(t => t.FiresAt is not null)
+                    .Select(t => new TrackerThresholdTimeDto
+                    {
+                        Urgency = t.Threshold.Urgency,
+                        FiresAt = t.FiresAt!.Value,
+                        Description = t.Threshold.Description,
+                    })],
         };
+}
+
+/// <summary>One notification threshold of a tracker run, placed on the timeline.</summary>
+public class TrackerThresholdTimeDto
+{
+    public NotificationUrgency Urgency { get; set; }
+    public DateTime FiresAt { get; set; }
+    public string? Description { get; set; }
 }
 
 public class TrackerPresetDto

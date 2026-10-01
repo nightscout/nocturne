@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Nocturne.Infrastructure.Data.Interceptors;
 using Npgsql;
-using Testcontainers.PostgreSql;
+using Nocturne.Tests.Shared.Infrastructure;
 
 namespace Nocturne.Infrastructure.Data.Tests.Migrations;
 
@@ -24,10 +24,7 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
     /// <summary>The migration immediately before the one under test.</summary>
     private const string PriorMigration = "20260908125351_AddDedupReconcileCursorLinkId";
 
-    private const string DbName = "nocturne_token_conversion";
-    private const string MigratorPassword = "token-conversion-migrator-password";
 
-    private PostgreSqlContainer _container = null!;
     private string _migratorConnectionString = string.Empty;
 
     internal static readonly Guid Converts = Guid.Parse("11111111-1111-7111-8111-111111111111");
@@ -36,32 +33,16 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _container = new PostgreSqlBuilder("postgres:17.6")
-            .WithDatabase(DbName)
-            .WithUsername("postgres")
-            .WithPassword("bootstrap-test-password")
-            .WithEnvironment("NOCTURNE_MIGRATOR_PASSWORD", MigratorPassword)
-            .WithEnvironment("NOCTURNE_APP_PASSWORD", "token-conversion-app-password")
-            .WithEnvironment("NOCTURNE_WEB_PASSWORD", "token-conversion-web-password")
-            .WithBindMount(ResolveInitScriptPath(), "/docker-entrypoint-initdb.d/00-init.sh")
-            .Build();
-
-        await _container.StartAsync();
-
-        _migratorConnectionString =
-            $"Host={_container.Hostname};Port={_container.GetMappedPublicPort(5432)};"
-            + $"Database={DbName};Username=nocturne_migrator;Password={MigratorPassword}";
+        // Unmigrated: the fixture walks the chain up to the migration under test itself.
+        var database = await SharedPostgres.CreateEmptyDatabaseAsync("token_conversion");
+        _migratorConnectionString = database.MigratorConnectionString;
 
         await MigrateToAsync(PriorMigration);
         await SeedAsync();
         await MigrateToAsync(targetMigration: null);
     }
 
-    public async Task DisposeAsync()
-    {
-        await _container.StopAsync();
-        await _container.DisposeAsync();
-    }
+    public Task DisposeAsync() => Task.CompletedTask;
 
     /// <summary>
     /// Migrates to <paramref name="targetMigration"/>, or to head when it is null. Seeding has to
@@ -70,7 +51,7 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
     private async Task MigrateToAsync(string? targetMigration)
     {
         var options = new DbContextOptionsBuilder<NocturneDbContext>()
-            .UseNpgsql(_migratorConnectionString)
+            .UseNpgsql(_migratorConnectionString, npgsql => npgsql.UseNocturneMigrations())
             .AddInterceptors(new TenantConnectionInterceptor())
             .Options;
 
@@ -168,20 +149,6 @@ public class SubjectTokenConversionFixture : IAsyncLifetime
             VALUES ('33333333-0000-7000-8000-00000000b001', '{LeftAlone}', '33333333-0000-7000-8000-00000000a001', '["glucose.read"]'::jsonb, now(), now(), false);
             """);
     }
-
-    private static string ResolveInitScriptPath()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh")))
-        {
-            dir = dir.Parent;
-        }
-
-        return dir is null
-            ? throw new InvalidOperationException(
-                "Could not locate docs/postgres/container-init/00-init.sh from " + AppContext.BaseDirectory)
-            : Path.Join(dir.FullName, "docs/postgres/container-init/00-init.sh");
-    }
 }
 
 /// <inheritdoc cref="SubjectTokenConversionFixture"/>
@@ -259,7 +226,7 @@ public class SubjectTokenConversionTests(SubjectTokenConversionFixture fixture)
         var orphans = await ScalarAsync<long>(Converts,
             $"""
             SELECT count(*) FROM tenant_members tm JOIN subjects s ON s.id = tm.subject_id
-             WHERE tm.tenant_id = '{Converts}' AND tm.revoked_at IS NULL AND s.is_active
+             WHERE tm.tenant_id = '{Converts}' AND s.is_active
                AND NOT s.is_system_subject AND NOT s.is_demo_subject
                AND NOT EXISTS (SELECT 1 FROM passkey_credentials p WHERE p.subject_id = s.id)
                AND NOT EXISTS (SELECT 1 FROM subject_oidc_identities i WHERE i.subject_id = s.id);

@@ -2,7 +2,8 @@
   import * as Command from "$lib/components/ui/command";
   import * as Popover from "$lib/components/ui/popover";
   import { Button } from "$lib/components/ui/button";
-  import { Check, ChevronsUpDown } from "lucide-svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
   import { cn } from "$lib/utils";
   import { tick } from "svelte";
   import { GI_OPTIONS, getGiLabel } from "./food-constants";
@@ -38,7 +39,7 @@
   <Popover.Trigger bind:ref={triggerRef}>
     {#snippet child({ props }: { props: Record<string, unknown> })}
       <Button
-        variant="outline"
+        variant="combobox"
         class={cn("w-full justify-between", className)}
         {...props}
         role="combobox"
@@ -55,7 +56,7 @@
       <Command.List>
         <Command.Empty>No GI level found.</Command.Empty>
         <Command.Group>
-          {#each GI_OPTIONS as option}
+          {#each GI_OPTIONS as option (option.value)}
             <Command.Item
               value={option.label}
               onSelect={() => selectGi(option.value)}

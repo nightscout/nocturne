@@ -64,6 +64,9 @@ public class ShareLinkController : ControllerBase
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
+        if (await WouldHandOutFullHistoryAsync(ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         var link = await _shareLinkService.RevealAsync(_tenantAccessor.TenantId, ct);
 
         // Logged on the outcome, not the request: a reveal that produced nothing gave nothing away.
@@ -94,6 +97,9 @@ public class ShareLinkController : ControllerBase
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
 
+        if (await WouldHandOutFullHistoryAsync(ct))
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
+
         return Ok(await _shareLinkService.RotateAsync(_tenantAccessor.TenantId, ct));
     }
 
@@ -120,6 +126,9 @@ public class ShareLinkController : ControllerBase
     {
         if (!HttpContext.HasScope(Scope.SharingManage))
             return Forbid();
+
+        if (request.FullHistory && HttpContext.IsCallerHistoryClamped())
+            return Problem(detail: HttpContextExtensions.HistoryCeilingDetail, statusCode: 403);
 
         return Ok(await _shareLinkService.SetFullHistoryAsync(_tenantAccessor.TenantId, request.FullHistory, ct));
     }
@@ -151,6 +160,15 @@ public class ShareLinkController : ControllerBase
                 statusCode: 400);
         }
     }
+
+    /// <summary>
+    /// True when a clamped caller would come away holding a live link to a full-history share:
+    /// revealing it, or rotating it, which returns the new token. See
+    /// <see cref="HttpContextExtensions.IsCallerHistoryClamped"/>.
+    /// </summary>
+    private async Task<bool> WouldHandOutFullHistoryAsync(CancellationToken ct) =>
+        HttpContext.IsCallerHistoryClamped()
+        && (await _shareLinkService.GetAsync(_tenantAccessor.TenantId, ct)).FullHistory;
 
 }
 

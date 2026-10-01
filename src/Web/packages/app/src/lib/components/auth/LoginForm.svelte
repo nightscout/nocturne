@@ -2,17 +2,15 @@
   import type { ComponentProps } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import * as InputGroup from "$lib/components/ui/input-group";
   import { Label } from "$lib/components/ui/label";
-  import {
-    Loader2,
-    ExternalLink,
-    Fingerprint,
-    User,
-    KeyRound,
-    Smartphone,
-    ShieldAlert,
-  } from "lucide-svelte";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
+  import User from "@lucide/svelte/icons/user";
+  import KeyRound from "@lucide/svelte/icons/key-round";
+  import Smartphone from "@lucide/svelte/icons/smartphone";
+  import ShieldAlert from "@lucide/svelte/icons/shield-alert";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import { FormError, FormField, useSubmission } from "$lib/forms";
   import { WebAuthnAbortService } from "@simplewebauthn/browser";
@@ -35,6 +33,7 @@
     runPasskeyAssertion,
     type CeremonyOptionsResponse,
   } from "./passkey-login";
+  import { brandColors } from "./brand-colors";
   import { isLastUsed, withLastUsedFirst } from "./last-sign-in";
   import { signInMethodLabels } from "./labels";
 
@@ -153,6 +152,7 @@
     if (onSuccess) {
       onSuccess();
     } else {
+      // eslint-disable-next-line svelte/no-navigation-without-resolve -- returnUrl is a caller-supplied same-origin path, not a route; goto() rejects cross-origin URLs
       await goto(returnUrl, { invalidateAll: true });
     }
   }
@@ -224,18 +224,12 @@
     isRedirecting = true;
     selectedProvider = providerId;
 
-    const params = new URLSearchParams();
-    params.set("provider", providerId);
-    if (returnUrl && returnUrl !== "/") {
-      params.set("returnUrl", returnUrl);
-    }
+    const params = new URLSearchParams({
+      provider: providerId,
+      ...(returnUrl && returnUrl !== "/" ? { returnUrl } : {}),
+    });
 
     window.location.href = `/api/auth/oidc/login?${params.toString()}`;
-  }
-
-  function getButtonStyle(buttonColor?: string): string {
-    if (!buttonColor) return "";
-    return `background-color: ${buttonColor}; border-color: ${buttonColor};`;
   }
 
   function switchMode(newMode: LoginMode) {
@@ -264,7 +258,7 @@
 {/snippet}
 
 {#snippet lastUsedBadge()}
-  <Badge variant="secondary" class="ml-2 text-[10px] uppercase">
+  <Badge variant="secondary" size="sm" class="ml-2">
     Last used
   </Badge>
 {/snippet}
@@ -287,7 +281,7 @@
     <Button
       type="submit"
       data-testid="passkey-sign-in"
-      class="w-full h-12"
+      class="w-full"
       size="lg"
       disabled={isLoading || isRedirecting || !passkeysSupported}
     >
@@ -316,11 +310,13 @@
 
 {#snippet providerButtons()}
   <div class="space-y-3">
-    {#each orderedProviders as provider}
+    {#each orderedProviders as provider (provider.id)}
+      {@const brand = brandColors(provider)}
       <Button
-        variant="outline"
-        class="w-full h-11 relative"
-        style={getButtonStyle(provider.buttonColor)}
+        variant={brand ? "brand" : "outline"}
+        {brand}
+        size="lg"
+        class="w-full relative"
         disabled={isLoading || isRedirecting || !provider.id}
         onclick={() => provider.id && loginWithProvider(provider.id)}
       >
@@ -342,8 +338,7 @@
 {#snippet otherMethodLinks()}
   <Button
     variant="link"
-    size="sm"
-    class="h-auto p-0 text-xs"
+    size="inline-xs"
     onclick={() => switchMode("recovery")}
     disabled={isLoading}
   >
@@ -354,8 +349,7 @@
 {#snippet backToSignIn(label: string)}
   <Button
     variant="link"
-    size="sm"
-    class="h-auto p-0 text-xs"
+    size="inline-xs"
     onclick={() => switchMode("default")}
     disabled={isLoading}
   >
@@ -380,9 +374,9 @@
     {/if}
 
     {#if !passkeysSupported && !tenantless}
-      <div class="flex items-start gap-3 rounded-md border border-yellow-500/30 bg-yellow-500/5 p-3">
-        <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
-        <p class="text-sm text-yellow-700 dark:text-yellow-400">
+      <div class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/5 p-3">
+        <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+        <p class="text-sm text-warning">
           Your browser does not support passkeys. Use a recovery code, or try a different browser. An authenticator app is a second step after a passkey, so it cannot get you in on its own.
         </p>
       </div>
@@ -421,14 +415,15 @@
       <form onsubmit={handleUsernameLogin} class="space-y-3">
         <FormField label="Username" id="username" required>
           {#snippet control(field)}
-            <div class="relative">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <User />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="username"
                 type="text"
                 placeholder="your-username"
-                class="pl-10"
                 autocomplete="username webauthn"
                 autocapitalize="none"
                 spellcheck={false}
@@ -436,7 +431,7 @@
                 bind:value={username}
                 disabled={isLoading}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 
@@ -482,21 +477,22 @@
           issues={signInWithRecoveryCode.fields.username.issues()}
         >
           {#snippet control(field)}
-            <div class="relative">
-              <User class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <User />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="username"
                 type="text"
                 placeholder="your-username"
-                class="pl-10"
                 autocomplete="username"
                 autocapitalize="none"
                 spellcheck={false}
                 autofocus
                 bind:value={username}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 
@@ -507,19 +503,21 @@
           issues={signInWithRecoveryCode.fields.code.issues()}
         >
           {#snippet control(field)}
-            <div class="relative">
-              <KeyRound class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+            <InputGroup.Root>
+              <InputGroup.Addon>
+                <KeyRound />
+              </InputGroup.Addon>
+              <InputGroup.Input
                 {...field}
                 name="code"
                 type="text"
                 placeholder="XXXX-XXXX"
-                class="pl-10 font-mono"
+                class="font-mono"
                 autocomplete="one-time-code"
                 autocapitalize="characters"
                 spellcheck={false}
               />
-            </div>
+            </InputGroup.Root>
           {/snippet}
         </FormField>
 
@@ -576,20 +574,20 @@
                 cells: ComponentProps<typeof InputOTP.Slot>["cell"][];
               })}
                 <InputOTP.Group>
-                  {#each cells.slice(0, 3) as cell}
+                  {#each cells.slice(0, 3) as cell, i (i)}
                     <InputOTP.Slot {cell} />
                   {/each}
                 </InputOTP.Group>
                 <InputOTP.Separator />
                 <InputOTP.Group>
-                  {#each cells.slice(3, 6) as cell}
+                  {#each cells.slice(3, 6) as cell, i (i)}
                     <InputOTP.Slot {cell} />
                   {/each}
                 </InputOTP.Group>
               {/snippet}
             </InputOTP.Root>
           </div>
-          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue}
+          {#each signInWithAuthenticator.fields.code.issues() ?? [] as issue, i (i)}
             <p role="alert" class="text-center text-sm text-destructive">
               {issue.message}
             </p>

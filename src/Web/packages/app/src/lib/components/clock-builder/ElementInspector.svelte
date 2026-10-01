@@ -7,15 +7,15 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
   import * as Select from "$lib/components/ui/select";
-  import { X, Trash2 } from "lucide-svelte";
+  import X from "@lucide/svelte/icons/x";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import type { ClockElement, TrackerDefinitionDto } from "$lib/api";
   import {
-    ELEMENT_INFO,
+    elementInfo,
     VISIBILITY_OPTIONS,
     TRACKER_SHOW_OPTIONS,
     TRACKER_CATEGORIES,
     CHART_FEATURE_OPTIONS,
-    type ClockElementType,
     type InternalElement,
     isTextElement,
     isShowOptionChecked,
@@ -53,7 +53,17 @@
     onRemoveCustomStyle,
   }: Props = $props();
 
-  const info = $derived(ELEMENT_INFO[element.type as ClockElementType]);
+  const info = $derived(elementInfo(element.type));
+
+  function chartFlag(
+    config: InternalElement["chartConfig"],
+    key: string
+  ): boolean | undefined {
+    const flag: unknown = config
+      ? Object.entries(config).find(([name]) => name === key)?.[1]
+      : undefined;
+    return typeof flag === "boolean" ? flag : undefined;
+  }
 
   function toggleShowOption(currentShow: string[] | undefined, option: string) {
     const show = currentShow ?? [];
@@ -86,7 +96,7 @@
 >
   <div class="flex items-center justify-between">
     <Badge>{info?.name ?? element.type}</Badge>
-    <Button variant="ghost" size="icon" class="size-6" onclick={onClose}>
+    <Button variant="ghost" size="icon-xs" onclick={onClose}>
       <X class="size-4" />
     </Button>
   </div>
@@ -117,7 +127,7 @@
         >
           <Select.Trigger>{element.hours || 3}h</Select.Trigger>
           <Select.Content>
-            {#each [1, 3, 6, 12, 24] as h}
+            {#each [1, 3, 6, 12, 24] as h (h)}
               <Select.Item value={String(h)}>
                 {h} hour{h > 1 ? "s" : ""}
               </Select.Item>
@@ -160,7 +170,7 @@
         >
           <Select.Trigger>{element.minutesAhead || 30}m</Select.Trigger>
           <Select.Content>
-            {#each [15, 30, 45, 60] as m}
+            {#each [15, 30, 45, 60] as m (m)}
               <Select.Item value={String(m)}>{m} min</Select.Item>
             {/each}
           </Select.Content>
@@ -199,7 +209,7 @@
                 : "Select tracker..."}
             </Select.Trigger>
             <Select.Content>
-              {#each trackerDefinitions as def}
+              {#each trackerDefinitions as def (def.id)}
                 <Select.Item value={def.id ?? ""}>
                   {def.name}
                 </Select.Item>
@@ -223,7 +233,7 @@
               )?.label ?? "Always show"}
             </Select.Trigger>
             <Select.Content>
-              {#each VISIBILITY_OPTIONS as opt}
+              {#each VISIBILITY_OPTIONS as opt (opt.value)}
                 <Select.Item value={opt.value}>{opt.label}</Select.Item>
               {/each}
             </Select.Content>
@@ -232,7 +242,7 @@
         <div class="space-y-2">
           <Label>Show</Label>
           <div class="space-y-1">
-            {#each TRACKER_SHOW_OPTIONS as opt}
+            {#each TRACKER_SHOW_OPTIONS as opt (opt.value)}
               <div class="flex items-center gap-2">
                 <Checkbox
                   checked={isShowOptionChecked(element.show, opt.value)}
@@ -263,7 +273,7 @@
               )?.label ?? "Always show"}
             </Select.Trigger>
             <Select.Content>
-              {#each VISIBILITY_OPTIONS as opt}
+              {#each VISIBILITY_OPTIONS as opt (opt.value)}
                 <Select.Item value={opt.value}>{opt.label}</Select.Item>
               {/each}
             </Select.Content>
@@ -277,7 +287,7 @@
               : "All categories"}
           </p>
           <div class="grid grid-cols-2 gap-1">
-            {#each TRACKER_CATEGORIES as cat}
+            {#each TRACKER_CATEGORIES as cat (cat)}
               <div class="flex items-center gap-1">
                 <Checkbox
                   checked={isCategoryChecked(element.categories, cat)}
@@ -343,7 +353,7 @@
           >
             <Select.Trigger>{element.hours || 3}h</Select.Trigger>
             <Select.Content>
-              {#each [1, 3, 6, 12, 24] as h}
+              {#each [1, 3, 6, 12, 24] as h (h)}
                 <Select.Item value={String(h)}>
                   {h} hour{h > 1 ? "s" : ""}
                 </Select.Item>
@@ -357,12 +367,10 @@
         <div class="space-y-2">
           <Label>Chart Features</Label>
           <div class="space-y-1">
-            {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue }}
+            {#each CHART_FEATURE_OPTIONS as { key, label, defaultValue } (key)}
               <div class="flex items-center gap-2">
                 <Checkbox
-                  checked={element.chartConfig?.[
-                    key as keyof typeof element.chartConfig
-                  ] ?? defaultValue}
+                  checked={chartFlag(element.chartConfig, key) ?? defaultValue}
                   onCheckedChange={(v: boolean) =>
                     onUpdateElement({
                       chartConfig: {
@@ -397,7 +405,7 @@
     variant="destructive"
     size="sm"
     onclick={onRemove}
-    class="w-full gap-2"
+    class="w-full"
   >
     <Trash2 class="size-4" />
     Remove

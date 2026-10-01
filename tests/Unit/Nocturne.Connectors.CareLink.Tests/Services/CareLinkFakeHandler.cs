@@ -18,7 +18,23 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
 
     internal sealed record RecordedRequest(HttpMethod Method, string Url, string? UserAgent, string? Body);
 
+    internal sealed record AuthorizeResponse(HttpStatusCode Status, string? Location, string? Body);
+
     internal List<RecordedRequest> Requests { get; } = [];
+
+    /// <summary>
+    /// Served in order to GETs under <c>/authorize</c>; the last entry repeats once exhausted.
+    /// Empty leaves that endpoint unmodelled.
+    /// </summary>
+    internal IReadOnlyList<AuthorizeResponse> AuthorizeResponses { get; init; } = [];
+
+    /// <summary>URL the credential POST is answered with <see cref="AuthCodeRedirect"/>.</summary>
+    internal string? CredentialPostUrl { get; init; }
+
+    /// <summary>Location the credential POST redirects to; its <c>code</c> is the captured auth code.</summary>
+    internal string AuthCodeRedirect { get; init; } = "com.medtronic.carepartner:/sso?code=test-auth-code";
+
+    private int _authorizeResponseIndex;
 
     internal string TokenResponseJson { get; init; } =
         """{"access_token":"new-access-token","refresh_token":"rotated-refresh-token"}""";
@@ -28,6 +44,9 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
 
     /// <summary>Body for the monitor endpoint; when null that endpoint is left unmodelled like the others.</summary>
     internal string? MonitorDataJson { get; init; }
+
+    /// <summary>Body for the Auth0 authorize endpoint; when null that endpoint stays unmodelled (404).</summary>
+    internal string? AuthorizeBody { get; init; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
@@ -62,14 +81,44 @@ internal sealed class CareLinkFakeHandler : HttpMessageHandler
                 }
                 """);
 
+        if (request.Method == HttpMethod.Get
+            && url.StartsWith($"https://{LoginHost}/authorize", StringComparison.Ordinal)
+            && AuthorizeResponses.Count > 0)
+            return ServeAuthorizeResponse();
+
+        if (CredentialPostUrl is not null && request.Method == HttpMethod.Post && url == CredentialPostUrl)
+            return new HttpResponseMessage(HttpStatusCode.Found)
+            {
+                Headers = { Location = new Uri(AuthCodeRedirect) },
+            };
+
         if (url == TokenUrl)
             return Json(TokenResponseJson);
+
+        if (AuthorizeBody is not null && url.Contains("/authorize", StringComparison.Ordinal))
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(AuthorizeBody, Encoding.UTF8, "text/html")
+            };
 
         if (MonitorDataJson is not null
             && url.EndsWith(CareLinkConstants.Endpoints.MonitorData, StringComparison.Ordinal))
             return Json(MonitorDataJson);
 
         return new HttpResponseMessage(UnmodelledStatus);
+    }
+
+    private HttpResponseMessage ServeAuthorizeResponse()
+    {
+        var spec = AuthorizeResponses[Math.Min(_authorizeResponseIndex, AuthorizeResponses.Count - 1)];
+        _authorizeResponseIndex++;
+
+        var response = new HttpResponseMessage(spec.Status);
+        if (spec.Location is not null)
+            response.Headers.Location = new Uri(spec.Location, UriKind.RelativeOrAbsolute);
+        if (spec.Body is not null)
+            response.Content = new StringContent(spec.Body, Encoding.UTF8, "text/html");
+        return response;
     }
 
     private static HttpResponseMessage Json(string body) =>

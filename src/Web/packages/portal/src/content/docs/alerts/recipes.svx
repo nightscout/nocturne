@@ -1,0 +1,170 @@
+---
+title: Example rules
+---
+
+<script>
+  import Callout from '@nocturne/cms/components/Callout.svelte';
+</script>
+
+# Example rules
+
+These are common starting points, written out so you can build them in the
+rule editor. Each one says what it is for and what to watch out for.
+
+<Callout type="info" title="Starting points, not recommendations">
+
+  The numbers here are examples of how people often set these rules up. They
+  are not medical advice and they may not suit you. Agree your own thresholds
+  with your diabetes care team, and keep your CGM and pump alarms switched on
+  alongside Nocturne.
+
+</Callout>
+
+Values are given in mg/dL with mmol/L in brackets. "Rows" are the conditions in
+the rule's **Condition** card, and "all of" or "any of" is the choice at the top
+of it.
+
+## Urgent low
+
+| | |
+|---|---|
+| **Rows** | Glucose below 54 (3.0) |
+| **Severity** | Critical |
+| **For at least** | Off |
+
+The alert that must always get through. Critical means Do Not Disturb never
+holds it back. No "for at least" delay, because a late alert here costs more
+than a false one.
+
+## Low
+
+| | |
+|---|---|
+| **Rows** | Glucose below 70 (3.9), for at least 15 min |
+| **Severity** | Warning |
+
+A gentler low alert that ignores a single odd reading, such as a compression
+low from lying on the sensor. Pair it with the urgent low above, which catches
+anything serious straight away. See
+[Conditions that must last](/docs/alerts/sustained) for how the delay works.
+
+## Falling towards a low
+
+| | |
+|---|---|
+| **Top** | any of |
+| **Rows** | Glucose below 70 (3.9); **or** a group, all of: Glucose below 100 (5.5) and Rate of change falling at least 2 (0.11) a minute |
+| **Severity** | Warning |
+
+Alerts on a low, and also earlier on a fast fall towards one, such as during
+exercise. See the worked example in
+[Combining conditions](/docs/alerts/combining#groups).
+
+## Predicted low
+
+| | |
+|---|---|
+| **Rows** | Predicted glucose ≤ 70 (3.9) within 30 min |
+| **Severity** | Warning |
+
+For loops that upload a forecast (AAPS, Trio). Warns before the low arrives.
+Forecasts change every few minutes, so expect some alerts that never turn into
+lows. On a setup with no forecast, this rule never fires, so keep an ordinary
+low rule as well.
+
+## High that does not go away
+
+| | |
+|---|---|
+| **Rows** | Glucose above 250 (13.9), for at least 60 min |
+| **Severity** | Warning |
+
+Waits long enough that a normal rise after food is not flagged, and speaks up
+when a high is lasting, which can be a sign of a blocked or failed infusion set.
+
+## Quiet after dinner
+
+| | |
+|---|---|
+| **Top** | all of |
+| **Rows** | Glucose above 180 (10.0), for at least 30 min; **and** NOT Time of day 18:00 to 20:00 |
+
+A high alert that stays quiet through the rise you expect after the evening
+meal.
+
+## Signal loss
+
+| | |
+|---|---|
+| **Rows** | Signal loss: no reading for 30 min |
+| **Severity** | Warning, or Critical overnight |
+
+When readings stop, every glucose rule goes quiet with them. This is the rule
+that tells you. Every setup that relies on alerts should have one.
+
+## Loop has stopped
+
+| | |
+|---|---|
+| **Rows** | Loop has stopped: more than 20 min |
+| **Severity** | Warning |
+
+For closed-loop users. A loop that stops has usually lost the pump or the CGM,
+and the pump carries on with its own programmed settings. Add **Loop not enacting** as
+well if your loop can run without being able to reach the pump.
+
+## Pump left suspended
+
+| | |
+|---|---|
+| **Rows** | Pump suspended: is, for at least 30 min |
+| **Severity** | Warning |
+
+Catches a pump suspended for a shower or a site change and not resumed.
+
+## Tell someone else if nobody responds
+
+| | |
+|---|---|
+| **Rows** | Other rule state: "Low" is unacknowledged, for at least 15 min |
+| **Severity** | Critical |
+| **Channels** | The second person's phone or chat |
+
+Escalation. If the Low alert has been going for 15 minutes and nobody has
+pressed **Acknowledge**, a second person is told. Acknowledging the Low alert
+stops this one. Snoozing does not, because a snooze is not an acknowledgement.
+
+Build the Low rule first, then pick it in this rule's **Other rule state** row.
+If the Low rule is switched off or deleted, this rule stops being checked.
+
+## Overnight only
+
+| | |
+|---|---|
+| **Top** | all of |
+| **Rows** | Glucose below 80 (4.4), for at least 10 min; **and** Time of day 22:00 to 07:00 |
+
+A slightly higher low threshold at night only, when a low is less likely to be
+noticed. The time window uses your time zone. As above, keep the "for at least"
+row first.
+
+## Site change reminder
+
+| | |
+|---|---|
+| **Rows** | Site age ≥ 72 h |
+| **Severity** | Info |
+
+Info alerts are sent once and marked as acknowledged straight away, so a
+reminder does not keep nagging. Use **Sensor age** in days for a sensor
+reminder, or **Reservoir** ≤ 20 U for a refill reminder.
+
+## Phone battery low
+
+| | |
+|---|---|
+| **Rows** | Phone battery ≤ 20 % |
+| **Severity** | Warning |
+
+The phone that uploads readings running flat is one of the most common reasons
+readings stop. A warning before it dies beats a signal loss alert after.

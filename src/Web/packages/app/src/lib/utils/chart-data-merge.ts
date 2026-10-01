@@ -11,17 +11,16 @@ export function mergeChartData(
 	if (!historical) return initial;
 
 	// Helper to merge arrays by time, avoiding duplicates
-	const mergeByTime = <T extends Record<string, any>>(
+	const timeValue = (value: unknown) => (value instanceof Date ? value.getTime() : value);
+	const mergeByTime = <T,>(
 		initialArr: T[],
 		historicalArr: T[],
-		timeKey: string = 'time'
+		timeOf: (item: T) => unknown
 	): T[] => {
 		if (!initialArr || !historicalArr) return initialArr || historicalArr || [];
-		const initialTimes = new Set(
-			initialArr.map((item) => item[timeKey]?.getTime?.() ?? item[timeKey])
-		);
+		const initialTimes = new Set(initialArr.map((item) => timeValue(timeOf(item))));
 		const uniqueHistorical = historicalArr.filter((item) => {
-			const time = item[timeKey]?.getTime?.() ?? item[timeKey];
+			const time = timeValue(timeOf(item));
 			return !initialTimes.has(time);
 		});
 		return [...uniqueHistorical, ...initialArr];
@@ -31,7 +30,7 @@ export function mergeChartData(
 	// Spans that straddle the initial/historical boundary can appear in both
 	// datasets with the same id but different startTime, so time-based dedup
 	// alone would let duplicates through and cause Svelte each_key_duplicate.
-	const mergeSpansById = <T extends Record<string, any>>(
+	const mergeSpansById = <T extends { id?: unknown }>(
 		initialArr: T[],
 		historicalArr: T[]
 	): T[] => {
@@ -56,18 +55,18 @@ export function mergeChartData(
 	// keeps only the initial window's rows instead of failing to compile.
 	return {
 		// Time series
-		iobSeries: mergeByTime(initial.iobSeries, historical.iobSeries),
-		cobSeries: mergeByTime(initial.cobSeries, historical.cobSeries),
-		basalSeries: mergeByTime(initial.basalSeries, historical.basalSeries, 'timestamp'),
-		glucoseData: mergeByTime(initial.glucoseData, historical.glucoseData),
-		heartRateSeries: mergeByTime(initial.heartRateSeries, historical.heartRateSeries),
-		stepSeries: mergeByTime(initial.stepSeries, historical.stepSeries),
+		iobSeries: mergeByTime(initial.iobSeries, historical.iobSeries, (p) => p.time),
+		cobSeries: mergeByTime(initial.cobSeries, historical.cobSeries, (p) => p.time),
+		basalSeries: mergeByTime(initial.basalSeries, historical.basalSeries, (p) => p.timestamp),
+		glucoseData: mergeByTime(initial.glucoseData, historical.glucoseData, (p) => p.time),
+		heartRateSeries: mergeByTime(initial.heartRateSeries, historical.heartRateSeries, (p) => p.time),
+		stepSeries: mergeByTime(initial.stepSeries, historical.stepSeries, (p) => p.time),
 
 		// Merge markers (keyed by time)
-		bolusMarkers: mergeByTime(initial.bolusMarkers, historical.bolusMarkers),
-		carbMarkers: mergeByTime(initial.carbMarkers, historical.carbMarkers),
-		deviceEventMarkers: mergeByTime(initial.deviceEventMarkers, historical.deviceEventMarkers),
-		bgCheckMarkers: mergeByTime(initial.bgCheckMarkers, historical.bgCheckMarkers),
+		bolusMarkers: mergeByTime(initial.bolusMarkers, historical.bolusMarkers, (p) => p.time),
+		carbMarkers: mergeByTime(initial.carbMarkers, historical.carbMarkers, (p) => p.time),
+		deviceEventMarkers: mergeByTime(initial.deviceEventMarkers, historical.deviceEventMarkers, (p) => p.time),
+		bgCheckMarkers: mergeByTime(initial.bgCheckMarkers, historical.bgCheckMarkers, (p) => p.time),
 
 		// Merge markers and spans keyed by id in {#each} blocks — must dedup by id
 		systemEventMarkers: mergeSpansById(initial.systemEventMarkers, historical.systemEventMarkers),

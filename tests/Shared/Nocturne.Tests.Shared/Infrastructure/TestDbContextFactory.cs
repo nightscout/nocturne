@@ -41,7 +41,15 @@ public static class TestDbContextFactory
     /// <c>MutationAuditInterceptor</c> for anything reading the soft-delete attribution flag.</param>
     public static SqliteTestDatabase CreateSqliteWithTenant(
         Guid tenantId, string tenantSlug = "test", params IInterceptor[] interceptors) =>
-        new(tenantId, tenantSlug, interceptors);
+        new(tenantId, tenantSlug, null, interceptors);
+
+    /// <param name="configure">Provider services the query under test needs replaced, e.g. a
+    /// translator SQLite lacks.</param>
+    public static SqliteTestDatabase CreateSqliteWithTenant(
+        Guid tenantId,
+        Action<DbContextOptionsBuilder<NocturneDbContext>> configure,
+        params IInterceptor[] interceptors) =>
+        new(tenantId, "test", configure, interceptors);
 }
 
 /// <summary>
@@ -51,24 +59,36 @@ public static class TestDbContextFactory
 /// </summary>
 public sealed class SqliteTestDatabase : IDisposable
 {
-    internal SqliteTestDatabase(Guid? tenantId, string? tenantSlug, params IInterceptor[] interceptors)
+    internal SqliteTestDatabase(
+        Guid? tenantId,
+        string? tenantSlug,
+        Action<DbContextOptionsBuilder<NocturneDbContext>>? configure = null,
+        params IInterceptor[] interceptors)
     {
         TenantId = tenantId ?? Guid.Empty;
 
         Connection = new SqliteConnection("DataSource=:memory:");
         Connection.Open();
 
-        Options = new DbContextOptionsBuilder<NocturneDbContext>()
+        var builder = new DbContextOptionsBuilder<NocturneDbContext>()
             .UseSqlite(Connection)
             .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
             .AddInterceptors(interceptors)
-            .EnableSensitiveDataLogging()
-            .Options;
+            .EnableSensitiveDataLogging();
+        configure?.Invoke(builder);
+        Options = builder.Options;
 
         ContextFactory = new PooledContextFactory(this);
 
         using var seed = CreateContext();
-        seed.Database.EnsureCreated();
+        if (configure is null)
+        {
+            SchemaTemplate.CopyInto(Connection);
+        }
+        else
+        {
+            seed.Database.EnsureCreated();
+        }
 
         if (tenantSlug is null)
         {
@@ -108,16 +128,55 @@ public sealed class SqliteTestDatabase : IDisposable
         return services;
     }
 
-    /// <summary>Adds a further tenant row, for tests that assert one tenant cannot reach another's.</summary>
-    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug)
+    /// <summary>
+    /// Adds a further tenant row, for tests that assert one tenant cannot reach another's or that
+    /// read the active tenants.
+    /// </summary>
+    public SqliteTestDatabase SeedTenant(Guid tenantId, string slug, bool isActive = true)
     {
         using var db = CreateContext();
-        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug });
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = slug, IsActive = isActive });
         db.SaveChanges();
         return this;
     }
 
     public void Dispose() => Connection.Dispose();
+
+    /// <summary>
+    /// The schema, created once per test process and copied page for page into each new
+    /// database. <c>EnsureCreated</c> diffs the whole model and runs its DDL, around half a second
+    /// every time, which made schema creation most of the unit suite's run time; a backup copy of
+    /// the finished database is a few milliseconds. A <c>configure</c> callback may replace
+    /// provider services, so those databases still build their own schema.
+    /// </summary>
+    private static class SchemaTemplate
+    {
+        private static readonly Lazy<SqliteConnection> Template = new(Create, LazyThreadSafetyMode.ExecutionAndPublication);
+
+        // One connection is not safe for concurrent use, and test classes run in parallel.
+        private static readonly Lock CopyLock = new();
+
+        public static void CopyInto(SqliteConnection destination)
+        {
+            lock (CopyLock)
+            {
+                Template.Value.BackupDatabase(destination);
+            }
+        }
+
+        private static SqliteConnection Create()
+        {
+            var connection = new SqliteConnection("DataSource=:memory:");
+            connection.Open();
+            var options = new DbContextOptionsBuilder<NocturneDbContext>()
+                .UseSqlite(connection)
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning))
+                .Options;
+            using var context = new NocturneDbContext(options);
+            context.Database.EnsureCreated();
+            return connection;
+        }
+    }
 
     private sealed class PooledContextFactory(SqliteTestDatabase db)
         : IDbContextFactory<NocturneDbContext>

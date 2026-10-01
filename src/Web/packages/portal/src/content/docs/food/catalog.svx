@@ -34,9 +34,11 @@ a food as 12 g of carb per 100 g and Nocturne works out 1.5 portions for you
 when you use it.
 
 <Callout type="tip" title="Define the portion you actually measure">
+
   If you weigh your pasta, define the food per 100 g. If you count biscuits,
   define it per 1 pcs. The portion is not a nutrition-label convention — it is
   whatever unit stops you doing arithmetic at the table.
+
 </Callout>
 
 ## Working the list
@@ -92,10 +94,12 @@ happens to them:
   being unspecified.
 
 <Callout type="warning" title="Deleting is not correcting">
+
   If a food's numbers are simply wrong, edit it. Editing updates the catalog
   entry in place, and existing attributions keep the carb figures that were
   recorded at the time. Deleting and re-adding gives you a new food, an
   identical-looking list, and a history that points at the wrong one of the two.
+
 </Callout>
 
 ## Through the API

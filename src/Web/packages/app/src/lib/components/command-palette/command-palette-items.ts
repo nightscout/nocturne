@@ -1,53 +1,52 @@
-import type { ComponentType } from "svelte";
-import {
-	Activity,
-	Apple,
-	BarChart3,
-	Battery,
-	Bell,
-	Building,
-	Calendar,
-	CalendarDays,
-	ChartArea,
-	ChartCandlestick,
-	ChartColumnIncreasing,
-	ChartLine,
-	CirclePlus,
-	ClipboardList,
-	Clock,
-	Cpu,
-	Database,
-	Droplet,
-	FileSearch,
-	FileText,
-	Footprints,
-	Heart,
-	House,
-	LifeBuoy,
-	Link,
-	MapPin,
-	Moon,
-	Palette,
-	Pill,
-	Plug,
-	Plus,
-	RefreshCw,
-	Ruler,
-	Shield,
-	Stethoscope,
-	Sun,
-	Syringe,
-	Target,
-	Timer,
-	TrendingUp,
-	TriangleAlert,
-	User,
-	UserPlus,
-	Users,
-	UtensilsCrossed,
-	Wrench,
-	ZoomIn,
-} from "lucide-svelte";
+import type { Component } from "svelte";
+import Activity from "@lucide/svelte/icons/activity";
+import Apple from "@lucide/svelte/icons/apple";
+import BarChart3 from "@lucide/svelte/icons/chart-column";
+import Battery from "@lucide/svelte/icons/battery";
+import Bell from "@lucide/svelte/icons/bell";
+import Building from "@lucide/svelte/icons/building";
+import Calendar from "@lucide/svelte/icons/calendar";
+import CalendarDays from "@lucide/svelte/icons/calendar-days";
+import ChartArea from "@lucide/svelte/icons/chart-area";
+import ChartCandlestick from "@lucide/svelte/icons/chart-candlestick";
+import ChartColumnIncreasing from "@lucide/svelte/icons/chart-column-increasing";
+import ChartLine from "@lucide/svelte/icons/chart-line";
+import CirclePlus from "@lucide/svelte/icons/circle-plus";
+import ClipboardList from "@lucide/svelte/icons/clipboard-list";
+import Clock from "@lucide/svelte/icons/clock";
+import Cpu from "@lucide/svelte/icons/cpu";
+import Database from "@lucide/svelte/icons/database";
+import Droplet from "@lucide/svelte/icons/droplet";
+import FileSearch from "@lucide/svelte/icons/file-search";
+import FileText from "@lucide/svelte/icons/file-text";
+import Footprints from "@lucide/svelte/icons/footprints";
+import Heart from "@lucide/svelte/icons/heart";
+import House from "@lucide/svelte/icons/house";
+import LifeBuoy from "@lucide/svelte/icons/life-buoy";
+import Link from "@lucide/svelte/icons/link";
+import MapPin from "@lucide/svelte/icons/map-pin";
+import Moon from "@lucide/svelte/icons/moon";
+import Palette from "@lucide/svelte/icons/palette";
+import Pill from "@lucide/svelte/icons/pill";
+import Plug from "@lucide/svelte/icons/plug";
+import Plus from "@lucide/svelte/icons/plus";
+import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+import Ruler from "@lucide/svelte/icons/ruler";
+import Shield from "@lucide/svelte/icons/shield";
+import Stethoscope from "@lucide/svelte/icons/stethoscope";
+import Sun from "@lucide/svelte/icons/sun";
+import SunMoon from "@lucide/svelte/icons/sun-moon";
+import Syringe from "@lucide/svelte/icons/syringe";
+import Target from "@lucide/svelte/icons/target";
+import Timer from "@lucide/svelte/icons/timer";
+import TrendingUp from "@lucide/svelte/icons/trending-up";
+import TriangleAlert from "@lucide/svelte/icons/triangle-alert";
+import User from "@lucide/svelte/icons/user";
+import UserPlus from "@lucide/svelte/icons/user-plus";
+import Users from "@lucide/svelte/icons/users";
+import UtensilsCrossed from "@lucide/svelte/icons/utensils-crossed";
+import Wrench from "@lucide/svelte/icons/wrench";
+import ZoomIn from "@lucide/svelte/icons/zoom-in";
 import { filterTenantlessNav } from "$lib/navigation/tenantless-navigation";
 
 export type CommandPaletteGroup =
@@ -64,11 +63,12 @@ export interface CommandPaletteItem {
 	group: CommandPaletteGroup;
 	description?: string;
 	keywords?: string[];
-	icon?: ComponentType;
+	icon?: Component;
 	shortcut?: string;
-	permission?: string;
-	/** Role required to see this item (e.g. "platform_admin"). */
-	role?: string;
+	/** Scope required to see this item (e.g. "audit.read"). */
+	scope?: string;
+	/** Shown only to a platform administrator. */
+	platformAdmin?: boolean;
 	href?: string;
 	linkedHref?: string;
 }
@@ -186,13 +186,13 @@ export const items: CommandPaletteItem[] = [
 		href: "/reports/week-to-week",
 	},
 	{
-		id: "report-month-to-month",
-		label: "Month to Month",
+		id: "report-hourly-patterns",
+		label: "Hourly Patterns",
 		group: "reports",
-		description: "Monthly comparison of glucose data",
-		keywords: ["comparison", "trend", "monthly"],
-		icon: CalendarDays,
-		href: "/reports/month-to-month",
+		description: "Hours of the day with the most and least time in range",
+		keywords: ["hourly", "time of day", "best hours", "worst hours"],
+		icon: SunMoon,
+		href: "/reports/hourly-stats",
 	},
 	{
 		id: "report-year-overview",
@@ -332,7 +332,7 @@ export const items: CommandPaletteItem[] = [
 		id: "page-calendar",
 		label: "Calendar",
 		group: "pages",
-		keywords: ["calendar", "schedule", "dates"],
+		keywords: ["calendar", "schedule", "dates", "monthly"],
 		icon: CalendarDays,
 		href: "/calendar",
 	},
@@ -367,7 +367,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["tenants", "organizations", "accounts", "platform admin"],
 		icon: Building,
 		href: "/settings/admin/tenants",
-		role: "platform_admin",
+		platformAdmin: true,
 	},
 	{
 		id: "page-access-requests",
@@ -376,7 +376,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["access requests", "join", "approve", "pending users"],
 		icon: UserPlus,
 		href: "/settings/access-requests",
-		role: "platform_admin",
+		platformAdmin: true,
 	},
 
 	// ─── Settings ────────────────────────────────────────────────────────
@@ -419,7 +419,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["grants", "access", "permissions", "sharing"],
 		icon: Shield,
 		href: "/settings/grants",
-		permission: "api:settings:admin",
+		scope: "sharing.manage",
 	},
 	{
 		id: "settings-connectors",
@@ -491,7 +491,7 @@ export const items: CommandPaletteItem[] = [
 		keywords: ["audit", "log", "history", "changes"],
 		icon: FileSearch,
 		href: "/settings/audit",
-		permission: "api:settings:admin",
+		scope: "audit.read",
 	},
 	{
 		id: "settings-support",

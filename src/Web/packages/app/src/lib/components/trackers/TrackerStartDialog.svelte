@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { timeDay } from "d3-time";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Label } from "$lib/components/ui/label";
   import { Input } from "$lib/components/ui/input";
   import { TextareaAutosize } from "$lib/components/ui/textarea";
-  import { Play } from "lucide-svelte";
+  import Play from "@lucide/svelte/icons/play";
   import { cn } from "$lib/utils";
   import { formatClock, formatShortDate, time } from "$lib/utils/formatting";
   import { useToastSubmission } from "$lib/forms";
@@ -76,8 +77,7 @@
         .toISOString()
         .slice(0, 16);
       // Default scheduled time to tomorrow at 9am for event mode
-      const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      tomorrow.setHours(9, 0, 0, 0);
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9);
       scheduledAtString = new Date(tomorrow.getTime() - offset)
         .toISOString()
         .slice(0, 16);
@@ -106,8 +106,7 @@
       a.getMonth() === b.getMonth() &&
       a.getDate() === b.getDate();
 
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = timeDay.offset(now, -1);
 
     const timeStr = time(d);
 
@@ -153,12 +152,10 @@
     if (isNaN(referenceTime.getTime())) return [];
 
     return definition.notificationThresholds
-      .filter((n) => n.hours !== undefined)
+      .filter((n) => n.offsetMinutes !== undefined && n.offsetMinutes !== null)
       .map((n) => {
-        // For event mode, hours are relative to scheduled time (negative = before)
-        // For duration mode, hours are relative to start time
         const triggerTime = new Date(
-          referenceTime.getTime() + n.hours! * 60 * 60 * 1000
+          referenceTime.getTime() + n.offsetMinutes! * 60 * 1000
         );
         const timeUntil = triggerTime.getTime() - now.getTime();
         const hoursUntil = timeUntil / (1000 * 60 * 60);
@@ -173,7 +170,7 @@
               : `${Math.abs(hoursUntil).toFixed(1)} hours`,
         };
       })
-      .sort((a, b) => (a.hours ?? 0) - (b.hours ?? 0));
+      .sort((a, b) => a.triggerTime.getTime() - b.triggerTime.getTime());
   });
 
   async function handleStart() {
@@ -258,7 +255,7 @@
             id="scheduledAt"
             bind:value={scheduledAtString}
           />
-          <p class="text-[10px] text-muted-foreground">
+          <p class="text-2xs text-muted-foreground">
             When is this event scheduled?
           </p>
         </div>
@@ -270,7 +267,7 @@
             id="startedAt"
             bind:value={startedAtString}
           />
-          <p class="text-[10px] text-muted-foreground">
+          <p class="text-2xs text-muted-foreground">
             Adjust if you started this earlier.
           </p>
         </div>
@@ -286,11 +283,11 @@
 
       {#if startPreview.length > 0}
         <div class="rounded-lg border bg-muted/50 p-3 mt-2">
-          <Label class="text-xs mb-2 block font-medium">
+          <Label size="sm" class="mb-2 block">
             Notification Schedule (Adjusted)
           </Label>
           <div class="space-y-2">
-            {#each startPreview as preview}
+            {#each startPreview as preview, i (i)}
               {@const isPast = preview.isPast}
               {@const urgencyLower = String(preview.urgency).toLowerCase()}
               <div class="flex items-center justify-between text-xs">
@@ -299,13 +296,13 @@
                     class={cn(
                       "w-2 h-2 rounded-full",
                       (urgencyLower === "info" || urgencyLower === "0") &&
-                        "bg-blue-500",
+                        "bg-severity-info",
                       (urgencyLower === "warn" || urgencyLower === "1") &&
-                        "bg-yellow-500",
+                        "bg-severity-warn",
                       (urgencyLower === "hazard" || urgencyLower === "2") &&
-                        "bg-orange-500",
+                        "bg-severity-hazard",
                       (urgencyLower === "urgent" || urgencyLower === "3") &&
-                        "bg-red-500"
+                        "bg-severity-urgent"
                     )}
                   ></div>
                   <span>{preview.hours}h</span>
@@ -320,7 +317,7 @@
                     {isPast ? "Triggered" : "Triggering in"}
                     {preview.relativeTime}
                   </span>
-                  <span class="text-[10px] opacity-70">
+                  <span class="text-2xs opacity-70">
                     {formatClock(preview.triggerTime, { seconds: true })}
                   </span>
                 </div>

@@ -1,0 +1,136 @@
+# End-to-end stack: the production API and web images, a throwaway Postgres and fake vendors.
+# Started by `pnpm e2e:up` (scripts/stack.ts), which builds the images first when their inputs
+# changed. Every credential below is a test-only value for this disposable stack.
+#
+# Tenants are addressed as http://<slug>.nocturne.localhost:<web port>: *.localhost resolves to
+# loopback in browsers, and the web server proxies /api to the API exactly as behind the gateway,
+# so no gateway container is needed.
+
+name: nocturne-e2e
+
+x-db-passwords: &db-passwords
+  NOCTURNE_MIGRATOR_PASSWORD: e2e-migrator-password
+  NOCTURNE_APP_PASSWORD: e2e-app-password
+  NOCTURNE_WEB_PASSWORD: e2e-web-password
+
+x-base-domain: &base-domain "nocturne.localhost:${E2E_WEB_PORT:-1631}"
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    # Durability is pointless on a tmpfs data directory that dies with the container.
+    command: >-
+      postgres
+      -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+      -c shared_buffers=32MB -c work_mem=4MB -c maintenance_work_mem=32MB
+      -c max_connections=120 -c max_wal_size=256MB -c wal_level=minimal -c max_wal_senders=0
+      -c autovacuum=off -c jit=off
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: e2e-postgres-password
+      POSTGRES_DB: nocturne
+      <<: *db-passwords
+    volumes:
+      # The same role bootstrap as the Aspire stack and the self-hosted bundle: non-superuser
+      # migrator and app roles, so FORCE ROW LEVEL SECURITY binds exactly as in production.
+      - ../docs/postgres/container-init/00-init.sh:/docker-entrypoint-initdb.d/00-init.sh:ro
+    tmpfs:
+      - /var/lib/postgresql/data:size=512m
+    shm_size: 64mb
+    ports:
+      - "127.0.0.1:${E2E_POSTGRES_PORT:-1633}:5432"
+    mem_limit: 256m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nocturne -h 127.0.0.1"]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+
+  mocks:
+    image: node:24-alpine
+    working_dir: /mocks
+    command: ["node", "server.ts"]
+    volumes:
+      - ./mocks:/mocks:ro
+    ports:
+      - "127.0.0.1:${E2E_MOCKS_PORT:-1634}:8080"
+    mem_limit: 96m
+    cpus: 0.25
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  api:
+    image: ${NOCTURNE_API_IMAGE:-nocturne-api:e2e}
+    environment:
+      HTTP_PORTS: "8080"
+      ASPNETCORE_ENVIRONMENT: ${E2E_API_ENVIRONMENT:-Production}
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__nocturne-postgres: Host=postgres;Port=5432;Database=nocturne;Username=nocturne_app;Password=e2e-app-password
+      ConnectionStrings__nocturne-postgres-migrator: Host=postgres;Port=5432;Database=nocturne;Username=nocturne_migrator;Password=e2e-migrator-password
+      INSTANCE_KEY: e2e-instance-key-test-only-not-a-real-secret
+      BASE_DOMAIN: *base-domain
+      WEB_URL: http://web:5173
+      DemoService__Enabled: "false"
+      NOCTURNE_ENABLE_DEV_ONLY_ENDPOINTS: "true"
+      # Workstation GC with a conserving heap: the server GC sizes its heaps per core.
+      DOTNET_gcServer: "0"
+      DOTNET_GCConserveMemory: "5"
+      # 90% of the container limit (hex) instead of the default 75%: the heap peaks while the
+      # migrations run on a fresh database, then settles around 140 MB.
+      DOTNET_GCHeapHardLimitPercent: "0x5A"
+      DOTNET_TieredPGO: "0"
+      Logging__LogLevel__Default: Warning
+      Logging__LogLevel__Nocturne: Information
+      Logging__LogLevel__Microsoft.EntityFrameworkCore: Warning
+    ports:
+      - "127.0.0.1:${E2E_API_PORT:-1630}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mocks:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 2.0
+    healthcheck:
+      # The aspnet base image carries no curl or wget; bash's /dev/tcp does the probe.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /alive HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          head -n1 <&3 | grep -q ' 200 '
+      interval: 1s
+      timeout: 3s
+      retries: 180
+      start_period: 5s
+
+  web:
+    image: ${NOCTURNE_WEB_IMAGE:-nocturne-web:e2e}
+    environment:
+      PORT: "5173"
+      NOCTURNE_API_URL: http://api:8080
+      NOCTURNE_API_HTTP: http://api:8080
+      PUBLIC_API_URL: http://api:8080
+      services__nocturne-api__http__0: http://api:8080
+      INSTANCE_KEY: e2e-instance-key-test-only-not-a-real-secret
+      BASE_DOMAIN: *base-domain
+      NOCTURNE_POSTGRES_URI: postgresql://nocturne_web:e2e-web-password@postgres:5432/nocturne
+      NODE_OPTIONS: --max-old-space-size=192
+    ports:
+      - "127.0.0.1:${E2E_WEB_PORT:-1631}:5173"
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 320m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5173/health"]
+      interval: 1s
+      timeout: 3s
+      retries: 60

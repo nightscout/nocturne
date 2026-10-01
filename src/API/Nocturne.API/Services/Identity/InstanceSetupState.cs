@@ -62,6 +62,6 @@ public sealed class InstanceSetupState : IInstanceSetupState
             .Where(m => m.TenantId == tenantId)
             .AnyAsync(m =>
                 context.PasskeyCredentials.Any(c => c.SubjectId == m.SubjectId) ||
-                context.SubjectOidcIdentities.Any(o => o.SubjectId == m.SubjectId), ct);
+                context.WorkingOidcIdentities().Any(o => o.SubjectId == m.SubjectId), ct);
     }
 }

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using Nocturne.API.Extensions;
 using Nocturne.API.Hubs;
 using Nocturne.API.Multitenancy;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -52,8 +53,8 @@ public class TenantHubFilterTests
         var httpContext = new DefaultHttpContext { RequestServices = handshakeServices };
         if (withTenant)
         {
-            httpContext.Items[TenantAwareHub.TenantContextKey] =
-                new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false);
+            httpContext.SetTenantContext(
+                new TenantContext(Tenant, "default", "Default", IsActive: true, IsDemo: false));
         }
 
         var features = new FeatureCollection();

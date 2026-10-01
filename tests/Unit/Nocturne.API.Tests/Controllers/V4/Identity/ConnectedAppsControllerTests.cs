@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Identity;
 using Nocturne.Core.Contracts.Auth;
+using Nocturne.Core.Contracts.ClientDevices;
 using Nocturne.Core.Models.Authorization;
 using Xunit;
 
@@ -18,6 +19,7 @@ namespace Nocturne.API.Tests.Controllers.V4.Identity;
 public class ConnectedAppsControllerTests
 {
     private readonly Mock<IOAuthGrantService> _grantService = new();
+    private readonly Mock<IClientDeviceService> _deviceService = new();
     private readonly Guid _callerSubjectId = Guid.CreateVersion7();
 
     [Fact]
@@ -75,6 +77,49 @@ public class ConnectedAppsControllerTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task List_reports_each_apps_paired_device_count_from_one_grouped_lookup()
+    {
+        var grantA = Guid.CreateVersion7();
+        var grantB = Guid.CreateVersion7();
+        _grantService
+            .Setup(s => s.GetGrantsForSubjectAsync(_callerSubjectId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new OAuthGrantInfo
+                {
+                    Id = grantA,
+                    SubjectId = _callerSubjectId,
+                    GrantType = OAuthGrantTypes.App,
+                    ClientDisplayName = "Prelude",
+                },
+                new OAuthGrantInfo
+                {
+                    Id = grantB,
+                    SubjectId = _callerSubjectId,
+                    GrantType = OAuthGrantTypes.App,
+                    ClientDisplayName = "Companion",
+                },
+            ]);
+        var controller = CreateController();
+        _deviceService
+            .Setup(s => s.GetDeviceCountsByGrantAsync(
+                It.Is<IReadOnlyCollection<Guid>>(ids =>
+                    ids.Count == 2 && ids.Contains(grantA) && ids.Contains(grantB)),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, int> { [grantA] = 3 });
+
+        var result = await controller.List(CancellationToken.None);
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        var apps = ok.Value.Should().BeAssignableTo<List<ConnectedAppDto>>().Subject;
+        apps.Single(a => a.GrantId == grantA).DeviceCount.Should().Be(3);
+        apps.Single(a => a.GrantId == grantB).DeviceCount.Should().Be(0);
+        _deviceService.Verify(
+            s => s.GetDeviceCountsByGrantAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
     private void GrantFor(Guid grantId, OAuthGrantInfo? grant) => _grantService
         .Setup(s => s.GetGrantForSubjectAsync(
             grantId, _callerSubjectId, It.IsAny<CancellationToken>()))
@@ -82,6 +127,11 @@ public class ConnectedAppsControllerTests
 
     private ConnectedAppsController CreateController()
     {
+        _deviceService
+            .Setup(s => s.GetDeviceCountsByGrantAsync(
+                It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<Guid, int>());
+
         var httpContext = new DefaultHttpContext();
         httpContext.Items["AuthContext"] = new AuthContext
         {
@@ -93,6 +143,7 @@ public class ConnectedAppsControllerTests
         return new ConnectedAppsController(
             _grantService.Object,
             Mock.Of<IOAuthTokenService>(),
+            _deviceService.Object,
             NullLogger<ConnectedAppsController>.Instance
         )
         {

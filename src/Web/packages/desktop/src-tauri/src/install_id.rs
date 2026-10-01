@@ -45,7 +45,10 @@ fn write_new(path: &std::path::Path) -> String {
     // Write atomically (temp file + same-volume rename) so a crash mid-write can never leave a
     // truncated, corrupt id behind. A failure falls through to the in-memory id for this session.
     let tmp = path.with_extension("txt.tmp");
-    if std::fs::write(&tmp, &id).and_then(|()| std::fs::rename(&tmp, path)).is_err() {
+    if std::fs::write(&tmp, &id)
+        .and_then(|()| std::fs::rename(&tmp, path))
+        .is_err()
+    {
         let _ = std::fs::remove_file(&tmp);
     }
     id

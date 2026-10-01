@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
-import type { AlertRuleResponse, LeafTransitionLog as ApiLeafTransitionLog } from "$api-clients";
+import {
+	AlertConditionType,
+	type AlertRuleResponse,
+	type LeafTransitionLog as ApiLeafTransitionLog,
+} from "$api-clients";
 import { assignLeafIds, LeafTransitionLog, composeRuleTruth } from "./leafEval";
-import { nodeFromApi, type ConditionNode } from "./types";
+import { nodeFromApi, toAlertConditionType, type ConditionNode } from "./types";
 
 // Lightweight builders. We bypass the editor's defaultPayload helpers so each
 // test owns the exact tree shape; uids are stable strings to make ID lookups
@@ -59,8 +63,8 @@ function makeRule(id: string, condition: ConditionNode): AlertRuleResponse {
 	return {
 		id,
 		name: id,
-		conditionType: condition.type as AlertRuleResponse["conditionType"],
-		conditionParams: (condition as unknown as Record<string, unknown>)[condition.type],
+		conditionType: toAlertConditionType(condition.type),
+		conditionParams: condition[condition.type],
 	};
 }
 
@@ -417,7 +421,7 @@ describe("composeRuleTruth", () => {
 		const r: AlertRuleResponse = {
 			id: "rJson",
 			name: "rJson",
-			conditionType: "composite" as AlertRuleResponse["conditionType"],
+			conditionType: AlertConditionType.Composite,
 			conditionParams: {
 				operator: "and",
 				conditions: [

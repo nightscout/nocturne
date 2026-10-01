@@ -17,26 +17,37 @@ let registered = 0;
 const REDACTED_URL = `https://${"•".repeat(16)}.share.example.com`;
 const PLAIN_URL = "https://abcdefghjkmnpqrs.share.example.com";
 
-const enabledShare = {
+/** The share read as the wire carries it: absent URLs are `null`. */
+interface ShareState {
+  enabled: boolean;
+  url: string | null;
+  redactedUrl: string | null;
+  canReveal: boolean;
+  fullHistory: boolean;
+  scopes: string[];
+  lastAccessedAt: string | null;
+}
+
+const enabledShare: ShareState = {
   enabled: true,
   url: null,
-  redactedUrl: REDACTED_URL as string | null,
+  redactedUrl: REDACTED_URL,
   canReveal: true,
   fullHistory: false,
   scopes: ["glucose.read"],
   lastAccessedAt: null,
 };
-const disabledShare = {
+const disabledShare: ShareState = {
   enabled: false,
   url: null,
   redactedUrl: null,
   canReveal: false,
   fullHistory: false,
-  scopes: [] as string[],
+  scopes: [],
   lastAccessedAt: null,
 };
 
-let share = $state.raw<typeof enabledShare>(enabledShare);
+let share = $state.raw<ShareState>(enabledShare);
 
 function registerShareQuery() {
   registered += 1;
@@ -58,7 +69,7 @@ const disableShareLink = vi.fn(() => {
   return disableCall;
 });
 
-let revealResult = { ...enabledShare, url: PLAIN_URL as string | null, canReveal: true };
+let revealResult: ShareState = { ...enabledShare, url: PLAIN_URL, canReveal: true };
 const revealShareLink = vi.fn(async () => revealResult);
 
 vi.mock("$api/generated/shareLinks.generated.remote", () => ({

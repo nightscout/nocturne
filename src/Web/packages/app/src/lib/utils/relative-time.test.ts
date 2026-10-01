@@ -3,24 +3,23 @@ import { timeAgo } from "./index";
 
 const NOW = Date.UTC(2026, 7, 29, 14, 5);
 
-// `Intl.RelativeTimeFormat` is declared read-only, so the counting double is
-// installed through a mutable view of the namespace.
-const intl = Intl as { RelativeTimeFormat: typeof Intl.RelativeTimeFormat };
+// `Intl.RelativeTimeFormat` is declared read-only but is a writable data
+// property at runtime, so the counting double is installed with Reflect.set.
 
 /** How many `Intl.RelativeTimeFormat`s `run` constructs. */
 function countFormatters(run: () => void): number {
-  const real = intl.RelativeTimeFormat;
+  const real = Intl.RelativeTimeFormat;
   let built = 0;
-  intl.RelativeTimeFormat = class extends real {
+  Reflect.set(Intl, "RelativeTimeFormat", class extends real {
     constructor(...args: ConstructorParameters<typeof real>) {
       built++;
       super(...args);
     }
-  };
+  });
   try {
     run();
   } finally {
-    intl.RelativeTimeFormat = real;
+    Reflect.set(Intl, "RelativeTimeFormat", real);
   }
   return built;
 }

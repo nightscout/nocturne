@@ -4,7 +4,7 @@
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
   import { Separator } from "$lib/components/ui/separator";
-  import { Clock } from "lucide-svelte";
+  import Clock from "@lucide/svelte/icons/clock";
   import type { AlarmProfileConfiguration } from "$lib/types/alarm-profile";
   import DayOfWeekPicker from "./DayOfWeekPicker.svelte";
 
@@ -61,7 +61,7 @@
           </Button>
         </div>
         <div class="space-y-2">
-          {#each profile.schedule.activeRanges as range, index}
+          {#each profile.schedule.activeRanges as range, index (range)}
             <div
               class="flex items-center gap-2 p-3 bg-muted/50 rounded-lg"
             >
@@ -78,9 +78,8 @@
               />
               {#if profile.schedule.activeRanges.length > 1}
                 <Button
-                  variant="ghost"
+                  variant="ghost-destructive"
                   size="icon"
-                  class="text-destructive"
                   onclick={() => removeTimeRange(index)}
                 >
                   ×

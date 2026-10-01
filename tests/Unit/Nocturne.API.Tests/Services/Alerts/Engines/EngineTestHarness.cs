@@ -6,7 +6,9 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Services.Alerts;
 using Nocturne.API.Services.Alerts.Engines;
 using Nocturne.API.Services.Alerts.Evaluators;
+using Nocturne.API.Tests.Services.BackgroundServices;
 using Nocturne.Core.Contracts.Alerts;
+using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Alerts;
 using Xunit;
@@ -50,7 +52,8 @@ internal static class EngineTestHarness
     public static (ManagedAlertEngine Engine, ServiceProvider Provider) BuildManagedEngine(
         ManualTimeProvider time,
         IConditionTimerStore timerStore,
-        InMemoryTrackerRepository trackerRepo)
+        IAlertTrackerRepository trackerRepo,
+        AlertRuleEvaluationGate? gate = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -61,10 +64,11 @@ internal static class EngineTestHarness
         var provider = services.BuildServiceProvider();
 
         var tracker = new ExcursionTracker(
-            trackerRepo, new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
+            trackerRepo, gate ?? new AlertRuleEvaluationGate(), time, NullLogger<ExcursionTracker>.Instance);
         var engine = new ManagedAlertEngine(
             provider.GetRequiredService<ConditionEvaluatorRegistry>(),
             tracker,
+            new ConditionVersionLog(),
             NullLogger<ManagedAlertEngine>.Instance);
         return (engine, provider);
     }
@@ -73,15 +77,14 @@ internal static class EngineTestHarness
     public static RustBackedAlertEngine BuildRustEngine(
         ManualTimeProvider time,
         IConditionTimerStore timerStore,
-        InMemoryTrackerRepository trackerRepo)
+        IAlertTrackerRepository trackerRepo)
     {
-        var gate = new AlertRuleEvaluationGate();
-        var tracker = new ExcursionTracker(trackerRepo, gate, time, NullLogger<ExcursionTracker>.Instance);
         return new RustBackedAlertEngine(
             timerStore,
             trackerRepo,
-            tracker,
-            gate,
+            new AlertRuleEvaluationGate(),
+            new AlertEngineErrors(new TestMeterFactory(), time),
+            new ConditionVersionLog(),
             time,
             NullLogger<RustBackedAlertEngine>.Instance);
     }
@@ -144,6 +147,8 @@ internal static class EngineTestHarness
                     State = state.State,
                     ConfirmationCount = state.ConfirmationCount,
                     Excursion = trackerRepo.OrdinalOf(state.ActiveExcursionId),
+                    HysteresisStartedAt = state.HysteresisStartedAt,
+                    AwaitingRearm = state.AwaitingRearm ? true : null,
                 },
             AutoResolved = evaluation.AutoResolved ? true : null,
             TimerOps = timerStore.DrainOps() is { Count: > 0 } ops ? ops : null,

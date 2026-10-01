@@ -33,8 +33,6 @@ public class MyFitnessPalAuthTokenProvider(
     private readonly IRetryDelayStrategy _retryDelayStrategy =
         retryDelayStrategy ?? throw new ArgumentNullException(nameof(retryDelayStrategy));
 
-    protected override string ConnectorName => "MyFitnessPal";
-
     protected override async Task<(string? Token, DateTime ExpiresAt, IReadOnlyDictionary<string, string>? Metadata)> AcquireTokenAsync(
         MyFitnessPalConnectorConfiguration config, CancellationToken cancellationToken)
     {
@@ -148,7 +146,7 @@ public class MyFitnessPalAuthTokenProvider(
             // A wrong password or revoked refresh token is non-retryable. Retrying it burns the
             // multi-minute backoff, overruns the per-tenant sync timeout, and hammers the login
             // endpoint every cycle.
-            var shouldRetry = await HandleErrorResponseAsync(response, operationName, cancellationToken);
+            var shouldRetry = await HandleOAuthErrorResponseAsync(response, operationName, cancellationToken);
             return (null, shouldRetry);
         }
 

@@ -173,6 +173,11 @@ export const connectorPropertyMeta = {
     description: 'Site URL (e.g., https://yoursite.herokuapp.com)',
     category: 'General',
   },
+  RealtimeUrl: {
+    label: 'Realtime URL',
+    description: 'Optional Nightscout origin used for live Socket.IO updates when the data URL is an adapter',
+    category: 'Advanced',
+  },
   ApiSecret: {
     label: 'API Secret',
     description: 'Nightscout API_SECRET for authentication',
@@ -199,6 +204,12 @@ export const connectorPropertyMeta = {
   V3IncludeCgmBackfill: {
     label: 'Include CGM Backfill',
     description: 'Include historical CGM data when using V3 API',
+    category: 'Advanced',
+  },
+  AutoClockCorrection: {
+    label: 'Automatic Clock Correction',
+    description:
+      'Let device-clock evidence from the account correct imported timestamps and keep the timezone timeline current',
     category: 'Advanced',
   },
 
@@ -322,6 +333,10 @@ export const connectorPropertyMeta = {
 /** String key names, taken from the entries above. */
 export type ConnectorPropertyKeyName = keyof typeof connectorPropertyMeta;
 
+const PROPERTY_META_BY_KEY: ReadonlyMap<string, PropertyMeta> = new Map<string, PropertyMeta>(
+  Object.entries(connectorPropertyMeta)
+);
+
 /**
  * Convert PascalCase/camelCase to Title Case with spaces.
  * Used as fallback for unknown property keys.
@@ -341,14 +356,16 @@ export function formatPropertyName(name: string): string {
  */
 export function getPropertyMeta(key: string): PropertyMeta {
   // Direct match (PascalCase from enum)
-  if (key in connectorPropertyMeta) {
-    return connectorPropertyMeta[key as ConnectorPropertyKeyName];
+  const direct = PROPERTY_META_BY_KEY.get(key);
+  if (direct) {
+    return direct;
   }
 
   // Convert camelCase to PascalCase for lookup (schema keys are camelCased)
   const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
-  if (pascalKey in connectorPropertyMeta) {
-    return connectorPropertyMeta[pascalKey as ConnectorPropertyKeyName];
+  const pascal = PROPERTY_META_BY_KEY.get(pascalKey);
+  if (pascal) {
+    return pascal;
   }
 
   return {

@@ -2,7 +2,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { Scale } from "lucide-svelte";
+  import Scale from "@lucide/svelte/icons/scale";
 
   interface Props {
     portions: number | null;

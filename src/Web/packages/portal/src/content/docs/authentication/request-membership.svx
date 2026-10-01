@@ -31,8 +31,10 @@ they know you by, and your connection to them. The owner sees the note next to y
 when they decide, so a blank one is simply harder to say yes to.
 
 <Callout type="info" title="Nothing happens until the owner approves">
+
   Sending a request does not create access. Until the owner approves it and picks a role,
   you see nothing of their data.
+
 </Callout>
 
 ## What the owner sees
@@ -42,7 +44,9 @@ The toggle and the requests themselves both live on **Settings > Sharing & Priva
 including what each role lets the person see and do.
 
 <Callout type="tip" title="Approve deliberately">
+
   A request tells you what someone says about themselves, and nothing more. If a request is
   unexpected, or the note doesn't match anyone you know, deny it; someone who genuinely
   needs access can ask again, or you can send them an invite directly.
+
 </Callout>

@@ -30,6 +30,8 @@ public static class TempBasalToTreatmentMapper
                 ? tempBasal.LegacyId
                 : tempBasal.Id.ToString(),
             Mills = tempBasal.StartMills,
+            SrvCreated = new DateTimeOffset(tempBasal.CreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvModified = new DateTimeOffset(tempBasal.ModifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
             EventType = "Temp Basal",
             Duration = durationMinutes,
             Absolute = rate,
@@ -38,6 +40,7 @@ public static class TempBasalToTreatmentMapper
             EnteredBy = tempBasal.App,
             UtcOffset = tempBasal.UtcOffset,
             DataSource = tempBasal.DataSource,
+            AdditionalProperties = TreatmentClientId.ToTreatment(tempBasal.AdditionalProperties),
         };
 
         // Carry origin, scheduled rate, and device in AdditionalProperties for debug/display

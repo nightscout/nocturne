@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { labelFor } from "$lib/components/ui/enum-value";
   import { formatMediumDate } from "$lib/utils/formatting";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
   import { Label } from "$lib/components/ui/label";
   import { Badge } from "$lib/components/ui/badge";
   import * as Card from "$lib/components/ui/card";
@@ -9,21 +11,19 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { ConfirmDialog } from "$lib/components/ui/confirm-dialog";
   import { Textarea } from "$lib/components/ui/textarea";
-  import {
-    Cpu,
-    Activity,
-    Droplets,
-    Syringe,
-    PenLine,
-    Upload,
-    Plus,
-    Pencil,
-    Trash2,
-    Save,
-    Loader2,
-    ChevronUp,
-    ChevronDown,
-  } from "lucide-svelte";
+  import Cpu from "@lucide/svelte/icons/cpu";
+  import Activity from "@lucide/svelte/icons/activity";
+  import Droplets from "@lucide/svelte/icons/droplets";
+  import Syringe from "@lucide/svelte/icons/syringe";
+  import PenLine from "@lucide/svelte/icons/pen-line";
+  import Upload from "@lucide/svelte/icons/upload";
+  import Plus from "@lucide/svelte/icons/plus";
+  import Pencil from "@lucide/svelte/icons/pencil";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Save from "@lucide/svelte/icons/save";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import ChevronUp from "@lucide/svelte/icons/chevron-up";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import {
     type PatientDevice,
     type DiscoveredSource,
@@ -180,7 +180,7 @@
 
   {#if deviceList.items.length > 0}
     <div class="space-y-3">
-      {#each deviceList.items as device}
+      {#each deviceList.items as device (device.id)}
         <Card.Root>
           <Card.Header class="flex flex-row items-center gap-3 py-3">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -195,7 +195,7 @@
               <Card.Title class="text-sm font-medium">
                 {[device.manufacturer, device.model].filter(Boolean).join(" ") || "Unknown Device"}
               </Card.Title>
-              <Card.Description class="text-xs">
+              <Card.Description size="sm">
                 {device.deviceCategory
                   ? (deviceCategoryLabels[device.deviceCategory] ?? device.deviceCategory)
                   : "Unknown Category"}
@@ -206,9 +206,9 @@
             </div>
             {#if device.id}
               <Button
-                variant="ghost"
+                variant="ghost-destructive"
                 size="icon"
-                class="shrink-0 text-muted-foreground hover:text-destructive"
+                class="shrink-0"
                 onclick={() => deviceList.remove(device.id!)}
               >
                 <Trash2 class="h-4 w-4" />
@@ -238,11 +238,11 @@
               <Select.Root type="single" name="deviceCategory" bind:value={inlineCategory}>
                 <Select.Trigger id="device-category">
                   {inlineCategory
-                    ? (deviceCategoryLabels[inlineCategory as DeviceCategory] ?? inlineCategory)
+                    ? (labelFor(deviceCategoryLabels, inlineCategory) ?? inlineCategory)
                     : "Select category"}
                 </Select.Trigger>
                 <Select.Content>
-                  {#each Object.entries(deviceCategoryLabels) as [value, label]}
+                  {#each Object.entries(deviceCategoryLabels) as [value, label] (value)}
                     <Select.Item {value} {label} />
                   {/each}
                 </Select.Content>
@@ -275,11 +275,11 @@
                 <Select.Root type="single" name="aidAlgorithm" bind:value={inlineAidAlgorithm}>
                   <Select.Trigger id="aid-algorithm">
                     {inlineAidAlgorithm
-                      ? (aidAlgorithmLabels[inlineAidAlgorithm as AidAlgorithm] ?? inlineAidAlgorithm)
+                      ? (labelFor(aidAlgorithmLabels, inlineAidAlgorithm) ?? inlineAidAlgorithm)
                       : "Select algorithm"}
                   </Select.Trigger>
                   <Select.Content>
-                    {#each Object.entries(aidAlgorithmLabels) as [value, label]}
+                    {#each Object.entries(aidAlgorithmLabels) as [value, label] (value)}
                       <Select.Item {value} {label} />
                     {/each}
                   </Select.Content>
@@ -288,7 +288,7 @@
             {/if}
           </div>
           <input type="hidden" name="b:isCurrent" value="on" />
-          {#each deviceList.createForm.fields.allIssues() ?? [] as issue}
+          {#each deviceList.createForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </Card.Content>
@@ -318,7 +318,7 @@
     </p>
   {:else}
     <div class="space-y-3">
-      {#each deviceList.items as device, i}
+      {#each deviceList.items as device, i (device.id)}
         <div
           class="flex items-center justify-between rounded-lg border p-3"
         >
@@ -327,15 +327,12 @@
               <span class="font-medium text-sm">
                 {device.manufacturer ?? "Unknown"} {device.model ?? ""}
               </span>
-              <Badge variant="secondary" class="text-xs">
-                {deviceCategoryLabels[(device.deviceCategory ?? "") as DeviceCategory] ??
+              <Badge variant="secondary">
+                {labelFor(deviceCategoryLabels, device.deviceCategory) ??
                   device.deviceCategory}
               </Badge>
               {#if device.isCurrent}
-                <Badge
-                  variant="default"
-                  class="text-xs bg-green-600 hover:bg-green-700"
-                >
+                <Badge variant="success">
                   Current
                 </Badge>
               {/if}
@@ -363,8 +360,7 @@
               <div class="flex flex-col">
                 <Button
                   variant="ghost"
-                  size="icon"
-                  class="h-5 w-6"
+                  size="icon-xs"
                   aria-label="Move device up in priority"
                   disabled={i === 0}
                   onclick={() => moveDevice(i, -1)}
@@ -373,8 +369,7 @@
                 </Button>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  class="h-5 w-6"
+                  size="icon-xs"
                   aria-label="Move device down in priority"
                   disabled={i === deviceList.items.length - 1}
                   onclick={() => moveDevice(i, 1)}
@@ -422,7 +417,7 @@
         </p>
       </div>
       <div class="space-y-2">
-        {#each deviceList.discoveredSources as source}
+        {#each deviceList.discoveredSources as source (JSON.stringify([source.dataSource, source.device]))}
           <div class="flex items-center justify-between rounded-lg border border-dashed p-3">
             <div class="space-y-1 min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
@@ -430,7 +425,7 @@
                   {source.device || source.dataSource || "Unknown source"}
                 </span>
                 {#if source.device && source.dataSource}
-                  <Badge variant="outline" class="text-xs font-mono">{source.dataSource}</Badge>
+                  <Badge variant="outline" class="font-mono">{source.dataSource}</Badge>
                 {/if}
               </div>
               <div class="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -480,10 +475,10 @@
             <Label for="device-category">Category</Label>
             <Select.Root type="single" name="{namePrefix}deviceCategory" bind:value={deviceCategory}>
               <Select.Trigger id="device-category">
-                {deviceCategoryLabels[deviceCategory as DeviceCategory] ?? deviceCategory}
+                {labelFor(deviceCategoryLabels, deviceCategory) ?? deviceCategory}
               </Select.Trigger>
               <Select.Content>
-                {#each Object.entries(deviceCategoryLabels) as [value, label]}
+                {#each Object.entries(deviceCategoryLabels) as [value, label] (value)}
                   <Select.Item {value} {label} />
                 {/each}
               </Select.Content>
@@ -517,11 +512,11 @@
               <Select.Root type="single" name="{namePrefix}aidAlgorithm" bind:value={deviceAidAlgorithm}>
                 <Select.Trigger id="device-aid">
                   {deviceAidAlgorithm
-                    ? (aidAlgorithmLabels[deviceAidAlgorithm as AidAlgorithm] ?? deviceAidAlgorithm)
+                    ? (labelFor(aidAlgorithmLabels, deviceAidAlgorithm) ?? deviceAidAlgorithm)
                     : "Select algorithm"}
                 </Select.Trigger>
                 <Select.Content>
-                  {#each Object.entries(aidAlgorithmLabels) as [value, label]}
+                  {#each Object.entries(aidAlgorithmLabels) as [value, label] (value)}
                     <Select.Item {value} {label} />
                   {/each}
                 </Select.Content>
@@ -561,12 +556,10 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <input
+            <Checkbox
               id="device-current"
-              type="checkbox"
               name="{namePrefix}isCurrent"
               bind:checked={deviceIsCurrent}
-              class="h-4 w-4 rounded border-input"
             />
             <Label for="device-current">Currently in use</Label>
           </div>
@@ -582,7 +575,7 @@
             />
           </div>
 
-          {#each activeForm.fields.allIssues() ?? [] as issue}
+          {#each activeForm.fields.allIssues() ?? [] as issue, i (i)}
             <p class="text-sm text-destructive">{issue.message}</p>
           {/each}
         </div>

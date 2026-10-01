@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
@@ -22,15 +23,16 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// <typeparam name="TEntity">The EF entity type backing <typeparamref name="TModel"/>.</typeparam>
 public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepositoryBase<TModel, TEntity>
     where TModel : class, IV4Record
-    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISyncDedupable
+    where TEntity : class, IV4TimeSeriesEntity, IAuditable, ISystemTimestamped, ISyncDedupable
 {
     /// <inheritdoc />
     protected SyncUpsertRepositoryBase(
         ITenantDbContextFactory contextFactory,
         IAuditContext auditContext,
+        ILogger logger,
         IV4RecordBroadcaster<TModel>? broadcaster = null,
         IDataEventSink<Entry>? entrySink = null)
-        : base(contextFactory, auditContext, broadcaster, entrySink)
+        : base(contextFactory, auditContext, logger, broadcaster, entrySink)
     {
     }
 
@@ -38,7 +40,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// Identity for this type is the sync key, which a legacy-id match neither honours nor
     /// deduplicates through; the batch path is <see cref="V4RepositoryBase{TModel,TEntity}.BulkCreateAsync"/>.
     /// </summary>
-    public override Task<IReadOnlyDictionary<string, LegacyUpsert<TModel>>> BulkUpsertByLegacyIdAsync(
+    public override Task<LegacyUpsertBatch<TModel>> BulkUpsertByLegacyIdAsync(
         IReadOnlyList<TModel> records,
         WriteOrigin origin,
         bool preserveStoredCorrelationId = false,
@@ -75,7 +77,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
             if (existing != null)
             {
-                ApplyUpdate(existing, model);
+                ApplySyncUpsert(existing, model);
                 await ctx.SaveChangesAsync(ct);
                 var upserted = ToDomain(existing);
                 // A single explicit upsert always broadcasts (no material-change gate on the single path).
@@ -86,6 +88,13 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
 
         return await InsertAsync(ctx, entity, origin, ct);
     }
+
+    /// <summary>
+    /// Writes a create onto the stored row its sync key matched, on both the single and the batch
+    /// path. The caller never read that row, so a type holding server-resolved state the write
+    /// cannot express overrides this to keep it; the default is <see cref="V4RepositoryBase{TModel,TEntity}.ApplyUpdate"/>.
+    /// </summary>
+    protected virtual void ApplySyncUpsert(TEntity existing, TModel model) => ApplyUpdate(existing, model);
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.ISyncKeyedRepository{T}.IsRecreationBlockedAsync" />
     public async Task<bool> IsRecreationBlockedAsync(
@@ -116,7 +125,8 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
     /// rows in the DB by that key and update them in place. Persists the updates inside the transaction
     /// before returning so the base's insert loop (which clears the tracker) doesn't lose them.
     /// A key held by a row the user deleted drops the record from the batch, per
-    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>.
+    /// <see cref="SoftDeleteDedupExtensions.WhereBlocksRecreation{TEntity}"/>, and is counted in
+    /// <see cref="V4RepositoryBase{TModel,TEntity}.UpsertSplit.SkippedDeleted"/>.
     /// </summary>
     protected override async Task<UpsertSplit> SplitUpsertsAsync(
         NocturneDbContext ctx, List<TEntity> entities, CancellationToken ct)
@@ -136,7 +146,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
         var updatedEntities = new List<TEntity>();
         var materiallyChanged = new List<TEntity>();
         if (syncKeyed.Count == 0)
-            return new UpsertSplit(updatedEntities, materiallyChanged, entities);
+            return new UpsertSplit(updatedEntities, materiallyChanged, entities, 0);
 
         var sources = syncKeyed.Select(e => e.DataSource!).Distinct().ToList();
         var syncIds = syncKeyed.Select(e => e.SyncIdentifier!).Distinct().ToList();
@@ -155,6 +165,7 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             .ToDictionary(g => g.Key, g => g.GoverningRow()!);
 
         var toInsert = new List<TEntity>();
+        var skippedDeleted = 0;
         foreach (var entity in entities)
         {
             var hasKey = !string.IsNullOrEmpty(entity.DataSource)
@@ -162,9 +173,12 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             if (hasKey && existingByKey.TryGetValue($"{entity.DataSource}|{entity.SyncIdentifier}", out var existing))
             {
                 if (existing.DeletedAt != null)
+                {
+                    skippedDeleted++;
                     continue;
+                }
 
-                ApplyUpdate(existing, ToDomain(entity));
+                ApplySyncUpsert(existing, ToDomain(entity));
                 updatedEntities.Add(existing);
                 // Capture material changes now, before SaveChanges clears the modified flags.
                 if (HasMaterialChange(ctx, existing))
@@ -182,6 +196,6 @@ public abstract class SyncUpsertRepositoryBase<TModel, TEntity> : SyncKeyedRepos
             await ctx.SaveChangesAsync(ct);
         }
 
-        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert);
+        return new UpsertSplit(updatedEntities, materiallyChanged, toInsert, skippedDeleted);
     }
 }

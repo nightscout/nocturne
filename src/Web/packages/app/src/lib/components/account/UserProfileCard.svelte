@@ -1,20 +1,19 @@
 <script lang="ts">
+  import { isRecord } from "$lib/utils/type-guards";
   import * as Card from "$lib/components/ui/card";
   import * as Avatar from "$lib/components/ui/avatar";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import { Separator } from "$lib/components/ui/separator";
-  import {
-    Mail,
-    Shield,
-    Clock,
-    Key,
-    LogOut,
-    Settings,
-    Camera,
-    Loader2,
-    Trash2,
-  } from "lucide-svelte";
+  import Mail from "@lucide/svelte/icons/mail";
+  import Shield from "@lucide/svelte/icons/shield";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Key from "@lucide/svelte/icons/key";
+  import LogOut from "@lucide/svelte/icons/log-out";
+  import Settings from "@lucide/svelte/icons/settings";
+  import Camera from "@lucide/svelte/icons/camera";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { formatSessionExpiry, getAuthStore } from "$lib/stores/auth-store.svelte";
   import { formatMediumDateTime } from "$lib/utils/formatting";
   import { upload as uploadAvatar, remove as deleteAvatar } from "$lib/api/generated/avatars.generated.remote";
@@ -45,12 +44,7 @@
   let avatarError = $state<string | null>(null);
 
   /** Reactive avatar URL that updates after upload/delete */
-  let localAvatarUrl = $state<string | undefined>();
-
-  /** Sync localAvatarUrl when user prop changes (e.g. session reload) */
-  $effect(() => {
-    localAvatarUrl = user.avatarUrl;
-  });
+  let localAvatarUrl = $derived(user.avatarUrl);
 
   /** Get initials from user name */
   function getInitials(name: string): string {
@@ -104,6 +98,7 @@
   <Card.Header>
     <div class="flex items-start gap-4">
       <div class="relative group">
+        <!-- eslint-disable-next-line no-restricted-syntax -- the avatar is the upload trigger -->
         <button
           type="button"
           class="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer"
@@ -113,7 +108,7 @@
         >
           <Avatar.Root class="h-16 w-16">
             <Avatar.Image src={localAvatarUrl} alt={user.name} />
-            <Avatar.Fallback class="bg-primary/10 text-primary text-xl">
+            <Avatar.Fallback variant="primary" class="text-xl">
               {getInitials(user.name)}
             </Avatar.Fallback>
           </Avatar.Root>
@@ -126,14 +121,16 @@
           </div>
         </button>
         {#if localAvatarUrl && !isUploading && !isDeleting}
-          <button
-            type="button"
-            class="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          <Button
+            variant="destructive"
+            size="icon-2xs"
+            reveal
+            class="absolute -bottom-1 -right-1"
             onclick={handleDeleteAvatar}
             title="Remove avatar"
           >
-            <Trash2 class="h-3 w-3" />
-          </button>
+            <Trash2 />
+          </Button>
         {/if}
         <form
           class="contents"
@@ -144,12 +141,10 @@
             avatarError = null;
             try {
               await submit();
-              const result = uploadAvatar.result as
-                | { avatarUrl: string }
-                | undefined;
+              const result: unknown = uploadAvatar.result;
               // A redirect (e.g. expired session -> login) resolves submit()
               // without a result; the navigation is already underway.
-              if (result) {
+              if (isRecord(result) && typeof result.avatarUrl === "string") {
                 localAvatarUrl = result.avatarUrl;
                 authStore.updateAvatarUrl(result.avatarUrl);
               }
@@ -161,6 +156,7 @@
             }
           })}
         >
+          <!-- eslint-disable-next-line no-restricted-syntax -- hidden file input, opened by the avatar -->
           <input
             type="file"
             name="file"
@@ -232,8 +228,8 @@
 
       {#if user.roles.length > 0}
         <div class="flex flex-wrap gap-2">
-          {#each user.roles as role}
-            <Badge variant="secondary" class="text-sm">
+          {#each user.roles as role, i (i)}
+            <Badge variant="secondary" size="lg">
               {role}
             </Badge>
           {/each}
@@ -256,8 +252,8 @@
 
       {#if user.permissions.length > 0}
         <div class="flex flex-wrap gap-2">
-          {#each user.permissions as permission}
-            <Badge variant="outline" class="text-xs font-mono">
+          {#each user.permissions as permission, i (i)}
+            <Badge variant="outline" class="font-mono">
               {permission}
             </Badge>
           {/each}

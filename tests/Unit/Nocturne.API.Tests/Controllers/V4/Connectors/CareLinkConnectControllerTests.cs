@@ -6,6 +6,8 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Connectors;
+using Nocturne.Connectors.CareLink.Configurations;
+using Nocturne.Connectors.Core.Extensions;
 using Nocturne.Core.Contracts.Auth;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -168,6 +170,23 @@ public sealed class CareLinkConnectControllerTests
         root.GetProperty("syncIntervalMinutes").GetInt32().Should().Be(5,
             "SaveConfigurationAsync replaces the whole document, so unrelated settings must survive");
         root.GetProperty("enabled").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public void RouteSegment_IsTheConnectorIdTheConfigurationIsStoredUnder()
+    {
+        var route = typeof(CareLinkConnectController)
+            .GetCustomAttributes(typeof(RouteAttribute), inherit: false)
+            .Cast<RouteAttribute>()
+            .Single()
+            .Template;
+
+        var connectorId = ConnectorRegistrationAttribute
+            .DeclaredOn(typeof(CareLinkConnectorConfiguration))
+            .ConnectorId;
+
+        route.Split('/').Should().Contain(connectorId,
+            "the connect flow writes the configuration row the settings page at this route reads");
     }
 
     [Fact]

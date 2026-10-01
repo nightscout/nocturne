@@ -138,7 +138,8 @@ public class HubCredentialKindTests
             Tenant,
             Scope.Normalize([Scope.FullAccess]),
             HubCredentialKind.Infrastructure,
-            SubjectId: null));
+            SubjectId: null,
+            HistoryClamped: false));
 
         await hub.Authorize(new AuthorizeRequest { Secret = "instance-key" });
 
@@ -247,7 +248,7 @@ public class HubCredentialKindTests
     }
 
     private static HubAuthorization Authorization(HubCredentialKind kind) => new(
-        Tenant, Scope.Normalize([Scope.GlucoseRead]), kind, Subject);
+        Tenant, Scope.Normalize([Scope.GlucoseRead]), kind, Subject, HistoryClamped: false);
 
     private static string Group(string name) => TenantAwareHub.FormatTenantGroup(Tenant.ToString(), name);
 

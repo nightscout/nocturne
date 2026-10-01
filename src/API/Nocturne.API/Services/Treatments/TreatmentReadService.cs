@@ -5,6 +5,7 @@ using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
+using Nocturne.Infrastructure.Data.Logging;
 using Nocturne.Infrastructure.Data.Mappers;
 
 namespace Nocturne.API.Services.Treatments;
@@ -57,7 +58,7 @@ public class TreatmentReadService : ITreatmentStore
     /// Upper bound on rows fetched into memory when a find query carries field filters, which can
     /// only be applied after projection and therefore defeat limit pushdown.
     /// </summary>
-    private const int MaxFilterFetch = 100_000;
+    internal int MaxFilterFetch { get; set; } = 100_000;
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> QueryAsync(TreatmentQuery query, CancellationToken ct = default)
@@ -167,16 +168,18 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Treatment>> CreateAsync(
+    public async Task<BulkWrite<Treatment>> CreateAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var results = new List<Treatment>();
+        var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
         {
             try
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+                skippedDeleted += result.SkippedDeleted;
                 var tempBasal = result.CreatedRecords
                     .OfType<Core.Models.V4.TempBasal>()
                     .FirstOrDefault();
@@ -200,7 +203,8 @@ public class TreatmentReadService : ITreatmentStore
             }
         }
 
-        return results;
+        _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted);
     }
 
     /// <inheritdoc />
@@ -208,6 +212,8 @@ public class TreatmentReadService : ITreatmentStore
     {
         var existing = await GetByIdAsync(id, ct);
         if (existing == null) return null;
+
+        TreatmentClientId.KeepStored(treatment, existing);
 
         // Re-key to the stored LegacyId so the decomposer upserts the existing record in place
         // rather than creating a duplicate when the client sends a derived ObjectId.
@@ -292,8 +298,12 @@ public class TreatmentReadService : ITreatmentStore
         {
             // Field filters only exist on the projected shape; count matches within the
             // (bounded) window instead of delegating to per-repo counts.
-            var projected = await _projection.GetProjectedTreatmentsAsync(
-                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, nativeOnly: false, ct: ct);
+            var projected = (await _projection.GetProjectedTreatmentsAsync(
+                findQuery.FromMills, findQuery.ToMills, MaxFilterFetch, nativeOnly: false, ct: ct)).ToList();
+            if (projected.Count >= MaxFilterFetch)
+                _logger.LogWarning(
+                    "Find-filtered treatment count hit the {MaxFetch}-row window; older matches are not counted",
+                    MaxFilterFetch);
             return projected.Count(findQuery.Matches);
         }
 
@@ -425,7 +435,7 @@ public class TreatmentReadService : ITreatmentStore
             ?? await ResolveOrBackfillLegacyIdAsync(_noteRepo, low, high, ct)
             ?? await ResolveOrBackfillLegacyIdAsync(_deviceEventRepo, low, high, ct)
             ?? await ResolveOrBackfillLegacyIdAsync(_bolusCalcRepo, low, high, ct)
-            ?? await ResolveOrBackfillTempBasalLegacyIdAsync(low, high, ct);
+            ?? await ResolveOrBackfillLegacyIdAsync(_tempBasalRepo, low, high, ct);
     }
 
     private static async Task<string?> ResolveOrBackfillLegacyIdAsync<T>(
@@ -438,18 +448,6 @@ public class TreatmentReadService : ITreatmentStore
         var objectId = MongoObjectId.FromGuid(entity.Id);
         entity.LegacyId = objectId;
         await repo.UpdateAsync(entity.Id, entity, WriteOrigin.Live, ct);
-        return objectId;
-    }
-
-    private async Task<string?> ResolveOrBackfillTempBasalLegacyIdAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var tempBasal = await _tempBasalRepo.GetByGuidRangeAsync(low, high, ct);
-        if (tempBasal is null) return null;
-        if (!string.IsNullOrEmpty(tempBasal.LegacyId)) return tempBasal.LegacyId;
-
-        var objectId = MongoObjectId.FromGuid(tempBasal.Id);
-        tempBasal.LegacyId = objectId;
-        await _tempBasalRepo.UpdateAsync(tempBasal.Id, tempBasal, WriteOrigin.Live, ct);
         return objectId;
     }
 

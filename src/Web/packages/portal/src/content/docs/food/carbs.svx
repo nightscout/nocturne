@@ -60,6 +60,7 @@ other. Read it back through the legacy API and you get your treatment document
 again, reassembled.
 
 <Callout type="info" title="Sync identifiers">
+
   Loop and AAPS give every record they upload a stable sync identifier. Nocturne
   keys on it, so if the same app re-uploads the same carb entry — after a phone
   restore, a backfill, or a flaky connection — the existing record is updated
@@ -67,6 +68,7 @@ again, reassembled.
   and itself; the fuzzier problem of <em>two different</em> apps reporting the
   same meal is covered in
   <a href="/docs/food/deduplication">When the same carbs arrive twice</a>.
+
 </Callout>
 
 ## Editing and deleting

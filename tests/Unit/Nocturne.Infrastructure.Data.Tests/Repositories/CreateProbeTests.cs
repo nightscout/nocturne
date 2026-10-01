@@ -1,6 +1,7 @@
 using System.Text;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -33,7 +34,7 @@ public class CreateProbeTests : IDisposable
         _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId);
 
         _context = _db.CreateContext();
-        _foods = new FoodRepository(_context);
+        _foods = new FoodRepository(_context, NullLogger<FoodRepository>.Instance);
         _settings = new SettingsRepository(_context);
     }
 

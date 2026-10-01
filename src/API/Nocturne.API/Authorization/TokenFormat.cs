@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Nocturne.API.Authorization;
 
 /// <summary>
@@ -17,6 +19,6 @@ public static class TokenFormat
     /// Base64-URL, and legacy Nightscout access tokens are <c>name-hash</c>.
     /// </summary>
     /// <param name="token">The presented credential, or null when none was presented.</param>
-    public static bool IsJwt(string? token) =>
+    public static bool IsJwt([NotNullWhen(true)] string? token) =>
         !string.IsNullOrEmpty(token) && token.Count(c => c == '.') == 2;
 }

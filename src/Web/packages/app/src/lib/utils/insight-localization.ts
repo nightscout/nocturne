@@ -38,74 +38,69 @@ export interface FormattedInsight {
 
 type InsightTemplate = { title: string; description: string };
 
-// Message templates keyed by InsightKey enum values
+// Observations only: each states a figure against its consensus reference and leaves the
+// conclusion to the reader (PRODUCT.md, "Data, not advice"). Bands are named rather than given
+// as mg/dL thresholds so the copy holds in either unit.
 const insightMessages: Record<string, InsightTemplate> = {
   [InsightKey.TimeInRangeExcellent]: {
-    title: "Excellent Time in Range",
-    description:
-      "You're spending {actual}% of your time in range — that's at or above the recommended {target}% target!",
+    title: "Time in range at or above target",
+    description: "Time in range was {actual}% (consensus target: at least {target}%).",
   },
   [InsightKey.NoSevereHypoglycemia]: {
-    title: "Minimal Low Blood Sugars",
-    description: "Great job avoiding lows! You're spending very little time below 54 mg/dL.",
+    title: "No time very low",
+    description: "No readings in this period were very low.",
   },
   [InsightKey.VariabilityControlled]: {
-    title: "Stable Glucose Levels",
-    description: "Your glucose variability is {cv}% — that's nicely stable!",
+    title: "Variability within target",
+    description: "Coefficient of variation was {cv}%, within its consensus target.",
   },
   [InsightKey.AllTargetsMet]: {
-    title: "All Targets Achieved",
-    description: "Excellent management across all metrics! Keep up the great work.",
+    title: "All consensus targets met",
+    description: "Every figure in this period was within its consensus target.",
   },
   [InsightKey.ReduceSevereHypoglycemia]: {
-    title: "Reduce Severe Hypoglycemia",
-    description:
-      "Focus on reducing time very low (<54 mg/dL). Review overnight basal rates and CGM alerts.",
+    title: "Time very low above target",
+    description: "Time very low was above its consensus target.",
   },
   [InsightKey.ReduceHypoglycemia]: {
-    title: "Reduce Overall Hypoglycemia",
-    description: "Work on reducing time below 70 mg/dL. Consider adjusting correction factors.",
+    title: "Time below range above target",
+    description: "Time below range was above its consensus target.",
   },
   [InsightKey.IncreaseTIR]: {
-    title: "Increase Time in Range",
-    description: "Focus on improving time in your target range (70-180 mg/dL).",
+    title: "Time in range below target",
+    description: "Time in range was below its consensus target.",
   },
   [InsightKey.ReduceSevereHyperglycemia]: {
-    title: "Reduce Severe Hyperglycemia",
-    description: "Work on reducing time very high (>250 mg/dL). Review carb counting and doses.",
+    title: "Time very high above target",
+    description: "Time very high was above its consensus target.",
   },
   [InsightKey.ReduceVariability]: {
-    title: "Reduce Glucose Variability",
-    description: "Aim for more stable glucose patterns with fewer ups and downs.",
+    title: "Variability above target",
+    description: "Coefficient of variation was above its consensus target.",
   },
   [InsightKey.TimeVeryLow]: {
-    title: "Very Low Blood Sugar Alert",
-    description:
-      "Time very low (<54 mg/dL) is {actual}% (target: <{target}%). Review overnight basal rates and consider CGM alerts.",
+    title: "Time very low",
+    description: "Time very low was {actual}% (consensus target: under {target}%).",
   },
   [InsightKey.TimeBelowRange]: {
-    title: "Time Below Range",
-    description:
-      "Time below range (<70 mg/dL) is {actual}% (target: <{target}%). Consider adjusting correction factors or meal timing.",
+    title: "Time below range",
+    description: "Time below range was {actual}% (consensus target: under {target}%).",
   },
   [InsightKey.TimeInRange]: {
-    title: "Time in Range Opportunity",
-    description:
-      "Time in range is {actual}% (target: ≥{target}%). Focus on post-meal management and consistent timing.",
+    title: "Time in range",
+    description: "Time in range was {actual}% (consensus target: at least {target}%).",
   },
   [InsightKey.TimeVeryHigh]: {
-    title: "Very High Blood Sugar",
-    description:
-      "Time very high (>250 mg/dL) is {actual}% (target: <{target}%). Review carb counting and correction doses.",
+    title: "Time very high",
+    description: "Time very high was {actual}% (consensus target: under {target}%).",
   },
   [InsightKey.Variability]: {
-    title: "Glucose Variability",
-    description:
-      "Glucose variability is {actual}% (target: <{target}%). Consider more consistent meal timing and composition.",
+    title: "Variability",
+    description: "Coefficient of variation was {actual}% (consensus target: at most {target}%).",
   },
   [InsightKey.AllTargetsAchieved]: {
-    title: "All Targets Met",
-    description: "Congratulations! You've achieved all clinical targets — keep up the excellent work!",
+    title: "All consensus targets met",
+    description: "Every figure in this period was within its consensus target.",
   },
 };
 
@@ -158,13 +153,13 @@ export function formatInsight(
 export function getInsightColor(type: "success" | "warning" | "info" | "action"): string {
   switch (type) {
     case "success":
-      return "text-green-600";
+      return "text-success";
     case "warning":
-      return "text-orange-600";
+      return "text-warning";
     case "info":
-      return "text-blue-600";
+      return "text-info";
     case "action":
-      return "text-violet-600";
+      return "text-primary";
   }
 }
 

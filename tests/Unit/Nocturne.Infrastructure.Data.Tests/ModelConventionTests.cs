@@ -56,6 +56,15 @@ public class ModelConventionTests
                 && i.IsUnique
                 && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_at IS NULL");
 
+    [Fact]
+    public void EveryV4LegacyIdRecordTable_HasTheUserTombstoneLegacyIdIndex() =>
+        AssertFamily(
+            NocturneDbContext.V4LegacyIdRecordEntities,
+            "_tenant_legacy_id_user_deleted",
+            i => Columns(i).SequenceEqual([nameof(ITenantScoped.TenantId), nameof(IV4Entity.LegacyId)])
+                && !i.IsUnique
+                && i.GetFilter() == "legacy_id IS NOT NULL AND deleted_by_user");
+
     /// <summary>
     /// <see cref="Nocturne.Infrastructure.Data.Repositories.V4.V4RepositoryBase{TModel,TEntity}"/>
     /// watermarks each connector sync on the newest timestamp for one tenant and data source. The
@@ -205,7 +214,7 @@ public class ModelConventionTests
             .SelectMany(g => g.Entities.Select(t => (Entity: t, g.Property)))
             .ToList();
 
-        listed.Should().HaveCountGreaterThan(40,
+        listed.Should().HaveCountGreaterThan(15,
             "a loop over an empty list emits nothing, and the assertion below would then pass vacuously");
 
         var model = Model();
@@ -215,6 +224,33 @@ public class ModelConventionTests
                 || property.GetDefaultValueSql() != "CURRENT_TIMESTAMP")
             .Select(p => $"{p.Entity.Name}.{p.Property}")
             .Should().BeEmpty("every listed column needs the default on its own mapped property");
+    }
+
+    [Fact]
+    public void EveryMarkerDeclaredTimestampColumn_HasACurrentTimestampDefault()
+    {
+        (Type Marker, string Property)[] markers =
+        [
+            (typeof(ISystemCreated), nameof(ISystemCreated.SysCreatedAt)),
+            (typeof(ISystemTimestamped), nameof(ISystemTimestamped.SysUpdatedAt)),
+            (typeof(IEntityCreated), nameof(IEntityCreated.CreatedAt)),
+            (typeof(IEntityTimestamped), nameof(IEntityTimestamped.UpdatedAt)),
+        ];
+
+        var columns = Model().GetEntityTypes()
+            .SelectMany(e => markers
+                .Where(m => m.Marker.IsAssignableFrom(e.ClrType))
+                .Select(m => (Entity: e, m.Property)))
+            .ToList();
+
+        columns.Should().HaveCountGreaterThan(90,
+            "every record, snapshot, schedule and identity table declares a timestamp marker");
+
+        columns
+            .Where(c => c.Entity.FindProperty(c.Property)?.GetDefaultValueSql() != "CURRENT_TIMESTAMP")
+            .Select(c => $"{c.Entity.ClrType.Name}.{c.Property}")
+            .Should().BeEmpty(
+                "a write that bypasses SaveChanges would otherwise store 0001-01-01 in the column");
     }
 
     private static void AssertFamily(

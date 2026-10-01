@@ -1,4 +1,5 @@
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 
 namespace Nocturne.Core.Contracts.Repositories;
 
@@ -69,6 +70,20 @@ public interface IFoodRepository
         string? findQuery = null,
         string? type = null,
         bool reverseResults = false,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Foods whose server write stamp falls after <paramref name="cursorMills"/>, oldest first, for
+    /// the v3 <c>history/{lastModified}</c> endpoint. The page ends on a millisecond boundary, so it
+    /// may exceed <paramref name="limit"/>.
+    /// </summary>
+    /// <param name="cursorMills">The client's cursor, in Unix milliseconds.</param>
+    /// <param name="limit">The page size.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<ModifiedSincePage<Food>> GetFoodModifiedSinceAsync(
+        long cursorMills,
+        int limit,
         CancellationToken cancellationToken = default
     );
 

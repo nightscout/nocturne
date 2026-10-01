@@ -21,6 +21,9 @@ export type AlertLevel = 'none' | 'info' | 'warn' | 'urgent';
 export interface PillInfoItem {
 	label: string;
 	value: string | number;
+	/** Bold text shown before the value */
+	lead?: string;
+	tone?: 'destructive';
 }
 
 /**

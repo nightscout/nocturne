@@ -10,18 +10,16 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import { Button } from '$lib/components/ui/button';
 	import { Separator } from '$lib/components/ui/separator';
-	import {
-		ArrowRightLeft,
-		Activity,
-		AlertCircle,
-		CheckCircle2,
-		Loader2,
-		Database,
-		ShieldCheck,
-		ShieldAlert,
-		Clock,
-		BarChart3,
-	} from 'lucide-svelte';
+	import ArrowRightLeft from '@lucide/svelte/icons/arrow-right-left';
+	import Activity from '@lucide/svelte/icons/activity';
+	import AlertCircle from '@lucide/svelte/icons/circle-alert';
+	import CheckCircle2 from '@lucide/svelte/icons/circle-check';
+	import Loader2 from '@lucide/svelte/icons/loader-circle';
+	import Database from '@lucide/svelte/icons/database';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
+	import Clock from '@lucide/svelte/icons/clock';
+	import BarChart3 from '@lucide/svelte/icons/chart-column';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getTransitionStatus } from '$api/generated/nightscoutTransitions.generated.remote';
@@ -111,7 +109,7 @@
 			<Loader2 class="h-8 w-8 animate-spin text-muted-foreground" />
 		</div>
 	{:else if error}
-		<Card class="border-destructive">
+		<Card variant="destructive">
 			<CardContent class="flex items-center gap-3 py-6">
 				<AlertCircle class="h-5 w-5 text-destructive" />
 				<div>
@@ -198,13 +196,13 @@
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Succeeded</p>
-						<p class="text-xl font-semibold tabular-nums text-green-600 dark:text-green-400">
+						<p class="text-xl font-semibold tabular-nums text-success">
 							{formatNumber(status.writeBack?.successesLast24h)}
 						</p>
 					</div>
 					<div class="rounded-lg border p-3">
 						<p class="text-sm text-muted-foreground">Failed</p>
-						<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+						<p class="text-xl font-semibold tabular-nums text-destructive">
 							{formatNumber(status.writeBack?.failuresLast24h)}
 						</p>
 					</div>
@@ -263,7 +261,7 @@
 						</div>
 						<div class="rounded-lg border p-3">
 							<p class="text-sm text-muted-foreground">Discrepancies</p>
-							<p class="text-xl font-semibold tabular-nums text-red-600 dark:text-red-400">
+							<p class="text-xl font-semibold tabular-nums text-destructive">
 								{formatNumber(status.compatibility.discrepancies)}
 							</p>
 						</div>
@@ -285,7 +283,7 @@
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<div class="flex items-center gap-3">
-					<Badge variant={recommendationColor} class="text-sm px-3 py-1">
+					<Badge variant={recommendationColor} size="lg">
 						{#if status.recommendation?.status === 'safe'}
 							<CheckCircle2 class="h-4 w-4" />
 						{:else if status.recommendation?.status === 'almost-ready'}

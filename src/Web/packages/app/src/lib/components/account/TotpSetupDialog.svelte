@@ -3,7 +3,8 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
-  import { AlertTriangle, Loader2 } from "lucide-svelte";
+  import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
+  import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as InputOTP from "$lib/components/ui/input-otp";
   import type { PinInput } from "bits-ui";
 
@@ -87,13 +88,13 @@
           <InputOTP.Root maxlength={6} bind:value={verifyCode} onComplete={handleVerify}>
             {#snippet children({ cells }: { cells: PinInput.CellProps["cell"][] })}
               <InputOTP.Group>
-                {#each cells.slice(0, 3) as cell}
+                {#each cells.slice(0, 3) as cell, i (i)}
                   <InputOTP.Slot {cell} />
                 {/each}
               </InputOTP.Group>
               <InputOTP.Separator />
               <InputOTP.Group>
-                {#each cells.slice(3, 6) as cell}
+                {#each cells.slice(3, 6) as cell, i (i)}
                   <InputOTP.Slot {cell} />
                 {/each}
               </InputOTP.Group>

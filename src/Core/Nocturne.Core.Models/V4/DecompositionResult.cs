@@ -12,6 +12,10 @@ public class DecompositionResult
     /// <summary>
     /// Correlation ID linking all records produced from the same legacy record
     /// </summary>
+    /// <remarks>
+    /// A batch mints one per source record, never one per batch: the devicestatus projection,
+    /// meal pairing and Linked Records all group by it. A batch result carries its first record's.
+    /// </remarks>
     public Guid? CorrelationId { get; set; }
 
     /// <summary>
@@ -24,4 +28,15 @@ public class DecompositionResult
     /// Most records implement IV4Record, but StateSpan records are also included.
     /// </summary>
     public List<object> UpdatedRecords { get; } = [];
+
+    /// <summary>
+    /// Records not written because the user had deleted them. A re-import never brings those back.
+    /// </summary>
+    public int SkippedDeleted { get; set; }
+
+    /// <summary>
+    /// Legacy records of a kind Nocturne does not store, such as an entry whose type is not a
+    /// sensor reading, meter reading or calibration.
+    /// </summary>
+    public int SkippedUnsupported { get; set; }
 }
