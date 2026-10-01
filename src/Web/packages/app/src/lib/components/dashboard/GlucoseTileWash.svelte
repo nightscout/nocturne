@@ -36,24 +36,31 @@
   const washPerReading = !prefersReducedMotion();
 
   // A reading in another range than the tile last showed paints its range's colour over the old
-  // fill, which holds until the stroke has spread across the tile and then fades to the new one.
+  // fill, which holds until the stroke has swept across the tile and then fades to the new one.
+  // The wash artwork lays its whole stroke on the first tick, so the sweep is a mask over it.
   const priorFill = $derived.by(() => {
     void washSeed;
     return untrack(() => shownFill);
   });
   const recolours = $derived(priorFill !== variant);
-  /** Share of the reveal after which the stroke covers the tile. */
-  const SPREAD_PROGRESS = 0.45;
+  let paintingSeed = $state<number | null>(null);
   let spreadSeed = $state<number | null>(null);
   const spread = $derived(spreadSeed === washSeed);
 
+  function markSpread() {
+    if (spreadSeed === washSeed) return;
+    spreadSeed = washSeed;
+    shownFill = variant;
+  }
+
   function onWashState(state: PlayerState) {
     if (state.finished) settledSeed = washSeed;
-    const nothingPaints = state.mode === "none" || state.error !== undefined;
-    if (spreadSeed !== washSeed && (nothingPaints || state.finished || state.progress >= SPREAD_PROGRESS)) {
-      spreadSeed = washSeed;
-      shownFill = variant;
-    }
+    if (state.mode === "none" || state.error !== undefined) markSpread();
+    else if (state.mode !== "pending") paintingSeed = washSeed;
+  }
+
+  function onSweepEnd(event: AnimationEvent) {
+    if (event.target === event.currentTarget) markSpread();
   }
 
   const faded = $derived(recolours ? spread : settledSeed === washSeed);
@@ -118,7 +125,7 @@
   <svg aria-hidden="true" class="absolute size-0">
     <filter id="glucose-tile-wash-tint" color-interpolation-filters="sRGB">
       <feComponentTransfer in="SourceAlpha" result="coverage">
-        <feFuncA type="linear" slope="2.4" />
+        <feFuncA type="linear" slope="1.5" />
       </feComponentTransfer>
       <feColorMatrix
         in="SourceGraphic"
@@ -141,6 +148,8 @@
           ? 'wash-tint -inset-x-[24%] -inset-y-[80%]'
           : `-top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade ${washBlend[variant]}`}"
         class:faded
+        class:sweeping={recolours && paintingSeed === washSeed}
+        onanimationend={onSweepEnd}
         ontransitionend={markFaded}
         ontransitioncancel={markFaded}
         use:fadedOnUnmount
@@ -182,6 +191,24 @@
   }
   .wash-tint {
     filter: url(#glucose-tile-wash-tint);
+    mask-image: linear-gradient(
+      100deg,
+      #000 calc(var(--sweep) - 22%),
+      transparent var(--sweep)
+    );
+  }
+  .wash-tint.sweeping {
+    animation: tint-sweep 2.6s cubic-bezier(0.35, 0.55, 0.45, 1) forwards;
+  }
+  @property --sweep {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 8%;
+  }
+  @keyframes tint-sweep {
+    to {
+      --sweep: 125%;
+    }
   }
   .prior-fill,
   .wash-tint {
