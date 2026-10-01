@@ -120,7 +120,14 @@
       <feComponentTransfer in="SourceAlpha" result="coverage">
         <feFuncA type="linear" slope="2.4" />
       </feComponentTransfer>
-      <feFlood class={floodClass[variant]} />
+      <feColorMatrix
+        in="SourceGraphic"
+        type="matrix"
+        values="0.12 0.24 0.04 0 0.8  0.12 0.24 0.04 0 0.8  0.12 0.24 0.04 0 0.8  0 0 0 0 1"
+        result="grain"
+      />
+      <feFlood class={floodClass[variant]} result="hue" />
+      <feBlend in="hue" in2="grain" mode="multiply" />
       <feComposite in2="coverage" operator="in" />
     </filter>
   </svg>
@@ -130,9 +137,9 @@
         <span class="absolute inset-0 prior-fill {priorFillClass[priorFill]}" class:gone={spread}></span>
       {/if}
       <span
-        class="absolute -top-full -left-[46%] h-[303%] w-[192%] {recolours
-          ? 'wash-tint'
-          : `wash-grain wash-fade ${washBlend[variant]}`}"
+        class="absolute {recolours
+          ? 'wash-tint -inset-x-[24%] -inset-y-[80%]'
+          : `-top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade ${washBlend[variant]}`}"
         class:faded
         ontransitionend={markFaded}
         ontransitioncancel={markFaded}
