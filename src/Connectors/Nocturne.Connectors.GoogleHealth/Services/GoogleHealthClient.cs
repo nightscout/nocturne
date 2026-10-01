@@ -131,7 +131,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             try
             {
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-                if (json.RootElement.TryGetProperty("dataPoints", out var data) && data.ValueKind == JsonValueKind.Array)
+                if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     count += data.GetArrayLength();
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
             }

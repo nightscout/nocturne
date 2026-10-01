@@ -11,6 +11,26 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 public class GoogleHealthClientTests
 {
     [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("42")]
+    [InlineData("\"malformed\"")]
+    [InlineData("true")]
+    public async Task Inventory_rejects_non_array_data_points(string value)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ =>
+            Json($$"""{"dataPoints":{{value}}}"""))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() =>
+            client.CountAsync("token", "heart-rate", from, from.AddDays(1), default));
+
+        Assert.Equal("invalid_google_response", error.Message);
+        Assert.Equal("inventory", error.Stage);
+        Assert.Equal("heart-rate", error.DataType);
+    }
+
+    [Theory]
     [InlineData("weight", "{\"weight\":{\"sampleTime\":{\"physicalTime\":\"2026-09-01T10:00:00Z\",\"utcOffset\":\"7200s\"},\"weightGrams\":72500}}", "kg", 72.5)]
     [InlineData("heart-rate", "{\"heartRate\":{\"sampleTime\":{\"physicalTime\":\"2026-09-01T10:00:00Z\"},\"beatsPerMinute\":\"67\"}}", "bpm", 67)]
     [InlineData("steps", "{\"steps\":{\"interval\":{\"startTime\":\"2026-09-01T10:00:00Z\",\"endTime\":\"2026-09-01T10:01:00Z\"},\"count\":\"42\"}}", "steps", 42)]
