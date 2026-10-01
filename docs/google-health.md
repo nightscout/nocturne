@@ -183,7 +183,8 @@ API replicas sharing the same PostgreSQL database and connector encryption key
 can handle different requests in one Google Health connection flow. The PKCE
 verifier and expiring OAuth state use encrypted connector storage. PostgreSQL
 session locks serialize token refresh, imports, settings changes, disconnect,
-and purge per tenant. Different tenants can still import concurrently.
+and purge per tenant. Each replica processes up to four manual imports concurrently
+for different tenants while holding each worker claim until the import finishes.
 
 Manual requests and progress use the existing `sync_cursors` column. Workers
 check the durable queue every 15 seconds; one worker owns each request. An

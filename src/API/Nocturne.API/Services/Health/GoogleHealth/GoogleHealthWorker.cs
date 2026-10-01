@@ -32,22 +32,24 @@ public sealed class GoogleHealthWorker(
     {
         try
         {
-            await foreach (var tenantId in coordinator.ReadRequestsAsync(stoppingToken))
+            await Parallel.ForEachAsync(coordinator.ReadRequestsAsync(stoppingToken),
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = stoppingToken },
+                async (tenantId, ct) =>
             {
-                await using var claim = await coordinator.ClaimWorkerAsync(tenantId, stoppingToken);
-                if (claim is null || !await coordinator.StartQueuedAsync(tenantId, stoppingToken)) continue;
+                await using var claim = await coordinator.ClaimWorkerAsync(tenantId, ct);
+                if (claim is null || !await coordinator.StartQueuedAsync(tenantId, ct)) return;
                 try
                 {
                     using var listing = scopes.CreateScope();
                     var tenant = await listing.ServiceProvider.GetRequiredService<ITenantService>()
-                        .GetByIdAsync(tenantId, stoppingToken);
+                        .GetByIdAsync(tenantId, ct);
                     if (tenant is not { IsActive: true })
                     {
-                        continue;
+                        return;
                     }
-                    await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, stoppingToken);
+                    await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
                     return;
                 }
@@ -60,9 +62,9 @@ public sealed class GoogleHealthWorker(
                 }
                 finally
                 {
-                    if (!stoppingToken.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
+                    if (!ct.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
                 }
-            }
+            });
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }

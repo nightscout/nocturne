@@ -830,6 +830,21 @@ public class GoogleHealthTests
         Assert.Equal("google_unavailable", Assert.IsType<ProblemDetails>(response.Value).Detail);
     }
 
+    [Theory]
+    [InlineData("rate_limited", 429)]
+    [InlineData("google_unavailable", 502)]
+    [InlineData("configure_first", 400)]
+    public async Task Sync_endpoint_preserves_provider_error_codes_and_retryable_status(string code, int status)
+    {
+        var controller = new GoogleHealthController(new ThrowingGoogleHealthService(new GoogleHealthException(code)));
+
+        var result = await controller.SyncGoogleHealth(default);
+
+        var response = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(status, response.StatusCode);
+        Assert.Equal(code, Assert.IsType<ProblemDetails>(response.Value).Detail);
+    }
+
     private static async Task ConnectAsync(GoogleHealthService service)
     {
         var subject = Guid.NewGuid();
@@ -970,7 +985,7 @@ public class GoogleHealthTests
         }
     }
 
-    private sealed class ThrowingGoogleHealthService : IGoogleHealthService
+    private sealed class ThrowingGoogleHealthService(Exception? failure = null) : IGoogleHealthService
     {
         public Task<GoogleHealthStatus> StatusAsync(CancellationToken ct) =>
             Task.FromResult(new GoogleHealthStatus());
@@ -985,7 +1000,7 @@ public class GoogleHealthTests
         public Task<GoogleHealthPreview> PreviewAsync(Guid subject, CancellationToken ct) =>
             Task.FromResult(new GoogleHealthPreview());
         public Task QueueSyncAsync(CancellationToken ct) =>
-            throw new HttpRequestException("synthetic");
+            throw failure ?? new HttpRequestException("synthetic");
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
