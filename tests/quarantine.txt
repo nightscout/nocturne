@@ -11,9 +11,7 @@ Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatusById_
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatus_ShouldReturnCreatedEntries | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.DeleteEntry_ShouldRemoveEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntries_WithSkip_ShouldOffsetResults | GET /api/v1/entries ignores skip, so pages overlap (Nightscout behaviour to confirm)
-Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntryById_ShouldReturnSpecificEntry | POST /api/v1/entries answers 201; Nightscout 200
-Nocturne.API.Tests.Integration.EntriesIntegrationTests.PostEntries_Array_ShouldCreateMultipleEntries | POST /api/v1/entries answers 201; Nightscout 200
-Nocturne.API.Tests.Integration.EntriesIntegrationTests.PostEntry_Single_ShouldCreateAndReturnEntry | POST /api/v1/entries answers 201; Nightscout 200
+Nocturne.API.Tests.Integration.EntriesIntegrationTests.GetEntryById_ShouldReturnSpecificEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
 Nocturne.API.Tests.Integration.EntriesIntegrationTests.PutEntry_ShouldUpdateExistingEntry | GET /api/v1/entries/{id} answers [] and PUT/DELETE 404 for an entry just created
 Nocturne.API.Tests.Integration.Migration.ApiMigrationTests.MigrateEntries_FromApi_AllFieldsPreserved | v3 filter {dataSource: mongodb-import} matches none of the imported entries
 Nocturne.API.Tests.Integration.Migration.ApiMigrationTests.MigrateTreatments_DuplicateRun_NoDuplicatesCreated | a second import of the same source reports every document as migrated again
@@ -35,8 +33,6 @@ Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithCount
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithData_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
 Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.GetEntries_WithFindTypeFilter_ReturnsSameShape | entries lose rssi and delta (and, filtered, sgv/direction/noise) on read
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.PostEntries_Batch_ReturnsSameShape | POST /api/v1/entries answers 201; Nightscout 200
-Nocturne.API.Tests.Integration.Parity.V1.EntriesParityTests.PostEntries_Single_ReturnsSameShape | POST /api/v1/entries answers 201; Nightscout 200
 Nocturne.API.Tests.Integration.Parity.V1.FoodParityTests.GetFoodQuickpicks_WithData_ReturnsSameShape | food/quickpicks returns a food Nightscout does not list
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_Empty_ReturnsSameShape | /api/v1/profile/current with no profile answers []; Nightscout null
 Nocturne.API.Tests.Integration.Parity.V1.ProfileParityTests.GetProfileCurrent_WithData_ReturnsSameShape | null-valued profile store fields (perGIvalues, carbs_hr_*, delay_*) are dropped

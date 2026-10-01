@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Legacy;
@@ -370,9 +371,9 @@ public class TreatmentsController : ControllerBase
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [NightscoutEndpoint("/api/v1/treatments/:id")]
-    [ProducesResponseType(204)]
-    [ProducesResponseType(404)]
+    [ProducesResponseType(typeof(object), 200)]
     [ProducesResponseType(400)]
+    [ProducesResponseType(403)]
     [ProducesResponseType(500)]
     public async Task<ActionResult> DeleteTreatment(
         string id,
@@ -393,17 +394,18 @@ public class TreatmentsController : ControllerBase
                 return BadRequest("Treatment ID cannot be null or empty");
             }
 
-            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
-
-            if (!deleted)
+            if (id == LegacyDeleteStatus.AnyId)
             {
-                _logger.LogDebug("Treatment not found for deletion with ID: {Id}", id);
-                return NotFound($"Treatment with ID '{id}' not found");
+                return HttpContext?.HasScope(Scope.FullAccess) == true
+                    ? await BulkDeleteTreatments(cancellationToken)
+                    : Forbid();
             }
 
-            _logger.LogDebug("Successfully deleted treatment with ID: {Id}", id);
+            var deleted = await _treatmentService.DeleteTreatmentAsync(id, cancellationToken);
 
-            return NoContent();
+            _logger.LogDebug("Deleted treatment with ID {Id}: {Deleted}", id, deleted);
+
+            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
         }
         catch (Exception ex)
         {
@@ -461,16 +463,7 @@ public class TreatmentsController : ControllerBase
 
             _logger.LogDebug("Successfully deleted {Count} treatments", deletedCount);
 
-            // Return result in the same format as Nightscout legacy API
-            // Nightscout returns MongoDB driver result which includes result object, n, and ok
-            // Use Dictionary to ensure 'n' is always serialized even when 0 (WhenWritingDefault would omit it)
-            var response = new Dictionary<string, object>
-            {
-                ["result"] = new Dictionary<string, object> { ["n"] = deletedCount, ["ok"] = 1 },
-                ["n"] = deletedCount,
-                ["ok"] = 1
-            };
-            return Ok(response);
+            return Ok(LegacyDeleteStatus.For(deletedCount));
         }
         catch (Exception ex)
         {

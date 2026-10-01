@@ -90,7 +90,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             }
         };
         var postResponse = await clientB.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read entries from tenant A
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
@@ -117,7 +117,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             }
         };
         var postResponse = await clientA.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read entries from tenant B
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
@@ -143,7 +143,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             }
         };
         var postResponse = await clientB.PostAsJsonAsync("/api/v1/treatments", treatmentPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read treatments from tenant A
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
@@ -213,7 +213,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             }
         };
         var postResponse = await clientA.PostAsJsonAsync("/api/v1/entries", entryPayload);
-        postResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+        postResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - read from tenant B
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
@@ -470,8 +470,8 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         };
         var response = await client.PostAsJsonAsync("/api/v1/entries", entryPayload);
 
-        response.StatusCode.Should().BeOneOf(
-            new[] { HttpStatusCode.OK, HttpStatusCode.Created },
+        response.StatusCode.Should().Be(
+            HttpStatusCode.OK,
             "a subject must be able to write to a tenant it belongs to using its own access token");
     }
 
@@ -539,7 +539,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             {
                 new { type = "sgv", sgv = 111, date = now.ToUnixTimeMilliseconds(), dateString = now.UtcDateTime.ToString("o") }
             });
-            ok.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created);
+            ok.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         // Remove subject A's membership in tenant A the way RemoveMemberAsync does, directly on the

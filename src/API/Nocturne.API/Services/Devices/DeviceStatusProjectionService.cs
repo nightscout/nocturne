@@ -281,25 +281,20 @@ public class DeviceStatusProjectionService
     }
 
     /// <summary>
-    /// Returns the total number of projected <see cref="DeviceStatus"/> documents matching the
-    /// optional <paramref name="find"/> filter. Sums APS snapshot count and orphan pump snapshot
-    /// count to approximate the total for V3 pagination.
+    /// Returns the number of <see cref="DeviceStatus"/> documents <see cref="GetAsync"/> projects for
+    /// <paramref name="find"/> without a page limit: every APS snapshot plus every pump snapshot
+    /// no APS snapshot in the same window and device correlates with.
     /// </summary>
     /// <param name="find">MongoDB-style query filter (same format as <see cref="GetAsync"/>).</param>
     /// <param name="ct">Cancellation token.</param>
     public async Task<long> CountAsync(string? find, CancellationToken ct)
     {
-        var (_, from, to) = ParseFindQuery(find);
+        var (device, from, to) = ParseFindQuery(find);
 
-        var apsCount = await _apsRepo.CountAsync(from, to, ct);
-        var pumpCount = await _pumpRepo.CountAsync(from, to, ct);
+        var apsCount = await _apsRepo.CountAsync(from, to, device, ct);
+        var orphanPumpCount = await _pumpRepo.CountUncorrelatedAsync(from, to, device, ct);
 
-        // Orphan pump count is estimated as total pumps minus APS count (each APS correlates
-        // to at most one pump). This is a rough estimate — the real orphan count requires
-        // a correlation join, which is too expensive for a count-only query.
-        var orphanPumpEstimate = Math.Max(0, pumpCount - apsCount);
-
-        return apsCount + orphanPumpEstimate;
+        return apsCount + orphanPumpCount;
     }
 
     #region Projection Logic
@@ -566,8 +561,26 @@ public class DeviceStatusProjectionService
     /// </summary>
     internal static (string? Device, DateTime? From, DateTime? To) ParseFindQuery(string? find)
     {
+        var (device, from, to, _) = ParseFindQueryReportingUnhonoured(find);
+        return (device, from, to);
+    }
+
+    /// <summary>
+    /// The filters of <paramref name="find"/> when it names at least one and every <c>find</c> key
+    /// in it is one <see cref="ParseFindQuery"/> honours, else null. A delete must refuse a find it
+    /// cannot apply, since the lenient read would drop that key and select everything.
+    /// </summary>
+    internal static (string? Device, DateTime? From, DateTime? To)? ParseDeleteFind(string? find)
+    {
+        var (device, from, to, unhonoured) = ParseFindQueryReportingUnhonoured(find);
+        return unhonoured || (device is null && from is null && to is null) ? null : (device, from, to);
+    }
+
+    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryReportingUnhonoured(
+        string? find)
+    {
         if (string.IsNullOrWhiteSpace(find))
-            return (null, null, null);
+            return (null, null, null, false);
 
         // Try JSON format first
         if (find.TrimStart().StartsWith('{'))
@@ -579,32 +592,36 @@ public class DeviceStatusProjectionService
         return ParseFindQueryFromQueryString(find);
     }
 
-    private static (string? Device, DateTime? From, DateTime? To) ParseFindQueryFromJson(string json)
+    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryFromJson(string json)
     {
         string? device = null;
         DateTime? from = null;
         DateTime? to = null;
+        var unhonoured = false;
 
         try
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return (null, null, null, true);
 
-            if (root.TryGetProperty("device", out var deviceEl) && deviceEl.ValueKind == JsonValueKind.String)
+            foreach (var field in root.EnumerateObject())
             {
-                device = deviceEl.GetString();
-            }
-
-            if (root.TryGetProperty("created_at", out var createdAtEl))
-            {
-                if (createdAtEl.ValueKind == JsonValueKind.Object)
+                if (field.Name == "device" && field.Value.ValueKind == JsonValueKind.String)
                 {
-                    foreach (var prop in createdAtEl.EnumerateObject())
+                    device = field.Value.GetString();
+                }
+                else if (field.Name == "created_at" && field.Value.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in field.Value.EnumerateObject())
                     {
                         var dateStr = prop.Value.ValueKind == JsonValueKind.String ? prop.Value.GetString() : null;
-                        if (dateStr == null) continue;
-
-                        if (!TryParseDateTime(dateStr, out var dt)) continue;
+                        if (dateStr == null || !TryParseDateTime(dateStr, out var dt))
+                        {
+                            unhonoured = true;
+                            continue;
+                        }
 
                         switch (prop.Name)
                         {
@@ -616,32 +633,46 @@ public class DeviceStatusProjectionService
                             case "$lt":
                                 to = dt;
                                 break;
+                            default:
+                                unhonoured = true;
+                                break;
                         }
                     }
+                }
+                else
+                {
+                    unhonoured = true;
                 }
             }
         }
         catch (JsonException)
         {
-            // Malformed JSON — return empty filters
+            return (null, null, null, true);
         }
 
-        return (device, from, to);
+        return (device, from, to, unhonoured);
     }
 
-    private static (string? Device, DateTime? From, DateTime? To) ParseFindQueryFromQueryString(string queryString)
+    private static (string? Device, DateTime? From, DateTime? To, bool Unhonoured) ParseFindQueryFromQueryString(
+        string queryString)
     {
         string? device = null;
         DateTime? from = null;
         DateTime? to = null;
+        var unhonoured = false;
 
         var parsed = HttpUtility.ParseQueryString(queryString);
 
         foreach (string? key in parsed)
         {
             if (key == null) continue;
+            var isFind = key.StartsWith("find", StringComparison.OrdinalIgnoreCase);
             var value = parsed[key];
-            if (string.IsNullOrEmpty(value)) continue;
+            if (string.IsNullOrEmpty(value))
+            {
+                unhonoured |= isFind;
+                continue;
+            }
 
             if (key.Equals("find[device]", StringComparison.OrdinalIgnoreCase))
             {
@@ -652,16 +683,24 @@ public class DeviceStatusProjectionService
             {
                 if (TryParseDateTime(value, out var dt))
                     from = dt;
+                else
+                    unhonoured = true;
             }
             else if (key.Equals("find[created_at][$lte]", StringComparison.OrdinalIgnoreCase)
                      || key.Equals("find[created_at][$lt]", StringComparison.OrdinalIgnoreCase))
             {
                 if (TryParseDateTime(value, out var dt))
                     to = dt;
+                else
+                    unhonoured = true;
+            }
+            else
+            {
+                unhonoured |= isFind;
             }
         }
 
-        return (device, from, to);
+        return (device, from, to, unhonoured);
     }
 
     private static bool TryParseDateTime(string value, out DateTime result)

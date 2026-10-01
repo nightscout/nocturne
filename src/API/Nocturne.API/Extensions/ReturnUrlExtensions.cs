@@ -9,6 +9,12 @@ public static class ReturnUrlExtensions
     /// </summary>
     public static bool IsValidReturnUrl(this BaseDomainOptions baseDomain, string returnUrl)
     {
+        // Browsers strip tab and newline while parsing, so "/\t/evil.com" would land on "//evil.com".
+        if (returnUrl.Any(char.IsControl))
+        {
+            return false;
+        }
+
         // Site-local path: starts with "/" but not "//" or "/\", which browsers
         // resolve as scheme-relative — "Location: //evil.com" leaves the site.
         if (returnUrl.StartsWith('/'))

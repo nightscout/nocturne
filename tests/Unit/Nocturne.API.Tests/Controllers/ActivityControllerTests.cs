@@ -571,43 +571,24 @@ public class ActivityControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
-    [Fact]
-    public async Task DeleteActivity_WhenActivityExists_ShouldDeleteAndReturnSuccess()
+    [Theory]
+    [InlineData(true, 1)]
+    [InlineData(false, 0)]
+    public async Task DeleteActivity_AnswersOkWithTheDeleteStatus_FoundOrNot(bool deleted, long count)
     {
-        // Arrange
         var activityId = "507f1f77bcf86cd799439011";
 
         _mockActivityService
             .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(deleted);
 
-        // Act
         var result = await _controller.DeleteActivity(activityId, CancellationToken.None);
 
-        // Assert
-        result.Should().NotBeNull();
-        result.Should().BeOfType<OkObjectResult>();
-        var okResult = result as OkObjectResult;
-        var responseValue = okResult!.Value;
-        responseValue.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task DeleteActivity_WhenActivityDoesNotExist_ShouldReturnNotFound()
-    {
-        // Arrange
-        var activityId = "507f1f77bcf86cd799439011";
-
-        _mockActivityService
-            .Setup(x => x.DeleteActivityAsync(activityId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
-
-        // Act
-        var result = await _controller.DeleteActivity(activityId, CancellationToken.None);
-
-        // Assert
-        result.Should().NotBeNull();
-        result.Should().BeOfType<NotFoundObjectResult>();
+        var body = JsonSerializer.SerializeToElement(
+            result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        body.GetProperty("deletedCount").GetInt64().Should().Be(count);
+        body.GetProperty("n").GetInt64().Should().Be(count);
     }
 
     [Fact]

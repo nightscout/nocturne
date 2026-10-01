@@ -204,14 +204,45 @@ public abstract class V4RepositoryBase<TModel, TEntity>
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var query = ctx.Set<TEntity>().AsNoTracking().AsQueryable();
-        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
-        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
-        if (device != null) query = query.Where(e => e.Device == device);
+        var query = InWindow(ctx.Set<TEntity>().AsNoTracking(), from, to, device);
         if (source != null) query = query.Where(e => e.DataSource == source);
         query = descending ? query.OrderByDescending(e => e.Timestamp) : query.OrderBy(e => e.Timestamp);
         var entities = await query.Skip(offset).Take(limit).ToListAsync(ct);
         return entities.Select(ToDomain);
+    }
+
+    /// <summary>
+    /// The time window and device filter of <see cref="GetAsync"/>, shared with the counts that must
+    /// agree with it.
+    /// </summary>
+    internal static IQueryable<TEntity> InWindow(
+        IQueryable<TEntity> query, DateTime? from, DateTime? to, string? device)
+    {
+        if (from.HasValue) query = query.Where(e => e.Timestamp >= from.Value);
+        if (to.HasValue) query = query.Where(e => e.Timestamp <= to.Value);
+        if (device != null) query = query.Where(e => e.Device == device);
+        return query;
+    }
+
+    /// <summary>
+    /// Upload duplicate probe: the newest stored record from <paramref name="device"/> (any device
+    /// when <c>null</c>) in <paramref name="from"/>..<paramref name="to"/>, or <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="InWindow"/>, <paramref name="to"/> is exclusive: the probe asks for one
+    /// millisecond, and an inclusive end would report the next millisecond's record as a duplicate.
+    /// </remarks>
+    public virtual async Task<TModel?> FindStoredDuplicateAsync(
+        string? device, DateTime from, DateTime to, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        var query = ctx.Set<TEntity>().AsNoTracking()
+            .Where(e => e.Timestamp >= from && e.Timestamp < to);
+        if (device != null) query = query.Where(e => e.Device == device);
+        var entity = await query
+            .OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id)
+            .FirstOrDefaultAsync(ct);
+        return entity is null ? null : ToDomain(entity);
     }
 
     /// <inheritdoc cref="Core.Contracts.V4.Repositories.IV4Repository{T}.GetByIdAsync" />

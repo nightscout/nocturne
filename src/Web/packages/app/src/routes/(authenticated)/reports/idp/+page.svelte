@@ -71,14 +71,10 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
+<div class="@container space-y-8">
   <div class="space-y-4">
     <div class="print:hidden">
-      <h1 class="text-2xl @md:text-3xl font-bold flex items-center gap-3">
-        <Syringe class="w-6 h-6 @md:w-8 @md:h-8 text-primary" />
-        Insulin Dosing Profile
-      </h1>
-      <p class="text-muted-foreground mt-1">
+      <p class="text-muted-foreground">
         Comprehensive insulin delivery analysis with glucose context
       </p>
     </div>

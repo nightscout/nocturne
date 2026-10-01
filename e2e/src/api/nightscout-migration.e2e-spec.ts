@@ -85,9 +85,15 @@ async function migrate(tenant: Tenant, nightscoutUrl = SOURCE_URL, collections =
   );
 }
 
+/** The count of a legacy `[{_id, count}]` answer, which holds no row when nothing matches. */
+async function countOf(tenant: Tenant, path: string): Promise<number> {
+  const rows = await tenant.api.ok<{ _id: null; count: number }[]>("GET", path);
+  expect(rows, `${path} answered no count row`).toHaveLength(1);
+  return rows[0]!.count;
+}
+
 async function entryCount(tenant: Tenant): Promise<number> {
-  // workaround: #1812
-  return (await tenant.api.ok<{ count?: number }>("GET", "/api/v1/count/entries/where")).count ?? 0;
+  return countOf(tenant, "/api/v1/count/entries/where");
 }
 
 async function treatments(tenant: Tenant): Promise<V1Treatment[]> {
@@ -97,8 +103,7 @@ async function treatments(tenant: Tenant): Promise<V1Treatment[]> {
 /** Naming created_at lifts the v1 four-day window. */
 async function bgCheckCount(tenant: Tenant): Promise<number> {
   const path = `/api/v1/count/treatments/where?find[eventType]=BG%20Check&find[created_at][$gte]=${BG_CHECKS_SINCE}`;
-  // workaround: #1812
-  return (await tenant.api.ok<{ count?: number }>("GET", path)).count ?? 0;
+  return countOf(tenant, path);
 }
 
 async function deviceStatuses(tenant: Tenant): Promise<V1DeviceStatus[]> {
@@ -202,10 +207,11 @@ describe("Nightscout migration", { timeout: 420_000 }, () => {
     expect(await migratedProfiles(tenant)).toHaveLength(1);
   });
 
-  // Bug #1812: the count answers `{count}`, and `{}` at zero. Flip to `it` once fixed.
-  it.fails("counts in the legacy [{_id, count}] shape, and [] when nothing matches", async () => {
+  it("counts in the legacy [{_id, count}] shape, and [] when nothing matches", async () => {
     const counted = await tenant.api.ok<unknown>("GET", "/api/v1/count/entries/where");
     expect(counted).toEqual([{ _id: null, count: MIGRATION_ENTRY_COUNT }]);
+    expect(await tenant.api.ok<unknown>("GET", "/api/v1/count/entries/where?find[type]=sgv")).toEqual([{ _id: null, count: MIGRATION_ENTRY_COUNT }]);
+    expect(await tenant.api.ok<unknown>("GET", "/api/v1/count/entries/where?find[type]=mbg")).toEqual([]);
 
     const empty = await seedTenant();
     expect(await empty.api.ok<unknown>("GET", "/api/v1/count/entries/where")).toEqual([]);

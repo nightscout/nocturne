@@ -1,3 +1,6 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
 using Nocturne.API.Tests.GoldenFiles.Infrastructure;
 using Nocturne.Infrastructure.Data.Entities.V4;
 
@@ -275,6 +278,39 @@ public class EntriesGoldenTests : GoldenFileTestBase
 
         await Verify(captured)
             .ScrubMembers("_id", "mills", "date", "sysTime", "created_at");
+    }
+
+    // NightscoutKit fails any upload that does not answer exactly 200 and requeues the batch.
+    [Fact]
+    public async Task PostEntries_EmptyArray_AnswersOkWithEmptyArray()
+    {
+        var response = await PostJsonAsync("/api/v1/entries", Array.Empty<object>());
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        body.ValueKind.Should().Be(JsonValueKind.Array);
+        body.GetArrayLength().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task PostEntries_EveryEntryRefused_AnswersOkWithOneEchoPerEntry()
+    {
+        var response = await PostJsonAsync("/api/v1/entries", new[] { new { type = "sgv" }, new { type = "sgv" } });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        body.ValueKind.Should().Be(JsonValueKind.Array);
+        body.GetArrayLength().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task PostEntries_UnparseableBody_AnswersBadRequest()
+    {
+        var content = new StringContent("{not json", Encoding.UTF8, "application/json");
+
+        var response = await Client.PostAsync("/api/v1/entries", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     #endregion

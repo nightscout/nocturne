@@ -65,7 +65,7 @@
 </svelte:head>
 
 {#if report}
-  <div class="@container space-y-6 p-3 @md:p-6">
+  <div class="@container space-y-6">
     <header class="max-w-3xl space-y-2">
       <p class="text-sm text-muted-foreground print:hidden">
         {dateRangeDisplay} • {patternsResource.date.dayCount} days

@@ -57,6 +57,13 @@ public class ApsSnapshotRepository : SyncUpsertRepositoryBase<ApsSnapshot, ApsSn
             .ToListAsync(ct);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default)
+    {
+        await using var ctx = await ContextFactory.CreateAsync(ct);
+        return await InWindow(ctx.ApsSnapshots.AsNoTracking(), from, to, device).CountAsync(ct);
+    }
+
     /// <summary>
     /// Gets APS snapshots by correlation IDs.
     /// </summary>

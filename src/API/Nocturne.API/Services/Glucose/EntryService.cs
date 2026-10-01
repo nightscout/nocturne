@@ -109,21 +109,18 @@ public class EntryService : IEntryService
     public async Task<Entry?> CheckForDuplicateEntryAsync(
         string? device,
         string type,
-        double? sgv,
         long mills,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default)
     {
-        return await _store.CheckDuplicateAsync(device, type, sgv, mills, windowMinutes, cancellationToken);
+        return await _store.CheckDuplicateAsync(device, type, mills, cancellationToken);
     }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry?>> CheckForDuplicateEntriesAsync(
         IReadOnlyList<EntryDuplicateProbe> probes,
-        int windowMinutes = 5,
         CancellationToken cancellationToken = default)
     {
-        return await _store.CheckDuplicatesAsync(probes, windowMinutes, cancellationToken);
+        return await _store.CheckDuplicatesAsync(probes, cancellationToken);
     }
 
     /// <inheritdoc />

@@ -97,10 +97,9 @@
 
 {#if reportsResource.current}
   {@const report = reportsResource.current}
-  <div class="@container space-y-6 p-3 @md:p-6">
+  <div class="@container space-y-6">
     <header class="print:hidden">
-      <h1 class="text-2xl font-bold">Glucose Distribution</h1>
-      <p class="mt-1 text-sm text-muted-foreground">
+      <p class="text-sm text-muted-foreground">
         {dateRangeDisplay} • {overallStats.totalReadings} readings
       </p>
     </header>

@@ -27,6 +27,17 @@ public interface IMeterGlucoseRepository : ILegacyKeyedRepository<MeterGlucose>,
     /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<MeterGlucose>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
+    /// <summary>
+    /// Upload duplicate probe: the newest stored <see cref="MeterGlucose"/> from the device in
+    /// <paramref name="from"/>..<paramref name="to"/>, or <c>null</c>.
+    /// </summary>
+    /// <param name="device">Device identifier to match, or <c>null</c> for any device.</param>
+    /// <param name="from">Inclusive start of the time range.</param>
+    /// <param name="to">Exclusive end of the time range.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<MeterGlucose?> FindStoredDuplicateAsync(
+        string? device, DateTime from, DateTime to, CancellationToken ct = default);
+
     /// <summary>Retrieve all <see cref="MeterGlucose"/> records sharing the same correlation identifier.</summary>
     /// <param name="correlationId">Correlation ID linking related records.</param>
     /// <param name="ct">Cancellation token.</param>

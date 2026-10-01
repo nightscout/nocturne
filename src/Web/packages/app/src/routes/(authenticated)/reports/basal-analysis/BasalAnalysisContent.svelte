@@ -9,7 +9,6 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Separator } from "$lib/components/ui/separator";
-  import Layers from "@lucide/svelte/icons/layers";
   import Calendar from "@lucide/svelte/icons/calendar";
   import Info from "@lucide/svelte/icons/info";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
@@ -68,7 +67,7 @@
 </script>
 
 {#if hourlyDeliveryQuery.error || analysisQuery.error}
-  <div class="@container container mx-auto max-w-7xl p-3 @md:p-6">
+  <div class="@container">
     <Card variant="destructive">
       <CardHeader>
         <CardTitle variant="destructive" class="flex items-center gap-2 text-base">
@@ -84,15 +83,11 @@
 {:else if !hourlyDeliveryQuery.current}
   <ReportsSkeleton />
 {:else}
-  <div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
+  <div class="@container space-y-8">
     <div class="space-y-4">
       <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div>
-          <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-            <Layers class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
-            Basal Rate Analysis
-          </h1>
-          <p class="mt-1 text-muted-foreground">
+          <p class="text-muted-foreground">
             Understand your background insulin delivery patterns over time
           </p>
         </div>

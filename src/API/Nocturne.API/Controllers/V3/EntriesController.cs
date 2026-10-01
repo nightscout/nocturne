@@ -177,9 +177,9 @@ public class EntriesController : BaseV3Controller<Entry>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The created <see cref="Entry"/> in V3 format.</returns>
     /// <remarks>
-    /// Supports AAPS deduplication: if an entry with the same device, type, SGV value,
-    /// and timestamp (within a 1-minute window) already exists, returns a 200 response
-    /// with <c>isDeduplication: true</c> instead of creating a duplicate.
+    /// Supports AAPS deduplication: if an entry with the same device, type and timestamp already
+    /// exists, returns a 200 response with <c>isDeduplication: true</c> instead of creating a
+    /// duplicate.
     /// After creation, alerts are evaluated via <see cref="IAlertOrchestrator"/> for the new reading.
     /// </remarks>
     /// <response code="201">Entry created successfully.</response>
@@ -218,10 +218,8 @@ public class EntriesController : BaseV3Controller<Entry>
                 var existingEntry = await _entryService.CheckForDuplicateEntryAsync(
                     entry.Device,
                     entry.Type ?? "sgv",
-                    entry.Sgv,
                     entry.Mills,
-                    windowMinutes: 1,
-                    cancellationToken: cancellationToken
+                    cancellationToken
                 );
                 if (existingEntry != null)
                 {

@@ -270,11 +270,11 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// are all linked non-primary is still a stored duplicate, and hiding it here caused uploads
     /// from a second source to re-insert their whole window on every cycle.
     /// </remarks>
-    public async Task<SensorGlucose?> FindStoredDuplicateAsync(
-        string? device, double? mgdl, DateTime from, DateTime to, CancellationToken ct = default)
+    public override async Task<SensorGlucose?> FindStoredDuplicateAsync(
+        string? device, DateTime from, DateTime to, CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entity = await StoredDuplicateQuery(ctx, device is null ? null : [device], mgdl, from, to)
+        var entity = await StoredDuplicateQuery(ctx, device is null ? null : [device], from, to)
             .FirstOrDefaultAsync(ct);
         return entity is null ? null : SensorGlucoseMapper.ToDomainModel(entity);
     }
@@ -285,7 +285,7 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
         CancellationToken ct = default)
     {
         await using var ctx = await ContextFactory.CreateAsync(ct);
-        var entities = await StoredDuplicateQuery(ctx, devices, mgdl: null, from, to)
+        var entities = await StoredDuplicateQuery(ctx, devices, from, to)
             .Take(limit)
             .ToListAsync(ct);
         return entities.Select(SensorGlucoseMapper.ToDomainModel).ToList();
@@ -296,11 +296,10 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
     /// the same rows in the same order. Deliberately without the non-primary LinkedRecords filter.
     /// </summary>
     private static IQueryable<SensorGlucoseEntity> StoredDuplicateQuery(
-        NocturneDbContext ctx, IReadOnlyCollection<string>? devices, double? mgdl,
-        DateTime from, DateTime to)
+        NocturneDbContext ctx, IReadOnlyCollection<string>? devices, DateTime from, DateTime to)
     {
         var query = ctx.SensorGlucose.AsNoTracking()
-            .Where(e => e.Timestamp >= from && e.Timestamp <= to);
+            .Where(e => e.Timestamp >= from && e.Timestamp < to);
         if (devices is { Count: 1 })
         {
             // One device is the overwhelmingly common case (a single uploader): keep it an
@@ -315,9 +314,6 @@ public class SensorGlucoseRepository : SyncUpsertRepositoryBase<SensorGlucose, S
             // 19 s against 200 ms. Enabling auto-prepare has to account for this query.
             query = query.Where(e => e.Device != null && devices.Contains(e.Device));
         }
-        if (mgdl.HasValue)
-            query = query.Where(e => Math.Abs(e.Mgdl - mgdl.Value) < 0.01);
-
         return query.OrderByDescending(e => e.Timestamp).ThenByDescending(e => e.Id);
     }
 

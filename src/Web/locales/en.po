@@ -4538,7 +4538,6 @@ msgstr "Therapy"
 
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Data Quality"
 msgstr "Data Quality"
@@ -7155,7 +7154,6 @@ msgstr "Flash the title and favicon during urgent glucose levels"
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
-#: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
 msgstr "Heart Rate"
 
@@ -7163,7 +7161,6 @@ msgstr "Heart Rate"
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Step Count"
 msgstr "Step Count"
 
@@ -10250,7 +10247,6 @@ msgstr "Contact Name"
 msgid "Close Emergency View"
 msgstr "Close Emergency View"
 
-#: src/lib/components/reports/year-overview/YearOverviewFilters.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Year Overview"
@@ -11137,9 +11133,8 @@ msgstr "Ambulatory Glucose Profile - Nocturne Reports"
 msgid "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 msgstr "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-msgid "<0/> Ambulatory Glucose Profile"
-msgstr "<0/> Ambulatory Glucose Profile"
+#~ msgid "<0/> Ambulatory Glucose Profile"
+#~ msgstr "<0/> Ambulatory Glucose Profile"
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "Your typical daily glucose pattern — a standardized clinical report"
@@ -11304,9 +11299,8 @@ msgstr "Basal Rate Analysis - Nocturne Reports"
 msgid "Analyze your basal insulin delivery patterns with percentile visualization"
 msgstr "Analyze your basal insulin delivery patterns with percentile visualization"
 
-#: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
-msgid "<0/> Basal Rate Analysis"
-msgstr "<0/> Basal Rate Analysis"
+#~ msgid "<0/> Basal Rate Analysis"
+#~ msgstr "<0/> Basal Rate Analysis"
 
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 msgid "Understand your background insulin delivery patterns over time"
@@ -11421,7 +11415,6 @@ msgstr "Insulin Delivery Report <0/>"
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-#: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Treatment Log"
 msgstr "Treatment Log"
 
@@ -11443,9 +11436,8 @@ msgstr "Battery Report - Nocturne"
 msgid "Device battery statistics and charge cycle history"
 msgstr "Device battery statistics and charge cycle history"
 
-#: src/routes/(authenticated)/reports/battery/+page.svelte
-msgid "Battery Report"
-msgstr "Battery Report"
+#~ msgid "Battery Report"
+#~ msgstr "Battery Report"
 
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 msgid "No Battery Data Available"
@@ -11572,7 +11564,6 @@ msgid "Data Quality Categories"
 msgstr "Data Quality Categories"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Compression Lows"
 msgstr "Compression Lows"
@@ -11779,7 +11770,6 @@ msgstr "<0/> Glucose Statistics"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Glucose Distribution"
 msgstr "Glucose Distribution"
 
@@ -11968,9 +11958,8 @@ msgstr "Insulin Delivery Report - Nocturne Reports"
 msgid "Analyze your insulin delivery patterns including basal/bolus ratios and TDD trends"
 msgstr "Analyze your insulin delivery patterns including basal/bolus ratios and TDD trends"
 
-#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-msgid "<0/> Insulin Delivery Report"
-msgstr "<0/> Insulin Delivery Report"
+#~ msgid "<0/> Insulin Delivery Report"
+#~ msgstr "<0/> Insulin Delivery Report"
 
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "Comprehensive analysis of your basal and bolus insulin patterns"
@@ -12159,9 +12148,8 @@ msgstr "Insulin Dosing Profile - Nocturne Reports"
 msgid "Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
 msgstr "Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "<0/> Insulin Dosing Profile"
-msgstr "<0/> Insulin Dosing Profile"
+#~ msgid "<0/> Insulin Dosing Profile"
+#~ msgstr "<0/> Insulin Dosing Profile"
 
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "Comprehensive insulin delivery analysis with glucose context"
@@ -12294,7 +12282,6 @@ msgid "Sleep pattern actogram with glucose overlay"
 msgstr "Sleep pattern actogram with glucose overlay"
 
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "Sleep & Overnight"
 msgstr "Sleep & Overnight"
 
@@ -12335,9 +12322,8 @@ msgstr "Site Change Impact - Nocturne Reports"
 msgid "Analyze how pump site changes affect your glucose control"
 msgstr "Analyze how pump site changes affect your glucose control"
 
-#: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
-msgid "<0/> Site Change Impact"
-msgstr "<0/> Site Change Impact"
+#~ msgid "<0/> Site Change Impact"
+#~ msgstr "<0/> Site Change Impact"
 
 #: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
 msgid "Analyze glucose patterns before and after pump site changes"
@@ -18230,7 +18216,6 @@ msgstr "Battery statistics are calculated from device status reports sent by you
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 msgid "Signal Integrity"
 msgstr "Signal Integrity"
 
@@ -22007,7 +21992,6 @@ msgstr "Report generated from {0} basal events between {1} and {2}"
 #~ msgstr "higher in {0} →"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "CGM Comparison"
 msgstr "CGM Comparison"

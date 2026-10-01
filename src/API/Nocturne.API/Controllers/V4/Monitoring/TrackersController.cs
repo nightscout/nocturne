@@ -108,16 +108,30 @@ public class TrackersController : ControllerBase, IWriteScopedController
     /// A manual start replaces the running instance, as a device-event start does; see
     /// <see cref="TrackerSuccession"/>.
     /// </summary>
-    private Task<bool> ReplaceRunningAsync(TrackerDefinitionEntity definition, DateTime startedAt) =>
-        TrackerSuccession.ReplaceRunningAsync(
+    private Task<TrackerSuccessionResult> StartSuccessorAsync(
+        TrackerDefinitionEntity definition,
+        string userId,
+        string? startNotes,
+        string? startTreatmentId,
+        DateTime startedAt,
+        DateTime? scheduledAt) =>
+        TrackerSuccession.StartAsync(
             _repository,
             _broadcast,
             _logger,
-            running: null,
             definition,
             startedAt,
             completionNotes: null,
             completeTreatmentId: null,
+            ct => _repository.StartInstanceAsync(
+                definition.Id,
+                userId,
+                startNotes,
+                startTreatmentId,
+                startedAt,
+                scheduledAt,
+                ct
+            ),
             HttpContext.RequestAborted
         );
 
@@ -136,12 +150,17 @@ public class TrackersController : ControllerBase, IWriteScopedController
     private static string? NullIfBlank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private ObjectResult RunningNewerConflict(TrackerDefinitionEntity definition) =>
+    private ObjectResult SuccessionConflict(TrackerDefinitionEntity definition, TrackerSuccessionOutcome outcome) =>
         Problem(
-            detail: $"A {definition.Name} started at or after this time is already running. Complete it first, or start this one later.",
+            detail: outcome == TrackerSuccessionOutcome.CompletedElsewhere
+                ? $"The running {definition.Name} was completed while this one was starting. Try again."
+                : $"A {definition.Name} started at or after this time is already running. Complete it first, or start this one later.",
             statusCode: StatusCodes.Status409Conflict,
             title: "Conflict"
         );
+
+    private ObjectResult AlreadyCompleted() =>
+        Problem(detail: "Instance already completed", statusCode: 400, title: "Bad Request");
 
     /// <summary>
     /// Validate notification thresholds for a definition
@@ -634,19 +653,16 @@ public class TrackersController : ControllerBase, IWriteScopedController
         if (definition.Mode == TrackerMode.Duration && request.ScheduledAt.HasValue)
             return Problem(detail: "Duration mode trackers should not have a ScheduledAt datetime", statusCode: 400, title: "Bad Request");
 
-        var startedAt = request.StartedAt ?? DateTime.UtcNow;
-        if (!await ReplaceRunningAsync(definition, startedAt))
-            return RunningNewerConflict(definition);
-
-        var instance = await _repository.StartInstanceAsync(
-            request.DefinitionId,
+        var succession = await StartSuccessorAsync(
+            definition,
             userId,
             request.StartNotes,
             request.StartTreatmentId,
-            startedAt,
-            request.ScheduledAt,
-            HttpContext.RequestAborted
+            request.StartedAt ?? DateTime.UtcNow,
+            request.ScheduledAt
         );
+        if (succession.Started is not { } instance)
+            return SuccessionConflict(definition, succession.Outcome);
 
         _logger.LogInformation(
             "Started tracker instance {Id} for definition {DefinitionId}",
@@ -687,7 +703,7 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return Forbid();
 
         if (existing.CompletedAt != null)
-            return Problem(detail: "Instance already completed", statusCode: 400, title: "Bad Request");
+            return AlreadyCompleted();
 
         var completed = await _repository.CompleteInstanceAsync(
             id,
@@ -697,6 +713,8 @@ public class TrackersController : ControllerBase, IWriteScopedController
             request.CompletedAt,
             HttpContext.RequestAborted
         );
+        if (completed is null)
+            return AlreadyCompleted();
 
         _logger.LogInformation(
             "Completed tracker instance {Id} with reason {Reason}",
@@ -707,12 +725,12 @@ public class TrackersController : ControllerBase, IWriteScopedController
         // Broadcast via SignalR
         await _broadcast.BroadcastTrackerUpdateAsync(
             "complete",
-            TrackerInstanceDto.FromEntity(completed!),
+            TrackerInstanceDto.FromEntity(completed),
             existing.UserId,
             existing.Definition.Visibility
         );
 
-        return Ok(TrackerInstanceDto.FromEntity(completed!));
+        return Ok(TrackerInstanceDto.FromEntity(completed));
     }
 
     /// <summary>
@@ -877,18 +895,16 @@ public class TrackersController : ControllerBase, IWriteScopedController
             return NotFound();
         if (preset.UserId != userId && !HttpContext.IsAdmin())
             return Forbid();
-        if (!await ReplaceRunningAsync(preset.Definition, DateTime.UtcNow))
-            return RunningNewerConflict(preset.Definition);
-
-        var instance = await _repository.ApplyPresetAsync(
-            id,
+        var succession = await StartSuccessorAsync(
+            preset.Definition,
             userId,
-            request?.OverrideNotes,
-            HttpContext.RequestAborted
+            request?.OverrideNotes ?? preset.DefaultStartNotes,
+            startTreatmentId: null,
+            DateTime.UtcNow,
+            scheduledAt: null
         );
-
-        if (instance == null)
-            return NotFound();
+        if (succession.Started is not { } instance)
+            return SuccessionConflict(preset.Definition, succession.Outcome);
 
         _logger.LogInformation(
             "Applied preset {PresetId}, created instance {InstanceId}",

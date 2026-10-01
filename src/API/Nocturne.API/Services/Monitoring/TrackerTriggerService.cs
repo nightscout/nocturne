@@ -146,44 +146,40 @@ public class TrackerTriggerService : IDeviceEventReactor
     )
     {
         var startTreatmentId = deviceEvent.Id.ToString();
-        var activeInstances = await _trackerRepository.GetActiveInstancesForDefinitionAsync(definition.Id, ct);
 
         // Connectors re-publish a moving window, so the same change can reach the chokepoint more than
-        // once. An instance already started from this event means it has been handled.
-        if (activeInstances.Any(i => i.StartTreatmentId == startTreatmentId))
-            return;
-
-        // Connectors also backfill older events into that window, and one dated at or before the
-        // running instance is history rather than a new change.
-        var replaced = await TrackerSuccession.ReplaceRunningAsync(
+        // once. An instance already started from this event means it has been handled. Connectors also
+        // backfill older events into that window, and one dated at or before the running instance is
+        // history rather than a new change.
+        var succession = await TrackerSuccession.StartAsync(
             _trackerRepository,
             _broadcast,
             _logger,
-            activeInstances,
             definition,
             deviceEvent.Timestamp,
             completionNotes: $"Auto-completed by {deviceEvent.EventType}",
             completeTreatmentId: startTreatmentId,
-            ct
+            token => _trackerRepository.StartInstanceAsync(
+                definition.Id,
+                definition.UserId,
+                startNotes: null,
+                startTreatmentId: startTreatmentId,
+                startedAt: deviceEvent.Timestamp,
+                cancellationToken: token
+            ),
+            ct,
+            alreadyStarted: running => running.Any(i => i.StartTreatmentId == startTreatmentId)
         );
-        if (!replaced)
+        if (succession.Started is not { } newInstance)
         {
             _logger.LogDebug(
-                "Skipping tracker {DefinitionName}: device event at {EventTime} is not newer than the active instance",
+                "Skipping tracker {DefinitionName} for device event at {EventTime}: {Outcome}",
                 definition.Name,
-                deviceEvent.Timestamp
+                deviceEvent.Timestamp,
+                succession.Outcome
             );
             return;
         }
-
-        var newInstance = await _trackerRepository.StartInstanceAsync(
-            definition.Id,
-            definition.UserId,
-            startNotes: null,
-            startTreatmentId: startTreatmentId,
-            startedAt: deviceEvent.Timestamp,
-            cancellationToken: ct
-        );
 
         _logger.LogInformation(
             "Auto-started tracker instance {InstanceId} for {DefinitionName} on {EventType}",

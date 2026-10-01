@@ -484,6 +484,7 @@ public class DataSourceService : IDataSourceService
         {
             SupportedDataTypes = registration.SupportedDataTypes
                 ?.Select(type => type.ToString())
+                .Distinct()
                 .ToList()
                 ?? new List<string>(),
             SupportsHistoricalSync = registration.SupportsHistoricalSync,

@@ -77,10 +77,7 @@ public class TenantMemberService : ITenantMemberService
             return null;
         }
 
-        var effectivePermissions = membership.MemberRoles
-            .SelectMany(mr => mr.TenantRole.Permissions)
-            .Union(membership.DirectPermissions ?? [])
-            .ToHashSet();
+        var effectivePermissions = membership.EffectivePermissions().ToHashSet();
 
         return new TenantMemberAccess(effectivePermissions, membership.LimitTo24Hours);
     }

@@ -296,7 +296,6 @@ public class ActivityController : ControllerBase
     [Authorize]
     [RequireScope(Scope.FullAccess)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> DeleteActivity(
         string id,
@@ -306,10 +305,7 @@ public class ActivityController : ControllerBase
         try
         {
             var deleted = await _activityService.DeleteActivityAsync(id, cancellationToken);
-            if (!deleted)
-                return NotFound(new { error = $"Activity with ID {id} not found" });
-
-            return Ok(new { message = "Activity deleted successfully" });
+            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
         }
         catch (Exception ex)
         {

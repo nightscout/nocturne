@@ -615,7 +615,7 @@
   />
 </svelte:head>
 
-<div class="year-overview @container flex min-h-full print:px-3">
+<div class="year-overview @container flex min-h-full">
   <!-- Main Content -->
   <div class="flex-1">
     <!-- Header / interactive filters — hidden on print -->

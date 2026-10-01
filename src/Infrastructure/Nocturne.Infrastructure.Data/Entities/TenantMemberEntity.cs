@@ -109,4 +109,15 @@ public class TenantMemberEntity : ISystemTimestamped
     /// Collection of roles assigned to this member within the tenant
     /// </summary>
     public List<TenantMemberRoleEntity> MemberRoles { get; set; } = [];
+
+    /// <summary>
+    /// The membership's effective permissions: every role's permissions unioned with the direct
+    /// permissions. Requires <see cref="MemberRoles"/> to be loaded with their roles.
+    /// </summary>
+    /// <param name="excludingRoleId">A role to leave out, to ask what would remain without it.</param>
+    public IEnumerable<string> EffectivePermissions(Guid? excludingRoleId = null) =>
+        MemberRoles
+            .Where(mr => mr.TenantRoleId != excludingRoleId)
+            .SelectMany(mr => mr.TenantRole.Permissions)
+            .Union(DirectPermissions ?? []);
 }

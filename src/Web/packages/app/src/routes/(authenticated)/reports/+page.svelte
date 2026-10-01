@@ -114,7 +114,7 @@
 </svelte:head>
 
 {#if isLoading && !reportsResource.current}
-  <ReportsSkeleton />
+  <div class="mx-auto max-w-6xl px-3 py-6 @md:px-6"><ReportsSkeleton /></div>
 {:else if reportsResource.error}
   <div class="flex min-h-[60vh] items-center justify-center px-4">
     <div class="max-w-md space-y-4 text-center">

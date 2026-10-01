@@ -40,7 +40,7 @@
 </script>
 
 <header
-  class="sticky top-0 z-30 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
+  class="sticky top-(--app-sticky-top,0px) z-30 transition-all duration-300 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur"
 >
   <Button variant="ghost" href="/clock">
     <ArrowLeft class="size-4" />

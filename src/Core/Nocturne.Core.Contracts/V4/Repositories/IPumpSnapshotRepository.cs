@@ -27,6 +27,13 @@ public interface IPumpSnapshotRepository : ILegacyKeyedRepository<PumpSnapshot>
     /// <param name="ct">Cancellation token.</param>
     new Task<IEnumerable<PumpSnapshot>> GetAsync(DateTime? from, DateTime? to, string? device, string? source, int limit = 100, int offset = 0, bool descending = true, CancellationToken ct = default);
 
+    /// <summary>
+    /// Counts the pump snapshots in the window and device that no APS snapshot in the same window
+    /// and device shares a correlation id with: the pump-only documents the legacy device status
+    /// projection emits on its own.
+    /// </summary>
+    Task<int> CountUncorrelatedAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
+
     /// <summary>Retrieve <see cref="PumpSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>
