@@ -176,3 +176,25 @@ Automated tests cover authorization, filters, pagination, native writes,
 reconciliation, repeated imports, progress and failure handling using synthetic
 data. They do not authorize a live Google account or prove availability of every
 device's data. Real consent and account-specific imports require runtime testing.
+
+## API replicas and import safety
+
+API replicas sharing the same PostgreSQL database and connector encryption key
+can handle different requests in one Google Health connection flow. The PKCE
+verifier and expiring OAuth state use encrypted connector storage. PostgreSQL
+session locks serialize token refresh, imports, settings changes, disconnect,
+and purge per tenant. Different tenants can still import concurrently.
+
+Manual requests and progress use the existing `sync_cursors` column. Workers
+check the durable queue every 15 seconds; one worker owns each request. An
+interrupted worker releases its database session lock, allowing another replica
+to retry the request from the unchanged cursor. Live and historical resume state
+is saved without treating it as a user configuration change.
+
+A malformed measurement or sleep session fails that type's import before
+destructive reconciliation. Earlier successfully written pages remain available,
+and the cursor does not advance. Retrying a complete response preserves stable
+native identifiers. Explicit purge permanently deletes only the current tenant's
+Google Health records, including old tombstones, and clears all resume state
+before releasing the account binding. This permits a replacement account to
+import readings with overlapping identifiers.

@@ -18,6 +18,33 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
 public class GoogleHealthConnectorServiceTests
 {
+    [Theory]
+    [InlineData("weight")]
+    [InlineData("sleep")]
+    public async Task A_malformed_later_page_abandons_reconciliation_and_preserves_the_cursor(string type)
+    {
+        var calls = 0;
+        var sample = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var valid = type == "weight"
+            ? """{"name":"retained","weight":{"sampleTime":{"physicalTime":"TIME"},"weightGrams":72500}}""".Replace("TIME", sample.ToString("O"))
+            : """{"name":"retained","sleep":{"interval":{"startTime":"START","endTime":"END"}}}"""
+                .Replace("START", sample.AddHours(-8).ToString("O")).Replace("END", sample.ToString("O"));
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"token_type":"Bearer","scope":"{{GoogleHealthClient.ScopeFor(type)}}"}""")
+            : Json(++calls == 1 ? "{\"dataPoints\":[" + valid + "],\"nextPageToken\":\"next\"}"
+                : "{\"dataPoints\":[" + valid + ",{\"name\":\"malformed\"}]}"));
+        var config = fixture.Configuration();
+        config.SyncBodyWeight = type == "weight";
+        config.SyncSleep = type == "sleep";
+        fixture.SetSession("refresh", GoogleHealthClient.ScopeFor(type));
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest { From = sample.AddHours(-23).UtcDateTime, To = sample.AddHours(1).UtcDateTime }, config, CancellationToken.None);
+        Assert.False(result.Success);
+        Assert.Contains("invalid_google_data", result.Message);
+        fixture.Writer.Verify(writer => writer.CompleteReconciliationAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(writer => writer.AbandonReconciliationAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Null(fixture.LastSavedConfiguration);
+    }
+
     [Fact]
     public async Task Sync_requires_a_durable_oauth_session()
     {
@@ -87,6 +114,7 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Contains("lastSyncedTo", fixture.LastSavedConfiguration);
+        Assert.Equal(0, fixture.ConfigurationSaves);
 
         var repeated = await fixture.Service.SyncDataAsync(
             new SyncRequest(), config, CancellationToken.None);
@@ -209,13 +237,14 @@ public class GoogleHealthConnectorServiceTests
         Assert.True(result.Success);
         var today = DateTimeOffset.UtcNow.Date;
         Assert.Equal(today, requestedFrom[0].UtcDateTime.Date);
-        Assert.Equal(new DateTime(today.Year, today.Month, 1), requestedFrom[1].UtcDateTime.Date);
+        var firstMonth = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
+        Assert.Equal(firstMonth, requestedFrom[1].UtcDateTime.Date);
 
         var repeated = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.True(repeated.Success);
         Assert.InRange(requestedFrom[2], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
-        Assert.Equal(new DateTime(today.Year, today.Month, 1).AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
+        Assert.Equal(firstMonth.AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
     }
 
     [Fact]
@@ -562,19 +591,36 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new ConnectorConfigurationResponse
                 {
                     ConnectorName = "GoogleHealth",
-                    Configuration = JsonDocument.Parse(StoredConfiguration)
+                    Configuration = JsonDocument.Parse(StoredConfiguration.Contains("importFrom") ? StoredConfiguration : "{\"importFrom\":\"2000-01-01T00:00:00Z\"}")
                 });
             configurations.Setup(value => value.SaveConfigurationAsync(
                     "GoogleHealth", It.IsAny<JsonDocument>(), null, It.IsAny<CancellationToken>()))
                 .Callback<string, JsonDocument, string?, CancellationToken>((_, document, _, _) =>
                 {
+                    ConfigurationSaves++;
                     ImportFromWasConsumed = document.RootElement.GetProperty("importFrom").ValueKind == JsonValueKind.Null;
                     LastSavedConfiguration = document.RootElement.GetRawText();
                     StoredConfiguration = LastSavedConfiguration;
                 })
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
+            var cursorStore = new Mock<IConnectorSyncCursorStore>();
+            cursorStore.Setup(value => value.GetAsync("GoogleHealth", "health", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new ConnectorSyncCursor(null, StoredConfiguration));
+            cursorStore.Setup(value => value.SetAsync("GoogleHealth", "health", It.IsAny<ConnectorSyncCursor>(), It.IsAny<CancellationToken>()))
+                .Callback<string, string, ConnectorSyncCursor, CancellationToken>((_, _, cursor, _) =>
+                {
+                    var prior = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(StoredConfiguration)!;
+                    foreach (var (key, value) in JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(cursor.LastGuid!)!) prior[key] = value;
+                    LastSavedConfiguration = JsonSerializer.Serialize(prior);
+                    StoredConfiguration = LastSavedConfiguration;
+                }).Returns(Task.CompletedTask);
             var coordinator = Coordinator;
-            coordinator.Setup(value => value.Gate(tenantId)).Returns(Gate);
+            coordinator.Setup(value => value.AcquireAsync(tenantId, It.IsAny<CancellationToken>(), null))
+                .Returns(async (Guid _, CancellationToken ct, TimeSpan? _) =>
+                {
+                    await Gate.WaitAsync(ct);
+                    return new TestLease(Gate);
+                });
             Writer = new Mock<IGoogleHealthReadingWriter>();
             Writer.Setup(value => value.WriteAsync(
                     It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
@@ -610,6 +656,7 @@ public class GoogleHealthConnectorServiceTests
                 Writer.Object,
                 coordinator.Object,
                 configurations.Object,
+                cursorStore.Object,
                 tenant.Object,
                 loader.Object,
                 NullLogger<GoogleHealthConnectorService>.Instance);
@@ -620,6 +667,7 @@ public class GoogleHealthConnectorServiceTests
         public Mock<IGoogleHealthSyncCoordinator> Coordinator { get; } = new();
         public Mock<IGoogleHealthReadingWriter> Writer { get; }
         public IReadOnlyDictionary<string, string> Secrets => secrets;
+        public int ConfigurationSaves { get; private set; }
         public bool ImportFromWasConsumed { get; private set; }
         public string? LastSavedConfiguration { get; private set; }
         public string StoredConfiguration { get; set; } = "{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}";
@@ -644,6 +692,11 @@ public class GoogleHealthConnectorServiceTests
             SyncSleep = false,
             BatchSize = 2
         };
+    }
+
+    private sealed class TestLease(SemaphoreSlim gate) : IAsyncDisposable
+    {
+        public ValueTask DisposeAsync() { gate.Release(); return ValueTask.CompletedTask; }
     }
 
     private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)

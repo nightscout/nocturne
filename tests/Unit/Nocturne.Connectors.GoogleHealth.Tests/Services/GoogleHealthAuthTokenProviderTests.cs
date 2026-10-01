@@ -16,6 +16,22 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 public class GoogleHealthAuthTokenProviderTests
 {
     [Fact]
+    public async Task Durable_rotated_session_replaces_a_stale_replica_cache()
+    {
+        string? posted = null;
+        var provider = CreateProvider(new StubHandler(request =>
+        {
+            posted = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return Json("""{"access_token":"fresh","expires_in":3600,"token_type":"Bearer"}""");
+        }));
+        await provider.StoreSessionAsync(new GoogleHealthTokenSession("old-refresh", ["scope-a"], "cached", DateTimeOffset.UtcNow.AddHours(1)));
+        await provider.SeedSessionAsync(new GoogleHealthTokenSession("rotated-refresh", ["scope-a"]));
+        Assert.Equal("fresh", await provider.GetValidTokenAsync(Configuration("rotated-refresh")));
+        Assert.Contains("refresh_token=rotated-refresh", posted);
+        Assert.Equal("rotated-refresh", (await provider.GetCurrentSessionAsync())!.RefreshToken);
+    }
+
+    [Fact]
     public async Task Refreshes_once_and_reuses_the_tenant_session()
     {
         var calls = 0;

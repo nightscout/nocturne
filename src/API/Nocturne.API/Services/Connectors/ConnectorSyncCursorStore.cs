@@ -42,6 +42,18 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
         string connectorName, string resource, ConnectorSyncCursor cursor, CancellationToken cancellationToken = default)
     {
         var canonicalName = ConnectorNames.Canonical(connectorName);
+        if (_context.Database.IsNpgsql())
+        {
+            var json = JsonSerializer.Serialize(cursor);
+            await _context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE connector_configurations
+                SET sync_cursors = jsonb_set(COALESCE(sync_cursors, jsonb_build_object()), ARRAY[{resource}], {json}::jsonb),
+                    sys_updated_at = {DateTime.UtcNow}
+                WHERE tenant_id = {_context.TenantId} AND connector_name = {canonicalName}
+                """, cancellationToken);
+            return;
+        }
+
         var config = await _context.ConnectorConfigurations
             .FirstOrDefaultAsync(c => c.ConnectorName == canonicalName, cancellationToken);
 

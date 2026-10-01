@@ -1,3 +1,10 @@
+using Microsoft.Extensions.DependencyInjection;
+using Nocturne.API.Multitenancy;
+using Nocturne.API.Services.Connectors;
+using Nocturne.Connectors.Core.Interfaces;
+using Nocturne.Core.Contracts.Multitenancy;
+using Nocturne.Core.Models.Health;
+using Nocturne.Infrastructure.Data.Interceptors;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -115,6 +122,164 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
             SELECT count(*)::integer AS "Value" FROM pg_class
             WHERE relname LIKE 'google_health_%'
             """).SingleAsync());
+    }
+
+    [Fact]
+    public async Task Purge_releases_sync_keys_and_preserves_other_sources_and_tenants()
+    {
+        await using var db = Context();
+        foreach (var tenant in new[] { tenantId, otherTenantId })
+        {
+            db.TenantId = tenant;
+            foreach (var identifier in new[] { "active", "user-deleted", "system-deleted", "other-source" })
+            {
+                var source = identifier == "other-source" ? "manual" : GoogleHealthReadingWriter.Source;
+                var deletedAt = identifier.EndsWith("deleted") ? DateTime.UtcNow : (DateTime?)null;
+                var heartRate = new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Bpm = 60,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                var steps = new StepCountEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Metric = 42,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                var weight = new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 70,
+                    DataSource = source, SyncIdentifier = identifier, DeletedAt = deletedAt };
+                db.HeartRates.Add(heartRate);
+                db.StepCounts.Add(steps);
+                db.BodyWeights.Add(weight);
+                foreach (var entity in new object[] { heartRate, steps, weight })
+                    db.Entry(entity).Property("DeletedByUser").CurrentValue = identifier == "user-deleted";
+            }
+            var session = new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = from.UtcDateTime.AddHours(-8),
+                EndTime = from.UtcDateTime, Source = "Google", SourceApp = "Google Health", OriginalId = "sleep-key" };
+            db.SleepSessions.Add(session);
+            db.SleepStages.Add(new SleepStageEntity { Id = Guid.NewGuid(), SleepSessionId = session.Id,
+                StartTime = session.StartTime, EndTime = session.EndTime, Stage = "Light" });
+            db.SleepSessions.Add(new SleepSessionEntity { Id = Guid.NewGuid(), StartTime = from.UtcDateTime.AddHours(-8),
+                EndTime = from.UtcDateTime, Source = "Google", SourceApp = "other-app", OriginalId = "other-sleep" });
+            await db.SaveChangesAsync();
+        }
+        await UseTenantAsync(db, tenantId);
+        await Writer(db).PurgeAsync(default);
+        foreach (var count in new[] {
+                     await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync(),
+                     await db.StepCounts.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync(),
+                     await db.BodyWeights.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync() })
+            Assert.Equal(1, count);
+        Assert.Equal("other-app", (await db.SleepSessions.AsNoTracking().SingleAsync()).SourceApp);
+        Assert.Empty(await db.SleepStages.AsNoTracking().ToListAsync());
+
+        db.ChangeTracker.Clear();
+        db.HeartRates.Add(new HeartRateEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Bpm = 70,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        db.StepCounts.Add(new StepCountEntity { Id = Guid.NewGuid(), Timestamp = from.UtcDateTime, Metric = 50,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        db.BodyWeights.Add(new BodyWeightEntity { Id = Guid.NewGuid(), Mills = from.ToUnixTimeMilliseconds(), WeightKg = 75,
+            DataSource = GoogleHealthReadingWriter.Source, SyncIdentifier = "user-deleted" });
+        await db.SaveChangesAsync();
+        Assert.Equal(2, await db.HeartRates.CountAsync());
+        Assert.Equal(2, await db.StepCounts.CountAsync());
+        Assert.Equal(2, await db.BodyWeights.CountAsync());
+
+        await UseTenantAsync(db, otherTenantId);
+        Assert.Equal(4, await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(4, await db.StepCounts.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(4, await db.BodyWeights.IgnoreQueryFilters().Where(row => row.TenantId == otherTenantId).CountAsync());
+        Assert.Equal(2, await db.SleepSessions.CountAsync());
+        Assert.Single(await db.SleepStages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Replicas_share_progress_and_exclude_concurrent_operations_per_tenant()
+    {
+        await SeedConnectorAsync();
+        await using var firstProvider = ReplicaServices();
+        await using var secondProvider = ReplicaServices();
+        var first = new GoogleHealthCoordinator(firstProvider.GetRequiredService<IServiceScopeFactory>());
+        var second = new GoogleHealthCoordinator(secondProvider.GetRequiredService<IServiceScopeFactory>());
+        var lease = await first.AcquireAsync(tenantId, default);
+        try
+        {
+            Assert.Null(await second.AcquireAsync(tenantId, default, TimeSpan.Zero));
+            await using var unrelated = await second.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
+            Assert.NotNull(unrelated);
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.AcquireAsync(tenantId, cancellation.Token));
+            await first.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, "steps", 1, 4, 3);
+            var observed = await second.ProgressAsync(tenantId, default);
+            Assert.Equal(GoogleHealthSyncPhase.Reading, observed!.Phase);
+            Assert.Equal(3, observed.PagesRead);
+            Assert.Null(await second.ProgressAsync(otherTenantId, default));
+            Assert.False(await second.QueueAsync(tenantId, 4, default));
+
+            using var scope = firstProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            db.TenantId = tenantId;
+            var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+            await cursors.SetAsync("GoogleHealth", "health", new(null, "{\"backfillComplete\":true}"));
+            Assert.Equal(3, (await second.ProgressAsync(tenantId, default))!.PagesRead);
+            await first.CompleteScheduledAsync(tenantId);
+        }
+        finally { await lease!.DisposeAsync(); }
+        await using var reacquired = await second.AcquireAsync(tenantId, default, TimeSpan.Zero);
+        Assert.NotNull(reacquired);
+        Assert.Null(await second.ProgressAsync(tenantId, default));
+    }
+
+    [Fact]
+    public async Task Durable_manual_requests_survive_replica_loss_and_have_one_worker_owner()
+    {
+        await SeedConnectorAsync();
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        Assert.True(await first.QueueAsync(tenantId, 4, default));
+        Assert.False(await second.QueueAsync(tenantId, 4, default));
+        var claim = await first.ClaimWorkerAsync(tenantId, default);
+        try
+        {
+            Assert.NotNull(claim);
+            Assert.Null(await second.ClaimWorkerAsync(tenantId, default));
+            Assert.True(await first.StartQueuedAsync(tenantId, default));
+            await first.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, "weight", 2, 4, 5);
+            await first.CompleteScheduledAsync(tenantId);
+            Assert.Equal(5, (await second.ProgressAsync(tenantId, default))!.PagesRead);
+        }
+        finally { await claim!.DisposeAsync(); }
+
+        var restarted = new GoogleHealthCoordinator(scopes);
+        await using var requests = restarted.ReadRequestsAsync(default).GetAsyncEnumerator();
+        Assert.True(await requests.MoveNextAsync());
+        Assert.Equal(tenantId, requests.Current);
+        await using var newClaim = await restarted.ClaimWorkerAsync(tenantId, default);
+        Assert.NotNull(newClaim);
+        Assert.True(await restarted.StartQueuedAsync(tenantId, default));
+        await restarted.CompleteAsync(tenantId);
+        Assert.Null(await second.ProgressAsync(tenantId, default));
+        Assert.True(await second.QueueAsync(tenantId, 4, default));
+    }
+
+    private async Task SeedConnectorAsync()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        {
+            Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
+            SyncCursorsJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}"
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private ServiceProvider ReplicaServices()
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
+        services.AddDbContext<NocturneDbContext>(options => options
+            .UseNpgsql(fixture.Database.AppConnectionString).AddInterceptors(new TenantConnectionInterceptor()));
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new TenantDto(tenantId, "synthetic", "Synthetic", true, DateTime.UtcNow)]);
+        services.AddSingleton(tenants.Object);
+        return services.BuildServiceProvider();
     }
 
     private NocturneDbContext Context() => new(new DbContextOptionsBuilder<NocturneDbContext>()

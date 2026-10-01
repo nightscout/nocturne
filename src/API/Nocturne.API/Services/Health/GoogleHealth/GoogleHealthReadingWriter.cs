@@ -267,20 +267,15 @@ public sealed class GoogleHealthReadingWriter(
         await strategy.ExecuteAsync(async () =>
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var deletedAt = DateTime.UtcNow;
-            await db.HeartRates.Where(record => record.DataSource == Source)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
-            await db.StepCounts.Where(record => record.DataSource == Source)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
-            await db.BodyWeights.Where(record => record.DataSource == Source)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(record => record.DeletedAt, deletedAt)
-                    .SetProperty(record => EF.Property<bool>(record, "DeletedByUser"), true), ct);
-            await db.SleepSessions.Where(session => session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
+            // Purge releases account-independent sync keys, including prior user-deletion tombstones.
+            await db.HeartRates.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+                .ExecuteDeleteAsync(ct);
+            await db.StepCounts.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+                .ExecuteDeleteAsync(ct);
+            await db.BodyWeights.IgnoreQueryFilters().Where(record => record.TenantId == db.TenantId && record.DataSource == Source)
+                .ExecuteDeleteAsync(ct);
+            await db.SleepSessions.IgnoreQueryFilters().Where(session => session.TenantId == db.TenantId &&
+                    session.Source == SleepSource.Google.ToString() && session.SourceApp == SourceApp)
                 .ExecuteDeleteAsync(ct);
             await transaction.CommitAsync(ct);
         });

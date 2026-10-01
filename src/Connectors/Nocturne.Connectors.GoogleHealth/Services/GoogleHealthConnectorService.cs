@@ -22,6 +22,7 @@ public sealed class GoogleHealthConnectorService(
     IGoogleHealthReadingWriter writer,
     IGoogleHealthSyncCoordinator coordinator,
     IConnectorConfigurationService connectorConfigurations,
+    IConnectorSyncCursorStore cursorStore,
     ITenantAccessor tenantAccessor,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
@@ -38,6 +39,7 @@ public sealed class GoogleHealthConnectorService(
     // families via IConnectorPublisher, which Google Health never publishes through — so its
     // own resume point is persisted here instead of relying on (and bypassing) the base one.
     private const string LastSyncedToKey = "lastSyncedTo";
+    public const string RuntimeStateResource = "health";
 
     public override Task<SyncResult> SyncDataAsync(
         GoogleHealthConnectorConfiguration config,
@@ -167,12 +169,20 @@ public sealed class GoogleHealthConnectorService(
                 DateTimeOffset.Parse(config.ImportFrom, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).UtcDateTime.Date,
                 DateTimeKind.Utc));
 
+    private async Task<Dictionary<string, JsonElement>> LoadRuntimeStateAsync(CancellationToken ct)
+    {
+        var cursor = await cursorStore.GetAsync(ConnectorName, RuntimeStateResource, ct);
+        return cursor?.LastGuid is { } json
+            ? JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? [] : [];
+    }
+
+    private Task SaveRuntimeStateAsync(Dictionary<string, JsonElement> state, CancellationToken ct) =>
+        cursorStore.SetAsync(ConnectorName, RuntimeStateResource,
+            new(null, JsonSerializer.Serialize(state)), ct);
+
     private async Task<BackfillState> LoadBackfillStateAsync(CancellationToken ct)
     {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null) return new BackfillState(null, EarliestSupportedDate, false, null);
-        var configuration = JsonDocument.Parse(stored.Configuration.RootElement.GetRawText())
-            .RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        var configuration = await LoadRuntimeStateAsync(ct);
         return new BackfillState(
             ParseStoredDate(configuration, BackfillCursorKey),
             ParseStoredDate(configuration, BackfillFloorKey) ?? EarliestSupportedDate,
@@ -192,11 +202,7 @@ public sealed class GoogleHealthConnectorService(
 
     private async Task SaveBackfillStateAsync(BackfillState state, CancellationToken ct)
     {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        var configuration = stored is null
-            ? []
-            : JsonDocument.Parse(stored.Configuration.RootElement.GetRawText())
-                .RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        var configuration = await LoadRuntimeStateAsync(ct);
         configuration[BackfillCursorKey] = state.CursorDate is { } cursor
             ? JsonSerializer.SerializeToElement(cursor.UtcDateTime.ToString("o"))
             : JsonSerializer.SerializeToElement<string?>(null);
@@ -206,8 +212,7 @@ public sealed class GoogleHealthConnectorService(
             configuration[BackfillChunkDaysKey] = JsonSerializer.SerializeToElement(chunkDays);
         else
             configuration.Remove(BackfillChunkDaysKey);
-        using var updated = JsonSerializer.SerializeToDocument(configuration);
-        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
+        await SaveRuntimeStateAsync(configuration, ct);
     }
 
     private async Task TryReduceBackfillWindowAsync(GoogleHealthSyncWindow window)
@@ -230,27 +235,12 @@ public sealed class GoogleHealthConnectorService(
         }
     }
 
-    private async Task<DateTime?> LoadWatermarkAsync(CancellationToken ct)
-    {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null) return null;
-        using var document = JsonDocument.Parse(stored.Configuration.RootElement.GetRawText());
-        if (!document.RootElement.TryGetProperty(LastSyncedToKey, out var element) ||
-            element.ValueKind != JsonValueKind.String)
-            return null;
-        return DateTime.TryParse(element.GetString(), CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var value)
-            ? value
-            : null;
-    }
+    private async Task<DateTime?> LoadWatermarkAsync(CancellationToken ct) =>
+        ParseStoredDate(await LoadRuntimeStateAsync(ct), LastSyncedToKey)?.UtcDateTime;
 
     private async Task PersistWatermarkAsync(DateTimeOffset to, CancellationToken ct)
     {
-        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        var configuration = stored is null
-            ? []
-            : JsonDocument.Parse(stored.Configuration.RootElement.GetRawText())
-                .RootElement.Deserialize<Dictionary<string, JsonElement>>() ?? [];
+        var configuration = await LoadRuntimeStateAsync(ct);
         // Never move the resume point backwards: a manual/admin resync of an older window must
         // not widen every later periodic sync back into a re-crawl of everything since.
         if (configuration.TryGetValue(LastSyncedToKey, out var existing) &&
@@ -260,8 +250,7 @@ public sealed class GoogleHealthConnectorService(
             existingValue >= to.UtcDateTime)
             return;
         configuration[LastSyncedToKey] = JsonSerializer.SerializeToElement(to.UtcDateTime.ToString("o"));
-        using var updated = JsonSerializer.SerializeToDocument(configuration);
-        await connectorConfigurations.SaveConfigurationAsync(ConnectorName, updated, ct: ct);
+        await SaveRuntimeStateAsync(configuration, ct);
     }
 
     protected override async Task<SyncResult> PerformSyncInternalAsync(
@@ -271,8 +260,7 @@ public sealed class GoogleHealthConnectorService(
     {
         var result = new SyncResult();
         var tenantId = tenantAccessor.TenantId;
-        var gate = coordinator.Gate(tenantId);
-        await gate.WaitAsync(cancellationToken);
+        await using var gate = await coordinator.AcquireAsync(tenantId, cancellationToken);
         try
         {
             config = await configurationLoader.LoadForTenantAsync(cancellationToken);
@@ -287,7 +275,7 @@ public sealed class GoogleHealthConnectorService(
                 return Complete(result);
             }
 
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.RefreshingSession);
+            await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var session = await SessionAsync(config, cancellationToken);
             var active = selected
                 .Where(type => session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
@@ -298,7 +286,7 @@ public sealed class GoogleHealthConnectorService(
 
             var now = DateTimeOffset.UtcNow;
             var window = await ResolveWindowAsync(request, config, now, cancellationToken);
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
+            await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
 
             if (!window.IsManaged)
             {
@@ -387,7 +375,7 @@ public sealed class GoogleHealthConnectorService(
         }
         finally
         {
-            gate.Release();
+            await coordinator.CompleteScheduledAsync(tenantId);
         }
     }
 
@@ -448,7 +436,7 @@ public sealed class GoogleHealthConnectorService(
             logger.LogInformation(
                 "Google Health access token was rejected for tenant {TenantId}; refreshing once",
                 tenantId);
-            coordinator.Report(tenantId, GoogleHealthSyncPhase.RefreshingSession);
+            await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.RefreshingSession);
             var refreshed = await SessionAsync(config, ct, forceRefresh: true);
             RestoreCounts();
             try
@@ -494,10 +482,10 @@ public sealed class GoogleHealthConnectorService(
             {
                     reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
                     stage = "google_read";
-                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
-                    void PageRead(int pages)
+                    await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
+                    async Task PageRead(int pages)
                     {
-                        coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+                        await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
                     }
                     if (type == "sleep")
                         await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
@@ -545,10 +533,10 @@ public sealed class GoogleHealthConnectorService(
                             await writer.WriteAsync(unique, [], config.BatchSize, ct);
                             AddCount(result, type, unique.Length);
                         }
-                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+                    await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
                     stage = "native_reconciliation_complete";
                     await writer.CompleteReconciliationAsync(reconciliationRun, ct);
-                    coordinator.Report(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
+                    await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);
             }
             catch (Exception ex)
             {

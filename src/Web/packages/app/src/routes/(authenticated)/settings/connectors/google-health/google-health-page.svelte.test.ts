@@ -231,9 +231,17 @@ describe("Google Health connector page", () => {
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByText("Body measurement", { exact: true }).click();
     await page.getByRole("checkbox", { name: "Import Weight" }).click();
-    await page
+    const saveButton = page
       .getByRole("button", { name: "Save import settings", exact: true })
-      .click();
+      .element() as HTMLButtonElement;
+    saveButton.form!.dispatchEvent(
+      new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        submitter: saveButton,
+      })
+    );
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
       expect.objectContaining({ dataTypes: ["steps"] })
     );
@@ -267,9 +275,17 @@ describe("Google Health connector page", () => {
     render(GoogleHealthPage);
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByLabelText("Import data from").fill("2020-01-01");
-    await page
+    const saveButton = page
       .getByRole("button", { name: "Save import settings", exact: true })
-      .click();
+      .element() as HTMLButtonElement;
+    saveButton.form!.dispatchEvent(
+      new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        submitter: saveButton,
+      })
+    );
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
       expect.objectContaining({
         dataTypes: [],
@@ -440,10 +456,19 @@ describe("Google Health connector page", () => {
       .element(page.getByText("Historical import progress", { exact: true }))
       .toBeVisible();
     await expect
-      .element(page.getByText("Synchronized back through 2025-06-01.", { exact: false }))
+      .element(
+        page.getByText("Synchronized back through 2025-06-01.", {
+          exact: false,
+        })
+      )
       .toBeVisible();
     await expect
-      .element(page.getByText("Each sync refreshes today and imports one older calendar month.", { exact: false }))
+      .element(
+        page.getByText(
+          "Each sync refreshes today and imports one older calendar month.",
+          { exact: false }
+        )
+      )
       .toBeVisible();
   });
 

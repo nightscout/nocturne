@@ -46,8 +46,14 @@ public sealed class GoogleHealthAuthTokenProvider(
         {
             try
             {
-                storedSessions[tenantId] = FromCache(cached);
-                return;
+                var cachedSession = FromCache(cached);
+                if (cachedSession.RefreshToken == session.RefreshToken &&
+                    cachedSession.Scopes.Order(StringComparer.Ordinal).SequenceEqual(session.Scopes.Order(StringComparer.Ordinal)))
+                {
+                    storedSessions[tenantId] = cachedSession;
+                    return;
+                }
+                InvalidateToken();
             }
             catch (GoogleHealthException)
             {

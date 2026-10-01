@@ -17,14 +17,15 @@ public interface IGoogleHealthService
 
 public interface IGoogleHealthSyncCoordinator
 {
-    SemaphoreSlim Gate(Guid tenantId);
-    void Report(
+    Task<IAsyncDisposable?> AcquireAsync(Guid tenantId, CancellationToken ct, TimeSpan? timeout = null);
+    Task ReportAsync(
         Guid tenantId,
         GoogleHealthSyncPhase phase,
         string? dataType = null,
         int? completedDataTypes = null,
         int? totalDataTypes = null,
         int? pagesRead = null);
+    Task CompleteScheduledAsync(Guid tenantId);
 }
 
 public interface IGoogleHealthReadingWriter

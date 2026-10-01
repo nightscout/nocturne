@@ -14,8 +14,19 @@ public sealed class GoogleHealthWorker(
 {
     private const string ConnectorId = "googlehealth";
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        ProcessRequestsAsync(stoppingToken);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await ProcessRequestsAsync(stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Google Health queue polling failed; durable requests will be retried");
+                await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
+            }
+        }
+    }
 
     private async Task ProcessRequestsAsync(CancellationToken stoppingToken)
     {
@@ -23,7 +34,8 @@ public sealed class GoogleHealthWorker(
         {
             await foreach (var tenantId in coordinator.ReadRequestsAsync(stoppingToken))
             {
-                if (!coordinator.StartQueued(tenantId)) continue;
+                await using var claim = await coordinator.ClaimWorkerAsync(tenantId, stoppingToken);
+                if (claim is null || !await coordinator.StartQueuedAsync(tenantId, stoppingToken)) continue;
                 try
                 {
                     using var listing = scopes.CreateScope();
@@ -46,7 +58,10 @@ public sealed class GoogleHealthWorker(
                         "Queued Google Health sync failed for tenant {TenantId} with code {Code} at stage {Stage}. Exception: {Message}",
                         tenantId, error?.Message ?? "internal_sync", error?.Stage ?? "worker", ex.Message);
                 }
-                finally { coordinator.Complete(tenantId); }
+                finally
+                {
+                    if (!stoppingToken.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
+                }
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
@@ -83,6 +98,7 @@ public sealed class GoogleHealthWorker(
             logger.LogInformation(
                 "Google Health worker sync for tenant {TenantId} ({Slug}) was not started because another run is already active",
                 id, slug);
+            await using var pending = await coordinator.AcquireAsync(id, ct);
             return;
         }
 

@@ -48,7 +48,7 @@ public class GoogleHealthClientTests
     }
 
     [Fact]
-    public async Task Skips_a_fractional_heart_rate_without_failing_the_page()
+    public async Task Rejects_a_mixed_malformed_page_before_reconciliation_can_use_it()
     {
         var handler = new StubHandler(_ => Json("""
             {"dataPoints":[
@@ -58,15 +58,13 @@ public class GoogleHealthClientTests
             """));
         var client = new GoogleHealthClient(new HttpClient(handler));
 
-        var readings = await ReadAllAsync(client.ReadPagesAsync("token", "heart-rate",
-            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
-
-        Assert.Single(readings);
-        Assert.Equal(73, readings[0].Value);
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync("token", "heart-rate",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default)));
+        Assert.Equal("invalid_google_data", error.Message);
     }
 
     [Fact]
-    public async Task Entirely_out_of_range_page_produces_no_reconciliation_identifiers()
+    public async Task Rejects_unrepresentable_samples_before_reconciliation()
     {
         var handler = new StubHandler(_ => Json("""
             {"dataPoints":[
@@ -78,9 +76,9 @@ public class GoogleHealthClientTests
 
         foreach (var type in new[] { "heart-rate", "steps" })
         {
-            var readings = await ReadAllAsync(client.ReadPagesAsync("token", type,
-                DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
-            Assert.Empty(readings);
+            var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync("token", type,
+                DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default)));
+            Assert.Equal("invalid_google_data", error.Message);
         }
     }
 

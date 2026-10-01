@@ -147,7 +147,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
 
     public async IAsyncEnumerable<IReadOnlyCollection<SleepSession>> ReadSleepPagesAsync(
         string token, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
-        Action<int>? onPageRead = null)
+        Func<int, Task>? onPageRead = null)
     {
         var filter = $"sleep.interval.end_time >= \"{FormatFilterTime(from)}\" AND sleep.interval.end_time < \"{FormatFilterTime(to)}\"";
         var root = $"https://health.googleapis.com/v4/users/me/dataTypes/sleep/dataPoints:reconcile?pageSize=25&filter={Uri.EscapeDataString(filter)}";
@@ -176,19 +176,13 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        try
-                        {
-                            var session = ParseSleep(item);
-                            if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
-                                continue;
-                            sessions.Add(session);
-                        }
-                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
-                        {
-                        }
+                        var session = ParseSleep(item);
+                        if (session.EndMills < from.ToUnixTimeMilliseconds() || session.EndMills >= to.ToUnixTimeMilliseconds())
+                            continue;
+                        sessions.Add(session);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                onPageRead?.Invoke(page + 1);
+                if (onPageRead is not null) await onPageRead(page + 1);
             }
             catch (GoogleHealthException) { throw; }
             catch (Exception ex) when (ex is JsonException or InvalidOperationException)
@@ -204,7 +198,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
 
     public async IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> ReadPagesAsync(
         string token, string type, DateTimeOffset from, DateTimeOffset to, [EnumeratorCancellation] CancellationToken ct,
-        Action<int>? onPageRead = null)
+        Func<int, Task>? onPageRead = null)
     {
         var field = type == "steps" ? "steps.interval.start_time" : $"{type.Replace('-', '_')}.sample_time.physical_time";
         var filter = $"{field} >= \"{FormatFilterTime(from)}\" AND {field} < \"{FormatFilterTime(to)}\"";
@@ -234,19 +228,13 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 if (json.RootElement.TryGetProperty("dataPoints", out var data))
                     foreach (var item in data.EnumerateArray())
                     {
-                        try
-                        {
-                            var point = Parse(type, item);
-                            if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
-                                continue;
-                            points.Add(point);
-                        }
-                        catch (GoogleHealthException ex) when (ex.Message is "invalid_google_data" or "unexpected_time_range")
-                        {
-                        }
+                        var point = Parse(type, item);
+                        if (point.Mills < from.ToUnixTimeMilliseconds() || point.Mills >= to.ToUnixTimeMilliseconds())
+                            continue;
+                        points.Add(point);
                     }
                 pageToken = json.RootElement.TryGetProperty("nextPageToken", out var next) ? next.GetString() ?? "" : "";
-                onPageRead?.Invoke(page + 1);
+                if (onPageRead is not null) await onPageRead(page + 1);
             }
             catch (GoogleHealthException)
             {
