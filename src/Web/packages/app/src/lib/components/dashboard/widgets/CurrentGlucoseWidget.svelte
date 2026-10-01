@@ -77,13 +77,13 @@
 {#snippet lastReading()}
   {#if !isLoading}
     {#if isDisconnected}
-      <p class="flex items-center gap-1.5 text-sm font-medium text-destructive">
+      <p class="flex items-center gap-1.5 text-sm font-medium whitespace-nowrap text-destructive">
         <WifiOff class="size-3.5" aria-hidden="true" />
         Connection Error
       </p>
     {:else}
       <p
-        class="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums"
+        class="flex items-center gap-1.5 text-sm whitespace-nowrap text-muted-foreground tabular-nums"
         title={time(lastUpdated)}
       >
         {#if isStale}
