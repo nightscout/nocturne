@@ -74,7 +74,31 @@
   </span>
 {/snippet}
 
-<WidgetCard title="Current Glucose">
+{#snippet lastReading()}
+  {#if !isLoading}
+    {#if isDisconnected}
+      <p class="flex items-center gap-1.5 text-sm font-medium text-destructive">
+        <WifiOff class="size-3.5" aria-hidden="true" />
+        Connection Error
+      </p>
+    {:else}
+      <p
+        class="flex items-center gap-1.5 text-sm text-muted-foreground tabular-nums"
+        title={time(lastUpdated)}
+      >
+        {#if isStale}
+          <History class="size-3.5" aria-hidden="true" />
+          <span class="sr-only">Stale reading</span>
+        {:else}
+          <Wifi class="size-3.5" aria-hidden="true" />
+        {/if}
+        {minutesAgo(lastUpdated, now)}
+      </p>
+    {/if}
+  {/if}
+{/snippet}
+
+<WidgetCard title="Current Glucose" subtitleSnippet={lastReading}>
   <div class="flex flex-col gap-3">
     <!-- The dashboard header hands this mark over while the widget carries the reading;
          see routes/(authenticated)/+page.svelte. -->
@@ -100,60 +124,36 @@
       />
     </div>
 
-    <div class="flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
-      <div class="flex items-center gap-3">
-        {#if !isLoading && !isStale}
-          <p class="flex items-baseline gap-1.5 tabular-nums">
-            <span class="font-medium">{formatGlucoseDelta(realtimeStore.bgDelta, units)}</span>
-            <span class="text-xs text-muted-foreground">{unitLabel}</span>
-          </p>
-        {/if}
-
-        {#await batteryStatusPromise then currentStatus}
-          {#if currentStatus?.min && Object.keys(currentStatus.devices ?? {}).length > 0}
-            {@const BatteryIcon = batteryIcon(currentStatus.level)}
-            <span
-              class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium {currentStatus.status ===
-              'urgent'
-                ? 'bg-destructive/20 text-destructive'
-                : currentStatus.status === 'warn'
-                  ? 'bg-warning/20 text-warning'
-                  : 'bg-success/20 text-success'}"
-            >
-              {#if currentStatus.min.isCharging}
-                <BatteryCharging class="size-3" aria-hidden="true" />
-              {:else}
-                <BatteryIcon class="size-3" aria-hidden="true" />
-              {/if}
-              {currentStatus.display}
-            </span>
-          {/if}
-        {:catch}
-          <!-- The battery chip is optional; the reading does not wait on it. -->
-        {/await}
-      </div>
-
-      {#if !isLoading}
-        {#if isDisconnected}
-          <p class="ml-auto flex items-center gap-1.5 font-medium text-destructive">
-            <WifiOff class="size-3.5" aria-hidden="true" />
-            Connection Error
-          </p>
-        {:else}
-          <p
-            class="ml-auto flex items-center gap-1.5 text-muted-foreground tabular-nums"
-            title={time(lastUpdated)}
-          >
-            {#if isStale}
-              <History class="size-3.5" aria-hidden="true" />
-              <span class="sr-only">Stale reading</span>
-            {:else}
-              <Wifi class="size-3.5" aria-hidden="true" />
-            {/if}
-            {minutesAgo(lastUpdated, now)}
-          </p>
-        {/if}
+    <div class="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      {#if !isLoading && !isStale}
+        <p class="flex items-baseline gap-1.5 tabular-nums">
+          <span class="font-medium">{formatGlucoseDelta(realtimeStore.bgDelta, units)}</span>
+          <span class="text-xs text-muted-foreground">{unitLabel}</span>
+        </p>
       {/if}
+
+      {#await batteryStatusPromise then currentStatus}
+        {#if currentStatus?.min && Object.keys(currentStatus.devices ?? {}).length > 0}
+          {@const BatteryIcon = batteryIcon(currentStatus.level)}
+          <span
+            class="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-medium {currentStatus.status ===
+            'urgent'
+              ? 'bg-destructive/20 text-destructive'
+              : currentStatus.status === 'warn'
+                ? 'bg-warning/20 text-warning'
+                : 'bg-success/20 text-success'}"
+          >
+            {#if currentStatus.min.isCharging}
+              <BatteryCharging class="size-3" aria-hidden="true" />
+            {:else}
+              <BatteryIcon class="size-3" aria-hidden="true" />
+            {/if}
+            {currentStatus.display}
+          </span>
+        {/if}
+      {:catch}
+        <!-- The battery chip is optional; the reading does not wait on it. -->
+      {/await}
     </div>
   </div>
 </WidgetCard>
