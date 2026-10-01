@@ -9,8 +9,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Health.GoogleHealth;
+using Nocturne.API.Services.Health;
+using Nocturne.API.Services.Realtime;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Contracts.Health;
+using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Sleep;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
@@ -40,6 +43,47 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    [Fact]
+    public async Task Minute_averages_use_half_open_utc_ranges_and_preserve_raw_tenant_data()
+    {
+        await using var db = Context();
+        db.TenantId = tenantId;
+        var start = from.AddSeconds(10).UtcDateTime;
+        var end = from.AddMinutes(2).UtcDateTime;
+        foreach (var (timestamp, bpm, deleted) in new[]
+        {
+            (start.AddMilliseconds(-1), 200, false),
+            (start, 60, false),
+            (from.AddSeconds(30).UtcDateTime, 65, false),
+            (from.AddSeconds(40).UtcDateTime, 200, true),
+            (from.AddMinutes(1).AddSeconds(10).UtcDateTime, 80, false),
+            (end.AddMilliseconds(-1), 90, false),
+            (end, 200, false)
+        })
+            db.HeartRates.Add(new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = timestamp, Bpm = bpm,
+                DeletedAt = deleted ? DateTime.UtcNow : null, DataSource = GoogleHealthReadingWriter.Source
+            });
+        await db.SaveChangesAsync();
+        db.TenantId = otherTenantId;
+        db.HeartRates.Add(new HeartRateEntity
+        {
+            Id = Guid.NewGuid(), Timestamp = start, Bpm = 200, DataSource = GoogleHealthReadingWriter.Source
+        });
+        await db.SaveChangesAsync();
+        await UseTenantAsync(db, tenantId);
+        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
+
+        var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(start, end)).ToArray();
+
+        Assert.Equal([from.UtcDateTime, from.AddMinutes(1).UtcDateTime], averages.Select(row => row.Timestamp));
+        Assert.All(averages, row => Assert.Equal(DateTimeKind.Utc, row.Timestamp.Kind));
+        Assert.Equal([63, 85], averages.Select(row => row.Bpm));
+        Assert.Equal(7, await db.HeartRates.IgnoreQueryFilters().Where(row => row.TenantId == tenantId).CountAsync());
+    }
 
     [Fact]
     public async Task Writer_uses_existing_native_tables_and_preserves_empty_types_and_other_tenants()
@@ -198,6 +242,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         try
         {
             Assert.Null(await second.AcquireAsync(tenantId, default, TimeSpan.Zero));
+            Assert.False(await second.QueueAsync(tenantId, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
             await using var unrelated = await second.AcquireAsync(otherTenantId, default, TimeSpan.Zero);
             Assert.NotNull(unrelated);
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));

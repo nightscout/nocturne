@@ -257,6 +257,24 @@ public class GoogleHealthTests
         Assert.Null(await coordinator.ProgressAsync(tenantId, default));
     }
 
+    [Fact]
+    public async Task Queue_does_not_block_scheduled_progress_and_replaces_only_abandoned_snapshots()
+    {
+        var coordinator = new GoogleHealthCoordinator();
+        var tenant = Guid.NewGuid();
+        var operation = await coordinator.AcquireAsync(tenant, default);
+        try
+        {
+            await coordinator.ReportAsync(tenant, GoogleHealthSyncPhase.Reading);
+            Assert.False(await coordinator.QueueAsync(tenant, 4, default).WaitAsync(TimeSpan.FromSeconds(5)));
+            await coordinator.ReportAsync(tenant, GoogleHealthSyncPhase.Integrating).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(GoogleHealthSyncPhase.Integrating, (await coordinator.ProgressAsync(tenant, default))!.Phase);
+        }
+        finally { await operation!.DisposeAsync(); }
+        Assert.True(await coordinator.QueueAsync(tenant, 4, default));
+        Assert.True((await coordinator.ProgressAsync(tenant, default))!.WorkerOwned);
+    }
+
     [Theory]
     [InlineData("http://example.com/settings/connectors/google-health/callback")]
     [InlineData("https://192.168.2.238/settings/connectors/google-health/callback")]

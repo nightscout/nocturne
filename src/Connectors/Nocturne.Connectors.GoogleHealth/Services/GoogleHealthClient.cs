@@ -375,7 +375,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             if (end <= start) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
 
             var stages = new List<SleepStageInterval>();
-            if (payload.TryGetProperty("stages", out var stageData) && stageData.ValueKind == JsonValueKind.Array)
+            if (payload.TryGetProperty("stages", out var stageData))
             {
                 var ordinal = 0;
                 foreach (var stage in stageData.EnumerateArray())

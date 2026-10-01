@@ -149,8 +149,10 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
 
     internal async Task<bool> QueueAsync(Guid tenantId, int totalDataTypes, CancellationToken ct)
     {
+        await using var operation = await AcquireAsync(tenantId, ct, TimeSpan.Zero);
+        if (operation is null) return false;
         await using var state = await AcquireKeyAsync(tenantId, StateLock, ct);
-        if (await ProgressAsync(tenantId, ct) is not null) return false;
+        if (await ReadProgressAsync(tenantId, ct) is { WorkerOwned: true }) return false;
         await WriteProgressAsync(tenantId, new(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0, true), ct);
         if (scopes is null) requests.Writer.TryWrite(tenantId);
         return true;

@@ -15,6 +15,34 @@ public class GoogleHealthClientTests
     [InlineData("{}")]
     [InlineData("42")]
     [InlineData("\"malformed\"")]
+    [InlineData("false")]
+    public async Task Sleep_reader_rejects_non_array_stages_before_yielding_a_session(string value)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json($$$"""
+            {"dataPoints":[{"name":"night-1","sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "stages":{{{value}}}
+            }}]}
+            """))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var yielded = 0;
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                yielded += page.Count;
+        });
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("42")]
+    [InlineData("\"malformed\"")]
     [InlineData("true")]
     public async Task Inventory_rejects_non_array_data_points(string value)
     {
