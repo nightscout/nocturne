@@ -249,6 +249,37 @@ describe("Google Health connector page", () => {
     expect(googleHealthMocks.disconnect).not.toHaveBeenCalled();
   });
 
+  it("preserves a consumed import date when saving other settings", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        importFrom: undefined,
+        backfillComplete: true,
+      })
+    );
+    render(GoogleHealthPage);
+    await expect
+      .element(
+        page.getByRole("button", { name: "Save import settings", exact: true })
+      )
+      .toBeEnabled();
+    const saveButton = page
+      .getByRole("button", { name: "Save import settings", exact: true })
+      .element() as HTMLButtonElement;
+    saveButton.form!.dispatchEvent(
+      new SubmitEvent("submit", {
+        bubbles: true,
+        cancelable: true,
+        submitter: saveButton,
+      })
+    );
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ importFrom: null })
+    );
+  });
+
   it("saves an older history date and an empty selection without reconnecting", async () => {
     googleHealthMocks.status
       .mockResolvedValueOnce(

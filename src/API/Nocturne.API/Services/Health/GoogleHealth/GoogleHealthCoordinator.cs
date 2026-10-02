@@ -20,6 +20,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     private const int StateLock = 0x474853;
     private const int WorkerLock = 0x474857;
     private const string ProgressKey = "googleHealthProgress";
+    private const string RequestChannel = "nocturne_google_health_requests";
     internal sealed record Flow(string State, string Verifier, Guid SubjectId, string Settings, DateTimeOffset Expires);
     internal sealed record SyncProgress(GoogleHealthSyncPhase Phase, string? DataType,
         int CompletedDataTypes, int TotalDataTypes, int PagesRead, bool WorkerOwned = false);
@@ -155,6 +156,13 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         if (await ReadProgressAsync(tenantId, ct) is { WorkerOwned: true }) return false;
         await WriteProgressAsync(tenantId, new(GoogleHealthSyncPhase.Queued, null, 0, totalDataTypes, 0, true), ct);
         if (scopes is null) requests.Writer.TryWrite(tenantId);
+        else
+        {
+            using var scope = TenantScope(tenantId);
+            var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_notify({RequestChannel}, {tenantId.ToString()})", ct);
+        }
         return true;
     }
 
@@ -167,12 +175,73 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         }
         while (!ct.IsCancellationRequested)
         {
-            using var scope = scopes.CreateScope();
-            var tenants = await scope.ServiceProvider.GetRequiredService<ITenantService>().GetAllAsync(ct);
-            foreach (var tenant in tenants.Where(tenant => tenant.IsActive))
-                if (await ReadProgressAsync(tenant.Id, ct) is { WorkerOwned: true })
-                    yield return tenant.Id;
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            NpgsqlConnection connection;
+            try { connection = await OpenRequestListenerAsync(ct); }
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is NpgsqlException or IOException)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                continue;
+            }
+            await using (connection)
+            {
+                connection.Notification += (_, notification) =>
+                {
+                    if (Guid.TryParse(notification.Payload, out var tenant)) requests.Writer.TryWrite(tenant);
+                };
+                var recoverAt = DateTimeOffset.MinValue;
+                while (!ct.IsCancellationRequested)
+                {
+                    if (DateTimeOffset.UtcNow >= recoverAt)
+                    {
+                        // RLS requires tenant-pinned reads. Sweep only at startup/reconnect and
+                        // every 15 minutes; normal dispatch is driven by durable queue notifications.
+                        using var scope = scopes.CreateScope();
+                        var tenants = await scope.ServiceProvider.GetRequiredService<ITenantService>().GetAllAsync(ct);
+                        foreach (var tenant in tenants.Where(tenant => tenant.IsActive))
+                            if (await ReadProgressAsync(tenant.Id, ct) is { WorkerOwned: true })
+                                yield return tenant.Id;
+                        recoverAt = DateTimeOffset.UtcNow.AddMinutes(15);
+                    }
+                    while (requests.Reader.TryRead(out var tenant))
+                    {
+                        using var scope = TenantScope(tenant);
+                        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+                        if (await db.Tenants.AnyAsync(row => row.Id == tenant && row.IsActive, ct))
+                            yield return tenant;
+                    }
+                    try
+                    {
+                        await connection.WaitAsync(
+                            Math.Max(1, (int)(recoverAt - DateTimeOffset.UtcNow).TotalMilliseconds), ct);
+                    }
+                    catch (Exception ex) when (!ct.IsCancellationRequested && ex is NpgsqlException or IOException)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private async Task<NpgsqlConnection> OpenRequestListenerAsync(CancellationToken ct)
+    {
+        using var scope = scopes!.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString())
+        {
+            Pooling = false
+        }.ConnectionString);
+        try
+        {
+            await connection.OpenAsync(ct);
+            await using var command = new NpgsqlCommand($"LISTEN {RequestChannel}", connection);
+            await command.ExecuteNonQueryAsync(ct);
+            return connection;
+        }
+        catch
+        {
+            await connection.DisposeAsync();
+            throw;
         }
     }
 

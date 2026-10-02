@@ -302,6 +302,34 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         Assert.True(await second.QueueAsync(tenantId, 4, default));
     }
 
+    [Fact]
+    public async Task Durable_queue_notifications_dispatch_without_repeated_tenant_sweeps()
+    {
+        await SeedConnectorAsync();
+        using var provider = ReplicaServices();
+        var tenants = Mock.Get(provider.GetRequiredService<ITenantService>());
+        tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var listener = new GoogleHealthCoordinator(scopes);
+        var sender = new GoogleHealthCoordinator(scopes);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await using var requests = listener.ReadRequestsAsync(cancellation.Token).GetAsyncEnumerator();
+        var next = requests.MoveNextAsync().AsTask();
+        while (tenants.Invocations.Count == 0) await Task.Delay(10, cancellation.Token);
+        Assert.False(next.IsCompleted);
+
+        Assert.True(await sender.QueueAsync(tenantId, 1, cancellation.Token));
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        await sender.CompleteAsync(tenantId);
+        next = requests.MoveNextAsync().AsTask();
+        Assert.True(await sender.QueueAsync(tenantId, 1, cancellation.Token));
+        Assert.True(await next.WaitAsync(cancellation.Token));
+        Assert.Equal(tenantId, requests.Current);
+        tenants.Verify(service => service.GetAllAsync(It.IsAny<CancellationToken>()), Times.Once);
+        await sender.CompleteAsync(tenantId);
+    }
+
     private async Task SeedConnectorAsync()
     {
         await using var db = Context();

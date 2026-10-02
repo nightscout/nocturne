@@ -237,9 +237,7 @@
       `${location.origin}/settings/connectors/google-health/callback`;
     selected = status.configured ? (status.selectedTypes ?? []) : selected;
     historyDays = status.historyDays ?? 7;
-    importFrom =
-      day(status.importFrom) ||
-      day(new Date(Date.now() - (status.historyDays ?? 7) * 86400000));
+    importFrom = day(status.importFrom);
     if (status.connected && loadInventory && !status.isSyncing)
       void loadPreview();
   }

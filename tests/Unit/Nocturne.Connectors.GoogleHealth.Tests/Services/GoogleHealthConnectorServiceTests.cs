@@ -251,6 +251,29 @@ public class GoogleHealthConnectorServiceTests
         Assert.Equal(firstMonth.AddMonths(-1), requestedFrom[3].UtcDateTime.Date);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Failed_initial_import_does_not_claim_backfill_progress(bool failHistorical, bool noHistory)
+    {
+        var reads = 0;
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : ++reads == (failHistorical ? 2 : 1)
+                ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+                : Json("""{"dataPoints":[]}"""));
+        var config = fixture.Configuration();
+        if (noHistory) config.ImportFrom = DateTimeOffset.UtcNow.Date.ToString("O");
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+
+        Assert.False(result.Success);
+        using var stored = JsonDocument.Parse(fixture.StoredConfiguration);
+        Assert.False(stored.RootElement.TryGetProperty("backfillCursorDate", out var cursor) && cursor.ValueKind == JsonValueKind.String);
+        Assert.False(stored.RootElement.TryGetProperty("backfillComplete", out var complete) && complete.ValueKind == JsonValueKind.True);
+    }
+
     [Fact]
     public async Task Failed_historical_window_is_halved_for_the_next_attempt()
     {

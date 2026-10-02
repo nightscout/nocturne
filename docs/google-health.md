@@ -187,7 +187,9 @@ and purge per tenant. Each replica processes up to four manual imports concurren
 for different tenants while holding each worker claim until the import finishes.
 
 Manual requests and progress use the existing `sync_cursors` column. Workers
-check the durable queue every 15 seconds; one worker owns each request. An
+receive PostgreSQL notifications when requests are durably queued; one worker
+owns each request. Tenant-pinned recovery scans run at startup, on listener
+reconnection, and every 15 minutes to recover missed notifications. An
 interrupted worker releases its database session lock, allowing another replica
 to retry the request from the unchanged cursor. Live and historical resume state
 is saved without treating it as a user configuration change.

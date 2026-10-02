@@ -92,8 +92,7 @@ public sealed class GoogleHealthConnectorService(
         if (state.CursorDate is null)
         {
             var floor = ComputeBackfillFloor(config, today);
-            state = new BackfillState(today, floor, floor >= today, null);
-            await SaveBackfillStateAsync(state, ct);
+            state = new BackfillState(today, floor, floor >= today, state.ChunkDays);
         }
         if (state.Complete)
             return new GoogleHealthSyncWindow(today, today, IsBackfillDay: false, IsManaged: true);
@@ -120,11 +119,15 @@ public sealed class GoogleHealthConnectorService(
         var state = await LoadBackfillStateAsync(ct);
         if (state.CursorDate is null)
         {
-            var today = new DateTimeOffset(DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+            var today = window.To;
             var floor = ComputeBackfillFloor(config, today);
-            var complete = floor >= today;
-            await SaveBackfillStateAsync(new BackfillState(today, floor, complete, null), ct);
-            return complete;
+            state = new BackfillState(today, floor, false, state.ChunkDays);
+            if (!window.IsBackfillDay)
+            {
+                var complete = floor >= today;
+                await SaveBackfillStateAsync(state with { Complete = complete }, ct);
+                return complete;
+            }
         }
         if (window.IsBackfillDay)
         {
@@ -330,12 +333,12 @@ public sealed class GoogleHealthConnectorService(
                     await TryReduceBackfillWindowAsync(window);
                     throw;
                 }
-                if (missingConsent.Length == 0)
-                {
-                    var justCompletedBackfill = await AdvanceBackfillStateAsync(window, config, cancellationToken);
-                    if (justCompletedBackfill && !string.IsNullOrWhiteSpace(config.ImportFrom))
-                        await ConsumeImportFromAsync(cancellationToken);
-                }
+            }
+            if (missingConsent.Length == 0)
+            {
+                var justCompletedBackfill = await AdvanceBackfillStateAsync(window, config, cancellationToken);
+                if (justCompletedBackfill && !string.IsNullOrWhiteSpace(config.ImportFrom))
+                    await ConsumeImportFromAsync(cancellationToken);
             }
             return Complete(result, missingConsent.Length == 0
                 ? string.Empty
