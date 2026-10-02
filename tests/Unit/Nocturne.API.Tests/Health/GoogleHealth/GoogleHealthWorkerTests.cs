@@ -77,9 +77,10 @@ public class GoogleHealthWorkerTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Scheduled_run_conflict_keeps_manual_request_until_retry_or_shutdown(bool shutdown)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Scheduled_run_conflict_keeps_manual_request_until_retry_shutdown_or_cancellation(bool shutdown, bool cancel)
     {
         var tenant = Guid.NewGuid();
         var coordinator = new GoogleHealthCoordinator();
@@ -135,8 +136,23 @@ public class GoogleHealthWorkerTests
                 Assert.NotNull(recovered);
                 return;
             }
+            if (cancel) await coordinator.CompleteAsync(tenant);
             await scheduled!.DisposeAsync();
             scheduled = null;
+            if (cancel)
+            {
+                IAsyncDisposable? released;
+                while ((released = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
+                    await Task.Delay(10, timeout.Token);
+                await using (released)
+                {
+                    Assert.Null(await coordinator.ProgressAsync(tenant, timeout.Token));
+                    Assert.False(retried.Task.IsCompleted);
+                    Assert.False(healthUpdated.Task.IsCompleted);
+                    Assert.Equal(1, calls);
+                }
+                return;
+            }
             await retried.Task.WaitAsync(timeout.Token);
             Assert.True((await coordinator.ProgressAsync(tenant, default))!.WorkerOwned);
             Assert.Null(await coordinator.ClaimWorkerAsync(tenant, default));

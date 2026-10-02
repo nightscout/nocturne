@@ -1029,6 +1029,36 @@ public class GoogleHealthTests
         Assert.Equal("sync_queue", error.Stage);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Disconnect_and_purge_cancel_queued_work_before_reconnect(bool purge)
+    {
+        var tenantId = Guid.NewGuid();
+        var coordinator = new GoogleHealthCoordinator();
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json("""{"sub":"account"}"""),
+            _ => Json("{}")
+        }), tenantId, coordinator);
+        await ConnectAsync(service);
+        if (purge) await service.DisconnectAsync(Guid.NewGuid(), default);
+        Assert.True(await coordinator.QueueAsync(tenantId, 1, default));
+        Assert.True((await service.StatusAsync(default)).IsSyncing);
+
+        if (purge) await service.PurgeAsync(Guid.NewGuid(), default);
+        else await service.DisconnectAsync(Guid.NewGuid(), default);
+
+        Assert.False((await service.StatusAsync(default)).IsSyncing);
+        Assert.False(await coordinator.StartQueuedAsync(tenantId, default));
+        await ConnectAsync(service);
+        Assert.True((await service.StatusAsync(default)).Connected);
+        Assert.False((await service.StatusAsync(default)).IsSyncing);
+        Assert.False(await coordinator.StartQueuedAsync(tenantId, default));
+    }
+
     private static async Task ConnectAsync(GoogleHealthService service)
     {
         var subject = Guid.NewGuid();

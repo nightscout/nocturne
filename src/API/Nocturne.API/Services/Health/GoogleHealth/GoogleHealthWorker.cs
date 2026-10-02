@@ -49,8 +49,7 @@ public sealed class GoogleHealthWorker(
                         completed = true;
                         return;
                     }
-                    await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
-                    completed = true;
+                    completed = await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -72,7 +71,7 @@ public sealed class GoogleHealthWorker(
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
     }
 
-    private async Task SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
+    private async Task<bool> SyncTenantAsync(Guid id, string slug, string displayName, CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
@@ -81,6 +80,7 @@ public sealed class GoogleHealthWorker(
         SyncResult result;
         while (true)
         {
+            if (!await coordinator.StartQueuedAsync(id, ct)) return false;
             result = await sync.TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
             if (!result.AlreadyRunning) break;
             logger.LogInformation(
@@ -102,7 +102,7 @@ public sealed class GoogleHealthWorker(
                 lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
                 isHealthy: true,
                 ct: ct);
-            return;
+            return true;
         }
 
         logger.LogError(
@@ -116,5 +116,6 @@ public sealed class GoogleHealthWorker(
             lastErrorAt: now,
             isHealthy: false,
             ct: ct);
+            return true;
     }
 }
