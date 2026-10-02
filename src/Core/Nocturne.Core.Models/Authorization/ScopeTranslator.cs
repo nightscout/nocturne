@@ -120,6 +120,18 @@ public static class ScopeTranslator
     };
 
     /// <summary>
+    /// Whether <paramref name="grantedScopes"/> read everything the legacy <c>*:*:read</c> grants.
+    /// </summary>
+    public static bool GrantsReadEverything(IReadOnlySet<string> grantedScopes) =>
+        ReadEverything.All(required => Scope.Satisfies(grantedScopes, required));
+
+    /// <summary>
+    /// Whether <paramref name="grantedScopes"/> write everything the legacy wildcard write verbs grant.
+    /// </summary>
+    public static bool GrantsWriteEverything(IReadOnlySet<string> grantedScopes) =>
+        WriteEverything.All(required => Scope.Satisfies(grantedScopes, required));
+
+    /// <summary>
     /// Translate a set of legacy Shiro-style permissions into OAuth scopes.
     /// This is used at the auth middleware level so controllers never see trie strings.
     /// </summary>

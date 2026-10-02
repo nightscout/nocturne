@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Nocturne.Core.Constants;
 using Nocturne.Core.Models.Serializers;
 
 namespace Nocturne.Core.Models;
@@ -7,7 +8,6 @@ namespace Nocturne.Core.Models;
 /// Loop notification data model matching the legacy loop.js data structure.
 /// Maintains 1:1 compatibility with the original Nightscout Loop implementation.
 /// </summary>
-/// <seealso cref="LoopSettings"/>
 /// <seealso cref="LoopConfiguration"/>
 /// <seealso cref="LoopProfileSettings"/>
 public class LoopNotificationData
@@ -17,7 +17,7 @@ public class LoopNotificationData
     /// Valid values: "Temporary Override Cancel", "Temporary Override", "Remote Carbs Entry", "Remote Bolus Entry"
     /// </summary>
     [JsonPropertyName("eventType")]
-    public string EventType { get; set; } = string.Empty;
+    public string? EventType { get; set; }
 
     /// <summary>
     /// Notes/comments associated with the notification
@@ -47,30 +47,35 @@ public class LoopNotificationData
     /// Duration in minutes for temporary override
     /// </summary>
     [JsonPropertyName("duration")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? Duration { get; set; }
 
     /// <summary>
     /// Remote carbs amount in grams (used when eventType is "Remote Carbs Entry")
     /// </summary>
     [JsonPropertyName("remoteCarbs")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? RemoteCarbs { get; set; }
 
     /// <summary>
     /// Carb absorption time in hours (used when eventType is "Remote Carbs Entry")
     /// </summary>
     [JsonPropertyName("remoteAbsorption")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? RemoteAbsorption { get; set; }
 
     /// <summary>
     /// Remote bolus amount in units (used when eventType is "Remote Bolus Entry")
     /// </summary>
     [JsonPropertyName("remoteBolus")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? RemoteBolus { get; set; }
 
     /// <summary>
     /// One-time password for secure operations
     /// </summary>
     [JsonPropertyName("otp")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
     public string? Otp { get; set; }
 
     /// <summary>
@@ -78,24 +83,6 @@ public class LoopNotificationData
     /// </summary>
     [JsonPropertyName("created_at")]
     public string? CreatedAt { get; set; }
-}
-
-/// <summary>
-/// Loop settings from user profile, matching the legacy loopSettings structure
-/// </summary>
-public class LoopSettings
-{
-    /// <summary>
-    /// Apple Push Notification device token for the Loop app
-    /// </summary>
-    [JsonPropertyName("deviceToken")]
-    public string? DeviceToken { get; set; }
-
-    /// <summary>
-    /// iOS bundle identifier for the Loop app
-    /// </summary>
-    [JsonPropertyName("bundleIdentifier")]
-    public string? BundleIdentifier { get; set; }
 }
 
 /// <summary>
@@ -120,9 +107,10 @@ public class LoopConfiguration
     public string? DeveloperTeamId { get; set; }
 
     /// <summary>
-    /// APNS environment - "production" or "development"
+    /// APNs server for Loop pushes. Only an explicit <c>"development"</c> selects the sandbox:
+    /// TestFlight and App Store Loop builds hold production tokens, which the sandbox rejects.
     /// </summary>
-    public string PushServerEnvironment { get; set; } = "development";
+    public string PushServerEnvironment { get; set; } = ConnectorDefaults.LoopPushServerEnvironment;
 
     /// <summary>
     /// Optional override URL for APNS server (used for testing)

@@ -210,7 +210,8 @@ public class TandemE2eSyncTests
             .ContainSingle(r => r.Path.Contains("/api/reports/bff/pump-logs/e2e-device-assignment-id")).Subject;
         pumpLogs.Path.Should().Contain("pumperId=pumper-1")
             .And.Contain("startDate=2026-05-14T00%3A00%3A00Z")
-            .And.Contain("endDate=2026-05-18T23%3A59%3A59Z");
+            .And.Contain("endDate=2026-05-18T23%3A59%3A59Z")
+            .And.Contain("eventCodes=");
         pumpLogs.Authorization.Should().Be("Bearer fake-token");
         // The WAF requires same-origin Origin/Referer or it returns 403.
         pumpLogs.Origin.Should().Be("https://source.tandemdiabetes.com");

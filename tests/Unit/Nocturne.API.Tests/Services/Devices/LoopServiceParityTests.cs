@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Nocturne.API.Services.Devices;
@@ -10,27 +11,66 @@ namespace Nocturne.API.Tests.Services.Devices;
 /// </summary>
 public class LoopServiceParityTests
 {
-    private (LoopService service, MockApnsClientFactory factory) CreateLoopService()
+    private (LoopService service, MockApnsClientFactory factory) CreateLoopService(
+        string? pushServerEnvironment = null
+    )
     {
-        var logger = new Mock<ILogger<LoopService>>();
-
-        // Create factory that captures push data
-        var mockFactory = new MockApnsClientFactory();
-
-        // Configure valid APNS credentials for testing
-        var configuration = new LoopConfiguration
+        var settings = new Dictionary<string, string?>
         {
-            ApnsKey = "mock-key",
-            ApnsKeyId = "ABC123DEFG",
-            DeveloperTeamId = "TEAM123456",
-            PushServerEnvironment = "development",
+            ["Loop:ApnsKey"] = "mock-key",
+            ["Loop:ApnsKeyId"] = "ABC123DEFG",
+            ["Loop:DeveloperTeamId"] = "TEAM123456",
         };
-        var options = Options.Create(configuration);
+        if (pushServerEnvironment is not null)
+            settings["Loop:PushServerEnvironment"] = pushServerEnvironment;
 
-        return (new LoopService(logger.Object, options, mockFactory), mockFactory);
+        var configuration = new LoopConfiguration();
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(settings)
+            .Build()
+            .GetSection("Loop")
+            .Bind(configuration);
+
+        var mockFactory = new MockApnsClientFactory();
+        var service = new LoopService(
+            Mock.Of<ILogger<LoopService>>(),
+            Options.Create(configuration),
+            mockFactory
+        );
+        return (service, mockFactory);
     }
 
-    private static LoopSettings CreateValidLoopSettings() =>
+    [Fact]
+    public async Task SendNotificationAsync_DefaultConfiguration_PushesToProduction()
+    {
+        var factory = new MockApnsClientFactory();
+        var service = new LoopService(
+            Mock.Of<ILogger<LoopService>>(),
+            Options.Create(
+                new LoopConfiguration
+                {
+                    ApnsKey = "mock-key",
+                    ApnsKeyId = "ABC123DEFG",
+                    DeveloperTeamId = "TEAM123456",
+                }
+            ),
+            factory
+        );
+
+        var result = await service.SendNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            CreateValidLoopSettings(),
+            "127.0.0.1",
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success, result.Message);
+        Assert.False(factory.LastPush!.SentToDevelopmentServer);
+
+        service.Dispose();
+    }
+
+    private static LoopProfileSettings CreateValidLoopSettings() =>
         new()
         {
             DeviceToken = "test-device-token-1234567890abcdef",
@@ -140,6 +180,65 @@ public class LoopServiceParityTests
 
         // Verify alert message includes reasonDisplay
         Assert.Contains("Exercise Temporary Override", push.Alert);
+
+        service.Dispose();
+    }
+
+    [Parity]
+    [Theory]
+    [InlineData("60.0", "60")]
+    [InlineData("45.5", "45")]
+    [InlineData(" 30min", "30")]
+    public async Task SendNotificationAsync_TemporaryOverride_ParsesDurationLikeParseInt(
+        string duration,
+        string expectedMinutes
+    )
+    {
+        var (service, factory) = CreateLoopService();
+        var data = new LoopNotificationData
+        {
+            EventType = "Temporary Override",
+            Reason = "exercise",
+            ReasonDisplay = "Exercise",
+            Duration = duration,
+        };
+
+        var result = await service.SendNotificationAsync(
+            data,
+            CreateValidLoopSettings(),
+            "127.0.0.1",
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(expectedMinutes, factory.LastPush!.GetProperty("override-duration-minutes"));
+
+        service.Dispose();
+    }
+
+    [Parity]
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("production", false)]
+    [InlineData("development", true)]
+    [InlineData("Development", true)]
+    public async Task SendNotificationAsync_PushesToTheSandboxOnlyWhenDevelopmentIsConfigured(
+        string? pushServerEnvironment,
+        bool expectDevelopmentServer
+    )
+    {
+        var (service, factory) = CreateLoopService(pushServerEnvironment);
+
+        var result = await service.SendNotificationAsync(
+            new LoopNotificationData { EventType = "Temporary Override Cancel" },
+            CreateValidLoopSettings(),
+            "127.0.0.1",
+            CancellationToken.None
+        );
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(expectDevelopmentServer, factory.LastPush!.SentToDevelopmentServer);
 
         service.Dispose();
     }
