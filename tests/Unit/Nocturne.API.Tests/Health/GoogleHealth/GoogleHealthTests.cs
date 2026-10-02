@@ -368,6 +368,7 @@ public class GoogleHealthTests
         options.DataTypes = ["weight", "steps"];
 
         await service.SaveAsync(options, subject, default);
+        Assert.False(store.IsActive);
         var authorization = await service.StartAsync(subject, default);
         var query = QueryHelpers.ParseQuery(new Uri(authorization.Url).Query);
         Assert.Equal("S256", query["code_challenge_method"]);
@@ -381,14 +382,20 @@ public class GoogleHealthTests
         var status = await service.StatusAsync(default);
         Assert.True(status.Configured);
         Assert.True(status.Connected);
+        Assert.True(store.IsActive);
         Assert.Equal("partial_consent", status.ErrorCode);
         Assert.Equal("refresh", store.Secrets["refreshToken"]);
         var accountKey = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("account")));
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
 
         await service.DisconnectAsync(subject, default);
-        Assert.False((await service.StatusAsync(default)).Connected);
+        var disconnected = await service.StatusAsync(default);
+        Assert.False(disconnected.Connected);
+        Assert.True(disconnected.Configured);
+        Assert.False(store.IsActive);
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
+        var reconnect = await service.StartAsync(subject, default);
+        Assert.Contains("client_id=synthetic.apps.googleusercontent.com", reconnect.Url);
     }
 
     [Theory]
@@ -1047,6 +1054,7 @@ public class GoogleHealthTests
         private JsonDocument? configuration;
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase);
         private ConnectorConfigurationResponse? response;
+        public bool? IsActive => response?.IsActive;
 
         private ConnectorSyncCursor? runtimeCursor;
         public IConnectorSyncCursorStore Cursors { get; }

@@ -39,8 +39,7 @@ public sealed class GoogleHealthService(
     private async Task<GoogleHealthOptions?> StoredOptionsOrNullAsync(CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
-        if (stored is null || !stored.IsActive)
-            return null;
+        if (stored is null) return null;
 
         var configuration = await configurationLoader.LoadForTenantAsync(ct);
         DateTimeOffset? importFrom = null;
@@ -95,8 +94,9 @@ public sealed class GoogleHealthService(
     private async Task SaveOptionsAsync(GoogleHealthOptions options, Guid subject, CancellationToken ct)
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
-        configuration["enabled"] = true;
+        configuration["enabled"] = !string.IsNullOrWhiteSpace(secrets.GetValueOrDefault("refreshToken"));
         configuration["clientId"] = options.ClientId;
         configuration["callbackUrl"] = options.CallbackUrl;
         configuration["lookbackDays"] = options.HistoryDays;
@@ -110,10 +110,20 @@ public sealed class GoogleHealthService(
         await connectorConfigurations.SaveConfigurationAsync(
             ConnectorName, document, subject.ToString(), ct);
 
-        var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets["clientSecret"] = options.ClientSecret!;
         await connectorConfigurations.SaveSecretsAsync(
             ConnectorName, secrets, subject.ToString(), ct);
+    }
+
+    private async Task SetEnabledAsync(bool enabled, Guid subject, CancellationToken ct)
+    {
+        var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
+        if (stored?.Configuration is null) return;
+        var configuration = JsonNode.Parse(stored.Configuration.RootElement.GetRawText())!.AsObject();
+        configuration["enabled"] = enabled;
+        using var document = JsonDocument.Parse(configuration.ToJsonString(Json));
+        await connectorConfigurations.SaveConfigurationAsync(
+            ConnectorName, document, subject.ToString(), ct);
     }
 
     private async Task SaveSessionAsync(
@@ -130,10 +140,12 @@ public sealed class GoogleHealthService(
         secrets[AccountKeySecret] = accountKey;
         await connectorConfigurations.SaveSecretsAsync(
             ConnectorName, secrets, subject.ToString(), ct);
+        await SetEnabledAsync(true, subject, ct);
     }
 
     private async Task RemoveSessionAsync(Guid subject, bool removeAccount, CancellationToken ct)
     {
+        await SetEnabledAsync(false, subject, ct);
         var secrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
         secrets.Remove("refreshToken");
         secrets.Remove("grantedScopes");

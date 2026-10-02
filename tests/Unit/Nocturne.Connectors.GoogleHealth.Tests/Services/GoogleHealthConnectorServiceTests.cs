@@ -124,6 +124,27 @@ public class GoogleHealthConnectorServiceTests
     }
 
     [Fact]
+    public async Task Disabled_connector_skips_polling_without_a_refresh_token()
+    {
+        var fixture = new Fixture(_ => throw new InvalidOperationException("Google must not be called"));
+        var config = fixture.Configuration();
+        config.Enabled = false;
+        config.RefreshToken = null;
+        fixture.SetSession(null, "");
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, CancellationToken.None);
+
+        Assert.True(result.Success);
+        fixture.Writer.Verify(value => value.BeginReconciliationAsync(
+            It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+            It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()), Times.Never);
+        fixture.Writer.Verify(value => value.WriteAsync(
+            It.IsAny<IReadOnlyCollection<GoogleHealthReading>>(),
+            It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Sync_fetches_selected_data_and_publishes_to_native_health_services()
     {
         var sampleTime = DateTimeOffset.UtcNow.AddMinutes(-10);
