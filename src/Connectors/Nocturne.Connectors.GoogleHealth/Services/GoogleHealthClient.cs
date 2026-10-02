@@ -420,8 +420,11 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 ? external.GetString()
                 : null;
             var resourceName = ResourceName(point);
-            var originalId = !string.IsNullOrWhiteSpace(resourceName) ? resourceName : externalId;
+            var originalId = !string.IsNullOrWhiteSpace(resourceName) ? resourceName :
+                !string.IsNullOrWhiteSpace(externalId) ? externalId : null;
             originalId ??= Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"sleep|{start:O}|{end:O}")));
+            // SleepSource.Google is shared; its upsert key must distinguish this connector.
+            originalId = "googlehealth:sleep:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(originalId)));
 
             return new SleepSession
             {

@@ -190,9 +190,30 @@ public class GoogleHealthClientTests
         var session = GoogleHealthClient.ParseSleep(document.RootElement);
 
         Assert.Equal(SleepSource.Google, session.Source);
-        Assert.Equal("users/me/dataTypes/sleep/dataPoints/night-1", session.OriginalId);
+        Assert.StartsWith("googlehealth:sleep:", session.OriginalId);
+        Assert.Equal(session.OriginalId, GoogleHealthClient.ParseSleep(document.RootElement).OriginalId);
         Assert.Equal(8 * 60 * 60 * 1000, session.TotalSleepMs);
         Assert.Equal(2, session.Stages!.Count);
+    }
+
+    [Theory]
+    [InlineData("\"dataPointName\":\"shared-night\",", "")]
+    [InlineData("", "\"metadata\":{\"externalId\":\"shared-night\"},")]
+    [InlineData("", "\"metadata\":{\"externalId\":\" \"},")]
+    [InlineData("", "")]
+    public void Sleep_identifiers_are_stable_and_namespaced_for_every_identity_source(string name, string metadata)
+    {
+        using var document = JsonDocument.Parse($$"""
+            { {{name}} "sleep":{ {{metadata}}
+              "interval":{"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T06:00:00Z"}
+            } }
+            """);
+        var first = GoogleHealthClient.ParseSleep(document.RootElement).OriginalId;
+        var second = GoogleHealthClient.ParseSleep(document.RootElement).OriginalId;
+        Assert.StartsWith("googlehealth:sleep:", first);
+        Assert.Equal(first, second);
+        Assert.NotEqual("shared-night", first);
+        Assert.True(first!.Length < 100);
     }
 
     [Fact]

@@ -220,7 +220,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Reimporting_google_sleep_preserves_relational_keys_and_replaces_stages()
+    public async Task Reimporting_and_purging_google_health_sleep_preserves_other_google_sources()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
         await connection.OpenAsync();
@@ -241,24 +241,39 @@ public class GoogleHealthTests
         var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
             Mock.Of<IBodyWeightService>(), sleepService.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance);
         var start = new DateTime(2026, 9, 1, 22, 0, 0, DateTimeKind.Utc);
-        var session = new SleepSession
+        var otherSource = await repository.UpsertSessionAsync(new SleepSession
         {
-            Source = SleepSource.Google, OriginalId = "google-sleep-1", SourceApp = "Google Health",
+            Source = SleepSource.Google, OriginalId = "google-sleep-1", SourceApp = "Google Fit",
             StartTime = start, EndTime = start.AddHours(8),
             Stages = [new SleepStageInterval { StartTime = start, EndTime = start.AddHours(1), Stage = SleepStageType.Light }]
-        };
+        });
+        using var document = JsonDocument.Parse("""
+            {"dataPointName":"google-sleep-1","sleep":{
+              "interval":{"startTime":"2026-09-01T22:00:00Z","endTime":"2026-09-02T06:00:00Z"},
+              "stages":[{"startTime":"2026-09-01T22:00:00Z","endTime":"2026-09-01T23:00:00Z","type":"LIGHT"}]
+            }}
+            """);
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
         await writer.WriteAsync([], [session], 25, default);
-        var first = await db.SleepSessions.AsNoTracking().SingleAsync();
+        var first = await db.SleepSessions.AsNoTracking().SingleAsync(value => value.SourceApp == "Google Health");
         session.Stages = [new SleepStageInterval { StartTime = start, EndTime = start.AddHours(2), Stage = SleepStageType.Deep }];
         await writer.WriteAsync([], [session], 25, default);
-        var second = await db.SleepSessions.Include(value => value.Stages).AsNoTracking().SingleAsync();
+        var second = await db.SleepSessions.Include(value => value.Stages).AsNoTracking()
+            .SingleAsync(value => value.SourceApp == "Google Health");
         Assert.Equal(first.Id, second.Id);
         Assert.Equal(first.CreatedAt, second.CreatedAt);
         var stage = Assert.Single(second.Stages);
         Assert.Equal("Deep", stage.Stage);
         Assert.Equal(first.Id, stage.SleepSessionId);
         Assert.Equal(tenantId, stage.TenantId);
-        Assert.Equal(1, await db.SleepStages.CountAsync());
+        Assert.Equal(2, await db.SleepStages.CountAsync());
+        Assert.Equal(2, await db.SleepSessions.CountAsync());
+        await writer.PurgeAsync(default);
+        var retained = await db.SleepSessions.Include(value => value.Stages).AsNoTracking().SingleAsync();
+        Assert.Equal(otherSource.Id, retained.Id.ToString());
+        Assert.Equal("Google Fit", retained.SourceApp);
+        Assert.Equal("google-sleep-1", retained.OriginalId);
+        Assert.Equal("Light", Assert.Single(retained.Stages).Stage);
     }
 
     [Fact]
