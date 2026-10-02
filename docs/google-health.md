@@ -83,13 +83,16 @@ by Google and covered by the granted scopes can be imported.
   explicitly instead of reporting an incomplete history as complete.
 - The page-by-page reader and reconciliation are the same bounded import
   path used by the connector integration; Google Health does not maintain a
-  second, competing chunking implementation. Each page is written before the
-  next one is requested, so large histories do not have to fit in one request or
-  one in-memory batch.
-- Heart rate is reduced to one average reading per UTC minute before it is
-  written. Google Health commonly returns near-continuous samples;
-  minute buckets keep the native history and reports responsive while retaining
-  a deterministic, idempotent value for every minute.
+  second, competing chunking implementation. Steps, weight and sleep pages are
+  written before the next page is requested. Heart-rate pages are the exception:
+  their samples are accumulated into UTC-minute buckets across the current
+  window so averages remain deterministic across page boundaries, then the
+  resulting readings are written after pagination completes. The 100,000 unique
+  identifier cap also bounds those staged minute buckets; oversized windows are
+  split into smaller periods before the accumulator can grow without bound.
+- Google Health commonly returns near-continuous heart-rate samples. Reducing
+  them to one stable average reading per UTC minute keeps native history and
+  reports responsive while preserving an idempotent value for every minute.
 - An empty result is not an error and is not converted into a zero measurement.
   Unsupported destinations are shown in the inventory but cannot be selected.
 - Disconnecting keeps imported data. Deleting imported Google data is a separate,
