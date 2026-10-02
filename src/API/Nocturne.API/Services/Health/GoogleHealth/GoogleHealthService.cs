@@ -67,8 +67,7 @@ public sealed class GoogleHealthService(
     private async Task<GoogleHealthTokenSession?> StoredSessionAsync(CancellationToken ct)
     {
         var configuration = await configurationLoader.LoadForTenantAsync(ct);
-        if (!configuration.Enabled || string.IsNullOrWhiteSpace(configuration.RefreshToken))
-            return null;
+        if (string.IsNullOrWhiteSpace(configuration.RefreshToken)) return null;
 
         var scopes = (configuration.GrantedScopes ?? string.Empty)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

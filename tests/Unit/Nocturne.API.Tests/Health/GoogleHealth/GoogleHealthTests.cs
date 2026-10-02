@@ -577,7 +577,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Setup_save_reenables_a_disabled_connector_and_preserves_unrelated_values()
+    public async Task Setup_without_session_stays_disabled_and_allows_explicit_reconnect()
     {
         var tenantId = Guid.NewGuid();
         var subject = Guid.NewGuid();
@@ -585,11 +585,9 @@ public class GoogleHealthTests
         store.SetConfiguration("""{"enabled":false,"syncIntervalMinutes":30,"activeThresholdMinutes":45}""");
         var service = Service(store, new StubHandler(_ => Json("{}")), tenantId);
 
-        var disabled = await Assert.ThrowsAsync<GoogleHealthException>(() => service.StartAsync(subject, default));
-        Assert.Equal("configure_first", disabled.Message);
         await service.SaveAsync(Options(), subject, default);
 
-        Assert.True(store.Configuration.GetProperty("enabled").GetBoolean());
+        Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
         Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
         Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
         Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, default)).Url);
