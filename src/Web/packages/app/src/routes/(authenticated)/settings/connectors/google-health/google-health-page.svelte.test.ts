@@ -130,7 +130,9 @@ describe("Google Health connector page", () => {
       })
     );
     await expect
-      .poll(() => googleHealthMocks.status.mock.calls.length, { timeout: 10000 })
+      .poll(() => googleHealthMocks.status.mock.calls.length, {
+        timeout: 10000,
+      })
       .toBeGreaterThan(statusCalls);
     await expect
       .element(
@@ -209,7 +211,10 @@ describe("Google Health connector page", () => {
         grantedTypes: ["steps", "heart-rate", "weight", "sleep"],
       })
     );
-    googleHealthMocks.preview.mockRejectedValue(new Error("already_running"));
+    googleHealthMocks.preview.mockRejectedValue({
+      status: 409,
+      body: { message: "already_running" },
+    });
     render(GoogleHealthPage);
 
     await expect
@@ -222,6 +227,42 @@ describe("Google Health connector page", () => {
       .element(page.getByRole("row", { name: /Heart rate/ }))
       .toHaveTextContent("Not scanned");
   });
+
+  it.each(["already_running", "google_unavailable"])(
+    "clears stale inventory feedback after retrying %s",
+    async (errorCode) => {
+      googleHealthMocks.status.mockResolvedValue(
+        status({ configured: true, connected: true })
+      );
+      googleHealthMocks.preview
+        .mockRejectedValueOnce({
+          status: errorCode === "already_running" ? 409 : 502,
+          body: { message: errorCode },
+        })
+        .mockResolvedValue({
+          items: [
+            {
+              dataType: "heart-rate",
+              granted: true,
+              supported: true,
+              count: 42,
+            },
+          ],
+        });
+      render(GoogleHealthPage);
+      const feedback = page.getByRole(
+        errorCode === "already_running" ? "status" : "alert"
+      );
+      await expect.element(feedback).toBeVisible();
+      await page
+        .getByRole("button", { name: "Refresh inventory", exact: true })
+        .click();
+      await expect
+        .element(page.getByRole("row", { name: /Heart rate/ }))
+        .toHaveTextContent("42");
+      await expect.element(feedback).not.toBeInTheDocument();
+    }
+  );
 
   it("allows problematic selected types to be unchecked and saved without syncing", async () => {
     googleHealthMocks.status.mockResolvedValue(

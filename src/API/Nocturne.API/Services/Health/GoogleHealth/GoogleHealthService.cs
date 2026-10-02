@@ -253,13 +253,13 @@ public sealed class GoogleHealthService(
                                  !options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal))))
         {
             var cursor = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
-            var state = cursor?.LastGuid is { } json ? JsonNode.Parse(json)!.AsObject() : new JsonObject();
+            var state = GoogleHealthConnectorService.ParseRuntimeState(cursor?.LastGuid);
             foreach (var key in new[] { "backfillCursorDate", "backfillFloorDate", "backfillComplete", "backfillChunkDays" })
                 state.Remove(key);
             if (!options.DataTypes.Order(StringComparer.Ordinal).SequenceEqual(prior.DataTypes.Order(StringComparer.Ordinal)))
                 state.Remove("lastSyncedTo");
             await cursorStore.SetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource,
-                new(null, state.ToJsonString(Json)), ct);
+                new(null, JsonSerializer.Serialize(state, Json)), ct);
         }
         await SaveOptionsAsync(options, subject, ct);
     }

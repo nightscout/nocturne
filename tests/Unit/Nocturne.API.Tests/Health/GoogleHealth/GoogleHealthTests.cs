@@ -467,6 +467,27 @@ public class GoogleHealthTests
         Assert.False(restarted.RootElement.TryGetProperty("backfillComplete", out _));
     }
 
+    [Theory]
+    [InlineData("{invalid")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("true")]
+    [InlineData("42")]
+    public async Task Saving_import_settings_repairs_unreadable_runtime_state(string runtimeState)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var options = Options();
+        var subject = Guid.NewGuid();
+        await service.SaveAsync(options, subject, default);
+        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
+        options.ImportFrom = DateTimeOffset.Parse("2019-01-01T00:00:00Z");
+        await service.SaveAsync(options, subject, default);
+        Assert.Equal("{}", (await store.Cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
+        Assert.Equal(options.ImportFrom, (await service.StatusAsync(default)).ImportFrom);
+    }
+
     [Fact]
     public async Task OAuth_flow_can_complete_on_a_different_api_replica_and_is_consumed_once()
     {

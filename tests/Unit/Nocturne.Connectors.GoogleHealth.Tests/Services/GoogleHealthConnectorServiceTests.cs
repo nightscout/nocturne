@@ -18,6 +18,29 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
 public class GoogleHealthConnectorServiceTests
 {
+    [Theory]
+    [InlineData("{invalid")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("true")]
+    [InlineData("42")]
+    [InlineData("{\"backfillChunkDays\":1.5}")]
+    [InlineData("{\"backfillChunkDays\":9223372036854775807}")]
+    [InlineData("{\"backfillChunkDays\":2147483647}")]
+    public async Task Unreadable_runtime_cursors_are_rebuilt_after_successful_import(string runtimeState)
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : Json("{\"dataPoints\":[]}"));
+        fixture.RuntimeStateOverride = runtimeState;
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), fixture.Configuration(), default);
+        Assert.True(result.Success);
+        using var saved = JsonDocument.Parse(fixture.LastSavedConfiguration!);
+        Assert.Equal(JsonValueKind.Object, saved.RootElement.ValueKind);
+        Assert.Equal(JsonValueKind.String, saved.RootElement.GetProperty("lastSyncedTo").ValueKind);
+    }
+
     [Fact]
     public async Task Page_progress_is_coalesced_but_phase_transitions_include_the_final_count()
     {
@@ -788,7 +811,7 @@ public class GoogleHealthConnectorServiceTests
                 .ReturnsAsync(() => new ConnectorConfigurationResponse());
             var cursorStore = new Mock<IConnectorSyncCursorStore>();
             cursorStore.Setup(value => value.GetAsync("GoogleHealth", "health", It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new ConnectorSyncCursor(null, StoredConfiguration));
+                .ReturnsAsync(() => new ConnectorSyncCursor(null, RuntimeStateOverride ?? StoredConfiguration));
             cursorStore.Setup(value => value.SetAsync("GoogleHealth", "health", It.IsAny<ConnectorSyncCursor>(), It.IsAny<CancellationToken>()))
                 .Callback<string, string, ConnectorSyncCursor, CancellationToken>((_, _, cursor, _) =>
                 {
@@ -796,6 +819,7 @@ public class GoogleHealthConnectorServiceTests
                     foreach (var (key, value) in JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(cursor.LastGuid!)!) prior[key] = value;
                     LastSavedConfiguration = JsonSerializer.Serialize(prior);
                     StoredConfiguration = LastSavedConfiguration;
+                    RuntimeStateOverride = null;
                 }).Returns(Task.CompletedTask);
             var coordinator = Coordinator;
             coordinator.Setup(value => value.AcquireAsync(tenantId, It.IsAny<CancellationToken>(), null))
@@ -854,6 +878,7 @@ public class GoogleHealthConnectorServiceTests
         public bool ImportFromWasConsumed { get; private set; }
         public string? LastSavedConfiguration { get; private set; }
         public string StoredConfiguration { get; set; } = "{\"importFrom\":\"2000-01-01T00:00:00.0000000+00:00\"}";
+        public string? RuntimeStateOverride { get; set; }
 
         public void SetSession(string? refreshToken, string scopes)
         {

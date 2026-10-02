@@ -170,8 +170,14 @@ public sealed class GoogleHealthConnectorService(
     private async Task<Dictionary<string, JsonElement>> LoadRuntimeStateAsync(CancellationToken ct)
     {
         var cursor = await cursorStore.GetAsync(ConnectorName, RuntimeStateResource, ct);
-        return cursor?.LastGuid is { } json
-            ? JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? [] : [];
+        return ParseRuntimeState(cursor?.LastGuid);
+    }
+
+    public static Dictionary<string, JsonElement> ParseRuntimeState(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? []; }
+        catch (JsonException) { return []; }
     }
 
     private Task SaveRuntimeStateAsync(Dictionary<string, JsonElement> state, CancellationToken ct) =>
@@ -186,8 +192,8 @@ public sealed class GoogleHealthConnectorService(
             ParseStoredDate(configuration, BackfillFloorKey) ?? EarliestSupportedDate,
             configuration.TryGetValue(BackfillCompleteKey, out var complete) && complete.ValueKind == JsonValueKind.True,
             configuration.TryGetValue(BackfillChunkDaysKey, out var chunkDays) &&
-                chunkDays.ValueKind == JsonValueKind.Number
-                ? Math.Max(1, chunkDays.GetInt32())
+                chunkDays.ValueKind == JsonValueKind.Number && chunkDays.TryGetInt32(out var days)
+                ? Math.Clamp(days, 1, 31)
                 : null);
     }
 

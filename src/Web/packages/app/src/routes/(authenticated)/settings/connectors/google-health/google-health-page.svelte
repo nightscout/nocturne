@@ -214,6 +214,8 @@
   });
   async function loadPreview() {
     if (inventoryBusy) return;
+    message = "";
+    notice = "";
     inventoryBusy = true;
     try {
       preview = await previewGoogleHealth();
