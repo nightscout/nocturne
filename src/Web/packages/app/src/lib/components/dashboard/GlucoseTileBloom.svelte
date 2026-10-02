@@ -7,9 +7,10 @@
     delta?: number;
     token: string;
     onstatechange: (state: PlayerState) => void;
+    onprogress: (progress: number) => void;
   }
 
-  let { seed, delta = 0, token, onstatechange }: Props = $props();
+  let { seed, delta = 0, token, onstatechange, onprogress }: Props = $props();
   function tokenColour(el: HTMLElement): [number, number, number] {
     const probeCanvas = document.createElement("canvas");
     probeCanvas.width = probeCanvas.height = 1;
@@ -35,7 +36,10 @@
     const player = createArtworkPlayer(
       el,
       { scene: (module) => bloomScene(module, width, height, { seed, slope, dpr, colour }) },
-      { mode: "live", durationMs: 5200, tail: 0.5, width, height, dpr, releaseAfterFinish: true },
+      {
+        mode: "live", durationMs: 5200, tail: 0.5, width, height, dpr, releaseAfterFinish: true,
+        onProgress: (progress) => untrack(() => onprogress(progress)),
+      },
     );
     // The initial callback must not make host state a dependency of this effect.
     const emit = () => untrack(() => onstatechange(player.state));

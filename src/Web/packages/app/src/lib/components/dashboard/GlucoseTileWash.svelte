@@ -51,6 +51,9 @@
     if (state.mode === "none" || state.error !== undefined) noBloomSeed = washSeed;
     if (noBloom || state.finished || state.progress >= BLOOM_COVERED) markSpread();
   }
+  function onBloomProgress(progress: number) {
+    if (progress >= BLOOM_COVERED) markSpread();
+  }
   const faded = $derived(
     recolours
       ? spread && (settledSeed === washSeed || noBloom)
@@ -114,7 +117,7 @@
           ontransitioncancel={markFaded}
           use:fadedOnUnmount
         >
-          <GlucoseTileBloom seed={washSeed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} />
+          <GlucoseTileBloom seed={washSeed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} onprogress={onBloomProgress} />
         </span>
       {:else}
         <span
