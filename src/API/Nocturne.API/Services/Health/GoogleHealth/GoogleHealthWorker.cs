@@ -74,8 +74,18 @@ public sealed class GoogleHealthWorker(
         using var scope = scopes.CreateScope();
         scope.ServiceProvider.GetRequiredService<ITenantAccessor>()
             .SetTenant(new(id, slug, displayName, true, false));
-        var result = await scope.ServiceProvider.GetRequiredService<IConnectorSyncService>()
-            .TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
+        var sync = scope.ServiceProvider.GetRequiredService<IConnectorSyncService>();
+        SyncResult result;
+        while (true)
+        {
+            result = await sync.TriggerSyncAsync(ConnectorId, new SyncRequest(), ct);
+            if (!result.AlreadyRunning) break;
+            logger.LogInformation(
+                "Google Health worker for tenant {TenantId} ({Slug}) is waiting to retry after an active run", id, slug);
+            await using (await coordinator.AcquireAsync(id, ct)) { }
+            // The connector releases its operation lock just before the outer run guard.
+            await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+        }
         var configurations = scope.ServiceProvider.GetRequiredService<IConnectorConfigurationService>();
         var now = DateTime.UtcNow;
         if (result.Success)
@@ -89,18 +99,6 @@ public sealed class GoogleHealthWorker(
                 lastErrorAt: string.IsNullOrWhiteSpace(result.Message) ? DateTime.MinValue : now,
                 isHealthy: true,
                 ct: ct);
-            return;
-        }
-
-        if (result.AlreadyRunning)
-        {
-            // The scheduler may already be importing this tenant. This is expected coordination,
-            // not a Google failure; the run that owns the slot will publish the eventual health
-            // state. In particular, do not replace a healthy state with a stale conflict string.
-            logger.LogInformation(
-                "Google Health worker sync for tenant {TenantId} ({Slug}) was not started because another run is already active",
-                id, slug);
-            await using var pending = await coordinator.AcquireAsync(id, ct);
             return;
         }
 
