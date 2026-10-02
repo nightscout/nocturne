@@ -438,6 +438,14 @@ public class GoogleHealthTests
         var state = System.Web.HttpUtility.ParseQueryString(new Uri(authorization.Url).Query)["state"]!;
         Assert.True(store.Secrets.ContainsKey("oauthFlow"));
         var second = Service(store, handler, tenant, new GoogleHealthCoordinator());
+        var persistedFlow = store.Secrets["oauthFlow"];
+        foreach (var (badState, badSubject) in new[] { ("", subject), ("mismatched", subject), (state, Guid.NewGuid()) })
+        {
+            var rejected = await Assert.ThrowsAsync<GoogleHealthException>(() => second.CompleteAsync(
+                new GoogleHealthCallback { State = badState, Code = "code" }, badSubject, default));
+            Assert.Equal("expired_signin", rejected.Message);
+            Assert.Equal(persistedFlow, store.Secrets["oauthFlow"]);
+        }
         var callback = new GoogleHealthCallback { State = state, Code = "code" };
         await second.CompleteAsync(callback, subject, default);
         Assert.False(store.Secrets.ContainsKey("oauthFlow"));

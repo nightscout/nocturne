@@ -678,7 +678,6 @@
               type="date"
               min="2000-01-01"
               max={day(new Date())}
-              required
               disabled={busy || status.isSyncing}
               bind:value={importFrom}
             />

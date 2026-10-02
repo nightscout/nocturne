@@ -18,6 +18,41 @@ namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
 
 public class GoogleHealthConnectorServiceTests
 {
+    [Fact]
+    public async Task Page_progress_is_coalesced_but_phase_transitions_include_the_final_count()
+    {
+        var clock = new TestTimeProvider();
+        var pages = 0;
+        var fixture = new Fixture(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/token")
+                return Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""");
+            clock.Advance(TimeSpan.FromMilliseconds(250));
+            pages++;
+            return Json(pages < 10 ? $$"""{"dataPoints":[],"nextPageToken":"{{pages}}"}""" : "{\"dataPoints\":[]}");
+        }, clock);
+        var from = DateTime.UtcNow.AddDays(-1);
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { From = from, To = from.AddHours(1) }, fixture.Configuration(), default);
+
+        Assert.True(result.Success);
+        Assert.Equal(10, pages);
+        fixture.Coordinator.Verify(value => value.ReportAsync(It.IsAny<Guid>(), GoogleHealthSyncPhase.Reading,
+            "weight", 0, 1, It.Is<int?>(count => count > 0)), Times.Once);
+        fixture.Coordinator.Verify(value => value.ReportAsync(It.IsAny<Guid>(), GoogleHealthSyncPhase.Reading,
+            "weight", 0, 1, 8), Times.Once);
+        fixture.Coordinator.Verify(value => value.ReportAsync(It.IsAny<Guid>(), GoogleHealthSyncPhase.Integrating,
+            "weight", 0, 1, 10), Times.Once);
+    }
+
+    private sealed class TestTimeProvider : TimeProvider
+    {
+        private long ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => ticks;
+        public void Advance(TimeSpan interval) => ticks += interval.Ticks;
+    }
+
     [Theory]
     [InlineData("weight")]
     [InlineData("sleep")]
@@ -719,7 +754,7 @@ public class GoogleHealthConnectorServiceTests
             ["grantedScopes"] = GoogleHealthClient.MetricsScope
         };
 
-        public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        public Fixture(Func<HttpRequestMessage, HttpResponseMessage> responder, TimeProvider? timeProvider = null)
         {
             var tenant = new Mock<ITenantAccessor>();
             tenant.SetupGet(value => value.IsResolved).Returns(true);
@@ -807,7 +842,7 @@ public class GoogleHealthConnectorServiceTests
                 cursorStore.Object,
                 tenant.Object,
                 loader.Object,
-                NullLogger<GoogleHealthConnectorService>.Instance);
+                NullLogger<GoogleHealthConnectorService>.Instance, timeProvider: timeProvider);
         }
 
         public GoogleHealthConnectorService Service { get; }

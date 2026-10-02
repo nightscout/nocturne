@@ -26,10 +26,12 @@ public sealed class GoogleHealthConnectorService(
     ITenantAccessor tenantAccessor,
     IConnectorConfigurationLoader<GoogleHealthConnectorConfiguration> configurationLoader,
     ILogger<GoogleHealthConnectorService> logger,
-    IConnectorPublisher? publisher = null)
+    IConnectorPublisher? publisher = null,
+    TimeProvider? timeProvider = null)
     : BaseConnectorService<GoogleHealthConnectorConfiguration>(httpClient, serverResolver, logger, publisher)
 {
     private const string ConnectorName = "GoogleHealth";
+    private readonly TimeProvider clock = timeProvider ?? TimeProvider.System;
 
     protected override string ConnectorSource => DataSources.GoogleHealthConnector;
     public override string ServiceName => ServiceNames.GoogleHealthConnector;
@@ -479,9 +481,16 @@ public sealed class GoogleHealthConnectorService(
                     reconciliationRun = await writer.BeginReconciliationAsync([type], from, to, ct);
                     stage = "google_read";
                     await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, 0);
+                    var progressAt = clock.GetTimestamp();
+                    var pagesRead = 0;
                     async Task PageRead(int pages)
                     {
+                        pagesRead = pages;
+                        // Progress uses database sessions; publish at most once per two seconds,
+                        // while phase transitions below always publish the final page count.
+                        if (clock.GetElapsedTime(progressAt) < TimeSpan.FromSeconds(2)) return;
                         await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index, active.Length, pages);
+                        progressAt = clock.GetTimestamp();
                     }
                     if (type == "sleep")
                         await foreach (var page in google.ReadSleepPagesAsync(accessToken, from, to, ct, PageRead))
@@ -529,7 +538,7 @@ public sealed class GoogleHealthConnectorService(
                             await writer.WriteAsync(unique, [], config.BatchSize, ct);
                             AddCount(result, type, unique.Length);
                         }
-                    await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length);
+                    await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Integrating, type, index, active.Length, pagesRead);
                     stage = "native_reconciliation_complete";
                     await writer.CompleteReconciliationAsync(reconciliationRun, ct);
                     await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, type, index + 1, active.Length);

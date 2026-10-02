@@ -231,16 +231,9 @@ describe("Google Health connector page", () => {
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByText("Body measurement", { exact: true }).click();
     await page.getByRole("checkbox", { name: "Import Weight" }).click();
-    const saveButton = page
+    await page
       .getByRole("button", { name: "Save import settings", exact: true })
-      .element() as HTMLButtonElement;
-    saveButton.form!.dispatchEvent(
-      new SubmitEvent("submit", {
-        bubbles: true,
-        cancelable: true,
-        submitter: saveButton,
-      })
-    );
+      .click();
     await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
       expect.objectContaining({ dataTypes: ["steps"] })
@@ -264,16 +257,9 @@ describe("Google Health connector page", () => {
         page.getByRole("button", { name: "Save import settings", exact: true })
       )
       .toBeEnabled();
-    const saveButton = page
+    await page
       .getByRole("button", { name: "Save import settings", exact: true })
-      .element() as HTMLButtonElement;
-    saveButton.form!.dispatchEvent(
-      new SubmitEvent("submit", {
-        bubbles: true,
-        cancelable: true,
-        submitter: saveButton,
-      })
-    );
+      .click();
     await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
       expect.objectContaining({ importFrom: null })
@@ -306,16 +292,9 @@ describe("Google Health connector page", () => {
     render(GoogleHealthPage);
     await page.getByRole("checkbox", { name: "Import Heart rate" }).click();
     await page.getByLabelText("Import data from").fill("2020-01-01");
-    const saveButton = page
+    await page
       .getByRole("button", { name: "Save import settings", exact: true })
-      .element() as HTMLButtonElement;
-    saveButton.form!.dispatchEvent(
-      new SubmitEvent("submit", {
-        bubbles: true,
-        cancelable: true,
-        submitter: saveButton,
-      })
-    );
+      .click();
     await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
     expect(googleHealthMocks.save).toHaveBeenCalledWith(
       expect.objectContaining({

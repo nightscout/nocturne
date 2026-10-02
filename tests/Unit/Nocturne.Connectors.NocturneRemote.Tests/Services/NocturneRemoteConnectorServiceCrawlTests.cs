@@ -226,6 +226,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
             CancellationToken.None);
 
         result.Success.Should().BeTrue("no type the tenant enabled failed to sync");
+        handler.Requests.Where(url => url.Contains(NocturneRemoteConstants.SensorGlucose)).Should().ContainSingle();
         result.Errors.Should().BeEmpty();
         result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
         {
@@ -624,6 +625,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be("Authentication failed");
+        handler.Requests.Should().ContainSingle("the auth probe has one attempt and a 401 ends the run");
         result.Errors.Should().ContainSingle()
             .Which.Should().Be($"Authentication failed for {DataSources.NocturneRemoteConnector}");
         handler.Requests.Should().NotContain(url => url.Contains(NocturneRemoteConstants.Boluses),

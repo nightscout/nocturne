@@ -306,10 +306,10 @@ public sealed class GoogleHealthService(
         {
             var flowSecrets = await connectorConfigurations.GetSecretsAsync(ConnectorName, ct);
             var flowJson = flowSecrets.GetValueOrDefault("oauthFlow");
-            await ClearFlowAsync(ct);
             var flow = flowJson is null ? null : JsonSerializer.Deserialize<GoogleHealthCoordinator.Flow>(flowJson, Json);
             if (flow is null ||
                 flow.Expires <= DateTimeOffset.UtcNow || flow.SubjectId != subject ||
+                string.IsNullOrEmpty(callback.State) ||
                 !CryptographicOperations.FixedTimeEquals(
                     Encoding.UTF8.GetBytes(flow.State), Encoding.UTF8.GetBytes(callback.State)))
                 throw new GoogleHealthException("expired_signin");
@@ -318,6 +318,7 @@ public sealed class GoogleHealthService(
             if (Fingerprint(settings) != flow.Settings)
                 throw new GoogleHealthException("expired_signin");
 
+            await ClearFlowAsync(ct);
             var requestedScopes = GoogleHealthClient.SupportedTypes
                 .Select(GoogleHealthClient.ScopeFor).Append("openid")
                 .Distinct(StringComparer.Ordinal).ToArray();
