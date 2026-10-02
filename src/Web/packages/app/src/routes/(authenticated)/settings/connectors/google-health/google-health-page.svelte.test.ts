@@ -158,6 +158,7 @@ describe("Google Health connector page", () => {
       status({
         configured: true,
         connected: true,
+        importFrom: "2026-08-01T00:00:00Z",
         isSyncing: true,
         syncPhase: GoogleHealthSyncPhase.Preparing,
       })
@@ -173,6 +174,7 @@ describe("Google Health connector page", () => {
         syncDataType: "steps",
         syncProgressPercent: 22,
         syncPagesRead: 12,
+        importFrom: "2026-08-01T00:00:00Z",
       })
     );
     await expect
@@ -185,6 +187,8 @@ describe("Google Health connector page", () => {
         configured: true,
         connected: true,
         isSyncing: false,
+        importFrom: undefined,
+        backfillComplete: true,
       })
     );
     await expect
@@ -193,6 +197,53 @@ describe("Google Health connector page", () => {
       )
       .toBeVisible();
     await expect.element(page.getByRole("progressbar")).not.toBeInTheDocument();
+    await expect
+      .element(page.getByLabelText("Import data from"))
+      .toHaveValue("");
+    await page.getByRole("button", { name: "Save import settings" }).click();
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ importFrom: null })
+    );
+  });
+
+  it("preserves an unsaved import date when polling completes a sync", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        importFrom: "2026-08-01T00:00:00Z",
+      })
+    );
+    googleHealthMocks.sync.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        importFrom: "2026-08-01T00:00:00Z",
+        isSyncing: true,
+      })
+    );
+    render(GoogleHealthPage);
+
+    const importFrom = page.getByLabelText("Import data from");
+    await expect.element(importFrom).toHaveValue("2026-08-01");
+    await importFrom.fill("2026-09-01");
+    await page.getByRole("button", { name: "Sync now" }).click();
+
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        importFrom: undefined,
+        backfillComplete: true,
+      })
+    );
+    await expect
+      .element(
+        page.getByText("Google Health import completed.", { exact: true })
+      )
+      .toBeVisible();
+    await expect.element(importFrom).toHaveValue("2026-09-01");
   });
 
   it("keeps category expansion choices while status polling refreshes", async () => {

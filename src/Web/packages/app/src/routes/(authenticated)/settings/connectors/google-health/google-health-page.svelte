@@ -363,9 +363,16 @@
       try {
         if (!busy) {
           const wasSyncing = status?.isSyncing;
+          const previousImportFrom = status?.importFrom;
           const next = await getGoogleHealth().run();
           if (disposed) return;
           status = next;
+          if (
+            wasSyncing &&
+            !next.isSyncing &&
+            importFrom === day(previousImportFrom)
+          )
+            importFrom = day(next.importFrom);
           if (notice === "Import status is temporarily unavailable. Retrying.")
             notice = "";
           if (wasSyncing && !next.isSyncing) {
