@@ -60,6 +60,99 @@ function status(
 }
 
 describe("Google Health connector page", () => {
+  it.each(["Sync now", "Save selection and import"])(
+    "treats %s scheduling conflicts as coordination and polls completion",
+    async (action) => {
+      googleHealthMocks.status.mockResolvedValue(
+        status({ configured: true, connected: true, selectedTypes: ["steps"] })
+      );
+      googleHealthMocks.sync.mockRejectedValue({
+        status: 409,
+        body: { message: "already_running" },
+      });
+      render(GoogleHealthPage);
+      const button = page.getByRole("button", { name: action, exact: true });
+      await expect.element(button).toBeEnabled();
+      googleHealthMocks.status.mockResolvedValue(
+        status({
+          configured: true,
+          connected: true,
+          selectedTypes: ["steps"],
+          isSyncing: true,
+          syncPhase: GoogleHealthSyncPhase.Preparing,
+        })
+      );
+      await button.click();
+      await expect
+        .element(
+          page.getByText(
+            "The import is running in the background. You can leave this page and return later.",
+            { exact: true }
+          )
+        )
+        .toBeVisible();
+      await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+      await expect.element(button).toBeDisabled();
+      expect(googleHealthMocks.sync).toHaveBeenCalledTimes(1);
+      googleHealthMocks.status.mockResolvedValue(
+        status({
+          configured: true,
+          connected: true,
+          selectedTypes: ["steps"],
+          isSyncing: false,
+        })
+      );
+      await expect
+        .element(
+          page.getByText("Google Health import completed.", { exact: true })
+        )
+        .toBeVisible();
+      await expect.element(button).toBeEnabled();
+    }
+  );
+
+  it("keeps a Sync now conflict recoverable when its immediate status refresh fails", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({ configured: true, connected: true, selectedTypes: ["steps"] })
+    );
+    googleHealthMocks.sync.mockRejectedValue({
+      status: 409,
+      body: { message: "already_running" },
+    });
+    render(GoogleHealthPage);
+    const button = page.getByRole("button", { name: "Sync now", exact: true });
+    await expect.element(button).toBeEnabled();
+    googleHealthMocks.status.mockRejectedValueOnce(
+      new Error("temporary status failure")
+    );
+    await button.click();
+    await expect
+      .element(
+        page.getByText("Import status is temporarily unavailable. Retrying.", {
+          exact: true,
+        })
+      )
+      .toBeVisible();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        selectedTypes: ["steps"],
+        isSyncing: true,
+        syncPhase: GoogleHealthSyncPhase.Preparing,
+      })
+    );
+    await expect.element(page.getByRole("progressbar")).toBeVisible();
+    await expect
+      .element(
+        page.getByText("Import status is temporarily unavailable. Retrying.", {
+          exact: true,
+        })
+      )
+      .not.toBeInTheDocument();
+  });
+
   it("polls progress and completion without a websocket event", async () => {
     googleHealthMocks.status.mockResolvedValue(
       status({

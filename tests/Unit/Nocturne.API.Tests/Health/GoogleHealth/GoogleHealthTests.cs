@@ -391,6 +391,33 @@ public class GoogleHealthTests
         Assert.Equal(accountKey, store.Secrets["accountKey"]);
     }
 
+    [Theory]
+    [InlineData("{invalid")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("true")]
+    [InlineData("42")]
+    public async Task Malformed_runtime_cursor_keeps_valid_connection_status(string runtimeState)
+    {
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(_ => Json("{}")), Guid.NewGuid());
+        var options = Options();
+        await service.SaveAsync(options, Guid.NewGuid(), default);
+        var secrets = store.Secrets.ToDictionary(value => value.Key, value => value.Value);
+        secrets["refreshToken"] = "refresh";
+        secrets["grantedScopes"] = GoogleHealthClient.MetricsScope;
+        await store.Configurations.SaveSecretsAsync("GoogleHealth", secrets);
+        await store.Cursors.SetAsync("GoogleHealth", "health", new(null, runtimeState));
+        var status = await service.StatusAsync(default);
+        Assert.True(status.Configured);
+        Assert.True(status.Connected);
+        Assert.Null(status.ErrorCode);
+        Assert.Equal(options.DataTypes, status.SelectedTypes);
+        Assert.Null(status.BackfillSyncedThrough);
+        Assert.False(status.BackfillComplete);
+    }
+
     [Fact]
     public async Task Status_exposes_persisted_historical_import_progress()
     {

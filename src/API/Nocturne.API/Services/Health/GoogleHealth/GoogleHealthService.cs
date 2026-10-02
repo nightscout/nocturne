@@ -173,8 +173,7 @@ public sealed class GoogleHealthService(
                 .ToArray();
             var storedError = GoogleHealthErrorCode.Decode(stored?.LastErrorMessage);
             var resume = await cursorStore.GetAsync(ConnectorName, GoogleHealthConnectorService.RuntimeStateResource, ct);
-            using var resumeDocument = resume?.LastGuid is { } resumeJson ? JsonDocument.Parse(resumeJson) : null;
-            var backfillProgress = BackfillProgress(resumeDocument?.RootElement);
+            var backfillProgress = BackfillProgress(GoogleHealthConnectorService.ParseRuntimeState(resume?.LastGuid));
             var missingScopes = selected
                 .Where(type => session is not null &&
                     !session.Scopes.Contains(GoogleHealthClient.ScopeFor(type), StringComparer.Ordinal))
@@ -564,17 +563,15 @@ public sealed class GoogleHealthService(
         ? null
         : new DateTimeOffset(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc));
 
-    private static (DateTimeOffset? SyncedThrough, bool Complete) BackfillProgress(JsonElement? configuration)
+    private static (DateTimeOffset? SyncedThrough, bool Complete) BackfillProgress(IReadOnlyDictionary<string, JsonElement> configuration)
     {
-        if (configuration is not { ValueKind: JsonValueKind.Object } root)
-            return (null, false);
         DateTimeOffset? syncedThrough = null;
-        if (root.TryGetProperty("backfillCursorDate", out var cursor) &&
+        if (configuration.TryGetValue("backfillCursorDate", out var cursor) &&
             cursor.ValueKind == JsonValueKind.String &&
             DateTimeOffset.TryParse(cursor.GetString(), CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed))
             syncedThrough = parsed;
-        var complete = root.TryGetProperty("backfillComplete", out var completed) &&
+        var complete = configuration.TryGetValue("backfillComplete", out var completed) &&
             completed.ValueKind == JsonValueKind.True;
         return (syncedThrough, complete);
     }

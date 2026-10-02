@@ -267,29 +267,9 @@
     await saveGoogleHealth(options(false));
     try {
       if (sync && selected.length > 0) {
-        operation = "sync";
-        status = await syncGoogleHealth();
-        notice = status.isSyncing
-          ? "The import is running in the background. You can leave this page and return later."
-          : status.errorCode
-            ? ""
-            : "Google Health import completed.";
+        await syncNow();
       }
     } catch (error) {
-      if (operation === "sync" && isGoogleHealthAlreadyRunningError(error)) {
-        // A scheduled run may have acquired the shared tenant slot between the button press and
-        // the queue request. Treat the 409 as coordination, not as a failed import, then refresh
-        // the same server-owned progress model that the normal polling loop uses.
-        message = "";
-        try {
-          await refresh(false);
-          notice =
-            "The import is running in the background. You can leave this page and return later.";
-        } catch {
-          notice = "Import status is temporarily unavailable. Retrying.";
-        }
-        return;
-      }
       const failedOperation = operation;
       // Keep the original sync failure if reloading the saved settings also fails.
       try {
@@ -301,6 +281,28 @@
       throw error;
     }
     if (!sync) await refresh();
+  }
+  async function syncNow() {
+    operation = "sync";
+    try {
+      status = await syncGoogleHealth();
+      notice = status.isSyncing
+        ? "The import is running in the background. You can leave this page and return later."
+        : status.errorCode
+          ? ""
+          : "Google Health import completed.";
+    } catch (error) {
+      if (!isGoogleHealthAlreadyRunningError(error)) throw error;
+      // A scheduled run can win the tenant slot after the page's last status refresh.
+      message = "";
+      try {
+        await refresh(false);
+        notice =
+          "The import is running in the background. You can leave this page and return later.";
+      } catch {
+        notice = "Import status is temporarily unavailable. Retrying.";
+      }
+    }
   }
   async function disconnect() {
     operation = "disconnect";
@@ -633,16 +635,7 @@
               status.isSyncing ||
               status.previewRequired ||
               !status.selectedTypes?.length}
-            onclick={() =>
-              void run(async () => {
-                operation = "sync";
-                status = await syncGoogleHealth();
-                notice = status.isSyncing
-                  ? "The import is running in the background. You can leave this page and return later."
-                  : status.errorCode
-                    ? ""
-                    : "Google Health import completed.";
-              })}
+            onclick={() => void run(syncNow)}
           >
             <RefreshCw class="mr-2 h-4 w-4" />Sync now
           </Button><Button
