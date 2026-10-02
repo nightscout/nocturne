@@ -468,6 +468,34 @@ describe("Google Health connector page", () => {
     );
   });
 
+  it("allows reconnecting after the backfill consumes the import date", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: false,
+        clientId: "test-client.apps.googleusercontent.com",
+        callbackUrl:
+          "https://nocturne.test/settings/connectors/google-health/callback",
+        importFrom: undefined,
+        backfillComplete: true,
+      })
+    );
+    googleHealthMocks.start.mockResolvedValue({ url: "" });
+    render(GoogleHealthPage);
+
+    await page.getByText("Edit connection settings", { exact: true }).click();
+    await expect
+      .element(page.getByLabelText("Import data from"))
+      .toHaveValue("");
+    await page.getByRole("button", { name: "Save and reconnect" }).click();
+
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ importFrom: null })
+    );
+    expect(googleHealthMocks.start).toHaveBeenCalledTimes(1);
+  });
+
   it("saves an older history date and an empty selection without reconnecting", async () => {
     googleHealthMocks.status
       .mockResolvedValueOnce(

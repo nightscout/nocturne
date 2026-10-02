@@ -66,33 +66,37 @@ public class HeartRateService(
         // Group in PostgreSQL so a dense wearable stream does not cross the API boundary as
         // hundreds of thousands of points. The source table remains untouched and the normal
         // tenant/soft-delete filters on EntitySet still apply.
-        var buckets = await EntitySet
-            .AsNoTracking()
-            .Where(row => row.Timestamp >= from && row.Timestamp < to)
-            .GroupBy(row => new
+        var rangeStart = from;
+        var rangeEnd = to;
+        var buckets = await (
+            from row in EntitySet.AsNoTracking()
+            where row.Timestamp >= rangeStart && row.Timestamp < rangeEnd
+            let utcTimestamp = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(row.Timestamp, "UTC")
+            group row by new
             {
-                row.Timestamp.Year,
-                row.Timestamp.Month,
-                row.Timestamp.Day,
-                row.Timestamp.Hour,
-                row.Timestamp.Minute,
-            })
-            .Select(group => new
+                utcTimestamp.Year,
+                utcTimestamp.Month,
+                utcTimestamp.Day,
+                utcTimestamp.Hour,
+                utcTimestamp.Minute,
+            }
+            into minute
+            orderby minute.Key.Year, minute.Key.Month, minute.Key.Day,
+                minute.Key.Hour, minute.Key.Minute
+            select new
             {
-                FirstTimestamp = group.Min(row => row.Timestamp),
-                AverageBpm = group.Average(row => (double)row.Bpm),
-            })
-            .OrderBy(bucket => bucket.FirstTimestamp)
-            .ToListAsync(cancellationToken);
+                minute.Key.Year,
+                minute.Key.Month,
+                minute.Key.Day,
+                minute.Key.Hour,
+                minute.Key.Minute,
+                AverageBpm = minute.Average(row => (double)row.Bpm),
+            }).ToListAsync(cancellationToken);
 
         return buckets.Select(bucket => new HeartRate
         {
-            Timestamp = new DateTime(
-                bucket.FirstTimestamp.Year,
-                bucket.FirstTimestamp.Month,
-                bucket.FirstTimestamp.Day,
-                bucket.FirstTimestamp.Hour,
-                bucket.FirstTimestamp.Minute,
+            Timestamp = new DateTime(bucket.Year, bucket.Month, bucket.Day,
+                bucket.Hour, bucket.Minute,
                 0,
                 DateTimeKind.Utc),
             Bpm = (int)Math.Round(bucket.AverageBpm, MidpointRounding.AwayFromZero),

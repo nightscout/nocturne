@@ -121,9 +121,10 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
+            var progress = document.RootElement.ValueKind == JsonValueKind.Object &&
                 document.RootElement.TryGetProperty(ProgressKey, out var value)
                 ? value.Deserialize<SyncProgress>() : null;
+            return progress is not null && Enum.IsDefined(progress.Phase) ? progress : null;
         }
         catch (JsonException)
         {

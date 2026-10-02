@@ -86,6 +86,37 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     }
 
     [Fact]
+    public async Task Minute_averages_keep_repeated_local_times_distinct_in_non_utc_sessions()
+    {
+        await using var db = Context();
+        await UseTenantAsync(db, tenantId);
+        await db.Database.ExecuteSqlRawAsync("SET TIME ZONE 'America/New_York'");
+        var first = new DateTime(2025, 11, 2, 5, 30, 0, DateTimeKind.Utc);
+        var second = new DateTime(2025, 11, 2, 6, 30, 0, DateTimeKind.Utc);
+        db.HeartRates.AddRange(
+            new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = first, Bpm = 60,
+                DataSource = GoogleHealthReadingWriter.Source
+            },
+            new HeartRateEntity
+            {
+                Id = Guid.NewGuid(), Timestamp = second, Bpm = 80,
+                DataSource = GoogleHealthReadingWriter.Source
+            });
+        await db.SaveChangesAsync();
+        var service = new HeartRateService(db, Mock.Of<IDocumentProcessingService>(),
+            Mock.Of<ISignalRBroadcastService>(), NullLogger<HeartRateService>.Instance);
+
+        var averages = (await service.GetHeartRateMinuteAveragesByDateRangeAsync(
+            new DateTime(2025, 11, 2, 5, 0, 0, DateTimeKind.Utc),
+            new DateTime(2025, 11, 2, 7, 0, 0, DateTimeKind.Utc))).ToArray();
+
+        Assert.Equal([first, second], averages.Select(row => row.Timestamp));
+        Assert.Equal([60, 80], averages.Select(row => row.Bpm));
+    }
+
+    [Fact]
     public async Task Writer_uses_existing_native_tables_and_preserves_empty_types_and_other_tenants()
     {
         await using var db = Context();
@@ -356,6 +387,7 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     [InlineData("{\"googleHealthProgress\":[]}")]
     [InlineData("{\"googleHealthProgress\":\"invalid\"}")]
     [InlineData("{\"googleHealthProgress\":42}")]
+    [InlineData("{\"googleHealthProgress\":{\"Phase\":999,\"WorkerOwned\":true}}")]
     [InlineData("{\"googleHealthProgress\":{\"Phase\":\"invalid\"}}")]
     [InlineData("{\"googleHealthProgress\":{\"WorkerOwned\":\"invalid\"}}")]
     [InlineData("{\"googleHealthProgress\":{\"PagesRead\":{}}}")]
