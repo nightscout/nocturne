@@ -127,6 +127,38 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('presented progress', () => {
+  it('crosses the coverage threshold before finishing without extra state notifications', async () => {
+    const instance = fakeInstance(40);
+    const { scheduler, frame } = manualScheduler();
+    const progress: number[] = [];
+    const live = player(instance, scheduler, { onProgress: (p) => progress.push(p) });
+    await live.ready;
+    const statechange = vi.fn();
+    live.on('statechange', statechange);
+    for (let i = 0; i < 90 && !progress.some((p) => p >= 0.67); i++) frame();
+    expect(progress.some((p) => p >= 0.67 && p < 1)).toBe(true);
+    expect(live.state.finished).toBe(false);
+    expect(statechange).not.toHaveBeenCalled();
+    live.dispose();
+  });
+
+  it('withholds progress while a swapchain frame cannot be presented', async () => {
+    const instance = fakeInstance(40);
+    instance.render = () => false;
+    const { scheduler, frame } = manualScheduler();
+    const onProgress = vi.fn();
+    const live = player(instance, scheduler, { onProgress });
+    await live.ready;
+    for (let i = 0; i < 5; i++) frame();
+    expect(onProgress).not.toHaveBeenCalled();
+    instance.render = () => true;
+    frame();
+    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40);
+    live.dispose();
+  });
+});
+
 describe('a live still under reduced motion', () => {
   it('runs its timeline a budgeted slice per frame, then presents once and lets go', async () => {
     // A tick costs 1 ms of a 10 ms budget; each call is sized from the last.

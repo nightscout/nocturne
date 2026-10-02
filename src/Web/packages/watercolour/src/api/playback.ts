@@ -78,6 +78,8 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   scheduler?: Scheduler;
   engineHost?: EngineHost;
   capabilities?: () => Promise<Capabilities>;
+  /** Runs after a live or baked frame is presented; does not allocate PlayerState. */
+  onProgress?: (progress: number) => void;
 }
 
 export interface ArtworkPlayer {
@@ -107,6 +109,7 @@ export interface ArtworkPlayer {
 interface BackendCallbacks {
   onFinished(): void;
   onFault(error: WatercolourError): void;
+  onProgress?: (progress: number) => void;
 }
 
 interface PixelSize {
@@ -532,6 +535,7 @@ class LiveBackend implements Backend {
       if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
       this.unpresented = 0;
       this.dirty = false;
+      if (presented !== false) this.callbacks.onProgress?.(this.progress);
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -728,6 +732,7 @@ class BakedBackend implements Backend {
     if (this.dirty) {
       this.dirty = false;
       drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height);
+      this.callbacks.onProgress?.(this.progress);
       if (this.isPlaying && this.finished) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -1182,6 +1187,7 @@ class Player implements ArtworkPlayer {
         this.emit('statechange');
       },
       onFault: (error) => this.handleFault(error),
+      onProgress: this.options.onProgress,
     };
     switch (mode) {
       case 'live': {
