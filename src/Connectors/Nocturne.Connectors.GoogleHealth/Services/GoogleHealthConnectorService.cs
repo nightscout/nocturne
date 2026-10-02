@@ -148,9 +148,11 @@ public sealed class GoogleHealthConnectorService(
     private async Task<DateTimeOffset> LiveFromAsync(CancellationToken ct)
     {
         var watermark = await LoadWatermarkAsync(ct);
-        return watermark is { } lastSyncedTo
+        var from = watermark is { } lastSyncedTo
             ? new DateTimeOffset(DateTime.SpecifyKind(lastSyncedTo, DateTimeKind.Utc)).AddMinutes(-5)
             : new DateTimeOffset(DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+        // Minute-based heart-rate IDs must be recomputed from the entire overlapping minute.
+        return new DateTimeOffset(from.Ticks - from.Ticks % TimeSpan.TicksPerMinute, TimeSpan.Zero);
     }
 
     private static DateTimeOffset ComputeBackfillFloor(GoogleHealthConnectorConfiguration config, DateTimeOffset today) =>

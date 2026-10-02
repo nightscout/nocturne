@@ -126,6 +126,8 @@ public class GoogleHealthConnectorServiceTests
     [InlineData("2026-09-10T10:00:00Z")]
     [InlineData("2026-09-10T12:00:00+02:00")]
     [InlineData("2026-09-10T10:00:00")]
+    [InlineData("2026-09-10T10:00:37.123Z")]
+    [InlineData("2026-09-10T12:00:37.123+02:00")]
     public async Task Scheduled_sync_resumes_from_a_persisted_watermark_in_utc(string watermark)
     {
         var requestedFrom = new List<DateTimeOffset>();
@@ -448,6 +450,37 @@ public class GoogleHealthConnectorServiceTests
         fixture.Writer.Verify(value => value.AbandonReconciliationAsync(
             It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.DoesNotContain("lastSyncedTo", fixture.StoredConfiguration);
+    }
+
+    [Fact]
+    public async Task Live_overlap_recomputes_the_complete_first_heart_rate_minute()
+    {
+        var requestedFrom = new List<DateTimeOffset>();
+        var fixture = new Fixture(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/token")
+                return Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""");
+            CaptureRange(request, requestedFrom.Add).Dispose();
+            var firstSample = requestedFrom[^1] <= new DateTimeOffset(2026, 9, 1, 10, 0, 5, TimeSpan.Zero)
+                ? """{"name":"a","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:05Z"},"beatsPerMinute":"60"}},"""
+                : "";
+            return Json("{\"dataPoints\":[" + firstSample + """
+                {"name":"b","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:45Z"},"beatsPerMinute":"70"}}]}
+                """);
+        });
+        fixture.StoredConfiguration = """{"lastSyncedTo":"2026-09-01T10:05:37.123Z","backfillComplete":true,"backfillCursorDate":"2026-09-01T00:00:00Z","backfillFloorDate":"2026-09-01T00:00:00Z"}""";
+        var config = fixture.Configuration();
+        config.SyncBodyWeight = false;
+        config.SyncHeartRate = true;
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+
+        Assert.True(result.Success);
+        Assert.Equal(new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero), requestedFrom[0]);
+        fixture.Writer.Verify(value => value.WriteAsync(
+            It.Is<IReadOnlyCollection<GoogleHealthReading>>(items => items.Count == 1 && items.Single().Value == 65m),
+            It.IsAny<IReadOnlyCollection<Nocturne.Core.Models.SleepSession>>(),
+            It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
