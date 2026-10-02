@@ -10,12 +10,8 @@ export interface BloomSceneOptions {
   /** Normalised trend from -1 (falling) to 1 (rising); defaults to level. */
   slope?: number;
   intensity?: number;
-  /** Device pixel ratio the canvas will be backed at; sizes the simulation grid. */
   dpr?: number;
-  /**
-   * Paints in this sRGB colour (0..1 per channel) as an opaque body colour instead of the
-   * palette's base pigment, so the bloom lands as that colour over whatever is under the canvas.
-   */
+  /** sRGB channels in 0..1; uses an opaque body pigment instead of the donor pigment. */
   colour?: readonly [number, number, number];
 }
 
@@ -24,35 +20,18 @@ interface SceneDocument {
   [key: string]: unknown;
 }
 
-/** The catalogue artwork whose paper and palette the bloom borrows; only its timeline is replaced. */
 const DONOR = 'avatar-wash';
 const TOTAL_TICKS = 220;
-/**
- * Splotches dropped into the wet sheet a few ticks apart. Each grows by one small charge a tick for
- * `GROW_TICKS`, from `START_REACH` to `END_REACH` short sides, until they run into one another and
- * cover the canvas. The steps are smaller than a frame's worth of growth, so every edge advances
- * continuously.
- */
 const SPLOTCHES = 3;
 const SPLOTCH_STAGGER_TICKS = 7;
 const GROW_TICKS = 90;
 const START_REACH = 0.07;
 const END_REACH = 0.95;
-/** Pigment each charge carries; the centre gathers every charge and the edge only the last few. */
 const CHARGE_CONCENTRATION = 0.06;
-/** Largest simulation grid: the bloom's edge is soft, and a smaller grid keeps each tick cheap. */
 const MAX_SIM_RESOLUTION = 320;
-/**
- * The gum film and the paper texture darken a heavy layer (Saunderson's surface term, see the
- * optics module), so the pigment is mixed lighter by this much in linear light to dry to the
- * colour asked for. Measured against a render of the dried bloom.
- */
+/** Compensates for gum-film and paper darkening; calibrated against the dried bloom. */
 const SURFACE_GAIN = 1.5;
-/** Scattering per unit thickness of a body colour: high enough to hide what lies under it. */
 const BODY_SCATTER = 5;
-/** Tick after which the last charge has bled to the corners. */
-export const BLOOM_COVERED_TICK = 140;
-export const BLOOM_TOTAL_TICKS = TOTAL_TICKS;
 const DRY_AT = 0.6;
 const DRY_RATE = 3;
 
@@ -74,7 +53,6 @@ function bodyColour(colour: readonly [number, number, number]) {
   };
 }
 
-/** Eases the growth so the bloom races out at first and slows as it reaches the edges. */
 const easeOut = (t: number) => 1 - (1 - t) ** 2.2;
 
 function mulberry(seed: number) {
@@ -111,7 +89,6 @@ export function bloomScene(
   const jitter = (spread: number) => (random() - 0.5) * spread;
   const events: { at_tick: number; op: unknown }[] = [];
 
-  // Wet the whole sheet first, in overlapping rows, so the charges have water to travel through.
   const rows = 4;
   for (let i = 0; i < rows; i++) {
     const y = (i + 0.5) / rows;
@@ -136,7 +113,6 @@ export function bloomScene(
     for (let step = 0; step < GROW_TICKS; step++) {
       const t = (step + 1) / GROW_TICKS;
       const r = Math.min(1, (START_REACH + (END_REACH - START_REACH) * easeOut(t)) * size);
-      // The centre drifts slowly as it grows, so a splotch swells lopsided rather than as a disc.
       const drift = r * 0.18 * (1 - Math.abs(trend) * 0.85);
       const centre = [
         clamp(at[0]! + (Math.sin(t * 3 + phase) * drift * short) / width),

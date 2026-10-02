@@ -21,6 +21,7 @@ const document = (width: number, height: number, seed: number, slope: number) =>
 
 describe('bloomScene', () => {
   it('keeps charges within the engine bounds across sizes, slopes and seeds', () => {
+    const invalid: unknown[] = [];
     for (const [width, height] of [[400, 150], [150, 400], [64, 64], [939, 61]]) {
       for (const slope of [-1, 0, 1]) {
         for (let seed = 0; seed < 24; seed++) {
@@ -29,25 +30,23 @@ describe('bloomScene', () => {
           const scene = JSON.parse(json) as BloomDocument;
           expect(scene.sim_resolution).toBeLessThanOrEqual(320);
           for (const event of scene.timeline.events) {
-            expect(event.at_tick).toBeGreaterThanOrEqual(0);
-            expect(event.at_tick).toBeLessThanOrEqual(scene.timeline.total_ticks);
+            if (event.at_tick < 0 || event.at_tick > scene.timeline.total_ticks) invalid.push(event);
             if (typeof event.op === 'string') continue;
             const stroke = event.op.brush ?? event.op.water;
             if (!stroke) continue;
             for (const point of stroke.path) {
               for (const coordinate of point) {
-                expect(coordinate).toBeGreaterThanOrEqual(0);
-                expect(coordinate).toBeLessThanOrEqual(1);
+                if (!Number.isFinite(coordinate) || coordinate < 0 || coordinate > 1) invalid.push(event);
               }
             }
             for (const radius of stroke.radius) {
-              expect(radius).toBeGreaterThan(0);
-              expect(radius).toBeLessThanOrEqual(1);
+              if (!Number.isFinite(radius) || radius <= 0 || radius > 1) invalid.push(event);
             }
           }
         }
       }
     }
+    expect(invalid).toEqual([]);
   });
 
   it('lands left, middle, right with the slope of the reading', () => {
