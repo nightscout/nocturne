@@ -118,10 +118,18 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             .Where(row => row.TenantId == tenantId && row.ConnectorName == "googlehealth")
             .Select(row => row.SyncCursorsJson).SingleOrDefaultAsync(ct);
         if (json is null) return null;
-        using var document = JsonDocument.Parse(json);
-        return document.RootElement.ValueKind == JsonValueKind.Object &&
-            document.RootElement.TryGetProperty(ProgressKey, out var value)
-            ? value.Deserialize<SyncProgress>() : null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                document.RootElement.TryGetProperty(ProgressKey, out var value)
+                ? value.Deserialize<SyncProgress>() : null;
+        }
+        catch (JsonException)
+        {
+            // A corrupt progress snapshot must not block status or replacement queue requests.
+            return null;
+        }
     }
 
     private async Task WriteProgressAsync(Guid tenantId, SyncProgress? progress, CancellationToken ct)

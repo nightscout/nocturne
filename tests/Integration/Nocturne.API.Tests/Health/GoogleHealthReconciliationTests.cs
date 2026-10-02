@@ -353,7 +353,13 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     [InlineData("\"legacy\"")]
     [InlineData("42")]
     [InlineData("true")]
-    public async Task Non_object_cursor_payloads_recover_for_cursor_writes_status_and_queue(string legacyJson)
+    [InlineData("{\"googleHealthProgress\":[]}")]
+    [InlineData("{\"googleHealthProgress\":\"invalid\"}")]
+    [InlineData("{\"googleHealthProgress\":42}")]
+    [InlineData("{\"googleHealthProgress\":{\"Phase\":\"invalid\"}}")]
+    [InlineData("{\"googleHealthProgress\":{\"WorkerOwned\":\"invalid\"}}")]
+    [InlineData("{\"googleHealthProgress\":{\"PagesRead\":{}}}")]
+    public async Task Invalid_cursor_payloads_recover_for_cursor_writes_status_and_queue(string legacyJson)
     {
         await SeedConnectorAsync(legacyJson);
         await using var provider = ReplicaServices();

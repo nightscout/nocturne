@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Controllers.V4.Health;
@@ -30,6 +31,37 @@ namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthTests
 {
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("42")]
+    [InlineData("{\"Phase\":\"invalid\"}")]
+    [InlineData("{\"WorkerOwned\":\"invalid\"}")]
+    [InlineData("{\"PagesRead\":{}}")]
+    public async Task Invalid_persisted_progress_does_not_block_status(string progress)
+    {
+        await using var connection = new SqliteConnection("DataSource=:memory:");
+        await connection.OpenAsync();
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var tenantId = Guid.NewGuid();
+        db.Tenants.Add(new TenantEntity { Id = tenantId, Slug = "invalid-progress", DisplayName = "Synthetic", IsActive = true });
+        await db.SaveChangesAsync();
+        db.TenantId = tenantId;
+        db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
+        {
+            Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
+            SyncCursorsJson = "{\"googleHealthProgress\":" + progress + "}"
+        });
+        await db.SaveChangesAsync();
+        var services = new ServiceCollection();
+        services.AddSingleton(db);
+        services.AddSingleton(Mock.Of<ITenantAccessor>());
+        using var provider = services.BuildServiceProvider();
+        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>());
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
+    }
+
     [Fact]
     public async Task Writer_uses_existing_native_tables_and_preserves_empty_types_and_other_tenants()
     {
