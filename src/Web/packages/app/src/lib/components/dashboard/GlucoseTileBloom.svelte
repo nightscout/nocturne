@@ -5,17 +5,15 @@
   interface Props {
     seed: number;
     delta?: number;
-    /** Custom property holding the colour to paint, e.g. `--glucose-high`. */
     token: string;
-    /** Fires on every player state change; `none` means nothing will paint. */
     onstatechange: (state: PlayerState) => void;
   }
 
   let { seed, delta = 0, token, onstatechange }: Props = $props();
-
-  /** The token's colour as sRGB 0..1, resolved by the browser whatever colour space it is written in. */
   function tokenColour(el: HTMLElement): [number, number, number] {
-    const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const probeCanvas = document.createElement("canvas");
+    probeCanvas.width = probeCanvas.height = 1;
+    const probe = probeCanvas.getContext("2d", { willReadFrequently: true });
     if (!probe) return [0.5, 0.5, 0.5];
     probe.fillStyle = getComputedStyle(el).getPropertyValue(token).trim() || "#808080";
     probe.fillRect(0, 0, 1, 1);
@@ -24,8 +22,6 @@
   }
 
   let canvas: HTMLCanvasElement | undefined = $state();
-
-  // Live only: a generated scene has no baked fallback, and the host treats `none` as already spread.
   $effect(() => {
     const el = canvas;
     if (!el) return;
@@ -41,8 +37,7 @@
       { scene: (module) => bloomScene(module, width, height, { seed, slope, dpr, colour }) },
       { mode: "live", durationMs: 5200, tail: 0.5, width, height, dpr, releaseAfterFinish: true },
     );
-    // Untracked: the first emit runs inside this effect, and the host's state it touches must not
-    // become a dependency that rebuilds the player.
+    // The initial callback must not make host state a dependency of this effect.
     const emit = () => untrack(() => onstatechange(player.state));
     const offs = [player.on("ready", emit), player.on("statechange", emit), player.on("fallback", emit)];
     emit();
