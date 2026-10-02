@@ -9,6 +9,7 @@ const module = {
     palette: { name: 'slate', entries: [{ role: 'base_wash', pigment: { name: 'slate' } }] },
   }),
 };
+const colour = [0, 150 / 255, 136 / 255] as const;
 
 type Stroke = { path: [number, number][]; radius: [number, number] };
 type BloomDocument = {
@@ -17,7 +18,7 @@ type BloomDocument = {
 };
 
 const document = (width: number, height: number, seed: number, slope: number) =>
-  JSON.parse(bloomScene(module, width, height, { seed, slope })) as BloomDocument;
+  JSON.parse(bloomScene(module, width, height, { seed, slope, colour })) as BloomDocument;
 
 describe('bloomScene', () => {
   it('keeps charges within the engine bounds across sizes, slopes and seeds', () => {
@@ -25,7 +26,7 @@ describe('bloomScene', () => {
     for (const [width, height] of [[400, 150], [150, 400], [64, 64], [939, 61]]) {
       for (const slope of [-1, 0, 1]) {
         for (let seed = 0; seed < 24; seed++) {
-          const json = bloomScene(module, width!, height!, { seed, slope });
+          const json = bloomScene(module, width!, height!, { seed, slope, colour });
           expect(parseSceneDocument(json).version).toBe(1);
           const scene = JSON.parse(json) as BloomDocument;
           expect(scene.sim_resolution).toBeLessThanOrEqual(320);
@@ -69,7 +70,7 @@ describe('bloomScene', () => {
   });
 
   it('reproduces a reading seed and varies the next reading', () => {
-    const options = { seed: 7, slope: 0.5, colour: [0, 150 / 255, 136 / 255] as const };
+    const options = { seed: 7, slope: 0.5, colour };
     expect(bloomScene(module, 400, 150, options)).toBe(bloomScene(module, 400, 150, options));
     expect(document(400, 150, 7, 0.5).timeline).not.toEqual(document(400, 150, 8, 0.5).timeline);
   });
