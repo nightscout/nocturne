@@ -111,69 +111,67 @@ public class NotificationsParityTests : ParityTestBase
     [Fact]
     public async Task PostLoopNotification_Empty_ReturnsSameShape()
     {
-        var request = new { };
-
-        await AssertPostParityAsync("/api/v2/notifications/loop", request);
+        await AssertPostParityAsync("/api/v2/notifications/loop", new { });
     }
 
     [Fact]
-    public async Task PostLoopNotification_Simple_ReturnsSameShape()
+    public async Task PostLoopNotification_RemoteCarbs_ReturnsSameShape()
     {
         var request = new
         {
-            title = "Loop Alert",
-            message = "Blood glucose update",
-            type = "bg"
+            eventType = "Remote Carbs Entry",
+            remoteCarbs = "20.0",
+            remoteAbsorption = "3.0",
+            otp = "123456",
+            created_at = "2026-09-30T01:02:03Z",
         };
 
         await AssertPostParityAsync("/api/v2/notifications/loop", request);
     }
 
     [Fact]
-    public async Task PostLoopNotification_WithDeviceToken_ReturnsSameShape()
+    public async Task PostLoopNotification_RemoteBolus_ReturnsSameShape()
     {
         var request = new
         {
-            title = "Loop Notification",
-            message = "Test loop notification",
-            type = "loop",
-            deviceToken = "test-device-token-123",
-            bundleIdentifier = "com.loopkit.Loop"
+            eventType = "Remote Bolus Entry",
+            remoteBolus = "1.5",
+            otp = "123456",
         };
 
         await AssertPostParityAsync("/api/v2/notifications/loop", request);
     }
 
     [Fact]
-    public async Task PostLoopNotification_WithPushoverFields_ReturnsSameShape()
+    public async Task PostLoopNotification_TemporaryOverride_ReturnsSameShape()
     {
         var request = new
         {
-            title = "Pushover Loop Alert",
-            message = "Alert with pushover fields",
-            type = "loop",
-            sound = "pushover",
-            priority = 1,
-            retry = 60,
-            expire = 3600
+            eventType = "Temporary Override",
+            reason = "exercise",
+            reasonDisplay = "Exercise",
+            duration = "60.0",
+            notes = "",
         };
 
         await AssertPostParityAsync("/api/v2/notifications/loop", request);
     }
 
     [Fact]
-    public async Task PostLoopNotification_Urgent_ReturnsSameShape()
+    public async Task PostLoopNotification_CareportalForm_ReturnsSameShape()
     {
-        var request = new
+        var fields = new Dictionary<string, string>
         {
-            title = "URGENT: Low Blood Sugar",
-            message = "Blood sugar is critically low at 50 mg/dL",
-            type = "urgent",
-            level = 3,
-            sound = "critical"
+            ["eventType"] = "Temporary Override Cancel",
+            ["duration"] = "0",
+            ["enteredBy"] = "careportal",
         };
 
-        await AssertPostParityAsync("/api/v2/notifications/loop", request);
+        await AssertParityAsync(
+            HttpMethod.Post,
+            "/api/v2/notifications/loop",
+            new FormUrlEncodedContent(fields)
+        );
     }
 
     #endregion

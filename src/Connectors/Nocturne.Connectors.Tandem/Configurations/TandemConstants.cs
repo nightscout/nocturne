@@ -31,9 +31,9 @@ public static class TandemConstants
     /// The event IDs the Tandem Source web app itself requests by default (its
     /// <c>getLogIDList()</c>, 55 ids including the FSL3 CGM events 477/480/486). When the connector
     /// is not fetching the full history-log (i.e. device status / "fetch all" is off) it filters to
-    /// these, matching <c>tconnectsync</c>'s <c>DEFAULT_EVENT_IDS</c>. Note the pump-logs endpoint
-    /// currently ignores this filter server-side; it is sent anyway to mirror the web app and stay
-    /// forward-compatible.
+    /// these, matching <c>tconnectsync</c>'s <c>DEFAULT_EVENT_IDS</c>. The pump-logs endpoint sends
+    /// the list under the query key <c>eventCodes</c>, mirroring the Tandem Source web app; the
+    /// filter is ignored server-side anyway.
     /// </summary>
     public static readonly int[] DefaultEventIds =
     [
