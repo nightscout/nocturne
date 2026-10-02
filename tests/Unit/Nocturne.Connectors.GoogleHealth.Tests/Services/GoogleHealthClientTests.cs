@@ -263,6 +263,71 @@ public class GoogleHealthClientTests
         Assert.Equal(2, calls);
     }
 
+    [Theory]
+    [InlineData(0, 120, "DEEP")]
+    [InlineData(60, 180, "REM")]
+    [InlineData(30, 60, "UNSPECIFIED")]
+    [InlineData(30, 60, "RESTLESS")]
+    public async Task Overlapping_sleep_stages_fail_before_yielding_sessions(int secondStartMinutes, int secondEndMinutes, string secondType)
+    {
+        var start = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var payload = JsonSerializer.Serialize(new
+        {
+            dataPoints = new[] { new
+            {
+                name = "overlapping-night",
+                sleep = new
+                {
+                    interval = new { startTime = start, endTime = start.AddHours(8) },
+                    stages = new[]
+                    {
+                        new { startTime = start.AddMinutes(secondStartMinutes), endTime = start.AddMinutes(secondEndMinutes), type = secondType },
+                        new { startTime = start, endTime = start.AddHours(2), type = "DEEP" }
+                    }
+                }
+            } }
+        });
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json(payload))));
+        var yielded = 0;
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", start, start.AddDays(1), default))
+                yielded += page.Count;
+        });
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Unordered_sleep_stages_allow_adjacency_and_gaps(bool adjacent)
+    {
+        var start = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            sleep = new
+            {
+                interval = new { startTime = start, endTime = start.AddHours(8) },
+                stages = new[]
+                {
+                    new { startTime = start.AddHours(4), endTime = start.AddHours(8), type = "REM" },
+                    new { startTime = start, endTime = start.AddHours(adjacent ? 4 : 2), type = "DEEP" }
+                }
+            }
+        }));
+
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+
+        Assert.Equal((adjacent ? 8 : 6) * 60 * 60 * 1000L, session.TotalSleepMs);
+        Assert.Equal(2, session.Stages!.Count);
+        Assert.Equal([0, 1], session.Stages.Select(stage => stage.Ordinal));
+    }
+
     [Fact]
     public void Maps_sleep_sessions_and_stages()
     {

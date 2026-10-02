@@ -396,6 +396,11 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 }
             }
 
+            var orderedStages = stages.OrderBy(stage => stage.StartTime).ToArray();
+            for (var index = 1; index < orderedStages.Length; index++)
+                if (orderedStages[index].StartTime < orderedStages[index - 1].EndTime)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
+
             JsonElement metadata = default;
             var hasMetadata = payload.TryGetProperty("metadata", out metadata) && metadata.ValueKind == JsonValueKind.Object;
             var isNap = hasMetadata && metadata.TryGetProperty("nap", out var nap) && nap.ValueKind == JsonValueKind.True;
