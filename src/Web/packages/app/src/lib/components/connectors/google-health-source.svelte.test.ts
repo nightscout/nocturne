@@ -92,6 +92,20 @@ describe("Google Health source presentation", () => {
     expect(goto).toHaveBeenCalledWith("/settings/connectors/google-health");
   });
 
+  it.each([undefined, "google_unavailable"])(
+    "shows an active import instead of persisted status %s",
+    async (errorCode) => {
+      render(GoogleHealthSourceRow, {
+        connection: { ...connected, isSyncing: true, errorCode },
+      });
+      const row = page.getByRole("button", { name: /Google Health/ });
+      await expect.element(row).toHaveTextContent("Syncing");
+      await expect.element(row).not.toHaveTextContent("Active");
+      await expect.element(row).not.toHaveTextContent("Error");
+      await expect.element(row).not.toHaveTextContent("needs attention");
+    }
+  );
+
   it.each([
     {
       change: { previewRequired: true },

@@ -467,7 +467,7 @@ public class GoogleHealthTests
     }
 
     [Fact]
-    public async Task Saving_options_preserves_unrelated_connector_values_and_enabled_state()
+    public async Task Setup_save_reenables_a_disabled_connector_and_preserves_unrelated_values()
     {
         var tenantId = Guid.NewGuid();
         var subject = Guid.NewGuid();
@@ -475,11 +475,14 @@ public class GoogleHealthTests
         store.SetConfiguration("""{"enabled":false,"syncIntervalMinutes":30,"activeThresholdMinutes":45}""");
         var service = Service(store, new StubHandler(_ => Json("{}")), tenantId);
 
+        var disabled = await Assert.ThrowsAsync<GoogleHealthException>(() => service.StartAsync(subject, default));
+        Assert.Equal("configure_first", disabled.Message);
         await service.SaveAsync(Options(), subject, default);
 
-        Assert.False(store.Configuration.GetProperty("enabled").GetBoolean());
+        Assert.True(store.Configuration.GetProperty("enabled").GetBoolean());
         Assert.Equal(30, store.Configuration.GetProperty("syncIntervalMinutes").GetInt32());
         Assert.Equal(45, store.Configuration.GetProperty("activeThresholdMinutes").GetInt32());
+        Assert.Contains("https://accounts.google.com/", (await service.StartAsync(subject, default)).Url);
     }
 
     [Fact]
@@ -971,6 +974,7 @@ public class GoogleHealthTests
                         IsActive = true
                     };
                     response.Configuration = configuration;
+                    response.IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean();
                 })
                 .ReturnsAsync(() => response!);
             configurations.Setup(value => value.GetSecretsAsync(
@@ -1025,7 +1029,7 @@ public class GoogleHealthTests
             {
                 ConnectorName = "GoogleHealth",
                 Configuration = configuration,
-                IsActive = true
+                IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean()
             };
         }
     }

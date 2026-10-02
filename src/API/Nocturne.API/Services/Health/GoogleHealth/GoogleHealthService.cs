@@ -96,7 +96,7 @@ public sealed class GoogleHealthService(
     {
         var stored = await connectorConfigurations.GetConfigurationAsync(ConnectorName, ct);
         var configuration = stored?.Configuration.RootElement.Deserialize<JsonObject>(Json) ?? new JsonObject();
-        configuration["enabled"] ??= true;
+        configuration["enabled"] = true;
         configuration["clientId"] = options.ClientId;
         configuration["callbackUrl"] = options.CallbackUrl;
         configuration["lookbackDays"] = options.HistoryDays;

@@ -2,16 +2,23 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import type { GoogleHealthStatus } from "$lib/api/generated/nocturne-api-client";
-  import DataSourceRow, { type DataSourceStatus } from "$lib/components/settings/DataSourceRow.svelte";
+  import DataSourceRow, {
+    type DataSourceStatus,
+  } from "$lib/components/settings/DataSourceRow.svelte";
   import { lastSeen } from "$lib/utils/formatting";
   import HeartPulse from "@lucide/svelte/icons/heart-pulse";
 
   let { connection }: { connection: GoogleHealthStatus } = $props();
   const status = $derived<DataSourceStatus>(
-    !connection.connected ? "offline"
-      : connection.errorCode ? "error"
-      : connection.previewRequired || !connection.selectedTypes?.length ? "configured"
-      : "active"
+    connection.isSyncing
+      ? "syncing"
+      : !connection.connected
+        ? "offline"
+        : connection.errorCode
+          ? "error"
+          : connection.previewRequired || !connection.selectedTypes?.length
+            ? "configured"
+            : "active"
   );
 </script>
 
@@ -19,7 +26,9 @@
   name="Google Health"
   icon={undefined}
   {status}
-  statusMessage={connection.errorCode ? "Google Health needs attention. Open the connector for details and recovery options." : undefined}
+  statusMessage={status === "error"
+    ? "Google Health needs attention. Open the connector for details and recovery options."
+    : undefined}
   lastSyncAttempt={connection.lastAttempt}
   lastSuccessfulSync={connection.lastSync}
   onclick={() => void goto(resolve("/settings/connectors/google-health"))}
