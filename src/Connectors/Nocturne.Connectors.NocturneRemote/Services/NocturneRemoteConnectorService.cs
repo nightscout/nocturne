@@ -400,6 +400,9 @@ public class NocturneRemoteConnectorService : BaseConnectorService<NocturneRemot
         var payload = await ExecuteWithRetryAsync(
             async () =>
             {
+                refusal = null;
+                transportFailure = null;
+                failure = null;
                 try
                 {
                     var response = await GetWithHeadersAsync(BuildAbsoluteUrl(relativeUrl), _authHeaders, ct);

@@ -514,7 +514,8 @@ public sealed class GoogleHealthService(
                 throw new GoogleHealthException("configure_first");
             if (settings.PreviewOnly) throw new GoogleHealthException("preview_required");
             if (settings.DataTypes.Length == 0) throw new GoogleHealthException("no_types_selected");
-            await coordinator.QueueAsync(TenantId, settings.DataTypes.Length, ct);
+            if (!await coordinator.QueueAsync(TenantId, settings.DataTypes.Length, ct))
+                throw new GoogleHealthException("already_running", stage: "sync_queue");
         }
         catch (Exception ex) when (ex is JsonException or FormatException)
         {

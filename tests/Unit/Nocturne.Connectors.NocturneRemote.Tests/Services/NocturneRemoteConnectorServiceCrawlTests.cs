@@ -631,6 +631,23 @@ public class NocturneRemoteConnectorServiceCrawlTests
     }
 
     [Fact]
+    public async Task SyncDataAsync_WhenRetryReturnsMalformedJson_ReportsTheTerminalFailure()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.Status(HttpStatusCode.ServiceUnavailable),
+                RemoteFakeHandler.Json("invalid-json"));
+        var fixture = new ServiceFixture(handler, config: NewConfig(maxRetryAttempts: 2));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().NotContain("HTTP 503");
+        result.Errors.Single().Should().Contain("invalid start");
+    }
+
+    [Fact]
     public async Task SyncDataAsync_WhenTheRemoteTransportFails_ReportsTheTransportCause()
     {
         var handler = new RemoteFakeHandler()

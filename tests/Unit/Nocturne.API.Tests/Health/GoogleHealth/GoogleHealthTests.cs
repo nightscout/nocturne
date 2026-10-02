@@ -863,6 +863,33 @@ public class GoogleHealthTests
         Assert.Equal(code, Assert.IsType<ProblemDetails>(response.Value).Detail);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Manual_import_reports_rejection_when_another_import_is_active(bool scheduled)
+    {
+        var tenant = Guid.NewGuid();
+        var coordinator = new GoogleHealthCoordinator();
+        var store = new TestConnectorStore();
+        var service = Service(store, new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"openid {{GoogleHealthClient.MetricsScope}}"}"""),
+            "/v1/userinfo" => Json("""{"sub":"account"}"""),
+            _ => Json("{}")
+        }), tenant, coordinator);
+        await ConnectAsync(service);
+        var options = Options();
+        options.PreviewOnly = false;
+        await service.SaveAsync(options, Guid.NewGuid(), default);
+        await using var operation = scheduled ? await coordinator.AcquireAsync(tenant, default) : null;
+        if (!scheduled) await service.QueueSyncAsync(default);
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => service.QueueSyncAsync(default));
+
+        Assert.Equal("already_running", error.Message);
+        Assert.Equal("sync_queue", error.Stage);
+    }
+
     private static async Task ConnectAsync(GoogleHealthService service)
     {
         var subject = Guid.NewGuid();

@@ -71,12 +71,9 @@ public sealed class GoogleHealthConnectorService(
 
     /// <summary>
     ///     Resolves the next historical calendar-month window. The live window is processed
-    ///     separately on every managed sync, before this backfill window. A multi-year history is
-    ///     therefore never attempted in one call. A caller-supplied window is
-    ///     honored exactly, without touching backfill state, when it is already bounded to at most one
-    ///     day; a wider or open-ended one (an admin cursor reset re-pulling all history) instead
-    ///     (re)starts the managed backfill from its lower bound, or from the earliest supported date
-    ///     when none is given.
+    ///     separately on every managed sync, before this backfill window. Caller-supplied windows
+    ///     are completed in full without touching backfill state; reconciliation splits oversized
+    ///     windows as needed. An omitted lower bound uses the earliest supported date.
     /// </summary>
     private async Task<GoogleHealthSyncWindow> ResolveWindowAsync(
         SyncRequest request, GoogleHealthConnectorConfiguration config, DateTimeOffset now, CancellationToken ct)
@@ -87,14 +84,8 @@ public sealed class GoogleHealthConnectorService(
             var explicitTo = new DateTimeOffset(DateTime.SpecifyKind(requestedTo, DateTimeKind.Utc));
             var explicitFrom = request.From is { } requestedFrom
                 ? new DateTimeOffset(DateTime.SpecifyKind(requestedFrom, DateTimeKind.Utc))
-                : (DateTimeOffset?)null;
-            if (explicitFrom is { } bounded && explicitTo - bounded <= TimeSpan.FromDays(1))
-                return new GoogleHealthSyncWindow(bounded, explicitTo, IsBackfillDay: false, IsManaged: false);
-
-            var floor = explicitFrom is { } floorFrom
-                ? new DateTimeOffset(DateTime.SpecifyKind(floorFrom.Date, DateTimeKind.Utc))
                 : EarliestSupportedDate;
-            await SaveBackfillStateAsync(new BackfillState(today, floor, floor >= today, null), ct);
+            return new GoogleHealthSyncWindow(explicitFrom, explicitTo, IsBackfillDay: false, IsManaged: false);
         }
 
         var state = await LoadBackfillStateAsync(ct);

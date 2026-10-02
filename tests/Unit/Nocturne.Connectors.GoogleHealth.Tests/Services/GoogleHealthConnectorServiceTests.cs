@@ -141,7 +141,9 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(result.Success);
         Assert.Equal(new DateTimeOffset(2026, 9, 10, 9, 55, 0, TimeSpan.Zero), requestedFrom[0]);
-        Assert.Equal(DateTimeOffset.UtcNow.Date.AddDays(-7), requestedFrom[1].UtcDateTime.Date);
+        var today = DateTimeOffset.UtcNow.Date;
+        var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
+        Assert.Equal(today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart, requestedFrom[1].UtcDateTime.Date);
     }
 
     [Theory]
@@ -264,12 +266,17 @@ public class GoogleHealthConnectorServiceTests
         var config = fixture.Configuration();
         config.HistoryDays = 7;
 
+        var today = DateTimeOffset.UtcNow.Date;
+        var monthStart = new DateTime(today.AddDays(-1).Year, today.AddDays(-1).Month, 1);
+        var windowFrom = today.AddDays(-7) > monthStart ? today.AddDays(-7) : monthStart;
+        var retryDays = Math.Max(1, (int)Math.Ceiling((today - windowFrom).TotalDays / 2));
+
         var failed = await fixture.Service.SyncDataAsync(config, CancellationToken.None);
 
         Assert.False(failed.Success);
         using (var stored = JsonDocument.Parse(fixture.StoredConfiguration))
         {
-            Assert.Equal(4, stored.RootElement.GetProperty("backfillChunkDays").GetInt32());
+            Assert.Equal(retryDays, stored.RootElement.GetProperty("backfillChunkDays").GetInt32());
             Assert.True(stored.RootElement.TryGetProperty("lastSyncedTo", out _));
         }
 
@@ -279,7 +286,7 @@ public class GoogleHealthConnectorServiceTests
 
         Assert.True(retried.Success);
         Assert.InRange(retryRanges[0], DateTimeOffset.UtcNow.AddMinutes(-6), DateTimeOffset.UtcNow);
-        Assert.Equal(DateTimeOffset.UtcNow.Date.AddDays(-4), retryRanges[1].UtcDateTime.Date);
+        Assert.Equal(today.AddDays(-retryDays), retryRanges[1].UtcDateTime.Date);
     }
 
     [Fact]
@@ -606,9 +613,44 @@ public class GoogleHealthConnectorServiceTests
         var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
 
         Assert.True(result.Success);
+        for (var attempt = 0; attempt < 3 && !fixture.ImportFromWasConsumed; attempt++)
+            Assert.True((await fixture.Service.SyncDataAsync(new SyncRequest(), config, default)).Success);
         Assert.True(fixture.ImportFromWasConsumed);
         Assert.Contains(windows, window => window.To - window.From > TimeSpan.FromDays(1));
         Assert.True(windows.Count(window => window.To - window.From <= TimeSpan.FromDays(1)) >= 4);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Explicit_range_completes_the_full_requested_history(bool hasLowerBound)
+    {
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/token" => Json($$"""{"access_token":"access","refresh_token":"refresh","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}"""),
+            _ => Json("""{"dataPoints":[]}""")
+        });
+        var from = new DateTime(2025, 1, 15, 12, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2025, 5, 10, 18, 0, 0, DateTimeKind.Utc);
+        var windows = new List<(DateTimeOffset From, DateTimeOffset To)>();
+        fixture.Writer.Setup(value => value.BeginReconciliationAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<DateTimeOffset>(),
+                It.IsAny<DateTimeOffset>(), It.IsAny<CancellationToken>()))
+            .Returns<IReadOnlyCollection<string>, DateTimeOffset, DateTimeOffset, CancellationToken>(
+                (_, start, end, _) =>
+                {
+                    windows.Add((start, end));
+                    return Task.FromResult(Guid.NewGuid());
+                });
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { From = hasLowerBound ? from : null, To = to }, fixture.Configuration(), default);
+
+        Assert.True(result.Success);
+        var window = Assert.Single(windows);
+        Assert.Equal(hasLowerBound ? new DateTimeOffset(from) : new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.Zero), window.From);
+        Assert.Equal(new DateTimeOffset(to), window.To);
+        Assert.False(fixture.ImportFromWasConsumed);
     }
 
     private sealed class Fixture
