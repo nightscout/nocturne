@@ -1,22 +1,18 @@
-import type { PaletteId, Surface } from '../types';
 import { DEFAULT_INTENSITY } from '../types';
 import type { WasmModule } from './wasm-types';
 import { dropSimResolution } from './drop-scene';
 
 export interface BloomSceneOptions {
-  palette?: PaletteId;
-  surface?: Surface;
   seed?: number;
   /** Normalised trend from -1 (falling) to 1 (rising); defaults to level. */
   slope?: number;
-  intensity?: number;
   dpr?: number;
   /** sRGB channels in 0..1; uses an opaque body pigment instead of the donor pigment. */
-  colour?: readonly [number, number, number];
+  colour: readonly [number, number, number];
 }
 
 interface SceneDocument {
-  palette: { name: string; entries: { role: string; pigment: unknown }[] };
+  palette: { name: string };
   [key: string]: unknown;
 }
 
@@ -75,15 +71,14 @@ export function bloomScene(
   module: Pick<WasmModule, 'catalogueScene'>,
   width: number,
   height: number,
-  { palette = 'slate', surface = 'light', seed = 0, slope = 0, intensity = DEFAULT_INTENSITY, dpr = 1, colour }: BloomSceneOptions = {},
+  { seed = 0, slope = 0, dpr = 1, colour }: BloomSceneOptions,
 ): string {
   const pxW = Math.max(1, Math.round(width * dpr));
   const pxH = Math.max(1, Math.round(height * dpr));
   const simResolution = Math.min(MAX_SIM_RESOLUTION, dropSimResolution(Math.max(pxW, pxH)));
   const doc = JSON.parse(
-    module.catalogueScene(DONOR, seed, palette, intensity, 'large', surface, simResolution),
+    module.catalogueScene(DONOR, seed, 'slate', DEFAULT_INTENSITY, 'large', 'light', simResolution),
   ) as SceneDocument;
-  const base = Math.max(0, doc.palette.entries.findIndex((e) => e.role === 'base_wash'));
   const short = Math.min(width, height);
   const random = mulberry(seed || 1);
   const jitter = (spread: number) => (random() - 0.5) * spread;
@@ -125,7 +120,7 @@ export function bloomScene(
             path: [centre],
             radius: [r, r],
             pigment: 0,
-            concentration: Math.min(1, CHARGE_CONCENTRATION * (0.4 + intensity * 0.857)),
+            concentration: Math.min(1, CHARGE_CONCENTRATION * (0.4 + DEFAULT_INTENSITY * 0.857)),
             water: 0.5,
             softness: 0.85,
           },
@@ -138,13 +133,13 @@ export function bloomScene(
 
   return JSON.stringify({
     ...doc,
-    id: `bloom-${palette}-${seed}`,
+    id: `bloom-slate-${seed}`,
     size_hint: [pxW, pxH],
     seed,
     sim_resolution: simResolution,
     palette: {
       name: doc.palette.name,
-      entries: [colour ? { role: 'base_wash', pigment: bodyColour(colour) } : doc.palette.entries[base]!],
+      entries: [{ role: 'base_wash', pigment: bodyColour(colour) }],
     },
     timeline: { total_ticks: TOTAL_TICKS, events },
   });
