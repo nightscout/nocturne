@@ -12,6 +12,79 @@ public class GoogleHealthClientTests
 {
     [Theory]
     [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{\"minutesAsleep\":null}")]
+    [InlineData("{\"minutesAsleep\":\"invalid\"}")]
+    [InlineData("{\"minutesAsleep\":-1}")]
+    [InlineData("{\"minutesAsleep\":1.5}")]
+    [InlineData("{\"minutesAsleep\":481}")]
+    [InlineData("{\"minutesAsleep\":9223372036854775807}")]
+    [InlineData("{\"minutesAwake\":null}")]
+    [InlineData("{\"minutesAwake\":\"invalid\"}")]
+    [InlineData("{\"minutesAwake\":-1}")]
+    [InlineData("{\"minutesAwake\":481}")]
+    [InlineData("{\"minutesAwake\":9223372036854775807}")]
+    [InlineData("{\"minutesToFallAsleep\":null}")]
+    [InlineData("{\"minutesToFallAsleep\":\"invalid\"}")]
+    [InlineData("{\"minutesToFallAsleep\":-1}")]
+    [InlineData("{\"minutesToFallAsleep\":481}")]
+    [InlineData("{\"minutesToFallAsleep\":9223372036854775807}")]
+    [InlineData("{\"minutesAsleep\":400,\"minutesAwake\":100}")]
+    public async Task Invalid_sleep_summaries_fail_the_page_before_yielding_sessions(string summary)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json($$$"""
+            {"dataPoints":[{"name":"night-1","sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{{{summary}}}
+            }}]}
+            """))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var yielded = 0;
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                yielded += page.Count;
+        });
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(480)]
+    public void Valid_sleep_summary_boundaries_preserve_explicit_totals(int minutes)
+    {
+        using var document = JsonDocument.Parse($$$"""
+            {"sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{"minutesAsleep":"{{{minutes}}}","minutesAwake":0,"minutesToFallAsleep":0}
+            }}
+            """);
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+        Assert.Equal(minutes * 60_000L, session.TotalSleepMs);
+        Assert.Equal(0, session.TotalAwakeMs);
+        Assert.Equal(0, session.SleepLatencyMs);
+    }
+
+    [Fact]
+    public void Partial_sleep_summary_deducts_known_awake_time_from_interval_fallback()
+    {
+        using var document = JsonDocument.Parse("""
+            {"sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{"minutesAwake":60}
+            }}
+            """);
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+        Assert.Equal(420 * 60_000L, session.TotalSleepMs);
+        Assert.Equal(60 * 60_000L, session.TotalAwakeMs);
+    }
+
+    [Theory]
+    [InlineData("null")]
     [InlineData("{}")]
     [InlineData("42")]
     [InlineData("\"malformed\"")]

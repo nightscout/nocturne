@@ -403,18 +403,22 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             var processed = hasMetadata && metadata.TryGetProperty("processed", out var complete) && complete.ValueKind == JsonValueKind.True;
 
             JsonElement summary = default;
-            var hasSummary = payload.TryGetProperty("summary", out summary) && summary.ValueKind == JsonValueKind.Object;
+            var hasSummary = payload.TryGetProperty("summary", out summary);
+            if (hasSummary && summary.ValueKind != JsonValueKind.Object)
+                throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
             var durationMs = (long)(end - start).TotalMilliseconds;
             var stagedSleepMs = StageMilliseconds(stages, SleepStageType.Asleep, SleepStageType.Light, SleepStageType.Deep, SleepStageType.Rem);
-            var sleepMinutes = hasSummary ? Minutes(summary, "minutesAsleep") : null;
-            var totalSleepMs = sleepMinutes.HasValue ? sleepMinutes.Value * 60_000 : stagedSleepMs;
-            if (totalSleepMs == 0 && stages.Count == 0) totalSleepMs = durationMs;
+            var sleepMs = hasSummary ? SummaryMilliseconds(summary, "minutesAsleep", durationMs) : null;
+            var totalSleepMs = sleepMs ?? stagedSleepMs;
             var stagedAwakeMs = StageMilliseconds(stages, SleepStageType.Awake, SleepStageType.AwakeInBed);
-            var awakeMinutes = hasSummary ? Minutes(summary, "minutesAwake") : null;
-            long? totalAwakeMs = awakeMinutes.HasValue
-                ? awakeMinutes.Value * 60_000
-                : stages.Count > 0 ? stagedAwakeMs : null;
-            var latencyMinutes = hasSummary ? Minutes(summary, "minutesToFallAsleep") : null;
+            var awakeMs = hasSummary ? SummaryMilliseconds(summary, "minutesAwake", durationMs) : null;
+            if (!sleepMs.HasValue && stages.Count == 0) totalSleepMs = durationMs - (awakeMs ?? 0);
+            long? totalAwakeMs = awakeMs ?? (stages.Count > 0 ? stagedAwakeMs : null);
+            var latencyMs = hasSummary ? SummaryMilliseconds(summary, "minutesToFallAsleep", durationMs) : null;
+            if (stagedSleepMs > durationMs || stagedAwakeMs > durationMs ||
+                stagedSleepMs + stagedAwakeMs > durationMs ||
+                totalSleepMs > durationMs || totalSleepMs + (totalAwakeMs ?? 0) > durationMs)
+                throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
 
             var externalId = hasMetadata && metadata.TryGetProperty("externalId", out var external) && external.ValueKind == JsonValueKind.String
                 ? external.GetString()
@@ -439,9 +443,7 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
                 DeepSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Deep) : null,
                 LightSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Light) : null,
                 RemSleepMs = stages.Count > 0 ? StageMilliseconds(stages, SleepStageType.Rem) : null,
-                SleepLatencyMs = latencyMinutes.HasValue
-                    ? latencyMinutes.Value * 60_000
-                    : null,
+                SleepLatencyMs = latencyMs,
                 Efficiency = durationMs > 0 ? (float)(totalSleepMs * 100d / durationMs) : null,
                 RestlessPeriods = stages.Count > 0 ? stages.Count(stage => stage.Stage == SleepStageType.Restless) : null,
                 Source = SleepSource.Google,
@@ -476,10 +478,15 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
     private static long StageMilliseconds(IEnumerable<SleepStageInterval> stages, params SleepStageType[] types) =>
         stages.Where(stage => types.Contains(stage.Stage)).Sum(stage => (long)(stage.EndTime - stage.StartTime).TotalMilliseconds);
 
-    private static long? Minutes(JsonElement summary, string property) =>
-        summary.TryGetProperty(property, out var value) && long.TryParse(value.ToString(), CultureInfo.InvariantCulture, out var minutes) && minutes >= 0
-            ? minutes
-            : null;
+    private static long? SummaryMilliseconds(JsonElement summary, string property, long durationMs)
+    {
+        if (!summary.TryGetProperty(property, out var value)) return null;
+        if (value.ValueKind is not (JsonValueKind.Number or JsonValueKind.String) ||
+            !long.TryParse(value.ToString(), CultureInfo.InvariantCulture, out var minutes) ||
+            minutes < 0 || minutes > durationMs / 60_000)
+            throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: "sleep");
+        return checked(minutes * 60_000);
+    }
 
     public static GoogleHealthReading Parse(string type, JsonElement point)
     {
