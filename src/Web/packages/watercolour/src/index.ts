@@ -88,3 +88,6 @@ export type { PigmentColours } from './api/drop-colour';
 
 export { WatercolourError, toWatercolourError } from './api/errors';
 export type { WatercolourErrorCode } from './api/errors';
+
+export { bloomScene } from './api/bloom-scene';
+export type { BloomSceneOptions } from './api/bloom-scene';
