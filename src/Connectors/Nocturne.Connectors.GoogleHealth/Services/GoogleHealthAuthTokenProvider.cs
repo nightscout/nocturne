@@ -153,7 +153,7 @@ public sealed class GoogleHealthAuthTokenProvider(
         ValidateTokenType(response, stage);
         var accessToken = RequiredString(response, "access_token", stage);
         var expiresAt = DateTimeOffset.UtcNow.AddSeconds(RequiredExpiresIn(response, stage));
-        var scopes = ResponseScopes(response, fallbackScopes);
+        var scopes = ResponseScopes(response, fallbackScopes, stage);
         var refreshToken = fallbackRefreshToken;
 
         if (response.TryGetProperty("refresh_token", out var replacement))
@@ -184,6 +184,7 @@ public sealed class GoogleHealthAuthTokenProvider(
     private static int RequiredExpiresIn(JsonElement response, string stage)
     {
         if (!response.TryGetProperty("expires_in", out var value) ||
+            value.ValueKind != JsonValueKind.Number ||
             !value.TryGetInt32(out var seconds) ||
             seconds <= 0)
             throw new GoogleHealthException("invalid_token_response", stage: stage);
@@ -198,10 +199,12 @@ public sealed class GoogleHealthAuthTokenProvider(
             throw new GoogleHealthException("invalid_token_response", stage: stage);
     }
 
-    private static string[] ResponseScopes(JsonElement response, IReadOnlyCollection<string> fallback)
+    private static string[] ResponseScopes(JsonElement response, IReadOnlyCollection<string> fallback, string stage)
     {
-        if (!response.TryGetProperty("scope", out var value) || value.ValueKind != JsonValueKind.String)
+        if (!response.TryGetProperty("scope", out var value))
             return fallback.Distinct(StringComparer.Ordinal).ToArray();
+        if (value.ValueKind != JsonValueKind.String)
+            throw new GoogleHealthException("invalid_token_response", stage: stage);
         return (value.GetString() ?? string.Empty)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Distinct(StringComparer.Ordinal)

@@ -454,7 +454,7 @@ public enum ConnectorResetJobState
     Running,
     /// <summary>Every connector has been processed successfully.</summary>
     Completed,
-    /// <summary>The job terminated due to an unrecoverable error before completing.</summary>
+    /// <summary>At least one connector failed, or an unrecoverable error prevented the job from completing.</summary>
     Failed,
     /// <summary>The job was cancelled before completing.</summary>
     Cancelled,
