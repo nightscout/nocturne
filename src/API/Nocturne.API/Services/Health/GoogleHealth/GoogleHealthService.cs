@@ -140,6 +140,7 @@ public sealed class GoogleHealthService(
         await connectorConfigurations.SaveSecretsAsync(
             ConnectorName, secrets, subject.ToString(), ct);
         await SetEnabledAsync(true, subject, ct);
+        await oauth.StoreSessionAsync(token);
     }
 
     private async Task RemoveSessionAsync(Guid subject, bool removeAccount, CancellationToken ct)
@@ -343,7 +344,6 @@ public sealed class GoogleHealthService(
             }
 
             await SaveSessionAsync(settings, token, account, subject, ct);
-            await oauth.StoreSessionAsync(token);
             await connectorConfigurations.UpdateHealthStateAsync(
                 ConnectorName,
                 lastErrorMessage: string.Empty,

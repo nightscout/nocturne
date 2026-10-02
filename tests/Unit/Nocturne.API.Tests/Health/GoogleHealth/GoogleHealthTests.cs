@@ -673,13 +673,18 @@ public class GoogleHealthTests
         });
     }
 
-    [Fact]
-    public async Task Preview_refreshes_a_rejected_token_once_and_restarts_inventory()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Preview_preserves_refreshed_tokens_after_configuration_invalidates_cache(bool expireCachedToken)
     {
         var tokenCalls = 0;
         var oldTokenCalls = 0;
         var freshTokenCalls = 0;
         var store = new TestConnectorStore();
+        var tenantId = Guid.NewGuid();
+        var tokenCache = new ConnectorTokenCache();
+        store.OnSave = () => tokenCache.Invalidate("GoogleHealth", tenantId);
         var handler = new StubHandler(request =>
         {
             if (request.RequestUri!.AbsolutePath == "/token")
@@ -694,14 +699,15 @@ public class GoogleHealthTests
             freshTokenCalls++;
             return Json("{\"dataPoints\":[{}]}");
         });
-        var service = Service(store, handler, Guid.NewGuid());
+        var service = Service(store, handler, tenantId, tokenCache: tokenCache);
         await ConnectAsync(service);
+        if (expireCachedToken) tokenCache.Invalidate("GoogleHealth", tenantId);
 
         var preview = await service.PreviewAsync(Guid.NewGuid(), default);
 
         Assert.Equal(2, tokenCalls);
         var supportedCount = GoogleHealthClient.Capabilities.Count(capability => capability.Supported);
-        Assert.Equal(supportedCount, oldTokenCalls);
+        Assert.Equal(expireCachedToken ? 0 : supportedCount, oldTokenCalls);
         Assert.Equal(supportedCount, freshTokenCalls);
         Assert.All(preview.Items.Where(item => item.Supported), item =>
         {
@@ -709,10 +715,12 @@ public class GoogleHealthTests
             Assert.Null(item.ErrorCode);
         });
         Assert.Equal("refreshed-refresh", store.Secrets["refreshToken"]);
-        Assert.True((await service.StatusAsync(default)).Connected);
+        var status = await service.StatusAsync(default);
+        Assert.True(status.Connected);
+        Assert.NotNull(status.AccessTokenExpiresAt);
         await service.PreviewAsync(Guid.NewGuid(), default);
         Assert.Equal(2, tokenCalls);
-        Assert.Equal(supportedCount, oldTokenCalls);
+        Assert.Equal(expireCachedToken ? 0 : supportedCount, oldTokenCalls);
     }
 
     [Fact]
@@ -1034,7 +1042,8 @@ public class GoogleHealthTests
         TestConnectorStore store,
         HttpMessageHandler handler,
         Guid tenantId,
-        GoogleHealthCoordinator? coordinator = null)
+        GoogleHealthCoordinator? coordinator = null,
+        ConnectorTokenCache? tokenCache = null)
     {
         var tenant = new Mock<ITenantAccessor>();
         tenant.SetupGet(value => value.IsResolved).Returns(true);
@@ -1044,7 +1053,7 @@ public class GoogleHealthTests
             new GoogleHealthClient(new HttpClient(handler, false)),
             new GoogleHealthAuthTokenProvider(
                 new HttpClient(handler, false),
-                new ConnectorTokenCache(),
+                tokenCache ?? new ConnectorTokenCache(),
                 new ConnectorServerResolver<GoogleHealthConnectorConfiguration>(null, null, null),
                 tenant.Object,
                 NullLogger<GoogleHealthAuthTokenProvider>.Instance),
@@ -1073,6 +1082,7 @@ public class GoogleHealthTests
         private Dictionary<string, string> secrets = new(StringComparer.OrdinalIgnoreCase);
         private ConnectorConfigurationResponse? response;
         public bool? IsActive => response?.IsActive;
+        public Action? OnSave { get; set; }
 
         private ConnectorSyncCursor? runtimeCursor;
         public IConnectorSyncCursorStore Cursors { get; }
@@ -1104,6 +1114,7 @@ public class GoogleHealthTests
                     };
                     response.Configuration = configuration;
                     response.IsActive = !configuration.RootElement.TryGetProperty("enabled", out var enabled) || enabled.GetBoolean();
+                    OnSave?.Invoke();
                 })
                 .ReturnsAsync(() => response!);
             configurations.Setup(value => value.GetSecretsAsync(
@@ -1113,7 +1124,10 @@ public class GoogleHealthTests
                     "GoogleHealth", It.IsAny<Dictionary<string, string>>(), It.IsAny<string?>(),
                     It.IsAny<CancellationToken>()))
                 .Callback<string, Dictionary<string, string>, string?, CancellationToken>((_, values, _, _) =>
-                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase))
+                {
+                    secrets = new Dictionary<string, string>(values, StringComparer.OrdinalIgnoreCase);
+                    OnSave?.Invoke();
+                })
                 .Returns(Task.CompletedTask);
             configurations.Setup(value => value.UpdateHealthStateAsync(
                     "GoogleHealth", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),

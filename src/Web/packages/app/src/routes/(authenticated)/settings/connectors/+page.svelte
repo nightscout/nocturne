@@ -55,11 +55,19 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { createCopyFeedback } from "$lib/hooks/copy-feedback.svelte";
   import { createTerminalRunTracker } from "./terminal-run-tracker";
+  import { canManageConnectors } from "$lib/authorization/connector-management";
+  import { page } from "$app/state";
 
   // Queries — fire on the server during SSR; results land in cache for hydration.
   const servicesOverviewQuery = getServicesOverview();
   const connectorStatusesQuery = getConnectorStatuses();
-  const googleHealthQuery = getGoogleHealth();
+  const canManage = $derived(
+    canManageConnectors(
+      page.data.effectivePermissions,
+      page.data.refusedAsDemoSubject
+    )
+  );
+  const googleHealthQuery = $derived(canManage ? getGoogleHealth() : null);
 
   const servicesOverview = $derived<ServicesOverview | null>(
     servicesOverviewQuery.current ?? null,
@@ -67,10 +75,10 @@
   const connectorStatuses = $derived<ConnectorStatusDto[]>(
     connectorStatusesQuery.current ?? [],
   );
-  const googleHealth = $derived(googleHealthQuery.current ?? null);
+  const googleHealth = $derived(googleHealthQuery?.current ?? null);
   const otherDataSources = $derived(
     (servicesOverview?.activeDataSources ?? []).filter(
-      (source) => source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector",
+      (source) => !canManage || (source.sourceType !== "google-health-connector" && source.deviceId !== "google-health-connector"),
     ),
   );
   const isLoading = $derived(
@@ -174,7 +182,7 @@
     await refreshQuietly(
       () => servicesOverviewQuery.refresh(),
       () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery.refresh()
+      () => googleHealthQuery?.refresh() ?? Promise.resolve()
     );
   }
 
@@ -185,7 +193,7 @@
   async function loadConnectorStatuses() {
     await refreshQuietly(
       () => connectorStatusesQuery.refresh(),
-      () => googleHealthQuery.refresh()
+      () => googleHealthQuery?.refresh() ?? Promise.resolve()
     );
   }
 
