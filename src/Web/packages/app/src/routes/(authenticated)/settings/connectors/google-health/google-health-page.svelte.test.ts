@@ -119,7 +119,24 @@ describe("Google Health connector page", () => {
     await page.getByText("Vitals", { exact: true }).click();
     await expect.element(vitals).not.toHaveAttribute("open");
 
-    await new Promise((resolve) => setTimeout(resolve, 2200));
+    const statusCalls = googleHealthMocks.status.mock.calls.length;
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        isSyncing: true,
+        syncPhase: GoogleHealthSyncPhase.Reading,
+        syncProgressPercent: 22,
+      })
+    );
+    await expect
+      .poll(() => googleHealthMocks.status.mock.calls.length, { timeout: 10000 })
+      .toBeGreaterThan(statusCalls);
+    await expect
+      .element(
+        page.getByRole("progressbar", { name: "Google Health import progress" })
+      )
+      .toHaveAttribute("aria-valuenow", "22");
     await expect.element(vitals).not.toHaveAttribute("open");
   });
 
