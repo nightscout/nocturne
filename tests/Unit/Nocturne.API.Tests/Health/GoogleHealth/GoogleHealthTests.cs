@@ -25,12 +25,32 @@ using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.Infrastructure.Data.Services;
+using Npgsql;
 using Xunit;
 
 namespace Nocturne.API.Tests.Health.GoogleHealth;
 
 public class GoogleHealthTests
 {
+    [Fact]
+    public void Dedicated_connection_preserves_data_source_password_without_enabling_security_info()
+    {
+        using var dataSource = NpgsqlDataSource.Create(
+            "Host=localhost;Database=synthetic;Username=synthetic;Password=synthetic-password");
+        using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseNpgsql(dataSource).Options);
+        Assert.Null(new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString()).Password);
+
+        using var connection = GoogleHealthCoordinator.CreateDedicatedConnection(db);
+        var settings = new NpgsqlConnectionStringBuilder(connection.ConnectionString);
+
+        Assert.Equal("synthetic-password", settings.Password);
+        Assert.False(settings.Pooling);
+        Assert.False(settings.PersistSecurityInfo);
+        Assert.Equal("synthetic", settings.Username);
+        Assert.Equal("synthetic", settings.Database);
+    }
+
     [Theory]
     [InlineData("[]")]
     [InlineData("\"invalid\"")]

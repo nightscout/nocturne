@@ -439,8 +439,9 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
     {
         var services = new ServiceCollection();
         services.AddScoped<ITenantAccessor, HttpContextTenantAccessor>();
-        services.AddDbContext<NocturneDbContext>(options => options
-            .UseNpgsql(fixture.Database.AppConnectionString).AddInterceptors(new TenantConnectionInterceptor()));
+        services.AddSingleton<NpgsqlDataSource>(_ => NpgsqlDataSource.Create(fixture.Database.AppConnectionString));
+        services.AddDbContext<NocturneDbContext>((provider, options) => options
+            .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()).AddInterceptors(new TenantConnectionInterceptor()));
         var tenants = new Mock<ITenantService>();
         tenants.Setup(service => service.GetAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
             [new TenantDto(tenantId, "synthetic", "Synthetic", true, DateTime.UtcNow)]);

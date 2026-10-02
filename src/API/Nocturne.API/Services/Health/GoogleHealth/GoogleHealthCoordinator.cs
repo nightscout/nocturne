@@ -52,8 +52,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
                 using var scope = scopes.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
                 // A dedicated, unpooled session releases the lock even if cleanup cannot reach PostgreSQL.
-                var settings = new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString()) { Pooling = false };
-                connection = new NpgsqlConnection(settings.ConnectionString);
+                connection = CreateDedicatedConnection(db);
                 await connection.OpenAsync(ct);
                 var started = System.Diagnostics.Stopwatch.StartNew();
                 var key = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(
@@ -80,6 +79,12 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             gate.Release();
             throw;
         }
+    }
+
+    internal static NpgsqlConnection CreateDedicatedConnection(NocturneDbContext db)
+    {
+        var settings = new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString()) { Pooling = false };
+        return ((NpgsqlConnection)db.Database.GetDbConnection()).CloneWith(settings.ConnectionString);
     }
 
     private sealed class Lease(NpgsqlConnection? connection, SemaphoreSlim gate) : IAsyncDisposable
@@ -240,10 +245,7 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
     {
         using var scope = scopes!.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
-        var connection = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(db.Database.GetConnectionString())
-        {
-            Pooling = false
-        }.ConnectionString);
+        var connection = CreateDedicatedConnection(db);
         try
         {
             await connection.OpenAsync(ct);
