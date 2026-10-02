@@ -510,8 +510,12 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             {
                 if (offsetValue.ValueKind != JsonValueKind.String || offsetValue.GetString() is not { } duration)
                     throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
-                var seconds = decimal.Parse(duration.TrimEnd('s'), CultureInfo.InvariantCulture);
-                if (seconds % 60 != 0 || Math.Abs(seconds) > 50400) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
+                if (duration.Length < 2 || duration[^1] != 's' ||
+                    !decimal.TryParse(duration.AsSpan(0, duration.Length - 1),
+                        NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint,
+                        CultureInfo.InvariantCulture, out var seconds) ||
+                    seconds % 60 != 0 || Math.Abs(seconds) > 50400)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
                 offset = (int)(seconds / 60);
             }
             return new GoogleHealthReading

@@ -155,6 +155,12 @@ public class GoogleHealthClientTests
     [InlineData("heart-rate", "null")]
     [InlineData("steps", "null")]
     [InlineData("weight", "7200")]
+    [InlineData("weight", "\"7200\"")]
+    [InlineData("heart-rate", "\"7200ss\"")]
+    [InlineData("steps", "\"7200ss\"")]
+    [InlineData("weight", "\"7,200s\"")]
+    [InlineData("weight", "\"7200 s\"")]
+    [InlineData("weight", "\"s\"")]
     [InlineData("weight", "true")]
     [InlineData("weight", "{}")]
     [InlineData("weight", "[]")]
@@ -173,6 +179,19 @@ public class GoogleHealthClientTests
         Assert.Equal("invalid_google_data", error.Message);
         Assert.Equal("data_parse", error.Stage);
         Assert.Equal(type, error.DataType);
+    }
+
+    [Theory]
+    [InlineData("0s", 0)]
+    [InlineData("7200s", 120)]
+    [InlineData("-19800s", -330)]
+    [InlineData("7200.000s", 120)]
+    [InlineData("50400s", 840)]
+    public void Valid_duration_utc_offsets_preserve_minute_values(string duration, int expected)
+    {
+        using var document = JsonDocument.Parse($$$"""{"weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z","utcOffset":"{{{duration}}}"},"weightGrams":60}}""");
+
+        Assert.Equal(expected, GoogleHealthClient.Parse("weight", document.RootElement).UtcOffsetMinutes);
     }
 
     [Theory]

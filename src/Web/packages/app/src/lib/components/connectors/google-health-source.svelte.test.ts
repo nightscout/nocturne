@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
+import { page as appPage } from "$app/state";
 import { goto } from "$app/navigation";
 import type { GoogleHealthStatus, ServicesOverview } from "$lib/api";
 
@@ -52,7 +53,11 @@ const connected: GoogleHealthStatus = {
 };
 
 describe("Google Health source presentation", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    appPage.data.effectivePermissions = ["tenant.settings"];
+    appPage.data.refusedAsDemoSubject = false;
+  });
 
   it("uses the same active styling as other connectors and opens its settings", async () => {
     render(ServerConnectorsCard, {
@@ -206,6 +211,38 @@ describe("Google Health source presentation", () => {
         .first()
         .click();
       expect(goto).toHaveBeenCalledWith("/settings/connectors/google-health");
+    }
+  );
+
+  it.each([
+    { permissions: ["glucose.read"], demo: false },
+    { permissions: ["tenant.settings"], demo: true },
+  ])(
+    "keeps read-only source information without querying Google Health (demo=$demo)",
+    async ({ permissions, demo }) => {
+      appPage.data.effectivePermissions = permissions;
+      appPage.data.refusedAsDemoSubject = demo;
+      overviewMocks.services.mockReturnValue({
+        current: {
+          activeDataSources: [
+            {
+              id: "google",
+              name: "Generic Google source",
+              sourceType: "google-health-connector",
+            },
+          ],
+          availableConnectors: [],
+        },
+      });
+      render(ConnectorsPage);
+
+      await expect
+        .element(page.getByText("Generic Google source", { exact: true }))
+        .toBeVisible();
+      expect(overviewMocks.google).not.toHaveBeenCalled();
+      await expect
+        .element(page.getByText("No data sources detected"))
+        .not.toBeInTheDocument();
     }
   );
 
