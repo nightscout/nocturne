@@ -18,15 +18,17 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
+  import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
   import type { PlayerState } from "@nocturne/watercolour";
 
   interface Props {
     /** The reading the wash belongs to; each reading paints its own stroke. */
     mills: number | undefined;
     variant: GlucoseTileVariant;
+    delta?: number;
   }
 
-  let { mills, variant }: Props = $props();
+  let { mills, variant, delta = 0 }: Props = $props();
 
   // Each reading paints its own stroke, which settles and fades back to the bare fill well
   // before the next reading arrives.
@@ -36,16 +38,20 @@
   const washPerReading = !prefersReducedMotion();
 
   // A reading in another range than the tile last showed paints its range's colour over the old
-  // fill, which holds until the stroke has swept across the tile and then fades to the new one.
-  // The wash artwork lays its whole stroke on the first tick, so the sweep is a mask over it.
+  // fill as splotches that bloom into one another, and the old fill holds until they cover the
+  // tile.
   const priorFill = $derived.by(() => {
     void washSeed;
     return untrack(() => shownFill);
   });
   const recolours = $derived(priorFill !== variant);
-  let paintingSeed = $state<number | null>(null);
+  /** With a 50% wall-clock tail, 0.67 is past covered tick 140 for every stagger seed. */
+  const BLOOM_COVERED = 0.67;
   let spreadSeed = $state<number | null>(null);
   const spread = $derived(spreadSeed === washSeed);
+
+  let noBloomSeed = $state<number | null>(null);
+  const noBloom = $derived(noBloomSeed === washSeed);
 
   function markSpread() {
     if (spreadSeed === washSeed) return;
@@ -56,14 +62,21 @@
   function onWashState(state: PlayerState) {
     if (state.finished) settledSeed = washSeed;
     if (state.mode === "none" || state.error !== undefined) markSpread();
-    else if (state.mode !== "pending") paintingSeed = washSeed;
   }
 
-  function onSweepEnd(event: AnimationEvent) {
-    if (event.target === event.currentTarget) markSpread();
+  function onBloomState(state: PlayerState) {
+    if (state.finished) settledSeed = washSeed;
+    if (state.mode === "none" || state.error !== undefined) noBloomSeed = washSeed;
+    if (noBloom || state.finished || state.progress >= BLOOM_COVERED) markSpread();
   }
 
-  const faded = $derived(recolours ? spread : settledSeed === washSeed);
+  // The old fill goes once the bloom covers the tile; the bloom itself dries in place, then fades
+  // to the flat fill, so the drying paint is never cut short.
+  const faded = $derived(
+    recolours
+      ? spread && (settledSeed === washSeed || noBloom)
+      : settledSeed === washSeed
+  );
 
   function markFaded(event: TransitionEvent) {
     if (event.target === event.currentTarget && faded) fadedSeed = washSeed;
@@ -92,13 +105,13 @@
     high: "bg-glucose-high",
     "very-high": "bg-glucose-very-high",
   };
-  const floodClass: Record<GlucoseTileVariant, string> = {
-    neutral: "flood-neutral",
-    "very-low": "flood-very-low",
-    low: "flood-low",
-    "in-range": "flood-in-range",
-    high: "flood-high",
-    "very-high": "flood-very-high",
+  const bloomToken: Record<GlucoseTileVariant, string> = {
+    neutral: "--muted",
+    "very-low": "--glucose-very-low",
+    low: "--glucose-low",
+    "in-range": "--glucose-in-range",
+    high: "--glucose-high",
+    "very-high": "--glucose-very-high",
   };
 
   const softLight = "mix-blend-soft-light";
@@ -119,54 +132,44 @@
      digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
      fill toward the digits. Cropped to the wash's interior so its dried edge
      falls outside the tile.
-     A recolouring wash instead floods the stroke's coverage with the new range token, laid over
-     the previous fill. -->
+     A recolouring wash instead blooms over the previous fill in the new range token's colour,
+     painted by the engine as an opaque body colour. -->
 {#if washPerReading}
-  <svg aria-hidden="true" class="absolute size-0">
-    <filter id="glucose-tile-wash-tint" color-interpolation-filters="sRGB">
-      <feComponentTransfer in="SourceAlpha" result="coverage">
-        <feFuncA type="linear" slope="1.5" />
-      </feComponentTransfer>
-      <feColorMatrix
-        in="SourceGraphic"
-        type="matrix"
-        values="0.12 0.24 0.04 0 0.8  0.12 0.24 0.04 0 0.8  0.12 0.24 0.04 0 0.8  0 0 0 0 1"
-        result="grain"
-      />
-      <feFlood class={floodClass[variant]} result="hue" />
-      <feBlend in="hue" in2="grain" mode="multiply" />
-      <feComposite in2="coverage" operator="in" />
-    </filter>
-  </svg>
   {#key washSeed}
     {#if fadedSeed !== washSeed}
       {#if recolours}
         <span class="absolute inset-0 prior-fill {priorFillClass[priorFill]}" class:gone={spread}></span>
+        <span
+          class="absolute inset-0 wash-tint"
+          class:faded
+          ontransitionend={markFaded}
+          ontransitioncancel={markFaded}
+          use:fadedOnUnmount
+        >
+          <GlucoseTileBloom seed={washSeed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} />
+        </span>
+      {:else}
+        <span
+          class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[variant]}"
+          class:faded
+          ontransitionend={markFaded}
+          ontransitioncancel={markFaded}
+          use:fadedOnUnmount
+        >
+          <Artwork
+            artwork="wash"
+            palette="slate"
+            surface="light"
+            seed={washSeed}
+            durationMs={11600}
+            tail={0.86}
+            releaseAfterFinish
+            onstatechange={onWashState}
+            fit="fill"
+            class="size-full"
+          />
+        </span>
       {/if}
-      <span
-        class="absolute {recolours
-          ? 'wash-tint -inset-x-[24%] -inset-y-[80%]'
-          : `-top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade ${washBlend[variant]}`}"
-        class:faded
-        class:sweeping={recolours && paintingSeed === washSeed}
-        onanimationend={onSweepEnd}
-        ontransitionend={markFaded}
-        ontransitioncancel={markFaded}
-        use:fadedOnUnmount
-      >
-        <Artwork
-          artwork="wash"
-          palette="slate"
-          surface="light"
-          seed={washSeed}
-          durationMs={11600}
-          tail={0.86}
-          releaseAfterFinish
-          onstatechange={onWashState}
-          fit="fill"
-          class="size-full"
-        />
-      </span>
     {/if}
   {/key}
 {:else}
@@ -189,27 +192,6 @@
   .wash-fade.faded {
     opacity: 0;
   }
-  .wash-tint {
-    filter: url(#glucose-tile-wash-tint);
-    mask-image: linear-gradient(
-      100deg,
-      #000 calc(var(--sweep) - 22%),
-      transparent var(--sweep)
-    );
-  }
-  .wash-tint.sweeping {
-    animation: tint-sweep 2.6s cubic-bezier(0.35, 0.55, 0.45, 1) forwards;
-  }
-  @property --sweep {
-    syntax: "<percentage>";
-    inherits: false;
-    initial-value: 8%;
-  }
-  @keyframes tint-sweep {
-    to {
-      --sweep: 125%;
-    }
-  }
   .prior-fill,
   .wash-tint {
     transition: opacity 1.6s ease-in-out;
@@ -217,23 +199,5 @@
   .prior-fill.gone,
   .wash-tint.faded {
     opacity: 0;
-  }
-  .flood-neutral {
-    flood-color: var(--color-muted);
-  }
-  .flood-very-low {
-    flood-color: var(--color-glucose-very-low);
-  }
-  .flood-low {
-    flood-color: var(--color-glucose-low);
-  }
-  .flood-in-range {
-    flood-color: var(--color-glucose-in-range);
-  }
-  .flood-high {
-    flood-color: var(--color-glucose-high);
-  }
-  .flood-very-high {
-    flood-color: var(--color-glucose-very-high);
   }
 </style>

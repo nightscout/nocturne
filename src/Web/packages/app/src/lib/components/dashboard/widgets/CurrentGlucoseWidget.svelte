@@ -55,7 +55,7 @@
 </script>
 
 {#snippet rangeWash()}
-  <GlucoseTileWash {mills} variant={tileVariant} />
+  <GlucoseTileWash {mills} variant={tileVariant} delta={mills && now - mills <= STALE_THRESHOLD_MS ? realtimeStore.bgDelta : 0} />
 {/snippet}
 
 <!-- Unit under the arrow, in the tile's own foreground. The trend is dropped while stale: it
