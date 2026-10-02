@@ -38,6 +38,7 @@ public sealed class GoogleHealthWorker(
             {
                 await using var claim = await coordinator.ClaimWorkerAsync(tenantId, ct);
                 if (claim is null || !await coordinator.StartQueuedAsync(tenantId, ct)) return;
+                var completed = false;
                 try
                 {
                     using var listing = scopes.CreateScope();
@@ -45,9 +46,11 @@ public sealed class GoogleHealthWorker(
                         .GetByIdAsync(tenantId, ct);
                     if (tenant is not { IsActive: true })
                     {
+                        completed = true;
                         return;
                     }
                     await SyncTenantAsync(tenant.Id, tenant.Slug, tenant.DisplayName, ct);
+                    completed = true;
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
@@ -62,7 +65,7 @@ public sealed class GoogleHealthWorker(
                 }
                 finally
                 {
-                    if (!ct.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
+                    if (completed && !ct.IsCancellationRequested) await coordinator.CompleteAsync(tenantId);
                 }
             });
         }

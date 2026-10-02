@@ -153,6 +153,58 @@ public class GoogleHealthWorkerTests
         }
     }
 
+    [Theory]
+    [InlineData("tenant")]
+    [InlineData("sync")]
+    [InlineData("health")]
+    public async Task Infrastructure_failure_preserves_request_for_another_worker(string stage)
+    {
+        var tenant = Guid.NewGuid();
+        var coordinator = new GoogleHealthCoordinator();
+        var failed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<T> Fail<T>()
+        {
+            failed.TrySetResult();
+            return Task.FromException<T>(new IOException("Transient infrastructure failure"));
+        }
+        var tenants = new Mock<ITenantService>();
+        tenants.Setup(service => service.GetByIdAsync(tenant, It.IsAny<CancellationToken>()))
+            .Returns(() => stage == "tenant" ? Fail<TenantDetailDto?>() :
+                Task.FromResult<TenantDetailDto?>(new(tenant, "tenant", "Tenant", true, DateTime.UtcNow, [])));
+        var sync = new Mock<IConnectorSyncService>();
+        sync.Setup(service => service.TriggerSyncAsync("googlehealth", It.IsAny<SyncRequest>(), It.IsAny<CancellationToken>()))
+            .Returns(() => stage == "sync" ? Fail<SyncResult>() : Task.FromResult(new SyncResult { Success = true }));
+        var configurations = new Mock<IConnectorConfigurationService>();
+        configurations.Setup(service => service.UpdateHealthStateAsync(
+                "GoogleHealth", It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<string>(),
+                It.IsAny<DateTime?>(), It.IsAny<bool?>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Fail<bool>());
+        var services = new ServiceCollection();
+        services.AddSingleton(tenants.Object);
+        services.AddSingleton(sync.Object);
+        services.AddSingleton(configurations.Object);
+        services.AddScoped<ITenantAccessor, TenantAccessor>();
+        using var provider = services.BuildServiceProvider();
+        using var worker = new GoogleHealthWorker(provider.GetRequiredService<IServiceScopeFactory>(),
+            coordinator, NullLogger<GoogleHealthWorker>.Instance);
+        Assert.True(await coordinator.QueueAsync(tenant, 1, default));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await worker.StartAsync(default);
+        try
+        {
+            await failed.Task.WaitAsync(timeout.Token);
+            IAsyncDisposable? recovered;
+            while ((recovered = await coordinator.ClaimWorkerAsync(tenant, timeout.Token)) is null)
+                await Task.Delay(10, timeout.Token);
+            await using (recovered)
+            {
+                Assert.True((await coordinator.ProgressAsync(tenant, timeout.Token))!.WorkerOwned);
+                Assert.True(await coordinator.StartQueuedAsync(tenant, timeout.Token));
+            }
+        }
+        finally { await worker.StopAsync(default); }
+    }
+
     private sealed class TenantAccessor : ITenantAccessor
     {
         public TenantContext? Context { get; private set; }
