@@ -498,7 +498,9 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
             int? offset = null;
             if (time.TryGetProperty(interval ? "startUtcOffset" : "utcOffset", out var offsetValue))
             {
-                var seconds = decimal.Parse(offsetValue.GetString()!.TrimEnd('s'), CultureInfo.InvariantCulture);
+                if (offsetValue.ValueKind != JsonValueKind.String || offsetValue.GetString() is not { } duration)
+                    throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
+                var seconds = decimal.Parse(duration.TrimEnd('s'), CultureInfo.InvariantCulture);
                 if (seconds % 60 != 0 || Math.Abs(seconds) > 50400) throw new GoogleHealthException("invalid_google_data", stage: "data_parse", dataType: type);
                 offset = (int)(seconds / 60);
             }

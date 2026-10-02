@@ -78,6 +78,31 @@ public class GoogleHealthClientTests
     }
 
     [Theory]
+    [InlineData("weight", "null")]
+    [InlineData("heart-rate", "null")]
+    [InlineData("steps", "null")]
+    [InlineData("weight", "7200")]
+    [InlineData("weight", "true")]
+    [InlineData("weight", "{}")]
+    [InlineData("weight", "[]")]
+    public void Invalid_utc_offsets_are_reported_as_provider_data_errors(string type, string offset)
+    {
+        var time = type == "steps"
+            ? $$"""{"startTime":"2026-09-01T10:00:00Z","endTime":"2026-09-01T10:01:00Z","startUtcOffset":{{offset}}}"""
+            : $$"""{"physicalTime":"2026-09-01T10:00:00Z","utcOffset":{{offset}}}""";
+        var payload = type == "heart-rate" ? "heartRate" : type;
+        var timeName = type == "steps" ? "interval" : "sampleTime";
+        var measure = type switch { "steps" => "count", "heart-rate" => "beatsPerMinute", _ => "weightGrams" };
+        using var document = JsonDocument.Parse($$$"""{"{{{payload}}}":{"{{{timeName}}}":{{{time}}},"{{{measure}}}":60}}""");
+
+        var error = Assert.Throws<GoogleHealthException>(() => GoogleHealthClient.Parse(type, document.RootElement));
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal(type, error.DataType);
+    }
+
+    [Theory]
     [InlineData("name")]
     [InlineData("dataPointName")]
     public void Retains_the_provider_resource_id_for_same_timestamp_readings(string identityField)
