@@ -30,8 +30,7 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
         if (!response.IsSuccessStatusCode)
             throw await OAuthErrorAsync(response, invalidGrantCode, stage, cancellationToken);
 
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        return json.RootElement.Clone();
+        return await ReadObjectAsync(response, stage, cancellationToken);
     }
 
     public async Task<bool> RevokeAsync(string refreshToken, CancellationToken cancellationToken)
@@ -56,13 +55,29 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
                 stage: "account_identity",
                 providerStatus: (int)response.StatusCode);
 
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-        if (!json.RootElement.TryGetProperty("sub", out var subjectValue) ||
+        var json = await ReadObjectAsync(response, "account_identity", cancellationToken);
+        if (!json.TryGetProperty("sub", out var subjectValue) ||
             subjectValue.ValueKind != JsonValueKind.String ||
             string.IsNullOrWhiteSpace(subjectValue.GetString()))
             throw new GoogleHealthException("invalid_token_response", stage: "account_identity");
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(subjectValue.GetString()!)));
+    }
+
+    private static async Task<JsonElement> ReadObjectAsync(
+        HttpResponseMessage response, string stage, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            if (json.RootElement.ValueKind != JsonValueKind.Object)
+                throw new GoogleHealthException("invalid_token_response", stage: stage);
+            return json.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            throw new GoogleHealthException("invalid_token_response", stage: stage);
+        }
     }
 
     private static async Task<GoogleHealthException> OAuthErrorAsync(

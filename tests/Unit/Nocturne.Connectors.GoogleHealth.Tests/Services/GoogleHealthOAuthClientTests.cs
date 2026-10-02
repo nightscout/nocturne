@@ -41,8 +41,30 @@ public class GoogleHealthOAuthClientTests
         Assert.Equal("token_refresh", exception.Stage);
     }
 
-    private static GoogleHealthOAuthClient CreateClient(string responseBody) =>
-        new(new HttpClient(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+    public static IEnumerable<object[]> MalformedSuccessResponses() =>
+        from stage in new[] { "authorization_code", "token_refresh", "account_identity" }
+        from body in new[] { "{sensitive-provider-text", "null", "[]", "42", "true", "\"secret\"" }
+        select new object[] { stage, body };
+
+    [Theory]
+    [MemberData(nameof(MalformedSuccessResponses))]
+    public async Task Malformed_success_responses_return_safe_domain_errors(string stage, string body)
+    {
+        var client = CreateClient(body, HttpStatusCode.OK);
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            if (stage == "authorization_code") await client.ExchangeAuthorizationCodeAsync([], default);
+            else if (stage == "token_refresh") await client.RefreshAccessTokenAsync([], default);
+            else await client.AccountKeyAsync("access-token", default);
+        });
+
+        Assert.Equal("invalid_token_response", exception.Message);
+        Assert.Equal(stage, exception.Stage);
+        Assert.Null(exception.InnerException);
+    }
+
+    private static GoogleHealthOAuthClient CreateClient(string responseBody, HttpStatusCode status = HttpStatusCode.BadRequest) =>
+        new(new HttpClient(new StubHandler(_ => new HttpResponseMessage(status)
         {
             Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
         })));
