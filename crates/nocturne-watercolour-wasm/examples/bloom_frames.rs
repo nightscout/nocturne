@@ -41,7 +41,10 @@ fn main() {
             fs::create_dir_all(&out).expect("out dir");
             let w: u32 = args[3].parse().expect("w");
             let h: u32 = args[4].parse().expect("h");
-            let ticks: Vec<u32> = args[5].split(',').map(|t| t.parse().expect("tick")).collect();
+            let ticks: Vec<u32> = args[5]
+                .split(',')
+                .map(|t| t.parse().expect("tick"))
+                .collect();
             let ctx = GpuContext::try_new().expect("gpu").expect("no gpu adapter");
             let gpu = GpuEngine::new(ctx).expect("gpu engine");
             let mut pb = Playback::new(gpu, scene, 1000.0).expect("playback");
