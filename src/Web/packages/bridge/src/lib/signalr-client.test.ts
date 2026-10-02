@@ -198,6 +198,28 @@ describe("SignalRClient connection lifecycle", () => {
     expect(retryAlarm.start).toHaveBeenCalledTimes(1);
   });
 
+  it("stops remaining hubs when one hub closes before retrying", async () => {
+    const data = new FakeHubConnection();
+    const alarm = new FakeHubConnection();
+    const retryData = new FakeHubConnection();
+    const retryAlarm = new FakeHubConnection();
+    queueConnections(data, alarm, retryData, retryAlarm);
+    const client = createClient(true);
+    await client.connect();
+
+    data.emitClose();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(alarm.stop).toHaveBeenCalledTimes(1);
+    expect(client.isConnected()).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(retryData.start).toHaveBeenCalledTimes(1);
+    expect(retryAlarm.start).toHaveBeenCalledTimes(1);
+    expect(client.isConnected()).toBe(true);
+  });
+
   it("waits for a pending start before disconnecting and prevents another retry", async () => {
     const startGate = deferred<void>();
     const connection = new FakeHubConnection(() => startGate.promise);

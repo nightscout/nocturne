@@ -43,6 +43,7 @@ class SignalRClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private disconnectRequested: boolean = false;
   private isCleaningUpConnections: boolean = false;
+  private connectionLossPromise: Promise<void> | null = null;
   private readonly connectionStartPromises = new Map<
     HubConnection,
     Promise<void>
@@ -170,12 +171,31 @@ class SignalRClient {
     }
   }
 
+  private handleHubClosed(): Promise<void> {
+    if (this.disconnectRequested || this.isCleaningUpConnections) {
+      return Promise.resolve();
+    }
+    if (this.connectionLossPromise) return this.connectionLossPromise;
+
+    void this.handleReconnect();
+    this.connectionLossPromise = (async () => {
+      if (this.connectPromise) await this.connectPromise;
+      if (this.disconnectRequested || this.isCleaningUpConnections) return;
+
+      await this.cleanupFailedConnections();
+    })().finally(() => {
+      this.connectionLossPromise = null;
+    });
+
+    return this.connectionLossPromise;
+  }
+
   private setupDataEventHandlers(): void {
     if (!this.dataConnection) return;
 
     this.dataConnection.onclose(() => {
       logger.warn("SignalR DataHub connection closed");
-      void this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.dataConnection.onreconnecting(() => {
@@ -262,7 +282,7 @@ class SignalRClient {
 
     this.alarmConnection.onclose(() => {
       logger.warn("SignalR AlarmHub connection closed");
-      void this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.alarmConnection.onreconnecting(() => {
@@ -297,7 +317,7 @@ class SignalRClient {
 
     this.configConnection.onclose(() => {
       logger.warn("SignalR ConfigHub connection closed");
-      void this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.configConnection.onreconnecting(() => {
@@ -449,6 +469,7 @@ class SignalRClient {
       this.reconnectTimer = null;
       void (async () => {
         if (this.connectPromise) await this.connectPromise;
+        if (this.connectionLossPromise) await this.connectionLossPromise;
         if (
           !this.disconnectRequested &&
           !this.reconnectTimer &&
