@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
+using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
@@ -53,13 +56,11 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
                 connection = new NpgsqlConnection(settings.ConnectionString);
                 await connection.OpenAsync(ct);
                 var started = System.Diagnostics.Stopwatch.StartNew();
-                var bytes = tenantId.ToByteArray();
-                var key = BitConverter.ToInt32(bytes, 0) ^ BitConverter.ToInt32(bytes, 4) ^
-                          BitConverter.ToInt32(bytes, 8) ^ BitConverter.ToInt32(bytes, 12);
+                var key = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(
+                    Encoding.UTF8.GetBytes($"nocturne:google-health:{lockClass}:{tenantId:D}")));
                 while (true)
                 {
-                    await using var command = new NpgsqlCommand("SELECT pg_try_advisory_lock(@class, @key)", connection);
-                    command.Parameters.AddWithValue("class", lockClass);
+                    await using var command = new NpgsqlCommand("SELECT pg_try_advisory_lock(@key)", connection);
                     command.Parameters.AddWithValue("key", key);
                     if ((bool)(await command.ExecuteScalarAsync(ct))!) break;
                     if (timeout is { } bound && started.Elapsed >= bound)
@@ -118,7 +119,8 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             .Select(row => row.SyncCursorsJson).SingleOrDefaultAsync(ct);
         if (json is null) return null;
         using var document = JsonDocument.Parse(json);
-        return document.RootElement.TryGetProperty(ProgressKey, out var value)
+        return document.RootElement.ValueKind == JsonValueKind.Object &&
+            document.RootElement.TryGetProperty(ProgressKey, out var value)
             ? value.Deserialize<SyncProgress>() : null;
     }
 
@@ -134,7 +136,8 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
         var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
         if (progress is null)
             await db.Database.ExecuteSqlInterpolatedAsync($"""
-                UPDATE connector_configurations SET sync_cursors = COALESCE(sync_cursors, jsonb_build_object()) - {ProgressKey}
+                UPDATE connector_configurations SET sync_cursors = (CASE WHEN jsonb_typeof(sync_cursors) = 'object'
+                    THEN sync_cursors ELSE jsonb_build_object() END) - {ProgressKey}
                 WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
                 """, ct);
         else
@@ -142,7 +145,8 @@ public sealed class GoogleHealthCoordinator : IGoogleHealthSyncCoordinator
             var json = JsonSerializer.Serialize(progress);
             await db.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations
-                SET sync_cursors = jsonb_set(COALESCE(sync_cursors, jsonb_build_object()), ARRAY[{ProgressKey}], {json}::jsonb)
+                SET sync_cursors = jsonb_set(CASE WHEN jsonb_typeof(sync_cursors) = 'object'
+                    THEN sync_cursors ELSE jsonb_build_object() END, ARRAY[{ProgressKey}], {json}::jsonb)
                 WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
                 """, ct);
         }

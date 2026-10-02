@@ -330,14 +330,69 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
         await sender.CompleteAsync(tenantId);
     }
 
-    private async Task SeedConnectorAsync()
+    [Fact]
+    public async Task Tenants_with_the_same_legacy_folded_key_have_independent_replica_locks()
+    {
+        var firstTenant = Guid.Empty;
+        var secondTenant = new Guid("00000001-0001-0000-0000-000000000000");
+        await using var provider = ReplicaServices();
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var first = new GoogleHealthCoordinator(scopes);
+        var second = new GoogleHealthCoordinator(scopes);
+        await using var operation = await first.AcquireAsync(firstTenant, default);
+        await using var unrelated = await second.AcquireAsync(secondTenant, default, TimeSpan.Zero);
+        Assert.NotNull(unrelated);
+        Assert.Null(await second.AcquireAsync(firstTenant, default, TimeSpan.Zero));
+        await using var worker = await second.ClaimWorkerAsync(firstTenant, default);
+        Assert.NotNull(worker);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"legacy\"")]
+    [InlineData("42")]
+    [InlineData("true")]
+    public async Task Non_object_cursor_payloads_recover_for_cursor_writes_status_and_queue(string legacyJson)
+    {
+        await SeedConnectorAsync(legacyJson);
+        await using var provider = ReplicaServices();
+        var coordinator = new GoogleHealthCoordinator(provider.GetRequiredService<IServiceScopeFactory>());
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
+
+        using var scope = provider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<NocturneDbContext>();
+        db.TenantId = tenantId;
+        var cursors = new ConnectorSyncCursorStore(db, NullLogger<ConnectorSyncCursorStore>.Instance);
+        await cursors.SetAsync("GoogleHealth", "health", new(null, "restored"));
+        Assert.Equal("restored", (await cursors.GetAsync("GoogleHealth", "health"))!.LastGuid);
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
+            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
+            """);
+        Assert.True(await coordinator.QueueAsync(tenantId, 4, default));
+        Assert.True((await coordinator.ProgressAsync(tenantId, default))!.WorkerOwned);
+        await coordinator.CompleteAsync(tenantId);
+        Assert.Null(await coordinator.ProgressAsync(tenantId, default));
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE connector_configurations SET sync_cursors = {legacyJson}::jsonb
+            WHERE tenant_id = {tenantId} AND connector_name = 'googlehealth'
+            """);
+        await coordinator.CompleteAsync(tenantId);
+        db.ChangeTracker.Clear();
+        Assert.Equal("{}", await db.ConnectorConfigurations.Select(row => row.SyncCursorsJson).SingleAsync());
+    }
+
+    private async Task SeedConnectorAsync(string cursorJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}")
     {
         await using var db = Context();
         db.TenantId = tenantId;
         db.ConnectorConfigurations.Add(new ConnectorConfigurationEntity
         {
             Id = Guid.NewGuid(), ConnectorName = "GoogleHealth", ConfigurationJson = "{}",
-            SyncCursorsJson = "{\"unrelated\":{\"LastUpdatedAt\":\"retained\",\"LastGuid\":null}}"
+            SyncCursorsJson = cursorJson
         });
         await db.SaveChangesAsync();
     }

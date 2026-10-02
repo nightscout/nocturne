@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ secrets.PAT_TOKEN }}
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:

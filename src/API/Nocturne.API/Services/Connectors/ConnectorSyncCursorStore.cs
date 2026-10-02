@@ -47,7 +47,8 @@ public class ConnectorSyncCursorStore : IConnectorSyncCursorStore
             var json = JsonSerializer.Serialize(cursor);
             await _context.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE connector_configurations
-                SET sync_cursors = jsonb_set(COALESCE(sync_cursors, jsonb_build_object()), ARRAY[{resource}], {json}::jsonb),
+                SET sync_cursors = jsonb_set(CASE WHEN jsonb_typeof(sync_cursors) = 'object'
+                    THEN sync_cursors ELSE jsonb_build_object() END, ARRAY[{resource}], {json}::jsonb),
                     sys_updated_at = {DateTime.UtcNow}
                 WHERE tenant_id = {_context.TenantId} AND connector_name = {canonicalName}
                 """, cancellationToken);
