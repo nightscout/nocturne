@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { artworkAspect, detailForEdge, seedFromName } from '../types';
-import { artworkOptionsFrom, containBox, hostSurface } from './helpers';
+import { artworkOptionsFrom, bannerFit, containBox, hostSurface } from './helpers';
 import heroSource from './ArtworkHero.svelte?raw';
+import confirmationSource from './ConfirmationBackground.svelte?raw';
 
 describe('detailForEdge (size to detail)', () => {
   it('maps the backing long edge to the catalogue detail level', () => {
@@ -15,6 +16,23 @@ describe('detailForEdge (size to detail)', () => {
     expect(detailForEdge(319)).toBe('large');
     expect(detailForEdge(320)).toBe('extraLarge');
     expect(detailForEdge(512)).toBe('extraLarge');
+  });
+});
+
+describe('bannerFit', () => {
+  it('fills a host near or wider than the banner, so the washes reach both ends', () => {
+    expect(bannerFit(300, 100)).toBe('fill');
+    expect(bannerFit(240, 100)).toBe('fill');
+    expect(bannerFit(390, 70)).toBe('fill');
+  });
+
+  it('contains a host taller than the banner, so the washes are not squashed', () => {
+    expect(bannerFit(230, 100)).toBe('contain');
+    expect(bannerFit(320, 240)).toBe('contain');
+  });
+
+  it('is the confirmation background unless the host picks a fit', () => {
+    expect(confirmationSource).toContain('fit: fit ?? bannerFit');
   });
 });
 
