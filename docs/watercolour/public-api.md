@@ -64,11 +64,16 @@ player.dispose();
 
 | Event | Payload | Fires |
 |---|---|---|
-| `ready` | - | a backend is drawing (or the player settled on `none`) |
+| `ready` | - | a backend is drawing |
 | `finished` | - | the reveal completed |
 | `fallback` | `{ from, error }` | a backend failed; a lower one took over |
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
+
+`onProgress` in `PlayerOptions` receives a numeric progress value after each
+presented live or baked frame. Use it for a coverage milestone without
+allocating `PlayerState` on every frame. It does not fire for an unavailable
+swapchain frame. A callback may dispose its player.
 
 `player.ready` resolves once a backend is drawing. A player whose canvas is in
 the document does not start until the canvas is within 200 px of the viewport
@@ -78,6 +83,20 @@ scroll; a canvas outside the document, or a page without
 current element, which differs from the one passed in only after a live-to-baked
 fallback (a WebGPU canvas can never give a 2D context, so the element is
 replaced in place).
+
+## Generated blooms
+
+`bloomScene(module, width, height, { colour, seed?, slope?, dpr? })` authors the
+glucose tile's three spreading charges. `colour` is an encoded RGB triple in
+`0..1`; `slope` is clamped to `-1..1`. Width and height are CSS pixels. The
+simulation grid is capped at 320 while the output follows the measured tile.
+
+`mountPlayer(frame, canvas, undefined, { scene, fit: 'fill', ... }, onready,
+onstatechange)` gives generated scenes the component resize and presentation
+lifecycle. Its `scene(module, width, height, dpr)` factory receives the measured
+box. Finished canvases stretch for small resizes and repaint after a large
+resize settles. Presentation changes rebuild the player; a finished reveal
+does not replay. `onstatechange` also reports `none`, which has no `ready` event.
 
 ## `detectCapabilities`
 

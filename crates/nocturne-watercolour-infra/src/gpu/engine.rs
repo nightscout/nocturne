@@ -814,7 +814,9 @@ impl GpuEngine {
 
         let render_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("watercolour-render"),
-            source: wgpu::ShaderSource::Wgsl(RENDER_SOURCE.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!("{}\n{RENDER_SOURCE}", include_str!("shaders/canvas.wgsl")).into(),
+            ),
         });
         let render_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("watercolour-render"),
