@@ -305,7 +305,7 @@ class LiveBackend implements Backend {
           const { x, y, width, height } = options.crop;
           instance.setCrop(x, y, width, height);
         }
-        if (options.blendTicks) instance.setBlendTicks(true);
+        if (options.blendTicks) instance.enableTickBlending();
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });

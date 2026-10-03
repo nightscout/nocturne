@@ -22,7 +22,7 @@ function fakeInstance(total: number) {
       canvas.height = height;
     },
     setCrop: vi.fn(),
-    setBlendTicks: vi.fn(),
+    enableTickBlending: vi.fn(),
     setProgressCurve() {},
     play: () => void (playing = true),
     pause: () => void (playing = false),
@@ -218,8 +218,8 @@ describe('presented progress', () => {
     const { scheduler } = manualScheduler();
     const players = [player(blended, scheduler, { blendTicks: true }), player(plain, scheduler, {})];
     await Promise.all(players.map((live) => live.ready));
-    expect(blended.setBlendTicks).toHaveBeenCalledWith(true);
-    expect(plain.setBlendTicks).not.toHaveBeenCalled();
+    expect(blended.enableTickBlending).toHaveBeenCalled();
+    expect(plain.enableTickBlending).not.toHaveBeenCalled();
     for (const live of players) live.dispose();
   });
 

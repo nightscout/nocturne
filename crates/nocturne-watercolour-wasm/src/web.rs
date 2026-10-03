@@ -646,13 +646,10 @@ impl SceneInstance {
             .map_err(engine_err)
     }
 
-    /// Whether playing frames blend the last two ticks; see `PlayerOptions.blendTicks`.
-    #[wasm_bindgen(js_name = setBlendTicks)]
-    pub fn set_blend_ticks(&mut self, enabled: bool) {
-        self.blend_ticks = enabled;
-        if !enabled {
-            self.playback.simulator().clear_interpolation();
-        }
+    /// Playing frames blend the last two ticks from now on; see `PlayerOptions.blendTicks`.
+    #[wasm_bindgen(js_name = enableTickBlending)]
+    pub fn enable_tick_blending(&mut self) {
+        self.blend_ticks = true;
     }
 
     /// Pixel size the swapchain is configured at; `null` until `attach`.
