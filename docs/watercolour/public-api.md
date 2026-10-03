@@ -231,7 +231,7 @@ and paper generation cover only that window. Simulation detail and paper grain
 retain the full painting's virtual dimensions. Baked strips and stills select
 the same window. `createArtworkPlayer` and `mountPlayer` accept `crop` too.
 `fit` may also be a function of the container size -
-`ConfirmationBackground` uses that to fill only near its 3:1 aspect. `onready`
+`ConfirmationBackground` uses that to fill a host 2.4:1 or wider and contain a taller one. `onready`
 fires once a backend is drawing; the returned cleanup runs with the player's
 disposal.
 
@@ -241,7 +241,7 @@ disposal.
 | `PaintedUnderline` | `tab-underline` | `active: boolean` | `opacity-0` unless `active`; plays once on activation, then releases its live slot. A 6px strip along the bottom of a tab. |
 | `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A 16px vertical or horizontal edge strip, `fit: 'fill'` by default so the stroke runs the item's full length; plays once on activation, then releases its live slot. |
 | `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
-| `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
+| `ConfirmationBackground` | `confirmation-background` | - | Fills a container 2.4:1 or wider, so its horizontal washes span it; a taller container gets `contain` anchored bottom-left, so the washes are not squashed. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
 | `HeaderMotif` | `header-motif` | - | Three loose horizontal brush strokes, pulled left to right. Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
