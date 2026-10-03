@@ -19,7 +19,7 @@ beforeEach(() => {
   reducedMotion.value = false;
   fakePlayer.seeks = [];
   fakePlayer.plays = 0;
-  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false });
+  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, seeking: false });
 });
 
 describe("HubPainting", () => {
@@ -85,6 +85,17 @@ describe("HubPainting", () => {
     fakePlayer.state.progress = 1;
 
     await expect.poll(() => onpainted.mock.calls).toEqual([[6]]);
+  });
+
+  it("does not report a stop while its target is waiting for presentation", async () => {
+    const onpainted = vi.fn();
+    fakePlayer.state.seeking = true;
+    render(HubPainting, { stop: 3, onpainted });
+    await expect.poll(() => fakePlayer.seeks).toEqual([0.5]);
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    expect(onpainted).not.toHaveBeenCalled();
+    fakePlayer.state.seeking = false;
+    await expect.poll(() => onpainted.mock.calls).toEqual([[3]]);
   });
 
   it("shows half the first stage when nothing is resolved", async () => {

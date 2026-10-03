@@ -8,6 +8,7 @@
       motion: "full" as "full" | "reduced",
       progress: 0,
       playing: false,
+      seeking: false,
     },
     seekTo(progress: number) {
       fakePlayer.seeks.push(progress);
