@@ -114,7 +114,8 @@ The component sizes its canvas to the container (`ResizeObserver`, DPR capped at
 canvas to the largest box of that aspect that fits and centring it, leaving the
 surrounding area transparent; `fit="fill"` stretches to the container. The
 accent components (`PaintedUnderline`, `SelectionEdge`, `AvatarWash`,
-`ConfirmationBackground`, `HeaderMotif`) take the same `fit` prop; the artwork
+`ConfirmationBackground`, `HeaderMotif`) take the same `fit` prop
+(`ConfirmationBackground` defaults to filling a host 2.4:1 or wider); the artwork
 is `aria-hidden` with `role="presentation"`. The player is created in an effect
 and disposed on destroy or when any prop changes. It maps props to
 `createArtworkPlayer` options and nothing else.

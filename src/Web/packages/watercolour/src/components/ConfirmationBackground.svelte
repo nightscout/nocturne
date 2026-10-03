@@ -16,7 +16,7 @@
     class: className = '',
   }: {
     surface?: Surface;
-    /** `contain` (default) preserves the artwork's aspect; `fill` stretches to the container. */
+    /** Defaults to {@link bannerFit}. */
     fit?: FitMode;
     onready?: PlayerReadyCallback;
     class?: string;

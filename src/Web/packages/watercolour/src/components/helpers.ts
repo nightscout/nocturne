@@ -27,7 +27,7 @@ export interface MountOptions extends ArtworkOptions {
   onProgress?: PlayerProgressCallback;
   /**
    * `contain` (default) or `fill`, or a function deciding per container
-   * size (e.g. ConfirmationBackground fills only near its 3:1 aspect).
+   * size, such as {@link bannerFit}.
    */
   fit?: FitMode | ((containerWidth: number, containerHeight: number) => FitMode);
   /** Only for `contain`: where the aspect box sits. */
@@ -87,13 +87,16 @@ export interface FitBox {
   offsetY: number;
 }
 
+/** Narrowest host, as width / height, that a 3:1 banner fills rather than contains. */
+const BANNER_FILL_MIN_ASPECT = 2.4;
+
 /**
- * Fit for a 3:1 banner painted behind a host. Its washes run horizontally, so a host near (from 2.4:1) or wider
- * than 3:1 fills: they stretch sideways and still reach both ends. A taller host, usually a card,
- * would squash them, so it contains instead.
+ * Fit for a 3:1 banner painted behind a host. Its washes run horizontally, so a host near 3:1 or
+ * wider fills and they reach both ends; a taller host, usually a card, would squash them, so it
+ * contains instead.
  */
 export function bannerFit(containerWidth: number, containerHeight: number): FitMode {
-  return containerWidth / Math.max(1, containerHeight) >= 2.4 ? 'fill' : 'contain';
+  return containerWidth / Math.max(1, containerHeight) >= BANNER_FILL_MIN_ASPECT ? 'fill' : 'contain';
 }
 
 /**

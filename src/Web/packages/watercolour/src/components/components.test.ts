@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { artworkAspect, detailForEdge, seedFromName } from '../types';
 import { artworkOptionsFrom, bannerFit, containBox, hostSurface } from './helpers';
 import heroSource from './ArtworkHero.svelte?raw';
+import confirmationSource from './ConfirmationBackground.svelte?raw';
 
 describe('detailForEdge (size to detail)', () => {
   it('maps the backing long edge to the catalogue detail level', () => {
@@ -28,6 +29,10 @@ describe('bannerFit', () => {
   it('contains a host taller than the banner, so the washes are not squashed', () => {
     expect(bannerFit(230, 100)).toBe('contain');
     expect(bannerFit(320, 240)).toBe('contain');
+  });
+
+  it('is the confirmation background unless the host picks a fit', () => {
+    expect(confirmationSource).toContain('fit: fit ?? bannerFit');
   });
 });
 
