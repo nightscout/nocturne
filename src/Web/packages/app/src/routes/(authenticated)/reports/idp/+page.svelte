@@ -1,5 +1,10 @@
 <script lang="ts">
   import {
+    a1cLabel,
+    a1cUnitLabel,
+    formatA1cValue,
+  } from "$lib/utils/a1c-formatting";
+  import {
     Card,
     CardContent,
     CardDescription,
@@ -23,7 +28,7 @@
   import TextureSwatch from "$lib/components/charts/print/TextureSwatch.svelte";
   import { bgPatternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { getIdpData } from "$api/idp.remote";
-  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate } from "$lib/utils/formatting";
+  import { bg, bgLabel, formatMediumDateTime, formatNumber, formatNumericDate, } from "$lib/utils/formatting";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
 
@@ -93,10 +98,10 @@
 
   <FigureStrip
     figures={[
-      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day" },
-      { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel() },
-      { label: "Est. A1C", value: variability.estimatedA1c?.toFixed(1) ?? "--", unit: "%", note: "From mean glucose" },
-      { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: "Target: ≤33%" },
+      { label: "Avg Total Daily Dose", value: insulinStats?.tdd?.toFixed(1) ?? "--", unit: "U/day", },
+      { label: "Average", value: stats.mean ? String(bg(stats.mean)) : "--", unit: bgLabel(), },
+      { label: a1cLabel(true), value: formatA1cValue( variability.estimatedA1cDisplay), unit: a1cUnitLabel(), note: "From mean glucose", },
+      { label: "CV", value: variability.coefficientOfVariation?.toFixed(0) ?? "--", unit: "%", note: "Target: ≤33%", },
     ]}
   />
 
@@ -135,11 +140,15 @@
           </div>
           <div class="flex h-4 rounded-full overflow-hidden">
             <div
-              class="w-(--share) bg-basal {bgPatternClass('insulin-scheduled-basal')} transition-all"
+              class="w-(--share) bg-basal {bgPatternClass(
+                  'insulin-scheduled-basal'
+                )} transition-all"
               style:--share="{basalPct}%"
             ></div>
             <div
-              class="w-(--share) bg-insulin-bolus {bgPatternClass('insulin-bolus')} transition-all"
+              class="w-(--share) bg-insulin-bolus {bgPatternClass(
+                  'insulin-bolus'
+                )} transition-all"
               style:--share="{bolusPct}%"
             ></div>
           </div>
@@ -228,27 +237,27 @@
         <div class="grid grid-cols-1 @xs:grid-cols-2 print:grid-cols-3 gap-4 text-sm">
           <div>
             <div class="text-muted-foreground">CGM</div>
-            <div class="font-semibold text-lg">{aidMetrics?.cgmDeviceNames ?? '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.cgmDeviceNames ?? "--"}</div>
           </div>
           <div>
             <div class="text-muted-foreground">Pump</div>
-            <div class="font-semibold text-lg">{aidMetrics?.pumpDeviceNames ?? '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.pumpDeviceNames ?? "--"}</div>
           </div>
           <div>
             <div class="text-muted-foreground">CGM Active</div>
-            <div class="font-semibold text-lg">{aidMetrics?.cgmActivePercent != null ? `${Math.round(aidMetrics.cgmActivePercent)}%` : '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.cgmActivePercent != null ? `${Math.round(aidMetrics.cgmActivePercent)}%` : "--"}</div>
           </div>
           <div>
             <div class="text-muted-foreground">AID Active</div>
-            <div class="font-semibold text-lg">{aidMetrics?.aidActivePercent != null ? `${Math.round(aidMetrics.aidActivePercent)}%` : '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.aidActivePercent != null ? `${Math.round(aidMetrics.aidActivePercent)}%` : "--"}</div>
           </div>
           <div>
             <div class="text-muted-foreground">Target</div>
-            <div class="font-semibold text-lg">{aidMetrics?.targetLow != null && aidMetrics?.targetHigh != null ? `${bg(aidMetrics.targetLow)}-${bg(aidMetrics.targetHigh)} ${bgLabel()}` : '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.targetLow != null && aidMetrics?.targetHigh != null ? `${bg(aidMetrics.targetLow)}-${bg(aidMetrics.targetHigh)} ${bgLabel()}` : "--"}</div>
           </div>
           <div>
             <div class="text-muted-foreground">Site Changes</div>
-            <div class="font-semibold text-lg">{aidMetrics?.siteChangeCount != null ? aidMetrics.siteChangeCount : '--'}</div>
+            <div class="font-semibold text-lg">{aidMetrics?.siteChangeCount != null ? aidMetrics.siteChangeCount : "--"}</div>
           </div>
         </div>
       </CardContent>
