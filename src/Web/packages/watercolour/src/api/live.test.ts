@@ -128,6 +128,23 @@ afterEach(() => {
 });
 
 describe('presented progress', () => {
+  it('allows a progress callback to dispose the player before finish', async () => {
+    const instance = fakeInstance(1);
+    const { scheduler, frame } = manualScheduler();
+    let live: ReturnType<typeof player>;
+    live = player(instance, scheduler, { onProgress: () => live.dispose() });
+    await live.ready;
+    const finished = vi.fn();
+    live.on('finished', finished);
+    instance.isFinished = () => {
+      if (instance.calls.includes('dispose')) throw new Error('freed instance');
+      return instance.tick >= 1;
+    };
+    expect(() => { for (let i = 0; i < 5; i++) frame(); }).not.toThrow();
+    expect(instance.calls).toContain('dispose');
+    expect(finished).not.toHaveBeenCalled();
+  });
+
   it('crosses the coverage threshold before finishing without extra state notifications', async () => {
     const instance = fakeInstance(40);
     const { scheduler, frame } = manualScheduler();

@@ -536,6 +536,7 @@ class LiveBackend implements Backend {
       this.unpresented = 0;
       this.dirty = false;
       if (presented !== false) this.callbacks.onProgress?.(this.progress);
+      if (this.disposed || this.released) return;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -733,6 +734,7 @@ class BakedBackend implements Backend {
       this.dirty = false;
       drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height);
       this.callbacks.onProgress?.(this.progress);
+      if (this.disposed) return;
       if (this.isPlaying && this.finished) {
         this.isPlaying = false;
         this.callbacks.onFinished();
