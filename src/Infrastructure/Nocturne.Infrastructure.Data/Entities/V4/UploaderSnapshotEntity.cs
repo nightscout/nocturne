@@ -8,8 +8,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.UploaderSnapshot
 /// </summary>
 [Table("uploader_snapshots")]
-public class UploaderSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable
+public class UploaderSnapshotEntity : V4TimeSeriesEntityBase, ISyncDedupable, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// Stable per-source identifier for synchronization. Unlike <see cref="V4TimeSeriesEntityBase.LegacyId"/> (insert-only),
     /// a record matched by (DataSource, SyncIdentifier) is updated in place on re-upload — required so

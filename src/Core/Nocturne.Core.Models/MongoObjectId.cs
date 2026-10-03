@@ -102,4 +102,26 @@ public static class MongoObjectId
         high = Guid.ParseExact(objectId + "ffffffff", "N");
         return true;
     }
+
+    /// <summary>
+    /// The uuid range a record's own id can be named by on the wire, where the record carries no
+    /// legacy id: its uuid in canonical form (a single-uuid range), or the 24-hex prefix
+    /// <see cref="FromGuid"/> derives from it. False for any other id, including an ObjectId without
+    /// the <see cref="IsGuidPrefixShaped"/> shape and a uuid in any non-canonical spelling, since
+    /// neither is a form Nocturne puts on the wire.
+    /// </summary>
+    public static bool TryGetOwnIdRange(string? id, out Guid low, out Guid high)
+    {
+        if (Guid.TryParse(id, out var uuid) && id == uuid.ToString())
+        {
+            low = high = uuid;
+            return true;
+        }
+
+        if (IsGuidPrefixShaped(id))
+            return TryGetGuidPrefixRange(id, out low, out high);
+
+        low = high = default;
+        return false;
+    }
 }

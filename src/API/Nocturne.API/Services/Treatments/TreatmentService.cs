@@ -154,7 +154,9 @@ public class TreatmentService : ITreatmentService
     /// via <see cref="PopulateInsulinContextAsync"/> if its <see cref="Treatment.EventType"/>
     /// matches a known bolus or basal type and no context is already set. After creation,
     /// the <see cref="ITreatmentCache"/> is invalidated and events are fired via
-    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/>.
+    /// <see cref="IDataEventSink{T}.OnCreatedAsync(IReadOnlyList{T}, CancellationToken)"/> for the
+    /// treatments inserted and <see cref="IDataEventSink{T}.OnUpdatedAsync"/> for those that updated
+    /// a stored record.
     /// </remarks>
     public async Task<BulkWrite<Treatment>> CreateTreatmentsAsync(
         IEnumerable<Treatment> treatments, CancellationToken cancellationToken = default)
@@ -166,10 +168,26 @@ public class TreatmentService : ITreatmentService
         var created = await _store.CreateAsync(treatmentList, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnCreatedAsync(created, cancellationToken);
+        await _events.OnCreatedAsync(Inserted(created), cancellationToken);
+        foreach (var reupload in created.Updated)
+            await _events.OnUpdatedAsync(reupload, cancellationToken);
 
         return created;
     }
+
+    /// <summary>
+    /// The created treatments the store inserted. One the user had deleted is returned to the caller
+    /// as before but stored nothing, so no event announces it, and write-back does not put it upstream
+    /// again. One that updated a record already stored (<see cref="BulkWrite{TRecord}.Updated"/>: a
+    /// client's resend, the v1 PUT create fallback, a connector republish) is announced as the update
+    /// it is, so write-back looks for the copy upstream holds before writing, as for any edit: sent as
+    /// a create, unlooked-for, it would store a second copy beside one held under another form.
+    /// </summary>
+    private static IReadOnlyList<Treatment> Inserted(BulkWrite<Treatment> created) =>
+        created.Withheld.Count == 0 && created.Updated.Count == 0
+            ? created
+            : created.Where(t => !created.Withheld.Contains(t, ReferenceEqualityComparer.Instance)
+                                 && !created.Updated.Contains(t, ReferenceEqualityComparer.Instance)).ToList();
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
@@ -208,9 +226,13 @@ public class TreatmentService : ITreatmentService
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
-        // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
-        // merge unless the patch explicitly changes _id.
+        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId and RecordId,
+        // so capture them and restore them after the merge. They are what write-back finds the
+        // edit's upstream copy by (UpstreamIdentityJson.TreatmentWireForms); lost, the edit would go
+        // to another copy.
         var originalId = treatment.Id;
+        var originalLegacyId = treatment.LegacyId;
+        var originalRecordId = treatment.RecordId;
 
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
@@ -242,6 +264,8 @@ public class TreatmentService : ITreatmentService
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
         // which would otherwise defeat the re-key and duplicate the record).
         treatment.Id = originalId;
+        treatment.LegacyId = originalLegacyId;
+        treatment.RecordId = originalRecordId;
     }
 
     /// <inheritdoc />

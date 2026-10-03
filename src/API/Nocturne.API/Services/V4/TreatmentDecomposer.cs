@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -370,12 +371,15 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     public async Task<V4Models.DecompositionResult> DecomposeAsync(Treatment treatment, WriteOrigin origin, CancellationToken ct = default)
     {
         NormalizeIdentity(treatment);
+        var echo = (await PointAtStoredTreatmentsAsync([treatment], ct)).Count > 0;
         using var restated = OpenRestatedScope([treatment]);
 
         var result = new V4Models.DecompositionResult
         {
             CorrelationId = Guid.CreateVersion7()
         };
+        if (echo)
+            return result;
 
         var c = ClassifyTreatment(treatment);
         if (c.ProducesNothing)
@@ -457,6 +461,90 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// The treatment tables, for <see cref="DecomposerBase.PlanStoredIdentitiesAsync"/>. Write-back
+    /// sends a treatment under <see cref="MongoObjectId.Coerce"/> of its key, so a uuid-shaped
+    /// legacy id comes back as its prefix and any other non-ObjectId one as its hash; an earlier
+    /// write-back of an edit sent the record's served id, its own uuid's prefix, whatever its legacy
+    /// id. A meal's bolus and carbs share a correlation id, so an adoption carries to both.
+    /// </summary>
+    private IReadOnlyList<KeyedTable> TreatmentTables =>
+    [
+        Table(_bolusRepository, TreatmentWireForms),
+        Table(_carbIntakeRepository, TreatmentWireForms),
+        Table(_bgCheckRepository, TreatmentWireForms),
+        Table(_noteRepository, TreatmentWireForms),
+        Table(_deviceEventRepository, TreatmentWireForms),
+        Table(_bolusCalculationRepository, TreatmentWireForms),
+        Table(_tempBasalRepository, TreatmentWireForms),
+    ];
+
+    private const WireForms TreatmentWireForms = WireForms.UuidPrefix | WireForms.Hashed | WireForms.KeyedOwnId;
+
+    private static bool PulledFromNightscout(Treatment treatment)
+        => treatment.DataSource == Nocturne.Core.Constants.DataSources.NightscoutConnector;
+
+    /// <summary>
+    /// Where each treatment this scope has already planned or pointed stands, so a connector sync
+    /// resolves a treatment once across <see cref="SelectForRepublishAsync"/>,
+    /// <see cref="ResolveStoredIdentitiesAsync"/> and the decomposition that follows.
+    /// </summary>
+    private readonly ConditionalWeakTable<Treatment, StoredIdentity> _identities = new();
+
+    private sealed class StoredIdentity(PlannedIdentity planned)
+    {
+        public PlannedIdentity Planned { get; set; } = planned;
+        public bool Applied { get; set; }
+    }
+
+    /// <summary>
+    /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> across the treatment tables, applying a
+    /// plan <see cref="SelectForRepublishAsync"/> already made rather than making it again, and
+    /// skipping the treatments already pointed.
+    /// </summary>
+    /// <returns>The write-back echoes, which store nothing.</returns>
+    private async Task<IReadOnlySet<Treatment>> PointAtStoredTreatmentsAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        var echoes = new HashSet<Treatment>(ReferenceEqualityComparer.Instance);
+        var pending = new Dictionary<Treatment, PlannedIdentity>(ReferenceEqualityComparer.Instance);
+        var unplanned = new List<Treatment>();
+        foreach (var treatment in treatments)
+        {
+            if (!_identities.TryGetValue(treatment, out var identity))
+                unplanned.Add(treatment);
+            else if (identity.Applied && identity.Planned.Echo)
+                echoes.Add(treatment);
+            else if (!identity.Applied)
+                pending[treatment] = identity.Planned;
+        }
+
+        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+            pending[treatment] = planned;
+
+        if (pending.Count == 0)
+            return echoes;
+
+        var applied = await ApplyStoredIdentitiesAsync(pending, TreatmentTables, ct);
+        foreach (var treatment in pending.Keys)
+        {
+            var echo = applied.Contains(treatment);
+            _identities.AddOrUpdate(treatment, new StoredIdentity(pending[treatment] with { Echo = echo }) { Applied = true });
+            if (echo)
+                echoes.Add(treatment);
+        }
+
+        return echoes;
+    }
+
+    /// <inheritdoc />
+    public async Task<IEnumerable<Treatment>> ResolveStoredIdentitiesAsync(
+        IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
+    {
+        foreach (var treatment in treatments)
+            NormalizeIdentity(treatment);
+        return await PointAtStoredTreatmentsAsync(treatments, ct);
     }
 
     #region Decomposition Methods
@@ -1177,6 +1265,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
         foreach (var treatment in treatments)
             NormalizeIdentity(treatment);
+        var echoes = await PointAtStoredTreatmentsAsync(treatments, ct);
         using var restated = OpenRestatedScope(treatments);
 
         var result = new V4Models.DecompositionResult();
@@ -1203,7 +1292,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         var pumpSuspendResumeTreatments = new List<(Treatment Treatment, DeviceEventType EventType)>();
         var unsupportedTypes = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var treatment in treatments)
+        foreach (var treatment in treatments.Where(t => !echoes.Contains(t)))
         {
             NormalizeIdentity(treatment);
 
@@ -1588,11 +1677,16 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     /// source wins. When none of the rows carries a fingerprint, the record is taken as it stands:
     /// stamped here, not overwritten. That covers rows stored before fingerprints and rows another
     /// uploader restated. A treatment the user deleted stays deleted.
+    /// <para>
+    /// All of this is keyed by the id each treatment is stored under, which for a copy Nightscout
+    /// re-keyed is not the <c>_id</c> it came back with, so each is first planned onto the record it
+    /// names (<see cref="PlanForRepublishAsync"/>). A write-back echo is never selected.
+    /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<Treatment>> SelectForRepublishAsync(
         string source, IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
-        var identified = treatments.Where(t => t.Id is { Length: > 0 }).ToList();
+        var identified = (await PlanForRepublishAsync(treatments, ct)).Where(t => t.Id is { Length: > 0 }).ToList();
         if (identified.Count == 0)
             return [];
 
@@ -1640,6 +1734,28 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         }
 
         return republish;
+    }
+
+    /// <summary>
+    /// Plans each treatment onto the record it names and rewrites its id to that record's id, without
+    /// writing anything: a record with no legacy id is only given the id it is named by when the
+    /// treatment is published (<see cref="ResolveStoredIdentitiesAsync"/>), which carries the plan
+    /// out rather than making it again.
+    /// </summary>
+    /// <returns>The treatments that are not write-back echoes.</returns>
+    private async Task<IReadOnlyList<Treatment>> PlanForRepublishAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct)
+    {
+        foreach (var treatment in treatments)
+            NormalizeIdentity(treatment);
+
+        var unplanned = treatments.Where(t => !_identities.TryGetValue(t, out _)).ToList();
+        foreach (var (treatment, planned) in await PlanStoredIdentitiesAsync(unplanned, TreatmentTables, PulledFromNightscout, ct))
+        {
+            treatment.Id = planned.Id;
+            _identities.AddOrUpdate(treatment, new StoredIdentity(planned));
+        }
+
+        return treatments.Where(t => !(_identities.TryGetValue(t, out var identity) && identity.Planned.Echo)).ToList();
     }
 
     /// <summary>

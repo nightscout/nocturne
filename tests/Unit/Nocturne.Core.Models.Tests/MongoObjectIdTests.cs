@@ -129,6 +129,43 @@ public class MongoObjectIdTests
         json.GetProperty("_id").GetString().Should().Be(expected);
         json.GetProperty("identifier").GetString().Should().Be(expected);
     }
+
+    [Fact]
+    public void TryGetOwnIdRange_ACanonicalUuidNamesOnlyThatUuid()
+    {
+        var id = Guid.Parse("0192abcd-ef01-7123-8456-789abcdef012");
+
+        MongoObjectId.TryGetOwnIdRange(id.ToString(), out var low, out var high).Should().BeTrue();
+
+        low.Should().Be(id);
+        high.Should().Be(id);
+    }
+
+    [Fact]
+    public void TryGetOwnIdRange_TheUuidPrefixNamesTheRangeHoldingTheUuid()
+    {
+        var id = Guid.Parse("0192abcd-ef01-7123-8456-789abcdef012");
+
+        MongoObjectId.TryGetOwnIdRange(MongoObjectId.FromGuid(id), out var low, out var high).Should().BeTrue();
+
+        low.Should().Be(Guid.Parse("0192abcd-ef01-7123-8456-789a00000000"));
+        high.Should().Be(Guid.Parse("0192abcd-ef01-7123-8456-789affffffff"));
+        (id >= low && id <= high).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("dexcom_7f3c2a91")]
+    [InlineData("0192ABCD-EF01-7123-8456-789ABCDEF012")]
+    [InlineData("0192abcdef0171238456789abcdef012")]
+    [InlineData("{0192abcd-ef01-7123-8456-789abcdef012}")]
+    [InlineData("507f1f77bcf80cd799439011")]
+    public void TryGetOwnIdRange_NamesNothingForAnIdNocturneNeverPutsOnTheWire(string? id)
+    {
+        MongoObjectId.TryGetOwnIdRange(id, out _, out _).Should().BeFalse();
+    }
+
     /// <summary>
     /// The shape filter ahead of a uuid range lookup: an id <see cref="MongoObjectId.FromGuid"/>
     /// produced always passes, and it rejects ids whose version or variant position a UUID could not
@@ -175,6 +212,11 @@ public class MongoObjectIdTests
     public void NewObjectId_IsNotGuidPrefixShaped()
     {
         for (var i = 0; i < 64; i++)
-            MongoObjectId.IsGuidPrefixShaped(MongoObjectId.NewObjectId()).Should().BeFalse();
+        {
+            var id = MongoObjectId.NewObjectId();
+            MongoObjectId.IsGuidPrefixShaped(id).Should().BeFalse();
+            MongoObjectId.TryGetOwnIdRange(id, out _, out _).Should().BeFalse();
+        }
     }
 }
+
