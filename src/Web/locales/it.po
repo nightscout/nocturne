@@ -25722,6 +25722,620 @@ msgstr ""
 msgid "min ago"
 msgstr ""
 
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sign in with Google"
+msgstr "Accedi con Google"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health"
+msgstr "Google Health"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Google Health needs attention. Open the connector for details and recovery options."
+msgstr "Google Health ha bisogno di attenzione. Apri il connettore per i dettagli e le opzioni di ripristino."
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Reconnect to resume importing"
+msgstr "Riconnettiti per riprendere l'importazione"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Review available data and confirm the import selection"
+msgstr "Esamina i dati disponibili e conferma la selezione di importazione"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Choose at least one data type to start importing"
+msgstr "Scegli almeno un tipo di dati per avviare l'importazione"
+
+#. 0: lastSeen(connection.lastSync)
+#. 0: lastSeen(status.lastSync)
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Last successful sync: {0}"
+msgstr "Ultima sincronizzazione riuscita: {0}"
+
+#: src/lib/components/connectors/GoogleHealthSourceRow.svelte
+msgid "Waiting for the first successful sync"
+msgstr "In attesa della prima sincronizzazione riuscita"
+
+#: src/lib/components/connectors/ServerConnectorsCard.svelte
+msgid "Import steps, heart rate, weight, and sleep from Google Health"
+msgstr "Importa passi, frequenza cardiaca, peso e sonno da Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Step history"
+msgstr "Cronologia dei passaggi"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Heart-rate history"
+msgstr "Cronologia della frequenza cardiaca"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep history"
+msgstr "Storia del sonno"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Vitals"
+msgstr "Elementi vitali"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Body measurement"
+msgstr "Misurazione del corpo"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nutrition"
+msgstr "Nutrizione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Cycle tracking"
+msgstr "Monitoraggio del ciclo"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save the Google configuration first."
+msgstr "Salva prima la configurazione di Google."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Check the client ID and import start date."
+msgstr "Controlla l'ID cliente e la data di inizio dell'importazione."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Use an HTTPS URL ending exactly in /settings/connectors/google-health/callback."
+msgstr "Utilizza un URL HTTPS che termina esattamente con /settings/connectors/google-health/callback."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the client ID or secret."
+msgstr "Google ha rifiutato l'ID cliente o il segreto."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected a requested Health scope."
+msgstr "Google ha rifiutato un ambito Salute richiesto."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the OAuth request."
+msgstr "Google ha rifiutato la richiesta OAuth."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not return a usable session."
+msgstr "Google non ha restituito una sessione utilizzabile."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "A Google client secret is required."
+msgstr "È richiesto un segreto client di Google."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Review and save the available data types before importing."
+msgstr "Esamina e salva i tipi di dati disponibili prima dell'importazione."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Select at least one data type before starting an import."
+msgstr "Seleziona almeno un tipo di dati prima di iniziare un'importazione."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Only the user who created this connection can change it."
+msgstr "Solo l'utente che ha creato questa connessione può modificarla."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnect before changing these settings."
+msgstr "Disconnettiti prima di modificare queste impostazioni."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This is a different Google account. Purge the old import before switching."
+msgstr "Questo è un account Google diverso. Elimina la vecchia importazione prima di cambiare."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The sign-in attempt expired. Start again."
+msgstr "Il tentativo di accesso è scaduto. Ricominciare."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not grant background access. Revoke access and reconnect."
+msgstr "Google non ha concesso l'accesso in background. Revoca l'accesso e riconnettiti."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not every requested permission was granted."
+msgstr "Non tutte le autorizzazioni richieste sono state concesse."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google denied access."
+msgstr "Google ha negato l'accesso."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google access expired or was revoked. Reconnect."
+msgstr "L'accesso a Google è scaduto o è stato revocato. Riconnettiti."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google's request limit was reached. Nocturne will retry later."
+msgstr "È stato raggiunto il limite di richieste di Google. Nocturne riproverà più tardi."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google is temporarily unavailable. Existing data was preserved."
+msgstr "Google è temporaneamente non disponibile. I dati esistenti sono stati conservati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This Google account is not linked to Fitbit."
+msgstr "Questo account Google non è collegato a Fitbit."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the data request."
+msgstr "Google ha rifiutato la richiesta di dati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This account cannot access this API version."
+msgstr "Questo account non può accedere a questa versione API."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This data type is unavailable for this account."
+msgstr "Questo tipo di dati non è disponibile per questo account."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google does not permit this data type to be read."
+msgstr "Google non consente la lettura di questo tipo di dati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected this date range. Choose a later start date."
+msgstr "Google ha rifiutato questo intervallo di date. Scegli una data di inizio successiva."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected Nocturne's time filter."
+msgstr "Google ha rifiutato il filtro temporale di Nocturne."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google rejected the filter for this data type."
+msgstr "Google ha rifiutato il filtro per questo tipo di dati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not recognise this data type."
+msgstr "Google non ha riconosciuto questo tipo di dati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google could not reconcile the sources."
+msgstr "Google non è riuscita a riconciliare le fonti."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned an incomplete response."
+msgstr "Google ha restituito una risposta incompleta."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned no measurements for this date range."
+msgstr "Google non ha restituito misurazioni per questo intervallo di date."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The saved connection cannot be read. Configure it again."
+msgstr "Impossibile leggere la connessione salvata. Configuralo di nuovo."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The saved selection contains an unsupported type."
+msgstr "La selezione salvata contiene un tipo non supportato."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Disconnected locally. Revoke the app in Google as well."
+msgstr "Disconnesso localmente. Revoca l'app anche su Google."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google exceeded the pagination safety limit. Try a later start date, or report the technical code if this persists."
+msgstr "Google ha superato il limite di sicurezza dell'impaginazione. Prova una data di inizio successiva o segnala il codice tecnico se il problema persiste."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned an unexpected data format."
+msgstr "Google ha restituito un formato dati imprevisto."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned overlapping measurements."
+msgstr "Google ha restituito misurazioni sovrapposte."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google returned data outside the requested range."
+msgstr "Google ha restituito dati al di fuori dell'intervallo richiesto."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne could not retrieve every page."
+msgstr "Nocturne non è riuscito a recuperare tutte le pagine."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne could not complete the import. Check the server log for the technical code and stage."
+msgstr "Nocturne non ha potuto completare l'importazione. Controlla il registro del server per il codice tecnico e la fase."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The import is running in the background. You can leave this page and return later."
+msgstr "L'importazione viene eseguita in background. Puoi lasciare questa pagina e tornare più tardi."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health import completed."
+msgstr "Importazione di Google Health completata."
+
+#. 0: item.errorCode
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Read failed ({0})"
+msgstr "Lettura non riuscita ({0})"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not yet supported by Nocturne"
+msgstr "Non ancora supportato da Nocturne"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Permission not granted"
+msgstr "Autorizzazione non concessa"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import needs attention"
+msgstr "L'importazione richiede attenzione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import enabled"
+msgstr "Importazione abilitata"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import enabled; no data found"
+msgstr "Importazione abilitata; nessun dato trovato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Available to connect"
+msgstr "Disponibile per connettersi"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Supported, but no data found"
+msgstr "Supportato, ma nessun dato trovato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Waiting for the background worker"
+msgstr "In attesa dell'operatore in background"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Refreshing the Google session"
+msgstr "Aggiornamento della sessione di Google"
+
+#. 0: status.capabilities?.find((entry) => entry.dataType === status?.syncDataType)?.displayName ?? status.syncDataType
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Reading {0}"
+msgstr "Lettura {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Reading Google Health data"
+msgstr "Lettura dei dati di Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Validating the downloaded data"
+msgstr "Convalida dei dati scaricati"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Updating Nocturne health records"
+msgstr "Aggiornamento delle cartelle cliniche di Nocturne"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Preparing the import"
+msgstr "Preparazione dell'importazione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import status is temporarily unavailable. Retrying."
+msgstr "Lo stato dell'importazione è temporaneamente non disponibile. Nuovo tentativo."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google sign-in failed or was cancelled."
+msgstr "L'accesso a Google non è riuscito o è stato annullato."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google did not grant the requested read access."
+msgstr "Google non ha concesso l'accesso in lettura richiesto."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The Nocturne session was missing after the Google redirect. Sign in and reconnect in the same browser."
+msgstr "La sessione Nocturne risultava mancante dopo il reindirizzamento di Google. Accedi e riconnettiti nello stesso browser."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health · Connectors & Apps"
+msgstr "Google Health · Connettori e app"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Server connector for health and fitness data"
+msgstr "Connettore server per dati di salute e fitness"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The import could not be completed."
+msgstr "Impossibile completare l'importazione."
+
+#. 0: status.errorDataTypes?.length ? ` · ${status.errorDataTypes.join(", ")}` \\: ""
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Technical code: <0/> {0}"
+msgstr "Codice tecnico: <0/> {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import running in the background"
+msgstr "Importazione in esecuzione in background"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health import progress"
+msgstr "Avanzamento dell'importazione di Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Historical import progress"
+msgstr "Avanzamento dell’importazione storica"
+
+#. 0: day(status.backfillSyncedThrough)
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}."
+msgstr "Sincronizzato fino al {0}."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Synchronized back through {0}. <0/>"
+msgstr "Sincronizzato fino al {0}. <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The requested history is complete."
+msgstr "La cronologia richiesta è completa."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Each sync refreshes today and imports one older calendar month."
+msgstr "Ogni sincronizzazione aggiorna oggi e importa un mese di calendario precedente."
+
+#. 0: status.syncCompletedDataTypes; 1: status.syncTotalDataTypes
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0} of {1} data types read"
+msgstr "Vengono letti i tipi di dati {0} di {1}"
+
+#. 0: status.syncPagesRead; 1: status.syncPagesRead === 1 ? "page" \\: "pages"
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0} Google {1} read for this data type"
+msgstr "{0} Google {1} lettura per questo tipo di dati"
+
+#. 0: status.syncProgressPercent ?? 0
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0}% complete"
+msgstr "{0}% completato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "You can keep using Nocturne or leave this page. The server will continue the import."
+msgstr "Puoi continuare a utilizzare Nocturne o abbandonare questa pagina. Il server continuerà l'importazione."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Read-only OAuth connection to the Google Health API"
+msgstr "Connessione OAuth di sola lettura all'API Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Loading connection status…"
+msgstr "Caricamento stato della connessione…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google client ID <0/>"
+msgstr "ID cliente Google <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Client secret <0/>"
+msgstr "Segreto cliente <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Callback URL <0/>"
+msgstr "URL di richiamata <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import data from <0/>"
+msgstr "Importa dati da <0/>"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne retrieves every available page from this date. An early start date can make the first import take longer."
+msgstr "Nocturne recupera ogni pagina disponibile da questa data. Una data di inizio anticipata può rendere la prima importazione più lunga."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save and connect"
+msgstr "Salva e connettiti"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Disconnect"
+msgstr "<0/>Disconnetti"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Leave empty to keep the saved secret"
+msgstr "Lascia vuoto per mantenere il segreto salvato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save and reconnect"
+msgstr "Salva e riconnettiti"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Edit connection settings"
+msgstr "Modifica le impostazioni di connessione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The encrypted Google Cloud configuration is saved."
+msgstr "La configurazione crittografata di Google Cloud viene salvata."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Review the available data below, then save your selection to start importing."
+msgstr "Google Health è connesso. Esamina i dati disponibili di seguito, quindi salva la selezione per avviare l'importazione."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Imports are paused because no data types are selected."
+msgstr "Google Health è connesso. Le importazioni sono sospese perché non è selezionato alcun tipo di dati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health is connected. Automatic sync runs approximately every 15 minutes."
+msgstr "Google Health è connesso. La sincronizzazione automatica viene eseguita circa ogni 15 minuti."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Sync now"
+msgstr "<0/>Sincronizza ora"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Change the import start date and selection below without reconnecting. Disconnect only to change OAuth settings."
+msgstr "Modifica la data di inizio dell'importazione e la selezione di seguito senza riconnetterti. Disconnettiti solo per modificare le impostazioni OAuth."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health data"
+msgstr "Dati di Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Detected data types and how Nocturne can use them"
+msgstr "Tipi di dati rilevati e come Nocturne può utilizzarli"
+
+#. 0: group.selectedCount; 1: group.entries.length
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "{0}/{1} selected"
+msgstr "{0}/{1} selezionato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Data type"
+msgstr "Tipo di dati"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Found"
+msgstr "Trovato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nocturne destination"
+msgstr "Destinazione di Nocturne"
+
+#. 0: capability?.displayName ?? item.dataType
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import {0}"
+msgstr "Importa {0}"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not scanned"
+msgstr "Non scansionato"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No permission"
+msgstr "Nessun permesso"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scan failed"
+msgstr "Scansione non riuscita"
+
+#. 0: item.count
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Yes ({0})"
+msgstr "Sì ({0})"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No"
+msgstr "NO"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No destination yet"
+msgstr "Nessuna destinazione ancora"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning the selected history in Google Health…"
+msgstr "Scansione della cronologia selezionata in Google Health…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "This runs separately, so the rest of the page remains available."
+msgstr "Questo viene eseguito separatamente, quindi il resto della pagina rimane disponibile."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "No inventory has been loaded yet."
+msgstr "Nessun inventario è stato ancora caricato."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Scanning inventory…"
+msgstr "Scansione inventario…"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Refresh inventory"
+msgstr "Aggiorna l'inventario"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save import settings"
+msgstr "Salva le impostazioni di importazione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Save selection and import"
+msgstr "Salva la selezione e importa"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Choose an earlier date to import older data shared with Google Health. Empty results are not errors. Clear all selections and save to pause imports; previously imported data is kept."
+msgstr "Scegli una data precedente per importare i dati meno recenti condivisi con Google Health. I risultati vuoti non sono errori. Cancella tutte le selezioni e salva per sospendere le importazioni; i dati precedentemente importati vengono conservati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Enable the Google Health API and create an OAuth Web application client."
+msgstr "Abilita l'API Google Health e crea un client dell'applicazione Web OAuth."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Add your account as a test user while the consent screen is in testing."
+msgstr "Aggiungi il tuo account come utente di prova mentre la schermata di consenso è in fase di test."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Register the callback URL above as an Authorized redirect URI."
+msgstr "Registra l'URL di richiamata riportato sopra come URI di reindirizzamento autorizzato."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Keep the client secret private."
+msgstr "Mantieni il segreto del cliente privato."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Cloud setup"
+msgstr "Configurazione di Google Cloud"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google setup documentation"
+msgstr "Documentazione sulla configurazione di Google"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported Google Health data?"
+msgstr "Vuoi eliminare i dati importati di Google Health?"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported data"
+msgstr "Elimina i dati importati"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Measurements imported through Google Health will be deleted from Nocturne. Data stored by Google is unchanged."
+msgstr "Le misurazioni importate tramite Google Health verranno eliminate da Nocturne. I dati memorizzati da Google rimangono invariati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Delete imported Google Health data"
+msgstr "Elimina i dati importati di Google Health"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "<0/>Connectors & Apps"
+msgstr "<0/>Connettori e app"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Import recovery"
+msgstr "Recupero importazioni"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "If a historical import stops or needs to be repeated, reset the Google Health connector from a chosen date. The reset re-reads the range and keeps the normal duplicate protection."
+msgstr "Se un'importazione storica si interrompe o deve essere ripetuta, reimposta il connettore Google Health da una data scelta. Il reset rilegge l'intervallo e mantiene la normale protezione dai duplicati."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "The reset runs in the background. Platform administrators can monitor or cancel it from the connector reset page."
+msgstr "Il ripristino viene eseguito in background. Gli amministratori della piattaforma possono monitorarlo o annullarlo dalla pagina di reimpostazione del connettore."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Open connector reset"
+msgstr "Ripristino del connettore aperto"
+
 #: ../portal/src/routes/docs/installation/portainer/+page.svelte
 msgid "PostgreSQL host-directory storage"
 msgstr ""
@@ -25825,3 +26439,107 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "One or more connectors failed; review the connector details and retry the failed range."
+msgstr "Uno o più connettori hanno avuto esito negativo; controlla i dettagli dei connettori e riprova l'intervallo non riuscito."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep sessions and stages"
+msgstr "Sessioni e fasi del sonno"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Active energy burned"
+msgstr "Energia consumata con l’attività"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Total calories"
+msgstr "Calorie totali"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Distance"
+msgstr "Distanza"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Floors"
+msgstr "Piani"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Workouts"
+msgstr "Allenamenti"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Body fat"
+msgstr "Grasso corporeo"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Height"
+msgstr "Altezza"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Nutrition log"
+msgstr "Diario alimentare"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Hydration"
+msgstr "Idratazione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Blood glucose"
+msgstr "Glicemia"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Oxygen saturation"
+msgstr "Saturazione di ossigeno"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Heart rate variability"
+msgstr "Variabilità della frequenza cardiaca"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Resting heart rate"
+msgstr "Frequenza cardiaca a riposo"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily oxygen saturation"
+msgstr "Saturazione di ossigeno giornaliera"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Daily respiratory rate"
+msgstr "Frequenza respiratoria giornaliera"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sleep respiratory rate"
+msgstr "Frequenza respiratoria durante il sonno"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Core body temperature"
+msgstr "Temperatura corporea centrale"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Menstrual period"
+msgstr "Mestruazioni"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Ovulation test"
+msgstr "Test di ovulazione"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Cervical mucus"
+msgstr "Muco cervicale"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Sexual activity"
+msgstr "Attività sessuale"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Unknown data type"
+msgstr "Tipo di dati sconosciuto"
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Google Health currently provides no read-only scope for this type."
+msgstr "Google Health al momento non offre un’autorizzazione di sola lettura per questo tipo."
+
+#: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
+msgid "Not exposed as a readable Google Health API data type."
+msgstr "Non disponibile come tipo di dati leggibile nell’API Google Health."

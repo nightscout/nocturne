@@ -103,15 +103,33 @@ public class SleepSessionRepository : ISleepSessionRepository
 
             if (existing is not null)
             {
+                entity.Id = existing.Id;
+                entity.CreatedAt = existing.CreatedAt;
                 ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
                 ctx.SleepStages.RemoveRange(existing.Stages);
-                ctx.SleepSessions.Remove(existing);
-                await ctx.SaveChangesAsync(token);
+
+                ctx.Entry(existing).CurrentValues.SetValues(entity);
+                existing.Stages = entity.Stages;
+                existing.BiometricSamples = entity.BiometricSamples;
+
+                foreach (var stage in existing.Stages)
+                {
+                    stage.SleepSessionId = existing.Id;
+                    stage.TenantId = ctx.TenantId;
+                }
+                foreach (var sample in existing.BiometricSamples)
+                {
+                    sample.SleepSessionId = existing.Id;
+                    sample.TenantId = ctx.TenantId;
+                }
+            }
+            else
+            {
+                ctx.SleepSessions.Add(entity);
             }
 
-            ctx.SleepSessions.Add(entity);
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            return SleepSessionMapper.ToDomainModel(existing ?? entity, includeChildren: true);
         }, ct: cancellationToken);
     }
 
@@ -189,18 +207,33 @@ public class SleepSessionRepository : ISleepSessionRepository
                     ctx.SleepBiometricSamples.RemoveRange(holder.BiometricSamples);
                     ctx.SleepStages.RemoveRange(holder.Stages);
                     ctx.SleepSessions.Remove(holder);
+                    // Release the source-record key before updating the live row.
+                    await ctx.SaveChangesAsync(token);
                 }
             }
 
-            // Remove old entity and children, then insert updated version preserving the original ID
+            entity.Id = existing.Id;
+            entity.CreatedAt = existing.CreatedAt;
             ctx.SleepBiometricSamples.RemoveRange(existing.BiometricSamples);
             ctx.SleepStages.RemoveRange(existing.Stages);
-            ctx.SleepSessions.Remove(existing);
-            await ctx.SaveChangesAsync(token);
 
-            ctx.SleepSessions.Add(entity);
+            ctx.Entry(existing).CurrentValues.SetValues(entity);
+            existing.Stages = entity.Stages;
+            existing.BiometricSamples = entity.BiometricSamples;
+
+            foreach (var stage in existing.Stages)
+            {
+                stage.SleepSessionId = existing.Id;
+                stage.TenantId = ctx.TenantId;
+            }
+            foreach (var sample in existing.BiometricSamples)
+            {
+                sample.SleepSessionId = existing.Id;
+                sample.TenantId = ctx.TenantId;
+            }
+
             await ctx.SaveChangesAsync(token);
-            return SleepSessionMapper.ToDomainModel(entity, includeChildren: true);
+            return SleepSessionMapper.ToDomainModel(existing, includeChildren: true);
         }, ct: cancellationToken);
     }
 

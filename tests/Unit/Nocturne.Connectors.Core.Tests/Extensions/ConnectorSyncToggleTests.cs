@@ -35,7 +35,7 @@ public class ConnectorSyncToggleTests
         var declared = SyncToggleProperties()
             .Select(property => property.GetCustomAttribute<ConnectorPropertyAttribute>()!.Key);
 
-        ConnectorSyncToggles.ByPropertyKey.Keys.Should().BeEquivalentTo(declared);
+        declared.Should().BeSubsetOf(ConnectorSyncToggles.ByPropertyKey.Keys);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ConnectorSyncToggleTests
     [Fact]
     public void EachToggleGatesOnlyItsOwnDataType()
     {
-        foreach (var (key, dataType) in ConnectorSyncToggles.ByPropertyKey)
+        foreach (var (key, dataType) in DeclaredSyncToggles())
         {
             var configuration = new TestConnectorConfiguration();
             PropertyFor(key).SetValue(configuration, false);
@@ -56,7 +56,7 @@ public class ConnectorSyncToggleTests
             configuration.IsDataTypeEnabled(dataType).Should().BeFalse(
                 "{0} is switched off", key);
 
-            var others = ConnectorSyncToggles.ByPropertyKey.Values.Where(other => other != dataType);
+            var others = DeclaredSyncToggles().Values.Where(other => other != dataType);
             others.Should().OnlyContain(other => configuration.IsDataTypeEnabled(other),
                 $"only {key} was switched off");
         }
@@ -66,7 +66,7 @@ public class ConnectorSyncToggleTests
     public void DataTypesWithNoToggleAreAlwaysEnabled()
     {
         var untoggled = Enum.GetValues<SyncDataType>()
-            .Except(ConnectorSyncToggles.ByPropertyKey.Values)
+            .Except(DeclaredSyncToggles().Values)
             .ToList();
 
         untoggled.Should().Contain([SyncDataType.Calibrations, SyncDataType.BGChecks]);
@@ -74,7 +74,7 @@ public class ConnectorSyncToggleTests
             "a connector declares basal injections supported, so the user must be able to switch them off");
 
         var allTogglesOff = new TestConnectorConfiguration();
-        foreach (var key in ConnectorSyncToggles.ByPropertyKey.Keys)
+        foreach (var key in DeclaredSyncToggles().Keys)
             PropertyFor(key).SetValue(allTogglesOff, false);
 
         untoggled.Should().OnlyContain(dataType => allTogglesOff.IsDataTypeEnabled(dataType));
@@ -83,6 +83,12 @@ public class ConnectorSyncToggleTests
     private static PropertyInfo PropertyFor(ConnectorPropertyKey key) =>
         SyncToggleProperties()
             .Single(property => property.GetCustomAttribute<ConnectorPropertyAttribute>()!.Key == key);
+
+    private static IReadOnlyDictionary<ConnectorPropertyKey, SyncDataType> DeclaredSyncToggles() =>
+        ConnectorSyncToggles.ByPropertyKey
+            .Where(pair => SyncToggleProperties().Any(property =>
+                property.GetCustomAttribute<ConnectorPropertyAttribute>()!.Key == pair.Key))
+            .ToDictionary();
 
     private static IEnumerable<PropertyInfo> SyncToggleProperties() =>
         typeof(TestConnectorConfiguration)

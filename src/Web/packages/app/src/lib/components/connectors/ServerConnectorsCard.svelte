@@ -1,5 +1,4 @@
 <script module lang="ts">
-  import { resolve } from "$app/paths";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
   export interface ConnectorStatusWithDescription extends ConnectorStatusDto {
@@ -12,6 +11,7 @@
     AvailableConnector,
     ConnectorCapabilities,
     DataSourceInfo,
+    GoogleHealthStatus,
   } from "$lib/api/generated/nocturne-api-client";
   import {
     Card,
@@ -29,12 +29,15 @@
   import Database from "@lucide/svelte/icons/database";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
+  import HeartPulse from "@lucide/svelte/icons/heart-pulse";
   import DataSourceRow from "$lib/components/settings/DataSourceRow.svelte";
+  import GoogleHealthSourceRow from "./GoogleHealthSourceRow.svelte";
   import AppLogo from "$lib/components/ui/AppLogo.svelte";
   import { canManageConnectors } from "$lib/authorization/connector-management";
   import { mapConnectorStatus } from "$lib/utils/connector-display";
   import { page } from "$app/state";
   import type { SyncProgressEvent } from "$lib/websocket/types";
+  import { resolve } from "$app/paths";
 
   interface Props {
     availableConnectors: AvailableConnector[];
@@ -52,6 +55,7 @@
       connector: ConnectorStatusWithDescription,
       connectorId?: string
     ) => void;
+    googleHealth: GoogleHealthStatus | null;
   }
 
   let {
@@ -67,6 +71,7 @@
     onManualSync,
     onQuickSync,
     onConnectorClick,
+    googleHealth,
   }: Props = $props();
 
   const canManage = $derived(
@@ -74,6 +79,9 @@
       page.data.effectivePermissions,
       page.data.refusedAsDemoSubject
     )
+  );
+  const visibleConnectors = $derived(
+    availableConnectors.filter((connector) => connector.id !== "googlehealth" || canManage)
   );
 
   function getConnectorDataSource(
@@ -117,7 +125,7 @@
         </CardDescription>
       </div>
       <div class="flex gap-2">
-        {#if connectorStatuses.length > 0}
+        {#if connectorStatuses.length > 0 || googleHealth?.configured || googleHealth?.connected}
           <Button
             variant="outline"
             size="sm"
@@ -151,7 +159,31 @@
   </CardHeader>
   <CardContent>
     <div class="grid gap-3 @xl:grid-cols-2">
-      {#each availableConnectors as connector (connector.id)}
+      {#each visibleConnectors as connector (connector.id)}
+        {#if connector.id === "googlehealth"}
+          {#if googleHealth?.connected || googleHealth?.configured}
+            <GoogleHealthSourceRow connection={googleHealth} />
+          {:else}
+            <a
+              href={resolve("/settings/connectors/google-health")}
+              class="group relative flex items-center gap-4 rounded-lg border bg-muted/30 p-4 transition-colors hover:border-primary/50 hover:bg-accent/50"
+            >
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <HeartPulse class="h-5 w-5 text-primary" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium">Google Health</span>
+                  <Badge variant="outline">Not Configured</Badge>
+                </div>
+                <p class="text-sm text-muted-foreground">
+                  Import steps, heart rate, weight, and sleep from Google Health
+                </p>
+              </div>
+              <ChevronRight class="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+            </a>
+          {/if}
+        {:else}
         {@const connectorStatusInfo = connectorStatuses.find(
           (cs) => cs.id === connector.id
         )}
@@ -312,6 +344,7 @@
               />
             </div>
           </div>
+        {/if}
         {/if}
       {/each}
     </div>

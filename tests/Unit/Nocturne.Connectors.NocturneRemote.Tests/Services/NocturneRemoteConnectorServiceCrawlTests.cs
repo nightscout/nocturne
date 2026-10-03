@@ -90,6 +90,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
         result.Success.Should().BeFalse();
         result.ItemsSynced.Should().BeEmpty();
         fixture.PublishedGlucose.Should().BeEmpty();
+        result.Errors.Should().ContainSingle()
+            .Which.Should().NotContain("see preceding connector logs",
+                "the response parsing cause must be visible in the connector status");
     }
 
     /// <summary>
@@ -223,6 +226,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
             CancellationToken.None);
 
         result.Success.Should().BeTrue("no type the tenant enabled failed to sync");
+        handler.Requests.Where(url => url.Contains(NocturneRemoteConstants.SensorGlucose)).Should().ContainSingle();
         result.Errors.Should().BeEmpty();
         result.ItemsSynced.Should().BeEquivalentTo(new Dictionary<SyncDataType, int>
         {
@@ -621,10 +625,46 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         result.Success.Should().BeFalse();
         result.Message.Should().Be("Authentication failed");
+        handler.Requests.Should().ContainSingle("the auth probe has one attempt and a 401 ends the run");
         result.Errors.Should().ContainSingle()
             .Which.Should().Be($"Authentication failed for {DataSources.NocturneRemoteConnector}");
         handler.Requests.Should().NotContain(url => url.Contains(NocturneRemoteConstants.Boluses),
             "a rejected credential fails the run before the enabled types are reached");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenRetryReturnsMalformedJson_ReportsTheTerminalFailure()
+    {
+        var handler = new RemoteFakeHandler()
+            .Serve(NocturneRemoteConstants.SensorGlucose,
+                RemoteFakeHandler.Status(HttpStatusCode.ServiceUnavailable),
+                RemoteFakeHandler.Json("invalid-json"));
+        var fixture = new ServiceFixture(handler, config: NewConfig(maxRetryAttempts: 2));
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] }, fixture.Config, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Errors.Should().ContainSingle().Which.Should().NotContain("HTTP 503");
+        result.Errors.Single().Should().Contain("invalid start");
+    }
+
+    [Fact]
+    public async Task SyncDataAsync_WhenTheRemoteTransportFails_ReportsTheTransportCause()
+    {
+        var handler = new RemoteFakeHandler()
+            .BreakTransport(NocturneRemoteConstants.SensorGlucose,
+                new HttpRequestException("TLS handshake failed"));
+        var fixture = new ServiceFixture(handler);
+
+        var result = await fixture.Service.SyncDataAsync(
+            new SyncRequest { DataTypes = [SyncDataType.Glucose] },
+            fixture.Config,
+            CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Message.Should().Be("The remote Nocturne instance at https://remote.example did not answer: TLS handshake failed");
+        result.Errors.Should().ContainSingle().Which.Should().Be(result.Message);
     }
 
     /// <summary>
@@ -829,6 +869,7 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
         private readonly Dictionary<string, Queue<HttpResponseMessage>> _pages = new(StringComparer.Ordinal);
         private readonly Dictionary<string, HttpStatusCode> _broken = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Exception> _transportFailures = new(StringComparer.Ordinal);
 
         /// <summary>Every request made, so a test can assert on the range each crawl asked for.</summary>
         internal List<string> Requests { get; } = [];
@@ -858,6 +899,12 @@ public class NocturneRemoteConnectorServiceCrawlTests
         internal RemoteFakeHandler Break(string path, HttpStatusCode status)
         {
             _broken[path] = status;
+            return this;
+        }
+
+        internal RemoteFakeHandler BreakTransport(string path, Exception failure)
+        {
+            _transportFailures[path] = failure;
             return this;
         }
 
@@ -894,6 +941,9 @@ public class NocturneRemoteConnectorServiceCrawlTests
 
             if (_broken.TryGetValue(path, out var status))
                 return Task.FromResult(Status(status));
+
+            if (_transportFailures.TryGetValue(path, out var failure))
+                throw failure;
 
             if (IsAuthCheck(request))
                 return Task.FromResult(GlucosePage(total: 0));

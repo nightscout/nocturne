@@ -1,0 +1,491 @@
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Nocturne.Connectors.GoogleHealth.Services;
+using Nocturne.Core.Models;
+using Nocturne.Core.Models.Health;
+using Xunit;
+
+namespace Nocturne.Connectors.GoogleHealth.Tests.Services;
+
+public class GoogleHealthClientTests
+{
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("\"invalid\"")]
+    [InlineData("{\"minutesAsleep\":null}")]
+    [InlineData("{\"minutesAsleep\":\"invalid\"}")]
+    [InlineData("{\"minutesAsleep\":-1}")]
+    [InlineData("{\"minutesAsleep\":1.5}")]
+    [InlineData("{\"minutesAsleep\":481}")]
+    [InlineData("{\"minutesAsleep\":9223372036854775807}")]
+    [InlineData("{\"minutesAwake\":null}")]
+    [InlineData("{\"minutesAwake\":\"invalid\"}")]
+    [InlineData("{\"minutesAwake\":-1}")]
+    [InlineData("{\"minutesAwake\":481}")]
+    [InlineData("{\"minutesAwake\":9223372036854775807}")]
+    [InlineData("{\"minutesToFallAsleep\":null}")]
+    [InlineData("{\"minutesToFallAsleep\":\"invalid\"}")]
+    [InlineData("{\"minutesToFallAsleep\":-1}")]
+    [InlineData("{\"minutesToFallAsleep\":481}")]
+    [InlineData("{\"minutesToFallAsleep\":9223372036854775807}")]
+    [InlineData("{\"minutesAsleep\":400,\"minutesAwake\":100}")]
+    public async Task Invalid_sleep_summaries_fail_the_page_before_yielding_sessions(string summary)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json($$$"""
+            {"dataPoints":[{"name":"night-1","sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{{{summary}}}
+            }}]}
+            """))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var yielded = 0;
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                yielded += page.Count;
+        });
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(480)]
+    public void Valid_sleep_summary_boundaries_preserve_explicit_totals(int minutes)
+    {
+        using var document = JsonDocument.Parse($$$"""
+            {"sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{"minutesAsleep":"{{{minutes}}}","minutesAwake":0,"minutesToFallAsleep":0}
+            }}
+            """);
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+        Assert.Equal(minutes * 60_000L, session.TotalSleepMs);
+        Assert.Equal(0, session.TotalAwakeMs);
+        Assert.Equal(0, session.SleepLatencyMs);
+    }
+
+    [Fact]
+    public void Partial_sleep_summary_deducts_known_awake_time_from_interval_fallback()
+    {
+        using var document = JsonDocument.Parse("""
+            {"sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "summary":{"minutesAwake":60}
+            }}
+            """);
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+        Assert.Equal(420 * 60_000L, session.TotalSleepMs);
+        Assert.Equal(60 * 60_000L, session.TotalAwakeMs);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("42")]
+    [InlineData("\"malformed\"")]
+    [InlineData("false")]
+    public async Task Sleep_reader_rejects_non_array_stages_before_yielding_a_session(string value)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json($$$"""
+            {"dataPoints":[{"name":"night-1","sleep":{
+              "interval":{"startTime":"2026-09-01T00:00:00Z","endTime":"2026-09-01T08:00:00Z"},
+              "stages":{{{value}}}
+            }}]}
+            """))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var yielded = 0;
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                yielded += page.Count;
+        });
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("{}")]
+    [InlineData("42")]
+    [InlineData("\"malformed\"")]
+    [InlineData("true")]
+    public async Task Inventory_rejects_non_array_data_points(string value)
+    {
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ =>
+            Json($$"""{"dataPoints":{{value}}}"""))));
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() =>
+            client.CountAsync("token", "heart-rate", from, from.AddDays(1), default));
+
+        Assert.Equal("invalid_google_response", error.Message);
+        Assert.Equal("inventory", error.Stage);
+        Assert.Equal("heart-rate", error.DataType);
+    }
+
+    [Theory]
+    [InlineData("weight", "{\"weight\":{\"sampleTime\":{\"physicalTime\":\"2026-09-01T10:00:00Z\",\"utcOffset\":\"7200s\"},\"weightGrams\":72500}}", "kg", 72.5)]
+    [InlineData("heart-rate", "{\"heartRate\":{\"sampleTime\":{\"physicalTime\":\"2026-09-01T10:00:00Z\"},\"beatsPerMinute\":\"67\"}}", "bpm", 67)]
+    [InlineData("steps", "{\"steps\":{\"interval\":{\"startTime\":\"2026-09-01T10:00:00Z\",\"endTime\":\"2026-09-01T10:01:00Z\"},\"count\":\"42\"}}", "steps", 42)]
+    public void Maps_supported_measurements(
+        string type,
+        string json,
+        string unit,
+        decimal expected)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        var reading = GoogleHealthClient.Parse(type, document.RootElement);
+
+        Assert.Equal(expected, reading.Value);
+        Assert.Equal(unit, reading.Unit);
+        Assert.Equal(DateTimeOffset.Parse("2026-09-01T10:00:00Z").ToUnixTimeMilliseconds(), reading.Mills);
+    }
+
+    [Theory]
+    [InlineData("weight", "null")]
+    [InlineData("heart-rate", "null")]
+    [InlineData("steps", "null")]
+    [InlineData("weight", "7200")]
+    [InlineData("weight", "\"7200\"")]
+    [InlineData("heart-rate", "\"7200ss\"")]
+    [InlineData("steps", "\"7200ss\"")]
+    [InlineData("weight", "\"7,200s\"")]
+    [InlineData("weight", "\"7200 s\"")]
+    [InlineData("weight", "\"s\"")]
+    [InlineData("weight", "true")]
+    [InlineData("weight", "{}")]
+    [InlineData("weight", "[]")]
+    public void Invalid_utc_offsets_are_reported_as_provider_data_errors(string type, string offset)
+    {
+        var time = type == "steps"
+            ? $$"""{"startTime":"2026-09-01T10:00:00Z","endTime":"2026-09-01T10:01:00Z","startUtcOffset":{{offset}}}"""
+            : $$"""{"physicalTime":"2026-09-01T10:00:00Z","utcOffset":{{offset}}}""";
+        var payload = type == "heart-rate" ? "heartRate" : type;
+        var timeName = type == "steps" ? "interval" : "sampleTime";
+        var measure = type switch { "steps" => "count", "heart-rate" => "beatsPerMinute", _ => "weightGrams" };
+        using var document = JsonDocument.Parse($$$"""{"{{{payload}}}":{"{{{timeName}}}":{{{time}}},"{{{measure}}}":60}}""");
+
+        var error = Assert.Throws<GoogleHealthException>(() => GoogleHealthClient.Parse(type, document.RootElement));
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal(type, error.DataType);
+    }
+
+    [Theory]
+    [InlineData("0s", 0)]
+    [InlineData("7200s", 120)]
+    [InlineData("-19800s", -330)]
+    [InlineData("7200.000s", 120)]
+    [InlineData("50400s", 840)]
+    public void Valid_duration_utc_offsets_preserve_minute_values(string duration, int expected)
+    {
+        using var document = JsonDocument.Parse($$$"""{"weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z","utcOffset":"{{{duration}}}"},"weightGrams":60}}""");
+
+        Assert.Equal(expected, GoogleHealthClient.Parse("weight", document.RootElement).UtcOffsetMinutes);
+    }
+
+    [Theory]
+    [InlineData("name")]
+    [InlineData("dataPointName")]
+    public void Retains_the_provider_resource_id_for_same_timestamp_readings(string identityField)
+    {
+        using var firstDocument = JsonDocument.Parse($$$"""
+            {"{{{identityField}}}":"users/me/dataTypes/heart-rate/dataPoints/watch","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+            """);
+        using var secondDocument = JsonDocument.Parse($$$"""
+            {"{{{identityField}}}":"users/me/dataTypes/heart-rate/dataPoints/phone","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72"}}
+            """);
+
+        var first = GoogleHealthClient.Parse("heart-rate", firstDocument.RootElement);
+        var second = GoogleHealthClient.Parse("heart-rate", secondDocument.RootElement);
+
+        Assert.NotEqual(GoogleHealthClient.Key(first), GoogleHealthClient.Key(second));
+    }
+
+    [Fact]
+    public async Task Rejects_a_mixed_malformed_page_before_reconciliation_can_use_it()
+    {
+        var handler = new StubHandler(_ => Json("""
+            {"dataPoints":[
+              {"heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"72.5"}},
+              {"heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:01:00Z"},"beatsPerMinute":"73"}}
+            ]}
+            """));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync("token", "heart-rate",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default)));
+        Assert.Equal("invalid_google_data", error.Message);
+    }
+
+    [Fact]
+    public async Task Rejects_unrepresentable_samples_before_reconciliation()
+    {
+        var handler = new StubHandler(_ => Json("""
+            {"dataPoints":[
+              {"name":"overflow-heart","heartRate":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"beatsPerMinute":"2147483648"}},
+              {"name":"overflow-steps","steps":{"interval":{"startTime":"2026-09-01T10:00:00Z","endTime":"2026-09-01T10:01:00Z"},"count":"2147483648"}}
+            ]}
+            """));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        foreach (var type in new[] { "heart-rate", "steps" })
+        {
+            var error = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync("token", type,
+                DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default)));
+            Assert.Equal("invalid_google_data", error.Message);
+        }
+    }
+
+    [Fact]
+    public async Task Pagination_returns_all_valid_pages()
+    {
+        var calls = 0;
+        var handler = new StubHandler(_ => Json(++calls == 1
+            ? """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"2026-09-01T10:00:00Z"},"weightGrams":70000}}],"nextPageToken":"next"}"""
+            : """{"dataPoints":[{"weight":{"sampleTime":{"physicalTime":"2026-09-01T11:00:00Z"},"weightGrams":71000}}]}"""));
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var readings = await ReadAllAsync(client.ReadPagesAsync("token", "weight",
+            DateTimeOffset.Parse("2026-09-01T00:00:00Z"), DateTimeOffset.Parse("2026-09-02T00:00:00Z"), default));
+
+        Assert.Equal(2, readings.Count);
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData(0, 120, "DEEP")]
+    [InlineData(60, 180, "REM")]
+    [InlineData(30, 60, "UNSPECIFIED")]
+    [InlineData(30, 60, "RESTLESS")]
+    public async Task Overlapping_sleep_stages_fail_before_yielding_sessions(int secondStartMinutes, int secondEndMinutes, string secondType)
+    {
+        var start = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var payload = JsonSerializer.Serialize(new
+        {
+            dataPoints = new[] { new
+            {
+                name = "overlapping-night",
+                sleep = new
+                {
+                    interval = new { startTime = start, endTime = start.AddHours(8) },
+                    stages = new[]
+                    {
+                        new { startTime = start.AddMinutes(secondStartMinutes), endTime = start.AddMinutes(secondEndMinutes), type = secondType },
+                        new { startTime = start, endTime = start.AddHours(2), type = "DEEP" }
+                    }
+                }
+            } }
+        });
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json(payload))));
+        var yielded = 0;
+
+        var error = await Assert.ThrowsAsync<GoogleHealthException>(async () =>
+        {
+            await foreach (var page in client.ReadSleepPagesAsync("token", start, start.AddDays(1), default))
+                yielded += page.Count;
+        });
+
+        Assert.Equal("invalid_google_data", error.Message);
+        Assert.Equal("data_parse", error.Stage);
+        Assert.Equal("sleep", error.DataType);
+        Assert.Equal(0, yielded);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Unordered_sleep_stages_allow_adjacency_and_gaps(bool adjacent)
+    {
+        var start = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            sleep = new
+            {
+                interval = new { startTime = start, endTime = start.AddHours(8) },
+                stages = new[]
+                {
+                    new { startTime = start.AddHours(4), endTime = start.AddHours(8), type = "REM" },
+                    new { startTime = start, endTime = start.AddHours(adjacent ? 4 : 2), type = "DEEP" }
+                }
+            }
+        }));
+
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+
+        Assert.Equal((adjacent ? 8 : 6) * 60 * 60 * 1000L, session.TotalSleepMs);
+        Assert.Equal(2, session.Stages!.Count);
+        Assert.Equal([0, 1], session.Stages.Select(stage => stage.Ordinal));
+    }
+
+    [Fact]
+    public void Maps_sleep_sessions_and_stages()
+    {
+        using var document = JsonDocument.Parse("""
+        {
+          "dataPointName":"users/me/dataTypes/sleep/dataPoints/night-1",
+          "sleep":{
+            "interval":{"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T06:00:00Z"},
+            "stages":[
+              {"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T02:00:00Z","type":"DEEP"},
+              {"startTime":"2026-09-05T02:00:00Z","endTime":"2026-09-05T06:00:00Z","type":"REM"}
+            ]
+          }
+        }
+        """);
+
+        var session = GoogleHealthClient.ParseSleep(document.RootElement);
+
+        Assert.Equal(SleepSource.Google, session.Source);
+        Assert.StartsWith("googlehealth:sleep:", session.OriginalId);
+        Assert.Equal(session.OriginalId, GoogleHealthClient.ParseSleep(document.RootElement).OriginalId);
+        Assert.Equal(8 * 60 * 60 * 1000, session.TotalSleepMs);
+        Assert.Equal(2, session.Stages!.Count);
+    }
+
+    [Theory]
+    [InlineData("\"dataPointName\":\"shared-night\",", "")]
+    [InlineData("", "\"metadata\":{\"externalId\":\"shared-night\"},")]
+    [InlineData("", "\"metadata\":{\"externalId\":\" \"},")]
+    [InlineData("", "")]
+    public void Sleep_identifiers_are_stable_and_namespaced_for_every_identity_source(string name, string metadata)
+    {
+        using var document = JsonDocument.Parse($$"""
+            { {{name}} "sleep":{ {{metadata}}
+              "interval":{"startTime":"2026-09-04T22:00:00Z","endTime":"2026-09-05T06:00:00Z"}
+            } }
+            """);
+        var first = GoogleHealthClient.ParseSleep(document.RootElement).OriginalId;
+        var second = GoogleHealthClient.ParseSleep(document.RootElement).OriginalId;
+        Assert.StartsWith("googlehealth:sleep:", first);
+        Assert.Equal(first, second);
+        Assert.NotEqual("shared-night", first);
+        Assert.True(first!.Length < 100);
+    }
+
+    [Fact]
+    public async Task Pagination_keeps_the_requested_window_and_rejects_cycles()
+    {
+        var from = DateTimeOffset.Parse("2026-09-01T00:00:00Z");
+        var to = from.AddDays(1);
+        var calls = 0;
+        var handler = new StubHandler(request =>
+        {
+            Assert.Contains("2026-09-01", Uri.UnescapeDataString(request.RequestUri!.Query));
+            calls++;
+            return Json(calls == 1
+                ? "{\"dataPoints\":[],\"nextPageToken\":\"repeat\"}"
+                : "{\"dataPoints\":[],\"nextPageToken\":\"repeat\"}");
+        });
+        var client = new GoogleHealthClient(new HttpClient(handler));
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() =>
+            ReadAllAsync(client.ReadPagesAsync("token", "weight", from, to, default)));
+
+        Assert.Equal("pagination_failed", exception.Message);
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData("ACCOUNT_NOT_LINKED", "account_not_linked")]
+    [InlineData("MISSING_OAUTH_SCOPE", "permission_denied")]
+    [InlineData("INVALID_PAGE_TOKEN", "invalid_google_request")]
+    public async Task Provider_errors_are_reduced_to_safe_codes(string reason, string expected)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            error = new
+            {
+                message = "sensitive provider detail",
+                details = new[] { new { reason } }
+            }
+        });
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            })));
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(() => ReadAllAsync(client.ReadPagesAsync(
+            "token", "weight", DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow, default)));
+
+        Assert.Equal(expected, exception.Message);
+        Assert.DoesNotContain("sensitive", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Sleep_scan_and_import_use_end_time_filters_on_every_page(bool inventory)
+    {
+        var calls = 0;
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(request =>
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query);
+            Assert.Equal("sleep.interval.end_time >= \"2026-09-05T00:00:00Z\" AND sleep.interval.end_time < \"2026-09-06T00:00:00Z\"", query["filter"]);
+            Assert.Equal("25", query["pageSize"]);
+            Assert.Equal("/v4/users/me/dataTypes/sleep/dataPoints:reconcile", request.RequestUri.AbsolutePath);
+            Assert.Equal(calls == 0 ? null : "next", query["pageToken"]);
+            calls++;
+            return Json(calls == 1 ? "{\"dataPoints\":[],\"nextPageToken\":\"next\"}" : "{\"dataPoints\":[]}");
+        })));
+        var from = DateTimeOffset.Parse("2026-09-05T00:00:00Z");
+        if (inventory)
+            Assert.Equal(0, await client.CountAsync("token", "sleep", from, from.AddDays(1), default));
+        else
+            await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+                Assert.Empty(page);
+        Assert.Equal(2, calls);
+    }
+
+    [Theory]
+    [InlineData("2026-09-04T22:00:00Z", "2026-09-05T06:00:00Z", true)]
+    [InlineData("2026-09-04T22:00:00Z", "2026-09-05T00:00:00Z", true)]
+    [InlineData("2026-09-04T20:00:00Z", "2026-09-04T23:59:59Z", false)]
+    [InlineData("2026-09-05T22:00:00Z", "2026-09-06T00:00:00Z", false)]
+    [InlineData("2026-09-05T22:00:00Z", "2026-09-06T06:00:00Z", false)]
+    public async Task Sleep_import_checks_the_session_end_against_the_half_open_window(string start, string end, bool included)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            dataPoints = new[] { new { sleep = new { interval = new { startTime = start, endTime = end } } } }
+        });
+        var client = new GoogleHealthClient(new HttpClient(new StubHandler(_ => Json(body))));
+        var sessions = new List<SleepSession>();
+        var from = DateTimeOffset.Parse("2026-09-05T00:00:00Z");
+        await foreach (var page in client.ReadSleepPagesAsync("token", from, from.AddDays(1), default))
+            sessions.AddRange(page);
+        Assert.Equal(included ? 1 : 0, sessions.Count);
+    }
+
+    private static HttpResponseMessage Json(string text) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(text, Encoding.UTF8, "application/json")
+    };
+
+    private static async Task<List<GoogleHealthReading>> ReadAllAsync(
+        IAsyncEnumerable<IReadOnlyCollection<GoogleHealthReading>> pages)
+    {
+        var readings = new List<GoogleHealthReading>();
+        await foreach (var page in pages) readings.AddRange(page);
+        return readings;
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+        : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) => Task.FromResult(responder(request));
+    }
+}
