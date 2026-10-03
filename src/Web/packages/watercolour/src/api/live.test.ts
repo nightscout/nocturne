@@ -272,7 +272,7 @@ describe('presented progress', () => {
     expect(onProgress).not.toHaveBeenCalled();
     instance.render = () => true;
     frame();
-    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40);
+    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40, false);
     live.dispose();
   });
 });
@@ -471,6 +471,22 @@ describe('target seeking', () => {
     live.dispose();
     clock.frame();
     expect(instance.calls.at(-1)).toBe('dispose');
+  });
+
+  it('tells the progress callback which presented frame shows the latest target', async () => {
+    const instance = fakeInstance(100);
+    const clock = manualScheduler();
+    const presented: Array<[number, boolean]> = [];
+    const live = player(instance, clock.scheduler, { autoplay: 'never', onProgress: (progress, seeking) => presented.push([progress, seeking]) });
+    await live.ready;
+    clock.frame();
+    presented.length = 0;
+    live.seekTo(0.6);
+    for (let i = 0; i < 100 && presented.at(-1)?.[1] !== false; i++) clock.frame();
+    expect(presented.at(-1)).toEqual([0.6, false]);
+    expect(presented.length).toBeGreaterThan(1);
+    expect(presented.slice(0, -1).every(([, seeking]) => seeking)).toBe(true);
+    live.dispose();
   });
 
   it('keeps a seek pending until a frame can actually be presented', async () => {

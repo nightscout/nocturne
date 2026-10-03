@@ -43,6 +43,12 @@ export interface PlayerState {
   released?: boolean;
 }
 
+/**
+ * Runs after a live or baked frame is presented, with that frame's progress
+ * and `seeking`: whether the latest `seekTo` target is still to be presented.
+ */
+export type PlayerProgressCallback = (progress: number, seeking: boolean) => void;
+
 export interface FallbackDetail {
   from: ResolvedMode;
   error: WatercolourError;
@@ -87,8 +93,7 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   scheduler?: Scheduler;
   engineHost?: EngineHost;
   capabilities?: () => Promise<Capabilities>;
-  /** Runs after a live or baked frame is presented; does not allocate PlayerState. */
-  onProgress?: (progress: number) => void;
+  onProgress?: PlayerProgressCallback;
 }
 
 export interface ArtworkPlayer {
@@ -120,7 +125,7 @@ export interface ArtworkPlayer {
 interface BackendCallbacks {
   onFinished(): void;
   onFault(error: WatercolourError): void;
-  onProgress?: (progress: number) => void;
+  onProgress?: PlayerProgressCallback;
 }
 
 interface PixelSize {
@@ -639,7 +644,7 @@ class LiveBackend implements Backend {
       this.unpresented = 0;
       this.dirty = false;
       if (this.seekTick === undefined) this.seekPresentPending = false;
-      if (presented !== false) this.callbacks.onProgress?.(this.progress);
+      if (presented !== false) this.callbacks.onProgress?.(this.progress, this.seekPresentPending);
       if (this.disposed || this.released) return;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
@@ -853,7 +858,7 @@ class BakedBackend implements Backend {
       this.dirty = false;
       drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height, this.crop);
       this.seekPending = false;
-      this.callbacks.onProgress?.(this.progress);
+      this.callbacks.onProgress?.(this.progress, false);
       if (this.disposed) return;
       if (this.isPlaying && this.finished) {
         this.isPlaying = false;

@@ -140,7 +140,8 @@ describe('player statechange', () => {
       frames.clear();
       for (const cb of pending) cb(clock);
     };
-    const baked = createArtworkPlayer(canvas(), { id: 'suitcase' }, { mode: 'baked', autoplay: 'never', durationMs: 100, width: 64, height: 64, assets: { manifest: 'manifest', strip: 'strip' }, capabilities, scheduler, engineHost: new EngineHost() });
+    const onProgress = vi.fn();
+    const baked = createArtworkPlayer(canvas(), { id: 'suitcase' }, { mode: 'baked', autoplay: 'never', durationMs: 100, width: 64, height: 64, assets: { manifest: 'manifest', strip: 'strip' }, capabilities, scheduler, engineHost: new EngineHost(), onProgress });
     await baked.ready;
     expect(baked.state.seeking).toBe(false);
     baked.resize(32, 32);
@@ -153,6 +154,7 @@ describe('player statechange', () => {
     expect(baked.state.seeking).toBe(true);
     nextFrame();
     expect(baked.state).toMatchObject({ seeking: false, progress: 0.5 });
+    expect(onProgress).toHaveBeenLastCalledWith(0.5, false);
     nextFrame();
     expect(baked.state.progress).toBeGreaterThan(0.5);
     baked.dispose();

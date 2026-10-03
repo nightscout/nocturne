@@ -78,10 +78,12 @@ is for authoring and export code that needs the simulation at the target before 
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
 
-`onProgress` in `PlayerOptions` receives a numeric progress value after each
-presented live or baked frame. Use it for a coverage milestone without
-allocating `PlayerState` on every frame. It does not fire for an unavailable
-swapchain frame. A callback may dispose its player.
+`onProgress(progress, seeking)` in `PlayerOptions` runs after each presented
+live or baked frame. `progress` is that frame's, and `seeking` is
+`state.seeking` as of it: false on the frame that shows the latest `seekTo`
+target. It does not fire for an unavailable swapchain frame or for a static
+player. A callback may dispose its player or seek it again. `Artwork` passes
+its `onprogress` prop through.
 
 `player.ready` resolves once a backend is drawing. A player whose canvas is in
 the document does not start until the canvas is within 200 px of the viewport

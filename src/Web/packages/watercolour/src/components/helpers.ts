@@ -1,5 +1,5 @@
 import { subscribePresentation } from '../api/presentation';
-import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
+import { createArtworkPlayer, type ArtworkPlayer, type PlayerProgressCallback, type PlayerState } from '../api/playback';
 import type { WasmModule } from '../api/engine-host';
 import type { CropWindow } from '../types';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
@@ -18,7 +18,7 @@ export interface MountOptions extends ArtworkOptions {
   icon?: IconArtworkSource;
   scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
   blendTicks?: boolean;
-  onProgress?: (progress: number) => void;
+  onProgress?: PlayerProgressCallback;
   /**
    * `contain` (default) or `fill`, or a function deciding per container
    * size (e.g. ConfirmationBackground fills only near its 3:1 aspect).
