@@ -30,7 +30,7 @@ function tokens(account: Account, initial: boolean): VendorReply {
 
 function points(type: string, account: Account): Record<string, unknown>[] {
   return [0, 1].map((index) => {
-    const start = account.anchor - (index + 1) * 3_600_000;
+    const start = account.anchor - (index + 1) * 60_000;
     const iso = (mills: number) => new Date(mills).toISOString();
     const name = `users/me/dataTypes/${type}/dataPoints/${account.clientId}-${index}`;
     switch (type) {
@@ -38,8 +38,8 @@ function points(type: string, account: Account): Record<string, unknown>[] {
       case "heart-rate": return { name, heartRate: { sampleTime: { physicalTime: iso(start) }, beatsPerMinute: 72 + index } };
       case "weight": return { name, weight: { sampleTime: { physicalTime: iso(start) }, weightGrams: 75_000 + index * 100 } };
       case "sleep": return { name, sleep: {
-        interval: { startTime: iso(start), endTime: iso(start + 30 * 60_000) },
-        stages: [{ startTime: iso(start), endTime: iso(start + 30 * 60_000), type: "LIGHT" }],
+        interval: { startTime: iso(start - 30 * 60_000), endTime: iso(start) },
+        stages: [{ startTime: iso(start - 30 * 60_000), endTime: iso(start), type: "LIGHT" }],
       } };
       default: return {};
     }
