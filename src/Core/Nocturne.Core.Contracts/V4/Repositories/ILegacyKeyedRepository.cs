@@ -238,14 +238,14 @@ public interface ILegacyKeyedRepository<TRecord>
         IReadOnlyCollection<string> ids, CancellationToken ct = default);
 
     /// <summary>
-    /// The stored legacy ids, live or deleted, of the records that carry one and whose own uuid's
-    /// 24-hex prefix (<see cref="MongoObjectId.FromGuid"/>) is one of <paramref name="ids"/>, each
-    /// paired with that prefix.
+    /// The stored legacy ids, live or deleted, of the records that carry one and whose own uuid, in
+    /// canonical form or as its 24-hex prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>), is one
+    /// of <paramref name="ids"/>, each paired with that id.
     /// </summary>
     /// <remarks>
-    /// The v1 and v3 reads serve a treatment under its uuid's prefix whatever its legacy id, and an
-    /// earlier treatment write-back sent an edit under that served id, so a copy upstream may name
-    /// the record by it.
+    /// The v1 and v3 reads serve a treatment under its uuid's prefix whatever its legacy id, and
+    /// treatment write-back sent edits under the id they were served by: the full uuid up to v0.2.3,
+    /// its prefix from v0.2.4. A copy upstream may name the record by either.
     /// </remarks>
     Task<IEnumerable<WireLegacyId>> ResolveKeyedOwnIdsAsync(
         IReadOnlyCollection<string> ids, CancellationToken ct = default);

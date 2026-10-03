@@ -687,13 +687,15 @@ public class TreatmentDecomposerBatchTests : IDisposable
     }
 
     /// <summary>
-    /// An earlier write-back sent an edit under the id the treatment is served by, its own uuid's
-    /// prefix, whatever its legacy id. That copy is pointed at the treatment too.
+    /// An earlier write-back sent an edit under the id the treatment was served by, whatever its
+    /// legacy id: its own uuid up to v0.2.3, that uuid's prefix from v0.2.4. That copy is pointed at
+    /// the treatment too.
     /// </summary>
-    [Fact]
-    public async Task ResolveStoredIdentitiesAsync_PointsAPulledCopyNamingATreatmentByItsServedIdAtItsLegacyId()
+    [Theory]
+    [InlineData("0198c2a41f3b7c2d9e556a1b")]
+    [InlineData("0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f")]
+    public async Task ResolveStoredIdentitiesAsync_PointsAPulledCopyNamingATreatmentByItsServedIdAtItsLegacyId(string servedId)
     {
-        const string servedId = "0198c2a41f3b7c2d9e556a1b";
         _carbRepoMock
             .Setup(x => x.ResolveKeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
