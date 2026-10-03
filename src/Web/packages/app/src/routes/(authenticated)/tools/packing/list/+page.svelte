@@ -16,16 +16,8 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
   import { EmptyState } from "$lib/components/shared";
-  import { untrack } from "svelte";
-  import { Tween, prefersReducedMotion } from "svelte/motion";
-  import { cubicOut } from "svelte/easing";
-  import {
-    Artwork,
-    ConfirmationBackground,
-    DEFAULT_TAIL,
-    type ArtworkPlayer,
-    type PlayerState,
-  } from "@nocturne/watercolour";
+  import PackingSuitcase from "$lib/components/tools/packing/packing-suitcase.svelte";
+  import { ConfirmationBackground, type PlayerState } from "@nocturne/watercolour";
   import { decodeBase64Utf8, encodeBase64Utf8 } from "$lib/utils";
 
   interface PackingItem {
@@ -63,43 +55,21 @@
   const totalCount = $derived(items.length);
   const complete = $derived(totalCount > 0 && totalChecked === totalCount);
 
-  // A catalogue reveal draws every stroke in its first `1 - DEFAULT_TAIL` and
-  // spends the rest settling, so packing spreads over the brushwork alone and
-  // the settle plays once everything is in.
-  const PAINT_END = 1 - DEFAULT_TAIL;
-  let suitcase = $state<ArtworkPlayer>();
+  let suitcase = $state<PackingSuitcase>();
   let suitcasePaints = $state(true);
   const showSuitcase = $derived(totalCount > 0 && suitcasePaints);
-  const reveal = new Tween(0, { easing: cubicOut });
-
-  $effect(() => {
-    const target = totalCount ? (totalChecked / totalCount) * PAINT_END : 0;
-    // Each backward frame is a checkpoint replay, so an unpack jumps.
-    const instant = prefersReducedMotion.current || target < untrack(() => reveal.target);
-    void reveal.set(target, { duration: instant ? 0 : 700 });
-  });
-
-  $effect(() => {
-    const player = suitcase;
-    if (!player) return;
-    const at = reveal.current;
-    if (!complete || at < PAINT_END) player.seekTo(at);
-    else if (prefersReducedMotion.current) player.finishImmediately();
-    else player.play();
-  });
-
-  function followPacking(player: ArtworkPlayer) {
-    suitcase = player;
-    return () => (suitcase = undefined);
-  }
 
   function followMode(state: PlayerState) {
     suitcasePaints = state.mode !== "none";
   }
 
   function setPacked(index: number, packed: boolean) {
+    const item = items[index];
+    if (!item || (item.p === 1) === packed) return;
     items = items.map((it, i) => (i === index ? { ...it, p: packed ? 1 : undefined } : it));
     updateUrl();
+    if (packed) suitcase?.pack(item.c, items.filter((it) => !it.p).length);
+    else suitcase?.unpack();
   }
 
   // Add custom item
@@ -121,8 +91,11 @@
   }
 
   function removeItem(index: number) {
+    const wasPacked = items[index]?.p === 1;
     items = items.filter((_, i) => i !== index);
     updateUrl();
+    if (wasPacked) suitcase?.unpack();
+    suitcase?.countChanged(items.filter((it) => !it.p).length);
   }
 
   function updateUrl() {
@@ -158,13 +131,10 @@
           <ConfirmationBackground />
         {/if}
         {#if showSuitcase}
-          <!-- Reduced motion keeps the baked strip: each seek draws one still frame, so progress shows without animating. -->
-          <Artwork
-            artwork="suitcase"
-            palette="dusk"
-            autoplay="never"
-            mode={prefersReducedMotion.current ? "baked" : "auto"}
-            onready={followPacking}
+          <PackingSuitcase
+            bind:this={suitcase}
+            packed={items.filter((item) => item.p).map((item) => item.c)}
+            total={totalCount}
             onstatechange={followMode}
             class="size-16 shrink-0 lg:size-48 lg:self-center"
           />
