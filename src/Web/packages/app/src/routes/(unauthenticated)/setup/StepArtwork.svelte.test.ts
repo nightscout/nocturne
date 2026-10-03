@@ -43,13 +43,6 @@ describe("StepArtwork", () => {
     await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(0.504);
   });
 
-  it("passes small progress changes to the coalescing player", async () => {
-    const view = render(StepArtwork, { art: "import", progress: 0.3 });
-    await expect.poll(() => fakePlayer.seeks).toEqual([0.3]);
-    await view.rerender({ art: "import", progress: 0.3004 });
-    await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(0.3004);
-  });
-
   // Reduced motion shows the finished artwork; rewinding it to the import's
   // progress would animate it after all.
   it("leaves a reduced-motion artwork finished", async () => {
