@@ -39,6 +39,15 @@ class SignalRClient {
   private instanceKey: string;
   private connectionHeaders: Record<string, string>;
   private isConnecting: boolean = false;
+  private connectPromise: Promise<void> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private disconnectRequested: boolean = false;
+  private isCleaningUpConnections: boolean = false;
+  private connectionLossPromise: Promise<void> | null = null;
+  private readonly connectionStartPromises = new Map<
+    HubConnection,
+    Promise<void>
+  >();
 
   constructor(messageHandler: MessageTranslator, config: SignalRConfig) {
     this.messageHandler = messageHandler;
@@ -53,6 +62,22 @@ class SignalRClient {
   }
 
   async connect(): Promise<void> {
+    if (this.disconnectRequested) return;
+
+    if (this.connectPromise) {
+      await this.connectPromise;
+      return;
+    }
+
+    this.connectPromise = this.connectInternal();
+    try {
+      await this.connectPromise;
+    } finally {
+      this.connectPromise = null;
+    }
+  }
+
+  private async connectInternal(): Promise<void> {
     if (this.isConnecting) {
       logger.warn("SignalR connection attempt already in progress");
       return;
@@ -64,7 +89,7 @@ class SignalRClient {
       this.dataConnection = this.buildConnection(this.hubUrl);
       this.setupDataEventHandlers();
 
-      await this.dataConnection.start();
+      await this.startConnection(this.dataConnection);
       logger.info("SignalR DataHub connection established");
 
       await this.authenticateWithDataHub();
@@ -74,7 +99,7 @@ class SignalRClient {
         this.alarmConnection = this.buildConnection(this.alarmHubUrl);
         this.setupAlarmEventHandlers();
 
-        await this.alarmConnection.start();
+        await this.startConnection(this.alarmConnection);
         logger.info("SignalR AlarmHub connection established");
 
         await this.subscribeToAlarmHub();
@@ -94,7 +119,7 @@ class SignalRClient {
         });
         this.setupConfigEventHandlers();
 
-        await this.configConnection.start();
+        await this.startConnection(this.configConnection);
         logger.info("SignalR ConfigHub connection established");
 
         await this.subscribeToConfigHub();
@@ -103,6 +128,7 @@ class SignalRClient {
       this.reconnectAttempts = 0;
     } catch (error) {
       logger.error("Failed to connect to SignalR hub:", error);
+      await this.cleanupFailedConnections();
       await this.handleReconnect(isSetupRequiredError(error));
     } finally {
       this.isConnecting = false;
@@ -116,22 +142,52 @@ class SignalRClient {
     const headers = { ...this.connectionHeaders, ...options?.headers };
     return new HubConnectionBuilder()
       .withUrl(hubUrl, Object.keys(headers).length > 0 ? { headers } : {})
-      .withAutomaticReconnect({
-        nextRetryDelayInMilliseconds: (retryContext) => {
-          const delay = Math.min(
-            this.reconnectDelay * Math.pow(2, retryContext.previousRetryCount),
-            this.maxReconnectDelay,
-          );
-          logger.info(
-            `SignalR reconnect attempt ${
-              retryContext.previousRetryCount + 1
-            } in ${delay}ms`,
-          );
-          return delay;
-        },
-      })
       .configureLogging(LogLevel.Information)
       .build();
+  }
+
+  private async startConnection(connection: HubConnection): Promise<void> {
+    const startPromise = connection.start();
+    this.connectionStartPromises.set(connection, startPromise);
+    try {
+      await startPromise;
+    } finally {
+      this.connectionStartPromises.delete(connection);
+    }
+  }
+
+  private async cleanupFailedConnections(): Promise<void> {
+    this.isCleaningUpConnections = true;
+    try {
+      await Promise.allSettled([...this.connectionStartPromises.values()]);
+      await this.stopConnection(this.dataConnection, "DataHub");
+      await this.stopConnection(this.alarmConnection, "AlarmHub");
+      await this.stopConnection(this.configConnection, "ConfigHub");
+    } finally {
+      this.dataConnection = null;
+      this.alarmConnection = null;
+      this.configConnection = null;
+      this.isCleaningUpConnections = false;
+    }
+  }
+
+  private handleHubClosed(): Promise<void> {
+    if (this.disconnectRequested || this.isCleaningUpConnections) {
+      return Promise.resolve();
+    }
+    if (this.connectionLossPromise) return this.connectionLossPromise;
+
+    void this.handleReconnect();
+    this.connectionLossPromise = (async () => {
+      if (this.connectPromise) await this.connectPromise;
+      if (this.disconnectRequested || this.isCleaningUpConnections) return;
+
+      await this.cleanupFailedConnections();
+    })().finally(() => {
+      this.connectionLossPromise = null;
+    });
+
+    return this.connectionLossPromise;
   }
 
   private setupDataEventHandlers(): void {
@@ -139,7 +195,7 @@ class SignalRClient {
 
     this.dataConnection.onclose(() => {
       logger.warn("SignalR DataHub connection closed");
-      this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.dataConnection.onreconnecting(() => {
@@ -226,7 +282,7 @@ class SignalRClient {
 
     this.alarmConnection.onclose(() => {
       logger.warn("SignalR AlarmHub connection closed");
-      this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.alarmConnection.onreconnecting(() => {
@@ -261,7 +317,7 @@ class SignalRClient {
 
     this.configConnection.onclose(() => {
       logger.warn("SignalR ConfigHub connection closed");
-      this.handleReconnect();
+      void this.handleHubClosed();
     });
 
     this.configConnection.onreconnecting(() => {
@@ -386,6 +442,9 @@ class SignalRClient {
   }
 
   private async handleReconnect(isSetupRequired = false): Promise<void> {
+    if (this.disconnectRequested || this.isCleaningUpConnections) return;
+    if (this.reconnectTimer) return;
+
     if (!isSetupRequired && this.reconnectAttempts >= this.maxReconnectAttempts) {
       logger.error(
         `Maximum reconnection attempts (${this.maxReconnectAttempts}) exceeded`,
@@ -406,37 +465,55 @@ class SignalRClient {
       `Attempting to reconnect to SignalR hub in ${delay}ms (${attemptLabel})`,
     );
 
-    setTimeout(() => {
-      this.connect();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void (async () => {
+        if (this.connectPromise) await this.connectPromise;
+        if (this.connectionLossPromise) await this.connectionLossPromise;
+        if (
+          !this.disconnectRequested &&
+          !this.reconnectTimer &&
+          !this.isConnected()
+        ) {
+          await this.connect();
+        }
+      })();
     }, delay);
   }
 
   async disconnect(): Promise<void> {
-    if (this.dataConnection) {
-      try {
-        await this.dataConnection.stop();
-        logger.info("SignalR DataHub connection stopped");
-      } catch (error) {
-        logger.error("Error stopping SignalR DataHub connection:", error);
-      }
+    this.disconnectRequested = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
 
-    if (this.alarmConnection) {
-      try {
-        await this.alarmConnection.stop();
-        logger.info("SignalR AlarmHub connection stopped");
-      } catch (error) {
-        logger.error("Error stopping SignalR AlarmHub connection:", error);
-      }
+    await this.connectPromise;
+
+    await this.stopConnection(this.dataConnection, "DataHub");
+    await this.stopConnection(this.alarmConnection, "AlarmHub");
+    await this.stopConnection(this.configConnection, "ConfigHub");
+  }
+
+  private async stopConnection(
+    connection: HubConnection | null,
+    name: string,
+  ): Promise<void> {
+    if (!connection || connection.state === "Disconnected") return;
+
+    if (connection.state === "Connecting") {
+      logger.warn(
+        `Skipping stop for SignalR ${name}: connection is still starting`,
+      );
+      return;
     }
 
-    if (this.configConnection) {
-      try {
-        await this.configConnection.stop();
-        logger.info("SignalR ConfigHub connection stopped");
-      } catch (error) {
-        logger.error("Error stopping SignalR ConfigHub connection:", error);
-      }
+    try {
+      await connection.stop();
+      logger.info(`SignalR ${name} connection stopped`);
+    } catch (error) {
+      logger.error(`Error stopping SignalR ${name} connection:`, error);
     }
   }
 
