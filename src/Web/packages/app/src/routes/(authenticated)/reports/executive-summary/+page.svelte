@@ -79,7 +79,7 @@
           { label: "Time in range", value: tir?.target?.toFixed(0) ?? "–", unit: "%", note: "Target: ≥70%", },
           { label: "Below range", value: totalLows.toFixed(1), unit: "%", note: "Target: <4%", },
           { label: "Above range", value: totalHighs.toFixed(1), unit: "%", note: "Target: <25%", },
-          { label: a1cLabel(true), value: formatA1cValue( variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: `Target: <${formatA1c(variability?.a1cTarget)}`, },
+          { label: a1cLabel(true), value: formatA1cValue( variability?.estimatedA1cDisplay), unit: a1cUnitLabel(), note: variability?.a1cTarget ? `Target: <${formatA1c(variability.a1cTarget)}` : undefined, },
           { label: "CV", value: variability?.coefficientOfVariation?.toFixed(0) ?? "–", unit: "%", note: "Target: ≤33%", },
           { label: "Average", value: String(bgOr(stats?.mean)), unit: bgLabel(), note: `Over ${dayCount} days`, },
         ]}

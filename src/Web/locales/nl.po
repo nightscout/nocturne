@@ -25838,21 +25838,24 @@ msgstr "Het verloop van je {0} door de jaren heen"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "Tijd binnen bereik, {0}-schattingen en gemiddelden"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "Weergavenaam voor A1c"
+msgid "{0} display name"
+msgstr "Weergavenaam voor {0}"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "Geschatte waarden behouden het voorvoegsel e: eHbA1c of eA1c."
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "Weergave-eenheid voor A1c"
+msgid "{0} display unit"
+msgstr "Weergave-eenheid voor {0}"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "Gebruik % (NGSP) of mmol/mol (IFCC) voor gemeten en geschatte A1c. De eenheid voor bloedglucose stel je afzonderlijk in."
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "Gebruik % (NGSP) of mmol/mol (IFCC) voor gemeten en geschatte {0}. De eenheid voor bloedglucose stel je afzonderlijk in."
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte

@@ -25838,21 +25838,24 @@ msgstr "Evolución de tu {0} a lo largo de los años"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "Tiempo en rango, estimaciones de {0} y promedios"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "Nombre mostrado para A1c"
+msgid "{0} display name"
+msgstr "Nombre mostrado para {0}"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "Los valores estimados conservan el prefijo e: eHbA1c o eA1c."
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "Unidad mostrada para A1c"
+msgid "{0} display unit"
+msgstr "Unidad mostrada para {0}"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "Usa % (NGSP) o mmol/mol (IFCC) para la A1c medida y estimada. La unidad de glucosa en sangre se configura por separado."
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "Usa % (NGSP) o mmol/mol (IFCC) para la {0} medida y estimada. La unidad de glucosa en sangre se configura por separado."
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte

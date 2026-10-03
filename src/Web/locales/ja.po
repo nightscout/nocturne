@@ -25838,21 +25838,24 @@ msgstr "長年にわたる {0} の推移"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "目標範囲内時間、{0} の推定値、平均値"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "A1c の表示名"
+msgid "{0} display name"
+msgstr "{0} の表示名"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "推定値には接頭辞 e が付きます：eHbA1c または eA1c。"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "A1c の表示単位"
+msgid "{0} display unit"
+msgstr "{0} の表示単位"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "実測および推定 A1c には % (NGSP) または mmol/mol (IFCC) を使用します。血糖値の単位は別に設定します。"
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "実測および推定 {0} には % (NGSP) または mmol/mol (IFCC) を使用します。血糖値の単位は別に設定します。"
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte

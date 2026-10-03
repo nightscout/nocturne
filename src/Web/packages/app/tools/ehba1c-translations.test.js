@@ -36,6 +36,11 @@ const sourceFiles = [
 ];
 const placeholders = (text) =>
   [...text.matchAll(/\{\d+\}|<\/?\d+\/?>/g)].map(([token]) => token).sort();
+const settingsMessages = [
+  "{0} display name",
+  "{0} display unit",
+  "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately.",
+];
 const labLabels = {
   en: "Lab result",
   es: "Resultado de laboratorio",
@@ -57,6 +62,7 @@ describe("A1c production translations", () => {
   let messageIds;
   let productionIds;
   let a1cMessages;
+  let settingsIds;
 
   beforeAll(async () => {
     root = await mkdtemp(join(tmpdir(), "nocturne-ehba1c-translations-"));
@@ -152,8 +158,7 @@ describe("A1c production translations", () => {
           comment.includes("a1cLabel")
         ) ||
           [
-            "A1c display name",
-            "A1c display unit",
+            ...settingsMessages,
             "Estimated values retain the e prefix: eHbA1c or eA1c.",
           ].includes(item.msgid) ||
           item.msgid.startsWith("Use % (NGSP)") ||
@@ -166,6 +171,12 @@ describe("A1c production translations", () => {
         join(root, "locales/.wuchale/main.0.en.compiled.js")
       ).href
     );
+    settingsIds = settingsMessages.map((message) =>
+      compiledEnglish.c.findIndex(
+        (entry) => JSON.stringify(entry) === JSON.stringify(compileTranslation(message, ""))
+      )
+    );
+    for (const id of settingsIds) expect(productionIds.has(id)).toBe(true);
     const reportMessages = [...reportIds].map((id) =>
       english.items.find(
         (item) =>
@@ -219,6 +230,12 @@ describe("A1c production translations", () => {
         )?.msgstr[0];
         expect(translation?.trim(), `${locale}: ${source.msgid}`).toBeTruthy();
         expect(placeholders(translation)).toEqual(placeholders(source.msgid));
+      }
+      for (const name of ["HbA1c", "A1c"]) {
+        for (const [index, message] of settingsMessages.entries()) {
+          const translated = po.items.find((item) => item.msgid === message).msgstr[0];
+          expect(runtime(settingsIds[index], [name])).toBe(translated.replace("{0}", name));
+        }
       }
     }
   );

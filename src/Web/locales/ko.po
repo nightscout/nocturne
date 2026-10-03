@@ -25838,21 +25838,24 @@ msgstr "여러 해에 걸친 {0}의 변화"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "목표 범위 내 시간, {0} 추정값 및 평균값"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "A1c 표시 이름"
+msgid "{0} display name"
+msgstr "{0} 표시 이름"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "추정값에는 접두사 e가 유지됩니다: eHbA1c 또는 eA1c."
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "A1c 표시 단위"
+msgid "{0} display unit"
+msgstr "{0} 표시 단위"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "측정 및 추정 A1c에 % (NGSP) 또는 mmol/mol (IFCC)를 사용합니다. 혈당 단위는 별도로 설정합니다."
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "측정 및 추정 {0}에 % (NGSP) 또는 mmol/mol (IFCC)를 사용합니다. 혈당 단위는 별도로 설정합니다."
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte

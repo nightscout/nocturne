@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { a1cLabel } from "$lib/utils/a1c-formatting";
   import { time } from "$lib/utils/formatting";
   import { getSettingsStore } from "$lib/stores/settings-store.svelte";
   import {
@@ -578,7 +579,7 @@
         </div>
         <div class="grid gap-4 @sm:grid-cols-2">
           <div class="space-y-2">
-            <Label for="a1c-name">A1c display name</Label>
+            <Label for="a1c-name">{a1cLabel()} display name</Label>
             <!-- @wc-ignore -->
             <Select type="single" value={a1cName.current} onValueChange={(value) => {
               if (value === "HbA1c" || value === "A1c") a1cName.current = value;
@@ -592,7 +593,7 @@
             <p class="text-xs text-muted-foreground">Estimated values retain the e prefix: eHbA1c or eA1c.</p>
           </div>
           <div class="space-y-2">
-            <Label for="a1c-units">A1c display unit</Label>
+            <Label for="a1c-units">{a1cLabel()} display unit</Label>
             <!-- @wc-ignore -->
             <Select type="single" value={a1cUnits.current} onValueChange={(value) => {
               if (value === "percent" || value === "mmol/mol") a1cUnits.current = value;
@@ -603,7 +604,7 @@
                 <SelectItem value="mmol/mol">mmol/mol (IFCC)</SelectItem>
               </SelectContent>
             </Select>
-            <p class="text-xs text-muted-foreground">Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately.</p>
+            <p class="text-xs text-muted-foreground">Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {a1cLabel()}. Blood glucose units are set separately.</p>
           </div>
         </div>
       </CardContent>

@@ -25838,21 +25838,24 @@ msgstr "您的 {0} 多年来的变化趋势"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "目标范围内时间、{0} 估算值和平均值"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "A1c 显示名称"
+msgid "{0} display name"
+msgstr "{0} 显示名称"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "估算值保留前缀 e：eHbA1c 或 eA1c。"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "A1c 显示单位"
+msgid "{0} display unit"
+msgstr "{0} 显示单位"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "实测和估算 A1c 可使用 % (NGSP) 或 mmol/mol (IFCC)。血糖单位需单独设置。"
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "实测和估算 {0} 可使用 % (NGSP) 或 mmol/mol (IFCC)。血糖单位需单独设置。"
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte

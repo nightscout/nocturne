@@ -25838,21 +25838,24 @@ msgstr "Изменение вашего {0} за прошедшие годы"
 msgid "Time-in-range, {0} estimates, and averages"
 msgstr "Время в целевом диапазоне, оценки {0} и средние значения"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display name"
-msgstr "Название A1c для отображения"
+msgid "{0} display name"
+msgstr "Название {0} для отображения"
 
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
 msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
 msgstr "Расчётные значения сохраняют префикс e: eHbA1c или eA1c."
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "A1c display unit"
-msgstr "Единица отображения A1c"
+msgid "{0} display unit"
+msgstr "Единица отображения {0}"
 
+#. 0: a1cLabel()
 #: src/routes/(authenticated)/settings/appearance/+page.svelte
-msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
-msgstr "Используйте % (NGSP) или mmol/mol (IFCC) для измеренного и расчётного A1c. Единица измерения глюкозы крови настраивается отдельно."
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated {0}. Blood glucose units are set separately."
+msgstr "Используйте % (NGSP) или mmol/mol (IFCC) для измеренного и расчётного {0}. Единица измерения глюкозы крови настраивается отдельно."
 
 #. 0: formatA1c(variability?.a1cTarget)
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
