@@ -15,6 +15,22 @@ fn stamp_at(x: u32, y: u32) -> f32 {
     let lx = x - stroke.rect_x;
     let ly = y - stroke.rect_y;
     if lx >= stroke.rect_w || ly >= stroke.rect_h { return 0.0; }
+    if stroke.kind == 3u {
+        let pu = (f32(x) + 0.5) / f32(P.width) * stroke.scale_x;
+        let pv = (f32(y) + 0.5) / f32(P.height) * stroke.scale_y;
+        let dx = pu - stroke.center_x;
+        let dy = pv - stroke.center_y;
+        let distance = sqrt(dx * dx + dy * dy);
+        let grain = state[o_h() + y * P.width + x] - 0.5;
+        let shifted = distance + grain * stroke.edge_roughness * stroke.radius;
+        let aa = 0.75 * stroke.cell / stroke.radius;
+        let inner = min(stroke.inner, 1.0 - aa);
+        let d = shifted / stroke.radius;
+        if d <= inner { return 1.0; }
+        if d >= 1.0 { return 0.0; }
+        let t = (d - inner) / max(1.0 - inner, 1e-5);
+        return 1.0 - t * t * (3.0 - 2.0 * t);
+    }
     return stamp[stroke.stamp_offset + ly * stroke.rect_w + lx];
 }
 
@@ -57,7 +73,7 @@ fn apply_brush(@builtin(global_invocation_id) gid: vec3<u32>) {
     let li = gid.x;
     if li >= stroke.rect_w * stroke.rect_h { return; }
     let i = stamp_cell(li);
-    let cov = stamp[stroke.stamp_offset + li] * state[o_m() + i];
+    let cov = stamp_at(i % P.width, i / P.width) * state[o_m() + i];
     if cov <= 0.0 { return; }
     let k = min(stroke.pigment, P.pigment_count - 1u);
     let water = stroke.water * cov * stroke_water_factor(state[o_h() + i]);

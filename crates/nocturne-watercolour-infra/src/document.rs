@@ -114,6 +114,14 @@ pub struct EventDoc {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationDoc {
+    Dab {
+        center: [f32; 2],
+        radius: f32,
+        pigment: usize,
+        concentration: f32,
+        water: f32,
+        softness: f32,
+    },
     Brush {
         path: Vec<[f32; 2]>,
         radius: [f32; 2],
@@ -275,6 +283,14 @@ fn span_from_doc(span: [f32; 2]) -> StrokeSpan {
 
 fn op_to_doc(op: &Operation) -> OperationDoc {
     match op {
+        Operation::Dab(s) => OperationDoc::Dab {
+            center: [s.center.x, s.center.y],
+            radius: s.radius,
+            pigment: s.pigment,
+            concentration: s.concentration,
+            water: s.water,
+            softness: s.softness,
+        },
         Operation::Brush(s) => OperationDoc::Brush {
             path: points_to_doc(&s.path),
             radius: radius_to_doc(s.radius),
@@ -310,6 +326,21 @@ fn op_to_doc(op: &Operation) -> OperationDoc {
 
 fn op_from_doc(op: OperationDoc) -> Operation {
     match op {
+        OperationDoc::Dab {
+            center,
+            radius,
+            pigment,
+            concentration,
+            water,
+            softness,
+        } => Operation::Dab(nocturne_watercolour_core::domain::ops::Dab {
+            center: Point::new(center[0], center[1]),
+            radius,
+            pigment,
+            concentration,
+            water,
+            softness,
+        }),
         OperationDoc::Brush {
             path,
             radius,

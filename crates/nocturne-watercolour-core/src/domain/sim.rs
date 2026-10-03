@@ -329,6 +329,7 @@ pub fn step(
 pub fn apply(grid: &mut SimulationGrid, op: &Operation, params: &SimParams, seed: Seed) {
     let (w, h) = (grid.width, grid.height);
     match op {
+        Operation::Dab(s) => apply(grid, &Operation::Brush(s.as_brush()), params, seed),
         Operation::Brush(s) => {
             let stamp = paint::rasterize_path_span(
                 &s.path,
