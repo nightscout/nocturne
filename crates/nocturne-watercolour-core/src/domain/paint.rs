@@ -1,11 +1,6 @@
 //! Rasterising operations onto the simulation grid.
 //!
-//! Strokes become a [`Stamp`] (per-cell coverage in `0..1`) computed once on
-//! the CPU and then added into the grid. Backends share this code, so the
-//! shader port only has to add a coverage field rather than mirror the
-//! geometry. Coverage is perturbed by paper height (high grain resists paint,
-//! so a wash edge breaks up on rough paper) and by a small seeded jitter of
-//! the radius along the path.
+//! Coverage is perturbed by paper height and seeded radius jitter.
 
 use super::grid::SimulationGrid;
 use super::ops::{
@@ -22,6 +17,7 @@ pub struct Stamp {
 }
 
 #[derive(Debug, Clone, Copy)]
+/// CPU-resolved radius retains the 64-bit seed hash; WGSL evaluates coverage.
 pub struct DabStamp {
     pub x: u32,
     pub y: u32,

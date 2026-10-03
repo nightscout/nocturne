@@ -182,16 +182,28 @@ returns for the engine to load.
 | `flow.wgsl` | `blur` (or `blur_h`, `blur_v` past `BLUR_MAX_RADIUS`), `advect`, `swirl_distance_h`, `swirl_distance_v`, `swirl_stream`, `swirl_from_scratch`, `swirl_from_state` | Curtis FlowOutward + MovePigment (`pass_blur_h/v`, `pass_advect`), the standing-water swirl (`sim::swirl_tick`: `pass_swirl_distance_h/v`, `pass_swirl_stream`, `pass_swirl` x `swirl::Geometry::substeps`) and the tick counter `step` advances | none (`swirl::Geometry` reaches the shader through the uniform) |
 | `transfer.wgsl` | `transfer`, `transfer_g_scratch` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`) | none |
-| `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp | none |
+| `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all`; uploaded stroke stamps or analytic dab coverage | f32 coverage rounding for dabs |
 | `render.wgsl` | `presence_taps`, `render`, `fs_render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; each tap position's presence and inside share computed once per frame by `presence_taps`), granulation, mixed KM layer, premultiplied conversion in the mode read from the state header | f32 transcendental precision only |
 
-Stamps and masks are rasterised on the CPU by the shared `domain::paint` code,
-so both backends see identical geometry. A mask goes over as a field; a stamp as
+Brush, water and lift stamps and masks are rasterised on the CPU by the shared
+`domain::paint` code. A mask goes over as a field; a stamp as
 the rect holding its non-zero coverage, which the apply pass is dispatched over
 (a zero-coverage cell is left as it was). Shared
 constants in the shaders (`DRAIN_DEPTH`, `ALPHA_SOFTNESS`, `LUMINOUS_*`, ...)
 mirror the `pub const`s in `domain::sim`, `domain::paint` and `domain::optics`;
 tunable parameters travel in the `Params` uniform.
+
+Dabs carry a point, uniform radius and paint charge. `DabStamp` resolves the
+seeded radius and raster bounds on the CPU; the GPU samples coverage and its
+neighbor gradients from the paper field. Consecutive dab events share a
+compute pass with their simulation ticks when checkpoints are disabled.
+Control operations split these batches, and seeds retain the timeline index.
+
+Live dab scenes cache two rendered tick images in premultiplied linear
+RGBA16 textures. Between adjacent ticks, presentation blends those images
+with half a tick of latency, without advancing the simulation or repeating
+optics. A missed tick discards the older image; pause and seek clear history.
+Finished and paused scenes use direct presentation.
 
 ### Stamps and masks
 

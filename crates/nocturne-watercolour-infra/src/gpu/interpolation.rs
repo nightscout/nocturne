@@ -72,7 +72,14 @@ impl Interpolation {
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("tick-blend"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shaders/interpolation.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "{}\n{}",
+                    include_str!("shaders/canvas.wgsl"),
+                    include_str!("shaders/interpolation.wgsl")
+                )
+                .into(),
+            ),
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("tick-blend"),
