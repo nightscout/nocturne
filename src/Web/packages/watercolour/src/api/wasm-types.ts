@@ -33,6 +33,7 @@ export interface WasmInstance {
   advanceTicks?(ticks: number): boolean;
   setProgressCurve(curve: 'frontLoaded' | 'linear' | 'reveal'): void;
   seekProgress(progress: number): void;
+  seekTowardsProgress(progress: number, ticks: number): boolean;
   finishImmediately(): void;
   progress(): number;
   isFinished(): boolean;

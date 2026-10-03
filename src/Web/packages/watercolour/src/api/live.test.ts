@@ -39,6 +39,16 @@ function fakeInstance(total: number) {
       tick = next;
       return moved;
     },
+    seekTowardsProgress(progress: number, ticks: number) {
+      playing = false;
+      const target = Math.round(progress * total);
+      if (target < tick) tick = 0;
+      tick = Math.min(target, tick + ticks);
+      calls.push(`seek:${progress}:${ticks}`);
+      return tick === target;
+    },
+    seekProgress(progress: number) { tick = Math.round(progress * total); playing = false; },
+    reset() { tick = 0; playing = false; },
     finishImmediately() {
       calls.push('finishImmediately');
       tick = total;
@@ -395,5 +405,63 @@ describe('a live reveal', () => {
     // The first frame draws the blank sheet; after that only a moved tick does.
     expect(renders).toEqual(['render@0', ...moved.map((t) => `render@${t}`)]);
     expect(reveal.state.finished).toBe(true);
+  });
+});
+
+
+describe('target seeking', () => {
+  it('coalesces requests and catches up in bounded frames before resuming play', async () => {
+    const instance = fakeInstance(100);
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never' });
+    await live.ready;
+    for (let i = 1; i <= 100; i++) live.seekTo(i / 100);
+    expect(instance.tick).toBe(0);
+    expect(instance.calls.filter(call => call.startsWith('seek:'))).toEqual([]);
+    live.seekTo(0.6);
+    live.play();
+    clock.frame();
+    expect(instance.tick).toBeGreaterThan(0);
+    expect(instance.tick).toBeLessThanOrEqual(8);
+    expect(live.state.playing).toBe(false);
+    for (let i = 0; i < 100 && !live.state.playing; i++) clock.frame();
+    expect(instance.tick).toBe(60);
+    expect(live.state.playing).toBe(true);
+    expect(instance.calls.filter(call => call.startsWith('seek:')).every(call => call.startsWith('seek:0.6:'))).toBe(true);
+    live.dispose();
+  });
+
+  it('replaces unfinished work with a backwards target and stops at that target', async () => {
+    const instance = fakeInstance(100);
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.seekTo(0.9);
+    for (let i = 0; i < 8; i++) clock.frame();
+    expect(instance.tick).toBeGreaterThan(10);
+    live.seekTo(0.1);
+    for (let i = 0; i < 100 && instance.tick !== 10; i++) clock.frame();
+    expect(instance.tick).toBe(10);
+    const calls = instance.calls.length;
+    for (let i = 0; i < 5; i++) clock.frame();
+    expect(instance.calls.length).toBe(calls);
+    live.seekTo(0.8);
+    live.dispose();
+    clock.frame();
+    expect(instance.calls.at(-1)).toBe('dispose');
+  });
+
+  it('lets immediate seek, reset and finish replace queued work', async () => {
+    const instance = fakeInstance(100);
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.seekTo(0.9); live.seek(0.2); clock.frame();
+    expect(instance.tick).toBe(20);
+    live.seekTo(0.9); live.reset(); clock.frame();
+    expect(instance.tick).toBe(0);
+    live.seekTo(0.2); live.finishImmediately(); clock.frame();
+    expect(instance.tick).toBe(100);
+    live.dispose();
   });
 });
