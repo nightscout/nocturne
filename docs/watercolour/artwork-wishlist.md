@@ -17,8 +17,8 @@ proposal was grounded in.
 ## Where artwork is used today
 
 Both the portal and the app are wired. Sizing follows the detail tiers in
-`detailForEdge`: nothing is painted below 192 px except `header-motif`, which
-is a 5:1 rule rather than an icon.
+`detailForEdge`: nothing is painted below 192 px except the report header's
+wash, which is a full-width strip rather than an icon.
 
 | Surface | Treatment |
 |---|---|
@@ -27,7 +27,7 @@ is a 5:1 rule rather than an icon.
 | App report headers | 224 px under the page heading. |
 | App empty states and dialog art | 192 px. |
 | Card grids and list rows, both packages | Lucide glyphs, not watercolour. A canvas under 64 px renders at the `small` tier and reads as a smudge. |
-| Accents | `HeaderMotif` on the report pages; `ConfirmationBackground` on the docs and demo pages, hidden on dark. |
+| Accents | `ReportHeaderWash` behind the report page headers; `ConfirmationBackground` on the docs and demo pages, hidden on dark. |
 | Showcase | Unchanged mockups of intended usage, at the older sizes. |
 
 ## Proposed artworks
@@ -61,7 +61,6 @@ Existing catalogue pieces that fit a screen the survey found:
 
 | Screen | Fitting artwork |
 |---|---|
-| Every report subpage's bare in-page h1 (`reports/steps/+page.svelte:69`, `reports/heart-rate/+page.svelte:77`, `reports/sleep/+page.svelte:220`, `reports/treatments/+page.svelte:372`, `reports/data-quality/+page.svelte:87`, and the rest) | `header-motif` (5:1) banner, exactly as on `reports/+page.svelte:229` |
 | Alerts header + empty `alerts/+page.svelte:170,329` | `alarm-bell` |
 | Notifications header + "All caught up" `notifications/+page.svelte:202,250` | `alarm-bell`, `confirmation-mark` |
 | Sleep empty state `reports/sleep/+page.svelte:232` | `crescent-moon` or `moonlit-shoreline` (16:9) |
@@ -84,7 +83,6 @@ Existing catalogue pieces that fit a screen the survey found:
 | Portal feature pillars `portal/src/routes/features/+page.svelte:53-58` | `shield`, `people-group`, `plug`, `heart-rate`, `report-pages` |
 | Portal get-involved lanes `get-involved/+page.svelte:46-123` | `heart`, `chat-bubble`, `world-globe`, `report-pages` (the four that already fit; see proposal table for the rest) |
 | Portal demo page + docs callout | `confirmation-background` (3:1) |
-| Portal roadmap/changelog page headers `roadmap/+page.svelte:51`, `changelog/+page.svelte:89` | `header-motif` (5:1) |
 | Portal `SupportNocturne.svelte:42` pricing tiers | `heart` |
 
 The setup wizard itself (`setup/+page@.svelte`) already carries a bespoke
@@ -94,8 +92,8 @@ The setup wizard itself (`setup/+page@.svelte`) already carries a bespoke
 
 Every proposal above is a **square icon**. Rationale: each target sits beside a
 heading or inside a card at 32-48 px, and the wide-banner need (report page
-headers, portal heroes, callouts) is already served by `header-motif`, the
-landscape scenes, and `confirmation-background` from section 3. `server` and
+headers, portal heroes, callouts) is already served by the report header wash,
+the landscape scenes, and `confirmation-background` from section 3. `server` and
 `database` could also be authored at a wide aspect if a docs page hero ever wants
 them, but the square version covers every concrete screen listed.
 

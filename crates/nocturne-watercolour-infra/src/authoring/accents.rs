@@ -21,11 +21,6 @@ pub(super) const BANNER_3_1: SizeHint = SizeHint {
     height: 171,
 };
 
-pub(super) const HEADER_5_1: SizeHint = SizeHint {
-    width: 512,
-    height: 102,
-};
-
 /// A loose disc of the base pigment with the accent and shadow dropped in
 /// while wet; the host clips it to the avatar's shape.
 pub(super) fn avatar_wash(style: &Style, palette: &Palette) -> Scene {
@@ -300,123 +295,6 @@ pub(super) fn confirmation_background(style: &Style, palette: &Palette) -> Scene
         "confirmation-background",
         palette,
         BANNER_3_1,
-        Paper::cold_press(style.seed()),
-        p.finish(),
-    )
-}
-
-/// One `header_motif` stroke: its ends in frame units, belly radius and paint.
-struct HeaderStroke {
-    x: (f32, f32),
-    y: (f32, f32),
-    belly: f32,
-    pigment: usize,
-    concentration: f32,
-    water: f32,
-}
-
-/// Three loose horizontal brush strokes pulled left to right, of different
-/// weights and slightly offset. Each lands light, presses to its belly and
-/// thins as the brush runs dry, ending (from Medium up) in split bristle
-/// streaks. They are laid wet one after another, so a later stroke bleeds into
-/// an earlier one where they cross.
-pub(super) fn header_motif(style: &Style, palette: &Palette) -> Scene {
-    let frame = Frame::new(HEADER_5_1);
-    let base = role(palette, PigmentRole::BaseWash);
-    let shadow = role(palette, PigmentRole::Shadow);
-    let mut stream = style.stream(3);
-    let mut p = Painting::new(style.ticks(420));
-    // The thin stroke leads: drawn first, the wide one would put half the
-    // finished area down in the reveal's first quarter.
-    let strokes = [
-        HeaderStroke {
-            x: (0.5, 3.4),
-            y: (0.2, 0.3),
-            belly: 0.035,
-            pigment: base,
-            concentration: 0.5,
-            water: 0.5,
-        },
-        HeaderStroke {
-            x: (0.15, 4.2),
-            y: (0.38, 0.54),
-            belly: 0.1,
-            pigment: base,
-            concentration: 0.55,
-            water: 0.9,
-        },
-        HeaderStroke {
-            x: (0.85, 4.5),
-            y: (0.74, 0.5),
-            belly: 0.06,
-            pigment: shadow,
-            concentration: 0.6,
-            water: 0.8,
-        },
-    ];
-    for HeaderStroke {
-        x: (x0, x1),
-        y: (y0, y1),
-        belly,
-        pigment,
-        concentration: conc,
-        water: wet,
-    } in strokes
-    {
-        let at = |x: f32| y0 + (y1 - y0) * (x - x0) / (x1 - x0);
-        let pt = |x: f32, dy: f32| frame.pt(x, at(x) + dy);
-        let landing = x0 + (x1 - x0) * 0.12;
-        let mut body: Vec<Point> = vec![pt(landing, 0.0)];
-        body.extend((1..7).map(|i| {
-            let x = landing + (x1 - landing) * i as f32 / 6.0;
-            pt(x, stream.next_signed() * 0.02)
-        }));
-        p.at(
-            0.0,
-            tapered(
-                vec![pt(x0, 0.0), pt(landing, 0.0)],
-                (belly * 0.45, belly),
-                pigment,
-                style.conc(conc),
-                style.water(wet),
-                0.5,
-            ),
-        );
-        p.at(
-            0.0,
-            tapered(
-                body,
-                (belly, belly * 0.5),
-                pigment,
-                style.conc(conc),
-                style.water(wet),
-                0.5,
-            ),
-        );
-        if style.fine() {
-            for k in [-1.0f32, 0.0, 1.0] {
-                let off = k * belly * 0.35;
-                let start = x1 - 0.35 + stream.next_signed().abs() * 0.15;
-                let len = 0.3 + stream.next_signed().abs() * 0.3;
-                p.at(
-                    0.0,
-                    tapered(
-                        vec![pt(start, off), pt(start + len, off + k * 0.01)],
-                        (belly * 0.18, belly * 0.06),
-                        pigment,
-                        style.conc(conc * 1.2),
-                        style.water(0.08),
-                        0.15,
-                    ),
-                );
-            }
-        }
-    }
-    p.settle(0.9, 3.0);
-    style.scene(
-        "header-motif",
-        palette,
-        HEADER_5_1,
         Paper::cold_press(style.seed()),
         p.finish(),
     )

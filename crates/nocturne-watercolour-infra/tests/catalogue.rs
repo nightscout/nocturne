@@ -22,7 +22,6 @@ const EXPECTED_IDS: [&str; 38] = [
     "tab-underline",
     "selection-edge",
     "confirmation-background",
-    "header-motif",
     "calendar",
     "clock",
     "stopwatch",
