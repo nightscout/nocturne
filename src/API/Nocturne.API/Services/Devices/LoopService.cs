@@ -35,7 +35,7 @@ public class LoopService : ILoopService, IDisposable
         {
             _logger.LogInformation(
                 "Loop service initialized successfully with {Environment} APNS environment",
-                _configuration.PushServerEnvironment ?? "development"
+                _configuration.PushServerEnvironment
             );
         }
         else
@@ -52,7 +52,7 @@ public class LoopService : ILoopService, IDisposable
     /// </summary>
     public async Task<LoopNotificationResponse> SendNotificationAsync(
         LoopNotificationData data,
-        LoopSettings? loopSettings,
+        LoopProfileSettings? loopSettings,
         string remoteAddress,
         CancellationToken cancellationToken = default
     )
@@ -128,7 +128,7 @@ public class LoopService : ILoopService, IDisposable
             HasApnsKeyId = !string.IsNullOrEmpty(_configuration.ApnsKeyId),
             HasDeveloperTeamId = !string.IsNullOrEmpty(_configuration.DeveloperTeamId)
                 && _configuration.DeveloperTeamId.Length == 10,
-            PushServerEnvironment = _configuration.PushServerEnvironment ?? "development",
+            PushServerEnvironment = _configuration.PushServerEnvironment,
             ApnsClientFactoryConfigured = _apnsClientFactory.IsConfigured,
         };
     }
@@ -171,11 +171,11 @@ public class LoopService : ILoopService, IDisposable
     /// <summary>
     /// Validates loop settings from user profile matching legacy validation logic
     /// </summary>
-    private (bool IsValid, string? ErrorMessage) ValidateLoopSettings(LoopSettings? loopSettings)
+    private (bool IsValid, string? ErrorMessage) ValidateLoopSettings(LoopProfileSettings? loopSettings)
     {
         if (loopSettings == null)
         {
-            return (false, "Loop notification failed: Loop settings are required.");
+            return (false, "Loop notification failed: Could not find loopSettings in profile.");
         }
 
         if (string.IsNullOrEmpty(loopSettings.DeviceToken))
@@ -185,7 +185,7 @@ public class LoopService : ILoopService, IDisposable
 
         if (string.IsNullOrEmpty(loopSettings.BundleIdentifier))
         {
-            return (false, "Loop notification failed: Bundle ID is required in loopSettings.");
+            return (false, "Loop notification failed: Could not find bundleIdentifier in loopSettings.");
         }
 
         return (true, null);
@@ -196,7 +196,7 @@ public class LoopService : ILoopService, IDisposable
     /// </summary>
     private async Task<LoopNotificationResponse> ProcessNotificationByEventType(
         LoopNotificationData data,
-        LoopSettings loopSettings, // Validation ensures this is not null when called
+        LoopProfileSettings loopSettings,
         string remoteAddress,
         CancellationToken cancellationToken
     )
@@ -222,6 +222,11 @@ public class LoopService : ILoopService, IDisposable
             .AddToken(loopSettings.DeviceToken!)
             .AddContentAvailable();
 
+        if (string.Equals(_configuration.PushServerEnvironment, "development", StringComparison.OrdinalIgnoreCase))
+        {
+            push.SendToDevelopmentServer();
+        }
+
         // Add custom payload properties to the root level
         foreach (var kvp in payload)
         {
@@ -239,9 +244,8 @@ public class LoopService : ILoopService, IDisposable
                 if (response.IsSuccessful)
                 {
                     _logger.LogInformation(
-                        "Loop notification sent successfully: {EventType} to {DeviceToken} from {RemoteAddress}",
+                        "Loop notification sent successfully: {EventType} from {RemoteAddress}",
                         data.EventType,
-                        MaskDeviceToken(loopSettings.DeviceToken!),
                         remoteAddress
                     );
 
@@ -319,11 +323,7 @@ public class LoopService : ILoopService, IDisposable
 
             case "Temporary Override":
                 payload["override-name"] = data.Reason ?? string.Empty;
-                if (
-                    !string.IsNullOrEmpty(data.Duration)
-                    && int.TryParse(data.Duration, out var duration)
-                    && duration > 0
-                )
+                if (ParseLeadingInteger(data.Duration) is > 0 and var duration)
                 {
                     payload["override-duration-minutes"] = duration;
                 }
@@ -376,8 +376,10 @@ public class LoopService : ILoopService, IDisposable
                     payload["start-time"] = data.CreatedAt;
                 }
 
-                alert =
-                    $"Remote Carbs Entry: {carbsEntry} grams\nAbsorption Time: {payload["absorption-time"]} hours";
+                alert = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Remote Carbs Entry: {carbsEntry} grams\nAbsorption Time: {payload["absorption-time"]} hours"
+                );
                 break;
 
             case "Remote Bolus Entry":
@@ -406,7 +408,7 @@ public class LoopService : ILoopService, IDisposable
                     payload["otp"] = data.Otp;
                 }
 
-                alert = $"Remote Bolus Entry: {bolusEntry} U";
+                alert = string.Create(CultureInfo.InvariantCulture, $"Remote Bolus Entry: {bolusEntry} U");
                 break;
 
             default:
@@ -440,6 +442,30 @@ public class LoopService : ILoopService, IDisposable
     }
 
     /// <summary>
+    /// JavaScript <c>parseInt</c> semantics: NightscoutKit sends override durations as
+    /// <c>"60.0"</c>, which <see cref="int.TryParse(string?, out int)"/> rejects.
+    /// </summary>
+    private static int? ParseLeadingInteger(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.TrimStart();
+        var length = trimmed[0] is '-' or '+' ? 1 : 0;
+        while (length < trimmed.Length && char.IsAsciiDigit(trimmed[length]))
+            length++;
+
+        return int.TryParse(
+            trimmed[..length],
+            NumberStyles.AllowLeadingSign,
+            CultureInfo.InvariantCulture,
+            out var parsed
+        )
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
     /// Creates a standardized error response
     /// </summary>
     private LoopNotificationResponse CreateErrorResponse(string message)
@@ -450,17 +476,6 @@ public class LoopService : ILoopService, IDisposable
             Message = message,
             Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
         };
-    }
-
-    /// <summary>
-    /// Masks device token for logging (shows first 8 and last 4 characters)
-    /// </summary>
-    private string MaskDeviceToken(string deviceToken)
-    {
-        if (string.IsNullOrEmpty(deviceToken) || deviceToken.Length < 12)
-            return "***";
-
-        return $"{deviceToken[..8]}...{deviceToken[^4..]}";
     }
 
     protected virtual void Dispose(bool disposing)

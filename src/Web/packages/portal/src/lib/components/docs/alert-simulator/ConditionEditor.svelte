@@ -14,8 +14,8 @@
         MGDL_PER_MMOL,
         type GlucoseUnits,
     } from "@nocturne/ui/glucose";
-    import type { GroupNode } from "./engine";
-    import { defaultLeaf, fromRow, LEAF_KINDS, toRow, type Row } from "./tree";
+    import type { CompareOperator, GroupNode } from "./wire";
+    import { defaultLeaf, fromRow, LEAF_KINDS, OPERATORS, toRow, type Row } from "./tree";
     import ConditionEditor from "./ConditionEditor.svelte";
 
     interface Props {
@@ -41,6 +41,24 @@
 
     const rateUnit = $derived(units === "mmol" ? "mmol/L a minute" : "mg/dL a minute");
 </script>
+
+{#snippet operator(value: CompareOperator, onchange: (next: CompareOperator) => void)}
+    <Select.Root
+        type="single"
+        {value}
+        onValueChange={(v: string) => {
+            const next = OPERATORS.find((o) => o.operator === v)?.operator;
+            if (next) onchange(next);
+        }}
+    >
+        <Select.Trigger size="xs">{OPERATORS.find((o) => o.operator === value)?.label}</Select.Trigger>
+        <Select.Content>
+            {#each OPERATORS as o (o.operator)}
+                <Select.Item value={o.operator} label={o.label} />
+            {/each}
+        </Select.Content>
+    </Select.Root>
+{/snippet}
 
 <div class="space-y-2">
     <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -218,6 +236,37 @@
                                 leaf.time_of_day.to = e.currentTarget.value;
                             }}
                         />
+                    {:else if row.leaf.type === "cob" || row.leaf.type === "iob"}
+                        {@const payload = row.leaf.type === "cob" ? row.leaf.cob : row.leaf.iob}
+                        {@render operator(payload.operator, (o) => (payload.operator = o))}
+                        <Input
+                            type="number"
+                            size="xs"
+                            min="0"
+                            step={row.leaf.type === "cob" ? "1" : "0.1"}
+                            class="w-20 text-right"
+                            aria-label={row.leaf.type === "cob" ? "Grams" : "Units"}
+                            value={payload.value}
+                            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                                payload.value = numberFrom(e, payload.value);
+                            }}
+                        />
+                        <span class="text-xs text-muted-foreground">{row.leaf.type === "cob" ? "g" : "U"}</span>
+                    {:else if row.leaf.type === "time_since_last_carb"}
+                        {@const payload = row.leaf.time_since_last_carb}
+                        {@render operator(payload.operator, (o) => (payload.operator = o))}
+                        <Input
+                            type="number"
+                            size="xs"
+                            min="0"
+                            class="w-16 text-right"
+                            aria-label="Minutes since carbs"
+                            value={payload.minutes}
+                            oninput={(e: Event & { currentTarget: HTMLInputElement }) => {
+                                payload.minutes = Math.round(numberFrom(e, payload.minutes));
+                            }}
+                        />
+                        <span class="text-xs text-muted-foreground">min ago</span>
                     {/if}
 
                     <span class="flex items-center gap-1.5">

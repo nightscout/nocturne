@@ -955,6 +955,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_step_counts_tenant_source_timestamp")
             .IsDescending(false, false, true);
 
+        // The activity id a heart rate or step count was decomposed from, read (tombstones included)
+        // on every activity write and connector reconcile.
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => new { s.TenantId, s.OriginalId })
+            .HasDatabaseName("ix_step_counts_tenant_original_id")
+            .HasFilter("original_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => new { h.TenantId, h.OriginalId })
+            .HasDatabaseName("ix_heart_rates_tenant_original_id")
+            .HasFilter("original_id IS NOT NULL");
+
         modelBuilder
             .Entity<HeartRateEntity>()
             .HasIndex(h => h.Timestamp)

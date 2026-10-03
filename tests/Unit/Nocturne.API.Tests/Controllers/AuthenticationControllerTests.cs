@@ -1,113 +1,144 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Text;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Controllers.V1;
+using Nocturne.API.Extensions;
 using Nocturne.API.Tests.Infrastructure;
+using Nocturne.Core.Models.Authorization;
 using Xunit;
 
 namespace Nocturne.API.Tests.Controllers;
 
 public class AuthenticationControllerTests : IClassFixture<AuthenticationTestFactory>
 {
+    private static readonly string[] NightscoutMessageFields =
+        ["canRead", "canWrite", "isAdmin", "message", "rolefound", "permissions"];
+
     private readonly AuthenticationTestFactory _factory;
-    private readonly HttpClient _client;
 
     public AuthenticationControllerTests(AuthenticationTestFactory factory)
     {
         _factory = factory;
-        _client = _factory.CreateClient();
     }
 
     [Fact]
-    public async Task VerifyAuth_NoAuthentication_ReturnsUnauthorizedResponse()
+    public async Task VerifyAuth_ValidApiSecret_ReportsFullAccessInNightscoutShape()
     {
-        // Arrange
-        // No authentication headers provided
-
-        // Act
-        var response = await _client.GetAsync("/api/v1/verifyauth", CancellationToken.None);
-        var content = await response.Content.ReadAsStringAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("NOT_FOUND", content);
-        Assert.Contains("UNAUTHORIZED", content);
-    }
-
-    [Fact]
-    public async Task VerifyAuth_ValidApiSecret_ReturnsOkResponse()
-    {
-        // Arrange — send SHA1 of the factory's configured API secret
-        var hash = ComputeSha1Hash(AuthenticationTestFactory.ApiSecret);
-
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("api-secret", hash);
+        client.DefaultRequestHeaders.Add(
+            "api-secret", TestDatabaseSeeder.Sha1Hex(AuthenticationTestFactory.ApiSecret));
 
-        // Act
-        var response = await client.GetAsync("/api/v1/verifyauth", CancellationToken.None);
-        var content = await response.Content.ReadAsStringAsync(CancellationToken.None);
+        var body = await GetVerifyAuthAsync(client);
 
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("OK", content);
+        body.GetProperty("status").GetInt32().Should().Be(200);
+        var message = body.GetProperty("message");
+        PropertyNames(message).Should().BeEquivalentTo(NightscoutMessageFields);
+        message.GetProperty("canRead").GetBoolean().Should().BeTrue();
+        message.GetProperty("canWrite").GetBoolean().Should().BeTrue();
+        message.GetProperty("isAdmin").GetBoolean().Should().BeTrue();
+        message.GetProperty("message").GetString().Should().Be("OK");
+        message.GetProperty("rolefound").GetString().Should().Be("NOTFOUND");
+        message.GetProperty("permissions").GetString().Should().Be("ROLE");
     }
 
     [Fact]
-    public async Task VerifyAuth_InvalidApiSecret_ReturnsUnauthorizedResponse()
+    public async Task VerifyAuth_NoCredential_AnswersUnauthorizedWithDefaultPermissions()
     {
-        // Arrange
-        var apiSecret = "test-api-secret";
-        var wrongHash = ComputeSha1Hash("wrong-secret");
+        var body = await GetVerifyAuthAsync(_factory.CreateClient());
 
-        var client = _factory
-            .WithWebHostBuilder(builder =>
-            {
-                builder.UseSetting("INSTANCE_KEY", apiSecret);
-            })
-            .CreateClient();
-
-        client.DefaultRequestHeaders.Add("api-secret", wrongHash);
-
-        // Act
-        var response = await client.GetAsync("/api/v1/verifyauth", CancellationToken.None);
-        var content = await response.Content.ReadAsStringAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("NOT_FOUND", content);
-        Assert.Contains("UNAUTHORIZED", content);
+        AssertUnauthorized(body);
     }
 
     [Fact]
-    public async Task VerifyAuth_ValidJwtToken_ReturnsTokenResponse()
+    public async Task VerifyAuth_WrongApiSecret_AnswersUnauthorized()
     {
-        // Arrange
-        // This test would require setting up a valid JWT token
-        // For now, we'll test the structure with an invalid token to ensure error handling
-
         var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            "invalid-token"
-        );
+        client.DefaultRequestHeaders.Add("api-secret", TestDatabaseSeeder.Sha1Hex("wrong-secret"));
 
-        // Act
-        var response = await client.GetAsync("/api/v1/verifyauth", CancellationToken.None);
-        var content = await response.Content.ReadAsStringAsync(CancellationToken.None);
-
-        // Assert
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Contains("NOT_FOUND", content);
-        Assert.Contains("UNAUTHORIZED", content);
+        AssertUnauthorized(await GetVerifyAuthAsync(client));
     }
 
-    private static string ComputeSha1Hash(string input)
+    [Fact]
+    public async Task VerifyAuth_InvalidBearerToken_AnswersUnauthorized()
     {
-        using var sha1 = SHA1.Create();
-        var hashBytes = sha1.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
+
+        AssertUnauthorized(await GetVerifyAuthAsync(client));
     }
+
+    [Fact]
+    public void VerifyAuth_ReadOnlyToken_CanReadButNotWriteOrAdminister()
+    {
+        var message = Verify(AuthType.DirectGrant, ScopeTranslator.FromPermissions(["*:*:read"]));
+
+        message.CanRead.Should().BeTrue();
+        message.CanWrite.Should().BeFalse();
+        message.IsAdmin.Should().BeFalse();
+        message.Message.Should().Be("OK");
+        message.RoleFound.Should().Be("FOUND");
+        message.Permissions.Should().Be("ROLE");
+    }
+
+    [Fact]
+    public void VerifyAuth_TokenCoveringSomeCategories_CannotReadEverything()
+    {
+        var message = Verify(AuthType.DirectGrant, new HashSet<string> { Scope.GlucoseReadWrite });
+
+        message.CanRead.Should().BeFalse();
+        message.CanWrite.Should().BeFalse();
+        message.IsAdmin.Should().BeFalse();
+    }
+
+    [Fact]
+    public void VerifyAuth_WriteEverythingWithoutFullAccess_IsNotAdmin()
+    {
+        var message = Verify(AuthType.DirectGrant, ScopeTranslator.FromPermissions(["api:*:create", "*:*:read"]));
+
+        message.CanRead.Should().BeTrue();
+        message.CanWrite.Should().BeTrue();
+        message.IsAdmin.Should().BeFalse();
+    }
+
+    private static VerifyAuthMessage Verify(AuthType authType, IReadOnlySet<string> scopes)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.SetAuthContext(new AuthContext { IsAuthenticated = true, AuthType = authType });
+        httpContext.SetGrantedScopes(scopes);
+
+        var controller = new AuthenticationController
+        {
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
+        };
+
+        var ok = controller.VerifyAuthentication().Result.Should().BeOfType<OkObjectResult>().Subject;
+        var response = ok.Value.Should().BeOfType<VerifyAuthResponse>().Subject;
+        response.Status.Should().Be(200);
+        return response.Message;
+    }
+
+    private static void AssertUnauthorized(JsonElement body)
+    {
+        body.GetProperty("status").GetInt32().Should().Be(200);
+        var message = body.GetProperty("message");
+        PropertyNames(message).Should().BeEquivalentTo(NightscoutMessageFields);
+        message.GetProperty("message").GetString().Should().Be("UNAUTHORIZED");
+        message.GetProperty("rolefound").GetString().Should().Be("NOTFOUND");
+        message.GetProperty("permissions").GetString().Should().Be("DEFAULT");
+        message.GetProperty("canWrite").GetBoolean().Should().BeFalse();
+        message.GetProperty("isAdmin").GetBoolean().Should().BeFalse();
+    }
+
+    private static async Task<JsonElement> GetVerifyAuthAsync(HttpClient client)
+    {
+        var response = await client.GetAsync("/api/v1/verifyauth", CancellationToken.None);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync(CancellationToken.None);
+        return JsonDocument.Parse(content).RootElement.Clone();
+    }
+
+    private static IEnumerable<string> PropertyNames(JsonElement element) =>
+        element.EnumerateObject().Select(p => p.Name);
 }

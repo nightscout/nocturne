@@ -2,10 +2,6 @@
 // (`/nightscout/...`), so a connector is pointed at `http://mocks:8080/<vendor>`.
 // Adding a vendor means adding a module under ./vendors and listing it below.
 //
-// workaround: #1806 - a vendor is also served at the root of a host of its own name, because the
-// migration job drops a base URL's path (a bug); docker-compose.yml gives the container that name
-// as an alias.
-//
 // Every vendor also answers `GET /<vendor>/__requests` with the requests it has served, and
 // `DELETE /<vendor>/__requests` to clear them, so specs can assert what a connector called.
 //
@@ -40,13 +36,11 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://mocks");
   if (url.pathname === "/health") return send(res, 200, "ok");
 
-  const hostVendor = (req.headers.host ?? "").split(":")[0]!;
-  const [, first, ...rest] = url.pathname.split("/");
-  const name = vendors[hostVendor] ? hostVendor : first;
+  const [, name, ...rest] = url.pathname.split("/");
   const vendor = name ? vendors[name] : undefined;
   if (!vendor) return send(res, 404, { error: `no fake vendor '${name}'` });
 
-  const path = name === hostVendor ? url.pathname : "/" + rest.join("/");
+  const path = "/" + rest.join("/");
   if (path === "/__requests") {
     if (req.method === "DELETE") {
       seen[name!] = [];

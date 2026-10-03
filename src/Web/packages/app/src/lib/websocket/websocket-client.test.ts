@@ -264,6 +264,55 @@ describe("WebSocketClient handshake ticket handling", () => {
   });
 });
 
+describe("WebSocketClient.ensureConnected", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("reopens a socket that dropped", async () => {
+    stubTicketEndpoint({ token: "a-verifiable-ticket" });
+    const client = new WebSocketClient(config);
+    client.connect();
+    const socket = lastSocket!;
+    await socket.handshake();
+
+    socket.connected = false;
+    socket.handlers.get("disconnect")?.("transport close");
+    client.ensureConnected();
+
+    expect(socket.connectCalls).toBe(1);
+  });
+
+  it("leaves a definitively denied session down", async () => {
+    stubTicketEndpoint({ token: null });
+    const client = new WebSocketClient(config);
+    client.connect();
+    await lastSocket!.handshake();
+
+    client.ensureConnected();
+
+    expect(lastSocket!.connectCalls).toBe(0);
+    expect(client.connectionStatus).toBe("unauthorized");
+  });
+
+  it("cancels a pending auth retry instead of racing it", async () => {
+    vi.useFakeTimers();
+    stubTicketEndpoint({ token: null, retry: true });
+    const client = new WebSocketClient(config);
+    client.connect();
+    const socket = lastSocket!;
+    await socket.handshake();
+
+    // Hold the manual attempt's ticket fetch open, so only a leftover retry
+    // timer could start another connect.
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    client.ensureConnected();
+    await vi.advanceTimersByTimeAsync(config.maxReconnectDelay * 2);
+
+    expect(socket.connectCalls).toBe(1);
+  });
+});
+
 describe("WebSocketClient tracker updates", () => {
   /** A client past the handshake, so its event listeners are live. */
   async function connectedClient(): Promise<InstanceType<typeof WebSocketClient>> {

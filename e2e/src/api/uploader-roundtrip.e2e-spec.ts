@@ -197,11 +197,11 @@ describe("v1 treatment finds with field filters", () => {
   });
 
   it("window the count route the same way", async () => {
-    const windowed = await tenant.api.ok<{ count: number }>("GET", "/api/v1/count/treatments/where?find[eventType]=Note");
-    expect(windowed.count).toBe(1);
+    const windowed = await tenant.api.ok<unknown>("GET", "/api/v1/count/treatments/where?find[eventType]=Note");
+    expect(windowed).toEqual([{ _id: null, count: 1 }]);
     const since = encodeURIComponent(new Date(Date.now() - 7 * DAY).toISOString());
-    const named = await tenant.api.ok<{ count: number }>("GET", `/api/v1/count/treatments/where?find[eventType]=Note&find[created_at][$gte]=${since}`);
-    expect(named.count).toBe(2);
+    const named = await tenant.api.ok<unknown>("GET", `/api/v1/count/treatments/where?find[eventType]=Note&find[created_at][$gte]=${since}`);
+    expect(named).toEqual([{ _id: null, count: 2 }]);
   });
 });
 

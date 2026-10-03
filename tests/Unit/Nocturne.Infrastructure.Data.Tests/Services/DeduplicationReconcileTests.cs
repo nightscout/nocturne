@@ -30,6 +30,7 @@ public class DeduplicationReconcileTests : IDisposable
     // test trips its many-providers guard. Tests within a class run one at a time.
     private static readonly LinkLoadRecorder LoadedLinks = new();
     private static readonly FailingReads FailingReadsInterceptor = new();
+    private static readonly ReadCounter Reads = new();
     private readonly SqliteTestDatabase _db;
     private readonly NocturneDbContext _context;
     private readonly DeduplicationService _service;
@@ -37,7 +38,7 @@ public class DeduplicationReconcileTests : IDisposable
     public DeduplicationReconcileTests()
     {
         // In-memory SQLite database for testing — mirrors CarbIntakeRepositoryTests.
-        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId, "test", LoadedLinks, FailingReadsInterceptor);
+        _db = TestDbContextFactory.CreateSqliteWithTenant(TestTenantId, "test", LoadedLinks, FailingReadsInterceptor, Reads);
 
         _context = _db.CreateContext();
         _context.TenantId = TestTenantId;
@@ -807,6 +808,78 @@ public class DeduplicationReconcileTests : IDisposable
     }
 
     [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_FiveMinuteGlucose_LinksEachCopyToItsReading()
+    {
+        var readings = await AddGlucoseWithCopies(WideBase, TimeSpan.FromMinutes(5), 72);
+
+        var merged = await _service.MergeDuplicateGroupsAsync(
+            RecordType.SensorGlucose, await AllCanonicals(RecordType.SensorGlucose), CancellationToken.None);
+
+        merged.Should().Be(readings.Count(r => r.Copy is not null));
+        await AssertEachCopyJoinsOnlyItsReading(readings);
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_ADayOfFiveMinuteGlucose_LoadsNeighboursPerHourNotPerReading()
+    {
+        await AddGlucoseWithCopies(WideBase, TimeSpan.FromMinutes(5), 288, copyEvery: 0, lateCopyEvery: 0);
+        var candidates = await AllCanonicals(RecordType.SensorGlucose);
+        Reads.Clear();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(RecordType.SensorGlucose, candidates, CancellationToken.None);
+
+        merged.Should().Be(0);
+        Reads.Count.Should().Be(24,
+            "one query learns the candidates' timestamps and each hour of runs, 13 readings, shares one neighbour load");
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_ANonCandidatePairInTheSliceButOutsideEveryRun_IsLeftAlone()
+    {
+        // The second candidate stretches the slice's load over the pair, which sits outside both
+        // candidates' own ranges and so belongs to neither run.
+        var t = WideBase;
+        var early = await AddSensorGlucose(t, "dexcom-connector", 100);
+        var pairA = await AddSensorGlucose(t.AddMinutes(20), "dexcom-connector", 150);
+        var pairB = await AddSensorGlucose(t.AddMinutes(20).AddSeconds(10), "glooko-connector", 150);
+        var late = await AddSensorGlucose(t.AddMinutes(40), "dexcom-connector", 200);
+        var earlyCanonical = AddPrimaryLink(RecordType.SensorGlucose, early, ToMills(t), "dexcom-connector");
+        var pairACanonical = AddPrimaryLink(RecordType.SensorGlucose, pairA, ToMills(t.AddMinutes(20)), "dexcom-connector");
+        var pairBCanonical = AddPrimaryLink(
+            RecordType.SensorGlucose, pairB, ToMills(t.AddMinutes(20).AddSeconds(10)), "glooko-connector");
+        var lateCanonical = AddPrimaryLink(RecordType.SensorGlucose, late, ToMills(t.AddMinutes(40)), "dexcom-connector");
+        await _context.SaveChangesAsync();
+
+        var merged = await _service.MergeDuplicateGroupsAsync(
+            RecordType.SensorGlucose,
+            new HashSet<Guid> { earlyCanonical, lateCanonical },
+            CancellationToken.None);
+
+        merged.Should().Be(0);
+        _context.ChangeTracker.Clear();
+        var links = await _context.LinkedRecords.IgnoreQueryFilters()
+            .Where(l => l.RecordType == "sensorglucose").ToListAsync();
+        links.Single(l => l.RecordId == pairA).CanonicalId.Should().Be(pairACanonical);
+        links.Single(l => l.RecordId == pairB).CanonicalId.Should().Be(pairBCanonical,
+            "a pair no candidate reaches is left to the pass that owns it");
+    }
+
+    [Fact]
+    public async Task MergeDuplicateGroupsAsync_CandidatePath_ARunLongerThanTheSlice_StillSeesItsWholeRange()
+    {
+        // 50 seconds apart keeps every reading in one run, since runs only split past twice the
+        // 30 second window, and outside each other's window, so only the copies can pair.
+        var readings = await AddGlucoseWithCopies(WideBase, TimeSpan.FromSeconds(50), 216, copyEvery: 53, lateCopyEvery: 71);
+
+        var merged = await _service.MergeDuplicateGroupsAsync(
+            RecordType.SensorGlucose, await AllCanonicals(RecordType.SensorGlucose), CancellationToken.None);
+
+        merged.Should().Be(readings.Count(r => r.Copy is not null));
+        readings[^1].Copy.Should().NotBeNull("the last copy sits past the slice width from the run's start");
+        await AssertEachCopyJoinsOnlyItsReading(readings);
+    }
+
+    [Fact]
     public async Task ReconcileNewLinksAsync_AFailedMerge_LogsTheStuckCursorAndLeavesItInPlace()
     {
         var now = DateTime.UtcNow;
@@ -1438,6 +1511,77 @@ public class DeduplicationReconcileTests : IDisposable
     /// </summary>
     private static readonly DateTime WideBase = new(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
 
+    private sealed record GlucoseWithCopies(Guid Reading, Guid? Copy, Guid? LateCopy);
+
+    /// <summary>
+    /// Adds <paramref name="count"/> single-source readings <paramref name="step"/> apart, each 5 mg/dL
+    /// above the one before and wrapping back to 60 every 60 readings, so neighbours never match. Every <paramref name="copyEvery"/>th reading
+    /// (and the last) gets a second source's copy 10 seconds later, inside the matching window;
+    /// every <paramref name="lateCopyEvery"/>th gets a third source's copy 45 seconds later, outside
+    /// it. Zero adds none.
+    /// </summary>
+    private async Task<List<GlucoseWithCopies>> AddGlucoseWithCopies(
+        DateTime first, TimeSpan step, int count, int copyEvery = 4, int lateCopyEvery = 7)
+    {
+        var readings = new List<GlucoseWithCopies>();
+        for (var i = 0; i < count; i++)
+        {
+            var at = first + step * i;
+            var mgdl = 60 + 5 * i % 300;
+            var reading = await AddSensorGlucose(at, "dexcom-connector", mgdl);
+            AddPrimaryLink(RecordType.SensorGlucose, reading, ToMills(at), "dexcom-connector");
+
+            Guid? copy = null;
+            if (copyEvery > 0 && (i % copyEvery == 0 || i == count - 1))
+            {
+                copy = await AddSensorGlucose(at.AddSeconds(10), "glooko-connector", mgdl);
+                AddPrimaryLink(RecordType.SensorGlucose, copy.Value, ToMills(at.AddSeconds(10)), "glooko-connector");
+            }
+
+            Guid? lateCopy = null;
+            if (lateCopyEvery > 0 && i % lateCopyEvery == 0)
+            {
+                lateCopy = await AddSensorGlucose(at.AddSeconds(45), "libre-connector", mgdl);
+                AddPrimaryLink(RecordType.SensorGlucose, lateCopy.Value, ToMills(at.AddSeconds(45)), "libre-connector");
+            }
+
+            readings.Add(new GlucoseWithCopies(reading, copy, lateCopy));
+        }
+
+        await _context.SaveChangesAsync();
+        return readings;
+    }
+
+    private async Task<HashSet<Guid>> AllCanonicals(RecordType recordType)
+    {
+        var key = recordType.ToString().ToLowerInvariant();
+        return (await _context.LinkedRecords.IgnoreQueryFilters()
+                .Where(l => l.RecordType == key).Select(l => l.CanonicalId).ToListAsync())
+            .ToHashSet();
+    }
+
+    private async Task AssertEachCopyJoinsOnlyItsReading(IReadOnlyList<GlucoseWithCopies> readings)
+    {
+        _context.ChangeTracker.Clear();
+        var links = await _context.LinkedRecords.IgnoreQueryFilters()
+            .Where(l => l.RecordType == "sensorglucose").ToListAsync();
+        var groupOf = links.ToDictionary(l => l.RecordId, l => l.CanonicalId);
+
+        foreach (var r in readings)
+        {
+            if (r.Copy is { } copy)
+                groupOf[copy].Should().Be(groupOf[r.Reading], "a copy inside the window is the same reading");
+            if (r.LateCopy is { } late)
+                groupOf[late].Should().NotBe(groupOf[r.Reading], "a copy outside the window stays apart");
+        }
+
+        readings.Select(r => groupOf[r.Reading]).Distinct().Should().HaveCount(readings.Count,
+            "readings minutes apart are never one another's duplicates");
+        links.GroupBy(l => l.CanonicalId).Should().OnlyContain(g => g.Count(l => l.IsPrimary) == 1);
+        links.Where(l => l.IsPrimary).Select(l => l.RecordId).Should().NotIntersectWith(
+            readings.Select(r => r.Copy).OfType<Guid>(), "the earlier reading survives as primary");
+    }
+
     /// <summary>
     /// Inserts a <see cref="SensorGlucoseEntity"/> for the test tenant and returns its id.
     /// </summary>
@@ -1608,6 +1752,28 @@ public class DeduplicationReconcileTests : IDisposable
         {
             if (FailWhen?.Invoke(command.CommandText) == true)
                 throw new InvalidOperationException("Simulated read failure");
+        }
+    }
+
+    private sealed class ReadCounter : DbCommandInterceptor
+    {
+        public int Count { get; private set; }
+
+        public void Clear() => Count = 0;
+
+        public override InterceptionResult<DbDataReader> ReaderExecuting(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result)
+        {
+            Count++;
+            return result;
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Count++;
+            return ValueTask.FromResult(result);
         }
     }
 }

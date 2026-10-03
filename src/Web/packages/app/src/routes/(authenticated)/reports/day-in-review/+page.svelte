@@ -270,7 +270,7 @@
 {/snippet}
 
 {#if dayDataResource.current}
-<div class="@container space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <div
     class="flex flex-col gap-3 print:hidden @2xl:flex-row @2xl:flex-wrap @2xl:items-center @2xl:justify-between"
   >

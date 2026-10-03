@@ -30,6 +30,16 @@ public class TherapySettings : V4RecordBase, IProfileScoped
     public const string ProfileSwitchStoreMarker = "@@@@@";
 
     /// <summary>
+    /// The <c>_id</c> a row answers to as a legacy profile document: the part of its legacy id before
+    /// the first colon, since a document fans out to one <c>"{_id}:{storeName}"</c> row per store; the
+    /// whole legacy id when it has no colon; or the row's own id when it has no legacy id.
+    /// </summary>
+    public static string DocumentIdOf(TherapySettings settings) =>
+        settings.LegacyId?.Contains(':') == true
+            ? settings.LegacyId.Split(':')[0]
+            : settings.LegacyId ?? settings.Id.ToString();
+
+    /// <summary>
     /// Named profile this came from (e.g., "Default", "Weekday")
     /// </summary>
     public string ProfileName { get; set; } = "Default";

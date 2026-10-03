@@ -15,10 +15,10 @@ using Xunit;
 namespace Nocturne.Connectors.Nightscout.Tests.Services;
 
 /// <summary>
-/// Glucose and device status resume from the newest stored time, so a record the source receives
-/// after a newer one (CGM readings backfilled once the signal returns) sits below the cursor. The
-/// catch-up hands what its read returned below the cursor to the publisher's recent path, which
-/// writes only what is not already stored.
+/// Glucose, device status and activity resume from the newest stored time, so a record the source
+/// receives after a newer one (CGM readings backfilled once the signal returns, activity a health app
+/// syncs hours late) sits below the cursor. The catch-up hands what its read returned below the
+/// cursor to the publisher's recent path, which writes only what is not already stored.
 /// </summary>
 public class NightscoutBackfillReconcileTests
 {
@@ -104,6 +104,100 @@ public class NightscoutBackfillReconcileTests
             "the created_at read already reaches past the reconcile window, so it is not extended");
     }
 
+    [Fact]
+    public async Task Activity_uploaded_late_below_the_cursor_goes_to_the_recent_path()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout("act-late", Now.AddHours(-3))],
+        };
+
+        var result = await harness.SyncAsync(SyncDataType.Activity);
+
+        result.Success.Should().BeTrue();
+        harness.CrawledActivities.Select(a => a.Id).Should().Equal("act-new");
+        harness.RecentActivities.Select(a => a.Id).Should().Equal("act-late");
+        harness.RecentSource.Should().Be("nightscout-connector");
+        result.ItemsSynced[SyncDataType.Activity].Should().Be(2);
+        harness.LowerBounds("activity").Should().ContainSingle().Which.Should().Be($"{From.AddHours(-14):o}",
+            "the created_at read already reaches past the reconcile window, so it is not extended");
+    }
+
+    [Fact]
+    public async Task Activity_below_the_reconcile_window_is_left_alone()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout("act-old", From.AddHours(-14))],
+        };
+
+        await harness.SyncAsync(SyncDataType.Activity);
+
+        harness.CrawledActivities.Select(a => a.Id).Should().Equal("act-new");
+        harness.RecentActivities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Activity_without_an_id_is_not_reconciled()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout(null, Now.AddHours(-3))],
+        };
+
+        await harness.SyncAsync(SyncDataType.Activity);
+
+        harness.RecentActivities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_failed_recent_activity_write_fails_the_activity_sync()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout("act-late", Now.AddHours(-3))],
+            RecentWriteFails = true,
+        };
+
+        var result = await harness.SyncAsync(SyncDataType.Activity);
+
+        result.Success.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task A_failed_activity_crawl_reconciles_nothing()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout("act-late", Now.AddHours(-3))],
+            CrawlWriteFails = true,
+        };
+
+        var result = await harness.SyncAsync(SyncDataType.Activity);
+
+        result.Success.Should().BeFalse();
+        harness.RecentActivities.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task A_ranged_activity_sync_reconciles_nothing()
+    {
+        var harness = new Harness
+        {
+            Activities = [Workout("act-new", Now.AddMinutes(-2)), Workout("act-late", Now.AddHours(-3))],
+        };
+
+        await harness.SyncAsync(SyncDataType.Activity, to: Now);
+
+        harness.RecentActivities.Should().BeEmpty();
+    }
+
+    private static string Workout(string? id, DateTime at)
+    {
+        var idField = id is null ? "" : $"\"_id\":\"{id}\",";
+        return $$"""{{{idField}}"type":"exercise","duration":30,"created_at":"{{at:yyyy-MM-dd'T'HH:mm:ss.fff'Z'}}"}""";
+    }
+
     private static string Sgv(string id, DateTime at) =>
         $$"""{"_id":"{{id}}","type":"sgv","sgv":120,"date":{{new DateTimeOffset(at).ToUnixTimeMilliseconds()}},"mills":{{new DateTimeOffset(at).ToUnixTimeMilliseconds()}}}""";
 
@@ -116,12 +210,17 @@ public class NightscoutBackfillReconcileTests
 
         public string[] Entries { get; init; } = [];
         public string[] DeviceStatuses { get; init; } = [];
+        public string[] Activities { get; init; } = [];
         public bool RecentWriteFails { get; init; }
+        public bool CrawlWriteFails { get; init; }
 
         public List<Entry> Crawled { get; } = [];
         public List<Entry> RecentEntries { get; } = [];
         public List<DeviceStatus> CrawledStatuses { get; } = [];
         public List<DeviceStatus> RecentStatuses { get; } = [];
+        public List<Activity> CrawledActivities { get; } = [];
+        public List<Activity> RecentActivities { get; } = [];
+        public string? RecentSource { get; private set; }
         private List<string> Urls { get; } = [];
 
         public IEnumerable<string> LowerBounds(string collection) => Urls
@@ -143,6 +242,7 @@ public class NightscoutBackfillReconcileTests
             Urls.Add(url);
             var docs = url.Contains("/api/v1/entries.json?count=1000", StringComparison.Ordinal) ? Entries
                 : url.Contains("/api/v1/devicestatus.json", StringComparison.Ordinal) ? DeviceStatuses
+                : url.Contains("/api/v1/activity.json", StringComparison.Ordinal) ? Activities
                 : [];
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -184,12 +284,32 @@ public class NightscoutBackfillReconcileTests
                 .ReturnsAsync((IEnumerable<DeviceStatus> batch, string _, WriteOrigin _, CancellationToken _) =>
                     RecentWriteFails ? (int?)null : batch.Count());
 
+            var metadata = new Mock<IMetadataPublisher>();
+            metadata
+                .Setup(p => p.GetLatestActivityTimestampAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Now);
+            metadata
+                .Setup(p => p.PublishActivityAsync(
+                    It.IsAny<IEnumerable<Activity>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<Activity>, string, WriteOrigin, CancellationToken>((batch, _, _, _) => CrawledActivities.AddRange(batch))
+                .ReturnsAsync(!CrawlWriteFails);
+            metadata
+                .Setup(p => p.PublishRecentActivityAsync(
+                    It.IsAny<IEnumerable<Activity>>(), It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+                .Callback<IEnumerable<Activity>, string, WriteOrigin, CancellationToken>((batch, source, _, _) =>
+                {
+                    RecentActivities.AddRange(batch);
+                    RecentSource = source;
+                })
+                .ReturnsAsync((IEnumerable<Activity> batch, string _, WriteOrigin _, CancellationToken _) =>
+                    RecentWriteFails ? (int?)null : batch.Count());
+
             var publisher = new Mock<IConnectorPublisher>();
             publisher.Setup(p => p.IsAvailable).Returns(true);
             publisher.Setup(p => p.Glucose).Returns(glucose.Object);
             publisher.Setup(p => p.Device).Returns(device.Object);
             publisher.Setup(p => p.Treatments).Returns(Mock.Of<ITreatmentPublisher>());
-            publisher.Setup(p => p.Metadata).Returns(Mock.Of<IMetadataPublisher>());
+            publisher.Setup(p => p.Metadata).Returns(metadata.Object);
 
             var registration = new Mock<IConnectorRegistration<NightscoutConnectorConfiguration>>();
             registration.Setup(r => r.Defaults).Returns(new NightscoutConnectorConfiguration());

@@ -405,6 +405,8 @@ public class TenantOverviewServiceTests
             lastReadingAt: oldReading);
         var exemptTenant = SeedMembership(options, subjectId, "exempt", [Scope.TenantSettings, Scope.GlucoseRead],
             limitTo24Hours: true, lastReadingAt: oldReading);
+        var ownerTenant = SeedMembership(options, subjectId, "owner", rolePermissions: null,
+            directPermissions: [Scope.FullAccess], limitTo24Hours: true, lastReadingAt: oldReading);
 
         var (service, clampSeen) = NewClampObservingService(options);
         var response = await service.GetOverviewAsync(subjectId, FullTokenScopes, AuthType.SessionCookie);
@@ -412,6 +414,8 @@ public class TenantOverviewServiceTests
         clampSeen[clampedTenant].Should().BeTrue("the glucose read must run under the membership's clamp");
         clampSeen[fullTenant].Should().BeFalse();
         clampSeen[exemptTenant].Should().BeFalse("a tenant.settings holder is never clamped");
+        clampSeen[ownerTenant].Should().BeFalse("an owner is never clamped by the membership flag");
+        response.Tenants.Single(t => t.Slug == "owner").LastReadingAt.Should().Be(oldReading);
         response.Tenants.Single(t => t.Slug == "clamped").LastReadingAt.Should().BeNull(
             "the denormalised last-reading time would reveal a reading older than 24 hours");
         response.Tenants.Single(t => t.Slug == "full").LastReadingAt.Should().Be(oldReading);
@@ -423,12 +427,14 @@ public class TenantOverviewServiceTests
         var subjectId = Guid.NewGuid();
         var options = NewOptions();
         var tenantId = SeedMembership(options, subjectId, "full", [Scope.GlucoseRead]);
+        var ownerTenant = SeedMembership(options, subjectId, "owner", [Scope.FullAccess]);
 
         var (service, clampSeen) = NewClampObservingService(options);
         await service.GetOverviewAsync(
             subjectId, FullTokenScopes, AuthType.OAuthAccessToken, credentialLimitTo24Hours: true);
 
         clampSeen[tenantId].Should().BeTrue();
+        clampSeen[ownerTenant].Should().BeTrue("the exemption covers the membership flag, not a limit on the token");
     }
 
     /// <summary>

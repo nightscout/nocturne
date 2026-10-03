@@ -343,6 +343,11 @@ app.UseResponseCaching();
 // UseRouting so the rewritten path is what the router sees.
 app.UseMiddleware<JsonExtensionMiddleware>();
 
+// Serve v1 under /api/v2 wherever v2 has no route of its own, as Nightscout does. After the
+// .json strip so /api/v2/entries.json is judged as /api/v2/entries, and before UseRouting so
+// the rewritten path is what the router sees.
+app.UseMiddleware<V2FallbackMiddleware>();
+
 // Routing must run here, not where minimal hosting would insert it, so that
 // TenantSetupMiddleware below can read endpoint metadata such as [AllowDuringSetup].
 app.UseRouting();

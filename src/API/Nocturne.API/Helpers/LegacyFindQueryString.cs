@@ -19,7 +19,7 @@ public static class LegacyFindQueryString
         if (queryString.StartsWith('?'))
             queryString = queryString[1..];
 
-        if (queryString.Contains("find[") || queryString.Contains("find%5B"))
+        if (queryString.Contains("find[") || queryString.Contains("find%5B", StringComparison.OrdinalIgnoreCase))
             return queryString;
 
         return string.IsNullOrEmpty(boundFind) ? null : boundFind;

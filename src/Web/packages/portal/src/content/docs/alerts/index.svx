@@ -61,13 +61,14 @@ switched off.
 
 Try it. Below is a rule that alerts when glucose is below 70 mg/dL (3.9
 mmol/L), run against an evening where glucose drifts down after midnight. Move
-across the graph to see what the rule saw at each moment.
+across the graph, or scrub the bar under it, to see what the rule saw at each
+moment.
 
 <AlertSimulator scenario="overnight-low" rules={["low"]} />
 
-The shaded band on the graph, and the solid line under it, is when the alert
-was sounding. It starts with the first reading below 70 and stops with the
-first reading back above it.
+The marker on the graph is where the alert fired: the first reading below 70.
+The light beside the rule is on for as long as the rule is true, and goes out
+with the first reading back above 70.
 
 ## The Alerts page
 

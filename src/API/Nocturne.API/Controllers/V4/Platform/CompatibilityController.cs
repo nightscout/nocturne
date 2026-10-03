@@ -6,6 +6,7 @@ using Nocturne.API.Attributes;
 using Nocturne.API.Configuration;
 using Nocturne.API.Controllers.V4.Base;
 using Nocturne.API.Extensions;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Models;
@@ -60,7 +61,7 @@ public class CompatibilityController : ControllerBase
         return Ok(
             new ProxyConfigurationDto
             {
-                NightscoutUrl = _nightscoutConfig?.Url ?? string.Empty,
+                NightscoutUrl = _nightscoutConfig?.Url is { Length: > 0 } url ? NightscoutBaseUri.Display(url) : string.Empty,
                 Enabled = _configuration.Enabled,
                 EnableDetailedLogging = _configuration.EnableDetailedLogging,
             }
@@ -284,6 +285,17 @@ public class CompatibilityController : ControllerBase
             return Problem(detail: "QueryPath is required", statusCode: 400, title: "Bad Request");
         }
 
+        if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out _))
+        {
+            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+        }
+
+        var queryPath = request.QueryPath.StartsWith("/") ? request.QueryPath : "/" + request.QueryPath;
+        if (!NightscoutBaseUri.TryResolve(request.NightscoutUrl, queryPath, out var nightscoutUrl))
+        {
+            return Problem(detail: NightscoutBaseUri.OutsideBaseMessage, statusCode: 400, title: "Bad Request");
+        }
+
         var result = new ManualTestResult
         {
             QueryPath = request.QueryPath,
@@ -292,11 +304,6 @@ public class CompatibilityController : ControllerBase
         };
 
         using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-
-        // Build URLs
-        var nightscoutBaseUrl = request.NightscoutUrl.TrimEnd('/');
-        var queryPath = request.QueryPath.StartsWith("/") ? request.QueryPath : "/" + request.QueryPath;
-        var nightscoutUrl = nightscoutBaseUrl + queryPath;
 
         // Get Nocturne base URL from current request
         var nocturneBaseUrl = $"{Request.PublicScheme()}://{Request.Host}";

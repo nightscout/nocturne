@@ -90,9 +90,7 @@ when a high is lasting, which can be a sign of a blocked or failed infusion set.
 | **Rows** | Glucose above 180 (10.0), for at least 30 min; **and** NOT Time of day 18:00 to 20:00 |
 
 A high alert that stays quiet through the rise you expect after the evening
-meal. Keep the "for at least" row first: see
-[Order matters](/docs/alerts/sustained#order-matters) for what goes wrong
-otherwise.
+meal.
 
 ## Signal loss
 

@@ -94,8 +94,8 @@ public class EntriesControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        var statusCodeResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        statusCodeResult.StatusCode.Should().Be(201);
+        var statusCodeResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        statusCodeResult.StatusCode.Should().Be(200);
 
         // Verify ProcessDocuments was called with validEntries (which have IDs set)
         processedInput.Should().NotBeNull();
@@ -375,8 +375,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -465,8 +465,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -520,8 +520,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -577,7 +577,7 @@ public class EntriesControllerTests
         // Assert
         var body = result
             .Result.Should()
-            .BeOfType<ObjectResult>()
+            .BeOfType<OkObjectResult>()
             .Subject.Value.Should()
             .BeAssignableTo<IEnumerable<object>>()
             .Subject.Cast<EntryV1Response>()
@@ -593,12 +593,12 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task CreateEntries_EveryEntryRefused_StillReturnsBadRequest()
+    public async Task CreateEntries_EveryEntryRefused_EchoesEveryEntryWithoutWriting()
     {
-        // Echoing refusals does not turn a wholly unusable batch into a success.
         var result = await _controller.CreateEntries(new[] { new Entry(), new Entry() });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().HaveCount(2);
         _mockEntryService.Verify(
             x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never
@@ -641,9 +641,25 @@ public class EntriesControllerTests
         // Derived fields are now filled in before the refusal check, and NormalizeEntry defaults an
         // empty type to "sgv". That must not rescue an entry: HasMeaningfulData accepts a type only
         // when it is neither empty nor "sgv", so both forms have to land the same way.
-        var result = await _controller.CreateEntries(new[] { new Entry { Type = "" } });
+        await _controller.CreateEntries(new[] { new Entry { Type = "" } });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task CreateEntries_EmptyArray_AnswersOkWithEmptyArray()
+    {
+        var result = await _controller.CreateEntries(Array.Empty<Entry>());
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().BeEmpty();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
     }
 
     /// <summary>
@@ -832,12 +848,11 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CheckForDuplicateEntriesAsync(
                     It.IsAny<IReadOnlyList<EntryDuplicateProbe>>(),
-                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(
-                (IReadOnlyList<EntryDuplicateProbe> probes, int _, CancellationToken _) =>
+                (IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken _) =>
                     probes
                         .Select(probe => byMills.GetValueOrDefault(probe.Mills))
                         .ToArray()

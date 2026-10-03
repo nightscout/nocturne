@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.Core.Contracts.Entries;
@@ -5,11 +6,11 @@ using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.Treatments;
-using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.API.Authorization;
+using Nocturne.API.Services.Devices;
 
 namespace Nocturne.API.Controllers.V1;
 
@@ -19,7 +20,7 @@ namespace Nocturne.API.Controllers.V1;
 /// </summary>
 /// <seealso cref="IEntryStore"/>
 /// <seealso cref="ITreatmentStore"/>
-/// <seealso cref="IApsSnapshotRepository"/>
+/// <seealso cref="DeviceStatusProjectionService"/>
 /// <seealso cref="IProfileProjectionService"/>
 /// <seealso cref="IFoodRepository"/>
 /// <seealso cref="IActivityService"/>
@@ -38,7 +39,7 @@ public class CountController : ControllerBase
 
     private readonly IEntryStore _entryStore;
     private readonly ITreatmentStore _treatmentStore;
-    private readonly IApsSnapshotRepository _apsSnapshotRepository;
+    private readonly DeviceStatusProjectionService _deviceStatusProjection;
     private readonly IProfileProjectionService _profileProjectionService;
     private readonly IFoodRepository _foodRepository;
     private readonly IActivityService _activityService;
@@ -50,7 +51,7 @@ public class CountController : ControllerBase
     /// </summary>
     /// <param name="entryStore">Store for glucose entry records.</param>
     /// <param name="treatmentStore">Store for treatment records.</param>
-    /// <param name="apsSnapshotRepository">Repository for APS snapshot records (V4 replacement for device status).</param>
+    /// <param name="deviceStatusProjection">Projection of V4 snapshots into legacy device status.</param>
     /// <param name="profileProjectionService">Service for profile projection and counting.</param>
     /// <param name="foodRepository">Repository for food records.</param>
     /// <param name="activityService">Service for activity operations.</param>
@@ -59,7 +60,7 @@ public class CountController : ControllerBase
     public CountController(
         IEntryStore entryStore,
         ITreatmentStore treatmentStore,
-        IApsSnapshotRepository apsSnapshotRepository,
+        DeviceStatusProjectionService deviceStatusProjection,
         IProfileProjectionService profileProjectionService,
         IFoodRepository foodRepository,
         IActivityService activityService,
@@ -69,7 +70,7 @@ public class CountController : ControllerBase
     {
         _entryStore = entryStore;
         _treatmentStore = treatmentStore;
-        _apsSnapshotRepository = apsSnapshotRepository;
+        _deviceStatusProjection = deviceStatusProjection;
         _profileProjectionService = profileProjectionService;
         _foodRepository = foodRepository;
         _activityService = activityService;
@@ -86,14 +87,16 @@ public class CountController : ControllerBase
     /// <returns>Count of entries matching the criteria</returns>
     [HttpGet("entries/where")]
     [NightscoutEndpoint("/api/v1/count/entries/where")]
-    [ProducesResponseType(typeof(CountResponse), 200)]
+    [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [RequireScope(Scope.GlucoseRead)]
-    public async Task<ActionResult<CountResponse>> CountEntries(
+    public async Task<ActionResult<LegacyCountResult[]>> CountEntries(
         [FromQuery] string? find = null,
         [FromQuery] string? type = null,
         CancellationToken cancellationToken = default
     )
     {
+        find = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+
         _logger.LogDebug(
             "Count entries endpoint requested with find: {Find}, type: {Type} from {RemoteIpAddress}",
             find,
@@ -106,7 +109,7 @@ public class CountController : ControllerBase
             var count = await _entryStore.CountAsync(find, type, cancellationToken);
 
             _logger.LogDebug("Found {Count} entries matching criteria", count);
-            return Ok(new CountResponse { Count = count });
+            return LegacyCountResult.For(count);
         }
         catch (Exception ex)
         {
@@ -136,9 +139,9 @@ public class CountController : ControllerBase
     /// <returns>Count of treatments matching the criteria</returns>
     [HttpGet("treatments/where")]
     [NightscoutEndpoint("/api/v1/count/treatments/where")]
-    [ProducesResponseType(typeof(CountResponse), 200)]
+    [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [RequireScope(Scope.TreatmentsRead)]
-    public async Task<ActionResult<CountResponse>> CountTreatments(
+    public async Task<ActionResult<LegacyCountResult[]>> CountTreatments(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
     )
@@ -157,7 +160,7 @@ public class CountController : ControllerBase
                 LegacyTreatmentDateWindow.Apply(find, _timeProvider.GetUtcNow()), cancellationToken);
 
             _logger.LogDebug("Found {Count} treatments matching criteria", count);
-            return Ok(new CountResponse { Count = count });
+            return LegacyCountResult.For(count);
         }
         catch (Exception ex)
         {
@@ -182,13 +185,15 @@ public class CountController : ControllerBase
     /// <returns>Count of device status entries matching the criteria</returns>
     [HttpGet("devicestatus/where")]
     [NightscoutEndpoint("/api/v1/count/devicestatus/where")]
-    [ProducesResponseType(typeof(CountResponse), 200)]
+    [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [RequireScope(Scope.DevicesRead)]
-    public async Task<ActionResult<CountResponse>> CountDeviceStatus(
+    public async Task<ActionResult<LegacyCountResult[]>> CountDeviceStatus(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
     )
     {
+        find = LegacyFindQueryString.Resolve(HttpContext?.Request, find);
+
         _logger.LogDebug(
             "Count device status endpoint requested with find: {Find} from {RemoteIpAddress}",
             find,
@@ -197,10 +202,10 @@ public class CountController : ControllerBase
 
         try
         {
-            var count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
+            var count = await _deviceStatusProjection.CountAsync(find, cancellationToken);
 
             _logger.LogDebug("Found {Count} device status entries matching criteria", count);
-            return Ok(new CountResponse { Count = count });
+            return LegacyCountResult.For(count);
         }
         catch (Exception ex)
         {
@@ -233,8 +238,8 @@ public class CountController : ControllerBase
     /// </remarks>
     [HttpGet("activity/where")]
     [NightscoutEndpoint("/api/v1/count/activity/where")]
-    [ProducesResponseType(typeof(CountResponse), 200)]
-    public async Task<ActionResult<CountResponse>> CountActivity(
+    [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
+    public async Task<ActionResult<LegacyCountResult[]>> CountActivity(
         [FromQuery] string? find = null,
         CancellationToken cancellationToken = default
     )
@@ -253,7 +258,7 @@ public class CountController : ControllerBase
             var count = await _activityService.CountActivitiesAsync(find, cancellationToken);
 
             _logger.LogDebug("Found {Count} activity entries matching criteria", count);
-            return Ok(new CountResponse { Count = count });
+            return LegacyCountResult.For(count);
         }
         catch (Exception ex)
         {
@@ -285,10 +290,10 @@ public class CountController : ControllerBase
     /// </remarks>
     [HttpGet("{storage}/where")]
     [NightscoutEndpoint("/api/v1/count/:storage/where")]
-    [ProducesResponseType(typeof(CountResponse), 200)]
+    [ProducesResponseType(typeof(LegacyCountResult[]), 200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(500)]
-    public async Task<ActionResult<CountResponse>> CountGeneric(
+    public async Task<ActionResult<LegacyCountResult[]>> CountGeneric(
         string storage,
         [FromQuery] string? find = null,
         [FromQuery] string? type = null,
@@ -331,7 +336,7 @@ public class CountController : ControllerBase
             {
                 case "entries":
                     count = await _entryStore.CountAsync(
-                        find,
+                        LegacyFindQueryString.Resolve(HttpContext?.Request, find),
                         type,
                         cancellationToken
                     );
@@ -343,7 +348,8 @@ public class CountController : ControllerBase
                         cancellationToken);
                     break;
                 case "devicestatus":
-                    count = await _apsSnapshotRepository.CountAsync(null, null, cancellationToken);
+                    count = await _deviceStatusProjection.CountAsync(
+                        LegacyFindQueryString.Resolve(HttpContext?.Request, find), cancellationToken);
                     break;
                 case "profile":
                     count = await _profileProjectionService.CountProfilesAsync(find, cancellationToken);
@@ -367,7 +373,7 @@ public class CountController : ControllerBase
             }
 
             _logger.LogDebug("Found {Count} {Storage} records matching criteria", count, storage);
-            return Ok(new CountResponse { Count = count });
+            return LegacyCountResult.For(count);
         }
         catch (Exception ex)
         {
@@ -392,12 +398,25 @@ public class CountController : ControllerBase
 }
 
 /// <summary>
-/// Response object for count endpoints
+/// One row of a legacy count: the output of Nightscout's
+/// <c>$group { _id: null, count: { $sum: 1 } }</c> aggregate.
 /// </summary>
-public class CountResponse
+public sealed class LegacyCountResult
 {
+    /// <summary>The group key, always null because the aggregate groups every match together.</summary>
+    [JsonPropertyName("_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? Id => null;
+
+    /// <summary>Number of records matching the query criteria.</summary>
+    [JsonPropertyName("count")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public long Count { get; init; }
+
     /// <summary>
-    /// Number of records matching the query criteria
+    /// The aggregate's output for <paramref name="count"/> matches: no row when nothing matches,
+    /// since a <c>$group</c> over an empty input emits no document.
     /// </summary>
-    public long Count { get; set; }
+    internal static OkObjectResult For(long count) =>
+        new(count == 0 ? Array.Empty<LegacyCountResult>() : new[] { new LegacyCountResult { Count = count } });
 }

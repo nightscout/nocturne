@@ -97,6 +97,7 @@ roles yourself and point Nocturne at them with connection strings.
 | **Slack** | `SLACK_*` | The Slack bot. See [Slack](/docs/bots/slack). |
 | **Telegram** | `TELEGRAM_*` | The Telegram bot. See [Telegram](/docs/bots/telegram). |
 | **WhatsApp** | `WHATSAPP_*` | The WhatsApp bot. See [WhatsApp](/docs/bots/whatsapp). |
+| **PostgreSQL storage** | `POSTGRES_DATA_PATH` | Optional Docker Compose bind-data override only. See [Docker Compose installation](/docs/installation/docker-compose). Portainer's stack editor does not apply Compose override files. |
 
 Leave any bot variables blank or commented out if you don't use that platform;
 nothing here is required for a working install.

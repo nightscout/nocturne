@@ -94,11 +94,9 @@ Nightscout (`vendors/nightscout.ts`) serves 48 hours of generated five-minute re
 treatments anchored to the request time, and honours the connector's `count` and date queries.
 `vendors/nightscout-migration.ts` is a Nightscout with a fixed history for the migration job: more
 entries and treatments than one migration page, `created_at` strings with and without an offset,
-and Nightscout's newest-first `created_at` ordering and filters. Until bug #1806 (the job drops the
-path of the URL it is given) is fixed, it is served at the root of `http://nightscout-migration:8080`,
-a network alias of the mocks container; any vendor answers at the root of a host of its own name. A
-spec expected to fail migrates from the sub-path `http://mocks:8080/nightscout-migration` and pins
-the bug.
+and Nightscout's newest-first `created_at` ordering and filters. The job migrates from its sub-path
+`http://mocks:8080/nightscout-migration`, with and without a trailing slash, so a Nightscout hosted
+under a path is covered.
 To add a vendor, write a module exporting a `Vendor` and list it in `server.ts`.
 
 **Migration upgrade.** `pnpm e2e:upgrade` starts the latest release

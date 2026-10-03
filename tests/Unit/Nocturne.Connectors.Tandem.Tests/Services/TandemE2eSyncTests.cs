@@ -210,7 +210,8 @@ public class TandemE2eSyncTests
             .ContainSingle(r => r.Path.Contains("/api/reports/bff/pump-logs/e2e-device-assignment-id")).Subject;
         pumpLogs.Path.Should().Contain("pumperId=pumper-1")
             .And.Contain("startDate=2026-05-14T00%3A00%3A00Z")
-            .And.Contain("endDate=2026-05-18T23%3A59%3A59Z");
+            .And.Contain("endDate=2026-05-18T23%3A59%3A59Z")
+            .And.Contain("eventCodes=");
         pumpLogs.Authorization.Should().Be("Bearer fake-token");
         // The WAF requires same-origin Origin/Referer or it returns 403.
         pumpLogs.Origin.Should().Be("https://source.tandemdiabetes.com");
@@ -737,6 +738,8 @@ public class TandemE2eSyncTests
             Task.FromResult<int?>(0);
         public Task<bool> PublishActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
+        public Task<int?> PublishRecentActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
         public Task<bool> PublishStateSpansAsync(IEnumerable<StateSpan> stateSpans, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(StateSpans, stateSpans);
         public Task<bool> PublishSystemEventsAsync(IEnumerable<SystemEvent> systemEvents, string source, WriteOrigin origin, CancellationToken ct = default) =>

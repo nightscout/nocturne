@@ -28,6 +28,16 @@ public class TrackersControllerStartTests
 
     private readonly Mock<ITrackerRepository> _repository = new();
 
+    public TrackersControllerStartTests()
+    {
+        _repository
+            .Setup(r => r.ExecuteUnderDefinitionLockAsync(
+                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerSuccessionResult>>>(),
+                It.IsAny<Func<TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<CancellationToken, Task<TrackerSuccessionResult>> work,
+                Func<TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+    }
+
     private TrackersController CreateController()
     {
         var controller = new TrackersController(
@@ -148,6 +158,48 @@ public class TrackersControllerStartTests
     }
 
     [Fact]
+    public async Task StartInstance_WhenAnotherWriterCompletesTheRunningRunFirst_ConflictsAndStartsNothing()
+    {
+        var old = Running(Now.AddDays(-3));
+        var definition = ArrangeDefinition(TrackerMode.Duration, old);
+        _repository
+            .Setup(r => r.CompleteInstanceAsync(
+                old.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerInstanceEntity?)null);
+
+        var result = await CreateController().StartInstance(
+            new StartTrackerInstanceRequest { DefinitionId = definition.Id, StartedAt = Now });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+        _repository.Verify(r => r.StartInstanceAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CompleteInstance_WhenAnotherWriterCompletesItFirst_ReportsItAlreadyCompleted()
+    {
+        var running = Running(Now.AddDays(-3));
+        ArrangeDefinition(TrackerMode.Duration, running);
+        _repository
+            .Setup(r => r.GetInstanceByIdAsync(running.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(running);
+        _repository
+            .Setup(r => r.CompleteInstanceAsync(
+                running.Id, It.IsAny<CompletionReason>(), It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((TrackerInstanceEntity?)null);
+
+        var result = await CreateController().CompleteInstance(
+            running.Id, new CompleteTrackerInstanceRequest { Reason = CompletionReason.Completed });
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+    }
+
+    [Fact]
     public async Task ApplyPreset_BelongingToSomeoneElse_IsForbidden()
     {
         var definition = ArrangeDefinition(TrackerMode.Duration);
@@ -165,8 +217,9 @@ public class TrackersControllerStartTests
         var result = await CreateController().ApplyPreset(preset.Id);
 
         result.Result.Should().BeOfType<ForbidResult>();
-        _repository.Verify(r => r.ApplyPresetAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repository.Verify(r => r.StartInstanceAsync(
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(),
+            It.IsAny<DateTime?>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

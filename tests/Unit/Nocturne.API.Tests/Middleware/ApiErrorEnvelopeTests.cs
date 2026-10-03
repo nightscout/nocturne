@@ -54,6 +54,26 @@ public class ApiErrorEnvelopeTests : IClassFixture<ApiErrorEnvelopeTests.Throwin
         );
     }
 
+    /// <summary>
+    /// Nightscout serves v1 under <c>/api/v2</c> wherever v2 has no route of its own, so a v1
+    /// resource read through a v2 path is served by the v1 action and answers the v1 envelope. The
+    /// <c>.json</c> form checks the fallback runs after the suffix is stripped.
+    /// </summary>
+    [Theory]
+    [InlineData($"/api/v2/entries/{TwentyFourHexId}")]
+    [InlineData($"/api/v2/entries/{TwentyFourHexId}.json")]
+    public async Task V2PathWithoutAV2Route_IsServedByV1_AndAnswersTheV1Envelope(string route)
+    {
+        var response = await _client.GetAsync(route);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(
+            $$"""{"status":500,"message":"Internal server error","type":"internal","error":"{{BoomMessage}}"}""",
+            await response.Content.ReadAsStringAsync()
+        );
+    }
+
     [Fact]
     public async Task V3_ThrowingAction_AnswersTheNightscoutV3Envelope()
     {

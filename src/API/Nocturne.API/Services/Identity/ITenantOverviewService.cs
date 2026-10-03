@@ -44,9 +44,15 @@ public interface ITenantOverviewService
 /// </summary>
 /// <param name="Tenant">The tenant.</param>
 /// <param name="AllowedScopes">What the caller may see there.</param>
-/// <param name="MembershipHistoryClamped">
-/// Whether the membership limits the caller to the last 24 hours, after the exemption in
-/// <see cref="MemberScopeResolver.IsExemptFromHistoryClamp"/>.
+/// <param name="MembershipLimitTo24Hours">
+/// The membership's own flag, before <see cref="MemberScopeResolver.IsHistoryClamped"/> combines it
+/// with the credential's limit and the member's exemption.
+/// </param>
+/// <param name="EffectivePermissions">
+/// The membership's <see cref="TenantMemberEntity.EffectivePermissions"/>.
 /// </param>
 public sealed record GlucoseReadTenant(
-    TenantEntity Tenant, IReadOnlySet<string> AllowedScopes, bool MembershipHistoryClamped = false);
+    TenantEntity Tenant,
+    IReadOnlySet<string> AllowedScopes,
+    bool MembershipLimitTo24Hours,
+    IReadOnlySet<string> EffectivePermissions);

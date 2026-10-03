@@ -29,6 +29,13 @@ internal static class ExcursionTransitionWriter
     /// written and the transition is <see cref="ExcursionTransitionType.None"/>. That process has
     /// already made and acted on the transition this one would have.
     /// </para>
+    /// <para>
+    /// A decision made against <paramref name="decidedAgainst"/> is stale too once the rule, read
+    /// under the same lock, no longer holds those fields, and is dropped the same way. A rule edit
+    /// saves the rule under this lock (<see cref="AlertRuleRearm"/>), so an evaluation that loaded
+    /// the rule before the edit cannot land a hold the edit cleared. A decision that does not
+    /// depend on the rule passes no <paramref name="decidedAgainst"/>.
+    /// </para>
     /// </remarks>
     /// <returns>
     /// The decision's transition with the host's excursion id, and the auto-resolve close when
@@ -40,6 +47,7 @@ internal static class ExcursionTransitionWriter
         Guid ruleId,
         AlertTrackerState? prior,
         TrackerDecision decision,
+        AlertRuleConditions? decidedAgainst,
         DateTime now,
         CancellationToken ct,
         bool autoResolved = false)
@@ -48,7 +56,8 @@ internal static class ExcursionTransitionWriter
             return (Unwritten(prior, decision), null);
 
         var written = await repository.ExecuteInTransactionAsync(
-            token => WriteAsync(repository, logger, ruleId, prior, decision, now, autoResolved, token),
+            token => WriteAsync(
+                repository, logger, ruleId, prior, decision, decidedAgainst, now, autoResolved, token),
             (attempt, token) => LandedAsync(repository, attempt, token),
             ct);
         return (written.Transition, written.AutoResolve);
@@ -146,11 +155,19 @@ internal static class ExcursionTransitionWriter
         Guid ruleId,
         AlertTrackerState? prior,
         TrackerDecision decision,
+        AlertRuleConditions? decidedAgainst,
         DateTime now,
         bool autoResolved,
         CancellationToken ct)
     {
         await repository.LockRuleAsync(ruleId, ct);
+        if (decidedAgainst is { } conditions && !conditions.HeldBy(await repository.GetRuleAsync(ruleId, ct)))
+        {
+            logger.LogInformation(
+                "Alert rule {AlertRuleId} changed since its evaluation read it; its transition is dropped",
+                ruleId);
+            return new Written(new ExcursionTransition(ExcursionTransitionType.None), null, null, now);
+        }
         if (!Same(await repository.GetTrackerStateAsync(ruleId, ct), prior))
         {
             logger.LogInformation(

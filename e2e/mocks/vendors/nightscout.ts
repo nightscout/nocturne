@@ -5,6 +5,11 @@
 //
 // Queries honour what the Nightscout connector sends: `count`, `find[date][$gte|$lte]` on
 // entries and `find[created_at][$gte|$lte]` (string comparison, as Mongo does) elsewhere.
+//
+// A base URL of `/nightscout/scope/<key>` serves the same instance under a scope of its own.
+// `POST /nightscout/scope/<key>/__activity-backfill` makes that scope also serve an exercise and a
+// heart-rate reading dated hours back, as a health app syncing late would upload them; `DELETE`
+// withdraws them. Specs run in parallel, so no other connector ever sees a scope's backfill.
 
 import type { Vendor, VendorReply, VendorRequest } from "./vendor.ts";
 
@@ -60,6 +65,25 @@ export function treatments(now = Date.now()) {
     { _id: "e2e-t-temp", identifier: "e2e-t-temp", eventType: "Temp Basal", duration: 30, absolute: 1.2, rate: 1.2, temp: "absolute", ...at(12), enteredBy: DEVICE },
     { _id: "e2e-t-site", identifier: "e2e-t-site", eventType: "Site Change", ...at(20), enteredBy: DEVICE },
   ].sort((a, b) => b.mills - a.mills);
+}
+
+export const ACTIVITY_ID = "e2e0a0000000000000000001";
+export const BACKFILLED_ACTIVITY_ID = "e2e0a0000000000000000002";
+export const BACKFILLED_HEART_RATE_ID = "e2e0a0000000000000000003";
+const backfilledScopes = new Set<string>();
+
+export function activity(now = Date.now(), backfilled = false) {
+  const minute = 60 * 1000;
+  const base = Math.floor(now / minute) * minute;
+  const at = (minutesAgo: number) => new Date(base - minutesAgo * minute).toISOString();
+  const rows: { _id: string; created_at: string; [field: string]: unknown }[] = [
+    { _id: ACTIVITY_ID, type: "exercise", duration: 30, notes: "e2e walk", created_at: at(20), enteredBy: DEVICE },
+  ];
+  if (backfilled) {
+    rows.push({ _id: BACKFILLED_HEART_RATE_ID, bpm: 64, accuracy: 2, created_at: at(150), enteredBy: DEVICE });
+    rows.push({ _id: BACKFILLED_ACTIVITY_ID, type: "exercise", duration: 45, notes: "e2e late upload", created_at: at(180), enteredBy: DEVICE });
+  }
+  return rows;
 }
 
 const profile = [
@@ -122,27 +146,39 @@ function byCreatedAt(query: Record<string, string>) {
 
 const ok = (body: unknown): VendorReply => ({ status: 200, body });
 
+const SCOPED = /^\/scope\/([^/]+)(\/.*)$/;
+
 export const nightscout: Vendor = {
   handle(request: VendorRequest): VendorReply {
-    if (request.path === "/api/v1/status.json") return ok(status());
+    const scoped = SCOPED.exec(request.path);
+    const scope = scoped?.[1];
+    const path = scoped?.[2] ?? request.path;
+    if (path === "/api/v1/status.json") return ok(status());
+    if (path === "/__activity-backfill") {
+      if (scope === undefined) return { status: 400, body: { status: 400, message: "backfill needs a /scope/<key> base" } };
+      if (request.method === "POST") backfilledScopes.add(scope);
+      else backfilledScopes.delete(scope);
+      return { status: 204, body: "" };
+    }
     if (request.headers["api-secret"]?.toLowerCase() !== NIGHTSCOUT_API_SECRET_HEADER) {
       return { status: 401, body: { status: 401, message: "Unauthorized" } };
     }
 
-    switch (request.path) {
+    switch (path) {
       case "/api/v1/entries.json":
       case "/api/v1/entries/sgv.json":
         return ok(limit(entries().filter(byDate(request.query)), request.query));
       case "/api/v1/treatments.json":
         return ok(limit(treatments().filter(byCreatedAt(request.query)), request.query));
+      case "/api/v1/activity.json":
+        return request.method === "GET" ? ok(limit(activity(Date.now(), scope !== undefined && backfilledScopes.has(scope)).filter(byCreatedAt(request.query)), request.query)) : ok([]);
       case "/api/v1/devicestatus.json":
       case "/api/v1/food.json":
-      case "/api/v1/activity.json":
         return ok([]);
       case "/api/v1/profile.json":
         return ok(profile);
       default:
-        return { status: 404, body: { status: 404, message: `fake nightscout has no ${request.path}` } };
+        return { status: 404, body: { status: 404, message: `fake nightscout has no ${path}` } };
     }
   },
 };

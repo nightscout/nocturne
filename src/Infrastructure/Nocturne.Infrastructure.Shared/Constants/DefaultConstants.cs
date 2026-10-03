@@ -20,12 +20,4 @@ public static class DefaultConstants
         public const int AuthFailDelay = 50;
         public const string DataDirectory = "./data";
     }
-
-    /// <summary>
-    /// Loop defaults
-    /// </summary>
-    public static class Loop
-    {
-        public const string PushServerEnvironment = "development";
-    }
 }

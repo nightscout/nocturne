@@ -60,41 +60,36 @@ and other data Nocturne had at each moment. That makes it good at answering
   [When readings stop](/docs/alerts/sustained#when-readings-stop).
 - A single replay covers at most two days.
 
-## Try any rule here
+## Playground
 
-This sandbox runs the same engine that checks rules on your Nocturne site,
-here in your browser, on made-up readings. Pick an example day, change the
-conditions, and watch what the rule would do. It offers the conditions that
-only need glucose readings and the clock: **Glucose**, **Rate of change**,
-**Signal loss** and **Time of day**. The rule editor in the app has many more;
-see [Conditions](/docs/alerts/conditions).
+Nocturne's own alert engine and Replay, running in your browser on made-up
+days. Pick a day, edit the rules or add example ones, and press play. The
+lights beside each condition show which were true at the playhead. Carbs and
+insulin on board appear on the graph when a rule uses them.
 
 <AlertSimulator
   scenario="overnight-low"
-  scenarios={["overnight-low", "brief-dip", "fast-fall", "sensor-gap", "meal-high", "high-dip-high"]}
-  rules={["sustained-low", "low-or-falling"]}
+  scenarios={["overnight-low", "brief-dip", "fast-fall", "sensor-gap", "meal-high", "missed-bolus", "treated-low"]}
+  rules={["sustained-low", "low-untreated"]}
   editable
 />
 
-Things to try:
+Some things to try:
 
-- Change "Low for 15 minutes" to 5 minutes, then 30, and switch between
-  **Overnight low** and **Brief dip** to see what each setting lets through.
-- Untick **for at least** to see the alert move earlier.
-- On **Fast fall**, change the rate in "Low, or falling toward it" from 2 to 1,
-  and see how much earlier, and how much more often, it alerts.
-- Switch the top of a rule between **all of** and **any of**.
-- On **Sensor gap**, add a **Signal loss** row.
+- On **Brief dip**, change "Low for 15 minutes" to 5 minutes.
+- On **Treated low**, compare "Low, unless carbs are on board" with plain "Low".
+- On **Missed bolus**, add "High with no insulin on board".
+- On **Sensor gap**, add "Signal loss".
 
-If a change would be refused when saving a real rule, such as a "for at least"
-of 0 minutes, the sandbox tells you, because it uses the same check as the rule
-editor.
+A change a real save would refuse, such as "for at least" 0 minutes, is flagged
+here too, because the playground uses the same check as the rule editor. The
+playground offers the conditions that need only glucose, carbs, insulin and the
+clock; the app has many more (see [Conditions](/docs/alerts/conditions)).
 
 <Callout type="info" title="Made-up readings, not advice">
 
-  The example days are invented to show one behaviour each. They are not taken
-  from anyone's data, and the rules in them are illustrations, not settings to
-  copy. Test your real rules with Replay on your own readings, and agree your
-  thresholds with your care team.
+  The example days are invented to show one behaviour each, and the rules are
+  illustrations, not settings to copy. Test your real rules with Replay on your
+  own readings, and agree your thresholds with your care team.
 
 </Callout>

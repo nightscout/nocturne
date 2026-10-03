@@ -66,7 +66,7 @@
 </svelte:head>
 
 {#if resource.current}
-  <div class="@container container mx-auto max-w-6xl space-y-6 p-3 @md:p-6">
+  <div class="@container space-y-6">
     <!-- Header -->
     <div class="space-y-3">
       <a
@@ -81,7 +81,6 @@
           <Activity class="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 class="text-2xl font-bold tracking-tight print:hidden">Signal Integrity</h1>
           <p class="text-muted-foreground">
             Windows where readings oscillate in a way that is unlikely to be physiologic
           </p>

@@ -6,7 +6,6 @@ namespace Nocturne.Core.Models;
 /// V2 Notification response model for enhanced notifications system.
 /// Maintains 1:1 compatibility with legacy Nightscout notifications v2 API.
 /// </summary>
-/// <seealso cref="LoopNotificationRequest"/>
 /// <seealso cref="NotificationAckRequest"/>
 public class NotificationV2Response
 {
@@ -33,67 +32,6 @@ public class NotificationV2Response
     /// </summary>
     [JsonPropertyName("timestamp")]
     public long Timestamp { get; set; }
-}
-
-/// <summary>
-/// V2 Loop notification request model for Loop app integration
-/// Maintains 1:1 compatibility with legacy Nightscout Loop notifications
-/// </summary>
-public class LoopNotificationRequest
-{
-    /// <summary>
-    /// Type of notification (e.g., "loop-completed", "loop-failed")
-    /// </summary>
-    [JsonPropertyName("type")]
-    public string Type { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Main message content of the notification
-    /// </summary>
-    [JsonPropertyName("message")]
-    public string Message { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Title of the notification
-    /// </summary>
-    [JsonPropertyName("title")]
-    public string? Title { get; set; }
-
-    /// <summary>
-    /// Urgency level of the notification
-    /// </summary>
-    [JsonPropertyName("urgency")]
-    public string? Urgency { get; set; }
-
-    /// <summary>
-    /// Sound to play for the notification
-    /// </summary>
-    [JsonPropertyName("sound")]
-    public string? Sound { get; set; }
-
-    /// <summary>
-    /// Group identifier for notification categorization
-    /// </summary>
-    [JsonPropertyName("group")]
-    public string? Group { get; set; }
-
-    /// <summary>
-    /// Timestamp when the notification was created
-    /// </summary>
-    [JsonPropertyName("timestamp")]
-    public long? Timestamp { get; set; }
-
-    /// <summary>
-    /// Additional arbitrary data for the notification
-    /// </summary>
-    [JsonPropertyName("data")]
-    public Dictionary<string, object>? Data { get; set; }
-
-    /// <summary>
-    /// Indicates if this is an announcement notification
-    /// </summary>
-    [JsonPropertyName("isAnnouncement")]
-    public bool? IsAnnouncement { get; set; }
 }
 
 /// <summary>

@@ -97,22 +97,22 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
 
         // …but the duplicate probe must not: the reading is already stored.
         var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", 134, now.AddMinutes(-5), now.AddMinutes(5));
+            "Dexcom G7 DXCMRf", now.AddMinutes(-5), now.AddMinutes(5));
         match.Should().NotBeNull();
         match!.Id.Should().Be(hiddenId);
     }
 
     [Theory]
-    [InlineData(134.005, true)]  // inside ±0.01
-    [InlineData(134.02, false)]  // just outside
-    [InlineData(135, false)]
-    public async Task FindStoredDuplicateAsync_MatchesValueWithinTolerance(double probeValue, bool expectMatch)
+    [InlineData(0, true)]
+    [InlineData(-1, false)]
+    [InlineData(1, false)]
+    public async Task FindStoredDuplicateAsync_RangeIsHalfOpen(int offsetMillis, bool expectMatch)
     {
         var now = DateTime.UtcNow;
+        var from = now.AddMilliseconds(offsetMillis);
         SeedReading(now, 134, "Dexcom G7 DXCMRf");
 
-        var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", probeValue, now.AddMinutes(-5), now.AddMinutes(5));
+        var match = await _repo.FindStoredDuplicateAsync("Dexcom G7 DXCMRf", from, from.AddMilliseconds(1));
 
         (match != null).Should().Be(expectMatch);
     }
@@ -130,7 +130,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         _context.SaveChanges();
 
         var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", 134, now.AddMinutes(-5), now.AddMinutes(5));
+            "Dexcom G7 DXCMRf", now.AddMinutes(-5), now.AddMinutes(5));
 
         match.Should().BeNull();
     }
@@ -152,7 +152,7 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         _context.SaveChanges();
 
         var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", 134, now.AddMinutes(-5), now.AddMinutes(5));
+            "Dexcom G7 DXCMRf", now.AddMinutes(-5), now.AddMinutes(5));
 
         match.Should().BeNull();
     }
@@ -164,38 +164,38 @@ public class SensorGlucoseRepositoryDuplicateProbeTests : IDisposable
         SeedReading(now, 134, "dexcom-connector");
 
         var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", 134, now.AddMinutes(-5), now.AddMinutes(5));
+            "Dexcom G7 DXCMRf", now.AddMinutes(-5), now.AddMinutes(5));
 
         match.Should().BeNull();
     }
 
     [Fact]
-    public async Task FindStoredDuplicateAsync_NullDeviceAndValue_MatchesAnyInWindow()
+    public async Task FindStoredDuplicateAsync_NullDevice_MatchesAnyDevice()
     {
         var now = DateTime.UtcNow;
         var id = SeedReading(now, 134, "Dexcom G7 DXCMRf");
 
         var match = await _repo.FindStoredDuplicateAsync(
-            device: null, mgdl: null, now.AddMinutes(-5), now.AddMinutes(5));
+            device: null, now.AddMinutes(-5), now.AddMinutes(5));
 
         match.Should().NotBeNull();
         match!.Id.Should().Be(id);
     }
 
     [Fact]
-    public async Task FindStoredDuplicateAsync_OutsideWindow_ReturnsNull()
+    public async Task FindStoredDuplicateAsync_OutsideRange_ReturnsNull()
     {
         var now = DateTime.UtcNow;
         SeedReading(now.AddMinutes(-30), 134, "Dexcom G7 DXCMRf");
 
         var match = await _repo.FindStoredDuplicateAsync(
-            "Dexcom G7 DXCMRf", 134, now.AddMinutes(-5), now.AddMinutes(5));
+            "Dexcom G7 DXCMRf", now.AddMinutes(-5), now.AddMinutes(5));
 
         match.Should().BeNull();
     }
 
     [Fact]
-    public async Task FindStoredDuplicateCandidatesAsync_ReturnsWindowNewestFirst()
+    public async Task FindStoredDuplicateCandidatesAsync_ReturnsRangeNewestFirst()
     {
         // The caller reproduces the single-entry probe by taking the first match in this order,
         // so the ordering is the contract, not an incidental detail.

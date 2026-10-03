@@ -111,15 +111,11 @@
 </svelte:head>
 
 {#if insulinResource.current}
-<div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
+<div class="@container space-y-8">
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
-        <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-          <PieChart class="h-7 w-7 text-report-treatment @md:h-8 @md:w-8" />
-          Insulin Delivery Report
-        </h1>
-        <p class="mt-1 text-muted-foreground">
+        <p class="text-muted-foreground">
           Comprehensive analysis of your basal and bolus insulin patterns
         </p>
       </div>

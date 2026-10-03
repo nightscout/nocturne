@@ -82,7 +82,7 @@
 </svelte:head>
 
 {#if resource.current}
-  <div class="@container container mx-auto max-w-5xl space-y-6 p-3 @md:p-6">
+  <div class="@container space-y-6">
     <div class="space-y-3">
       <a
         href={resolve("/reports/data-quality")}
@@ -96,7 +96,6 @@
           <GitCompareArrows class="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 class="text-2xl font-bold tracking-tight print:hidden">CGM Comparison</h1>
           <p class="text-muted-foreground">
             Readings from two sensors matched to the same moment
           </p>

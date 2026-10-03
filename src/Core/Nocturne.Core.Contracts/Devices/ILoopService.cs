@@ -20,7 +20,7 @@ public interface ILoopService
     /// <returns>Loop notification response indicating success or failure</returns>
     Task<LoopNotificationResponse> SendNotificationAsync(
         LoopNotificationData data,
-        LoopSettings? loopSettings,
+        LoopProfileSettings? loopSettings,
         string remoteAddress,
         CancellationToken cancellationToken = default
     );

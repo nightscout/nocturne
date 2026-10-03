@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using OpenApi.Remote.Attributes;
 using Nocturne.API.Attributes;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Migration;
 using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Multitenancy;
@@ -72,6 +73,10 @@ public class MigrationController : ControllerBase
             {
                 return Problem(detail: "Nightscout URL is required for API mode", statusCode: 400, title: "Bad Request");
             }
+            if (!NightscoutBaseUri.TryFor(request.NightscoutUrl, out _))
+            {
+                return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
+            }
         }
         else
         {
@@ -125,6 +130,11 @@ public class MigrationController : ControllerBase
         if (string.IsNullOrEmpty(url))
         {
             return Problem(detail: "Nightscout URL not found in connector configuration", statusCode: 400, title: "Bad Request");
+        }
+
+        if (!NightscoutBaseUri.TryFor(url, out _))
+        {
+            return Problem(detail: NightscoutBaseUri.InvalidUrlMessage, statusCode: 400, title: "Bad Request");
         }
 
         var request = new StartMigrationRequest

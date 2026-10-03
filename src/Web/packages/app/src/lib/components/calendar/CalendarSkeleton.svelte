@@ -5,7 +5,7 @@
 
 <div class="flex flex-col h-full">
   <!-- Header Skeleton -->
-  <div class="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
+  <div class="border-b bg-background/95 backdrop-blur sticky top-(--app-sticky-top,0px) z-10 transition-all duration-300">
     <div class="flex items-center justify-between p-4">
       <div class="flex items-center gap-4">
         <Skeleton class="h-6 w-6 rounded" />

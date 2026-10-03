@@ -52,16 +52,12 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-7xl">
+<div class="@container space-y-8">
   <!-- Header with AGP Explanation -->
   <div class="space-y-4">
     <div class="flex items-center justify-between flex-wrap gap-4">
       <div class="print:hidden">
-        <h1 class="text-3xl font-bold flex items-center gap-3">
-          <BarChart3 class="w-8 h-8 text-primary" />
-          Ambulatory Glucose Profile
-        </h1>
-        <p class="text-muted-foreground mt-1">
+        <p class="text-muted-foreground">
           Your typical daily glucose pattern — a standardized clinical report
         </p>
       </div>

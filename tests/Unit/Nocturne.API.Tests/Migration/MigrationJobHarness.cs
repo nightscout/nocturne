@@ -106,7 +106,8 @@ internal static class MigrationJobHarness
     /// cancel it mid-fetch the way the user's Cancel button does.
     /// </summary>
     public static async Task<MigrationJobStatus> RunAsync(
-        IServiceProvider provider, Action<MigrationJob>? onCreated, string[] collections, ILogger? logger = null)
+        IServiceProvider provider, Action<MigrationJob>? onCreated, string[] collections, ILogger? logger = null,
+        string nightscoutUrl = "https://example-nightscout.invalid")
     {
         var tenant = new TenantContext(
             Guid.CreateVersion7(), "migrated", "Migrated Tenant", true, IsDemo: false);
@@ -117,7 +118,7 @@ internal static class MigrationJobHarness
             new StartMigrationRequest
             {
                 Mode = MigrationMode.Api,
-                NightscoutUrl = "https://example-nightscout.invalid",
+                NightscoutUrl = nightscoutUrl,
                 Collections = [.. collections],
             },
             new MigrationJobInfo

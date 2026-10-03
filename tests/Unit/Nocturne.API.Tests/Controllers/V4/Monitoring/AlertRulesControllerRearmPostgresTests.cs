@@ -187,6 +187,23 @@ public class AlertRulesControllerRearmPostgresTests(AlertRulesControllerRearmPos
         (await StoredAsync(tenant, rule)).Should().Be((60, true, false));
     }
 
+    /// <summary>
+    /// Read last-wins ignoring case, the request says 70, the stored value. The store re-orders
+    /// the keys to <c>{"Value":70,"value":60,…}</c>, which the engines read as 60, so the edit is real.
+    /// </summary>
+    [Fact]
+    public async Task An_edit_whose_names_differ_only_in_case_is_saved()
+    {
+        var (controller, tenant, rule, _) = await CreateAsync();
+        var request = EditedConditions();
+        request.ConditionParams = JsonSerializer.Deserialize<JsonElement>(
+            """{"direction":"below","value":60,"Value":70}""");
+
+        await controller.UpdateRule(rule, request, CancellationToken.None);
+
+        (await StoredAsync(tenant, rule)).Should().Be((60, true, false));
+    }
+
     [Fact]
     public async Task A_failure_clearing_the_hold_rolls_back_the_edit()
     {

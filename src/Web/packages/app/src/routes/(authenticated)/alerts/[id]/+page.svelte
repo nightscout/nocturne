@@ -534,7 +534,7 @@
     </div>
 
     <!-- Right rail: test alert + historic firings -->
-    <aside class="min-w-0 lg:sticky lg:top-6 self-start space-y-4">
+    <aside class="min-w-0 lg:sticky lg:top-[calc(var(--app-sticky-top,0px)_+_var(--editor-bar-height,0px)_+_1.5rem)] self-start space-y-4">
       <Card>
         <CardHeader>
           <CardTitle class="text-base">Test alert</CardTitle>

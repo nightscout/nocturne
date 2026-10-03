@@ -58,7 +58,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-  <div class="@container container mx-auto space-y-8 p-3 @md:p-6 max-w-6xl">
+  <div class="@container space-y-8">
     {#if analysis}
       {@const tir = analysis?.timeInRange?.percentages}
       {@const dailyMinutes = analysis?.timeInRange?.averageDailyMinutes}

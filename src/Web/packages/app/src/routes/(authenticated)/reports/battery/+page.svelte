@@ -105,10 +105,9 @@
 </svelte:head>
 
 {#if batteryResource.current}
-<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between print:hidden">
     <div>
-      <h1 class="text-3xl font-bold">Battery Report</h1>
       <p class="text-muted-foreground">
         Device battery statistics and charge cycle history
       </p>

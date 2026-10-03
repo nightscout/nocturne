@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using dotAPNS;
 using Nocturne.API.Services.Notifications;
@@ -129,12 +130,27 @@ internal class MockApnsClient : IApnsClient
             BundleId = _bundleId,
             DeviceToken = deviceToken,
             Alert = alert,
+            SentToDevelopmentServer = IsSentToDevelopmentServer(push),
             CustomProperties = customProperties,
         };
 
         _factory.CapturePush(captured);
 
         return Task.FromResult(_factory.NextResponse);
+    }
+
+    private static bool IsSentToDevelopmentServer(ApplePush push)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        var member = (MemberInfo?)typeof(ApplePush).GetProperty("IsSendToDevelopmentServer", flags)
+            ?? typeof(ApplePush).GetField("IsSendToDevelopmentServer", flags)
+            ?? throw new InvalidOperationException("dotAPNS no longer exposes IsSendToDevelopmentServer");
+        return member switch
+        {
+            PropertyInfo property => (bool)property.GetValue(push)!,
+            FieldInfo field => (bool)field.GetValue(push)!,
+            _ => false,
+        };
     }
 }
 
@@ -146,6 +162,7 @@ public class CapturedApnsPush
     public string BundleId { get; init; } = "";
     public string DeviceToken { get; init; } = "";
     public string Alert { get; init; } = "";
+    public bool SentToDevelopmentServer { get; init; }
     public Dictionary<string, string?> CustomProperties { get; init; } = [];
 
     /// <summary>

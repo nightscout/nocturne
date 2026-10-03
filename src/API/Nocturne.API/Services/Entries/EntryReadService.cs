@@ -179,17 +179,15 @@ public class EntryReadService : IEntryStore
     }
 
     /// <inheritdoc />
-    public async Task<Entry?> CheckDuplicateAsync(string? device, string type, double? sgv, long mills,
-        int windowMinutes = 5, CancellationToken ct = default)
+    public async Task<Entry?> CheckDuplicateAsync(string? device, string type, long mills,
+        CancellationToken ct = default)
     {
-        var windowMs = (long)windowMinutes * 60 * 1000;
-        var from = MillsToUtc(mills - windowMs);
-        var to = MillsToUtc(mills + windowMs);
+        var (from, to) = MillisecondOf(mills);
 
         return type switch
         {
-            "sgv" => await CheckSgvDuplicateAsync(device, sgv, from, to, ct),
-            "mbg" => await CheckMbgDuplicateAsync(device, sgv, from, to, ct),
+            "sgv" => await CheckSgvDuplicateAsync(device, from, to, ct),
+            "mbg" => await CheckMbgDuplicateAsync(device, from, to, ct),
             "cal" => await CheckCalDuplicateAsync(device, from, to, ct),
             _ => null,
         };
@@ -197,7 +195,7 @@ public class EntryReadService : IEntryStore
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Entry?>> CheckDuplicatesAsync(
-        IReadOnlyList<EntryDuplicateProbe> probes, int windowMinutes = 5, CancellationToken ct = default)
+        IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken ct = default)
     {
         var results = new Entry?[probes.Count];
         var sgvProbes = new List<(EntryDuplicateProbe probe, int index)>();
@@ -211,17 +209,13 @@ public class EntryReadService : IEntryStore
                 continue;
             }
 
-            // Only sgv arrives in the thousands-per-cycle uploads this batching exists for. mbg and
-            // cal keep the per-entry probe: theirs reads a device-filtered page of the entry's own
-            // window, and a batch-wide read is a strict superset of that — it reports duplicates
-            // the per-entry probe does not, dropping a reading that would have been stored.
-            // Unknown types return null here without a query, as they always did.
-            results[i] = await CheckDuplicateAsync(
-                probe.Device, probe.Type, probe.Sgv, probe.Mills, windowMinutes, ct);
+            // Only sgv arrives in the thousands-per-cycle uploads this batching exists for, so mbg
+            // and cal keep the per-entry probe. Unknown types return null without a query.
+            results[i] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
         }
 
         foreach (var chunk in ChunkByTimeSpan(sgvProbes))
-            await ClassifySgvChunkAsync(chunk, windowMinutes, results, ct);
+            await ClassifySgvChunkAsync(chunk, results, ct);
 
         return results;
     }
@@ -609,48 +603,42 @@ public class EntryReadService : IEntryStore
     #region Private — Duplicate check helpers
 
     private async Task<Entry?> CheckSgvDuplicateAsync(
-        string? device, double? sgv, DateTime from, DateTime to, CancellationToken ct)
+        string? device, DateTime from, DateTime to, CancellationToken ct)
     {
         // Probe raw storage rather than the visibility-filtered GetAsync: copies linked as
         // non-primary cross-connector duplicates are hidden from reads, but they still mean the
         // reading is already stored — a filtered check re-inserts them on every upload.
-        var match = await _sgRepo.FindStoredDuplicateAsync(device, sgv, from, to, ct);
+        var match = await _sgRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromSensorGlucose(match);
     }
 
     private async Task<Entry?> CheckMbgDuplicateAsync(
-        string? device, double? mbg, DateTime from, DateTime to, CancellationToken ct)
+        string? device, DateTime from, DateTime to, CancellationToken ct)
     {
-        var results = await _mgRepo.GetAsync(from, to, device, source: null, limit: 100, offset: 0, descending: true, ct: ct);
-        var match = mbg.HasValue
-            ? results.FirstOrDefault(r => Math.Abs(r.Mgdl - mbg.Value) < 0.01)
-            : results.FirstOrDefault();
+        var match = await _mgRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromMeterGlucose(match);
     }
 
     private async Task<Entry?> CheckCalDuplicateAsync(
         string? device, DateTime from, DateTime to, CancellationToken ct)
     {
-        var results = await _calRepo.GetAsync(from, to, device, source: null, limit: 100, offset: 0, descending: true, ct: ct);
-        var match = results.FirstOrDefault();
+        var match = await _calRepo.FindStoredDuplicateAsync(device, from, to, ct);
         return match is null ? null : EntryProjection.FromCalibration(match);
     }
 
     /// <summary>
     /// Loads one chunk's stored readings in a single query and classifies every probe in it.
-    /// <paramref name="chunk"/> is ordered by timestamp, so its ends give the query's window.
+    /// <paramref name="chunk"/> is ordered by timestamp, so its ends give the query's range.
     /// </summary>
     private async Task ClassifySgvChunkAsync(
         List<(EntryDuplicateProbe probe, int index)> chunk,
-        int windowMinutes,
         Entry?[] results,
         CancellationToken ct)
     {
-        var windowMs = (long)windowMinutes * 60 * 1000;
-        var from = MillsToUtc(chunk[0].probe.Mills - windowMs);
-        var to = MillsToUtc(chunk[^1].probe.Mills + windowMs);
+        var (from, _) = MillisecondOf(chunk[0].probe.Mills);
+        var (_, to) = MillisecondOf(chunk[^1].probe.Mills);
 
-        // One row over the cap is enough to know the window held more than this may hold.
+        // One row over the cap is enough to know the range held more than this may hold.
         var candidates = await _sgRepo.FindStoredDuplicateCandidatesAsync(
             ResolveProbeDevices(chunk), from, to, MaxProbeChunkRows + 1, ct);
 
@@ -663,8 +651,7 @@ public class EntryReadService : IEntryStore
             foreach (var (probe, index) in chunk)
             {
                 ct.ThrowIfCancellationRequested();
-                results[index] = await CheckDuplicateAsync(
-                    probe.Device, probe.Type, probe.Sgv, probe.Mills, windowMinutes, ct);
+                results[index] = await CheckDuplicateAsync(probe.Device, probe.Type, probe.Mills, ct);
             }
 
             return;
@@ -673,36 +660,32 @@ public class EntryReadService : IEntryStore
         foreach (var (probe, index) in chunk)
         {
             ct.ThrowIfCancellationRequested();
-            var match = MatchInWindow(candidates, probe, windowMs);
+            var match = MatchAtMillisecond(candidates, probe);
             results[index] = match is null ? null : EntryProjection.FromSensorGlucose(match);
         }
     }
 
     /// <summary>
-    /// The single-entry probe's match rule, applied in memory: the newest candidate inside the
-    /// probe's own window whose device and value match. <paramref name="candidates"/> arrive
-    /// newest-first in the order that probe resolved ties by, so the first match is the row it
-    /// returned.
+    /// The single-entry probe's match rule, applied in memory: the newest candidate at the probe's
+    /// millisecond whose device matches. <paramref name="candidates"/> arrive newest-first in the
+    /// order that probe resolved ties by, so the first match is the row it returned.
     /// </summary>
-    private static SensorGlucose? MatchInWindow(
-        IReadOnlyList<SensorGlucose> candidates, EntryDuplicateProbe probe, long windowMs)
+    private static SensorGlucose? MatchAtMillisecond(
+        IReadOnlyList<SensorGlucose> candidates, EntryDuplicateProbe probe)
     {
-        var from = MillsToUtc(probe.Mills - windowMs);
-        var to = MillsToUtc(probe.Mills + windowMs);
+        var (from, to) = MillisecondOf(probe.Mills);
 
-        for (var i = NewestAtOrBefore(candidates, to); i < candidates.Count; i++)
+        for (var i = NewestBefore(candidates, to); i < candidates.Count; i++)
         {
             var candidate = candidates[i];
             if (candidate.Timestamp < from)
                 break;
             // The search is a starting point, not the bound: a wrong index here would report a
-            // reading outside the probe's window as a duplicate and drop a real one.
-            if (candidate.Timestamp > to)
+            // reading at another time as a duplicate and drop a real one.
+            if (candidate.Timestamp >= to)
                 continue;
             if (probe.Device is not null
                 && !string.Equals(candidate.Device, probe.Device, StringComparison.Ordinal))
-                continue;
-            if (probe.Sgv.HasValue && Math.Abs(candidate.Mgdl - probe.Sgv.Value) >= 0.01)
                 continue;
             return candidate;
         }
@@ -711,12 +694,12 @@ public class EntryReadService : IEntryStore
     }
 
     /// <summary>
-    /// Index of the newest candidate at or before <paramref name="to"/>. A chunk's candidate list
-    /// covers every probe's window, so scanning it from the front for each probe is quadratic in
-    /// the batch; the list is sorted newest-first, so the probe's slice is a binary search away.
-    /// The caller re-checks the bound, so this is an optimisation and not a correctness dependency.
+    /// Index of the newest candidate before <paramref name="to"/>. A chunk's candidate list covers
+    /// every probe, so scanning it from the front for each probe is quadratic in the batch; the
+    /// list is sorted newest-first, so the probe's slice is a binary search away. The caller
+    /// re-checks the bound, so this is an optimisation and not a correctness dependency.
     /// </summary>
-    private static int NewestAtOrBefore(IReadOnlyList<SensorGlucose> candidates, DateTime to)
+    private static int NewestBefore(IReadOnlyList<SensorGlucose> candidates, DateTime to)
     {
         var low = 0;
         var high = candidates.Count;
@@ -724,7 +707,7 @@ public class EntryReadService : IEntryStore
         while (low < high)
         {
             var mid = low + ((high - low) / 2);
-            if (candidates[mid].Timestamp > to)
+            if (candidates[mid].Timestamp >= to)
                 low = mid + 1;
             else
                 high = mid;
@@ -749,6 +732,13 @@ public class EntryReadService : IEntryStore
         }
         return devices;
     }
+
+    /// <summary>
+    /// The half-open range <c>[mills, mills + 1 ms)</c>. A stored timestamp can carry sub-millisecond
+    /// precision that its <c>Mills</c> truncates away, so equality on the instant would miss it.
+    /// </summary>
+    private static (DateTime From, DateTime To) MillisecondOf(long mills) =>
+        (MillsToUtc(mills), MillsToUtc(mills + 1));
 
     private static DateTime MillsToUtc(long mills) =>
         DateTimeOffset.FromUnixTimeMilliseconds(mills).UtcDateTime;

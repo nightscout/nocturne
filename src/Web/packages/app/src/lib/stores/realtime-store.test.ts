@@ -28,11 +28,14 @@ vi.mock("svelte-sonner", () => ({
   }),
 }));
 
+import { toast } from "svelte-sonner";
 import { RealtimeStore, sensorGlucoseToEntry } from "./realtime-store.svelte";
 import type {
+  ConnectionInfo,
   StorageEvent,
   SyncProgressEvent,
   TrackerUpdateEvent,
+  WebSocketConnectionStatus,
 } from "$lib/websocket/types";
 import type { SensorGlucose, TrackerInstanceDto } from "$lib/api";
 
@@ -42,8 +45,14 @@ interface StoreInternals {
   handleUpdate(event: StorageEvent): void;
   handleDelete(event: StorageEvent): void;
   performBackfillIfNeeded(force?: boolean): Promise<void>;
+  handleVisibilityChange: (() => void) | null;
   websocketClient: {
+    connectionStatus: WebSocketConnectionStatus;
+    ensureConnected(): void;
     eventHandlers: {
+      connect?: (info: ConnectionInfo) => void;
+      disconnect?: (reason: string) => void;
+      connect_error?: (error: Error) => void;
       syncProgress?: (event: SyncProgressEvent) => void;
       trackerUpdate?: (event: TrackerUpdateEvent) => void;
     };
@@ -53,6 +62,8 @@ interface StoreInternals {
 type TestStore = StoreInternals &
   Pick<
     RealtimeStore,
+    | "connectionUnavailable"
+    | "connectionPresentation"
     | "currentReservoir"
     | "entries"
     | "currentEntry"
@@ -61,6 +72,7 @@ type TestStore = StoreInternals &
     | "syncProgressByConnector"
     | "trackerInstances"
     | "destroy"
+    | "initialize"
   >;
 
 /** Store instance with an empty socket URL, so nothing connects. */
@@ -82,6 +94,205 @@ function deviceStatus(id: string): StorageEvent {
     doc: { _id: id, mills: Date.now(), pump: {} },
   };
 }
+
+describe("RealtimeStore connection presentation", () => {
+  const info: ConnectionInfo = { clientId: "socket", serverTime: "", version: "" };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    api.getCurrentTherapyState.mockResolvedValue({ reservoir: null });
+    api.apsGetAll.mockResolvedValue({ data: [] });
+    api.emptyPage.mockResolvedValue({ data: [] });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  /** The socket events as the client emits them: status first, then the handler. */
+  function connected(store: TestStore): void {
+    store.websocketClient.connectionStatus = "connected";
+    store.websocketClient.eventHandlers.connect?.(info);
+  }
+
+  function dropped(store: TestStore): void {
+    store.websocketClient.connectionStatus = "disconnected";
+    store.websocketClient.eventHandlers.disconnect?.("transport close");
+  }
+
+  /** An initialized store on a page whose visibility the test flips, driving the
+   *  store's own `visibilitychange` listener. */
+  async function onPage(): Promise<{ store: TestStore; show(): void; hide(): void }> {
+    const page = {
+      visibilityState: "visible",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("document", page);
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+    const store = makeStore();
+    await store.initialize();
+    const flip = (state: "visible" | "hidden") => {
+      page.visibilityState = state;
+      store.handleVisibilityChange?.();
+    };
+    return { store, show: () => flip("visible"), hide: () => flip("hidden") };
+  }
+
+  it("waits before presenting a foreground disconnect and clears it on reconnect", async () => {
+    const store = makeStore();
+    connected(store);
+    dropped(store);
+
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(store.connectionUnavailable).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.connectionUnavailable).toBe(true);
+
+    connected(store);
+    expect(store.connectionUnavailable).toBe(false);
+    store.destroy();
+  });
+
+  it("does not present a transient connection error", async () => {
+    const store = makeStore();
+    store.websocketClient.connectionStatus = "error";
+    store.websocketClient.eventHandlers.connect_error?.(new Error("temporary"));
+    await vi.advanceTimersByTimeAsync(5_000);
+    connected(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.connectionUnavailable).toBe(false);
+    store.destroy();
+  });
+
+  it("presents a first connect that keeps failing", async () => {
+    const store = makeStore();
+    store.websocketClient.connectionStatus = "error";
+    store.websocketClient.eventHandlers.connect_error?.(new Error("network down"));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.connectionUnavailable).toBe(true);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
+  it("announces the recovery of a first connect it reported as unavailable", async () => {
+    const store = makeStore();
+    store.websocketClient.connectionStatus = "error";
+    store.websocketClient.eventHandlers.connect_error?.(new Error("network down"));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    connected(store);
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(store.connectionPresentation).toBe("live");
+    store.destroy();
+  });
+
+  it("shows a reported outage that ends in a denial as not live, not failed", async () => {
+    const store = makeStore();
+    connected(store);
+    dropped(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionPresentation).toBe("unavailable");
+
+    store.websocketClient.connectionStatus = "unauthorized";
+
+    expect(store.connectionUnavailable).toBe(false);
+    expect(store.connectionPresentation).toBe("denied");
+    store.destroy();
+  });
+
+  it("does not present a disconnect while the page is hidden", async () => {
+    const page = {
+      visibilityState: "hidden",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    vi.stubGlobal("document", page);
+    const store = makeStore();
+    dropped(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionUnavailable).toBe(false);
+
+    page.visibilityState = "visible";
+    dropped(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionUnavailable).toBe(true);
+    store.destroy();
+  });
+
+  it("resumes a socket that dropped in a background tab without presenting an error", async () => {
+    const { store, show, hide } = await onPage();
+    const ensureConnected = vi.spyOn(store.websocketClient, "ensureConnected");
+    connected(store);
+
+    hide();
+    dropped(store);
+    await vi.advanceTimersByTimeAsync(20 * 60_000);
+    show();
+
+    expect(ensureConnected).toHaveBeenCalledTimes(1);
+    expect(store.connectionUnavailable).toBe(false);
+    expect(store.connectionPresentation).toBe("pending");
+    await vi.advanceTimersByTimeAsync(5_000);
+    connected(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.connectionUnavailable).toBe(false);
+    expect(toast.warning).not.toHaveBeenCalled();
+    store.destroy();
+  });
+
+  it("presents a resumed tab whose socket stays down", async () => {
+    const { store, show, hide } = await onPage();
+    connected(store);
+    hide();
+    dropped(store);
+    show();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(store.connectionUnavailable).toBe(true);
+    store.destroy();
+  });
+
+  it("keeps a reported outage through tab switches, announcing it once", async () => {
+    const { store, show, hide } = await onPage();
+    connected(store);
+    dropped(store);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.connectionUnavailable).toBe(true);
+
+    hide();
+    show();
+    expect(store.connectionUnavailable).toBe(true);
+    hide();
+    show();
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(store.connectionUnavailable).toBe(true);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    store.destroy();
+  });
+
+  it("stays quiet on tab focus for a session denied realtime", async () => {
+    const { store, show, hide } = await onPage();
+    store.websocketClient.connectionStatus = "unauthorized";
+
+    hide();
+    show();
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    expect(store.connectionUnavailable).toBe(false);
+    expect(store.connectionPresentation).toBe("denied");
+    expect(toast.warning).not.toHaveBeenCalled();
+    store.destroy();
+  });
+});
 
 describe("RealtimeStore reservoir freshness", () => {
   beforeEach(() => {

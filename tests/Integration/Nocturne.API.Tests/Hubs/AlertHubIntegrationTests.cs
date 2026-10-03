@@ -232,7 +232,8 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "alert-hub-tenant-b", "Alert Hub Tenant B");
+        var tenantBSlug = $"alert-hub-b-{Guid.NewGuid():N}"[..24];
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Alert Hub Tenant B");
         var (_, tenantBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantBId, "Tenant B Alert User");
 
         var ruleId = await AuthTestHelpers.SeedAlertRuleAsync(Fixture, tenantBId, "Tenant B Rule");
@@ -249,7 +250,7 @@ public class AlertHubIntegrationTests : ApiIntegrationTestBase
         // Act — acknowledge for tenant B using tenant B's authenticated client
         var baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(
-            Fixture, "alert-hub-tenant-b", baseDomain, tenantBToken);
+            Fixture, tenantBSlug, baseDomain, tenantBToken);
         var response = await clientB.PostAsJsonAsync("/api/v4/alerts/acknowledge", new { acknowledgedBy = "tenant-b-user" });
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 

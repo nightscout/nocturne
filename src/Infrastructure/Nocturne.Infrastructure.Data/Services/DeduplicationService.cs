@@ -97,6 +97,12 @@ public class DeduplicationService : IDeduplicationService
     private const int DedupChunkSize = 500;
 
     /// <summary>
+    /// How far apart the first and last run of one candidate-bounded neighbour load may start. A run
+    /// longer than this still loads whole, so a load spans at most this plus one run.
+    /// </summary>
+    private static readonly long NeighbourSliceMillis = (long)TimeSpan.FromHours(1).TotalMilliseconds;
+
+    /// <summary>
     /// How far behind the present <see cref="ReconcileNewLinksAsync"/> reads. A link's
     /// <c>sys_created_at</c> is the API clock when its insert's <c>SaveChanges</c> began
     /// (<see cref="NocturneDbContext"/> stamps it before opening the transaction), so an insert
@@ -391,22 +397,28 @@ public class DeduplicationService : IDeduplicationService
     /// <summary>
     /// Orders <paramref name="items"/> by event time and slices them into chunks of at most
     /// <see cref="DedupChunkSize"/>, also starting a new chunk wherever two consecutive items sit
-    /// more than <paramref name="maxGapMillis"/> apart.
+    /// more than <paramref name="maxGapMillis"/> apart, or an item sits more than
+    /// <paramref name="maxSpanMillis"/> after its chunk's first.
     /// </summary>
     private static IEnumerable<List<T>> TimeOrderedChunks<T>(
-        IEnumerable<T> items, Func<T, long> mills, long maxGapMillis = long.MaxValue)
+        IEnumerable<T> items, Func<T, long> mills, long maxGapMillis = long.MaxValue,
+        long maxSpanMillis = long.MaxValue)
     {
         var chunk = new List<T>();
+        var first = 0L;
         var previous = 0L;
         foreach (var item in items.OrderBy(mills))
         {
             var at = mills(item);
-            if (chunk.Count == DedupChunkSize || (chunk.Count > 0 && at - previous > maxGapMillis))
+            if (chunk.Count == DedupChunkSize
+                || (chunk.Count > 0 && (at - previous > maxGapMillis || at - first > maxSpanMillis)))
             {
                 yield return chunk;
                 chunk = [];
             }
 
+            if (chunk.Count == 0)
+                first = at;
             chunk.Add(item);
             previous = at;
         }
@@ -802,8 +814,9 @@ public class DeduplicationService : IDeduplicationService
 
         // Candidate-bounded reconcile: never load all primaries. Load only the candidate
         // canonicals' primary links to learn their event timestamps, then DB-bound each neighbour
-        // query to a run of candidates plus the window either side. This keeps the candidate path
-        // O(candidates + window-slice) rather than O(all primaries).
+        // query to a slice of runs of candidates plus the window either side. This keeps the
+        // candidate path bounded by the primaries in the slices around the candidates rather than
+        // by all primaries.
         var candidatePrimaries = await PrimariesOf(recordTypeStr, candidateCanonicalIds).ToListAsync(ct);
 
         if (candidatePrimaries.Count == 0)
@@ -814,20 +827,43 @@ public class DeduplicationService : IDeduplicationService
         // than one: deciding a pair needs to see any third same-value group that would make it
         // ambiguous, and such a group can sit a full window beyond the pair's own edge. At one
         // window the same three groups merge or refuse depending on which one is the candidate.
-        var neighbourWindowMillis = WideMatchableTypes.Contains(recordType)
+        var wideEligible = WideMatchableTypes.Contains(recordType);
+        var neighbourWindowMillis = wideEligible
             ? 2 * WideMatchingWindowMillis
             : MatchingWindowMillis;
 
         // Links are paged in creation order, so one batch can hold candidates years apart in event
         // time. A single range over them would load every primary in between. Runs split where two
-        // candidates' neighbour ranges cannot meet, so each load stays a window slice.
+        // candidates' neighbour ranges cannot meet, so each run is decided over its own neighbour range.
+        var runs = TimeOrderedChunks(candidatePrimaries, p => p.SourceTimestamp, 2 * neighbourWindowMillis);
+
+        // A wide load selects whole groups by their links, so its primaries cannot be cut back to one
+        // run's range in memory; a wide type loads per run.
+        var slices = wideEligible
+            ? runs.Select(run => new List<List<LinkedRecordEntity>> { run })
+            : TimeOrderedChunks(runs, run => run[0].SourceTimestamp, maxSpanMillis: NeighbourSliceMillis);
+
         var merged = 0;
-        foreach (var run in TimeOrderedChunks(candidatePrimaries, p => p.SourceTimestamp, 2 * neighbourWindowMillis))
+        foreach (var slice in slices)
         {
-            var minTs = run[0].SourceTimestamp - neighbourWindowMillis;
-            var maxTs = run[^1].SourceTimestamp + neighbourWindowMillis;
-            var primaries = await LoadNeighbourPrimariesAsync(recordType, minTs, maxTs, ct);
-            merged += await MergePrimariesAsync(recordType, primaries, candidateCanonicalIds, minTs, maxTs, ct);
+            List<LinkedRecordEntity>? loaded = null;
+            foreach (var run in slice)
+            {
+                var minTs = run[0].SourceTimestamp - neighbourWindowMillis;
+                var maxTs = run[^1].SourceTimestamp + neighbourWindowMillis;
+                loaded ??= await LoadNeighbourPrimariesAsync(
+                    recordType, minTs, slice[^1][^1].SourceTimestamp + neighbourWindowMillis, ct);
+
+                var primaries = wideEligible
+                    ? loaded
+                    : loaded.Where(p => p.SourceTimestamp >= minTs && p.SourceTimestamp <= maxTs).ToList();
+                var runMerged = await MergePrimariesAsync(recordType, primaries, candidateCanonicalIds, minTs, maxTs, ct);
+
+                // A merge re-points links, possibly promoting one inside a later run's range.
+                if (runMerged > 0)
+                    loaded = null;
+                merged += runMerged;
+            }
         }
 
         return merged;

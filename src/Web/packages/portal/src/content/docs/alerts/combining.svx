@@ -35,8 +35,8 @@ exercise:
 <AlertSimulator scenario="fast-fall" rules={["low", "falling-and-low"]} />
 
 "Falling toward low" alerts ten minutes before "Low", because it notices the
-speed as well as the number. Look at its two lines. "Below 100" stays true
-right through the low, but "falling at least 2" stops as the fall levels
+speed as well as the number. Watch its two lights as it plays. "Below 100" stays
+on right through the low, but "falling at least 2" goes out as the fall levels
 off, and the rule stops with it. **All of** means the rule ends as soon as any
 one of its rows stops being true.
 
@@ -96,11 +96,11 @@ NOT is most useful with time. "Glucose above 180 for at least 30 minutes,
 **and NOT** between 18:00 and 20:00" is a high alert that stays quiet through
 the rise you expect after dinner:
 
-<AlertSimulator scenario="meal-high" rules={["high-after-dinner-timer-first"]} />
+<AlertSimulator scenario="meal-high" rules={["high-outside-dinner"]} />
 
-On the simulator, the line for the time condition shows the condition itself,
-the time being between 18:00 and 20:00. NOT uses the opposite, so the rule can
-only be true outside that window.
+The light for the time condition shows the condition itself, the time being
+between 18:00 and 20:00. NOT uses the opposite, so the rule can only be true
+outside that window.
 
 <Callout type="warning" title="NOT over missing data is true">
 
@@ -118,11 +118,8 @@ only be true outside that window.
 - **A rule with one row is saved as that row.** The editor always shows a
   group, but a rule with a single condition is stored as just that condition.
   It behaves the same either way.
-- **Rules check rows from the top down, and stop when they know the answer.**
-  With **all of**, the first row that is not true decides the rule, and the rows
-  under it are not checked. With **any of**, the first row that is true decides
-  it. For most conditions this makes no difference. For conditions that must
-  last, it does: see
-  [Order matters](/docs/alerts/sustained#order-matters).
+- **Every row is checked every time, in any order.** A row with "for at least"
+  keeps its own clock whatever the rows around it are doing, so moving rows up
+  or down never changes when a rule alerts.
 - **Every condition in a rule sees the same moment.** The rule is checked when a
   reading arrives, and every row looks at that same reading.

@@ -229,7 +229,10 @@ public interface IStateSpanRepository
     /// </summary>
     /// <param name="stateSpans">The state spans representing activities to create.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A collection of the created <see cref="StateSpan"/> records.</returns>
+    /// <returns>
+    /// The created or updated <see cref="StateSpan"/> records. A span whose original id the user
+    /// deleted is not written and not returned.
+    /// </returns>
     Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default);

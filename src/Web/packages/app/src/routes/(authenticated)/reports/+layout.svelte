@@ -105,15 +105,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 </svelte:head>
 
-<div class="relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
+<div class="@container relative min-h-full bg-background" bind:this={reportRoot} data-report-root>
     {#if page.url.pathname !== "/reports"}
         <ReportPrintHeader title={reportName} period={printPeriod} />
 
-        <!-- top-0 at every width: <main> (overflow-auto) is the sticky container and already
-             starts below the fixed MobileHeader, so an extra top-14 pushed this bar onto the
-             page heading on phones. -->
         <div
-                class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
+                class="sticky top-(--app-sticky-top,0px) z-20 transition-all duration-300 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
             <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <div class="flex items-center gap-2">
@@ -165,7 +162,7 @@
     <HistoryLimitNotice class="mx-3 mt-3 w-auto @md:mx-6 print:hidden" />
 
     <!-- Main Content -->
-    <div class="relative">
+    <div class={useResourceGuard ? "relative mx-auto w-full max-w-7xl p-3 @md:p-6 print:max-w-none print:p-3" : "relative"}>
         {#if useResourceGuard}
             <ResourceGuard
                 loading={resourceCtx.loading}

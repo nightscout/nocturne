@@ -792,8 +792,8 @@ public class StatisticsController : ControllerBase
     /// <returns>A <see cref="MultiPeriodStatistics"/> containing a <see cref="PeriodStatistics"/>
     /// entry for each of the five standard periods.</returns>
     /// <remarks>
-    /// When no TempBasal or algorithm bolus records are found but a profile is loaded, the method
-    /// falls back to integrating scheduled basal across the period via <see cref="IBasalSegmentService"/>.
+    /// When a period has no algorithm boluses, profile basal may stand in for scheduled basal; see
+    /// <see cref="AddScheduledBasalFallbackAsync"/> for the rest of the gate.
     /// GMI reliability is assessed per-period using context-appropriate recommended-day minimums
     /// (e.g., 1-day periods cannot require 14 days of data).
     /// </remarks>
@@ -816,9 +816,6 @@ public class StatisticsController : ControllerBase
         {
             return Ok(cachedResult);
         }
-
-        // Check if profile data exists for scheduled basal calculation
-        var hasProfileData = await _therapySettingsResolver.HasDataAsync(cancellationToken);
 
         // Calculate statistics for each period
         var periods = new[] { 1, 3, 7, 30, 90 };
@@ -860,6 +857,9 @@ public class StatisticsController : ControllerBase
                     dayCount: days
                 );
 
+                if (algorithmBoluses.Count == 0)
+                    await AddScheduledBasalFallbackAsync(tempBasals, startDate, endDate, basalInjections);
+
                 insulinDelivery = _statisticsService.CalculateInsulinDeliveryStatistics(
                     filteredBoluses,
                     algorithmBoluses,
@@ -869,47 +869,6 @@ public class StatisticsController : ControllerBase
                     endDate,
                     basalInjections
                 );
-
-                // If no TempBasals/algorithm boluses/basal injections but we have profile data, augment with scheduled basal
-                if (
-                    tempBasals.Count == 0
-                    && algorithmBoluses.Count == 0
-                    && basalInjections.Count == 0
-                    && hasProfileData
-                )
-                {
-                    var fromMs = new DateTimeOffset(startDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                    var toMs = new DateTimeOffset(endDate, TimeSpan.Zero).ToUnixTimeMilliseconds();
-                    var profileSegments = await _basalSegments
-                        .GetSegmentsAsync(fromMs, toMs, cancellationToken)
-                        .ToListAsync(cancellationToken);
-                    var profileBasal = Math.Round(
-                        profileSegments.Sum(s => s.Units) * 100) / 100;
-                    var totalWithProfile = insulinDelivery.TotalBolus + profileBasal;
-                    insulinDelivery.TotalBasal = Math.Round(profileBasal * 100) / 100;
-                    insulinDelivery.ScheduledBasal = Math.Round(profileBasal * 100) / 100;
-                    insulinDelivery.AdditionalBasal = 0;
-                    insulinDelivery.BasalCount = profileSegments.Count;
-                    insulinDelivery.InsulinEventCount =
-                        insulinDelivery.BolusCount
-                        + insulinDelivery.MicroBolusCount
-                        + insulinDelivery.BasalCount;
-                    insulinDelivery.TotalInsulin = Math.Round(totalWithProfile * 100) / 100;
-                    insulinDelivery.Tdd =
-                        Math.Round(
-                            totalWithProfile / insulinDelivery.WindowDays * 10
-                        ) / 10;
-                    insulinDelivery.BasalPercent =
-                        totalWithProfile > 0
-                            ? Math.Round(profileBasal / totalWithProfile * 100 * 10) / 10
-                            : 0;
-                    insulinDelivery.BolusPercent =
-                        totalWithProfile > 0
-                            ? Math.Round(
-                                insulinDelivery.TotalBolus / totalWithProfile * 100 * 10
-                            ) / 10
-                            : 0;
-                }
             }
 
             // Compute GMI and reliability for this period

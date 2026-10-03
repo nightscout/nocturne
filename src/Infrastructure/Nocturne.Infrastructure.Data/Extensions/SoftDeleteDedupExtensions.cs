@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Core.Models;
@@ -78,6 +79,46 @@ public static class SoftDeleteDedupExtensions
             .ToListAsync(ct);
 
         return RecreationBlocks<string>.From(blocking.Select(b => (b.Key, b.Live)));
+    }
+
+    /// <summary>
+    /// The ids among <paramref name="originalIds"/> a re-upload would find held, per
+    /// <see cref="WhereBlocksRecreation{TEntity}"/>, on a table keyed by <c>OriginalId</c> rather than
+    /// <c>LegacyId</c>.
+    /// </summary>
+    public static Task<IReadOnlySet<string>> GetHeldOriginalIdsAsync<TEntity>(
+        this NocturneDbContext ctx,
+        IReadOnlyCollection<string> originalIds,
+        CancellationToken ct = default)
+        where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
+        => ctx.GetHeldOriginalIdsAsync<TEntity>(originalIds, _ => true, ct);
+
+    /// <summary>
+    /// As <see cref="GetHeldOriginalIdsAsync{TEntity}(NocturneDbContext, IReadOnlyCollection{string}, CancellationToken)"/>,
+    /// counting only the rows <paramref name="within"/> keeps: on a table whose dedup key pairs
+    /// <c>OriginalId</c> with another column, the rows sharing the rest of the write's key.
+    /// </summary>
+    public static async Task<IReadOnlySet<string>> GetHeldOriginalIdsAsync<TEntity>(
+        this NocturneDbContext ctx,
+        IReadOnlyCollection<string> originalIds,
+        Expression<Func<TEntity, bool>> within,
+        CancellationToken ct = default)
+        where TEntity : class, ITenantScoped, ISoftDeletable, IOriginalIdentified
+    {
+        if (originalIds.Count == 0)
+            return RecreationBlocks<string>.None.Held;
+
+        var ids = originalIds.ToList();
+        var held = await ctx.Set<TEntity>().IgnoreQueryFilters().AsNoTracking()
+            .Where(e => e.TenantId == ctx.TenantId
+                     && e.OriginalId != null
+                     && ids.Contains(e.OriginalId))
+            .Where(within)
+            .WhereBlocksRecreation()
+            .Select(e => e.OriginalId!)
+            .ToListAsync(ct);
+
+        return held.ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>

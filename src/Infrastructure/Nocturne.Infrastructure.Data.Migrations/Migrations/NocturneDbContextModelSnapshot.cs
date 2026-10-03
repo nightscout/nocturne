@@ -2132,6 +2132,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .IsDescending()
                         .HasDatabaseName("ix_heart_rates_timestamp");
 
+                    b.HasIndex("TenantId", "OriginalId")
+                        .HasDatabaseName("ix_heart_rates_tenant_original_id")
+                        .HasFilter("original_id IS NOT NULL");
+
                     b.HasIndex("TenantId", "Timestamp")
                         .HasDatabaseName("ix_heart_rates_tenant_timestamp");
 
@@ -3955,6 +3959,16 @@ namespace Nocturne.Infrastructure.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("deep_sleep_ms");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<bool>("DeletedByUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("deleted_by_user");
+
                     b.Property<string>("DetectionMethod")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -4300,6 +4314,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.HasIndex("Timestamp")
                         .IsDescending()
                         .HasDatabaseName("ix_step_counts_timestamp");
+
+                    b.HasIndex("TenantId", "OriginalId")
+                        .HasDatabaseName("ix_step_counts_tenant_original_id")
+                        .HasFilter("original_id IS NOT NULL");
 
                     b.HasIndex("TenantId", "Timestamp")
                         .HasDatabaseName("ix_step_counts_tenant_timestamp");

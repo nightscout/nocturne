@@ -86,7 +86,7 @@ public class LoopServiceTests
         );
 
         var data = new LoopNotificationData { EventType = "loop-completed" };
-        var loopSettings = new LoopSettings { BundleIdentifier = "com.example.loop" };
+        var loopSettings = new LoopProfileSettings { BundleIdentifier = "com.example.loop" };
 
         // Act
         var result = await invalidLoopService.SendNotificationAsync(
@@ -118,7 +118,10 @@ public class LoopServiceTests
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("Loop settings", result.Message);
+        Assert.Equal(
+            "Loop notification failed: Could not find loopSettings in profile.",
+            result.Message
+        );
     }
 
     [Parity]
@@ -127,7 +130,7 @@ public class LoopServiceTests
     {
         // Arrange
         var data = new LoopNotificationData { EventType = "loop-completed" };
-        var loopSettings = new LoopSettings
+        var loopSettings = new LoopProfileSettings
         {
             DeviceToken = "valid-device-token", // Valid device token
             BundleIdentifier = "", // Empty bundle ID
@@ -143,7 +146,10 @@ public class LoopServiceTests
 
         // Assert
         Assert.False(result.Success);
-        Assert.Contains("Bundle ID", result.Message);
+        Assert.Equal(
+            "Loop notification failed: Could not find bundleIdentifier in loopSettings.",
+            result.Message
+        );
     }
 
     [Parity]
@@ -152,7 +158,7 @@ public class LoopServiceTests
     {
         // Arrange
         var data = new LoopNotificationData { EventType = "loop-completed" };
-        var loopSettings = new LoopSettings
+        var loopSettings = new LoopProfileSettings
         {
             BundleIdentifier = "com.example.loop",
             DeviceToken = "test-device-token",

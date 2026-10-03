@@ -152,14 +152,7 @@ public partial class TenantRoleService(
 
             foreach (var member in affectedMembers)
             {
-                // Compute remaining permissions without this role
-                var remainingPermissions = member.MemberRoles
-                    .Where(mr => mr.TenantRoleId != roleId)
-                    .SelectMany(mr => mr.TenantRole.Permissions)
-                    .Union(member.DirectPermissions ?? [])
-                    .ToList();
-
-                if (remainingPermissions.Count == 0)
+                if (!member.EffectivePermissions(excludingRoleId: roleId).Any())
                 {
                     return new DeleteRoleResult(
                         false,
@@ -265,14 +258,7 @@ public partial class TenantRoleService(
         if (member is null)
             return [];
 
-        var rolePermissions = member.MemberRoles
-            .SelectMany(mr => mr.TenantRole.Permissions);
-
-        var directPermissions = member.DirectPermissions ?? [];
-
-        return rolePermissions
-            .Union(directPermissions)
-            .ToList();
+        return member.EffectivePermissions().ToList();
     }
 
     /// <inheritdoc />

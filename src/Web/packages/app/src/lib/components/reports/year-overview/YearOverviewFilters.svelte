@@ -38,7 +38,6 @@
       <CalendarDays class="h-5 w-5 text-primary" />
     </div>
     <div>
-      <h1 class="text-2xl font-bold tracking-tight">Year Overview</h1>
       <p class="text-sm text-muted-foreground">
         Multi-year heatmap of all your data
       </p>
