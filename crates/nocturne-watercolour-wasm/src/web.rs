@@ -301,6 +301,12 @@ impl WatercolourEngine {
         }
         self.shared.live.set(self.shared.live.get() + 1);
         let mut instance = SceneInstance {
+            has_dabs: playback.scene().timeline.events.iter().any(|event| {
+                matches!(
+                    event.op,
+                    nocturne_watercolour_core::domain::Operation::Dab(_)
+                )
+            }),
             playback,
             surface: None,
             ctx: self.ctx.clone(),
@@ -511,6 +517,7 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
+    has_dabs: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
     ctx: GpuContext,
@@ -560,8 +567,10 @@ impl SceneInstance {
         f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
     ) -> Result<bool, JsError> {
         let before = self.playback.current_tick();
+        let before_blend = self.playback.tick_blend();
         self.timed_step(f)?;
-        Ok(self.playback.current_tick() != before)
+        Ok(self.playback.current_tick() != before
+            || (self.has_dabs && self.playback.tick_blend() != before_blend))
     }
 
     async fn frames_async(
@@ -661,6 +670,7 @@ impl SceneInstance {
 
     pub fn pause(&mut self) {
         self.playback.pause();
+        self.playback.simulator().clear_interpolation();
     }
 
     pub fn reset(&mut self) -> Result<(), JsError> {
@@ -717,6 +727,7 @@ impl SceneInstance {
 
     #[wasm_bindgen(js_name = seekProgress)]
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), JsError> {
+        self.playback.simulator().clear_interpolation();
         self.timed_step(|p| p.seek_progress(progress))
     }
 
@@ -748,11 +759,14 @@ impl SceneInstance {
             .as_ref()
             .ok_or_else(|| js_err("NoSurface", "attach a canvas before rendering"))?;
         let t0 = now_ms();
-        let presented = self
-            .playback
-            .simulator()
-            .present(surface)
-            .map_err(engine_err)?;
+        let tick = self.playback.current_tick();
+        let blend = self.playback.tick_blend();
+        let presented = if self.has_dabs && self.playback.state() == PlaybackState::Playing {
+            self.playback.simulator().present_at(surface, tick, blend)
+        } else {
+            self.playback.simulator().present(surface)
+        }
+        .map_err(engine_err)?;
         self.shared.last_render_ms.set(now_ms() - t0);
         self.sync_gpu_timings();
         Ok(presented)

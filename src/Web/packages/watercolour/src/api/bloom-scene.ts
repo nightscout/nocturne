@@ -116,9 +116,9 @@ export function bloomScene(
       events.push({
         at_tick: start + step,
         op: {
-          brush: {
-            path: [centre],
-            radius: [r, r],
+          dab: {
+            center: centre,
+            radius: r,
             pigment: 0,
             concentration: Math.min(1, CHARGE_CONCENTRATION * (0.4 + DEFAULT_INTENSITY * 0.857)),
             water: 0.5,

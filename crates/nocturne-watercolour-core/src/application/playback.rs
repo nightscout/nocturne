@@ -96,9 +96,10 @@ impl ProgressCurve {
             .iter()
             .rev()
             .find_map(|e| match &e.op {
-                Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
-                    Some(e.at_tick as f32 / total)
-                }
+                Operation::Brush(_)
+                | Operation::Dab(_)
+                | Operation::Water(_)
+                | Operation::Lift(_) => Some(e.at_tick as f32 / total),
                 _ => None,
             });
         let tick_split = match last_stroke {
@@ -315,16 +316,26 @@ impl<S: Simulator> Playback<S> {
     }
 
     pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.fractional_tick(progress).round() as u32
+    }
+
+    /// Presentation lags simulation by half a tick, blending only states already simulated.
+    pub fn tick_blend(&self) -> f32 {
+        if self.state != PlaybackState::Playing {
+            return 1.0;
+        }
+        (self.fractional_tick(self.elapsed_progress) - self.tick as f32 + 0.5).clamp(0.0, 1.0)
+    }
+
+    fn fractional_tick(&self, progress: f32) -> f32 {
         let p = progress.clamp(0.0, 1.0);
         match self.curve {
-            ProgressCurve::FrontLoaded => (ease(p) * self.total_ticks() as f32).round() as u32,
-            ProgressCurve::Linear => (p * self.total_ticks() as f32).round() as u32,
+            ProgressCurve::FrontLoaded => ease(p) * self.total_ticks() as f32,
+            ProgressCurve::Linear => p * self.total_ticks() as f32,
             ProgressCurve::Reveal {
                 wall_split,
                 tick_split,
-            } => {
-                (reveal_ticks(p, wall_split, tick_split) * self.total_ticks() as f32).round() as u32
-            }
+            } => reveal_ticks(p, wall_split, tick_split) * self.total_ticks() as f32,
         }
     }
 
@@ -455,12 +466,13 @@ impl<S: Simulator> Playback<S> {
     /// to `target`, the next event, or the next tick a periodic checkpoint
     /// could be taken at, whichever comes first. A backend encodes a step as
     /// one batch, where one tick at a time is a submission each.
-    fn run_length(&self, target: u32) -> u32 {
+    fn run_length(&self, target: u32, batch_dabs: bool) -> u32 {
         let next_event = self
             .scene
             .timeline
             .events
             .iter()
+            .filter(|e| !batch_dabs || !matches!(e.op, Operation::Dab(_)))
             .map(|e| e.at_tick)
             .filter(|&t| t > self.tick)
             .min()
@@ -475,9 +487,35 @@ impl<S: Simulator> Playback<S> {
 
     fn run_to(&mut self, target: u32) -> Result<(), EngineError> {
         while self.tick < target {
-            self.apply_events_at(self.tick)?;
-            let ticks = self.run_length(target);
-            self.sim.step(ticks)?;
+            let batch_dabs = self.sim.checkpoint_capacity() == 0
+                && self
+                    .scene
+                    .timeline
+                    .events_at(self.tick)
+                    .all(|(_, e)| matches!(e.op, Operation::Dab(_)));
+            let ticks = self.run_length(target, batch_dabs);
+            if batch_dabs {
+                let charges: Vec<_> = self
+                    .scene
+                    .timeline
+                    .events
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| e.at_tick >= self.tick && e.at_tick < self.tick + ticks)
+                    .filter_map(|(index, e)| match &e.op {
+                        Operation::Dab(dab) => Some(super::ports::DabCharge {
+                            at_tick: e.at_tick - self.tick,
+                            dab,
+                            seed: self.scene.seed.derive(SubSeed::Brush(index as u32)),
+                        }),
+                        _ => None,
+                    })
+                    .collect();
+                self.sim.step_with_dabs(ticks, &charges)?;
+            } else {
+                self.apply_events_at(self.tick)?;
+                self.sim.step(ticks)?;
+            }
             self.tick += ticks;
             if self.tick < self.total_ticks() {
                 let at_event = self.scene.timeline.events_at(self.tick).next().is_some();

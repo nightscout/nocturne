@@ -1,6 +1,6 @@
 //! Narrow interfaces a backend implements.
 
-use crate::domain::{Image, Operation, Scene, Seed};
+use crate::domain::{Dab, Image, Operation, Scene, Seed};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineError(pub String);
@@ -22,6 +22,12 @@ impl std::error::Error for EngineError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct CheckpointId(pub u64);
 
+pub struct DabCharge<'a> {
+    pub at_tick: u32,
+    pub dab: &'a Dab,
+    pub seed: Seed,
+}
+
 /// Holds the simulation state for one scene and advances it.
 pub trait Simulator {
     /// Resets to the empty grid for `scene`, discarding all checkpoints.
@@ -35,6 +41,19 @@ pub trait Simulator {
 
     fn step(&mut self, ticks: u32) -> Result<(), EngineError> {
         for _ in 0..ticks {
+            self.tick()?;
+        }
+        Ok(())
+    }
+
+    /// Charge ticks are relative to this batch; tied charges retain timeline order.
+    fn step_with_dabs(&mut self, ticks: u32, charges: &[DabCharge<'_>]) -> Result<(), EngineError> {
+        let mut charges = charges.iter().peekable();
+        for tick in 0..ticks {
+            while charges.peek().is_some_and(|charge| charge.at_tick == tick) {
+                let charge = charges.next().unwrap();
+                self.apply(&Operation::Dab(charge.dab.clone()), charge.seed)?;
+            }
             self.tick()?;
         }
         Ok(())

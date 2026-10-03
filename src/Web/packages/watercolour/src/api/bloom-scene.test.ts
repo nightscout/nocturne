@@ -12,9 +12,10 @@ const module = {
 const colour = [0, 150 / 255, 136 / 255] as const;
 
 type Stroke = { path: [number, number][]; radius: [number, number] };
+type Dab = { center: [number, number]; radius: number };
 type BloomDocument = {
   sim_resolution: number;
-  timeline: { total_ticks: number; events: { at_tick: number; op: { brush?: Stroke; water?: Stroke } | string }[] };
+  timeline: { total_ticks: number; events: { at_tick: number; op: { dab?: Dab; water?: Stroke } | string }[] };
 };
 
 const document = (width: number, height: number, seed: number, slope: number) =>
@@ -33,14 +34,15 @@ describe('bloomScene', () => {
           for (const event of scene.timeline.events) {
             if (event.at_tick < 0 || event.at_tick > scene.timeline.total_ticks) invalid.push(event);
             if (typeof event.op === 'string') continue;
-            const stroke = event.op.brush ?? event.op.water;
-            if (!stroke) continue;
-            for (const point of stroke.path) {
+            const points = event.op.dab ? [event.op.dab.center] : event.op.water?.path;
+            const radii = event.op.dab ? [event.op.dab.radius] : event.op.water?.radius;
+            if (!points || !radii) continue;
+            for (const point of points) {
               for (const coordinate of point) {
                 if (!Number.isFinite(coordinate) || coordinate < 0 || coordinate > 1) invalid.push(event);
               }
             }
-            for (const radius of stroke.radius) {
+            for (const radius of radii) {
               if (!Number.isFinite(radius) || radius <= 0 || radius > 1) invalid.push(event);
             }
           }
@@ -54,7 +56,7 @@ describe('bloomScene', () => {
     for (let seed = 0; seed < 24; seed++) {
       for (const slope of [-1, 1]) {
         const charges = document(400, 150, seed, slope).timeline.events.flatMap((event) =>
-          typeof event.op !== 'string' && event.op.brush ? [{ tick: event.at_tick, point: event.op.brush.path[0]! }] : [],
+          typeof event.op !== 'string' && event.op.dab ? [{ tick: event.at_tick, point: event.op.dab.center }] : [],
         );
         const first = [0, 1, 2].map((band) => charges
           .filter(({ point }) => Math.floor(point[0] * 3) === band)
