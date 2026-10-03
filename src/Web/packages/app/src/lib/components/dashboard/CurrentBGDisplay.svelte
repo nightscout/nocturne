@@ -30,7 +30,7 @@
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import GlucoseTileWash from "./GlucoseTileWash.svelte";
+  import GlucoseTileWash, { trackUnwashedFill } from "./GlucoseTileWash.svelte";
   import { showsCurrentGlucoseWidget } from "./top-widget-ids";
 
   interface ComponentProps {
@@ -81,6 +81,12 @@
   const isLoading = $derived(
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
+  trackUnwashedFill(() => ({
+    loading: isLoading,
+    stale: isStale,
+    disconnected: isDisconnected,
+    variant: tileVariant,
+  }));
 
   function formatTimeSinceLastReading(): string {
     return minutesAgo(lastUpdated, currentTime.getTime());

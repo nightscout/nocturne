@@ -1,15 +1,40 @@
 <script module lang="ts">
   import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
+
+  /** What the tile showed before this wash: a range fill, or the loading skeleton. */
   type PriorFill = GlucoseTileVariant | "skeleton";
-  // Reading state survives handoffs between the header tile and the dashboard widget.
+
+  // Module state, not instance state: the tile unmounts this wash whenever it paints none, and
+  // the reading can move between the header tile and the Current Glucose widget, so it must
+  // outlive any one mount. That also means one live wash at a time.
   let settledSeed = $state<number | null>(null);
   let fadedSeed = $state<number | null>(null);
   let shownFill: PriorFill = "skeleton";
+
+  export interface TileFill {
+    loading: boolean;
+    stale: boolean;
+    disconnected: boolean;
+    variant: GlucoseTileVariant;
+  }
+
+  /**
+   * Records the flat fill a host's tile shows while it paints no wash (loading, stale,
+   * disconnected or neutral; see GlucoseValueIndicator's `background`), so the next wash blooms
+   * over what was on screen. Call during component initialisation.
+   */
+  export function trackUnwashedFill(tile: () => TileFill): void {
+    $effect(() => {
+      const { loading, stale, disconnected, variant } = tile();
+      if (loading) shownFill = "skeleton";
+      else if (stale) shownFill = "neutral";
+      else if (disconnected || variant === "neutral") shownFill = variant;
+    });
+  }
 </script>
 
 <script lang="ts">
   import { washInterior } from '$lib/watercolour-wash';
-  import { untrack } from "svelte";
   import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
   import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
   import type { PlayerState } from "@nocturne/watercolour";
@@ -17,39 +42,38 @@
   interface Props {
     mills: number | undefined;
     variant: GlucoseTileVariant;
-    delta?: number;
+    delta: number;
   }
 
-  let { mills, variant, delta = 0 }: Props = $props();
+  let { mills, variant, delta }: Props = $props();
   const washSeed = $derived((mills ?? 0) % 2_147_483_647);
+  // Each reading paints its own stroke, over the fill that was on screen when it arrived. Keyed
+  // by the derived seed, so it is taken again only when the seed changes.
+  const reading = $derived({ seed: washSeed, priorFill: shownFill });
   const washPerReading = !prefersReducedMotion();
-  const priorFill = $derived.by(() => {
-    void washSeed;
-    return untrack(() => shownFill);
-  });
-  const recolours = $derived(priorFill !== variant);
+  const recolours = $derived(reading.priorFill !== variant);
   // With a 50% tail, this progress is past covered tick 140 for every stagger seed.
   const BLOOM_COVERED = 0.67;
   let spreadSeed = $state<number | null>(null);
-  const spread = $derived(spreadSeed === washSeed);
+  const spread = $derived(spreadSeed === reading.seed);
 
   let noBloomSeed = $state<number | null>(null);
-  const noBloom = $derived(noBloomSeed === washSeed);
+  const noBloom = $derived(noBloomSeed === reading.seed);
 
   function markSpread() {
-    if (spreadSeed === washSeed) return;
-    spreadSeed = washSeed;
+    if (spreadSeed === reading.seed) return;
+    spreadSeed = reading.seed;
     shownFill = variant;
   }
 
   function onWashState(state: PlayerState) {
-    if (state.finished) settledSeed = washSeed;
+    if (state.finished) settledSeed = reading.seed;
     if (state.mode === "none" || state.error !== undefined) markSpread();
   }
 
   function onBloomState(state: PlayerState) {
-    if (state.finished) settledSeed = washSeed;
-    if (state.mode === "none" || state.error !== undefined) noBloomSeed = washSeed;
+    if (state.finished) settledSeed = reading.seed;
+    if (state.mode === "none" || state.error !== undefined) noBloomSeed = reading.seed;
     if (noBloom || state.finished || state.progress >= BLOOM_COVERED) markSpread();
   }
   function onBloomProgress(progress: number) {
@@ -57,25 +81,21 @@
   }
   const faded = $derived(
     recolours
-      ? spread && (settledSeed === washSeed || noBloom)
-      : settledSeed === washSeed
+      ? spread && (settledSeed === reading.seed || noBloom)
+      : settledSeed === reading.seed
   );
 
   function markFaded(event: TransitionEvent) {
-    if (event.target === event.currentTarget && faded) fadedSeed = washSeed;
+    if (event.target === event.currentTarget && faded) fadedSeed = reading.seed;
   }
   // A settled reading unmounted mid-fade must not replay on its next mount.
   function fadedOnUnmount(_node: HTMLElement) {
     return {
       destroy: () => {
-        if (faded) fadedSeed = washSeed;
+        if (faded) fadedSeed = reading.seed;
       },
     };
   }
-  $effect(() => () => {
-    shownFill = "neutral";
-  });
-
   const priorFillClass: Record<PriorFill, string> = {
     skeleton: "bg-accent",
     neutral: "bg-muted",
@@ -107,10 +127,14 @@
 </script>
 
 {#if washPerReading}
-  {#key washSeed}
-    {#if fadedSeed !== washSeed}
+  {#key reading.seed}
+    {#if fadedSeed !== reading.seed}
       {#if recolours}
-        <span class="absolute inset-0 prior-fill {priorFillClass[priorFill]}" class:gone={spread}></span>
+        <span
+          class="absolute inset-0 prior-fill {priorFillClass[reading.priorFill]}"
+          class:gone={spread}
+          data-testid="glucose-tile-prior-fill"
+        ></span>
         <span
           class="absolute inset-0 wash-tint"
           class:faded
@@ -118,7 +142,7 @@
           ontransitioncancel={markFaded}
           use:fadedOnUnmount
         >
-          <GlucoseTileBloom seed={washSeed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} onprogress={onBloomProgress} />
+          <GlucoseTileBloom seed={reading.seed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} onprogress={onBloomProgress} />
         </span>
       {:else}
         <span
@@ -132,7 +156,7 @@
             artwork="wash"
             palette="slate"
             surface="light"
-            seed={washSeed}
+            seed={reading.seed}
             durationMs={11600}
             tail={0.86}
             releaseAfterFinish

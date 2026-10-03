@@ -1,6 +1,6 @@
 <script lang="ts">
   import WidgetCard from "./WidgetCard.svelte";
-  import GlucoseTileWash from "../GlucoseTileWash.svelte";
+  import GlucoseTileWash, { trackUnwashedFill } from "../GlucoseTileWash.svelte";
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
@@ -42,6 +42,7 @@
   const isDisconnected = $derived(connection.isDisconnected);
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
   const DirectionIcon = $derived(directionInfo.icon);
+  trackUnwashedFill(() => ({ loading: isLoading, stale: isStale, disconnected: isDisconnected, variant: tileVariant }));
 
   const batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
 
