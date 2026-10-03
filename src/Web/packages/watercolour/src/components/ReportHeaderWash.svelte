@@ -1,18 +1,15 @@
 <script lang="ts">
-  import { reportStripCrop, reportStrokesScene, reportWashScene } from '../api/report-header-scene';
+  import { reportWashCrop, reportWashScene } from '../api/report-wash-scene';
   import { type Surface, seedFromName } from '../types';
   import { hostSurface, mountPlayer, watchSurface } from './helpers';
 
   let {
     name,
-    gesture = 'strokes',
     position = 'relative',
     class: className = '',
   }: {
-    /** Seeds the painting, so one name always paints the same. */
+    /** Seeds the wash, so one name always paints the same. */
     name: string;
-    /** Three strokes across the whole box, or one wash fading out toward its right. */
-    gesture?: 'strokes' | 'wash';
     /** The frame's `position`; see Artwork. */
     position?: 'relative' | 'absolute';
     class?: string;
@@ -31,10 +28,9 @@
     if (!frame || !canvas || !surface) return;
     const seed = seedFromName(name);
     const ground = surface;
-    const paint = gesture === 'wash' ? reportWashScene : reportStrokesScene;
     return mountPlayer(frame, canvas, {
-      scene: (module, width, height, dpr) => paint(module, width, height, { seed, surface: ground, dpr }),
-      crop: reportStripCrop,
+      scene: (module, width, height, dpr) => reportWashScene(module, width, height, { seed, surface: ground, dpr }),
+      crop: reportWashCrop,
       fit: 'fill',
       releaseAfterFinish: true,
     });
