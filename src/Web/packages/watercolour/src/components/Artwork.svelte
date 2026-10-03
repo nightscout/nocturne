@@ -99,20 +99,33 @@
 
 <div
   bind:this={frame}
-  class={className}
+  class="nwc-frame {className}"
+  class:nwc-absolute={position === 'absolute'}
+  class:nwc-fixed={position === 'fixed'}
+  class:nwc-sticky={position === 'sticky'}
   aria-hidden="true"
   role="presentation"
-  style:position
-  style:overflow="hidden"
 >
   {#if plainIcon}
-    <div class="nwc-plain-icon" style="position:absolute;inset:0">{@html plainIcon}</div>
+    <div class="nwc-plain-icon">{@html plainIcon}</div>
   {:else}
-    <canvas bind:this={canvas} style="position:absolute;inset:0;display:block"></canvas>
+    <canvas bind:this={canvas}></canvas>
   {/if}
 </div>
 
 <style>
+  .nwc-frame {
+    position: relative;
+    overflow: hidden;
+  }
+  .nwc-absolute { position: absolute; }
+  .nwc-fixed { position: fixed; }
+  .nwc-sticky { position: sticky; }
+  canvas, .nwc-plain-icon {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
   .nwc-plain-icon :global(svg) {
     display: block;
     width: 100%;
