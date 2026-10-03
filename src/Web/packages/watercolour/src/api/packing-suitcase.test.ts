@@ -209,10 +209,12 @@ describe('packingSuitcaseScene', () => {
   it('gives the last replayed band time to spread before the sheet dries for the hardware', () => {
     const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 0 });
     const { timeline } = JSON.parse(sceneJson) as Doc;
-    const isBand = (op: unknown) => typeof op === 'object' && op !== null && 'brush' in op && (op as { brush: Brush }).brush.pigment !== 1;
-    const lastBandTick = Math.max(...timeline.events.filter((e) => isBand(e.op)).map((e) => e.at_tick));
-    const dried = timeline.events.find((e) => e.op === 'dry_all' && e.at_tick >= lastBandTick)!;
-    expect(dried.at_tick - lastBandTick).toBeGreaterThanOrEqual(5);
+    // The hardware starts with the lift under the strap; every brush before it is a band.
+    const strapLift = timeline.events.findIndex((e) => typeof e.op === 'object' && e.op !== null && 'lift' in e.op);
+    const before = timeline.events.slice(0, strapLift);
+    const lastBandTick = Math.max(...before.filter((e) => typeof e.op === 'object' && e.op !== null && 'brush' in e.op).map((e) => e.at_tick));
+    const dried = before.filter((e) => e.op === 'dry_all').at(-1)!;
+    expect(dried.at_tick - lastBandTick).toBeGreaterThanOrEqual(6);
   });
 
   it('refuses a donor without the pigments it paints with', () => {

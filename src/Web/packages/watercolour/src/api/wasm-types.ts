@@ -40,7 +40,10 @@ export interface WasmInstance {
   finishImmediately(): void;
   /** Finishes the reveal and carries on as a live session; see `Playback::go_live`. */
   goLive(ticksPerSecond: number, idleTicks: number): void;
-  /** A JSON array of `{ after_ticks, op }`, appended from the next tick; plays. */
+  /**
+   * A JSON array of `{ after_ticks, op }`, queued after everything appended
+   * before it, and plays; an empty array leaves a stopped session stopped.
+   */
   appendOperations(json: string): void;
   progress(): number;
   isFinished(): boolean;

@@ -165,9 +165,9 @@ export class PackingSuitcase {
   }
 
   /**
-   * The list changed with no pack: an unpacked item was removed, leaving
-   * `stillUnpacked`. When that completes the list, the lowest band runs on to
-   * the bottom of the body and the hardware goes on.
+   * The list lost an item, leaving `stillUnpacked`; a packed one is `unpack`ed
+   * first. When that leaves the list complete, the lowest band runs on to the
+   * bottom of the body and the hardware goes on.
    */
   countChanged(stillUnpacked: number): TimedOp[] {
     const last = this.bands.at(-1);

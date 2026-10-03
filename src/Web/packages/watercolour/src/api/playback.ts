@@ -112,8 +112,9 @@ export interface ArtworkPlayer {
    * still running is finished first, a budgeted slice per frame. The session
    * plays until `clock.idleTicks` after its last operation, dries and stops;
    * the next `paint` starts it again. It only moves forward: once live, seek
-   * and reset are ignored, and the instance is kept through every stop.
-   * Other modes ignore it.
+   * and reset are ignored, and the instance is kept through every stop. A
+   * `releaseAfterFinish` player that let go before its first paint has
+   * nothing left to paint on. Other modes ignore it.
    */
   paint(ops: readonly TimedOp[], clock: LiveClock): void;
   resize(width: number, height: number, dpr?: number): void;
@@ -448,6 +449,7 @@ class LiveBackend implements Backend {
 
   reset(): void {
     if (this.live) return;
+    this.queued = [];
     this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
@@ -488,7 +490,7 @@ class LiveBackend implements Backend {
   finish(sliced = false): void {
     if (this.disposed || this.released) return;
     // Finishing outright finishes what was painted too; a sliced finish goes live once its slices are done.
-    if (!sliced) this.goLive();
+    if (!sliced) this.flushPaints();
     this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
@@ -504,7 +506,7 @@ class LiveBackend implements Backend {
     this.settling = false;
     this.step(() => this.instance.finishImmediately());
     this.callbacks.onFinished();
-    this.goLive();
+    this.flushPaints();
     // Presented now rather than on the scheduler's next visible frame, so a
     // host finishing an off-screen still does not leave it holding its slot.
     if (this.releaseAfterFinish) this.render();
@@ -514,14 +516,14 @@ class LiveBackend implements Backend {
     if (this.disposed || this.released) return;
     this.queued.push({ ops, clock });
     if (this.live || this.finished) {
-      this.goLive();
+      this.flushPaints();
       return;
     }
     if (!this.settling) this.finish(true);
   }
 
   /** Appends what was painted, going live first; the reveal must have finished or be finishable at once. */
-  private goLive(): void {
+  private flushPaints(): void {
     const queued = this.queued.splice(0);
     if (queued.length === 0) return;
     this.seekTick = undefined;
@@ -681,7 +683,7 @@ class LiveBackend implements Backend {
     if (!done || !this.settling) return;
     this.settling = false;
     this.callbacks.onFinished();
-    this.goLive();
+    this.flushPaints();
     if (!inFrame) this.render();
   }
 
