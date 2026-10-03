@@ -9,6 +9,7 @@
       progress: 0,
       playing: false,
       seeking: false,
+      finished: false,
     },
     onprogress: undefined as ((progress: number, seeking: boolean) => void) | undefined,
     seekTo(progress: number) {

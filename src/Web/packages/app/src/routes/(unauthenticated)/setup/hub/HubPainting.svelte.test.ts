@@ -19,7 +19,7 @@ beforeEach(() => {
   reducedMotion.value = false;
   fakePlayer.seeks = [];
   fakePlayer.plays = 0;
-  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, seeking: false });
+  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, seeking: false, finished: false });
 });
 
 describe("HubPainting", () => {
@@ -90,6 +90,19 @@ describe("HubPainting", () => {
     expect(fakePlayer.seeks.at(-1)).toBe(1);
     fakePlayer.present(true);
     expect(onpainted).not.toHaveBeenCalled();
+
+    fakePlayer.present();
+    expect(onpainted.mock.calls).toEqual([[6]]);
+  });
+
+  it("settles on the last stop when the play finishes just short of it", async () => {
+    const onpainted = vi.fn();
+    render(HubPainting, { stop: 6, from: 5, onpainted });
+    await expect.poll(() => fakePlayer.plays).toBe(1);
+
+    Object.assign(fakePlayer.state, { progress: 0.999, finished: true });
+    fakePlayer.present();
+    expect(fakePlayer.seeks.at(-1)).toBe(1);
 
     fakePlayer.present();
     expect(onpainted.mock.calls).toEqual([[6]]);

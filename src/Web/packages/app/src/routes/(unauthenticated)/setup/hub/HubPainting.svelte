@@ -81,8 +81,9 @@
     } else {
       current.seekTo(previous / HUB_PAINTING_STOPS);
       current.play();
+      // A live play finishes on its last whole tick, at a progress just short of 1.
       onFrame = (progress, seeking) => {
-        if (!seeking && progress >= position) settle();
+        if (!seeking && (progress >= position || current.state.finished)) settle();
       };
     }
     return () => (onFrame = undefined);
