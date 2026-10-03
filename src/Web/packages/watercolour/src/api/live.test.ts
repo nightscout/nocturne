@@ -14,6 +14,7 @@ function fakeInstance(total: number, ticksPerSecond = 25) {
   let playing = false;
   let blending = false;
   let owed = 0;
+  let idle = 0;
   const instance = {
     calls,
     /** Frames the scheduler admitted this instance to advance in. */
@@ -61,6 +62,18 @@ function fakeInstance(total: number, ticksPerSecond = 25) {
     finishImmediately() {
       calls.push('finishImmediately');
       tick = total;
+    },
+    goLive(rate: number, idleTicks: number) {
+      calls.push(`goLive:${rate}:${idleTicks}`);
+      tick = total;
+      ticksPerSecond = rate;
+      idle = idleTicks;
+    },
+    appendOperations(json: string) {
+      const ops = JSON.parse(json) as { after_ticks: number; op: unknown }[];
+      calls.push(`append:${JSON.stringify(ops)}`);
+      total = Math.max(total, tick + 1 + Math.max(...ops.map((o) => o.after_ticks)) + idle);
+      playing = true;
     },
     isFinished: () => tick >= total,
     isPlaying: () => playing && tick < total,
@@ -557,6 +570,113 @@ describe('target seeking', () => {
     expect(instance.tick).toBe(0);
     live.seekTo(0.2); live.finishImmediately(); clock.frame();
     expect(instance.tick).toBe(100);
+    live.dispose();
+  });
+});
+
+describe('a live session', () => {
+  const clock = { ticksPerSecond: 30, idleTicks: 60 };
+  const ops = [{ afterTicks: 0, op: 'clear_mask' }, { afterTicks: 4, op: { dry: { rate: 2 } } }];
+  const goneLive = (instance: ReturnType<typeof fakeInstance>) => instance.calls.filter((call) => call.startsWith('goLive'));
+  const appended = (instance: ReturnType<typeof fakeInstance>) => instance.calls.filter((call) => call.startsWith('append'));
+
+  it('goes live once, then appends each paint in the engine format and plays', async () => {
+    const instance = fakeInstance(20);
+    const frames = manualScheduler();
+    const live = player(instance, frames.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.finishImmediately();
+    live.paint(ops, clock);
+    live.paint(ops.slice(0, 1), clock);
+    expect(goneLive(instance)).toEqual(['goLive:30:60']);
+    expect(appended(instance)).toEqual([
+      'append:[{"after_ticks":0,"op":"clear_mask"},{"after_ticks":4,"op":{"dry":{"rate":2}}}]',
+      'append:[{"after_ticks":0,"op":"clear_mask"}]',
+    ]);
+    expect(live.state.playing).toBe(true);
+    live.dispose();
+  });
+
+  it('finishes a running reveal a budgeted slice per frame before going live', async () => {
+    const instance = fakeInstance(400);
+    const frames = manualScheduler();
+    const live = player(instance, frames.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.paint(ops, clock);
+    expect(goneLive(instance)).toEqual([]);
+    for (let i = 0; i < 200 && goneLive(instance).length === 0; i++) frames.frame();
+    const slices = instance.calls.slice(0, instance.calls.indexOf('goLive:30:60')).filter((call) => call.startsWith('ticks:'));
+    expect(slices.length).toBeGreaterThan(1);
+    expect(instance.calls).not.toContain('finishImmediately');
+    expect(appended(instance)).toHaveLength(1);
+    expect(live.state.playing).toBe(true);
+    live.dispose();
+  });
+
+  it('runs what was painted to its end when finished outright, as reduced motion does', async () => {
+    const instance = fakeInstance(400);
+    const frames = manualScheduler();
+    const live = player(instance, frames.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.paint(ops, clock);
+    live.finishImmediately();
+    expect(instance.calls.filter((call) => /^(goLive|append|finishImmediately)/.test(call)).map((call) => call.split(':')[0])).toEqual([
+      'goLive',
+      'append',
+      'finishImmediately',
+    ]);
+    expect(live.state.finished).toBe(true);
+    expect(live.state.playing).toBe(false);
+    live.dispose();
+  });
+
+  it('runs on its own clock until it stops, and a later paint starts it again', async () => {
+    const instance = fakeInstance(20);
+    const frames = manualScheduler();
+    const finished = vi.fn();
+    const live = player(instance, frames.scheduler, { autoplay: 'never', easing: (t) => t * t });
+    await live.ready;
+    live.finishImmediately();
+    live.on('finished', finished);
+    live.paint(ops, clock);
+    for (let i = 0; i < 400 && live.state.playing; i++) frames.frame();
+    expect(instance.tick).toBe(20 + 1 + 4 + 60);
+    expect(live.state.playing).toBe(false);
+    expect(finished).toHaveBeenCalledTimes(1);
+    live.paint(ops, clock);
+    frames.frame();
+    expect(live.state.playing).toBe(true);
+    live.dispose();
+  });
+
+  it('ignores seeks and resets once live', async () => {
+    const instance = fakeInstance(20);
+    const frames = manualScheduler();
+    const live = player(instance, frames.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.finishImmediately();
+    live.paint(ops, clock);
+    const tick = instance.tick;
+    live.seekTo(0.2);
+    live.seek(0);
+    live.reset();
+    frames.frame();
+    expect(instance.calls.some((call) => call.startsWith('seek'))).toBe(false);
+    expect(instance.tick).toBeGreaterThanOrEqual(tick);
+    live.dispose();
+  });
+
+  it('keeps the instance through every stop, even for a player that lets go of a finished reveal', async () => {
+    const instance = fakeInstance(40);
+    const frames = manualScheduler();
+    const live = player(instance, frames.scheduler, { releaseAfterFinish: true });
+    await live.ready;
+    live.paint(ops, clock);
+    for (let i = 0; i < 400 && (goneLive(instance).length === 0 || live.state.playing); i++) frames.frame();
+    frames.frame();
+    expect(goneLive(instance)).toHaveLength(1);
+    expect(live.state.released).toBe(false);
+    expect(instance.calls).not.toContain('dispose');
     live.dispose();
   });
 });

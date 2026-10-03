@@ -14,7 +14,7 @@ use nocturne_watercolour_core::application::{
     EngineError, Exporter, Playback, PlaybackState, ProgressCurve,
 };
 use nocturne_watercolour_core::domain::{Image, Scene, Seed};
-use nocturne_watercolour_infra::document::parse_scene_json;
+use nocturne_watercolour_infra::document::{parse_appended_json, parse_scene_json};
 use nocturne_watercolour_infra::export::PngExporter;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine, PresentSurface};
 use wasm_bindgen::prelude::*;
@@ -772,6 +772,20 @@ impl SceneInstance {
     #[wasm_bindgen(js_name = finishImmediately)]
     pub fn finish_immediately(&mut self) -> Result<(), JsError> {
         self.timed_step(|p| p.finish_immediately())
+    }
+
+    /// See `Playback::go_live`.
+    #[wasm_bindgen(js_name = goLive)]
+    pub fn go_live(&mut self, ticks_per_second: f32, idle_ticks: u32) -> Result<(), JsError> {
+        self.timed_step(|p| p.go_live(ticks_per_second, idle_ticks))
+    }
+
+    /// A JSON array of `{ after_ticks, op }`; see `Playback::append`.
+    #[wasm_bindgen(js_name = appendOperations)]
+    pub fn append_operations(&mut self, json: &str) -> Result<(), JsError> {
+        self.guard_device()?;
+        let events = parse_appended_json(json).map_err(|e| js_err("InvalidScene", e))?;
+        self.playback.append(events).map_err(engine_err)
     }
 
     pub fn progress(&self) -> f32 {
