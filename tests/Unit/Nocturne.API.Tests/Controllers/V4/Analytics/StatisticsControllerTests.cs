@@ -870,6 +870,168 @@ public class StatisticsControllerTests
         VerifyBolusLimit(BolusKind.Algorithm, int.MaxValue);
     }
 
+    [Fact]
+    public async Task GetMultiPeriodStatistics_WithOnlyProfileBasal_CountsTheProfileAsScheduledBasal()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [
+                new BasalSegment(Mills(start), Mills(start.AddHours(6)), 0.8, 0.8, "Default"),
+                new BasalSegment(Mills(start.AddHours(6)), Mills(start.AddHours(18)), 1.2, 1.2, "Default"),
+                new BasalSegment(Mills(start.AddHours(18)), Mills(start.AddDays(1)), 0.9, 0.9, "Default"),
+            ]);
+        SetupBoluses(BolusKind.Manual,
+        [
+            new() { Timestamp = start.AddHours(2), Insulin = 4.5 },
+            new() { Timestamp = start.AddHours(8), Insulin = 3.2 },
+        ]);
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.TotalBasal.Should().Be(24.6);
+        delivery.ScheduledBasal.Should().Be(24.6);
+        delivery.AdditionalBasal.Should().Be(0);
+        delivery.BasalCount.Should().Be(3);
+        delivery.InsulinEventCount.Should().Be(5);
+        delivery.TotalInsulin.Should().Be(32.3);
+        delivery.Tdd.Should().Be(32.3);
+        delivery.BasalPercent.Should().Be(76.2);
+        delivery.BolusPercent.Should().Be(23.8);
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_DoesNotCountAZeroRateProfileSegmentAsABasalEvent()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [
+                new BasalSegment(Mills(start), Mills(start.AddHours(12)), 0.8, 0.8, "Default"),
+                new BasalSegment(Mills(start.AddHours(12)), Mills(start.AddDays(1)), 0, 0, "Default"),
+            ]);
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.ScheduledBasal.Should().Be(9.6);
+        delivery.BasalCount.Should().Be(1);
+        delivery.InsulinEventCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_DerivesTddFromTheUnroundedProfileBasal()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [new BasalSegment(Mills(start), Mills(start) + 44_117_640, 1.0, 1.0, "Default")]);
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.TotalBasal.Should().Be(12.25);
+        delivery.Tdd.Should().Be(12.3, "12.2549 U rounds to 12.3, where the 2dp total 12.25 would round to even");
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_WithAlgorithmBoluses_DoesNotFallBackToProfileBasal()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [new BasalSegment(Mills(start), Mills(start.AddDays(1)), 1.0, 1.0, "Default")]);
+        SetupBoluses(BolusKind.Algorithm,
+        [
+            new() { Timestamp = start.AddHours(2), Insulin = 0.15, Automatic = true },
+            new() { Timestamp = start.AddHours(3), Insulin = 0.2, Automatic = true },
+        ]);
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.TotalBasal.Should().Be(0.35);
+        delivery.ScheduledBasal.Should().Be(0);
+        delivery.AdditionalBasal.Should().Be(0.35);
+        delivery.BasalCount.Should().Be(0);
+        _basalSegmentsMock.Verify(
+            s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_WithBasalInjections_DoesNotFallBackToProfileBasal()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [new BasalSegment(Mills(start), Mills(start.AddDays(1)), 1.0, 1.0, "Default")]);
+        _basalInjectionRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<BasalInjection> { new() { Timestamp = start.AddHours(1), Units = 22 } });
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.ScheduledBasal.Should().Be(22);
+        delivery.TotalBasal.Should().Be(22);
+        _basalSegmentsMock.Verify(
+            s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetMultiPeriodStatistics_WithTempBasals_DoesNotFallBackToProfileBasal()
+    {
+        var start = DateTime.UtcNow.AddDays(-1);
+        SetupMultiPeriodWithProfile(
+            [new BasalSegment(Mills(start), Mills(start.AddDays(1)), 1.0, 1.0, "Default")]);
+        _tempBasalRepoMock
+            .Setup(r => r.GetAsync(
+                It.IsAny<DateTime?>(), It.IsAny<DateTime?>(),
+                It.IsAny<string?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<TempBasal>
+            {
+                new()
+                {
+                    StartTimestamp = start,
+                    EndTimestamp = start.AddHours(2),
+                    Rate = 1.5,
+                    Origin = TempBasalOrigin.Manual,
+                },
+            });
+
+        var delivery = await MultiPeriodLastDayDelivery();
+
+        delivery.TotalBasal.Should().Be(3);
+        delivery.BasalCount.Should().Be(1);
+        _basalSegmentsMock.Verify(
+            s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    private void SetupMultiPeriodWithProfile(BasalSegment[] segments)
+    {
+        var now = DateTime.UtcNow;
+        SetupGlucose(Enumerable.Range(1, 12)
+            .Select(i => new SensorGlucose { Timestamp = now.AddMinutes(-5 * i), Mgdl = 120 })
+            .ToList());
+        SetupEmptyTreatments();
+        _therapySettingsResolverMock
+            .Setup(r => r.HasDataAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _basalSegmentsMock
+            .Setup(s => s.GetSegmentsAsync(It.IsAny<long>(), It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .Returns(() => AsAsync(segments));
+    }
+
+    private async Task<InsulinDeliveryStatistics> MultiPeriodLastDayDelivery()
+    {
+        var result = await CreateController(statisticsService: new StatisticsService())
+            .GetMultiPeriodStatistics();
+
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Subject
+            .Value.Should().BeOfType<MultiPeriodStatistics>().Subject;
+        return payload.LastDay!.InsulinDelivery!;
+    }
+
     private void SetupBoluses(BolusKind kind, IEnumerable<Bolus> boluses) =>
         _bolusRepoMock
             .Setup(r => r.GetAsync(

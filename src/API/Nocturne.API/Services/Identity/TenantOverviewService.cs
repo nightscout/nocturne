@@ -48,10 +48,11 @@ public class TenantOverviewService : ITenantOverviewService
         var glucoseReadTenants = await GetGlucoseReadTenantsAsync(subjectId, tokenScopes, authType, ct);
 
         var items = new List<TenantOverviewItem>();
-        foreach (var (tenant, allowed, membershipClamped) in glucoseReadTenants)
+        foreach (var (tenant, allowed, membershipLimitTo24Hours, effectivePermissions) in glucoseReadTenants)
         {
             var includeAlerts = Scope.Satisfies(allowed, Scope.AlertsRead);
-            var historyClamped = membershipClamped || credentialLimitTo24Hours;
+            var historyClamped = MemberScopeResolver.IsHistoryClamped(
+                credentialLimitTo24Hours, membershipLimitTo24Hours, effectivePermissions);
 
             try
             {
@@ -89,33 +90,16 @@ public class TenantOverviewService : ITenantOverviewService
             var tenant = membership.Tenant;
             if (tenant is null || !tenant.IsActive) continue;
 
-            var allowed = ResolveAllowedScopes(membership, tokenScopes, authType);
+            var effectivePermissions = membership.EffectivePermissions().ToHashSet();
+            var allowed = MemberScopeResolver.Resolve(effectivePermissions, authType, tokenScopes);
             if (!Scope.Satisfies(allowed, Scope.GlucoseRead)) continue;
 
-            var membershipClamped = membership.LimitTo24Hours
-                && !MemberScopeResolver.IsExemptFromHistoryClamp(EffectivePermissions(membership));
-
-            result.Add(new GlucoseReadTenant(tenant, allowed, membershipClamped));
+            result.Add(new GlucoseReadTenant(
+                tenant, allowed, membership.LimitTo24Hours, effectivePermissions));
         }
 
         return result;
     }
-
-    /// <summary>
-    /// Resolves what the caller may see on this tenant. Delegates to
-    /// <see cref="MemberScopeResolver"/>, the same resolution <c>MemberScopeMiddleware</c> applies
-    /// per request, so the tenant picker cannot list a tenant the endpoints behind it refuse (or
-    /// hide one they would serve).
-    /// </summary>
-    internal static IReadOnlySet<string> ResolveAllowedScopes(
-        TenantMemberEntity membership, IReadOnlySet<string> tokenScopes, AuthType authType) =>
-        MemberScopeResolver.Resolve(EffectivePermissions(membership), authType, tokenScopes);
-
-    private static HashSet<string> EffectivePermissions(TenantMemberEntity membership) =>
-        membership.MemberRoles
-            .SelectMany(mr => mr.TenantRole.Permissions)
-            .Union(membership.DirectPermissions ?? [])
-            .ToHashSet();
 
     private async Task<TenantOverviewItem> BuildItemAsync(
         TenantEntity tenant,

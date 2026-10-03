@@ -34,6 +34,17 @@ public interface IEntryDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Deletes the stored entry <paramref name="stored"/>: every v4 record sharing its legacy id, or
+    /// only <paramref name="stored"/> itself when it has none.
+    /// </summary>
+    /// <param name="stored">A stored <see cref="SensorGlucose"/>, <see cref="MeterGlucose"/> or
+    /// <see cref="Calibration"/>.</param>
+    /// <param name="origin">Write classification, as for <see cref="DecomposeAsync"/>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Total number of v4 records deleted; 0 when none was still stored.</returns>
+    Task<int> DeleteStoredAsync(IV4Record stored, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
     /// Bulk-deletes V4 records matching the given MongoDB-style find query.
     /// Parses time bounds from the find JSON and deletes across all glucose repositories.
     /// </summary>

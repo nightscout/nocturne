@@ -39,15 +39,22 @@ public class OwnIdAdoptionTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private Mock<TRepo> LegacyKeyed<TRepo, TRecord>(string name)
+    /// <param name="unkeyed">The ids that name a record of the table with no legacy id.</param>
+    private Mock<TRepo> LegacyKeyed<TRepo, TRecord>(string name, params string[] unkeyed)
         where TRepo : class, ILegacyKeyedRepository<TRecord>
-        where TRecord : class, IV4Record
+        where TRecord : class, IV4Record, new()
     {
         var repo = new Mock<TRepo>();
+        repo.Setup(r => r.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback((IReadOnlyCollection<string> ids, string _, CancellationToken _) =>
+                _calls.Add($"{name}.find({string.Join(",", ids.Order())})"))
+            .ReturnsAsync((IReadOnlyCollection<string> ids, string _, CancellationToken _) =>
+                ids.Where(unkeyed.Contains).Select(id => new UnkeyedOwnId(id, WriteBackMaySend: false)).ToList());
         repo.Setup(r => r.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
                 _calls.Add($"{name}.adopt({string.Join(",", ids.Order())})"))
-            .ReturnsAsync([]);
+            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
+                ids.Where(unkeyed.Contains).Select(id => new TRecord { LegacyId = id }).ToList());
         repo.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .Callback((IReadOnlyCollection<string> ids, CancellationToken _) =>
                 _calls.Add($"{name}.held({string.Join(",", ids.Order())})"))
@@ -90,20 +97,21 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task EntryBatch_OffersEachTableTheOwnIdsOfItsTypeBeforeUpserting()
     {
-        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg", Uuid);
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
 
         await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
         [
-            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
+            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = DataSources.NightscoutConnector },
             new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
             new Entry { Id = UuidPrefix, Type = "mbg", Mills = 1_700_000_600_000, Mbg = 140 },
             new Entry { Id = "cal-1", Type = "cal", Mills = 1_700_000_900_000, Slope = 850 },
         ], WriteOrigin.Live);
 
         _calls.Should().Equal(
-            $"sg.adopt({Uuid})", $"mg.resolve({UuidPrefix})", $"mg.adopt({UuidPrefix})",
+            $"sg.held({Uuid})", $"sg.find({Uuid})", $"sg.adopt({Uuid})",
+            $"mg.held({UuidPrefix})", $"mg.resolve({UuidPrefix})", $"mg.find({UuidPrefix})",
             "sg.upsert", "mg.upsert", "cal.upsert");
     }
 
@@ -112,12 +120,14 @@ public class OwnIdAdoptionTests : IDisposable
     {
         var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
-        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal", UuidPrefix);
 
         await EntryDecomposer(sg, mg, cal).DecomposeAsync(
             new Entry { Id = UuidPrefix, Type = "cal", Mills = 1_700_000_000_000, Slope = 850 }, WriteOrigin.Live);
 
-        _calls.Should().Equal($"cal.resolve({UuidPrefix})", $"cal.adopt({UuidPrefix})", $"cal.get({UuidPrefix})");
+        _calls.Should().Equal(
+            $"cal.held({UuidPrefix})", $"cal.resolve({UuidPrefix})", $"cal.find({UuidPrefix})",
+            $"cal.adopt({UuidPrefix})", $"cal.get({UuidPrefix})");
     }
 
     [Fact]
@@ -131,6 +141,7 @@ public class OwnIdAdoptionTests : IDisposable
         [
             new Entry { Id = "507f1f77bcf80cd799439011", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
             new Entry { Id = Uuid.ToUpperInvariant(), Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
+            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_450_000, Sgv = 128 },
             new Entry { Id = null, Type = "sgv", Mills = 1_700_000_600_000, Sgv = 130 },
         ], WriteOrigin.Live);
 
@@ -138,9 +149,9 @@ public class OwnIdAdoptionTests : IDisposable
     }
 
     private (DeviceStatusDecomposer Decomposer, Mock<IApsSnapshotRepository> Aps, Mock<IPumpSnapshotRepository> Pump,
-        Mock<IUploaderSnapshotRepository> Uploader) DeviceStatusDecomposer()
+        Mock<IUploaderSnapshotRepository> Uploader) DeviceStatusDecomposer(string[]? unkeyed = null)
     {
-        var aps = LegacyKeyed<IApsSnapshotRepository, ApsSnapshot>("aps");
+        var aps = LegacyKeyed<IApsSnapshotRepository, ApsSnapshot>("aps", unkeyed ?? [Uuid]);
         var pump = LegacyKeyed<IPumpSnapshotRepository, PumpSnapshot>("pump");
         var uploader = LegacyKeyed<IUploaderSnapshotRepository, UploaderSnapshot>("uploader");
         var extras = new Mock<IDeviceStatusExtrasRepository>();
@@ -174,7 +185,8 @@ public class OwnIdAdoptionTests : IDisposable
 
         await decomposer.DecomposeBatchAsync([Status(Uuid), Status("loop_status_42")], source: null, WriteOrigin.Live);
 
-        _calls.Take(7).Should().Equal(
+        _calls.Take(11).Should().Equal(
+            $"aps.held({Uuid})", $"pump.held({Uuid})", $"uploader.held({Uuid})", $"aps.find({Uuid})",
             $"aps.adopt({Uuid})", $"pump.adopt({Uuid})", $"uploader.adopt({Uuid})",
             $"aps.adoptSiblings({correlationId}={Uuid})",
             $"pump.adoptSiblings({correlationId}={Uuid})",
@@ -183,15 +195,16 @@ public class OwnIdAdoptionTests : IDisposable
     }
 
     [Fact]
-    public async Task DeviceStatusSingle_SkipsTheSiblingsWhenNoStoredStatusTookTheId()
+    public async Task DeviceStatusSingle_AdoptsNothingWhenNoStoredStatusCarriesTheId()
     {
-        var (decomposer, _, _, _) = DeviceStatusDecomposer();
+        var (decomposer, _, _, _) = DeviceStatusDecomposer(unkeyed: []);
 
         await decomposer.DecomposeAsync(Status(UuidPrefix), source: null, WriteOrigin.Live);
 
-        _calls.Take(7).Should().Equal(
+        _calls.Take(10).Should().Equal(
+            $"aps.held({UuidPrefix})", $"pump.held({UuidPrefix})", $"uploader.held({UuidPrefix})",
             $"aps.resolve({UuidPrefix})", $"pump.resolve({UuidPrefix})", $"uploader.resolve({UuidPrefix})",
-            $"aps.adopt({UuidPrefix})", $"pump.adopt({UuidPrefix})", $"uploader.adopt({UuidPrefix})",
+            $"aps.find({UuidPrefix})", $"pump.find({UuidPrefix})", $"uploader.find({UuidPrefix})",
             "aps.correlations");
     }
 
@@ -210,17 +223,16 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task EntryBatch_UpsertsAPrefixUnderTheUuidLegacyIdItStandsFor()
     {
-        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        const string otherPrefix = "0198c2a41f3b7c2d9e55ffff";
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg", otherPrefix);
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         sg.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+            .ReturnsAsync([new WireLegacyId(UuidPrefix, UuidShapedLegacyId)]);
         List<SensorGlucose>? written = null;
         sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
             .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
-        const string otherPrefix = "0198c2a41f3b7c2d9e55ffff";
-
         await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
         [
             new Entry { Id = UuidPrefix, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
@@ -239,12 +251,12 @@ public class OwnIdAdoptionTests : IDisposable
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         mg.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+            .ReturnsAsync([new WireLegacyId(UuidPrefix, UuidShapedLegacyId)]);
 
         await EntryDecomposer(sg, mg, cal).DecomposeAsync(
             new Entry { Id = UuidPrefix, Type = "mbg", Mills = 1_700_000_000_000, Mbg = 140 }, WriteOrigin.Live);
 
-        _calls.Should().Equal($"mg.get({UuidShapedLegacyId})");
+        _calls.Should().Equal($"mg.held({UuidPrefix})", $"mg.get({UuidShapedLegacyId})");
     }
 
     [Fact]
@@ -252,7 +264,7 @@ public class OwnIdAdoptionTests : IDisposable
     {
         var (decomposer, _, pump, _) = DeviceStatusDecomposer();
         pump.Setup(r => r.ResolveUuidLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new UuidLegacyId(UuidPrefix, UuidShapedLegacyId)]);
+            .ReturnsAsync([new WireLegacyId(UuidPrefix, UuidShapedLegacyId)]);
         var status = Status(UuidPrefix);
 
         await decomposer.DecomposeAsync(status, source: null, WriteOrigin.Live);
@@ -271,14 +283,11 @@ public class OwnIdAdoptionTests : IDisposable
     [Fact]
     public async Task EntryBatch_MatchesAPulledCopyByItsIdentifierBeforeItsId()
     {
-        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg", Uuid);
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         sg.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
-        sg.Setup(r => r.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((IReadOnlyCollection<string> ids, CancellationToken _) =>
-                ids.Contains(Uuid) ? [new SensorGlucose { LegacyId = Uuid }] : []);
         List<SensorGlucose>? written = null;
         sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
@@ -286,9 +295,9 @@ public class OwnIdAdoptionTests : IDisposable
 
         await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
         [
-            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
-            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = Uuid, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 121 },
-            new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d2", UpstreamIdentifier = "trio-7c2d", Type = "sgv", Mills = 1_700_000_600_000, Sgv = 122 },
+            Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d0", UpstreamIdentifier = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 }),
+            Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d1", UpstreamIdentifier = Uuid, Type = "sgv", Mills = 1_700_000_300_000, Sgv = 121 }),
+            Pulled(new Entry { Id = "66f0a1b2c3d4e0f6a7b8c9d2", UpstreamIdentifier = "trio-7c2d", Type = "sgv", Mills = 1_700_000_600_000, Sgv = 122 }),
         ], WriteOrigin.Live);
 
         written!.Select(r => r.LegacyId).Should().Equal("dexcom_7f3c2a91", Uuid, "66f0a1b2c3d4e0f6a7b8c9d2");
@@ -303,14 +312,15 @@ public class OwnIdAdoptionTests : IDisposable
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
         status.UpstreamIdentifier = "loop_status_42";
 
-        await decomposer.DecomposeAsync(status, source: null, WriteOrigin.Live);
+        await decomposer.DecomposeAsync(status, DataSources.NightscoutConnector, WriteOrigin.Live);
 
         status.Id.Should().Be("loop_status_42");
-        _calls.Should().NotContain(c => c.Contains(".adopt(") || c.Contains(".resolve("));
+        _calls.Should().NotContain(c => c.Contains(".adopt(") || c.Contains(".resolve(") || c.Contains(".find("));
+        _calls.Should().Contain("aps.correlations");
     }
 
     /// <summary>
-    /// A copy the Nightscout connector pulls that names a record stored from another source is that
+    /// A copy the Nightscout connector pulls that names a record write-back may have sent upstream is that
     /// record's write-back echo. It keeps the identity it was pointed at and writes nothing, so the
     /// record keeps its attribution and any edit made in Nocturne since.
     /// </summary>
@@ -322,7 +332,7 @@ public class OwnIdAdoptionTests : IDisposable
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
         sg.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "dexcom_7f3c2a91" });
-        sg.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+        sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
             .ReturnsAsync(["dexcom_7f3c2a91"]);
         List<SensorGlucose>? written = null;
@@ -352,7 +362,7 @@ public class OwnIdAdoptionTests : IDisposable
         var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
         var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
         var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
-        sg.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+        sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(["dexcom_7f3c2a91"]);
 
@@ -361,7 +371,7 @@ public class OwnIdAdoptionTests : IDisposable
             WriteOrigin.Live);
 
         _calls.Should().Equal("sg.upsert");
-        sg.Verify(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+        sg.Verify(r => r.GetLegacyIdsWriteBackMaySendAsync(
             It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -371,7 +381,7 @@ public class OwnIdAdoptionTests : IDisposable
         var (decomposer, aps, _, _) = DeviceStatusDecomposer();
         aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new HashSet<string> { "loop_status_42" });
-        aps.Setup(r => r.GetLegacyIdsHeldOutsideSourceAsync(
+        aps.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
                 It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
             .ReturnsAsync(["loop_status_42"]);
         var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
@@ -384,5 +394,56 @@ public class OwnIdAdoptionTests : IDisposable
         result.UpdatedRecords.Should().BeEmpty();
         _calls.Should().NotContain(c => c.Contains(".get(") || c.Contains(".correlations"));
     }
-}
 
+    private static Entry Pulled(Entry entry)
+    {
+        entry.DataSource = DataSources.NightscoutConnector;
+        return entry;
+    }
+
+    /// <summary>
+    /// Only a record write-back may have sent upstream has a write-back echo. One only an import
+    /// wrote, such as a Nightscout migration, is the upstream's own record, and the pull updates it:
+    /// an upstream edit (a dose marked invalid, a temp basal cancelled early) must reach Nocturne.
+    /// </summary>
+    [Fact]
+    public async Task EntryBatch_UpdatesAReadingWriteBackNeverSent()
+    {
+        var sg = LegacyKeyed<ISensorGlucoseRepository, SensorGlucose>("sg");
+        var mg = LegacyKeyed<IMeterGlucoseRepository, MeterGlucose>("mg");
+        var cal = LegacyKeyed<ICalibrationRepository, Calibration>("cal");
+        sg.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "5f1a2b3c4d5e6f7a8b9c0d1e" });
+        sg.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        List<SensorGlucose>? written = null;
+        sg.Setup(r => r.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
+            .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
+            [Pulled(new Entry { Id = "5f1a2b3c4d5e6f7a8b9c0d1e", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 131 })],
+            WriteOrigin.Live);
+
+        written!.Select(r => (r.LegacyId, r.Mgdl)).Should().Equal(("5f1a2b3c4d5e6f7a8b9c0d1e", 131d));
+    }
+
+    [Fact]
+    public async Task DeviceStatusSingle_UpdatesAStatusWriteBackNeverSent()
+    {
+        var (decomposer, aps, _, _) = DeviceStatusDecomposer();
+        aps.Setup(r => r.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string> { "loop_status_42" });
+        aps.Setup(r => r.GetLegacyIdsWriteBackMaySendAsync(
+                It.IsAny<IReadOnlyCollection<string>>(), DataSources.NightscoutConnector, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        var status = Status("66f0a1b2c3d4e0f6a7b8c9d0");
+        status.UpstreamIdentifier = "loop_status_42";
+
+        await decomposer.DecomposeAsync(status, DataSources.NightscoutConnector, WriteOrigin.Live);
+
+        status.Id.Should().Be("loop_status_42");
+        _calls.Should().Contain("aps.get(loop_status_42)");
+    }
+}

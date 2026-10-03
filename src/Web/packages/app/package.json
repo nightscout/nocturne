@@ -8,12 +8,14 @@
     "./ui/*.svelte": "./src/lib/components/ui/*.svelte",
     "./ui/*": "./src/lib/components/ui/*/index.ts",
     "./utils": "./src/lib/utils/index.ts",
+    "./utils/*": "./src/lib/utils/*.ts",
     "./stores/*.svelte": "./src/lib/stores/*.svelte.ts",
     "./stores/*": "./src/lib/stores/*",
     "./components/*.svelte": "./src/lib/components/*.svelte",
     "./components/*": "./src/lib/components/*",
     "./constants/*": "./src/lib/constants/*.ts",
-    "./api/*": "./src/lib/api/generated/*"
+    "./api/*": "./src/lib/api/generated/*",
+    "./api-client": "./src/lib/api/generated/nocturne-api-client.ts"
   },
   "directories": {
     "lib": "lib"

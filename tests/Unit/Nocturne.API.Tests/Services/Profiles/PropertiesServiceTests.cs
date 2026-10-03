@@ -109,6 +109,68 @@ public class PropertiesServiceTests
     }
 
     [Fact]
+    public async Task GetPropertiesAsync_BgNow_IsTheNewestFiveMinuteBucket()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = new DData
+        {
+            Sgvs = new List<Entry>
+            {
+                new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = 90 },
+                new() { Type = "sgv", Mills = now - 2 * 60 * 1000, Mgdl = 100 },
+                new() { Type = "sgv", Mills = now - 60 * 1000, Mgdl = 110 },
+                new() { Type = "sgv", Mills = now, Mgdl = 120 },
+            },
+        };
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        using var doc = JsonDocument.Parse(json);
+        var bgnow = doc.RootElement.GetProperty("bgnow");
+
+        Assert.Equal(110, bgnow.GetProperty("mean").GetDouble());
+        Assert.Equal(120, bgnow.GetProperty("last").GetDouble());
+        Assert.Equal(now, bgnow.GetProperty("mills").GetInt64());
+        Assert.Equal(
+            new[] { 100.0, 110.0, 120.0 },
+            bgnow.GetProperty("sgvs").EnumerateArray().Select(s => s.GetProperty("mgdl").GetDouble())
+        );
+        Assert.False(bgnow.TryGetProperty("errors", out _));
+    }
+
+    [Fact]
+    public async Task GetPropertiesAsync_BgNow_LeavesSensorErrorCodesOutOfTheMean()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ddata = new DData
+        {
+            Sgvs = new List<Entry>
+            {
+                new() { Type = "sgv", Mills = now - 60 * 1000, Mgdl = 100 },
+                new() { Type = "sgv", Mills = now, Mgdl = 5 },
+            },
+        };
+        _mockDDataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
+
+        var result = await _service.GetPropertiesAsync(new[] { "bgnow" }, CancellationToken.None);
+
+        var json = JsonSerializer.Serialize(result, NightscoutJsonOptions.Create());
+        using var doc = JsonDocument.Parse(json);
+        var bgnow = doc.RootElement.GetProperty("bgnow");
+
+        Assert.Equal(100, bgnow.GetProperty("mean").GetDouble());
+        Assert.Equal(100, bgnow.GetProperty("last").GetDouble());
+        Assert.Equal(now - 60 * 1000, bgnow.GetProperty("mills").GetInt64());
+        Assert.Equal(5, bgnow.GetProperty("errors")[0].GetProperty("mgdl").GetDouble());
+    }
+
+    [Fact]
     public async Task GetAllPropertiesAsync_EmitsIobAndCobAtZero_WithDisplayFields()
     {
         // Legacy clients (LoopFollow, Trio) treat a missing `iob`/`cob` as "unsupported"

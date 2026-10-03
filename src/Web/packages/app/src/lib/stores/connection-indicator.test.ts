@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isErrorStatus } from "./connection-indicator.svelte";
+import { isErrorStatus, presentConnection } from "./connection-indicator.svelte";
 
 describe("isErrorStatus", () => {
   it("reports a dropped or failed socket", () => {
@@ -19,5 +19,27 @@ describe("isErrorStatus", () => {
 
   it("does not treat a denied realtime session as a fault", () => {
     expect(isErrorStatus("unauthorized")).toBe(false);
+  });
+});
+
+describe("presentConnection", () => {
+  it("shows a drop still inside the grace window as pending, never as a failure", () => {
+    expect(presentConnection("disconnected", false)).toBe("pending");
+    expect(presentConnection("error", false)).toBe("pending");
+    expect(presentConnection("idle", false)).toBe("pending");
+  });
+
+  it("shows a reported outage as unavailable", () => {
+    expect(presentConnection("disconnected", true)).toBe("unavailable");
+    expect(presentConnection("connecting", true)).toBe("unavailable");
+  });
+
+  it("shows a denied session as not live, whatever was reported", () => {
+    expect(presentConnection("unauthorized", false)).toBe("denied");
+    expect(presentConnection("unauthorized", true)).toBe("denied");
+  });
+
+  it("shows a connected socket as live", () => {
+    expect(presentConnection("connected", false)).toBe("live");
   });
 });

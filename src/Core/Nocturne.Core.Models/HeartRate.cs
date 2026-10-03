@@ -62,6 +62,13 @@ public class HeartRate : ProcessableDocumentBase
     public int Accuracy { get; set; }
 
     /// <summary>
+    /// The legacy <c>type</c> the record was uploaded with (xDrip sends <c>hr-bpm</c>), returned on
+    /// the v1 activity read-back.
+    /// </summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    /// <summary>
     /// Gets or sets the device identifier that recorded this reading
     /// </summary>
     [JsonPropertyName("device")]

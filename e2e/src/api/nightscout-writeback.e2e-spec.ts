@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "../helpers/env.ts";
 import { seedTenant, type Tenant } from "../helpers/tenant.ts";
@@ -78,6 +79,16 @@ function uuidPrefix(uuid: string): string {
   return uuid.replace(/[^0-9a-fA-F]/g, "").toLowerCase().slice(0, 24);
 }
 
+/**
+ * The 24-hex id a treatment goes upstream under (MongoObjectId.Coerce): an ObjectId as it is, a uuid
+ * as its prefix, anything else as the head of its SHA-256.
+ */
+function wireId(key: string): string {
+  if (/^[0-9a-f]{24}$/.test(key)) return key;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) return uuidPrefix(key);
+  return createHash("sha256").update(key, "utf8").digest("hex").slice(0, 24);
+}
+
 /** A fresh lowercase 24-hex ObjectId, as a Nightscout or an AAPS client mints one. */
 function objectId(): string {
   const seconds = Math.floor(Date.now() / 1000).toString(16).padStart(8, "0");
@@ -126,15 +137,17 @@ describe("Nightscout connector write-back round trip", () => {
   const apsSnapshots = (device: string) =>
     tenant.api.ok<Page<ApsSnapshot>>("GET", `/api/v4/device-status/aps?limit=50&device=${encodeURIComponent(device)}`);
   const sync = () => tenant.api.ok<SyncResult>("POST", "/api/v4/services/connectors/nightscout/sync", {});
+  const writeBack = (writeBackEnabled: boolean) =>
+    tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout", {
+      url: `${env.mocksUrlFromApi}/nightscout-writeback`,
+      isActive: true,
+      writeBackEnabled,
+    });
 
   beforeAll(async () => {
     tenant = await seedTenant();
     run = tenant.slug;
-    await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout", {
-      url: `${env.mocksUrlFromApi}/nightscout-writeback`,
-      isActive: true,
-      writeBackEnabled: true,
-    });
+    await writeBack(true);
     await tenant.api.ok("PUT", "/api/v4/connectors/config/nightscout/secrets", { apiSecret: FAKE_SECRET });
   });
 
@@ -222,16 +235,17 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await readings(device)).data).toHaveLength(1);
   });
 
-  // A v4-native treatment has no legacy id: write-back sends it with its record's uuid prefix as
-  // `_id` and its uuid as `identifier`, and Nightscout 15.0.7+ upserts it by that identifier under
-  // a `_id` of its own. On main no path writes a v4-native treatment back before giving it a legacy
-  // id, so the spec sends that payload upstream itself; the pull-back side is what is under test.
+  // A v4-native treatment has no legacy id, so the one path that writes it back, its first v1 edit,
+  // gives it its uuid's prefix and sends that as both `_id` and `identifier`; Nightscout 15.0.7+
+  // upserts it by that identifier under a `_id` of its own. The spec leaves the bolus without a
+  // legacy id and sends that payload upstream itself: the pull-back of an unkeyed record is what is
+  // under test.
   async function createBolusWrittenBack(minutesAgo: number): Promise<{ bolus: SourcedBolus; at: string }> {
     const at = new Date(Date.now() - minutesAgo * MINUTE).toISOString();
     const created = await tenant.api.post<SourcedBolus>("/api/v4/insulin/boluses", { timestamp: at, insulin: 2.5 });
     expect(created.status).toBe(201);
     const [stored] = await upstreamPost("/api/v1/treatments", [
-      { _id: uuidPrefix(created.body.id), identifier: created.body.id, eventType: "Correction Bolus", insulin: 2.5, created_at: at },
+      { _id: uuidPrefix(created.body.id), identifier: uuidPrefix(created.body.id), eventType: "Correction Bolus", insulin: 2.5, created_at: at },
     ]);
     expect(stored!._id).not.toBe(uuidPrefix(created.body.id));
     return { bolus: created.body, at };
@@ -267,20 +281,21 @@ describe("Nightscout connector write-back round trip", () => {
   };
 
   /** The `[_id, identifier]` of each write-back of the treatment its legacy key names, in order. */
-  const sentTreatments = async (identifier: string) =>
-    (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === identifier).map((t) => [t._id, t.identifier]);
+  const sentTreatments = async (legacyKey: string) =>
+    (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === wireId(legacyKey)).map((t) => [t._id, t.identifier]);
 
-  // A v1 upload is served under its record's uuid prefix. Write-back sends that as `_id` and the
-  // legacy key it is stored by as `identifier`, and the fake upserts it by that identifier under a
-  // `_id` of its own. Each pull must land on the stored treatment.
+  // A create, a PUT and a PATCH by the id the create answered all go out under the coerced legacy
+  // key, as `_id` and `identifier` both, so each lands on the one copy upstream and each pull lands
+  // on the stored treatment.
   it("pulls a v1 treatment it wrote back on create, PUT and PATCH onto that treatment", async () => {
     const syncIdentifier = crypto.randomUUID();
+    const wire = wireId(syncIdentifier);
     const at = new Date(Date.now() - 55 * MINUTE).toISOString();
     const upload = { eventType: "Correction Bolus", insulin: 0.75, created_at: at, enteredBy: `loop://e2e-writeback-${run}`, syncIdentifier };
     const [created] = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [upload]);
     const id = created!._id;
     expect(id).toMatch(/^[0-9a-f]{24}$/);
-    expect(await sentTreatments(syncIdentifier)).toEqual([[id, syncIdentifier]]);
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire]]);
 
     expect((await sync()).success).toBe(true);
     const stored = (await bolusesAround(at)).data;
@@ -291,12 +306,13 @@ describe("Nightscout connector write-back round trip", () => {
     expect(kept[0]![1]).not.toBe("nightscout-connector");
 
     await tenant.api.ok("PUT", `/api/v1/treatments/${id}`, { ...upload, insulin: 0.8 });
-    expect(await sentTreatments(syncIdentifier)).toEqual([[id, syncIdentifier], [id, syncIdentifier]]);
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [wire, wire]]);
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
 
     await tenant.api.ok("PATCH", `/api/v3/treatments/${id}`, { insulin: 0.85 });
-    expect(await sentTreatments(syncIdentifier)).toEqual([[id, syncIdentifier], [id, syncIdentifier], [id, syncIdentifier]]);
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [wire, wire], [wire, wire]]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t.identifier, t.insulin])).toEqual([[wire, 0.85]]);
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
   });
@@ -311,9 +327,8 @@ describe("Nightscout connector write-back round trip", () => {
 
     const sent = (await writtenBack("/api/v1/treatments")).filter((t) => t.created_at === at && t.eventType === "Temp Basal");
     expect(sent).toHaveLength(1);
-    expect(sent[0]!._id).toBe(id);
-    expect(typeof sent[0]!.identifier).toBe("string");
-    expect(sent[0]!.identifier).not.toBe(id);
+    expect(sent[0]!._id).toMatch(/^[0-9a-f]{24}$/);
+    expect(sent[0]!.identifier).toBe(sent[0]!._id);
 
     expect((await sync()).success).toBe(true);
 
@@ -372,7 +387,7 @@ describe("Nightscout connector write-back round trip", () => {
     const [bolus] = (await bolusesAround(at)).data;
     expect(bolus).toBeDefined();
     expect(bolus!.dataSource).not.toBe("nightscout-connector");
-    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => t.identifier)).toEqual([syncIdentifier]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => t.identifier)).toEqual([wireId(syncIdentifier)]);
 
     expect((await sync()).success).toBe(true);
     expect((await sync()).success).toBe(true);
@@ -385,35 +400,114 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 2]]);
 
-    const sentBefore = (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === syncIdentifier).length;
+    const sentBefore = (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === wireId(syncIdentifier)).length;
     await tenant.api.ok("PUT", `/api/v1/treatments/${uuidPrefix(bolus!.id)}`, { ...upload, insulin: 2.25 });
-    expect((await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === syncIdentifier).length).toBe(sentBefore + 1);
-    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t.identifier, t.insulin])).toEqual([[syncIdentifier, 2.25]]);
+    expect((await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === wireId(syncIdentifier)).length).toBe(sentBefore + 1);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t.identifier, t.insulin])).toEqual([[wireId(syncIdentifier), 2.25]]);
 
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 2.25]]);
   });
 
-  // Before identifiers were sent, a treatment went upstream under its ObjectId alone. An upsert
-  // carrying an identifier matches `identifier` or a string `_id`, never that ObjectId, so writing
-  // the treatment back with one would give upstream followers a second copy of the dose. A
-  // treatment keyed by an ObjectId goes out under it, with no identifier.
-  it("writes an edit of a treatment kept upstream under its ObjectId onto that copy", async () => {
+  // Every earlier write-back sent a treatment under the coercion of its key as both `_id` and
+  // `identifier`, so that is where its copy upstream is found. An edit made in Nocturne must land on
+  // that copy: a second one would give followers of that Nightscout, and an AAPS syncing from it, the
+  // dose twice. The treatment is stored with write-back off and its copy is put upstream as the
+  // earlier write-back left it.
+  it.each([
+    ["an ObjectId", 80, () => objectId()],
+    ["a uuid", 90, () => crypto.randomUUID()],
+    ["another", 100, () => `e2e-tr-${crypto.randomUUID()}`],
+  ])("writes an edit of a treatment keyed by %s onto the copy an earlier write-back left", async (_shape, minutesAgo, key) => {
+    const legacyId = key();
+    const wire = wireId(legacyId);
+    const at = new Date(Date.now() - minutesAgo * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.7, created_at: at, enteredBy: `e2e-writeback-main-${run}` };
+    await writeBack(false);
+    try {
+      await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    } finally {
+      await writeBack(true);
+    }
+    const [copy] = await upstreamPost("/api/v1/treatments", [{ ...upload, _id: wire, identifier: wire }]);
+    expect(copy!._id).not.toBe(wire);
+
+    const [bolus] = (await bolusesAround(at)).data;
+    await tenant.api.ok("PUT", `/api/v1/treatments/${uuidPrefix(bolus!.id)}`, { ...upload, insulin: 1.1 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 1.1]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 1.1]]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus"))).toHaveLength(1);
+  });
+
+  // Nightscout narrows a treatment find that bounds no created_at to the last four days, so the
+  // lookup an edit makes for its copy must bound created_at itself: missing the copy of an older
+  // treatment, the edit would go out under its `_id` alone and 15.0.8 would store a second copy.
+  it.each([
+    ["an ObjectId", 6, () => objectId()],
+    ["a uuid", 9, () => crypto.randomUUID()],
+    ["another", 12, () => `e2e-tr-old-${crypto.randomUUID()}`],
+  ])("writes an edit of a treatment keyed by %s and %i days old onto its one copy", async (_shape, daysAgo, key) => {
+    const legacyId = key();
+    const wire = wireId(legacyId);
+    const at = new Date(Date.now() - daysAgo * 24 * 60 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-old-${run}` };
+    await writeBack(false);
+    try {
+      await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    } finally {
+      await writeBack(true);
+    }
+    const [copy] = await upstreamPost("/api/v1/treatments", [{ ...upload, _id: wire, identifier: wire }]);
+    expect(await upstreamRead("/api/v1/treatments.json", { "find[identifier]": wire })).toEqual([]);
+
+    const [bolus] = (await bolusesAround(at)).data;
+    await tenant.api.ok("PUT", `/api/v1/treatments/${uuidPrefix(bolus!.id)}`, { ...upload, insulin: 0.8 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.8]]);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 0.8]]);
+  });
+
+  // A treatment upstream holds under its ObjectId alone, such as the original of one a Nightscout
+  // migration imported, has no copy under its identifier. An edit carrying one would match neither
+  // on 15.0.7+ and store a second copy, so it goes out under the ObjectId alone.
+  it("writes an edit of a treatment upstream holds under its ObjectId alone onto that treatment", async () => {
     const legacyId = objectId();
     const at = new Date(Date.now() - 70 * MINUTE).toISOString();
     const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.6, created_at: at, enteredBy: `e2e-writeback-oid-${run}` };
     await upstreamPost("/api/v1/treatments", [upload]);
+    await writeBack(false);
+    try {
+      await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    } finally {
+      await writeBack(true);
+    }
 
-    await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
-    expect((await sync()).success).toBe(true);
+    const sentBefore = (await writtenBack("/api/v1/treatments")).length;
     await tenant.api.ok("PUT", `/api/v1/treatments/${legacyId}`, { ...upload, insulin: 0.9 });
 
-    const sent = (await writtenBack("/api/v1/treatments")).filter((t) => t._id === legacyId);
-    expect(sent.length).toBeGreaterThanOrEqual(3);
-    expect(sent.every((t) => t.identifier === undefined)).toBe(true);
-    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.insulin])).toEqual([[legacyId, 0.9]]);
+    const sent = (await writtenBack("/api/v1/treatments")).slice(sentBefore).filter((t) => t._id === legacyId);
+    expect(sent.map((t) => t.identifier)).toEqual([undefined]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[legacyId, undefined, 0.9]]);
 
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.9]);
+  });
+
+  // A status goes upstream under a stable `_id`, and Nightscout refuses one it already holds with a
+  // duplicate-key error. That refusal means the status is there; counted as a failure, a few resends
+  // would open the circuit breaker every sink shares, and nothing else would be written back.
+  it("does not count a status Nightscout already holds against write-back", async () => {
+    const device = `openaps://e2e-writeback-resend-${run}`;
+    const at = new Date(Date.now() - 5 * MINUTE).toISOString();
+    const status = { _id: objectId(), device, created_at: at, openaps: { iob: { iob: 0.3, timestamp: at } } };
+    for (let i = 0; i < 6; i++) await tenant.api.ok("POST", "/api/v1/devicestatus", [status]);
+
+    const readingDevice = `e2e-writeback-after-resend-${run}`;
+    const reading = await createReading(readingDevice, 3);
+
+    expect((await writtenBack("/api/v1/entries")).filter((e) => e.device === readingDevice).map((e) => e.identifier)).toEqual([reading.id]);
+    expect((await upstreamRead("/api/v1/devicestatus.json", {})).filter((d) => d.device === device)).toHaveLength(1);
   });
 });

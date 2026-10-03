@@ -16,8 +16,8 @@ namespace Nocturne.API.Services.Alerts;
 /// this clears it drops its decision, as for any state changed under it.
 /// <para>
 /// An evaluation that read the rule before the save, and takes the lease after this clear,
-/// can still set a hold decided on the old conditions. The writer does not check which
-/// version of the rule a decision was made against.
+/// decided on the old conditions. The writer re-reads the rule under the transition lock and
+/// drops that decision (<see cref="AlertRuleConditions"/>), so it sets no hold.
 /// </para>
 /// </remarks>
 /// <param name="gate">The in-process per-rule lease the tracker holds across read, decide and write.</param>

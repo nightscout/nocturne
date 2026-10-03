@@ -1,6 +1,15 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Nocturne.API.Configuration;
 using Nocturne.API.Services.Glucose;
+using Nocturne.API.Services.Profiles;
+using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Devices;
+using Nocturne.Core.Contracts.Glucose;
+using Nocturne.Core.Contracts.Legacy;
+using Nocturne.Core.Contracts.Treatments;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Xunit;
 
@@ -48,120 +57,67 @@ public class Ar2Tests
     }
 
     [Fact]
-    public async Task CalculateForecastAsync_ShouldGenerateCorrectPredictions_WithValidData()
+    public async Task PropertiesForecast_FromTwoReadingsInRange_PredictsWithoutAlarm()
     {
-        // Arrange - data similar to legacy ar2.test.js
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - (5 * 60 * 1000); // 5 minutes ago
+        var ar2 = await GetAr2PropertyAsync(100, 105);
 
-        var ddata = new DData
-        {
-            Sgvs = new List<Entry>
-            {
-                new() { Mills = before, Mgdl = 100 },
-                new() { Mills = now, Mgdl = 105 },
-            },
-        };
-
-        var bgNowProperties = new Dictionary<string, object>
-        {
-            ["mean"] = 105.0,
-            ["mills"] = now,
-            ["last"] = 105.0,
-        };
-
-        var deltaProperties = new Dictionary<string, object>
-        {
-            ["mean5MinsAgo"] = 100.0,
-            ["mgdl"] = 5,
-        };
-
-        var settings = new Dictionary<string, object>
-        {
-            ["bgTargetTop"] = 180,
-            ["bgTargetBottom"] = 80,
-            ["alarmHigh"] = true,
-            ["alarmLow"] = true,
-        };
-
-        // Act
-        var result = await _ar2Service.CalculateForecastAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            settings,
-            CancellationToken.None
-        );
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.Forecast);
-        Assert.Equal(6, result.Forecast.Predicted.Count); // Exactly 6 predictions as in legacy
-        Assert.True(result.Forecast.AvgLoss >= 0); // Should calculate loss
-        Assert.NotNull(result.DisplayLine);
-        Assert.Contains("BG 15m:", result.DisplayLine);
+        Assert.Equal(6, ar2.GetProperty("forecast").GetProperty("predicted").GetArrayLength());
+        Assert.StartsWith("BG 15m: ", ar2.GetProperty("displayLine").GetString());
+        Assert.False(ar2.TryGetProperty("level", out _));
     }
 
     [Fact]
-    public async Task CalculateForecastAsync_ShouldTriggerWarning_WhenHighPrediction()
+    public async Task PropertiesForecast_RisingAboveTarget_WarnsHighWithFifteenMinuteLine()
     {
-        // Arrange - data that should trigger high warning (from ar2.test.js)
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - (5 * 60 * 1000);
+        var ar2 = await GetAr2PropertyAsync(150, 170);
 
+        Assert.Equal("BG 15m: 206 mg/dl", ar2.GetProperty("displayLine").GetString());
+        Assert.Equal("warn", ar2.GetProperty("level").GetString());
+        Assert.Equal("high", ar2.GetProperty("eventName").GetString());
+    }
+
+    [Fact]
+    public async Task PropertiesForecast_AtTheCeiling_ClampsPredictionsToBounds()
+    {
+        var ar2 = await GetAr2PropertyAsync(400, 400);
+
+        var predicted = ar2.GetProperty("forecast").GetProperty("predicted").EnumerateArray().ToList();
+        Assert.Equal(6, predicted.Count);
+        Assert.All(predicted, p => Assert.InRange(p.GetProperty("mgdl").GetInt32(), 36, 400));
+    }
+
+    private async Task<JsonElement> GetAr2PropertyAsync(double mgdlFiveMinutesAgo, double mgdlNow)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var ddata = new DData
         {
             Sgvs = new List<Entry>
             {
-                new() { Mills = before, Mgdl = 150 },
-                new() { Mills = now, Mgdl = 170 },
+                new() { Type = "sgv", Mills = now - 5 * 60 * 1000, Mgdl = mgdlFiveMinutesAgo },
+                new() { Type = "sgv", Mills = now, Mgdl = mgdlNow },
             },
         };
 
-        var bgNowProperties = new Dictionary<string, object>
-        {
-            ["mean"] = 170.0,
-            ["mills"] = now,
-            ["last"] = 170.0,
-        };
+        var ddataService = new Mock<IDDataService>();
+        ddataService
+            .Setup(x => x.GetDDataAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ddata);
 
-        var deltaProperties = new Dictionary<string, object>
-        {
-            ["mean5MinsAgo"] = 150.0,
-            ["mgdl"] = 20,
-        };
-
-        var settings = new Dictionary<string, object>
-        {
-            ["bgTargetTop"] = 160,
-            ["bgTargetBottom"] = 80,
-            ["alarmHigh"] = true,
-            ["alarmLow"] = true,
-        };
-
-        // Act
-        var result = await _ar2Service.CalculateForecastAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            settings,
-            CancellationToken.None
+        var service = new PropertiesService(
+            ddataService.Object,
+            Mock.Of<ILogger<PropertiesService>>(),
+            Mock.Of<IIobCalculator>(),
+            Mock.Of<ICobCalculator>(),
+            Mock.Of<IBolusRepository>(),
+            Mock.Of<ICarbIntakeRepository>(),
+            Mock.Of<ITempBasalRepository>(),
+            _ar2Service,
+            Mock.Of<IDeviceAgeService>()
         );
 
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.Forecast);
-
-        // Should potentially trigger warning based on prediction trend
-        if (result.Forecast.Predicted.Count >= 4)
-        {
-            var prediction20min = result.Forecast.Predicted[3].Mgdl;
-            // Verify that high predictions trigger appropriate event
-            if (prediction20min > 160 && result.Forecast.AvgLoss > 0.05)
-            {
-                Assert.Equal("high", result.EventName);
-            }
-        }
+        var properties = await service.GetPropertiesAsync(new[] { "bgnow", "delta", "ar2" });
+        var json = JsonSerializer.Serialize(properties, NightscoutJsonOptions.Create());
+        return JsonDocument.Parse(json).RootElement.GetProperty("ar2").Clone();
     }
 
     [Fact]
@@ -327,51 +283,5 @@ public class Ar2Tests
         // Assert
         Assert.NotNull(result);
         Assert.Equal(13, result.Count); // Only 13 points (no negative cone points)
-    }
-
-    [Fact]
-    public async Task CalculateForecastAsync_ShouldClampPredictions_ToBounds()
-    {
-        // Arrange - extreme values to test clamping
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var before = now - (5 * 60 * 1000);
-
-        var ddata = new DData
-        {
-            Sgvs = new List<Entry>
-            {
-                new() { Mills = before, Mgdl = 400 },
-                new() { Mills = now, Mgdl = 400 },
-            },
-        };
-
-        var bgNowProperties = new Dictionary<string, object> { ["mean"] = 400.0, ["mills"] = now };
-
-        var deltaProperties = new Dictionary<string, object> { ["mean5MinsAgo"] = 400.0 };
-
-        var settings = new Dictionary<string, object>();
-
-        // Act
-        var result = await _ar2Service.CalculateForecastAsync(
-            ddata,
-            bgNowProperties,
-            deltaProperties,
-            settings,
-            CancellationToken.None
-        );
-
-        // Assert
-        Assert.NotNull(result);
-        Assert.NotNull(result.Forecast);
-
-        // All predictions should be within valid range
-        Assert.All(
-            result.Forecast.Predicted,
-            point =>
-            {
-                Assert.True(point.Mgdl >= 36, $"Prediction {point.Mgdl} should be >= 36");
-                Assert.True(point.Mgdl <= 400, $"Prediction {point.Mgdl} should be <= 400");
-            }
-        );
     }
 }

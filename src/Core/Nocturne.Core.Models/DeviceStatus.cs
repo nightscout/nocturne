@@ -425,6 +425,7 @@ public class OpenApsStatus
     /// Gets or sets the enacted action (confirmed delivered to pump)
     /// </summary>
     [JsonPropertyName("enacted")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public OpenApsEnacted? Enacted { get; set; }
 
     /// <summary>

@@ -123,12 +123,12 @@
         </Button>
 
         <!-- Date Navigation -->
-        <div class="flex items-center gap-2">
+        <div class="flex min-w-0 items-center gap-2 max-sm:w-full">
           <Button variant="outline" size="icon" onclick={() => shiftPeriod(-1)}>
             <ChevronLeft class="h-4 w-4" />
           </Button>
           <div
-            class="flex items-center gap-2 min-w-[280px] justify-center text-center"
+            class="flex min-w-0 flex-1 items-center gap-2 justify-center text-center sm:min-w-[280px]"
           >
             <span class="text-lg font-medium">{dateRangeDisplay}</span>
           </div>
@@ -137,7 +137,7 @@
           </Button>
         </div>
 
-        <div class="w-24"></div>
+        <div class="hidden w-24 sm:block"></div>
       </div>
     </Card.Content>
   </Card.Root>

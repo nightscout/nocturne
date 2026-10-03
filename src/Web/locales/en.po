@@ -3843,6 +3843,7 @@ msgstr "Sensor"
 msgid "<0/> BG Check"
 msgstr "<0/> BG Check"
 
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 #: src/lib/components/entries/BGCheckSection.svelte
 #: src/lib/components/trackers/ReservoirReportDialog.svelte
 #: src/lib/components/treatments/edit-dialog/BGCheckFormFields.svelte
@@ -4233,9 +4234,9 @@ msgstr "PumpBatteryChange"
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
 #: src/lib/components/dashboard/glucose-chart/ChartLegend.svelte
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
-#: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
+#: src/lib/components/dashboard/glucose-chart/engine/chart-data-view.svelte.ts
 #: src/lib/components/icons/PumpModeIcon.svelte
 #: src/lib/components/treatments/edit-dialog/BolusFormFields.svelte
 msgid "Automatic"
@@ -4537,7 +4538,6 @@ msgstr "Therapy"
 
 #: src/lib/navigation/app-navigation.svelte.ts
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/settings/data-quality/+page.svelte
 msgid "Data Quality"
 msgstr "Data Quality"
@@ -7154,7 +7154,6 @@ msgstr "Flash the title and favicon during urgent glucose levels"
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/heart-rate/+page.svelte
-#: src/routes/(authenticated)/reports/heart-rate/+page.svelte
 msgid "Heart Rate"
 msgstr "Heart Rate"
 
@@ -7162,7 +7161,6 @@ msgstr "Heart Rate"
 #: src/lib/components/rbac/PermissionSummary.svelte
 #: src/lib/components/settings/TokenScopeSelector.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/steps/+page.svelte
 msgid "Step Count"
 msgstr "Step Count"
 
@@ -10249,7 +10247,6 @@ msgstr "Contact Name"
 msgid "Close Emergency View"
 msgstr "Close Emergency View"
 
-#: src/lib/components/reports/year-overview/YearOverviewFilters.svelte
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/year-overview/+page.svelte
 msgid "Year Overview"
@@ -11136,9 +11133,8 @@ msgstr "Ambulatory Glucose Profile - Nocturne Reports"
 msgid "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 msgstr "Standard AGP report with glucose pattern overlay, percentile bands, and time-in-range analysis"
 
-#: src/routes/(authenticated)/reports/agp/+page.svelte
-msgid "<0/> Ambulatory Glucose Profile"
-msgstr "<0/> Ambulatory Glucose Profile"
+#~ msgid "<0/> Ambulatory Glucose Profile"
+#~ msgstr "<0/> Ambulatory Glucose Profile"
 
 #: src/routes/(authenticated)/reports/agp/+page.svelte
 msgid "Your typical daily glucose pattern — a standardized clinical report"
@@ -11303,9 +11299,8 @@ msgstr "Basal Rate Analysis - Nocturne Reports"
 msgid "Analyze your basal insulin delivery patterns with percentile visualization"
 msgstr "Analyze your basal insulin delivery patterns with percentile visualization"
 
-#: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
-msgid "<0/> Basal Rate Analysis"
-msgstr "<0/> Basal Rate Analysis"
+#~ msgid "<0/> Basal Rate Analysis"
+#~ msgstr "<0/> Basal Rate Analysis"
 
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 msgid "Understand your background insulin delivery patterns over time"
@@ -11420,7 +11415,6 @@ msgstr "Insulin Delivery Report <0/>"
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/basal-analysis/BasalAnalysisContent.svelte
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-#: src/routes/(authenticated)/reports/treatments/+page.svelte
 msgid "Treatment Log"
 msgstr "Treatment Log"
 
@@ -11442,9 +11436,8 @@ msgstr "Battery Report - Nocturne"
 msgid "Device battery statistics and charge cycle history"
 msgstr "Device battery statistics and charge cycle history"
 
-#: src/routes/(authenticated)/reports/battery/+page.svelte
-msgid "Battery Report"
-msgstr "Battery Report"
+#~ msgid "Battery Report"
+#~ msgstr "Battery Report"
 
 #: src/routes/(authenticated)/reports/battery/+page.svelte
 msgid "No Battery Data Available"
@@ -11571,7 +11564,6 @@ msgid "Data Quality Categories"
 msgstr "Data Quality Categories"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/compression-lows/+page.svelte
 msgid "Compression Lows"
 msgstr "Compression Lows"
@@ -11778,7 +11770,6 @@ msgstr "<0/> Glucose Statistics"
 
 #: src/lib/navigation/report-navigation.svelte.ts
 #: src/routes/(authenticated)/reports/executive-summary/+page.svelte
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "Glucose Distribution"
 msgstr "Glucose Distribution"
 
@@ -11967,9 +11958,8 @@ msgstr "Insulin Delivery Report - Nocturne Reports"
 msgid "Analyze your insulin delivery patterns including basal/bolus ratios and TDD trends"
 msgstr "Analyze your insulin delivery patterns including basal/bolus ratios and TDD trends"
 
-#: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
-msgid "<0/> Insulin Delivery Report"
-msgstr "<0/> Insulin Delivery Report"
+#~ msgid "<0/> Insulin Delivery Report"
+#~ msgstr "<0/> Insulin Delivery Report"
 
 #: src/routes/(authenticated)/reports/insulin-delivery/+page.svelte
 msgid "Comprehensive analysis of your basal and bolus insulin patterns"
@@ -12158,9 +12148,8 @@ msgstr "Insulin Dosing Profile - Nocturne Reports"
 msgid "Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
 msgstr "Insulin Dosing Profile report with delivery statistics, glucose metrics, basal analysis, and bolus distribution"
 
-#: src/routes/(authenticated)/reports/idp/+page.svelte
-msgid "<0/> Insulin Dosing Profile"
-msgstr "<0/> Insulin Dosing Profile"
+#~ msgid "<0/> Insulin Dosing Profile"
+#~ msgstr "<0/> Insulin Dosing Profile"
 
 #: src/routes/(authenticated)/reports/idp/+page.svelte
 msgid "Comprehensive insulin delivery analysis with glucose context"
@@ -12293,7 +12282,6 @@ msgid "Sleep pattern actogram with glucose overlay"
 msgstr "Sleep pattern actogram with glucose overlay"
 
 #: src/lib/navigation/report-navigation.svelte.ts
-#: src/routes/(authenticated)/reports/sleep/+page.svelte
 msgid "Sleep & Overnight"
 msgstr "Sleep & Overnight"
 
@@ -12334,9 +12322,8 @@ msgstr "Site Change Impact - Nocturne Reports"
 msgid "Analyze how pump site changes affect your glucose control"
 msgstr "Analyze how pump site changes affect your glucose control"
 
-#: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
-msgid "<0/> Site Change Impact"
-msgstr "<0/> Site Change Impact"
+#~ msgid "<0/> Site Change Impact"
+#~ msgstr "<0/> Site Change Impact"
 
 #: src/routes/(authenticated)/reports/site-change-impact/+page.svelte
 msgid "Analyze glucose patterns before and after pump site changes"
@@ -15328,7 +15315,7 @@ msgstr "<0/> Running…"
 msgid "Window: {0}"
 msgstr "Window: {0}"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "No events would have fired in this window."
 msgstr "No events would have fired in this window."
 
@@ -15836,7 +15823,7 @@ msgstr "Drag to reorder"
 msgid "Turn off"
 msgstr "Turn off"
 
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "No events yet — playhead at start of window."
 msgstr "No events yet — playhead at start of window."
 
@@ -15899,7 +15886,7 @@ msgid "No leaves to evaluate."
 msgstr "No leaves to evaluate."
 
 #: ../portal/src/lib/components/features/AlarmsDemo.svelte
-#: src/lib/components/alerts/ReplayPanel.svelte
+#: src/lib/components/alerts/ReplayView.svelte
 msgid "Resolved"
 msgstr "Resolved"
 
@@ -18228,7 +18215,6 @@ msgid "Battery statistics are calculated from device status reports sent by your
 msgstr "Battery statistics are calculated from device status reports sent by your uploader app."
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/sensor-integrity/+page.svelte
 msgid "Signal Integrity"
 msgstr "Signal Integrity"
@@ -22007,7 +21993,6 @@ msgstr "Report generated from {0} basal events between {1} and {2}"
 
 #: src/routes/(authenticated)/reports/data-quality/+page.svelte
 #: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
-#: src/routes/(authenticated)/reports/data-quality/cgm-comparison/+page.svelte
 msgid "CGM Comparison"
 msgstr "CGM Comparison"
 
@@ -22446,9 +22431,8 @@ msgstr "Data source connectors (Dexcom, LibreLinkUp, Glooko, etc.) are configure
 msgid "Ports <0/> and <1/> open to the internet. The bundled proxy uses them to obtain and serve TLS certificates."
 msgstr "Ports <0/> and <1/> open to the internet. The bundled proxy uses them to obtain and serve TLS certificates."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
-msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
+#~ msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
+#~ msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Edit <0/> and fill in your values. The required fields come first and are left blank; optional bot integrations are commented out. Use the generator below for each password field and <1/>."
@@ -23876,8 +23860,10 @@ msgstr "Protein <0>optional</0>"
 msgid "Energy <0>auto</0>"
 msgstr "Energy <0>auto</0>"
 
+#. 0: rule.name
 #. 0: perm
 #. 0: item.l
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 #: src/lib/components/admin/RoleDialog.svelte
 #: src/routes/(authenticated)/tools/packing/list/+page.svelte
 msgid "Remove {0}"
@@ -25544,53 +25530,42 @@ msgstr "Mute for me"
 msgid "You can press Mute for me on an alert to stop it reaching you. Other people keep getting it until someone who manages alerts acknowledges it, or it ends."
 msgstr "You can press Mute for me on an alert to stop it reaching you. Other people keep getting it until someone who manages alerts acknowledges it, or it ends."
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "NOT applies to: "
-msgstr "NOT applies to: "
+#~ msgid "NOT applies to: "
+#~ msgstr "NOT applies to: "
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "No alert over this trace."
-msgstr "No alert over this trace."
+#~ msgid "No alert over this trace."
+#~ msgstr "No alert over this trace."
 
-#. 0: active.label.toLowerCase()
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "Glucose readings for the {0} example, with the times each rule was alerting shaded."
-msgstr "Glucose readings for the {0} example, with the times each rule was alerting shaded."
+#~ msgid "Glucose readings for the {0} example, with the times each rule was alerting shaded."
+#~ msgstr "Glucose readings for the {0} example, with the times each rule was alerting shaded."
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "Whole rule is true"
-msgstr "Whole rule is true"
+#~ msgid "Whole rule is true"
+#~ msgstr "Whole rule is true"
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "Alerting"
-msgstr "Alerting"
+#~ msgid "Alerting"
+#~ msgstr "Alerting"
 
 #. 0: issues[index].map((i) => issueText[i.reason] ?? i.reason).join(", ")
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 msgid "A save would be refused: this rule needs {0}."
 msgstr "A save would be refused: this rule needs {0}."
 
-#. 0: Math.round(hovered.age)
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "· last reading {0} min ago"
-msgstr "· last reading {0} min ago"
+#~ msgid "· last reading {0} min ago"
+#~ msgstr "· last reading {0} min ago"
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "· no reading yet"
-msgstr "· no reading yet"
+#~ msgid "· no reading yet"
+#~ msgstr "· no reading yet"
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "<0/> Reset the example"
-msgstr "<0/> Reset the example"
+#~ msgid "<0/> Reset the example"
+#~ msgstr "<0/> Reset the example"
 
 #. 0: failure
 #: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
 msgid "The alert engine could not run here ({0}). The rest of this page still applies."
 msgstr "The alert engine could not run here ({0}). The rest of this page still applies."
 
-#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
-msgid "This runs Nocturne's own alert engine in your browser, one check every 5 minutes, as <0>Replay</0> does in the app. The readings are made up to show one behaviour; they are not anyone's data, and nothing here is medical advice."
-msgstr "This runs Nocturne's own alert engine in your browser, one check every 5 minutes, as <0>Replay</0> does in the app. The readings are made up to show one behaviour; they are not anyone's data, and nothing here is medical advice."
+#~ msgid "This runs Nocturne's own alert engine in your browser, one check every 5 minutes, as <0>Replay</0> does in the app. The readings are made up to show one behaviour; they are not anyone's data, and nothing here is medical advice."
+#~ msgstr "This runs Nocturne's own alert engine in your browser, one check every 5 minutes, as <0>Replay</0> does in the app. The readings are made up to show one behaviour; they are not anyone's data, and nothing here is medical advice."
 
 #: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
 msgid "Group: match"
@@ -25722,3 +25697,131 @@ msgstr "Change coming up"
 #: src/lib/components/dashboard/glucose-chart/engine/chart-data-engine.svelte.ts
 msgid "The chart data could not be loaded."
 msgstr "The chart data could not be loaded."
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "<0/> Add an example rule"
+msgstr "<0/> Add an example rule"
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "<0/> Start over"
+msgstr "<0/> Start over"
+
+#: ../portal/src/lib/components/docs/alert-simulator/AlertSimulator.svelte
+msgid "Nocturne's own alert engine and Replay, running in your browser on made-up readings. Not anyone's data, and not medical advice."
+msgstr "Nocturne's own alert engine and Replay, running in your browser on made-up readings. Not anyone's data, and not medical advice."
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Grams"
+msgstr "Grams"
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "Minutes since carbs"
+msgstr "Minutes since carbs"
+
+#: ../portal/src/lib/components/docs/alert-simulator/ConditionEditor.svelte
+msgid "min ago"
+msgstr "min ago"
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "PostgreSQL host-directory storage"
+msgstr "PostgreSQL host-directory storage"
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
+msgstr "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
+msgstr "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
+msgstr "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Add the path to <0/>: <1/>"
+msgstr "Add the path to <0/>: <1/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+msgstr "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Changing the path does not move your database"
+msgstr "Changing the path does not move your database"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
+msgstr "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
+msgstr "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+msgstr "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
+msgstr "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+msgstr "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
+msgstr "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
+msgstr "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
+msgstr "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Move an existing database from the named volume"
+msgstr "Move an existing database from the named volume"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "View docker-compose.bind-data.yaml"
+msgstr "View docker-compose.bind-data.yaml"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+msgstr "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Optional: use a host directory for PostgreSQL"
+msgstr "Optional: use a host directory for PostgreSQL"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+msgstr "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+msgstr "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
+msgstr "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If you also use the bind-data override, include both overrides in the same command:"
+msgstr "If you also use the bind-data override, include both overrides in the same command:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in both the pull and update commands. For bind-data only:"
+msgstr "Keep every active override in both the pull and update commands. For bind-data only:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "For bind-data with the BYO-proxy override:"
+msgstr "For bind-data with the BYO-proxy override:"
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Omitting the bind-data override changes the declared storage back to the named volume."
+msgstr "Omitting the bind-data override changes the declared storage back to the named volume."

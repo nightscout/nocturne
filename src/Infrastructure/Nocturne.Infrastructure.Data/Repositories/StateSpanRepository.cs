@@ -226,10 +226,14 @@ public class StateSpanRepository : IStateSpanRepository
     /// afterwards so a long connector sync does not pay change detection over every earlier batch; only
     /// those rows, since the scoped context may also track entities the caller still holds.
     /// </summary>
+    /// <param name="stateSpans">The spans to write.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="omitBlocked">Leave out the spans a soft-deleted row blocked instead of returning that row.</param>
     /// <returns>Per input span, the row it wrote or the soft-deleted row that blocked it.</returns>
     private async Task<List<StateSpan>> UpsertBatchAsync(
         IReadOnlyList<StateSpan> stateSpans,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool omitBlocked = false)
     {
         if (stateSpans.Count == 0)
             return [];
@@ -250,6 +254,8 @@ public class StateSpanRepository : IStateSpanRepository
             {
                 if (governing.DeletedAt == null)
                     StateSpanMapper.UpdateEntity(governing, stateSpan);
+                else if (omitBlocked)
+                    continue;
                 written.Add(governing);
                 continue;
             }
@@ -747,6 +753,8 @@ public class StateSpanRepository : IStateSpanRepository
         if (!string.IsNullOrEmpty(type))
             query = query.Where(s => s.State == type);
 
+        query = query.ExcludeNonPrimary(_context, RecordType.StateSpan);
+
         var entities = await query
             .OrderByDescending(s => s.StartTimestamp)
             .Skip(skip)
@@ -812,7 +820,7 @@ public class StateSpanRepository : IStateSpanRepository
     public async Task<IEnumerable<StateSpan>> CreateActivitiesAsStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,
         CancellationToken cancellationToken = default
-    ) => await UpsertBatchAsync(stateSpans.ToList(), cancellationToken);
+    ) => await UpsertBatchAsync(stateSpans.ToList(), cancellationToken, omitBlocked: true);
 
     /// <summary>
     /// Update an existing Activity state span

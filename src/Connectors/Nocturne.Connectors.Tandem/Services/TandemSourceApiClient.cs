@@ -36,8 +36,9 @@ public sealed class TandemSourceApiClient(HttpClient httpClient, ILogger logger)
     /// Returns the server-decoded pump events for a device over an inclusive date window. The
     /// server caps each window at roughly four weeks (<see cref="TandemConstants.PumpLogsWindowDays"/>);
     /// callers page longer ranges. When <paramref name="eventIdsFilter"/> is null the full history
-    /// log is requested; the server currently ignores the filter and returns every event in the
-    /// window regardless, but it is sent to mirror the Tandem Source web app.
+    /// log is requested. The filter is sent under the query key <c>eventCodes</c>, mirroring the
+    /// Tandem Source web app; the endpoint ignores the filter server-side and returns every event
+    /// regardless, so filtering is client-side.
     /// </summary>
     public async Task<TandemPumpLogsResponse?> GetPumpLogsAsync(
         TandemConstants.RegionUrls region, string accessToken, string pumperId,
@@ -51,7 +52,7 @@ public sealed class TandemSourceApiClient(HttpClient httpClient, ILogger logger)
             ["pumperId"] = pumperId,
             ["startDate"] = $"{min}T00:00:00Z",
             ["endDate"] = $"{max}T23:59:59Z",
-            ["eventIds"] = eventIdsFilter is { Length: > 0 } ? string.Join(",", eventIdsFilter) : string.Empty,
+            ["eventCodes"] = eventIdsFilter is { Length: > 0 } ? string.Join(",", eventIdsFilter) : string.Empty,
         };
         var endpoint = $"api/reports/bff/pump-logs/{deviceAssignmentId}?" +
             string.Join("&", query.Select(kv => $"{kv.Key}={Uri.EscapeDataString(kv.Value)}"));

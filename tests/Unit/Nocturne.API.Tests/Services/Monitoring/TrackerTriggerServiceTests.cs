@@ -89,6 +89,13 @@ public class TrackerTriggerServiceTests
                 return instance;
             });
 
+        _repository
+            .Setup(r => r.ExecuteUnderDefinitionLockAsync(
+                It.IsAny<Guid>(), It.IsAny<Func<CancellationToken, Task<TrackerSuccessionResult>>>(),
+                It.IsAny<Func<TrackerSuccessionResult, CancellationToken, Task<bool>>?>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid _, Func<CancellationToken, Task<TrackerSuccessionResult>> work,
+                Func<TrackerSuccessionResult, CancellationToken, Task<bool>>? _, CancellationToken ct) => work(ct));
+
         _sut = new TrackerTriggerService(
             _repository.Object,
             _broadcast.Object,

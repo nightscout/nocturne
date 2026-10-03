@@ -19,10 +19,21 @@
     leading?: Snippet;
     actions: Snippet;
   } = $props();
+
+  // Sticky side panels on the same page offset themselves by this bar via
+  // `--editor-bar-height`, so it is published on the root rather than the bar.
+  let barHeight = $state(0);
+
+  $effect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--editor-bar-height", `${barHeight}px`);
+    return () => root.style.removeProperty("--editor-bar-height");
+  });
 </script>
 
 <div
-  class="mb-6 flex items-center justify-between gap-4 md:sticky md:top-0 md:z-30 md:border-b md:border-border/60 md:bg-background/95 md:py-3 md:backdrop-blur"
+  bind:offsetHeight={barHeight}
+  class="mb-6 flex items-center justify-between gap-4 md:sticky md:top-(--app-sticky-top,0px) md:z-30 md:border-b md:border-border/60 md:bg-background/95 md:py-3 md:backdrop-blur"
 >
   <div class="flex min-w-0 items-center gap-2">
     {@render leading?.()}

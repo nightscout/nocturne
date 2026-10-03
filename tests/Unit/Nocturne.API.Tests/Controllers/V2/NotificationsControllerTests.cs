@@ -1,5 +1,7 @@
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -25,73 +27,130 @@ public class NotificationsControllerTests
         );
     }
 
-    [Fact]
-    public async Task SendLoopNotification_WithValidRequest_ReturnsOkResult()
+    private LoopNotificationData? _sent;
+
+    private void GivenRequestBody(string contentType, string body)
     {
-        // Arrange
-        var request = new LoopNotificationRequest
-        {
-            Type = "temp-basal",
-            Message = "Temp Basal",
-            Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        };
+        var context = new DefaultHttpContext();
+        context.Request.ContentType = contentType;
+        context.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(body));
+        context.Request.ContentLength = context.Request.Body.Length;
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+    }
 
-        var expectedResponse = new NotificationV2Response
-        {
-            Success = true,
-            Message = "Loop notification processed successfully",
-        };
-
+    private void GivenSendResult(bool success, string message) =>
         _mockNotificationService
             .Setup(s =>
                 s.SendLoopNotificationAsync(
-                    It.IsAny<LoopNotificationRequest>(),
+                    It.IsAny<LoopNotificationData>(),
                     It.IsAny<string>(),
                     It.IsAny<CancellationToken>()
                 )
             )
-            .ReturnsAsync(expectedResponse);
+            .Callback<LoopNotificationData, string, CancellationToken>((data, _, _) => _sent = data)
+            .ReturnsAsync(new LoopNotificationResponse { Success = success, Message = message });
 
-        // Act
-        var result = await _controller.SendLoopNotification(request, CancellationToken.None);
+    [Fact]
+    public async Task SendLoopNotification_NightscoutJsonBody_IsSentAndAnswersOk()
+    {
+        GivenSendResult(true, "Loop notification sent successfully");
+        GivenRequestBody(
+            "application/json",
+            """{"eventType":"Remote Carbs Entry","remoteCarbs":"20","remoteAbsorption":3,"otp":"123456","enteredBy":"caregiver","created_at":"2026-09-30T01:02:03Z"}"""
+        );
 
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationV2Response>(okResult.Value);
-        Assert.True(response.Success);
-        Assert.Equal("Loop notification processed successfully", response.Message);
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
+
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status200OK, content.StatusCode);
+        Assert.Equal("OK", content.Content);
+        Assert.NotNull(_sent);
+        Assert.Equal("Remote Carbs Entry", _sent.EventType);
+        Assert.Equal("20", _sent.RemoteCarbs);
+        Assert.Equal("3", _sent.RemoteAbsorption);
+        Assert.Equal("123456", _sent.Otp);
+        Assert.Equal("caregiver", _sent.EnteredBy);
+        Assert.Equal("2026-09-30T01:02:03Z", _sent.CreatedAt);
     }
 
     [Fact]
-    public async Task SendLoopNotification_WithInvalidRequest_ReturnsBadRequest()
+    public async Task SendLoopNotification_CareportalFormBody_IsSent()
     {
-        // Arrange
-        var request = new LoopNotificationRequest(); // Invalid request - missing required fields
+        GivenSendResult(true, "Loop notification sent successfully");
+        GivenRequestBody(
+            "application/x-www-form-urlencoded",
+            "eventType=Temporary+Override&reason=exercise&reasonDisplay=Pre-run+exercise&duration=60&notes=&enteredBy=parent&created_at=2026-09-30T01%3A02%3A03Z"
+        );
 
-        var expectedResponse = new NotificationV2Response
-        {
-            Success = false,
-            Message = "Missing required 'type' field",
-        };
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
 
-        _mockNotificationService
-            .Setup(s =>
-                s.SendLoopNotificationAsync(
-                    It.IsAny<LoopNotificationRequest>(),
-                    It.IsAny<string>(),
-                    It.IsAny<CancellationToken>()
-                )
-            )
-            .ReturnsAsync(expectedResponse);
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status200OK, content.StatusCode);
+        Assert.NotNull(_sent);
+        Assert.Equal("Temporary Override", _sent.EventType);
+        Assert.Equal("exercise", _sent.Reason);
+        Assert.Equal("Pre-run exercise", _sent.ReasonDisplay);
+        Assert.Equal("60", _sent.Duration);
+        Assert.Equal("parent", _sent.EnteredBy);
+        Assert.Equal("2026-09-30T01:02:03Z", _sent.CreatedAt);
+    }
 
-        // Act
-        var result = await _controller.SendLoopNotification(request, CancellationToken.None);
+    [Fact]
+    public async Task SendLoopNotification_NothingSent_AnswersServerErrorWithTheReason()
+    {
+        GivenSendResult(
+            false,
+            "Loop notification failed: Could not find deviceToken in loopSettings."
+        );
+        GivenRequestBody("application/json", """{"eventType":"Temporary Override Cancel"}""");
 
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationV2Response>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Missing required 'type' field", response.Message);
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
+
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status500InternalServerError, content.StatusCode);
+        Assert.Equal(
+            "Loop notification failed: Could not find deviceToken in loopSettings.",
+            content.Content
+        );
+    }
+
+    [Fact]
+    public async Task SendLoopNotification_EmptyBody_ReachesTheServiceWithNoEventType()
+    {
+        GivenSendResult(false, "Loop notification failed: Unhandled event type: ");
+        GivenRequestBody("application/json", "");
+
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
+
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status500InternalServerError, content.StatusCode);
+        Assert.NotNull(_sent);
+        Assert.Null(_sent.EventType);
+    }
+
+    [Fact]
+    public async Task SendLoopNotification_FormOverTheKeyLengthLimit_AnswersBadRequest()
+    {
+        GivenRequestBody("application/x-www-form-urlencoded", new string('k', 5000) + "=1");
+
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
+
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, content.StatusCode);
+        Assert.Equal("Malformed request body", content.Content);
+        _mockNotificationService.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task SendLoopNotification_MalformedJson_AnswersBadRequest()
+    {
+        GivenRequestBody("application/json", "{\"eventType\":");
+
+        var result = await _controller.SendLoopNotification(CancellationToken.None);
+
+        var content = Assert.IsType<ContentResult>(result);
+        Assert.Equal(StatusCodes.Status400BadRequest, content.StatusCode);
+        _mockNotificationService.VerifyNoOtherCalls();
     }
 
     [Fact]
@@ -150,22 +209,6 @@ public class NotificationsControllerTests
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         Assert.NotNull(okResult.Value);
-    }
-
-    [Fact]
-    public async Task SendLoopNotification_WithNullRequest_ReturnsBadRequest()
-    {
-        // Arrange
-        LoopNotificationRequest? request = null;
-
-        // Act
-        var result = await _controller.SendLoopNotification(request!, CancellationToken.None);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
-        var response = Assert.IsType<NotificationV2Response>(badRequestResult.Value);
-        Assert.False(response.Success);
-        Assert.Equal("Request body is required", response.Message);
     }
 
     [Fact]

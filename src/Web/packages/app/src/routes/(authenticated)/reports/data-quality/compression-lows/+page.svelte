@@ -34,6 +34,7 @@
 	import IobCobTrack from '$lib/components/dashboard/glucose-chart/tracks/IobCobTrack.svelte';
 	import ThresholdRules from '$lib/components/dashboard/glucose-chart/tracks/ThresholdRules.svelte';
 	import ChartTooltip from '$lib/components/dashboard/glucose-chart/ChartTooltip.svelte';
+	import { openDayInReview } from '$lib/components/dashboard/glucose-chart/day-in-review';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
 	import Clock from '@lucide/svelte/icons/clock';
@@ -350,14 +351,13 @@
 </svelte:head>
 
 {#if suggestionsResource.current}
-	<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
+	<div class="@container space-y-6">
 		<div class="flex flex-col gap-3 @lg:flex-row @lg:items-center @lg:justify-between">
 			<div class="flex items-center gap-4">
 				<Button href="/reports/data-quality" variant="ghost" size="icon" class="print:hidden">
 					<ArrowLeft class="h-4 w-4" />
 				</Button>
 				<div>
-					<h1 class="text-2xl font-bold print:hidden">Compression Lows</h1>
 					<p class="text-muted-foreground">
 						{#if pendingCount > 0}
 							{pendingCount} pending review
@@ -588,7 +588,7 @@
 													<IobCobTrack />
 												{/snippet}
 												{#snippet overlays(_ctx)}
-													<ChartTooltip />
+													<ChartTooltip onTimeClick={openDayInReview} />
 												{/snippet}
 											</GlucoseChartShell>
 										</div>

@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Repositories;
@@ -573,7 +575,7 @@ public class SleepSessionRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task DeleteSessionAsync_removes_session_and_children()
+    public async Task DeleteSessionAsync_soft_deletes_session_and_keeps_children()
     {
         var entity = CreateEntity(TenantA,
             new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
@@ -601,5 +603,64 @@ public class SleepSessionRepositoryTests : IDisposable
 
         var count = await _repository.CountSessionsAsync();
         count.Should().Be(0);
+        (await _repository.GetSessionByIdAsync(entity.Id)).Should().BeNull();
+        _context.ChangeTracker.Clear();
+        var tombstone = _context.SleepSessions.IgnoreQueryFilters().Single(s => s.Id == entity.Id);
+        tombstone.DeletedAt.Should().NotBeNull();
+        _context.SleepStages.IgnoreQueryFilters().Count(s => s.SleepSessionId == entity.Id).Should().Be(1);
     }
+
+    [Fact]
+    public async Task UpsertSessionAsync_refuses_a_session_the_user_deleted()
+    {
+        var deleted = CreateEntity(TenantA,
+            new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
+            originalId: "fitbit-deleted");
+        deleted.DeletedAt = DateTime.UtcNow;
+        await SeedAsync(deleted);
+        _context.Entry(deleted).Property("DeletedByUser").CurrentValue = true;
+        await _context.SaveChangesAsync();
+        _context.ChangeTracker.Clear();
+
+        var upsert = () => _repository.UpsertSessionAsync(Session("fitbit-deleted"));
+
+        await upsert.Should().ThrowAsync<RecreationBlockedException>();
+        (await _repository.CountSessionsAsync()).Should().Be(0);
+        _context.ChangeTracker.Clear();
+        _context.SleepSessions.IgnoreQueryFilters().Where(s => s.OriginalId == "fitbit-deleted")
+            .Should().ContainSingle().Which.DeletedAt.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task UpsertSessionAsync_replaces_a_session_the_system_swept()
+    {
+        var swept = CreateEntity(TenantA,
+            new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
+            originalId: "fitbit-swept");
+        swept.DeletedAt = DateTime.UtcNow;
+        await SeedAsync(swept);
+        _context.ChangeTracker.Clear();
+
+        await _repository.UpsertSessionAsync(Session("fitbit-swept"));
+
+        (await _repository.CountSessionsAsync()).Should().Be(1);
+        _context.ChangeTracker.Clear();
+        _context.SleepSessions.IgnoreQueryFilters().Where(s => s.OriginalId == "fitbit-swept")
+            .Should().ContainSingle("the unique (tenant, source, original_id) index counts the swept row too")
+            .Which.DeletedAt.Should().BeNull();
+    }
+
+    private static SleepSession Session(string originalId) => new()
+    {
+        StartTime = new DateTime(2026, 1, 1, 22, 0, 0, DateTimeKind.Utc),
+        EndTime = new DateTime(2026, 1, 2, 6, 0, 0, DateTimeKind.Utc),
+        Type = SleepSessionType.Overnight,
+        DetectionMethod = SleepDetectionMethod.Auto,
+        Source = SleepSource.Fitbit,
+        DurationMs = 28_800_000,
+        TotalSleepMs = 25_200_000,
+        OriginalId = originalId,
+    };
 }

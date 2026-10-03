@@ -4,6 +4,7 @@ using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Infrastructure.Data.Abstractions;
 using Nocturne.Infrastructure.Data.Repositories;
 using Nocturne.API.Configuration;
+using Nocturne.API.Helpers;
 using Nocturne.API.Services.Compatibility;
 
 namespace Nocturne.API.Extensions;
@@ -61,19 +62,12 @@ public static class CompatibilityProxyServiceExtensions
                 .GetSection(CompatibilityProxyConfiguration.ConfigurationSection)
                 .Get<CompatibilityProxyConfiguration>() ?? new CompatibilityProxyConfiguration();
 
-        // Nightscout HTTP client — URL comes from NightscoutConnectorConfiguration
-        // which is already registered by the connector installer.
-        // We resolve it at request time; here we just set timeout and user-agent.
+        // Requests carry absolute URIs built by NightscoutBaseUri from the connector URL.
         services
             .AddHttpClient(
                 "NightscoutClient",
-                (sp, client) =>
+                client =>
                 {
-                    var nightscoutConfig = sp.GetService<NightscoutConnectorConfiguration>();
-                    if (nightscoutConfig != null && !string.IsNullOrEmpty(nightscoutConfig.Url))
-                    {
-                        client.BaseAddress = new Uri(nightscoutConfig.Url);
-                    }
                     client.Timeout = TimeSpan.FromSeconds(proxyConfig.TimeoutSeconds);
                     client.DefaultRequestHeaders.Add(
                         "User-Agent",
@@ -193,9 +187,8 @@ public class CompatibilityProxyHealthCheck : IHealthCheck
             using var client = _httpClientFactory.CreateClient(clientName);
             client.Timeout = TimeSpan.FromSeconds(5); // Short timeout for health checks
 
-            // Try to connect to the target URL with a HEAD request
             using var response = await client.SendAsync(
-                new HttpRequestMessage(HttpMethod.Head, "/"),
+                new HttpRequestMessage(HttpMethod.Head, NightscoutBaseUri.For(targetUrl)),
                 cancellationToken
             );
 

@@ -336,7 +336,7 @@
 </svelte:head>
 
 {#if reportsResource.current}
-<div class="@container container mx-auto space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <!-- Header -->
   <div class="space-y-2 print:hidden">
     <div
@@ -349,7 +349,6 @@
       <span class="text-muted-foreground/50">•</span>
       <span>{formatNumber(allRows.length)} records</span>
     </div>
-    <h1 class="text-center text-3xl font-bold">Treatment Log</h1>
     <p class="mx-auto max-w-2xl text-center text-muted-foreground">
       Review and manage your insulin doses, carb entries, BG checks, notes, and
       device events. Use filters to find specific records.

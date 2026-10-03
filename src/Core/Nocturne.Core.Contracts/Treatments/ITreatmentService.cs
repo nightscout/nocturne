@@ -49,6 +49,14 @@ public interface ITreatmentService
     );
 
     /// <summary>
+    /// Whether <paramref name="id"/> names a treatment the user deleted, so a save under it must not
+    /// bring the treatment back
+    /// </summary>
+    /// <param name="id">Treatment ID as the client sent it</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    Task<bool> IsTreatmentDeletedByUserAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Get treatments with advanced V3-style filtering, including StateSpan-derived temp basals.
     /// </summary>
     /// <param name="count">Maximum number of treatments to return.</param>

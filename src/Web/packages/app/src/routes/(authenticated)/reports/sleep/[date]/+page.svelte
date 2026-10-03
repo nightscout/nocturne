@@ -95,7 +95,7 @@
 </svelte:head>
 
 {#if report && session}
-  <div class="@container container mx-auto max-w-7xl space-y-6 p-3 @md:p-6">
+  <div class="@container space-y-6">
     <div>
       <a
         href={resolve("/(authenticated)/reports/sleep")}
@@ -104,7 +104,7 @@
         <ArrowLeft class="h-4 w-4" />
         Sleep & Overnight
       </a>
-      <h1 class="mt-2 text-2xl font-bold @md:text-3xl print:hidden">{dateDisplay}</h1>
+      <p class="mt-2 text-lg font-semibold print:hidden">{dateDisplay}</p>
       {#if timeSpan}
         <!-- The printed header's period already carries the time span. -->
         <p class="text-muted-foreground tabular-nums">

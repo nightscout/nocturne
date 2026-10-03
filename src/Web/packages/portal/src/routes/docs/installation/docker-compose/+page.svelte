@@ -6,8 +6,10 @@
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import PasswordGenerator from "$lib/components/docs/PasswordGenerator.svelte";
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
+    import Callout from "@nocturne/cms/components/Callout.svelte";
     import envExample from "$lib/release/docker-compose/default.env.example?raw";
     import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
+    import bindDataCompose from "$lib/release/docker-compose/docker-compose.bind-data.yaml?raw";
 </script>
 
 <div class="max-w-3xl">
@@ -55,8 +57,10 @@
         bundle also ships a
         <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker-compose.byo-proxy.yaml</code>
         override for operators who run their own reverse proxy (see below).
+        A second, optional override lets PostgreSQL store its data in a directory on
+        the Docker host.
     </p>
-    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -L -o .env https://github.com/nightscout/nocturne/releases/latest/download/default.env.example"} class="mb-4" />
+    <CodeBlock code={"mkdir nocturne && cd nocturne\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.yaml\ncurl -LO https://github.com/nightscout/nocturne/releases/latest/download/docker-compose.bind-data.yaml\ncurl -L -o .env https://github.com/nightscout/nocturne/releases/latest/download/default.env.example"} class="mb-4" />
 
     <details class="mb-8">
         <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.yaml</summary>
@@ -71,6 +75,111 @@
     </p>
     <PasswordGenerator label="password" />
     <CodeBlock code={envExample} class="mb-8" maxHeight="400px" />
+
+    <h2 class="text-2xl font-bold mt-8 mb-4">Optional: use a host directory for PostgreSQL</h2>
+    <p class="text-muted-foreground mb-4">
+        The default named Docker volume is recommended for most installs and needs no extra
+        configuration. To place PostgreSQL's data on a specific disk or host directory, use
+        the separate bind-data override. It fixes the mount type to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">bind</code>
+        and requires one path, so the mount type and source cannot be accidentally mismatched.
+    </p>
+    <p class="text-muted-foreground mb-4">
+        Keep every active override in the same ordered <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
+        list on every Compose command for this stack. Include the bind-data file, the BYO-proxy
+        file, and any local override file you use. Omitting an active override can restore the
+        named-volume mount or bundled proxy configuration.
+    </p>
+    <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-4">
+        <li>
+            Create the directory on the machine running the Docker daemon, not merely on the
+            computer where you run the Docker CLI. Use an absolute path and ensure the
+            PostgreSQL container can write to it. For example:
+            <CodeBlock code="sudo mkdir -p /srv/nocturne/postgres-data" class="mt-3" />
+        </li>
+        <li>
+            Add the path to <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">.env</code>:
+            <CodeBlock code="POSTGRES_DATA_PATH=/srv/nocturne/postgres-data" class="mt-3" />
+        </li>
+        <li>
+            This replaces the default <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
+            command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">-f</code>
+            arguments on every later Compose command, including updates and shutdown:
+            <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d" class="mt-3" />
+        </li>
+    </ol>
+    <Callout type="warning" title="Changing the path does not move your database">
+        <p>
+            A new or empty directory initializes a separate, empty PostgreSQL database. For an
+            existing install, take and verify a backup, stop the stack, and migrate the existing
+            PostgreSQL data before starting with the override. Preserve file ownership and use
+            the same PostgreSQL major version. Keep the original named volume until the new
+            location has been verified. There is no automatic volume migration. Do not use
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker compose down -v</code>
+            while the original volume is your only copy.
+        </p>
+    </Callout>
+    <details class="mb-6">
+        <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">Move an existing database from the named volume</summary>
+        <div class="mt-3">
+            <p class="text-muted-foreground mb-4">
+                Schedule downtime first. This copies PostgreSQL's physical data directory, so
+                the source server must be stopped and the destination must use the same
+                PostgreSQL major version. These commands assume Docker runs on this Linux host
+                and you are in the directory containing the Compose files and <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">.env</code>.
+            </p>
+            <ol class="list-decimal list-inside space-y-3 text-muted-foreground mb-4">
+                <li>
+                    Stop the stack without removing its containers or volumes, then record the
+                    stopped PostgreSQL container:
+                    <CodeBlock code={'docker compose stop\npostgres_container="$(docker compose ps -aq nocturne-postgres-server)"\ntest -n "$postgres_container"'} class="mt-3" />
+                </li>
+                <li>
+                    Create and inspect a root-owned backup archive while the database is stopped:
+                    <CodeBlock code={'docker run --rm --user 0 --volumes-from "$postgres_container" -v "$PWD:/backup" postgres:17.6 tar --numeric-owner -C /var/lib/postgresql -cpf /backup/nocturne-postgres-data.tar data\ntar -tf nocturne-postgres-data.tar | head'} class="mt-3" />
+                    Keep this archive somewhere safe before continuing.
+                </li>
+                <li>
+                    Create the host directory and copy the stopped data directory, preserving
+                    its contents and ownership:
+                    <CodeBlock code={'sudo mkdir -p /srv/nocturne/postgres-data\ndocker run --rm --user 0 --volumes-from "$postgres_container" -v /srv/nocturne/postgres-data:/target postgres:17.6 sh -c \'cp -a /var/lib/postgresql/data/. /target/ && chown --reference=/var/lib/postgresql/data /target && chmod --reference=/var/lib/postgresql/data /target\''} class="mt-3" />
+                </li>
+                <li>
+                    Set <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">POSTGRES_DATA_PATH=/srv/nocturne/postgres-data</code>
+                    in <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">.env</code> and start
+                    with both Compose files:
+                    <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d" class="mt-3" />
+                    If you also use the BYO-proxy override, include it as well:
+                    <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml up -d" class="mt-3" />
+                </li>
+                <li>
+                    Verify the PostgreSQL logs and your existing Nocturne data before allowing
+                    writes. Keep the original named volume and backup archive until verification
+                    is complete. To roll back before new writes, stop the override stack without
+                    deleting volumes, then start the original Compose file again:
+                    <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml down\ndocker compose up -d'} class="mt-3" />
+                    For a stack that also uses BYO proxy, keep that override when stopping and
+                    when returning to the named-volume configuration:
+                    <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml down\ndocker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d'} class="mt-3" />
+                </li>
+            </ol>
+            <p class="text-muted-foreground">
+                Do not use <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">down -v</code>
+                during migration or rollback. It deletes named volumes. If the new database has
+                accepted writes, it is no longer equivalent to the untouched original volume;
+                plan any rollback or restore before reopening the service to users.
+            </p>
+        </div>
+    </details>
+    <p class="text-muted-foreground mb-4 mt-4">
+        The override requires <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">POSTGRES_DATA_PATH</code>
+        and refuses to create a missing host directory. If the variable is unset or the path does
+        not exist, Compose reports an error instead of silently starting PostgreSQL in a newly
+        created directory. A path that exists but contains no database is still a new database.
+    </p>
+    <details class="mb-8">
+        <summary class="text-sm font-medium text-muted-foreground cursor-pointer hover:text-foreground">View docker-compose.bind-data.yaml</summary>
+        <CodeBlock code={bindDataCompose} class="mt-2" maxHeight="240px" />
+    </details>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Step 3: Start the services</h2>
     <CodeBlock code="docker compose up -d" class="mb-4" />
@@ -93,6 +202,10 @@
         gateway on plain HTTP port 8080 for your proxy to forward to:
     </p>
     <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.byo-proxy.yaml up -d" class="mb-4" />
+    <p class="text-muted-foreground mb-4">
+        If you also use the bind-data override, include both overrides in the same command:
+    </p>
+    <CodeBlock code="docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml up -d" class="mb-4" />
     <p class="text-muted-foreground mb-8">
         Your proxy must forward the original <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">Host</code>
         along with <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">X-Forwarded-Proto</code> and
@@ -116,6 +229,15 @@
         run <code class="text-xs bg-muted/50 px-1.5 py-0.5 rounded">docker compose up -d</code>
         to pick them up. That first run recreates the containers, which clears their
         old logs; your database data is kept.
+    </p>
+    <p class="text-muted-foreground mb-4">
+        Keep every active override in both the pull and update commands. For bind-data only:
+    </p>
+    <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml pull\ndocker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml up -d'} class="mb-4" />
+    <p class="text-muted-foreground mb-4">For bind-data with the BYO-proxy override:</p>
+    <CodeBlock code={'docker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml pull\ndocker compose -f docker-compose.yaml -f docker-compose.bind-data.yaml -f docker-compose.byo-proxy.yaml up -d'} class="mb-8" />
+    <p class="text-muted-foreground mb-8">
+        Omitting the bind-data override changes the declared storage back to the named volume.
     </p>
 
     <h2 class="text-2xl font-bold mt-8 mb-4">Restarts and logs</h2>

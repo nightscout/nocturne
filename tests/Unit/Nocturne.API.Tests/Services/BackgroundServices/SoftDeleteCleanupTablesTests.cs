@@ -16,7 +16,7 @@ public class SoftDeleteCleanupTablesTests
         "bolus_calculations", "boluses", "calibrations", "carb_intakes", "carb_ratio_schedules",
         "device_events", "device_status_extras", "devices", "heart_rates", "lab_hba1c_results",
         "meter_glucose", "notes", "patient_devices", "patient_insulins", "patient_records",
-        "pump_snapshots", "sensitivity_schedules", "sensor_glucose", "state_spans", "step_counts",
+        "pump_snapshots", "sensitivity_schedules", "sensor_glucose", "sleep_sessions", "state_spans", "step_counts",
         "target_range_schedules", "temp_basals", "therapy_settings", "uploader_snapshots"
     ];
 

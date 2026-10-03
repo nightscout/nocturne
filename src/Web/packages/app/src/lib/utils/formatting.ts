@@ -15,7 +15,7 @@ import {
   preferredLanguage,
   type GlucoseUnits,
 } from "$lib/stores/appearance-store.svelte";
-import type { OverallAverages, Treatment, TreatmentSummary } from "$lib/api";
+import type { OverallAverages, Treatment, TreatmentSummary } from "$api-clients";
 
 // Re-export for backward compatibility
 export type { GlucoseUnits, OverallAverages, Treatment, TreatmentSummary };

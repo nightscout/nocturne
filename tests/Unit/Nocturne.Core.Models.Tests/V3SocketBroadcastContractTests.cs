@@ -103,6 +103,25 @@ public class V3SocketBroadcastContractTests
     }
 
     [Fact]
+    public void AapsDeviceStatus_NullEnacted_IsOmittedFromBroadcast()
+    {
+        var status = new DeviceStatus
+        {
+            Mills = Mills,
+            OpenAps = new OpenApsStatus
+            {
+                Suggested = new OpenApsSuggested { Bg = 120 },
+                Enacted = null,
+            },
+        };
+
+        var root = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(status));
+        var openaps = root.GetProperty("openaps");
+
+        openaps.TryGetProperty("enacted", out _).Should().BeFalse();
+    }
+
+    [Fact]
     public void ExplicitSrvTimestamps_WinOverTheFallback()
     {
         var entry = new Entry

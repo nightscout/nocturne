@@ -414,7 +414,7 @@
   ]);
 </script>
 
-<div class="@container space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <!-- Period controls — pickers/toggles are print chaff; compared period
        labels + ranges remain visible in the diff strip and TIR cards below. -->
   <Card.Root class="print:hidden">

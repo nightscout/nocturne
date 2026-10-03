@@ -8,63 +8,44 @@
   const realtimeStore = getRealtimeStore();
 
   // Reactive state from realtime store
-  const connectionStatus = $derived(realtimeStore.connectionStatus);
-  const isConnected = $derived(realtimeStore.isConnected);
-  const connectionError = $derived(realtimeStore.connectionError);
+  const connection = $derived(realtimeStore.connectionPresentation);
+  const isConnected = $derived(connection === 'live');
+  const connectionError = $derived(
+    connection === 'unavailable' ? realtimeStore.connectionError : null
+  );
   const stats = $derived(realtimeStore.connectionStats);
   const timeSinceUpdate = $derived(realtimeStore.timeSinceUpdate);
 
   // Connection status styling
   const statusConfig = $derived.by(() => {
-    switch (connectionStatus) {
-      case 'connected':
+    switch (connection) {
+      case 'live':
         return {
           variant: 'default' as const,
           color: 'bg-success',
           text: 'Connected',
           description: 'Real-time data active'
         };
-      case 'idle':
-        return {
-          variant: 'outline' as const,
-          color: 'bg-gray-500',
-          text: 'Starting',
-          description: 'Waiting to connect'
-        };
-      case 'connecting':
+      case 'pending':
         return {
           variant: 'secondary' as const,
           color: 'bg-warning',
           text: 'Connecting...',
           description: 'Establishing connection'
         };
-      case 'reconnecting':
-        return {
-          variant: 'secondary' as const,
-          color: 'bg-orange-500',
-          text: 'Reconnecting...',
-          description: 'Attempting to reconnect'
-        };
-      case 'disconnected':
-        return {
-          variant: 'outline' as const,
-          color: 'bg-gray-500',
-          text: 'Disconnected',
-          description: 'Using cached data'
-        };
-      case 'unauthorized':
+      case 'denied':
         return {
           variant: 'outline' as const,
           color: 'bg-gray-500',
           text: 'Not available',
           description: 'Live updates are not permitted for this view'
         };
-      case 'error':
+      case 'unavailable':
         return {
           variant: 'destructive' as const,
           color: 'bg-destructive',
-          text: 'Error',
-          description: connectionError?.message || 'Connection failed'
+          text: 'Disconnected',
+          description: connectionError?.message || 'Using cached data'
         };
     }
   });
@@ -99,7 +80,7 @@
         </Badge>
       </div>
       
-      {#if !isConnected}
+      {#if connection === 'unavailable'}
         <Button
           variant="outline"
           size="xs"

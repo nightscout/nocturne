@@ -81,7 +81,7 @@ public interface ITreatmentDecomposer
     /// </summary>
     /// <returns>
     /// The write-back echoes among <paramref name="treatments"/>: treatments the Nightscout
-    /// connector pulled that name a record stored from another source. Decomposing one stores nothing.
+    /// connector pulled that name a record write-back may have sent upstream. Decomposing one stores nothing.
     /// </returns>
     Task<IEnumerable<Treatment>> ResolveStoredIdentitiesAsync(
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default);

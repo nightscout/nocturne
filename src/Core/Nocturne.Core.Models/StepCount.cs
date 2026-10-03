@@ -79,6 +79,13 @@ public class StepCount : ProcessableDocumentBase
     public bool IsPossibleRunningTotal() => (Source & PossibleRunningTotalFlag) != 0;
 
     /// <summary>
+    /// The legacy <c>type</c> the record was uploaded with (xDrip sends <c>steps-total</c>), returned on
+    /// the v1 activity read-back.
+    /// </summary>
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    /// <summary>
     /// Gets or sets the device identifier that recorded this reading
     /// </summary>
     [JsonPropertyName("device")]

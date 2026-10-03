@@ -45,11 +45,18 @@ public interface ISleepService
     /// <summary>
     /// Creates or updates a sleep session, matched by its identifier or original ID.
     /// </summary>
+    /// <exception cref="V4.Repositories.RecreationBlockedException">
+    /// The session matches one the user deleted, which a re-upload never brings back.
+    /// </exception>
     Task<SleepSession> UpsertSessionAsync(SleepSession session, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Updates an existing sleep session by ID.
     /// </summary>
+    /// <exception cref="V4.Repositories.RecreationBlockedException">
+    /// The update moves the session onto a source and original ID that another live session, or one
+    /// the user deleted, holds.
+    /// </exception>
     Task<SleepSession?> UpdateSessionAsync(Guid id, SleepSession session, CancellationToken cancellationToken = default);
 
     /// <summary>

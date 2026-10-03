@@ -140,24 +140,6 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_WithLegacyId_PrefersTheDeviceEventOverTheNoteItsNotesWrote()
-    {
-        const string legacyId = "abc123";
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime;
-        var deviceEvent = new DeviceEvent { Id = Guid.NewGuid(), Timestamp = timestamp, LegacyId = legacyId };
-        var note = new Note { Id = Guid.NewGuid(), Timestamp = timestamp, LegacyId = legacyId };
-        _deviceEventRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
-        _noteRepo.Setup(r => r.GetByLegacyIdAsync(legacyId, It.IsAny<CancellationToken>())).ReturnsAsync(note);
-        _projection
-            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([new() { Id = note.Id.ToString(), Mills = 1000 }, new() { Id = deviceEvent.Id.ToString(), Mills = 1000 }]);
-
-        var result = await _service.GetByIdAsync(legacyId);
-
-        result!.Id.Should().Be(deviceEvent.Id.ToString());
-    }
-
-    [Fact]
     public async Task GetByIdAsync_NotFound_ReturnsNull()
     {
         _bolusRepo.Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Bolus?)null);
@@ -250,8 +232,8 @@ public class TreatmentReadServiceTests
     }
 
     /// <summary>
-    /// The record whose uuid names the created treatment is the one <c>GetByLegacyIdAsync</c> resolves
-    /// the upload's legacy id to, so the create names the treatment as a later read does.
+    /// The record whose uuid names the created treatment is the one a read resolves the upload's
+    /// legacy id to, so the create names the treatment as a later read does.
     /// </summary>
     public static TheoryData<string, object[], int> ServedRecords()
     {
@@ -261,13 +243,14 @@ public class TreatmentReadServiceTests
         var note = new Note { Id = Guid.NewGuid() };
         var deviceEvent = new DeviceEvent { Id = Guid.NewGuid() };
         var calculation = new BolusCalculation { Id = Guid.NewGuid() };
+        var tempBasal = new TempBasal { Id = Guid.NewGuid() };
 
         return new()
         {
+            { "temp basal with a note", [note, tempBasal], 1 },
             { "note", [note], 0 },
             { "bolus with a note", [note, bolus], 1 },
             { "meal", [carbs, bolus], 1 },
-            { "carbs", [carbs], 0 },
             { "bg check with a note", [note, bgCheck], 1 },
             { "device event with a note", [note, deviceEvent], 1 },
             { "bolus wizard", [calculation, bolus], 1 },
@@ -318,16 +301,6 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_KeepsTheLegacyIdOfATreatmentStoredOnlyAsAStateSpan()
-    {
-        var result = await CreateWithAsync(
-            new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Temporary Override" },
-            Wrote([new StateSpan()]));
-
-        result.Should().ContainSingle().Which.Id.Should().Be("legacy-1");
-    }
-
-    [Fact]
     public async Task CreateAsync_LeavesOutATreatmentRefusedByTheUsersDelete()
     {
         var refused = new Treatment { Id = "legacy-1", Mills = 1000, EventType = "Correction Bolus" };
@@ -350,6 +323,27 @@ public class TreatmentReadServiceTests
         result.Settled.Select(t => t.Id).Should().Equal(
             [deletedBolus.ToString(), note.Id.ToString()],
             "a refused treatment keeps its place in the reply, named as the deleted record was served");
+    }
+
+    /// <summary>
+    /// A refused temp basal is named as the temp basal read serves it: by an ObjectId legacy id, else
+    /// by the deleted row's id.
+    /// </summary>
+    [Theory]
+    [InlineData("65a1b2c3d4e5f60718293a5c", true)]
+    [InlineData("syn-temp-basal", false)]
+    public async Task CreateAsync_NamesARefusedTempBasalAsTheReadServedIt(string legacyId, bool servedByLegacyId)
+    {
+        var deletedTempBasal = Guid.NewGuid();
+        var refusal = new DecompositionResult { SkippedDeleted = 1 };
+        refusal.RefusedRecords.Add(new RefusedRecord(typeof(TempBasal), deletedTempBasal));
+
+        var result = await CreateWithAsync(
+            new Treatment { Id = legacyId, Mills = 1000, EventType = "Temp Basal" }, refusal);
+
+        result.Should().BeEmpty();
+        result.Settled.Should().ContainSingle().Which.Id
+            .Should().Be(servedByLegacyId ? legacyId : deletedTempBasal.ToString());
     }
 
     [Fact]
@@ -382,19 +376,187 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
-    public async Task DeleteAsync_CallsPipelineAndChecksTemp()
+    public async Task DeleteAsync_ByStoredLegacyId_DeletesEverySiblingThroughThePipeline()
     {
+        _bolusRepo
+            .Setup(r => r.GetByLegacyIdAsync("t1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Bolus { Id = Guid.CreateVersion7(), LegacyId = "t1" });
         _pipeline
             .Setup(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(3);
-        _tempBasalRepo
-            .Setup(r => r.GetByLegacyIdAsync("t1", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((TempBasal?)null);
 
         var result = await _service.DeleteAsync("t1");
 
-        result.Should().BeTrue();
+        result.Should().NotBeNull();
         _pipeline.Verify(p => p.DeleteByLegacyIdAsync<Treatment>("t1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_NothingStoredUnderTheId_DeletesNothing()
+    {
+        var result = await _service.DeleteAsync("t1");
+
+        result.Should().BeNull();
+        _pipeline.Verify(
+            p => p.DeleteByLegacyIdAsync<Treatment>(It.IsAny<string>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_ReturnsTheIdReadsServeForTheStoredRecord()
+    {
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var treatment = new Treatment { Id = syncIdentifier, Mills = 1000, EventType = "Carb Correction", Carbs = 20 };
+        var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = syncIdentifier };
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.Add(carb);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+        var created = await _service.CreateAsync([treatment]);
+
+        created.Should().ContainSingle().Which.Id.Should().Be(carb.Id.ToString());
+        System.Text.Json.JsonSerializer.SerializeToElement(created[0]).GetProperty("_id").GetString()
+            .Should().Be(MongoObjectId.FromGuid(carb.Id));
+    }
+
+    [Fact]
+    public async Task CreateAsync_MealBolus_ReturnsTheBolusIdTheMealIsReadBackUnder()
+    {
+        var treatment = new Treatment { Id = "meal-1", Mills = 1000, EventType = "Meal Bolus", Insulin = 2, Carbs = 30, Notes = "lunch" };
+        var bolus = new Bolus { Id = Guid.CreateVersion7(), LegacyId = "meal-1" };
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = "meal-1" });
+        result.CreatedRecords.Add(new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = "meal-1" });
+        result.UpdatedRecords.Add(bolus);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+        var created = await _service.CreateAsync([treatment]);
+
+        created.Should().ContainSingle().Which.Id.Should().Be(bolus.Id.ToString());
+    }
+
+    [Fact]
+    public async Task CreateAsync_NothingProjectedWritten_KeepsTheClientId()
+    {
+        var treatment = new Treatment { Id = "override-1", Mills = 1000, EventType = "Temporary Override" };
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.Add(new StateSpan { Id = Guid.CreateVersion7().ToString(), OriginalId = "override-1" });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+
+        var created = await _service.CreateAsync([treatment]);
+
+        created.Should().ContainSingle().Which.Id.Should().Be("override-1");
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_GuidStoredOnlyAsALegacyId_ResolvesIt()
+    {
+        var clientId = Guid.NewGuid().ToString();
+        var carb = new CarbIntake
+        {
+            Id = Guid.CreateVersion7(),
+            LegacyId = clientId,
+            Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime,
+        };
+        _carbIntakeRepo.Setup(r => r.GetByLegacyIdAsync(clientId, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Treatment { Id = carb.Id.ToString(), Mills = 1000 }]);
+
+        var result = await _service.GetByIdAsync(clientId);
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(carb.Id.ToString());
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_LegacyIdOfATreatmentWithNotes_ResolvesTheRecordTheCreateReturned()
+    {
+        var treatment = new Treatment { Id = "site-1", Mills = 1000, EventType = "Site Change", Notes = "left arm" };
+        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(1000).UtcDateTime;
+        var deviceEvent = new DeviceEvent { Id = Guid.CreateVersion7(), LegacyId = "site-1", Timestamp = timestamp };
+        var note = new Note { Id = Guid.CreateVersion7(), LegacyId = "site-1", Timestamp = timestamp };
+        var result = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        result.CreatedRecords.Add(note);
+        result.CreatedRecords.Add(deviceEvent);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(treatment, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+        _deviceEventRepo.Setup(r => r.GetByLegacyIdAsync("site-1", It.IsAny<CancellationToken>())).ReturnsAsync(deviceEvent);
+        _noteRepo.Setup(r => r.GetByLegacyIdAsync("site-1", It.IsAny<CancellationToken>())).ReturnsAsync(note);
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(1000, 1000, 100, false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([
+                new Treatment { Id = note.Id.ToString(), Mills = 1000 },
+                new Treatment { Id = deviceEvent.Id.ToString(), Mills = 1000 },
+            ]);
+
+        var created = await _service.CreateAsync([treatment]);
+        var read = await _service.GetByIdAsync("site-1");
+
+        created.Should().ContainSingle().Which.Id.Should().Be(deviceEvent.Id.ToString());
+        read!.Id.Should().Be(deviceEvent.Id.ToString());
+    }
+
+    [Fact]
+    public async Task DeleteAsync_IdAnOlderCreateEchoed_DeletesTheRecordStoredUnderTheClientId()
+    {
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var echoed = MongoObjectId.Coerce(syncIdentifier)!;
+        _carbIntakeRepo
+            .Setup(r => r.GetByLegacyIdUuidPrefixAsync(echoed, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = syncIdentifier });
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>(syncIdentifier, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var result = await _service.DeleteAsync(echoed);
+
+        result.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetForUpdateAsync_IdAnOlderCreateEchoed_KeysTheTreatmentToTheStoredClientId()
+    {
+        const string syncIdentifier = "a1b2c3d4e5f60718293a4b5c6d7e8f90aa";
+        var echoed = MongoObjectId.Coerce(syncIdentifier)!;
+        var bolus = new Bolus { Id = Guid.CreateVersion7(), LegacyId = syncIdentifier };
+        _bolusRepo
+            .Setup(r => r.GetByLegacyIdHashAsync(echoed, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(bolus);
+        ProjectAs(bolus.Id);
+
+        var existing = await _service.GetForUpdateAsync(echoed);
+
+        existing!.Id.Should().Be(syncIdentifier);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ExactLegacyIdInOneTable_WinsOverAPrefixMatchInAnother()
+    {
+        var prefixed = new Bolus { Id = Guid.CreateVersion7(), LegacyId = "bolus-legacy" };
+        var wireId = MongoObjectId.FromGuid(prefixed.Id);
+        _bolusRepo
+            .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prefixed);
+        _noteRepo
+            .Setup(r => r.GetByLegacyIdAsync(wireId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Note { Id = Guid.CreateVersion7(), LegacyId = wireId });
+        _pipeline
+            .Setup(p => p.DeleteByLegacyIdAsync<Treatment>(wireId, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        await _service.DeleteAsync(wireId);
+
+        _pipeline.Verify(
+            p => p.DeleteByLegacyIdAsync<Treatment>("bolus-legacy", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -419,14 +581,14 @@ public class TreatmentReadServiceTests
 
         var result = await _service.DeleteAsync(wireId);
 
-        result.Should().BeTrue();
+        result.Should().NotBeNull();
         _pipeline.Verify(
             p => p.DeleteByLegacyIdAsync<Treatment>("syn-meal-1", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
     [Fact]
-    public async Task ResolveCanonicalIdAsync_BackfillsNullLegacyId_SoUpdateUpsertsInPlace()
+    public async Task GetForUpdateAsync_BackfillsNullLegacyId_SoUpdateUpsertsInPlace()
     {
         // A native V4 row (LegacyId == null) resolved by a derived ObjectId must be backfilled with
         // that ObjectId so the decomposer upserts it in place instead of inserting a duplicate.
@@ -437,14 +599,89 @@ public class TreatmentReadServiceTests
         _noteRepo
             .Setup(r => r.GetByGuidRangeAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(note);
+        ProjectAs(uuid);
 
-        var canonical = await _service.ResolveCanonicalIdAsync(wireId);
+        var existing = await _service.GetForUpdateAsync(wireId);
 
-        canonical.Should().Be(wireId);
+        existing!.Id.Should().Be(wireId);
         // The backfill goes through IV4Repository<Note>.UpdateAsync (the base slot the generic
-        // helper is typed against), which INoteRepository new-shadows — verify the base slot.
+        // helper is typed against), which INoteRepository new-shadows: verify the base slot.
         _noteRepo.As<IV4Repository<Note>>().Verify(
             r => r.UpdateAsync(uuid, It.Is<Note>(n => n.LegacyId == wireId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    private void ProjectAs(Guid recordId) =>
+        _projection
+            .Setup(p => p.GetProjectedTreatmentsAsync(It.IsAny<long?>(), It.IsAny<long?>(), It.IsAny<int>(), false, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new Treatment { Id = recordId.ToString() }]);
+
+    private void VerifyOneHashScanPerTable()
+    {
+        _bolusRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _carbIntakeRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _bgCheckRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _noteRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _deviceEventRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _bolusCalcRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _tempBasalRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_UnknownObjectId_ScansEachTableOnce()
+    {
+        (await _service.DeleteAsync("0123456789abcdef01234567")).Should().BeNull();
+
+        VerifyOneHashScanPerTable();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_UnknownObjectId_ScansEachTableOnce()
+    {
+        (await _service.UpdateAsync("0123456789abcdef01234567", new Treatment { EventType = "Note" })).Should().BeNull();
+
+        VerifyOneHashScanPerTable();
+        _decomposer.Verify(d => d.DecomposeAsync(
+            It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task GetForUpdateAsync_UnknownObjectId_ScansEachTableOnce()
+    {
+        (await _service.GetForUpdateAsync("0123456789abcdef01234567")).Should().BeNull();
+
+        VerifyOneHashScanPerTable();
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ByAnEchoedId_ReadsTheResultBackByTheRecordsOwnId()
+    {
+        var syncIdentifier = Guid.NewGuid().ToString().ToUpperInvariant();
+        var echoed = MongoObjectId.Coerce(syncIdentifier)!;
+        var carb = new CarbIntake { Id = Guid.CreateVersion7(), LegacyId = syncIdentifier };
+        _carbIntakeRepo.Setup(r => r.GetByLegacyIdUuidPrefixAsync(echoed, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        _carbIntakeRepo.Setup(r => r.GetByIdAsync(carb.Id, It.IsAny<CancellationToken>())).ReturnsAsync(carb);
+        ProjectAs(carb.Id);
+        _decomposer
+            .Setup(d => d.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+
+        var updated = await _service.UpdateAsync(echoed, new Treatment { EventType = "Carb Correction", Carbs = 25 });
+
+        updated!.Id.Should().Be(carb.Id.ToString());
+        _decomposer.Verify(d => d.DecomposeAsync(
+            It.Is<Treatment>(t => t.Id == syncIdentifier && t.Carbs == 25),
+            It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+        _carbIntakeRepo.Verify(r => r.GetByLegacyIdUuidPrefixAsync(echoed, It.IsAny<CancellationToken>()), Times.Once);
+        _carbIntakeRepo.Verify(r => r.GetByLegacyIdHashAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task IsDeletedByUserAsync_AnyTreatmentTableHoldingATombstone_IsTrue()
+    {
+        _noteRepo.Setup(r => r.IsDeletedByUserAsync("t1", It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        (await _service.IsDeletedByUserAsync("t1")).Should().BeTrue();
+        (await _service.IsDeletedByUserAsync("t2")).Should().BeFalse();
     }
 }

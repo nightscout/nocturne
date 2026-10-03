@@ -15,7 +15,6 @@
   import HelpCircle from "@lucide/svelte/icons/circle-question-mark";
   import Clock from "@lucide/svelte/icons/clock";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import SiteChangeIcon from "$lib/components/icons/SiteChangeIcon.svelte";
   import SiteChangeImpactChart from "$lib/components/reports/SiteChangeImpactChart.svelte";
   import { getSiteChangeImpact } from "$api/reports.remote";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -53,15 +52,11 @@
 </svelte:head>
 
 {#if siteChangeResource.current}
-<div class="@container container mx-auto max-w-7xl space-y-8 p-3 @md:p-6">
+<div class="@container space-y-8">
   <div class="space-y-4">
     <div class="flex flex-wrap items-center justify-between gap-4 print:hidden">
       <div>
-        <h1 class="flex items-center gap-3 text-2xl font-bold @md:text-3xl">
-          <SiteChangeIcon class="h-6 w-6 text-report-treatment @md:h-8 @md:w-8" />
-          Site Change Impact
-        </h1>
-        <p class="mt-1 text-muted-foreground">
+        <p class="text-muted-foreground">
           Analyze glucose patterns before and after pump site changes
         </p>
       </div>

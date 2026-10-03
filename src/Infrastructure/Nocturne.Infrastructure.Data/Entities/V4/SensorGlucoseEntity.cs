@@ -10,8 +10,13 @@ namespace Nocturne.Infrastructure.Data.Entities.V4;
 /// Maps to Nocturne.Core.Models.V4.SensorGlucose
 /// </summary>
 [Table("sensor_glucose")]
-public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity
+public class SensorGlucoseEntity : V4TimeSeriesEntityBase, ISyncDedupable, IDeviceAttributedEntity, IWriteBackTracked
 {
+    /// <inheritdoc />
+    [AuditIgnored]
+    [Column("written_live")]
+    public bool WrittenLive { get; set; }
+
     /// <summary>
     /// FK to the patient's registered device record (resolved at ingest time)
     /// </summary>

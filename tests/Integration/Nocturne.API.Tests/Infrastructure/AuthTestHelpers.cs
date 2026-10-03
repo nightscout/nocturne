@@ -508,6 +508,25 @@ public static class AuthTestHelpers
     }
 
     /// <summary>
+    /// <see cref="CreateAuthenticatedTenantClient(ApiIntegrationTestFixture, string, string, string, string)"/>
+    /// over <paramref name="handler"/>, e.g. to see redirects rather than follow them.
+    /// </summary>
+    public static HttpClient CreateAuthenticatedTenantClient(
+        ApiIntegrationTestFixture fixture,
+        HttpMessageHandler handler,
+        string slug,
+        string baseDomain,
+        string accessToken,
+        string apiSecret = "test-secret-for-integration-tests")
+    {
+        var client = fixture.CreateHttpClient(handler);
+        client.DefaultRequestHeaders.Host = $"{slug}.{baseDomain}";
+        client.DefaultRequestHeaders.Add("api-secret", apiSecret);
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+        return client;
+    }
+
+    /// <summary>
     /// Creates an HttpClient targeting a specific tenant by slug with ONLY a Bearer
     /// access token (no api-secret). Use this to exercise the subject-membership
     /// authorization gate in <c>AuthenticationMiddleware</c>: an api-secret header

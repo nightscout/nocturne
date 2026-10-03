@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import { Chart, Svg, Axis, BrushContext } from "layerchart";
   import { scaleTime } from "d3-scale";
-  import type { ChartDataEngine } from "./engine/chart-data-engine.svelte";
+  import type { ChartDataEngine } from "./engine/chart-data-view.svelte";
   import type { PointInspection } from "./engine/point-inspection.svelte";
   import type { GlucoseChartContext, LegendState } from "./chart-context.svelte";
   import { setGlucoseChartContext } from "./chart-context.svelte";

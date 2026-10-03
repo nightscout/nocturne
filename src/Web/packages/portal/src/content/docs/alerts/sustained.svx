@@ -84,62 +84,13 @@ every setup that relies on alerts should also have a **Signal loss** rule (see
 
 </Callout>
 
-## Order matters
-
-A rule checks its rows from the top down, and stops as soon as it knows the
-answer. With **all of**, the first row that is not true settles it, and the
-rows under it are **not checked at all**. A "for at least" row that is not
-checked does nothing to its clock: it does not start it, and it does not throw
-it away.
-
-So when a "for at least" row sits under another condition, its clock only runs
-while the rows above it are true. That can make it alert **later** than you
-expect, or **sooner**.
-
-Both rules below alert when glucose has been above 180 mg/dL (10.0 mmol/L) for
-at least 30 minutes, and it is not between 18:00 and 20:00. They have the same
-two rows, in a different order.
-
-<AlertSimulator
-  scenario="meal-high"
-  scenarios={["meal-high", "high-dip-high"]}
-  rules={["high-after-dinner-timer-first", "high-after-dinner-gate-first"]}
-/>
-
-**Later.** On **High after a meal**, glucose has been over 180 since well
-before 20:00. "Sustained high first" alerts at 20:00, the moment the window
-ends, because its clock has been running since the rise. In "Time window first",
-the time row stops the rule from reaching the clock until 20:00, so the clock
-only starts then and the alert comes half an hour later.
-
-**Sooner.** Switch to **High, dip, high**. Glucose goes over 180 at about 17:40
-and its clock starts, but at 18:00 the window closes before 30 minutes have
-passed. Glucose comes back down during the evening, but "Time window first"
-never checks the clock while the window is closed, so the clock is never thrown
-away. When the window ends at 20:00, glucose has just gone high again, and the
-clock still counts from 17:40: the rule alerts straight away, after only about
-10 minutes over 180. "Sustained high first" threw its clock away when glucose
-came down, and alerts at 20:20, 30 minutes into the second high.
-
-<Callout type="tip" title="Put 'for at least' rows first">
-
-  Make a row with a "for at least" setting the **first** row of its group. The
-  first row is checked every time, so its clock always reflects what actually
-  happened: it starts when the condition starts and stops when it stops, whatever
-  the rows under it are doing.
-
-</Callout>
-
-The same applies to **any of**, where the first row that **is** true settles
-the rule and the rows under it go unchecked.
-
 ## Several conditions that must last
 
-In the rule editor, **Make sustained** is offered on a single condition row,
-not on a group. To require that several conditions hold together for a while,
-make **one** of them sustained, the one that matters most, and put it first.
+Every row's clock runs on its own, whatever the rows around it are doing, so
+the order of rows never changes when a rule alerts.
 
-Making every row sustained adds the delays together. While a sustained row's
-clock is running, the row counts as not true, so under **all of** the rows
-beneath it are not checked and their clocks have not started yet. Two rows of
-"for at least 15 min" under **all of** alert after 30 minutes, not 15.
+In the rule editor, **Make sustained** is offered on a single condition row,
+not on a group. Two rows of "for at least 15 min" under **all of** alert once
+both have held for 15 minutes: after 15 minutes if both started together, later
+if one started later. To require that several conditions hold together for a
+while, making one of them sustained is usually enough.

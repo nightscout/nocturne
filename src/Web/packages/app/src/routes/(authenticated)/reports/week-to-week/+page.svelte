@@ -103,7 +103,7 @@
 </script>
 
 {#if weekdayResource.current}
-<div class="@container space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <!-- The compared date range stays visible in the layout's print header. -->
   <div class="flex flex-wrap items-center justify-center gap-2 @md:justify-start print:hidden">
     <Button variant="outline" size="icon" onclick={previousWeek}>

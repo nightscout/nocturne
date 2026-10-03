@@ -157,6 +157,19 @@ export class WebSocketClient {
     }
   }
 
+  /** Reconnect a dropped socket, e.g. when a backgrounded tab returns. A denied
+   *  session stays down: that denial is terminal by design. */
+  ensureConnected(): void {
+    if (this.socket?.connected || this.connectionStatus === "unauthorized") return;
+    this.intentionallyClosed = false;
+    this.clearAuthRetry();
+    if (this.socket) {
+      this.socket.connect();
+      return;
+    }
+    this.connect();
+  }
+
   /** Fetch a realtime handshake ticket from the BFF. Reports a denial only for a
    *  definitive one (`retry` not set by the endpoint); transient failures
    *  (timeout, network, 5xx) report false so the connect_error path keeps

@@ -21,11 +21,6 @@ interface V1Entry {
   date: number;
 }
 
-interface SensorGlucose {
-  id: string;
-  mills: number;
-}
-
 const storage = (args: unknown[]) => (args[0] ?? {}) as StorageEvent;
 
 // The API's DataHub, which the Socket.IO bridge relays to legacy clients: what it broadcasts is
@@ -58,39 +53,42 @@ describe("realtime data hub", () => {
     });
   });
 
-  it("pushes a deleted entry as a delete", async () => {
+  it("pushes an entry deleted through v3 by the _id REST serves as a delete", async () => {
     const [entry] = sgvSeries({ count: 1, end: Date.now() - 60 * 60 * 1000, valueAt: () => 97, device: "e2e-realtime" });
     await postEntries(tenant.api, [entry!]);
     await hub.waitFor("create", (a) => storage(a).colName === "entries" && storage(a).doc?.date === entry!.date, {
       what: "the entry's create event",
     });
+    const [rest] = await tenant.api.ok<V1Entry[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`);
+    expect(rest).toBeDefined();
 
-    // workaround: #1808 - neither v1 nor v3 deletes an entry by the _id REST serves, so it is
-    // deleted by its v4 id, which stays valid whatever id the socket and REST carry.
-    const readings = await tenant.api.ok<{ data: SensorGlucose[] }>(
-      "GET",
-      `/api/v4/glucose/sensor?from=${encodeURIComponent(new Date(entry!.date).toISOString())}&limit=50`,
-    );
-    const reading = readings.data.find((g) => g.mills === entry!.date);
-    expect(reading).toBeDefined();
-    const del = await tenant.api.delete(`/api/v4/glucose/sensor/${reading!.id}`);
-    expect(del.status).toBeLessThan(300);
-    await hub.waitFor("delete", (a) => storage(a).colName === "entries" && storage(a).doc?.date === entry!.date, {
+    const del = await tenant.api.delete(`/api/v3/entries/${rest!._id}`);
+    expect(del.status, del.text).toBeLessThan(300);
+    const [deleted] = await hub.waitFor("delete", (a) => storage(a).colName === "entries" && storage(a).doc?.date === entry!.date, {
       what: "the entry's delete event",
     });
+    expect(storage([deleted]).identifier).toBe(rest!._id);
+    expect(await tenant.api.ok<V1Entry[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`)).toEqual([]);
   });
 
-  // Bug #1808: the v1 delete matches legacy ids only. Flip to `it` once fixed.
-  it.fails("deletes an entry by the _id REST serves", async () => {
+  it("deletes an entry through v1 by the _id REST serves", async () => {
     const [entry] = sgvSeries({ count: 1, end: Date.now() - 90 * 60 * 1000, valueAt: () => 98, device: "e2e-realtime" });
     await postEntries(tenant.api, [entry!]);
     const [rest] = await tenant.api.ok<V1Entry[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`);
     expect(rest).toBeDefined();
 
-    expect((await tenant.api.delete(`/api/v1/entries/${rest!._id}`)).status).toBeLessThan(300);
-    await hub.waitFor("delete", (a) => storage(a).colName === "entries" && storage(a).doc?.date === entry!.date, {
+    const del = await tenant.api.request<{ n: number; deletedCount: number }>("DELETE", `/api/v1/entries/${rest!._id}`);
+    expect(del.status, del.text).toBe(200);
+    expect(del.body).toMatchObject({ n: 1, deletedCount: 1 });
+    const [deleted] = await hub.waitFor("delete", (a) => storage(a).colName === "entries" && storage(a).doc?.date === entry!.date, {
       what: "the entry's delete event",
     });
+    expect(storage([deleted]).identifier).toBe(rest!._id);
+    expect(await tenant.api.ok<V1Entry[]>("GET", `/api/v1/entries.json?find[date][$eq]=${entry!.date}`)).toEqual([]);
+
+    const again = await tenant.api.request<{ n: number; deletedCount: number }>("DELETE", `/api/v1/entries/${rest!._id}`);
+    expect(again.status, again.text).toBe(200);
+    expect(again.body).toMatchObject({ n: 0, deletedCount: 0 });
   });
 
   it("pushes a treatment create and delete", async () => {

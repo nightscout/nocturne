@@ -51,6 +51,23 @@ public interface ITherapySettingsRepository : IProfileScopedRepository<TherapySe
     Task<TherapySettings?> GetNewestDocumentRowAsync(CancellationToken ct = default);
 
     /// <summary>
+    /// The ids of the stored profile documents (see <see cref="TherapySettings.DocumentIdOf"/>), newest
+    /// first as Nightscout sorts them: by time descending, then by <c>_id</c> descending. Profile-switch
+    /// snapshots are not documents and are left out.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<string>> GetDocumentIdsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// The live rows of the profile document <paramref name="documentId"/>, one per named store,
+    /// resolved as <see cref="TherapySettings.DocumentIdOf"/> reads them and leaving out profile-switch
+    /// snapshots.
+    /// </summary>
+    /// <param name="documentId">The document's <c>_id</c>.</param>
+    /// <param name="ct">Cancellation token.</param>
+    Task<IReadOnlyList<TherapySettings>> GetDocumentRowsAsync(string documentId, CancellationToken ct = default);
+
+    /// <summary>
     /// Makes the row <paramref name="id"/> the tenant's only <see cref="TherapySettings.IsDefault"/> row,
     /// or clears the flag on every row when <paramref name="id"/> is <c>null</c>.
     /// </summary>

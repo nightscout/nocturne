@@ -36,6 +36,8 @@ public class PropertiesService : IPropertiesService
     private static readonly HashSet<string> DeviceAgeProperties =
         new(StringComparer.OrdinalIgnoreCase) { "cage", "sage", "iage", "bage" };
 
+    private const long BgNowBucketHalfWidthMills = 150_000;
+
     // Properties that should be filtered out for security
     private static readonly string[] SecureProperties =
     {
@@ -234,7 +236,9 @@ public class PropertiesService : IPropertiesService
     }
 
     /// <summary>
-    /// Set BGNow properties from the most recent glucose entry
+    /// Sets <c>bgnow</c> to the most recent 5 minute bucket, as <c>bgnow.js</c> does: every reading
+    /// within 2.5 minutes of the newest one, with <c>mean</c>, <c>last</c> and <c>mills</c> taken
+    /// from the readings above 39 mg/dl (lower values are sensor error codes).
     /// </summary>
     private void SetBgNowPropertiesAsync(Dictionary<string, object> properties, DData ddata)
     {
@@ -243,17 +247,39 @@ public class PropertiesService : IPropertiesService
             return;
 
         var currentSgv = sgvs.First();
-        var mgdlValue = currentSgv.Mgdl != 0 ? currentSgv.Mgdl : currentSgv.Sgv ?? 0;
+        var mgdlValue = MgdlOf(currentSgv);
 
-        properties["bgnow"] = new Dictionary<string, object>
+        var bucketFrom = currentSgv.Mills - BgNowBucketHalfWidthMills;
+        var bucketSgvs = sgvs
+            .Where(s => s.Mills >= bucketFrom)
+            .OrderBy(s => s.Mills)
+            .ToList();
+        var valid = bucketSgvs.Where(s => MgdlOf(s) > 39).ToList();
+        var errors = bucketSgvs.Where(s => MgdlOf(s) <= 39).ToList();
+
+        var bgnow = new Dictionary<string, object>
         {
-            ["sgvs"] = new[] { currentSgv },
+            ["sgvs"] = bucketSgvs,
             ["mgdl"] = mgdlValue,
             ["scaled"] = currentSgv.Scaled ?? mgdlValue,
-            ["mills"] = currentSgv.Mills,
             ["displayLine"] = $"BG Now: {currentSgv.Scaled ?? mgdlValue} mg/dl",
         };
+
+        if (valid.Count > 0)
+        {
+            var newest = valid[^1];
+            bgnow["mean"] = valid.Average(MgdlOf);
+            bgnow["last"] = MgdlOf(newest);
+            bgnow["mills"] = newest.Mills;
+        }
+
+        if (errors.Count > 0)
+            bgnow["errors"] = errors;
+
+        properties["bgnow"] = bgnow;
     }
+
+    private static double MgdlOf(Entry entry) => entry.Mgdl != 0 ? entry.Mgdl : entry.Sgv ?? 0;
 
     /// <summary>
     /// Set delta properties showing glucose change - exact legacy algorithm

@@ -322,7 +322,7 @@
   });
 </script>
 
-<div class="@container space-y-6 p-3 @md:p-6">
+<div class="@container space-y-6">
   <Card.Root>
     <Card.Header class="flex flex-row flex-wrap items-start justify-between gap-4">
       <div>

@@ -84,8 +84,7 @@ change it:
   delete button.
 
 You can drag rows by the handle at their left to reorder them, or drop one onto
-a group to move it inside. Order matters in one case, explained in
-[Conditions that must last](/docs/alerts/sustained#order-matters).
+a group to move it inside. The order of rows does not change what a rule does.
 
 Every condition, with what it means and when to use it, is on the
 [Conditions](/docs/alerts/conditions) page.

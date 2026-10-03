@@ -1,3 +1,4 @@
+using Nocturne.Core.Contracts.V4.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -106,9 +107,10 @@ public class SleepController : ControllerBase
     /// </summary>
     /// <remarks>
     /// Sessions are upserted one by one with the same dedup semantics as the single create, so a
-    /// retried batch is idempotent. On a concurrent-insert conflict the request stops with `409
-    /// Conflict`; sessions upserted before the conflict remain persisted, and retrying the whole
-    /// batch is safe.
+    /// retried batch is idempotent. A session matching one the user deleted is left out of the
+    /// write and of the response, where the single create answers `409 Conflict`. On a
+    /// concurrent-insert conflict the request stops with `409 Conflict`; sessions upserted before
+    /// the conflict remain persisted, and retrying the whole batch is safe.
     /// </remarks>
     [HttpPost("bulk")]
     [RequireScope(Scope.SleepReadWrite)]
@@ -128,7 +130,15 @@ public class SleepController : ControllerBase
         try
         {
             foreach (var session in sessions)
-                results.Add(await _sleepService.UpsertSessionAsync(session, cancellationToken));
+            {
+                try
+                {
+                    results.Add(await _sleepService.UpsertSessionAsync(session, cancellationToken));
+                }
+                catch (RecreationBlockedException)
+                {
+                }
+            }
         }
         catch (DbUpdateException)
         {
@@ -147,6 +157,7 @@ public class SleepController : ControllerBase
     [RequireScope(Scope.SleepReadWrite)]
     [ProducesResponseType(typeof(SleepSession), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<SleepSession>> UpdateSession(
         Guid id,
         [FromBody] SleepSession session,

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -41,91 +42,80 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Send Loop notification for iOS Loop app integration
-    /// Implements the /api/v2/notifications/loop endpoint from legacy notifications-v2.js
+    /// Pushes a Loop remote command (override, override cancel, remote carbs, remote bolus) to the
+    /// phone named by the current profile's <c>loopSettings</c>.
     /// </summary>
-    /// <param name="request">Loop notification request data</param>
-    /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Notification response indicating success or failure</returns>
-    /// <response code="200">Notification processed successfully</response>
-    /// <response code="400">Invalid notification request</response>
-    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// The body is read by hand because Nightscout's careportal posts it form-urlencoded while
+    /// NightscoutKit posts JSON, and a <c>[FromBody]</c> parameter accepts only the latter.
+    /// </remarks>
+    /// <response code="200">The push was accepted by APNs; the body is <c>OK</c>.</response>
+    /// <response code="400">The body is not valid JSON or form data.</response>
+    /// <response code="500">Nothing was pushed; the body is the reason.</response>
     [HttpPost("loop")]
     [Authorize]
     [RequireScope(Scope.AlertsReadWrite)]
     [NightscoutEndpoint("/api/v2/notifications/loop")]
-    [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(NotificationV2Response), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<NotificationV2Response>> SendLoopNotification(
-        [FromBody] LoopNotificationRequest request,
-        CancellationToken cancellationToken = default
-    )
+    [Consumes("application/json", "application/x-www-form-urlencoded")]
+    [Produces("text/plain")]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> SendLoopNotification(CancellationToken cancellationToken = default)
     {
-        var remoteAddress = HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
-        _logger.LogDebug(
-            "Loop notification endpoint requested from {RemoteAddress}",
-            remoteAddress
-        );
+        var remoteAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
+        LoopNotificationData data;
         try
         {
-            if (request == null)
-            {
-                _logger.LogWarning(
-                    "Loop notification request body is null from {RemoteAddress}",
-                    remoteAddress
-                );
-                return BadRequest(
-                    new NotificationV2Response
-                    {
-                        Success = false,
-                        Message = "Request body is required",
-                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    }
-                );
-            }
-
-            var response = await _notificationService.SendLoopNotificationAsync(
-                request,
-                remoteAddress,
-                cancellationToken
-            );
-
-            if (!response.Success)
-            {
-                _logger.LogWarning(
-                    "Loop notification failed from {RemoteAddress}: {Message}",
-                    remoteAddress,
-                    response.Message
-                );
-                return BadRequest(response);
-            }
-
-            _logger.LogDebug(
-                "Loop notification processed successfully from {RemoteAddress}",
-                remoteAddress
-            );
-            return Ok(response);
+            data = await ReadLoopNotificationAsync(Request, cancellationToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is JsonException or InvalidDataException)
         {
-            _logger.LogError(
-                ex,
-                "Error processing Loop notification from {RemoteAddress}",
-                remoteAddress
-            );
-            return StatusCode(
-                StatusCodes.Status500InternalServerError,
-                new NotificationV2Response
-                {
-                    Success = false,
-                    Message = "Internal server error processing Loop notification",
-                    Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                }
-            );
+            return PlainText(StatusCodes.Status400BadRequest, "Malformed request body");
         }
+
+        var response = await _notificationService.SendLoopNotificationAsync(
+            data,
+            remoteAddress,
+            cancellationToken
+        );
+
+        if (!response.Success)
+        {
+            _logger.LogWarning(
+                "Loop notification not sent for {RemoteAddress}: {Message}",
+                remoteAddress,
+                response.Message
+            );
+            return PlainText(StatusCodes.Status500InternalServerError, response.Message);
+        }
+
+        return PlainText(StatusCodes.Status200OK, "OK");
     }
+
+    private static async Task<LoopNotificationData> ReadLoopNotificationAsync(
+        HttpRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        if (request.HasFormContentType)
+        {
+            var form = await request.ReadFormAsync(cancellationToken);
+            var fields = form.ToDictionary(field => field.Key, field => field.Value.ToString());
+            return JsonSerializer.SerializeToElement(fields).Deserialize<LoopNotificationData>()
+                ?? new LoopNotificationData();
+        }
+
+        using var reader = new StreamReader(request.Body);
+        var body = await reader.ReadToEndAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(body)
+            ? new LoopNotificationData()
+            : JsonSerializer.Deserialize<LoopNotificationData>(body) ?? new LoopNotificationData();
+    }
+
+    private static ContentResult PlainText(int statusCode, string content) =>
+        new() { StatusCode = statusCode, Content = content, ContentType = "text/plain; charset=utf-8" };
 
     /// <summary>
     /// Process a generic V2 notification

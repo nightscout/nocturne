@@ -214,6 +214,12 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
     /// table that type is stored in.
     /// </summary>
+    /// <remarks>
+    /// An entry another uploader sent names a stored record only by the 24-hex prefix the v1 reads
+    /// serve. A uuid it sends is a legacy id of its own, stored beside the record that uuid names,
+    /// which <see cref="Entries.EntryReadService.GetByIdAsync"/> resolves ahead of it. A pulled copy may still
+    /// carry the raw uuid older write-backs sent.
+    /// </remarks>
     /// <returns>The write-back echoes, which store nothing.</returns>
     private async Task<IReadOnlySet<Entry>> PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
     {
@@ -222,13 +228,14 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
         {
             var table = byType.Key switch
             {
-                "sgv" => Table(_sensorGlucoseRepository, resolvesUuidLegacyIds: true),
-                "mbg" => Table(_meterGlucoseRepository, resolvesUuidLegacyIds: true),
-                "cal" => Table(_calibrationRepository, resolvesUuidLegacyIds: true),
+                "sgv" => Table(_sensorGlucoseRepository, WireForms.UuidPrefix),
+                "mbg" => Table(_meterGlucoseRepository, WireForms.UuidPrefix),
+                "cal" => Table(_calibrationRepository, WireForms.UuidPrefix),
                 _ => (KeyedTable?)null,
             };
             if (table is { } keyed)
-                echoes.UnionWith(await PointAtStoredRecordsAsync(byType, [keyed], PulledFromNightscout, ct));
+                echoes.UnionWith(await PointAtStoredRecordsAsync(
+                    byType, [keyed], PulledFromNightscout, ct, MongoObjectId.IsGuidPrefixShaped));
         }
 
         return echoes;
@@ -248,6 +255,33 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
             Logger.LogDebug("Soft-deleted {Count} v4 records for legacy entry {LegacyId}", deleted, legacyId);
 
         return deleted;
+    }
+
+    /// <inheritdoc />
+    public Task<int> DeleteStoredAsync(IV4Record stored, WriteOrigin origin, CancellationToken ct = default)
+        => stored.LegacyId is { } legacyId
+            ? DeleteByLegacyIdAsync(legacyId, origin, ct)
+            : stored switch
+            {
+                SensorGlucose => DeleteUnkeyedAsync(_sensorGlucoseRepository, stored.Id, origin, ct),
+                MeterGlucose => DeleteUnkeyedAsync(_meterGlucoseRepository, stored.Id, origin, ct),
+                Calibration => DeleteUnkeyedAsync(_calibrationRepository, stored.Id, origin, ct),
+                _ => throw new ArgumentException($"{stored.GetType().Name} is not an entry record", nameof(stored)),
+            };
+
+    private static async Task<int> DeleteUnkeyedAsync<TRecord>(
+        IV4Repository<TRecord> repository, Guid id, WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, IV4Record
+    {
+        try
+        {
+            await repository.DeleteAsync(id, origin, ct);
+            return 1;
+        }
+        catch (KeyNotFoundException)
+        {
+            return 0;
+        }
     }
 
     /// <inheritdoc />

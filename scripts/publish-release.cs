@@ -54,6 +54,7 @@ try
     var composePath = Path.Combine(tempDir, "docker-compose.yaml");
     var portainerComposePath = Path.Combine(tempDir, "docker-compose.portainer.yaml");
     var byoProxyComposePath = Path.Combine(tempDir, "docker-compose.byo-proxy.yaml");
+    var postgresDataComposePath = Path.Combine(tempDir, "docker-compose.bind-data.yaml");
     var envMetadataPath = Path.Combine(tempDir, "env-metadata.json");
 
     if (!File.Exists(composePath))
@@ -71,6 +72,12 @@ try
     if (!File.Exists(envMetadataPath))
     {
         Console.Error.WriteLine("[publish-release] ERROR: aspire publish did not produce env-metadata.json");
+        return 1;
+    }
+
+    if (!File.Exists(postgresDataComposePath))
+    {
+        Console.Error.WriteLine("[publish-release] ERROR: aspire publish did not produce docker-compose.bind-data.yaml");
         return 1;
     }
 
@@ -99,6 +106,7 @@ try
     // byo-proxy publish step; absent when Caddy is disabled).
     if (File.Exists(byoProxyComposePath))
         File.Copy(byoProxyComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.byo-proxy.yaml"), overwrite: true);
+    File.Copy(postgresDataComposePath, Path.Combine(deployDockerComposeDir, "docker-compose.bind-data.yaml"), overwrite: true);
     File.WriteAllText(Path.Combine(deployDockerComposeDir, ".env.example"), envExample);
     Console.WriteLine("[publish-release] Updated deploy/docker-compose/");
 

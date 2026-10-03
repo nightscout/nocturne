@@ -152,11 +152,7 @@ public class MemberScopeMiddleware
             return;
         }
 
-        // Resolve effective permissions: union of role permissions + direct permissions
-        var rolePermissions = membership.MemberRoles
-            .SelectMany(mr => mr.TenantRole.Permissions);
-        var directPermissions = membership.DirectPermissions ?? [];
-        var effectivePermissions = rolePermissions.Union(directPermissions).ToHashSet();
+        var effectivePermissions = membership.EffectivePermissions().ToHashSet();
 
         var resolvedScopes = MemberScopeResolver.Resolve(
             effectivePermissions, authContext.AuthType, context.GetGrantedScopes());

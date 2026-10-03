@@ -55,11 +55,6 @@ services:
       - ./mocks:/mocks:ro
     ports:
       - "127.0.0.1:${E2E_MOCKS_PORT:-1634}:8080"
-    networks:
-      default:
-        # workaround: #1806 - the migration job drops the path of a Nightscout URL (a bug), so its
-        # fake source needs a host of its own; mocks/server.ts routes by this name.
-        aliases: [nightscout-migration]
     mem_limit: 96m
     cpus: 0.25
     healthcheck:

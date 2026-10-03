@@ -9,7 +9,7 @@ public sealed record AlertEngineOptions
 {
     /// <summary>
     /// When true, force-evaluate every leaf of the rule's condition tree in isolation
-    /// (no short-circuit) and return the per-leaf truths keyed by pre-order leaf id.
+    /// and return the per-leaf truths keyed by pre-order leaf id.
     /// Replay/leaf-log semantics; live evaluation leaves this off.
     /// </summary>
     public bool IncludeLeafValues { get; init; }

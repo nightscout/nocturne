@@ -114,6 +114,11 @@ public class TreatmentService : ITreatmentService
     }
 
     /// <inheritdoc />
+    public Task<bool> IsTreatmentDeletedByUserAsync(
+        string id, CancellationToken cancellationToken = default)
+        => _store.IsDeletedByUserAsync(id, cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Treatment>> GetTreatmentsWithAdvancedFilterAsync(
         int count, int skip, string? findQuery, bool reverseResults,
         CancellationToken cancellationToken = default)
@@ -185,19 +190,15 @@ public class TreatmentService : ITreatmentService
     public async Task<Treatment?> PatchTreatmentAsync(
         string id, JsonElement patchData, CancellationToken cancellationToken = default)
     {
-        var existing = await _store.GetByIdAsync(id, cancellationToken);
+        var existing = await _store.GetForUpdateAsync(id, cancellationToken);
         if (existing is null) return null;
-
-        // Re-key to the stored LegacyId so re-decomposition upserts this record in place instead
-        // of creating a duplicate when AAPS patches by a derived ObjectId.
-        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.Id;
 
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
         var result = await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
-        var patched = TreatmentReadService.AsServed(existing, result).Served;
+        var patched = TreatmentReadService.ToCreated(existing, result);
 
         await _cache.InvalidateAsync(cancellationToken);
         await _events.OnUpdatedAsync(patched, cancellationToken);
@@ -208,9 +209,11 @@ public class TreatmentService : ITreatmentService
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
-        // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
-        // merge unless the patch explicitly changes _id.
+        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId, so capture
+        // both and restore them after the merge. LegacyId is the key write-back sends the edit
+        // under (UpstreamIdentityJson.TreatmentWireKey); lost, the edit would go to another copy.
         var originalId = treatment.Id;
+        var originalLegacyId = treatment.LegacyId;
 
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
@@ -242,23 +245,21 @@ public class TreatmentService : ITreatmentService
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
         // which would otherwise defeat the re-key and duplicate the record).
         treatment.Id = originalId;
+        treatment.LegacyId = originalLegacyId;
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteTreatmentAsync(
         string id, CancellationToken cancellationToken = default)
     {
-        var existing = await _store.GetByIdAsync(id, cancellationToken);
-        var deleted = await _store.DeleteAsync(id, cancellationToken);
+        if (await _store.DeleteAsync(id, cancellationToken) is not { } deletion)
+            return false;
 
-        if (deleted)
-        {
-            await _cache.InvalidateAsync(cancellationToken);
-            if (existing is not null)
-                await _events.OnDeletedAsync(existing, cancellationToken);
-        }
+        await _cache.InvalidateAsync(cancellationToken);
+        if (deletion.Served is not null)
+            await _events.OnDeletedAsync(deletion.Served, cancellationToken);
 
-        return deleted;
+        return true;
     }
 
     /// <inheritdoc />
@@ -287,7 +288,7 @@ public class TreatmentService : ITreatmentService
         long deleted = 0;
         foreach (var treatment in matching.Where(t => !string.IsNullOrEmpty(t.Id)))
         {
-            if (await _store.DeleteAsync(treatment.Id!, ct))
+            if (await _store.DeleteAsync(treatment.Id!, ct) is not null)
             {
                 deleted++;
                 await _events.OnDeletedAsync(treatment, ct);

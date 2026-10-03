@@ -422,6 +422,136 @@ public class ProfileDecomposer : DecomposerBase, IProfileDecomposer, IDecomposer
     #endregion
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A row that does not carry the <c>"{_id}:{storeName}"</c> key (a v4 row served under its own id)
+    /// is first keyed under it, with its schedules, so the upsert updates it in place rather than
+    /// inserting a copy beside it. Dropped stores are soft-deleted rather than the whole document
+    /// deleted and rewritten: the recreation guard would then refuse every store it rewrote.
+    /// </remarks>
+    public async Task<bool> ReplaceDocumentAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default)
+    {
+        if (profile.Store.Count == 0)
+            return false;
+
+        var documentId = profile.Id!;
+        var storedLegacyIds = new List<string>();
+        foreach (var row in await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct))
+        {
+            storedLegacyIds.Add(IsKeyedUnder(row, documentId)
+                ? row.LegacyId!
+                : await KeyUnderDocumentAsync(row, documentId, origin, ct));
+        }
+
+        var result = await DecomposeAsync(profile, origin, ct);
+        var written = result.CreatedRecords.Concat(result.UpdatedRecords).OfType<V4Models.TherapySettings>().Count();
+        if (written < profile.Store.Count)
+            return false;
+
+        var carried = profile.Store.Keys.Select(store => $"{documentId}:{store}").ToHashSet(StringComparer.Ordinal);
+        foreach (var dropped in storedLegacyIds.Where(id => !carried.Contains(id)))
+        {
+            await _therapySettingsRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+            await _basalScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+            await _carbRatioScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+            await _sensitivityScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+            await _targetRangeScheduleRepo.DeleteByLegacyIdAsync(dropped, origin, ct);
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<int> DeleteDocumentAsync(string documentId, WriteOrigin origin, CancellationToken ct = default)
+    {
+        var unkeyed = (await _therapySettingsRepo.GetDocumentRowsAsync(documentId, ct))
+            .Where(row => !IsKeyedUnder(row, documentId))
+            .ToList();
+
+        var deleted = await DeleteByLegacyIdAsync(documentId, origin, ct);
+        foreach (var row in unkeyed)
+        {
+            deleted += await DeleteSiblingsAsync(_basalScheduleRepo, row, origin, ct);
+            deleted += await DeleteSiblingsAsync(_carbRatioScheduleRepo, row, origin, ct);
+            deleted += await DeleteSiblingsAsync(_sensitivityScheduleRepo, row, origin, ct);
+            deleted += await DeleteSiblingsAsync(_targetRangeScheduleRepo, row, origin, ct);
+            await _therapySettingsRepo.DeleteAsync(row.Id, origin, ct);
+            deleted++;
+        }
+
+        return deleted;
+    }
+
+    private static bool IsKeyedUnder(V4Models.TherapySettings row, string documentId) =>
+        row.LegacyId?.StartsWith(documentId + ":", StringComparison.Ordinal) == true;
+
+    /// <summary>
+    /// Keys an unkeyed settings row, and the schedules <see cref="SiblingsAsync"/> finds for it, under
+    /// <c>"{documentId}:{profileName}"</c>.
+    /// </summary>
+    /// <returns>The legacy id the row now carries.</returns>
+    private async Task<string> KeyUnderDocumentAsync(
+        V4Models.TherapySettings row, string documentId, WriteOrigin origin, CancellationToken ct)
+    {
+        var legacyId = $"{documentId}:{row.ProfileName}";
+        await KeySiblingsAsync(_basalScheduleRepo, row, legacyId, origin, ct);
+        await KeySiblingsAsync(_carbRatioScheduleRepo, row, legacyId, origin, ct);
+        await KeySiblingsAsync(_sensitivityScheduleRepo, row, legacyId, origin, ct);
+        await KeySiblingsAsync(_targetRangeScheduleRepo, row, legacyId, origin, ct);
+        row.LegacyId = legacyId;
+        await _therapySettingsRepo.UpdateAsync(row.Id, row, origin, ct);
+        return legacyId;
+    }
+
+    private static async Task KeySiblingsAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row, string legacyId,
+        WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
+    {
+        foreach (var sibling in await SiblingsAsync(repository, row, ct))
+        {
+            sibling.LegacyId = legacyId;
+            await repository.UpdateAsync(sibling.Id, sibling, origin, ct);
+        }
+    }
+
+    private static async Task<int> DeleteSiblingsAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row,
+        WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
+    {
+        var siblings = await SiblingsAsync(repository, row, ct);
+        foreach (var sibling in siblings)
+            await repository.DeleteAsync(sibling.Id, origin, ct);
+        return siblings.Count;
+    }
+
+    /// <summary>
+    /// The schedules that belong to an unkeyed settings row and to no other: those sharing its
+    /// correlation id and profile name, or its exact legacy id. A schedule the projection reaches only
+    /// by profile name may be shared with another row, so it is left alone.
+    /// </summary>
+    private static async Task<List<TRecord>> SiblingsAsync<TRecord>(
+        IProfileScopedRepository<TRecord> repository, V4Models.TherapySettings row, CancellationToken ct)
+        where TRecord : class, V4Models.IV4Record, V4Models.IProfileScoped
+    {
+        var siblings = row.CorrelationId is { } correlationId
+            ? (await repository.GetByCorrelationIdAsync(correlationId, ct))
+                .Where(s => s.ProfileName == row.ProfileName)
+                .ToList()
+            : [];
+
+        if (!string.IsNullOrEmpty(row.LegacyId)
+            && await repository.GetByLegacyIdAsync(row.LegacyId, ct) is { } byLegacyId
+            && byLegacyId.ProfileName == row.ProfileName
+            && siblings.All(s => s.Id != byLegacyId.Id))
+        {
+            siblings.Add(byLegacyId);
+        }
+
+        return siblings;
+    }
+
+    /// <inheritdoc />
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         var prefix = legacyId + ":";

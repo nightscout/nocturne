@@ -471,6 +471,24 @@ public class StateSpanRepositoryTests : IDisposable
         spans.Should().ContainSingle().Which.Source.Should().Be("primary");
     }
 
+    [Fact]
+    public async Task GetActivityStateSpansAsync_ExcludesNonPrimaryDeduplicatedSpans()
+    {
+        var start = new DateTime(2026, 1, 1, 9, 0, 0, DateTimeKind.Utc);
+        var primaryEntity = SpanEntity(_context.TenantId, StateSpanCategory.Exercise, "Running", start, null);
+        primaryEntity.Source = "primary";
+        var duplicateEntity = SpanEntity(_context.TenantId, StateSpanCategory.Exercise, "Running", start, null);
+        duplicateEntity.Source = "duplicate";
+
+        _context.StateSpans.AddRange(primaryEntity, duplicateEntity);
+        _context.LinkedRecords.Add(Link(Guid.NewGuid(), duplicateEntity.Id, isPrimary: false));
+        await _context.SaveChangesAsync();
+
+        var spans = await _repository.GetActivityStateSpansAsync();
+
+        spans.Should().ContainSingle().Which.Source.Should().Be("primary");
+    }
+
     private static LinkedRecordEntity Link(Guid canonicalId, Guid recordId, bool isPrimary) => new()
     {
         Id = Guid.NewGuid(),
@@ -1114,6 +1132,20 @@ public class StateSpanRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertStateSpanAsync_SupersededSpanReUploadedOpen_StaysClosedAtItsSuccessorsStart()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-a"));
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 10, "ov-b"));
+
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Override, "Custom", 9, "ov-a"));
+
+        var rows = await LiveRowsAsync();
+        rows["ov-a"].EndTimestamp.Should().Be(BatchDay.AddHours(10));
+        rows["ov-a"].SupersededById.Should().Be(rows["ov-b"].Id);
+        rows["ov-b"].EndTimestamp.Should().BeNull();
+    }
+
+    [Fact]
     public async Task UpsertStateSpanAsync_BackfillBehindASuccessor_LeavesAnEndItDidNotSet()
     {
         await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Profile, "Active", 5, "pr-b"));
@@ -1374,6 +1406,22 @@ public class StateSpanRepositoryTests : IDisposable
                 inputs.Select(i => i.RecordId).SequenceEqual(expectedIds)),
             It.IsAny<CancellationToken>()), Times.Once);
         _mockDedup.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CreateActivitiesAsStateSpansAsync_DoesNotReturnASpanTheUserDeleted()
+    {
+        await _repository.UpsertStateSpanAsync(Span(StateSpanCategory.Exercise, "Running", 8, "act-deleted"));
+        (await _repository.DeleteStateSpanAsync("act-deleted")).Should().BeTrue();
+
+        var created = (await _repository.CreateActivitiesAsStateSpansAsync(
+        [
+            Span(StateSpanCategory.Exercise, "Running", 8, "act-deleted"),
+            Span(StateSpanCategory.Illness, "Flu", 10, "act-fresh"),
+        ])).ToList();
+
+        created.Select(s => s.OriginalId).Should().Equal("act-fresh");
+        (await RowsForAsync("act-deleted")).Should().ContainSingle().Which.DeletedAt.Should().NotBeNull();
     }
 
     [Fact]

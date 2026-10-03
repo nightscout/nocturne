@@ -365,14 +365,8 @@ public sealed class ShareLinkService : IShareLinkService
         if (member == null)
             return [];
 
-        var rolePermissions = member.MemberRoles
-            .SelectMany(mr => mr.TenantRole?.Permissions ?? Enumerable.Empty<string>());
-        var directPermissions = member.DirectPermissions ?? Enumerable.Empty<string>();
-
-        return rolePermissions
-            .Concat(directPermissions)
+        return member.EffectivePermissions()
             .Where(Scope.PublicShareScopes.Contains)
-            .Distinct()
             .ToList();
     }
 }

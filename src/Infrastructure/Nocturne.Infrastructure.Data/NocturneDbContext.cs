@@ -955,6 +955,20 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             .HasDatabaseName("ix_step_counts_tenant_source_timestamp")
             .IsDescending(false, false, true);
 
+        // The activity id a heart rate or step count was decomposed from, read (tombstones included)
+        // on every activity write and connector reconcile.
+        modelBuilder
+            .Entity<StepCountEntity>()
+            .HasIndex(s => new { s.TenantId, s.OriginalId })
+            .HasDatabaseName("ix_step_counts_tenant_original_id")
+            .HasFilter("original_id IS NOT NULL");
+
+        modelBuilder
+            .Entity<HeartRateEntity>()
+            .HasIndex(h => new { h.TenantId, h.OriginalId })
+            .HasDatabaseName("ix_heart_rates_tenant_original_id")
+            .HasFilter("original_id IS NOT NULL");
+
         modelBuilder
             .Entity<HeartRateEntity>()
             .HasIndex(h => h.Timestamp)
@@ -2696,6 +2710,7 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
             EnforceTenantOwnership(entry, isAdded);
             StripNulCharacters(entry, isAdded, isRelational);
             ApplyUpstreamFingerprint(entry);
+            ApplyWrittenLive(entry);
 
             // Update timestamps are stamped on insert and on real modifications only. An
             // unchanged tracked row is left alone rather than rewritten on every save, and a row
@@ -2749,6 +2764,15 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
         entry.Property(nameof(IUpstreamFingerprinted.UpstreamFingerprint)).CurrentValue = fingerprint;
     }
 
+    /// <summary>Marks a row a live write inserts or modifies, per <see cref="LiveWriteScope"/>.</summary>
+    private static void ApplyWrittenLive(EntityEntry entry)
+    {
+        if (entry.State is EntityState.Added or EntityState.Modified
+            && entry.Entity is IWriteBackTracked { WrittenLive: false }
+            && LiveWriteScope.IsOpen)
+            entry.Property(nameof(IWriteBackTracked.WrittenLive)).CurrentValue = true;
+    }
+
     /// <summary>
     /// Writes a timestamp through the change tracker, which is how a modified row's stamp reaches
     /// the UPDATE now that <see cref="DetectChangesOnceForSave"/> has turned auto-detection off.
@@ -2770,7 +2794,8 @@ public class NocturneDbContext : DbContext, IDataProtectionKeyContext
                 p.IsModified
                 && p.Metadata.Name != nameof(ISystemTimestamped.SysUpdatedAt)
                 && p.Metadata.Name != nameof(IEntityTimestamped.UpdatedAt)
-                && p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint));
+                && p.Metadata.Name != nameof(IUpstreamFingerprinted.UpstreamFingerprint)
+                && p.Metadata.Name != nameof(IWriteBackTracked.WrittenLive));
 
     /// <summary>
     /// Enforces tenant ownership on a tracked entity: stamps the resolved tenant on new

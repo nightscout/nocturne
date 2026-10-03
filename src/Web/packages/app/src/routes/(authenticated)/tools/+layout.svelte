@@ -17,7 +17,7 @@
     </div>
   {/if}
 
-  <div class="flex-1 overflow-auto">
+  <div class="flex-1 overflow-x-clip">
     {@render children()}
   </div>
 </div>

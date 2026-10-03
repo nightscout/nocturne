@@ -61,4 +61,22 @@ public interface IProfileDecomposer
     /// <param name="ct">Cancellation token</param>
     /// <returns>Total number of V4 records deleted across all tables</returns>
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Replaces the stored profile document <paramref name="profile"/> names by its <c>_id</c> with
+    /// the stores it carries, inserting it when none is stored, and deletes the stored stores it no
+    /// longer carries.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c>, deleting nothing, when the document carries no store or a store was not written
+    /// because a user deleted that identity.
+    /// </returns>
+    Task<bool> ReplaceDocumentAsync(Profile profile, WriteOrigin origin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes the profile document that answers to <paramref name="documentId"/>, as
+    /// <see cref="TherapySettings.DocumentIdOf"/> resolves it, including one served under a row id.
+    /// </summary>
+    /// <returns>Total number of V4 records deleted across all tables</returns>
+    Task<int> DeleteDocumentAsync(string documentId, WriteOrigin origin, CancellationToken ct = default);
 }

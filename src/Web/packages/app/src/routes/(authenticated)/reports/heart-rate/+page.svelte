@@ -74,9 +74,8 @@
   />
 </svelte:head>
 
-<div class="@container container mx-auto space-y-6 p-3 @md:p-6 max-w-7xl">
+<div class="@container space-y-6">
   <div class="print:hidden">
-    <h1 class="text-2xl @md:text-3xl font-bold">Heart Rate</h1>
     <p class="text-muted-foreground">
       Daily heart rate patterns with glucose overlay
     </p>

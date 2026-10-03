@@ -1,7 +1,9 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
 using Nocturne.API.Authorization;
+using Nocturne.API.Helpers;
 using Nocturne.Core.Models.Authorization;
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Models;
@@ -240,6 +242,134 @@ public class ProfileController : ControllerBase
             _logger.LogError(ex, "Error occurred while creating profiles");
             return StatusCode(500, Array.Empty<Profile>());
         }
+    }
+
+    /// <summary>
+    /// Replace the profile document named by the body's <c>_id</c>, inserting it when none is stored.
+    /// </summary>
+    /// <param name="profile">The whole profile document, carrying its <c>_id</c></param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The saved profile</returns>
+    [HttpPut]
+    [Authorize]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [NightscoutEndpoint("/api/v1/profile")]
+    [ProducesResponseType(typeof(Profile), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(409)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult<Profile>> UpdateProfile(
+        [FromBody] Profile profile,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(profile?.Id))
+        {
+            return BadRequest("Profile _id is required for update");
+        }
+
+        if (profile.Store.Count == 0)
+        {
+            return BadRequest("Profile store must name at least one profile");
+        }
+
+        try
+        {
+            var saved = await _writeService.UpdateProfileAsync(
+                profile.Id,
+                profile,
+                cancellationToken
+            );
+            return saved is null
+                ? Conflict("A profile with this _id was deleted and cannot be recreated")
+                : Ok(saved);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while saving profile {ProfileId}", profile.Id);
+            return StatusCode(500, "Internal server error while saving profile");
+        }
+    }
+
+    /// <summary>
+    /// Delete every profile document except the newest <c>keep</c> (query), bounded by
+    /// <see cref="TryParseKeep"/>.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body</returns>
+    [HttpDelete]
+    [Authorize]
+    [RequireScope(Scope.FullAccess)]
+    [NightscoutEndpoint("/api/v1/profile")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> PruneProfiles(CancellationToken cancellationToken = default)
+    {
+        var keep = Request.Query.TryGetValue("keep", out var raw) ? raw.ToString() : null;
+        if (!TryParseKeep(keep, out var keepCount))
+        {
+            return BadRequest("keep must be a whole number between 10 and 10000");
+        }
+
+        try
+        {
+            var deleted = await _writeService.PruneProfilesAsync(keepCount, cancellationToken);
+            return Ok(LegacyDeleteStatus.For(deleted));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while pruning profiles to {Keep}", keepCount);
+            return StatusCode(500, "Internal server error while pruning profiles");
+        }
+    }
+
+    /// <summary>
+    /// Delete a profile document by id.
+    /// </summary>
+    /// <param name="id">The profile document's <c>_id</c></param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>The <see cref="LegacyDeleteStatus"/> body, found or not</returns>
+    [HttpDelete("{id}")]
+    [Authorize]
+    [RequireScope(Scope.TherapyReadWrite)]
+    [NightscoutEndpoint("/api/v1/profile/:_id")]
+    [ProducesResponseType(typeof(object), 200)]
+    [ProducesResponseType(500)]
+    public async Task<ActionResult> DeleteProfile(
+        string id,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            var deleted = await _writeService.DeleteProfileAsync(id, cancellationToken);
+            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error occurred while deleting profile {ProfileId}", id);
+            return StatusCode(500, "Internal server error while deleting profile");
+        }
+    }
+
+    /// <summary>
+    /// Nightscout's bounds on a prune: a missing <c>keep</c> keeps 100, and anything that is not a
+    /// whole number from 10 to 10000 is refused, so a typo cannot empty the collection.
+    /// </summary>
+    private static bool TryParseKeep(string? keep, out int keepCount)
+    {
+        keepCount = 100;
+        if (keep is null)
+            return true;
+
+        return int.TryParse(
+                keep,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out keepCount
+            )
+            && keepCount is >= 10 and <= 10000;
     }
 
     /// <summary>

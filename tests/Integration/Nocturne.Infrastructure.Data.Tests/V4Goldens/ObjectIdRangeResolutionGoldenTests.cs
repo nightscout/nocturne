@@ -62,4 +62,90 @@ public class ObjectIdRangeResolutionGoldenTests
 
         resolved.Should().BeNull();
     }
+
+    private static string LegacyIdOfShape(string shape, Guid uuid) => shape switch
+    {
+        "uppercase uuid" => uuid.ToString().ToUpperInvariant(),
+        "lowercase uuid" => uuid.ToString(),
+        "dashless uuid" => uuid.ToString("N"),
+        "hex sync identifier" => Convert.ToHexStringLower(uuid.ToByteArray()) + "0a1b",
+        _ => "syn-" + Convert.ToHexStringLower(uuid.ToByteArray()),
+    };
+
+    private async Task<(ICarbIntakeRepository Repo, CarbIntake Created, IServiceScope Scope)> StoreCarbAsync(string legacyId)
+    {
+        var scope = await _fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = scope.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
+        var created = await repo.CreateAsync(
+            new CarbIntake { Timestamp = T0, Carbs = 20, DataSource = "loop", LegacyId = legacyId },
+            WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(
+            new CarbIntake { Timestamp = T0, Carbs = 30, DataSource = "loop", LegacyId = Guid.NewGuid().ToString() },
+            WriteOrigin.Live, CancellationToken.None);
+        return (repo, created, scope);
+    }
+
+    [Theory]
+    [InlineData("uppercase uuid")]
+    [InlineData("lowercase uuid")]
+    [InlineData("dashless uuid")]
+    public async Task GetByLegacyIdUuidPrefix_ResolvesTheIdCoerceEchoedForAUuidLegacyId(string shape)
+    {
+        var legacyId = LegacyIdOfShape(shape, Guid.NewGuid());
+        var (repo, created, scope) = await StoreCarbAsync(legacyId);
+        using var tenantScope = scope;
+
+        var resolved = await repo.GetByLegacyIdUuidPrefixAsync(MongoObjectId.Coerce(legacyId)!, CancellationToken.None);
+
+        resolved.Should().NotBeNull();
+        resolved!.Id.Should().Be(created.Id);
+    }
+
+    [Theory]
+    [InlineData("hex sync identifier")]
+    [InlineData("synthetic id")]
+    public async Task GetByLegacyIdHash_ResolvesTheIdCoerceEchoedForAnyOtherLegacyId(string shape)
+    {
+        var legacyId = LegacyIdOfShape(shape, Guid.NewGuid());
+        var (repo, created, scope) = await StoreCarbAsync(legacyId);
+        using var tenantScope = scope;
+
+        var resolved = await repo.GetByLegacyIdHashAsync(MongoObjectId.Coerce(legacyId)!, CancellationToken.None);
+
+        resolved.Should().NotBeNull();
+        resolved!.Id.Should().Be(created.Id);
+    }
+
+    [Fact]
+    public async Task GetByLegacyIdUuidPrefix_DoesNotMatchANonUuidLegacyIdSharingThePrefix()
+    {
+        var hex = Convert.ToHexStringLower(Guid.NewGuid().ToByteArray()) + "0a1b";
+        var (repo, _, scope) = await StoreCarbAsync(hex);
+        using var tenantScope = scope;
+
+        var resolved = await repo.GetByLegacyIdUuidPrefixAsync(hex[..24], CancellationToken.None);
+
+        resolved.Should().BeNull("Coerce hashes a 36-hex id rather than taking its prefix");
+    }
+
+    [Fact]
+    public async Task CoercedLegacyIdLookups_DoNotReachAnotherTenantsRecord()
+    {
+        var uuidLegacyId = Guid.NewGuid().ToString().ToUpperInvariant();
+        var hashedLegacyId = "syn-" + Convert.ToHexStringLower(Guid.NewGuid().ToByteArray());
+        using (var owner = await _fx.BeginTenantScopeAsync(Guid.NewGuid()))
+        {
+            var ownerRepo = owner.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
+            foreach (var legacyId in new[] { uuidLegacyId, hashedLegacyId })
+                await ownerRepo.CreateAsync(
+                    new CarbIntake { Timestamp = T0, Carbs = 20, DataSource = "loop", LegacyId = legacyId },
+                    WriteOrigin.Live, CancellationToken.None);
+        }
+
+        using var other = await _fx.BeginTenantScopeAsync(Guid.NewGuid());
+        var repo = other.ServiceProvider.GetRequiredService<ICarbIntakeRepository>();
+
+        (await repo.GetByLegacyIdUuidPrefixAsync(MongoObjectId.Coerce(uuidLegacyId)!, CancellationToken.None)).Should().BeNull();
+        (await repo.GetByLegacyIdHashAsync(MongoObjectId.Coerce(hashedLegacyId)!, CancellationToken.None)).Should().BeNull();
+    }
 }

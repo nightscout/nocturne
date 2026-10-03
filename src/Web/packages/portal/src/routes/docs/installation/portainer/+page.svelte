@@ -80,6 +80,18 @@
         </p>
     </Callout>
 
+    <Callout type="warning" title="PostgreSQL host-directory storage">
+        <p>
+            Portainer's stack editor and app template use the default named Docker volume;
+            Portainer does not apply Compose override files. To put PostgreSQL data in a host
+            directory, deploy the Docker Compose bundle from the command line with both
+            <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker-compose.yaml</code>
+            and <code class="text-xs bg-muted/50 px-1 py-0.5 rounded">docker-compose.bind-data.yaml</code>.
+            See the <a href={resolve("/docs/installation/docker-compose")} class="text-primary hover:underline">Docker Compose guide</a>
+            for setup and existing-database migration precautions.
+        </p>
+    </Callout>
+
     <h2 class="text-2xl font-bold mt-8 mb-4">Option 2: Manual deployment</h2>
     <p class="text-muted-foreground mb-4">
         If you prefer to configure the stack manually, download

@@ -40,6 +40,12 @@ public interface IApsSnapshotRepository : ILegacyKeyedRepository<ApsSnapshot>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<ApsIobCobPoint>> GetIobCobPointsAsync(DateTime from, DateTime to, CancellationToken ct = default);
 
+    /// <summary>
+    /// Counts the snapshots <see cref="GetAsync"/> reads for the same window and device, with no
+    /// source filter.
+    /// </summary>
+    Task<int> CountAsync(DateTime? from, DateTime? to, string? device, CancellationToken ct = default);
+
     /// <summary>Retrieve <see cref="ApsSnapshot"/> records matching any of the given correlation IDs.</summary>
     /// <param name="correlationIds">Correlation IDs to match.</param>
     /// <param name="ct">Cancellation token.</param>

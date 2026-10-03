@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -6,6 +7,7 @@ using Nocturne.API.Extensions;
 using Nocturne.API.Helpers;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Authorization;
 
@@ -185,29 +187,9 @@ public class ActivityController : ControllerBase
             if (activities == null)
                 return BadRequest(new { error = "Activity data is required" });
 
-            List<Activity> activityList;
-
-            if (activities is System.Text.Json.JsonElement jsonElement)
-            {
-                if (jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    activityList =
-                        System.Text.Json.JsonSerializer.Deserialize<List<Activity>>(
-                            jsonElement.GetRawText()
-                        ) ?? [];
-                }
-                else
-                {
-                    var singleActivity = System.Text.Json.JsonSerializer.Deserialize<Activity>(
-                        jsonElement.GetRawText()
-                    );
-                    activityList = singleActivity != null ? [singleActivity] : [];
-                }
-            }
-            else
-            {
+            var activityList = ReadActivities(activities);
+            if (activityList is null)
                 return BadRequest(new { error = "Invalid activity data format" });
-            }
 
             if (activityList.Count == 0)
                 return BadRequest(new { error = "At least one activity is required" });
@@ -237,14 +219,46 @@ public class ActivityController : ControllerBase
     }
 
     /// <summary>
-    /// Update an existing activity
+    /// Save the activity identified by the <c>_id</c> in the body, inserting it when that id is not
+    /// already stored
+    /// </summary>
+    /// <remarks>Nightscout's save takes one document, so an array is refused.</remarks>
+    [HttpPut]
+    [Authorize]
+    [RequireScope(Scope.TreatmentsReadWrite)]
+    [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<Activity>> SaveActivities(
+        [FromBody] JsonElement activity,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (activity.ValueKind != JsonValueKind.Object)
+            return BadRequest(new { error = "Invalid activity payload. Expected an object." });
+
+        Activity toSave;
+        try
+        {
+            toSave = JsonSerializer.Deserialize<Activity>(activity.GetRawText())!;
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Invalid JSON in save activity request");
+            return BadRequest(new { error = "Invalid activity payload." });
+        }
+
+        return await SaveAsync(toSave, cancellationToken);
+    }
+
+    /// <summary>
+    /// Save an activity by ID, inserting it when the ID is not already stored
     /// </summary>
     [HttpPut("{id}")]
     [Authorize]
     [RequireScope(Scope.TreatmentsReadWrite)]
     [ProducesResponseType(typeof(Activity), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Activity>> UpdateActivity(
         string id,
@@ -257,27 +271,12 @@ public class ActivityController : ControllerBase
             if (activity == null)
                 return BadRequest(new { error = "Activity data is required" });
 
-            // Gate on both the payload's destination and the existing record's destination so a
-            // caller cannot write or edit sleep/heart-rate/step data without its category scope.
-            var existing = await _activityService.GetActivityByIdAsync(id, cancellationToken);
-            var toCheck = new List<Activity> { activity };
-            if (existing is not null)
-                toCheck.Add(existing);
-            var missingScope = ActivityWriteScopeGuard.FindMissingScope(
-                toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
-            if (missingScope is not null)
-                return ForbiddenForScope(missingScope);
-
-            var updatedActivity = await _activityService.UpdateActivityAsync(
-                id,
-                activity,
-                cancellationToken
-            );
-
-            if (updatedActivity == null)
-                return NotFound(new { error = $"Activity with ID {id} not found" });
-
-            return Ok(updatedActivity);
+            activity.Id = id;
+            return await SaveAsync(activity, cancellationToken);
+        }
+        catch (RecreationBlockedException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -296,7 +295,6 @@ public class ActivityController : ControllerBase
     [Authorize]
     [RequireScope(Scope.FullAccess)]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> DeleteActivity(
         string id,
@@ -306,10 +304,7 @@ public class ActivityController : ControllerBase
         try
         {
             var deleted = await _activityService.DeleteActivityAsync(id, cancellationToken);
-            if (!deleted)
-                return NotFound(new { error = $"Activity with ID {id} not found" });
-
-            return Ok(new { message = "Activity deleted successfully" });
+            return Ok(LegacyDeleteStatus.For(deleted ? 1 : 0));
         }
         catch (Exception ex)
         {
@@ -320,6 +315,61 @@ public class ActivityController : ControllerBase
             );
         }
     }
+
+    /// <summary>
+    /// Nightscout's save is an upsert: an activity whose id resolves to a stored record replaces it,
+    /// and any other goes through the create path, which keeps the client's id.
+    /// </summary>
+    /// <remarks>
+    /// The scope gate covers the stored record as well as the payload, so a caller cannot edit
+    /// sleep, heart-rate or step data without that category's scope by sending another type.
+    /// An id that names an activity the user deleted is refused with the 409 every other refused
+    /// recreation gets (<see cref="Filters.RecreationBlockedFilter"/>), as a PUT of a deleted sleep
+    /// session already was.
+    /// </remarks>
+    /// <exception cref="RecreationBlockedException">The id names an activity the user deleted.</exception>
+    private async Task<ActionResult<Activity>> SaveAsync(
+        Activity activity,
+        CancellationToken cancellationToken
+    )
+    {
+        var hasId = !string.IsNullOrWhiteSpace(activity.Id);
+        var toCheck = new List<Activity> { activity };
+        if (hasId
+            && await _activityService.GetActivityByIdAsync(activity.Id!, cancellationToken)
+                is { } existing)
+            toCheck.Add(existing);
+        var missingScope = ActivityWriteScopeGuard.FindMissingScope(
+            toCheck, _activityDecomposer, HttpContext.GetGrantedScopes());
+        if (missingScope is not null)
+            return ForbiddenForScope(missingScope);
+
+        if (hasId
+            && await _activityService.UpdateActivityAsync(
+                activity.Id!, activity, cancellationToken) is { } updated)
+            return Ok(updated);
+
+        if (hasId && await _activityDecomposer.IsDeletedByUserAsync(activity.Id!, cancellationToken))
+            throw new RecreationBlockedException(
+                nameof(Activity), RecreationBlockedException.LegacyIdIdentity(activity.Id!));
+
+        var created = await _activityService.CreateActivitiesAsync([activity], cancellationToken);
+        return created.FirstOrDefault() is { } saved
+            ? Ok(saved)
+            : StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "An error occurred while saving the activity" }
+            );
+    }
+
+    private static List<Activity>? ReadActivities(object body) => body switch
+    {
+        JsonElement { ValueKind: JsonValueKind.Array } array =>
+            JsonSerializer.Deserialize<List<Activity>>(array.GetRawText()) ?? [],
+        JsonElement single =>
+            JsonSerializer.Deserialize<Activity>(single.GetRawText()) is { } activity ? [activity] : [],
+        _ => null,
+    };
 
     private ObjectResult ForbiddenForScope(string scope) => StatusCode(
         StatusCodes.Status403Forbidden,

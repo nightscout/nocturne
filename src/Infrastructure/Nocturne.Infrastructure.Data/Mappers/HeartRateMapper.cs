@@ -21,6 +21,7 @@ public static class HeartRateMapper
             Timestamp = heartRate.Timestamp,
             Bpm = heartRate.Bpm,
             Accuracy = heartRate.Accuracy,
+            Type = heartRate.Type,
             Device = heartRate.Device,
             EnteredBy = heartRate.EnteredBy,
             UtcOffset = heartRate.UtcOffset,
@@ -40,6 +41,7 @@ public static class HeartRateMapper
             Timestamp = entity.Timestamp,
             Bpm = entity.Bpm,
             Accuracy = entity.Accuracy,
+            Type = entity.Type,
             Device = entity.Device,
             EnteredBy = entity.EnteredBy,
             UtcOffset = entity.UtcOffset,
@@ -56,6 +58,7 @@ public static class HeartRateMapper
         entity.Timestamp = heartRate.Timestamp;
         entity.Bpm = heartRate.Bpm;
         entity.Accuracy = heartRate.Accuracy;
+        entity.Type = heartRate.Type;
         entity.Device = heartRate.Device;
         entity.EnteredBy = heartRate.EnteredBy;
         entity.UtcOffset = heartRate.UtcOffset;

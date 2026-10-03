@@ -251,7 +251,7 @@ public class TreatmentSocketIdentityTests : IDisposable
     /// <summary>The one treatment document the last write-back sent: a POST's array element or a PUT's body.</summary>
     private JsonElement LastSent()
     {
-        var body = JsonSerializer.Deserialize<JsonElement>(_upstream.Bodies.Last());
+        var body = JsonSerializer.Deserialize<JsonElement>(_upstream.Requests.Last(r => r.Method != HttpMethod.Get).Body);
         if (body.ValueKind != JsonValueKind.Array)
             return body;
         body.GetArrayLength().Should().Be(1);
@@ -259,21 +259,28 @@ public class TreatmentSocketIdentityTests : IDisposable
     }
 
     /// <summary>
-    /// The upstream identity of <see cref="UpstreamIdentityJson"/>: <c>_id</c> is the 24-hex id the reads
-    /// serve, <c>identifier</c> the legacy key the stored treatment is upserted by. A legacy key that is
-    /// itself an ObjectId goes out as the <c>_id</c> alone.
+    /// The upstream identity of <see cref="UpstreamIdentityJson.TreatmentWireKey"/>: <c>_id</c> and
+    /// <c>identifier</c> are both the legacy key coerced to an ObjectId, the same on a create, a PUT
+    /// and a PATCH.
     /// </summary>
-    private static void ShouldCarryServedIdAndLegacyKey(JsonElement sent, string restId, string legacyKey)
+    private static void ShouldCarryTheWireKey(JsonElement sent, string legacyKey)
     {
-        if (MongoObjectId.IsObjectId(legacyKey))
-        {
-            sent.GetProperty("_id").GetString().Should().Be(legacyKey);
-            sent.TryGetProperty("identifier", out _).Should().BeFalse();
-            return;
-        }
+        var wire = MongoObjectId.Coerce(legacyKey);
+        sent.GetProperty("_id").GetString().Should().MatchRegex("^[0-9a-f]{24}$").And.Be(wire);
+        sent.GetProperty("identifier").GetString().Should().Be(wire);
+    }
 
-        sent.GetProperty("_id").GetString().Should().MatchRegex("^[0-9a-f]{24}$").And.Be(restId);
-        sent.GetProperty("identifier").GetString().Should().Be(legacyKey);
+    /// <summary>
+    /// An edit first asks the upstream for the copy under its wire key, bounding <c>created_at</c> so
+    /// Nightscout's four-day default does not hide an older copy, then posts onto the copy it found.
+    /// </summary>
+    private void ShouldHaveLookedUpThenPosted(string legacyKey)
+    {
+        var edit = _upstream.Requests.TakeLast(2).ToList();
+        edit.Select(r => r.Method).Should().Equal(HttpMethod.Get, HttpMethod.Post);
+        edit[0].PathAndQuery.Should().Be(
+            $"/api/v1/treatments.json?find[identifier]={MongoObjectId.Coerce(legacyKey)}&find[created_at][$gte]=1970-01-01T00%3A00%3A00.000Z&count=1");
+        ShouldCarryTheWireKey(LastSent(), legacyKey);
     }
 
     [Theory]
@@ -282,19 +289,18 @@ public class TreatmentSocketIdentityTests : IDisposable
     [InlineData(ObjectIdCarbs, "65a1b2c3d4e5f60718293a4b")]
     [InlineData(TempBasal, null)]
     [InlineData(ObjectIdTempBasal, "65a1b2c3d4e5f60718293a5c")]
-    public async Task WriteBack_OfACreate_SendsTheServedIdAndTheLegacyKey(string upload, string? uploadedKey)
+    public async Task WriteBack_OfACreate_SendsTheWireKey(string upload, string? uploadedKey)
     {
         var submitted = Upload(upload);
         await _service.CreateTreatmentsAsync([submitted]);
-        var restId = await RestIdAsync();
 
-        _upstream.Bodies.Should().ContainSingle();
+        _upstream.Requests.Should().ContainSingle().Which.Method.Should().Be(HttpMethod.Post);
         var legacyKey = submitted.Id!;
         if (uploadedKey is null)
             legacyKey.Should().StartWith(TreatmentClientId.SyntheticIdPrefix);
         else
             legacyKey.Should().Be(uploadedKey);
-        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, legacyKey);
+        ShouldCarryTheWireKey(LastSent(), legacyKey);
     }
 
     [Theory]
@@ -303,7 +309,7 @@ public class TreatmentSocketIdentityTests : IDisposable
     [InlineData(ObjectIdCarbs)]
     [InlineData(TempBasal)]
     [InlineData(ObjectIdTempBasal)]
-    public async Task WriteBack_OfAPut_SendsTheServedIdAndTheLegacyKey(string upload)
+    public async Task WriteBack_OfAPut_SendsTheCreatesWireKey(string upload)
     {
         var submitted = Upload(upload);
         await _service.CreateTreatmentsAsync([submitted]);
@@ -313,27 +319,39 @@ public class TreatmentSocketIdentityTests : IDisposable
         replacement.EnteredBy = "e2e-put";
         (await _service.UpdateTreatmentAsync(restId, replacement)).Should().NotBeNull();
 
-        _upstream.Bodies.Should().HaveCount(2);
-        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, submitted.Id!);
+        _upstream.Requests.Should().HaveCount(3);
+        ShouldHaveLookedUpThenPosted(submitted.Id!);
     }
 
+    /// <summary>
+    /// A PATCH by the served id and one by the raw legacy key (what an uploader that kept its own id
+    /// patches by) both answer and broadcast the served id, and go out under the create's wire key.
+    /// </summary>
     [Theory]
-    [InlineData(Note)]
-    [InlineData(LoopBolus)]
-    [InlineData(ObjectIdCarbs)]
-    [InlineData(TempBasal)]
-    [InlineData(ObjectIdTempBasal)]
-    public async Task WriteBack_OfAPatch_SendsTheServedIdAndTheLegacyKey(string upload)
+    [InlineData(Note, false)]
+    [InlineData(Note, true)]
+    [InlineData(LoopBolus, false)]
+    [InlineData(LoopBolus, true)]
+    [InlineData(ObjectIdCarbs, false)]
+    [InlineData(ObjectIdCarbs, true)]
+    [InlineData(TempBasal, false)]
+    [InlineData(TempBasal, true)]
+    [InlineData(ObjectIdTempBasal, false)]
+    [InlineData(ObjectIdTempBasal, true)]
+    public async Task WriteBack_OfAPatch_SendsTheCreatesWireKey(string upload, bool byLegacyKey)
     {
         var submitted = Upload(upload);
         await _service.CreateTreatmentsAsync([submitted]);
         var restId = await RestIdAsync();
 
-        (await _service.PatchTreatmentAsync(restId, JsonSerializer.Deserialize<JsonElement>("""{"enteredBy":"e2e-patch"}""")))
-            .Should().NotBeNull();
+        var patched = await _service.PatchTreatmentAsync(
+            byLegacyKey ? submitted.Id! : restId, JsonSerializer.Deserialize<JsonElement>("""{"enteredBy":"e2e-patch"}"""));
 
-        _upstream.Bodies.Should().HaveCount(2);
-        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, submitted.Id!);
+        patched.Should().NotBeNull();
+        JsonSerializer.SerializeToElement(patched).GetProperty("_id").GetString().Should().Be(restId);
+        Events("update").Select(Id).Should().Equal(restId);
+        _upstream.Requests.Should().HaveCount(3);
+        ShouldHaveLookedUpThenPosted(submitted.Id!);
     }
 
     public enum Write { Create, Put, Patch }
@@ -344,10 +362,15 @@ public class TreatmentSocketIdentityTests : IDisposable
     /// ObjectId it minted (15.0.7 and later, as <c>e2e/mocks/vendors/nightscout-writeback.ts</c>
     /// normalises it).
     /// </summary>
+    /// <remarks>
+    /// A copy of a treatment whose legacy key is not an ObjectId comes back under that key's hash or
+    /// uuid prefix, which only the PostgreSQL resolvers answer; <c>WriteBackEchoIntegrationTests</c>
+    /// covers those keys.
+    /// </remarks>
     public static TheoryData<string, Write, bool> PullBacks()
     {
         var data = new TheoryData<string, Write, bool>();
-        foreach (var upload in new[] { Note, LoopBolus, ObjectIdCarbs, TempBasal, ObjectIdTempBasal })
+        foreach (var upload in new[] { ObjectIdCarbs, ObjectIdTempBasal })
             foreach (var write in Enum.GetValues<Write>())
                 foreach (var reMinted in new[] { false, true })
                     data.Add(upload, write, reMinted);
@@ -375,13 +398,9 @@ public class TreatmentSocketIdentityTests : IDisposable
 
         var sent = LastSent();
         var pulled = JsonSerializer.Deserialize<Treatment>(sent)!;
-        // A copy sent without an identifier is upserted by its _id, so Nightscout never re-mints it.
-        if (sent.TryGetProperty("identifier", out var identifier))
-        {
-            pulled.UpstreamIdentifier = identifier.GetString();
-            if (reMinted)
-                pulled.Id = "65f0e2e00000000000000001";
-        }
+        pulled.UpstreamIdentifier = sent.GetProperty("identifier").GetString();
+        if (reMinted)
+            pulled.Id = "65f0e2e00000000000000001";
         pulled.DataSource = DataSources.NightscoutConnector;
         var before = (await _service.GetTreatmentsAsync(count: 10)).Single();
         await _service.CreateTreatmentsAsync([pulled]);
@@ -415,17 +434,24 @@ public class TreatmentSocketIdentityTests : IDisposable
         var stored = (await _bolusRepo.GetByIdAsync(bolus.Id))!;
         stored.Insulin.Should().Be(1.75);
         stored.LegacyId.Should().BeOneOf(restId, bolus.Id.ToString());
-        ShouldCarryServedIdAndLegacyKey(LastSent(), restId, stored.LegacyId!);
+        ShouldHaveLookedUpThenPosted(stored.LegacyId!);
     }
 
+    /// <summary>An upstream that holds a copy under every identifier it is asked for.</summary>
     private sealed class UpstreamCapture : HttpMessageHandler
     {
-        public List<string> Bodies { get; } = [];
+        public List<(HttpMethod Method, string PathAndQuery, string Body)> Requests { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            Bodies.Add(await request.Content!.ReadAsStringAsync(ct));
-            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+            Requests.Add((
+                request.Method,
+                request.RequestUri!.PathAndQuery,
+                request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct)));
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(request.Method == HttpMethod.Get ? """[{"_id":"65f0e2e00000000000000002"}]""" : ""),
+            };
         }
     }
 

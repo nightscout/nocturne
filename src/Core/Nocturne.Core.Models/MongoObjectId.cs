@@ -68,8 +68,9 @@ public static class MongoObjectId
         if (Guid.TryParse(id, out var guid))
             return FromGuid(guid);
 
-        // Non-UUID, non-ObjectId legacy strings: hash to a stable 24-hex value so the wire is
-        // always AAPS-safe. These do not round-trip to a record (see the LegacyId lookup path).
+        // Any other id hashes to a stable 24-hex value so the wire is always AAPS-safe. The hash
+        // does not reverse; a stored record is found by it only by hashing every legacy id, see
+        // ILegacyKeyedRepository.GetByLegacyIdHashAsync.
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(id));
         return Convert.ToHexStringLower(hash.AsSpan(0, 12));
     }

@@ -159,6 +159,8 @@ public class LoginHandoffControllerTests : IDisposable
     [InlineData("https://evil.example/steal", "/")]
     [InlineData("//evil.example", "/")]
     [InlineData("/\\evil.example", "/")]
+    [InlineData("/\t/evil.example", "/")]
+    [InlineData("/\n/evil.example", "/")]
     [InlineData("", "/")]
     public async Task Exchange_ReturnsOnlyASiteLocalTarget(string requested, string expected)
     {

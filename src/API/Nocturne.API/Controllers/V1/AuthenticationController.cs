@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Nocturne.API.Attributes;
@@ -16,150 +17,72 @@ namespace Nocturne.API.Controllers.V1;
 [AllowAnonymous]
 public class AuthenticationController : ControllerBase
 {
-    private readonly ILogger<AuthenticationController> _logger;
-
-    public AuthenticationController(ILogger<AuthenticationController> logger)
-    {
-        _logger = logger;
-    }
-
     /// <summary>
-    /// Verify authentication status and permissions for the current request
-    /// This endpoint provides 1:1 compatibility with Nightscout's /api/v1/verifyauth endpoint
+    /// Report what the request's credential may do. Answers 200 whether or not the caller is
+    /// authenticated, as Nightscout does; the message says which.
     /// </summary>
-    /// <returns>Authentication status and permission information</returns>
     [HttpGet("verifyauth")]
     [NightscoutEndpoint("/api/v1/verifyauth")]
     [ProducesResponseType(typeof(VerifyAuthResponse), 200)]
     public ActionResult<VerifyAuthResponse> VerifyAuthentication()
     {
-        try
+        var authContext = HttpContext.GetAuthContext();
+        var authenticated = authContext?.IsAuthenticated == true;
+        var grantedScopes = HttpContext.GetGrantedScopes();
+
+        return Ok(new VerifyAuthResponse
         {
-            var authContext = HttpContext.GetAuthContext();
-
-            // Determine the response format based on authentication status
-            if (authContext?.IsAuthenticated == true)
+            Message = new VerifyAuthMessage
             {
-                var canRead = HttpContext.CanRead();
-                var canWrite = HttpContext.CanWrite();
-                var isAdmin = HttpContext.IsAdmin();
-
-                // For JWT/OIDC token authentication, use the detailed response format
-                if (authContext.AuthType != AuthType.ApiKey)
-                {
-                    var response = new VerifyAuthResponse
-                    {
-                        Message = new AuthResponseMessage
-                        {
-                            RoleFound = "FOUND",
-                            Message = "OK",
-                            CanRead = canRead,
-                            CanWrite = canWrite,
-                            IsAdmin = isAdmin,
-                            Permissions = string.Join(",", authContext.Permissions),
-                        },
-                    };
-
-                    _logger.LogDebug(
-                        "Token authentication verified for subject {SubjectId}",
-                        authContext.SubjectId
-                    );
-                    return Ok(response);
-                }
-                else
-                {
-                    // For API secret authentication, use simple "OK" response
-                    var response = new VerifyAuthResponse { Message = "OK" };
-
-                    _logger.LogDebug("API secret authentication verified");
-                    return Ok(response);
-                }
-            }
-            else
-            {
-                // Not authenticated - return unauthorized message
-                var response = new VerifyAuthResponse
-                {
-                    Message = new AuthResponseMessage
-                    {
-                        RoleFound = "NOT_FOUND",
-                        Message = "UNAUTHORIZED",
-                        CanRead = false,
-                        CanWrite = false,
-                        IsAdmin = false,
-                        Permissions = "",
-                    },
-                };
-
-                _logger.LogDebug("Authentication verification failed - no valid credentials");
-                return Ok(response);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error during authentication verification");
-
-            var response = new VerifyAuthResponse
-            {
-                Message = new AuthResponseMessage
-                {
-                    RoleFound = "ERROR",
-                    Message = "INTERNAL_ERROR",
-                    CanRead = false,
-                    CanWrite = false,
-                    IsAdmin = false,
-                    Permissions = "",
-                },
-            };
-
-            return Ok(response);
-        }
+                CanRead = ScopeTranslator.GrantsReadEverything(grantedScopes),
+                CanWrite = ScopeTranslator.GrantsWriteEverything(grantedScopes),
+                IsAdmin = grantedScopes.Contains(Scope.FullAccess),
+                Message = authenticated ? "OK" : "UNAUTHORIZED",
+                RoleFound = authenticated && authContext!.AuthType != AuthType.ApiKey ? "FOUND" : "NOTFOUND",
+                Permissions = authenticated ? "ROLE" : "DEFAULT",
+            },
+        });
     }
 }
 
 /// <summary>
-/// Response for the /api/v1/verifyauth endpoint
+/// Nightscout's <c>sendJSONStatus</c> envelope around a <see cref="VerifyAuthMessage"/>.
 /// </summary>
 public class VerifyAuthResponse
 {
-    /// <summary>
-    /// Authentication message - can be either a string or an object
-    /// </summary>
-    public object Message { get; set; } = "";
+    public int Status { get; set; } = StatusCodes.Status200OK;
+
+    public VerifyAuthMessage Message { get; set; } = new();
 }
 
 /// <summary>
-/// Detailed authentication response message
+/// What the credential may do, in Nightscout's spelling. The flags are written even when false,
+/// which the Nightscout JSON options would otherwise drop, because Nightscout always sends them.
 /// </summary>
-public class AuthResponseMessage
+public class VerifyAuthMessage
 {
-    /// <summary>
-    /// Whether the role was found (FOUND, NOT_FOUND, ERROR)
-    /// </summary>
-    public string RoleFound { get; set; } = "";
+    /// <summary>Whether the credential reads every data category, as Nightscout's <c>*:*:read</c>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public bool CanRead { get; set; }
 
-    /// <summary>
-    /// Status message (OK, UNAUTHORIZED, INTERNAL_ERROR)
-    /// </summary>
+    /// <summary>Whether the credential writes every data category, as Nightscout's <c>*:*:write</c>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public bool CanWrite { get; set; }
+
+    /// <summary>Whether the credential holds <see cref="Scope.FullAccess"/>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public bool IsAdmin { get; set; }
+
+    /// <summary><c>OK</c> for an authenticated caller, otherwise <c>UNAUTHORIZED</c>.</summary>
     public string Message { get; set; } = "";
 
     /// <summary>
-    /// Whether the user can read data
+    /// <c>FOUND</c> for a token-style credential, <c>NOTFOUND</c> for an api-secret or no
+    /// credential. Nightscout's web client treats <c>FOUND</c> as token authentication.
     /// </summary>
-    public bool CanRead { get; set; }
+    [JsonPropertyName("rolefound")]
+    public string RoleFound { get; set; } = "";
 
-    /// <summary>
-    /// Whether the user can write data
-    /// </summary>
-    public bool CanWrite { get; set; }
-
-    /// <summary>
-    /// Whether the user has admin permissions
-    /// </summary>
-    public bool IsAdmin { get; set; }
-
-    /// <summary>
-    /// Comma-separated list of permissions
-    /// </summary>
+    /// <summary><c>ROLE</c> for an authenticated caller, <c>DEFAULT</c> when only the default roles apply.</summary>
     public string Permissions { get; set; } = "";
 }

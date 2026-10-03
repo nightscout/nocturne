@@ -94,8 +94,8 @@ public class EntriesControllerTests
 
         // Assert
         result.Should().NotBeNull();
-        var statusCodeResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        statusCodeResult.StatusCode.Should().Be(201);
+        var statusCodeResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        statusCodeResult.StatusCode.Should().Be(200);
 
         // Verify ProcessDocuments was called with validEntries (which have IDs set)
         processedInput.Should().NotBeNull();
@@ -259,8 +259,8 @@ public class EntriesControllerTests
         var entry = processedInput![0];
         entry.Id.Should().NotBeNullOrEmpty();
 
-        // The ID should be a valid GUID-like string (hex characters, 32 chars without dashes)
-        entry.Id.Should().MatchRegex("^[a-f0-9]{32}$");
+        // The wire coerces a stored id that is not an ObjectId, so only an ObjectId is served as stored.
+        MongoObjectId.IsObjectId(entry.Id).Should().BeTrue();
     }
 
     [Fact]
@@ -375,8 +375,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -393,7 +393,7 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task UpdateEntry_AcceptsIdGeneratedByCreateEndpoint()
+    public async Task UpdateEntry_AcceptsA32HexUuid()
     {
         var generatedId = Guid.CreateVersion7().ToString("N");
         var update = new Entry { Sgv = 123, Mills = 1686565800000 };
@@ -423,7 +423,7 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task DeleteEntry_AcceptsIdGeneratedByCreateEndpoint()
+    public async Task DeleteEntry_AcceptsA32HexUuid()
     {
         var generatedId = Guid.CreateVersion7().ToString("N");
 
@@ -433,7 +433,43 @@ public class EntriesControllerTests
 
         var result = await _controller.DeleteEntry(generatedId);
 
-        result.Should().BeOfType<OkObjectResult>();
+        AssertDeleteStatus(result, 1);
+    }
+
+    [Fact]
+    public async Task DeleteEntry_UnknownId_AnswersOkWithNoneDeleted()
+    {
+        const string unknownId = "0123456789abcdef01234567";
+
+        _mockEntryService
+            .Setup(x => x.DeleteEntryAsync(unknownId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
+        var result = await _controller.DeleteEntry(unknownId);
+
+        AssertDeleteStatus(result, 0);
+    }
+
+    [Theory]
+    [InlineData("sgv")]
+    [InlineData("0123456789abcdef0123456")]
+    public async Task DeleteEntry_NonIdSpec_AnswersBadRequestWithoutDeleting(string spec)
+    {
+        var result = await _controller.DeleteEntry(spec);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.DeleteEntryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    private static void AssertDeleteStatus(ActionResult result, long count)
+    {
+        var body = JsonSerializer.SerializeToElement(result.Should().BeOfType<OkObjectResult>().Subject.Value);
+        body.GetProperty("acknowledged").GetBoolean().Should().BeTrue();
+        body.GetProperty("deletedCount").GetInt64().Should().Be(count);
+        body.GetProperty("n").GetInt64().Should().Be(count);
     }
 
     [Fact]
@@ -465,8 +501,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -520,8 +556,8 @@ public class EntriesControllerTests
         var result = await _controller.CreateEntries(submitted);
 
         // Assert
-        var objectResult = result.Result.Should().BeOfType<ObjectResult>().Subject;
-        objectResult.StatusCode.Should().Be(201);
+        var objectResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(200);
 
         var body = objectResult
             .Value.Should()
@@ -577,7 +613,7 @@ public class EntriesControllerTests
         // Assert
         var body = result
             .Result.Should()
-            .BeOfType<ObjectResult>()
+            .BeOfType<OkObjectResult>()
             .Subject.Value.Should()
             .BeAssignableTo<IEnumerable<object>>()
             .Subject.Cast<EntryV1Response>()
@@ -593,12 +629,12 @@ public class EntriesControllerTests
     }
 
     [Fact]
-    public async Task CreateEntries_EveryEntryRefused_StillReturnsBadRequest()
+    public async Task CreateEntries_EveryEntryRefused_EchoesEveryEntryWithoutWriting()
     {
-        // Echoing refusals does not turn a wholly unusable batch into a success.
         var result = await _controller.CreateEntries(new[] { new Entry(), new Entry() });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().HaveCount(2);
         _mockEntryService.Verify(
             x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
             Times.Never
@@ -641,9 +677,25 @@ public class EntriesControllerTests
         // Derived fields are now filled in before the refusal check, and NormalizeEntry defaults an
         // empty type to "sgv". That must not rescue an entry: HasMeaningfulData accepts a type only
         // when it is neither empty nor "sgv", so both forms have to land the same way.
-        var result = await _controller.CreateEntries(new[] { new Entry { Type = "" } });
+        await _controller.CreateEntries(new[] { new Entry { Type = "" } });
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
+    }
+
+    [Fact]
+    public async Task CreateEntries_EmptyArray_AnswersOkWithEmptyArray()
+    {
+        var result = await _controller.CreateEntries(Array.Empty<Entry>());
+
+        var ok = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeAssignableTo<IEnumerable<object>>().Which.Should().BeEmpty();
+        _mockEntryService.Verify(
+            x => x.CreateEntriesAsync(It.IsAny<IEnumerable<Entry>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()),
+            Times.Never
+        );
     }
 
     /// <summary>
@@ -832,12 +884,11 @@ public class EntriesControllerTests
             .Setup(x =>
                 x.CheckForDuplicateEntriesAsync(
                     It.IsAny<IReadOnlyList<EntryDuplicateProbe>>(),
-                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()
                 )
             )
             .ReturnsAsync(
-                (IReadOnlyList<EntryDuplicateProbe> probes, int _, CancellationToken _) =>
+                (IReadOnlyList<EntryDuplicateProbe> probes, CancellationToken _) =>
                     probes
                         .Select(probe => byMills.GetValueOrDefault(probe.Mills))
                         .ToArray()

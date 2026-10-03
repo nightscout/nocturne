@@ -35,6 +35,16 @@ public class EntryDecomposerBatchTests : IDisposable
         _mgRepoMock = new Mock<IMeterGlucoseRepository>();
         _calRepoMock = new Mock<ICalibrationRepository>();
 
+        _sgRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
+        _mgRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
+        _calRepoMock
+            .Setup(x => x.GetHeldLegacyIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new HashSet<string>());
+
         // BulkUpsertAsync returns the input records
         _sgRepoMock
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
@@ -279,6 +289,13 @@ public class EntryDecomposerBatchTests : IDisposable
             .Setup(x => x.BulkUpsertAsync(It.IsAny<IEnumerable<SensorGlucose>>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .Callback((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => written = [.. records])
             .ReturnsAsync((IEnumerable<SensorGlucose> records, WriteOrigin _, CancellationToken _) => [.. records]);
+
+        _sgRepoMock
+            .Setup(x => x.FindUnkeyedOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new UnkeyedOwnId(unkeyedWireId, WriteBackMaySend: false)]);
+        _sgRepoMock
+            .Setup(x => x.AdoptOwnIdsAsync(It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync([new SensorGlucose { LegacyId = unkeyedWireId }]);
 
         var entries = new List<Entry>
         {

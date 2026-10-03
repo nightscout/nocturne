@@ -193,7 +193,7 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
         var resolved = (await repo.ResolveUuidLegacyIdsAsync([prefix, "0198c2a41f3b7c2d9e55ffff", "dexcom_x"], CancellationToken.None)).ToList();
         var written = await repo.BulkUpsertAsync([Echo(resolved.Single().LegacyId)], WriteOrigin.Live, CancellationToken.None);
 
-        resolved.Should().Equal(new UuidLegacyId(prefix, legacyId));
+        resolved.Should().Equal(new WireLegacyId(prefix, legacyId));
         written.Updated.Should().ContainSingle().Which.Id.Should().Be(stored.Id);
     }
 
@@ -268,13 +268,15 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
     }
 
     /// <summary>
-    /// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsHeldOutsideSourceAsync"/> is how a
-    /// pull tells a write-back echo from the connector's own record: a live row decides over the
-    /// user's deletion of the same id, a user's deletion holds on its own, a system sweep does not,
-    /// and a row with no source counts as another source.
+    /// <see cref="ILegacyKeyedRepository{TRecord}.GetLegacyIdsWriteBackMaySendAsync"/> is how a
+    /// pull tells a write-back echo from the upstream's own record. Only a row a live write has
+    /// touched can have been written back, and never the connector's own. A live row decides over the
+    /// user's deletion of the same id, the latest of several deletions decides over the rest, a
+    /// user's deletion holds on its own, a system sweep does not, and a row with no source counts as
+    /// another source.
     /// </summary>
     [Fact]
-    public async Task LegacyIdsHeldOutsideASource_AreDecidedByTheRowThatGovernsTheId()
+    public async Task LegacyIdsWriteBackMaySend_AreDecidedByTheRowThatGovernsTheId()
     {
         using (var otherScope = await fx.BeginTenantScopeAsync(Guid.NewGuid()))
             await otherScope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>()
@@ -296,12 +298,133 @@ public class OwnIdAdoptionGoldenTests(V4GoldenFixture fx)
             $"UPDATE sensor_glucose SET deleted_at = now(), deleted_by_user = false WHERE id = {swept.Id}"));
         await repo.CreateAsync(
             new SensorGlucose { Timestamp = T0.AddMinutes(30), Mgdl = 120, LegacyId = "unsourced" }, WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(Reading("imported", minute: 35), WriteOrigin.Backfill, CancellationToken.None);
+        var importedThenEdited = await repo.CreateAsync(Reading("imported-then-edited", minute: 40), WriteOrigin.Backfill, CancellationToken.None);
+        importedThenEdited.Mgdl = 140;
+        await repo.UpdateAsync(importedThenEdited.Id, importedThenEdited, WriteOrigin.Live, CancellationToken.None);
+        var olderTombstone = await repo.CreateAsync(Reading("two-tombstones", minute: 45), WriteOrigin.Live, CancellationToken.None);
+        await DeleteByUserAsync(tenant, olderTombstone.Id);
+        var newerTombstone = await repo.CreateAsync(Reading("two-tombstones-import", minute: 50), WriteOrigin.Backfill, CancellationToken.None);
+        await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE sensor_glucose SET legacy_id = 'two-tombstones', deleted_at = now() + interval '1 minute', deleted_by_user = true WHERE id = {newerTombstone.Id}"));
 
-        var held = await repo.GetLegacyIdsHeldOutsideSourceAsync(
-            ["dexcom-live", "connector-live", "dexcom-deleted", "connector-over-tombstone", "dexcom-swept", "unsourced", "other-tenant", "absent"],
+        var sendable = await repo.GetLegacyIdsWriteBackMaySendAsync(
+            ["dexcom-live", "connector-live", "dexcom-deleted", "connector-over-tombstone", "dexcom-swept", "unsourced",
+                "other-tenant", "absent", "imported", "imported-then-edited", "two-tombstones"],
             "nightscout-connector", CancellationToken.None);
 
-        held.Should().BeEquivalentTo("dexcom-live", "dexcom-deleted", "unsourced");
+        sendable.Should().BeEquivalentTo("dexcom-live", "dexcom-deleted", "unsourced", "imported-then-edited");
+    }
+
+    private Task<bool> WrittenLiveAsync(Guid tenant, Guid id) =>
+        fx.QueryAsync(tenant, ctx => ctx.SensorGlucose.IgnoreQueryFilters([NocturneDbContext.SoftDeleteFilterKey])
+            .Where(e => e.Id == id).Select(e => e.WrittenLive).SingleAsync());
+
+    /// <summary>
+    /// A live write marks the rows it inserts or changes, through every write path; an import marks
+    /// nothing, and a live write that changes nothing leaves a row as it was.
+    /// </summary>
+    [Fact]
+    public async Task WrittenLive_IsSetByLiveWritesOnly()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+
+        var live = await repo.CreateAsync(Reading("live"), WriteOrigin.Live, CancellationToken.None);
+        var imported = await repo.CreateAsync(Reading("imported", minute: 5), WriteOrigin.Backfill, CancellationToken.None);
+        var bulkImported = (await repo.BulkUpsertAsync([Reading("bulk-imported", minute: 10)], WriteOrigin.Backfill, CancellationToken.None)).Single();
+        var bulkLive = (await repo.BulkUpsertAsync([Reading("bulk-live", minute: 15)], WriteOrigin.Live, CancellationToken.None)).Single();
+        var reimported = (await repo.BulkUpsertAsync([new SensorGlucose { Timestamp = T0.AddMinutes(10), Mgdl = 150, DataSource = "dexcom-connector", LegacyId = "bulk-imported" }], WriteOrigin.Live, CancellationToken.None)).Single();
+
+        (await WrittenLiveAsync(tenant, live.Id)).Should().BeTrue();
+        (await WrittenLiveAsync(tenant, imported.Id)).Should().BeFalse();
+        (await WrittenLiveAsync(tenant, bulkLive.Id)).Should().BeTrue();
+        reimported.Id.Should().Be(bulkImported.Id);
+        (await WrittenLiveAsync(tenant, bulkImported.Id)).Should().BeTrue("a live write changed it");
+    }
+
+    /// <summary>
+    /// Treatment write-back sends a legacy id that is neither an ObjectId nor a uuid as the hash
+    /// <see cref="MongoObjectId.Coerce"/> gives it. Postgres computes the same hash through the
+    /// migration's <c>legacy_id_wire_hash</c>, live rows and deleted alike, tenant-scoped, and a uuid
+    /// or an ObjectId never answers for one.
+    /// </summary>
+    [Fact]
+    public async Task HashedLegacyIds_ResolveToTheLegacyIdTheirHashNames()
+    {
+        var other = Guid.NewGuid();
+        using (var otherScope = await fx.BeginTenantScopeAsync(other))
+            await otherScope.ServiceProvider.GetRequiredService<IBolusRepository>()
+                .CreateAsync(new Bolus { Timestamp = T0, Insulin = 1, LegacyId = "other-tenant-bolus" }, WriteOrigin.Live, CancellationToken.None);
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+        string[] legacyIds = ["syn-3a7c0e9f1b2d4c6e", "5F1A2B3C4D5E6F7A8B9C0D1E", "café-ü-1", "65a1b2c3d4e5f60718293a4b", "4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f"];
+        foreach (var (legacyId, i) in legacyIds.Select((l, i) => (l, i)))
+            await repo.CreateAsync(new Bolus { Timestamp = T0.AddMinutes(i * 10), Insulin = 1, LegacyId = legacyId }, WriteOrigin.Live, CancellationToken.None);
+        var deleted = await repo.CreateAsync(new Bolus { Timestamp = T0.AddHours(2), Insulin = 1, LegacyId = "deleted-bolus" }, WriteOrigin.Live, CancellationToken.None);
+        await fx.QueryAsync(tenant, ctx => ctx.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE boluses SET deleted_at = now(), deleted_by_user = true WHERE id = {deleted.Id}"));
+
+        var resolved = await repo.ResolveHashedLegacyIdsAsync(
+            [.. legacyIds.Select(l => MongoObjectId.Coerce(l)!), MongoObjectId.Coerce("deleted-bolus")!, MongoObjectId.Coerce("other-tenant-bolus")!],
+            CancellationToken.None);
+
+        resolved.Should().BeEquivalentTo(new[]
+        {
+            new WireLegacyId(MongoObjectId.Coerce("syn-3a7c0e9f1b2d4c6e")!, "syn-3a7c0e9f1b2d4c6e"),
+            new WireLegacyId(MongoObjectId.Coerce("5F1A2B3C4D5E6F7A8B9C0D1E")!, "5F1A2B3C4D5E6F7A8B9C0D1E"),
+            new WireLegacyId(MongoObjectId.Coerce("café-ü-1")!, "café-ü-1"),
+            new WireLegacyId(MongoObjectId.Coerce("deleted-bolus")!, "deleted-bolus"),
+        });
+    }
+
+    /// <summary>
+    /// The v1 and v3 reads serve a treatment under its own uuid's prefix whatever its legacy id, and
+    /// an earlier write-back sent an edit under that id.
+    /// </summary>
+    [Fact]
+    public async Task KeyedOwnIds_ResolveToTheLegacyIdOfTheRecordTheyName()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<IBolusRepository>();
+        var keyed = await repo.CreateAsync(new Bolus { Timestamp = T0, Insulin = 1, LegacyId = "65a1b2c3d4e5f60718293a4b" }, WriteOrigin.Live, CancellationToken.None);
+        var unkeyed = await repo.CreateAsync(new Bolus { Timestamp = T0.AddMinutes(10), Insulin = 1 }, WriteOrigin.Live, CancellationToken.None);
+
+        var resolved = await repo.ResolveKeyedOwnIdsAsync(
+            [MongoObjectId.FromGuid(keyed.Id), MongoObjectId.FromGuid(unkeyed.Id), keyed.Id.ToString()], CancellationToken.None);
+
+        resolved.Should().Equal(new WireLegacyId(MongoObjectId.FromGuid(keyed.Id), "65a1b2c3d4e5f60718293a4b"));
+    }
+
+    /// <summary>
+    /// The read-only half of adoption: which ids name a record with no legacy id, and whether
+    /// write-back may have sent that record. It writes nothing.
+    /// </summary>
+    [Fact]
+    public async Task UnkeyedOwnIds_AreFoundWithoutAdoptingThem()
+    {
+        var tenant = Guid.NewGuid();
+        using var scope = await fx.BeginTenantScopeAsync(tenant);
+        var repo = scope.ServiceProvider.GetRequiredService<ISensorGlucoseRepository>();
+        var live = await repo.CreateAsync(Reading(null), WriteOrigin.Live, CancellationToken.None);
+        var imported = await repo.CreateAsync(Reading(null, minute: 5), WriteOrigin.Backfill, CancellationToken.None);
+        var connector = await repo.CreateAsync(new SensorGlucose { Timestamp = T0.AddMinutes(10), Mgdl = 120, DataSource = "nightscout-connector" }, WriteOrigin.Live, CancellationToken.None);
+        var shadowed = await repo.CreateAsync(Reading(null, minute: 15), WriteOrigin.Live, CancellationToken.None);
+        await repo.CreateAsync(Reading(shadowed.Id.ToString(), minute: 20), WriteOrigin.Live, CancellationToken.None);
+
+        var found = await repo.FindUnkeyedOwnIdsAsync(
+            [MongoObjectId.FromGuid(live.Id), imported.Id.ToString(), MongoObjectId.FromGuid(connector.Id), shadowed.Id.ToString()],
+            "nightscout-connector", CancellationToken.None);
+
+        found.Should().BeEquivalentTo(new[]
+        {
+            new UnkeyedOwnId(MongoObjectId.FromGuid(live.Id), WriteBackMaySend: true),
+            new UnkeyedOwnId(imported.Id.ToString(), WriteBackMaySend: false),
+            new UnkeyedOwnId(MongoObjectId.FromGuid(connector.Id), WriteBackMaySend: false),
+        });
+        (await ReadingsAsync(tenant)).Where(r => r.LegacyId is not null).Should().ContainSingle();
     }
 }
-

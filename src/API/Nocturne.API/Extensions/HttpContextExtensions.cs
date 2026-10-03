@@ -153,20 +153,6 @@ public static class HttpContextExtensions
     }
 
     /// <summary>
-    /// Check if the current request has write permissions
-    /// </summary>
-    /// <param name="context">HTTP context</param>
-    /// <returns>True if has write permissions</returns>
-    public static bool CanWrite(this HttpContext context)
-    {
-        return context.HasPermission("*")
-            || context.HasPermission("api:*")
-            || context.HasPermission("api:*:create")
-            || context.HasPermission("api:*:update")
-            || context.HasPermission("api:*:delete");
-    }
-
-    /// <summary>
     /// Get the resolved OAuth scopes for the current request.
     /// These are populated by the auth middleware from either OAuth token claims
     /// or translated from legacy Shiro-style permissions.

@@ -266,11 +266,12 @@ public class AlertRulesIntegrationTests : ApiIntegrationTestBase
         await using var conn = new NpgsqlConnection(connStr);
         await conn.OpenAsync();
 
-        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, "tenant-b", "Tenant B");
+        var tenantBSlug = $"tenant-b-{Guid.NewGuid():N}"[..20];
+        var tenantBId = await AuthTestHelpers.SeedTenantAsync(Fixture, tenantBSlug, "Tenant B");
         var (_, tenantBToken) = await AuthTestHelpers.SeedAuthenticatedSubjectAsync(conn, tenantBId, "Tenant B User");
 
         var baseDomain = AuthTestHelpers.GetBaseDomain(ApiClient);
-        using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, "tenant-b", baseDomain, tenantBToken);
+        using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, tenantBSlug, baseDomain, tenantBToken);
 
         // Act - list rules from tenant B
         var response = await clientB.GetAsync("/api/v4/alert-rules");

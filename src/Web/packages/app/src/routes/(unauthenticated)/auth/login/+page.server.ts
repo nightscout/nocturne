@@ -2,6 +2,7 @@ import { redirect } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import type { PageServerLoad } from "./$types";
 import { GUEST_CODE_DISMISSED_COOKIE } from "$lib/components/auth/guest-code-dismissal";
+import { safeReturnUrl } from "$lib/server/return-url";
 
 // Marker appended to returnUrl so a single auto-login attempt can be detected
 // after it bounces back. It survives the round-trip because the auth guard
@@ -34,15 +35,11 @@ export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => 
     };
   }
 
-  const raw = url.searchParams.get("returnUrl") || "/";
-  // Same-origin paths only, mirroring the endpoint's IsLocalUrl guard: a
-  // second "/" or "\" would be a protocol-relative URL (browsers normalize
-  // "/\" to "//" in Location headers).
-  const returnUrl = /^\/(?![/\\])/.test(raw) ? raw : "/";
+  const returnUrl = safeReturnUrl(url.searchParams.get("returnUrl"));
   const returnUrlParams = new URL(returnUrl, url.origin).searchParams;
 
   if (locals.isAuthenticated) {
-    redirect(303, stripMarker(returnUrl, url.origin));
+    redirect(303, withMarker(returnUrl, url.origin, false));
   }
 
   // One-shot guard. The session is host-scoped (cookie domain = the exact host
@@ -54,7 +51,7 @@ export const load: PageServerLoad = async ({ url, locals, cookies, parent }) => 
   // passkey UI instead of retrying.
   if (returnUrlParams.has(AUTO_LOGIN_MARKER)) return;
 
-  const marked = appendMarker(returnUrl, url.origin);
+  const marked = withMarker(returnUrl, url.origin, true);
   redirect(303, `${endpoint}?redirect=${encodeURIComponent(marked)}`);
 };
 
@@ -100,14 +97,13 @@ async function hasPendingGuestCode(
   }
 }
 
-function appendMarker(returnUrl: string, origin: string): string {
+/**
+ * `returnUrl` with the marker set or removed. Rebuilding from the parsed URL
+ * resolves dot segments, so the result is checked again rather than trusted.
+ */
+function withMarker(returnUrl: string, origin: string, marked: boolean): string {
   const target = new URL(returnUrl, origin);
-  target.searchParams.set(AUTO_LOGIN_MARKER, "1");
-  return target.pathname + target.search;
-}
-
-function stripMarker(returnUrl: string, origin: string): string {
-  const target = new URL(returnUrl, origin);
-  target.searchParams.delete(AUTO_LOGIN_MARKER);
-  return target.pathname + target.search;
+  if (marked) target.searchParams.set(AUTO_LOGIN_MARKER, "1");
+  else target.searchParams.delete(AUTO_LOGIN_MARKER);
+  return safeReturnUrl(target.pathname + target.search);
 }

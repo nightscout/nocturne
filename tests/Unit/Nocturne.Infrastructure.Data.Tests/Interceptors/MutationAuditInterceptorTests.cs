@@ -425,6 +425,31 @@ public class MutationAuditInterceptorTests : IDisposable
     }
 
     [Fact]
+    public async Task SoftDelete_OfSoftDeletableRowThatIsNotAudited_MaintainsDeletedByUser_ButProducesNoAuditRecord()
+    {
+        // Heart rates are soft-deletable but not audited; the dedup flag must still say who deleted.
+        using var context = CreateContext();
+        var userDeleted = new HeartRateEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, Timestamp = DateTime.UtcNow, Bpm = 70 };
+        var systemDeleted = new HeartRateEntity { Id = Guid.CreateVersion7(), TenantId = _tenantId, Timestamp = DateTime.UtcNow, Bpm = 71 };
+        context.HeartRates.AddRange(userDeleted, systemDeleted);
+        await context.SaveChangesAsync();
+
+        using var userContext = CreateContext();
+        var trackedByUser = await userContext.HeartRates.FindAsync(userDeleted.Id);
+        trackedByUser!.DeletedAt = DateTime.UtcNow;
+        await InvokeSavingChanges(userContext);
+
+        using var systemContext = CreateContext(new StubAuditContext { IsSystem = true });
+        var trackedBySystem = await systemContext.HeartRates.FindAsync(systemDeleted.Id);
+        trackedBySystem!.DeletedAt = DateTime.UtcNow;
+        await InvokeSavingChanges(systemContext);
+
+        ((bool)userContext.Entry(trackedByUser).Property("DeletedByUser").CurrentValue!).Should().BeTrue();
+        ((bool)systemContext.Entry(trackedBySystem).Property("DeletedByUser").CurrentValue!).Should().BeFalse();
+        userContext.ChangeTracker.Entries<MutationAuditLogEntity>().Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task SoftDelete_NullAuditContext_MaintainsDeletedByUser_ButProducesNoAuditRecord()
     {
         // No AuditContext and null HttpContext: an unattributed background save. The audit row

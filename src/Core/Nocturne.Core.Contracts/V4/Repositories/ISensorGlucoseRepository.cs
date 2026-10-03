@@ -67,8 +67,8 @@ public interface ISensorGlucoseRepository
     );
 
     /// <summary>
-    /// Raw-storage duplicate probe for upload idempotency: returns a stored reading matching the
-    /// device, value (±0.01 mg/dL), and time window, or <c>null</c>.
+    /// Raw-storage duplicate probe for upload idempotency: returns the newest stored reading from
+    /// the device in <paramref name="from"/>..<paramref name="to"/>, or <c>null</c>.
     /// </summary>
     /// <remarks>
     /// Unlike <see cref="GetAsync(DateTime?, DateTime?, string?, string?, int, int, bool, bool, DateTime?, Guid?, CancellationToken, Guid?)"/>,
@@ -78,12 +78,11 @@ public interface ISensorGlucoseRepository
     /// same readings are re-inserted on every upload cycle.
     /// </remarks>
     /// <param name="device">Optional device identifier filter.</param>
-    /// <param name="mgdl">Optional glucose value to match within ±0.01 mg/dL.</param>
-    /// <param name="from">Inclusive start of the time window.</param>
-    /// <param name="to">Inclusive end of the time window.</param>
+    /// <param name="from">Inclusive start of the time range.</param>
+    /// <param name="to">Exclusive end of the time range.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<SensorGlucose?> FindStoredDuplicateAsync(
-        string? device, double? mgdl, DateTime from, DateTime to, CancellationToken ct = default);
+        string? device, DateTime from, DateTime to, CancellationToken ct = default);
 
     /// <summary>
     /// Raw-storage duplicate probe for a whole upload batch: returns the stored readings in
@@ -92,16 +91,16 @@ public interface ISensorGlucoseRepository
     /// </summary>
     /// <remarks>
     /// Same raw semantics as
-    /// <see cref="FindStoredDuplicateAsync(string?, double?, DateTime, DateTime, CancellationToken)"/> —
+    /// <see cref="FindStoredDuplicateAsync(string?, DateTime, DateTime, CancellationToken)"/>:
     /// non-primary duplicate copies are included, and the ordering (timestamp then id, both
     /// descending) is the one the single-entry probe resolves ties by, so scanning the returned
     /// list in order and taking the first match reproduces its result exactly.
     /// </remarks>
     /// <param name="devices">Device identifiers to include, or <c>null</c> for every device
     /// (required when any submitted entry has no device, since such an entry matches any).</param>
-    /// <param name="from">Inclusive start of the time window.</param>
-    /// <param name="to">Inclusive end of the time window.</param>
-    /// <param name="limit">Maximum rows to return. A caller that needs to know whether the window
+    /// <param name="from">Inclusive start of the time range.</param>
+    /// <param name="to">Exclusive end of the time range.</param>
+    /// <param name="limit">Maximum rows to return. A caller that needs to know whether the range
     /// held more than it can use should ask for one row more than that.</param>
     /// <param name="ct">Cancellation token.</param>
     Task<IReadOnlyList<SensorGlucose>> FindStoredDuplicateCandidatesAsync(

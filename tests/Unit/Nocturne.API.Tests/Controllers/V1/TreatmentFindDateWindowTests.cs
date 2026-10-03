@@ -251,7 +251,8 @@ public class TreatmentFindDateWindowTests
         var httpContext = new DefaultHttpContext();
         httpContext.Request.QueryString = new QueryString(queryString);
         return new CountController(
-            Mock.Of<IEntryStore>(), store, Mock.Of<IApsSnapshotRepository>(),
+            Mock.Of<IEntryStore>(), store,
+            CountControllerTests.DeviceStatusProjection(new Mock<IApsSnapshotRepository>(), new Mock<IPumpSnapshotRepository>()),
             Mock.Of<IProfileProjectionService>(), Mock.Of<IFoodRepository>(),
             Mock.Of<IActivityService>(), new FakeTimeProvider(Now), NullLogger<CountController>.Instance)
         {

@@ -140,7 +140,9 @@ public interface ITrackerRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Completes an active tracker instance with a specified reason
+    /// Completes a running tracker instance with a specified reason, in one conditional write.
+    /// Returns null, changing nothing, when the instance is not found or is already completed, so
+    /// of two writers completing one instance exactly one gets it back.
     /// </summary>
     Task<TrackerInstanceEntity?> CompleteInstanceAsync(
         Guid instanceId,
@@ -148,6 +150,21 @@ public interface ITrackerRepository
         string? completionNotes = null,
         string? completeTreatmentId = null,
         DateTime? completedAt = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> in one transaction holding the definition's lock, so that
+    /// writers succeeding one tracker's run take turns across replicas.
+    /// </summary>
+    /// <remarks>
+    /// <paramref name="work"/> can run more than once when the store retries a transient failure.
+    /// <paramref name="verifySucceeded"/> judges, after a commit that reported failure, whether the
+    /// result the attempt returned landed anyway.
+    /// </remarks>
+    Task<T> ExecuteUnderDefinitionLockAsync<T>(
+        Guid definitionId,
+        Func<CancellationToken, Task<T>> work,
+        Func<T, CancellationToken, Task<bool>>? verifySucceeded = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -186,15 +203,6 @@ public interface ITrackerRepository
     /// </summary>
     Task<TrackerPresetEntity> CreatePresetAsync(
         TrackerPresetEntity preset,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Applies a tracker preset, creating a new instance for a user
-    /// </summary>
-    Task<TrackerInstanceEntity?> ApplyPresetAsync(
-        Guid presetId,
-        string userId,
-        string? overrideNotes = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
