@@ -19,7 +19,7 @@ beforeEach(() => {
   reducedMotion.value = false;
   fakePlayer.seeks = [];
   fakePlayer.plays = 0;
-  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, seeking: false, finished: false });
+  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, finished: false });
 });
 
 describe("HubPainting", () => {

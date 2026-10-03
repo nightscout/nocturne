@@ -8,18 +8,15 @@
       motion: "full" as "full" | "reduced",
       progress: 0,
       playing: false,
-      seeking: false,
       finished: false,
     },
     onprogress: undefined as ((progress: number, seeking: boolean) => void) | undefined,
     seekTo(progress: number) {
       fakePlayer.seeks.push(progress);
       fakePlayer.state.progress = progress;
-      fakePlayer.state.seeking = true;
     },
     /** Presents a frame; one that shows the latest `seekTo` target is presented with `seeking` false. */
     present(seeking = false) {
-      fakePlayer.state.seeking = seeking;
       fakePlayer.onprogress?.(fakePlayer.state.progress, seeking);
     },
     play() {
@@ -58,6 +55,7 @@
   $effect(() => untrack(() => onready?.(fakePlayer)));
   $effect(() => {
     fakePlayer.onprogress = onprogress;
+    return () => (fakePlayer.onprogress = undefined);
   });
 </script>
 
