@@ -76,6 +76,9 @@ export type { DropMark, DropKind, MarkOptions, DropStroke, StrokeOptions, Stroke
 export { dropScene, strokeFrame } from './api/drop-scene';
 export type { DropScene, DropSceneOptions, DropDeposit } from './api/drop-scene';
 
+export { PackingSuitcase, packingSuitcaseScene, LIVE_TICKS_PER_SECOND, LIVE_SETTLE_SHARE } from './api/packing-suitcase';
+export type { PackingSuitcaseScene, SuitcaseGeometry, TimedOp, SceneOp } from './api/packing-suitcase';
+
 export { measureObstacles, textBoxes, DROP_TEXT_PAD } from './api/drop-text';
 export type { DropFont, DropFonts } from './api/drop-text';
 
