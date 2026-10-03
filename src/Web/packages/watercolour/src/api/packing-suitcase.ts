@@ -1,5 +1,6 @@
 import type { LiveClock, SceneOp, TimedOp } from '../types';
 import { DEFAULT_INTENSITY } from '../types';
+import { dropSimResolution } from './drop-scene';
 import type { WasmModule } from './wasm-types';
 
 /**
@@ -297,6 +298,17 @@ const REPLAY_SPREAD_TICKS = 6;
 const REPLAY_SETTLE_SHARE = 0.25;
 /** Ticks after the last replayed operation for the reveal to come to rest. */
 const REPLAY_TAIL_TICKS = 20;
+/** The grid the prototype was tuned on; a larger one spreads the same strokes over more cells. */
+const MAX_SIM_RESOLUTION = 320;
+
+export interface PackingSuitcaseOptions {
+  /** Categories of the items already packed, in the order they are painted. */
+  packed: readonly string[];
+  /** Items still to pack. */
+  unpacked: number;
+  seed?: number;
+  dpr?: number;
+}
 
 export interface PackingSuitcaseScene {
   sceneJson: string;
@@ -313,15 +325,17 @@ function donorOutline(doc: SceneDocument): [number, number][] {
 }
 
 /**
- * The suitcase as a reload finds it: `packed` categories painted in order,
- * each band dried before the next, with `unpacked` items still to go.
+ * The suitcase as a reload finds it, `width` x `height` CSS pixels: the
+ * `packed` categories painted in order, each band dried before the next,
+ * with `unpacked` items still to go.
  */
 export function packingSuitcaseScene(
   module: Pick<WasmModule, 'catalogueScene'>,
-  packed: readonly string[],
-  unpacked: number,
-  { seed = 0, simResolution }: { seed?: number; simResolution: number },
+  width: number,
+  height: number,
+  { packed, unpacked, seed = 0, dpr = 1 }: PackingSuitcaseOptions,
 ): PackingSuitcaseScene {
+  const simResolution = Math.min(MAX_SIM_RESOLUTION, dropSimResolution(Math.round(Math.max(width, height) * dpr)));
   const doc = JSON.parse(
     module.catalogueScene(DONOR, seed, DONOR_PALETTE, DEFAULT_INTENSITY, 'large', 'light', simResolution),
   ) as SceneDocument;

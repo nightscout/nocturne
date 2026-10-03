@@ -156,12 +156,22 @@ describe('packingSuitcaseScene', () => {
   type Doc = { timeline: { total_ticks: number; events: { at_tick: number; op: unknown }[] } };
 
   it('borrows the catalogue suitcase in dusk', () => {
-    packingSuitcaseScene(module, ['clothes'], 2, { simResolution: 256 });
+    packingSuitcaseScene(module, 120, 120, { packed: ['clothes'], unpacked: 2 });
     expect(calls.at(-1)?.slice(0, 3)).toEqual(['suitcase', 0, 'dusk']);
   });
 
+  it('sizes the grid to the canvas, up to the grid the strokes were tuned on', () => {
+    packingSuitcaseScene(module, 64, 64, { packed: [], unpacked: 2, dpr: 2 });
+    const small = calls.at(-1)![6] as number;
+    packingSuitcaseScene(module, 192, 192, { packed: [], unpacked: 2, dpr: 2 });
+    const large = calls.at(-1)![6] as number;
+    expect(small).toBeGreaterThanOrEqual(128);
+    expect(large).toBeGreaterThan(small);
+    expect(large).toBeLessThanOrEqual(320);
+  });
+
   it('replays the packed items in order, dried in turn, ending wet-ready for the live session', () => {
-    const { sceneJson } = packingSuitcaseScene(module, ['a', 'b', 'c'], 2, { simResolution: 256 });
+    const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b', 'c'], unpacked: 2 });
     const { timeline } = JSON.parse(sceneJson) as Doc;
     const ticks = timeline.events.map((e) => e.at_tick);
     expect(ticks).toEqual([...ticks].sort((x, y) => x - y));
@@ -172,13 +182,13 @@ describe('packingSuitcaseScene', () => {
   });
 
   it('lays a completed list’s hardware without the live drying waits', () => {
-    const { sceneJson } = packingSuitcaseScene(module, ['a', 'b'], 0, { simResolution: 256 });
+    const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 0 });
     const { timeline } = JSON.parse(sceneJson) as Doc;
     expect(timeline.total_ticks).toBeLessThan(120);
   });
 
   it('hands over a painter that continues from the replayed bands', () => {
-    const replayed = packingSuitcaseScene(module, ['a', 'b'], 1, { simResolution: 256 }).painter;
+    const replayed = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 1 }).painter;
     const fresh = new PackingSuitcase({ outline: OUTLINE, pigments: { bands: [0, 2, 3], hardware: 1, clasp: 3 } });
     fresh.pack('a', 2);
     fresh.pack('b', 1);
