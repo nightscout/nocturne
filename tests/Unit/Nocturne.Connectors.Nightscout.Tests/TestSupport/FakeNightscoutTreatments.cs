@@ -22,13 +22,27 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// 15.0.6: a POST replaces the document matching <c>created_at</c> and <c>eventType</c> with the one
 /// sent, <c>_id</c> included as a string, which is an error when that <c>_id</c> differs from the
 /// stored one, and inserts it when none matches, which is a duplicate-key error when its <c>_id</c>
-/// is taken. A PUT saves under <c>new ObjectID(_id)</c>, which a string <c>_id</c> never equals.
+/// is taken. A PUT saves under <c>new ObjectID(_id)</c>, which a string <c>_id</c> never equals; with
+/// no <c>_id</c> that mints one, and with one that is neither 24-hex nor 12 characters it throws, a
+/// 500.
 /// </para>
+/// <para>
 /// Every version keeps <c>identifier</c> as sent and answers <c>find[identifier]</c> (equal to, or
 /// <c>[$in]</c>) within <c>query.js</c>'s default four-day <c>created_at</c> window unless the find
-/// bounds <c>created_at</c> itself. A <c>find[_id]</c> skips that window, and a 24-hex value is cast
-/// to an ObjectId (<c>updateIdQuery</c>), so it never matches a string <c>_id</c>. Reads serve an
-/// ObjectId as lowercase hex, as a string <c>_id</c> is served, and honour <c>count</c>.
+/// bounds <c>created_at</c> itself. A find naming <c>_id</c> skips that window
+/// (<c>updateIdQuery</c>):
+/// <list type="bullet">
+/// <item><c>find[_id]=v</c>: a 24-hex value is cast to an ObjectId, so it never matches a string
+/// <c>_id</c>. Up to 15.0.6 any other value goes through <c>ObjectID(v)</c> too: 12 characters are
+/// taken as its bytes, matching nothing stored here, and anything else throws, a 500. From 15.0.7 a
+/// uuid matches <c>identifier</c> or a string <c>_id</c>, and any other value a string <c>_id</c>.</item>
+/// <item><c>find[_id][$in][n]=v</c>: up to 15.0.6 an object is never cast, so every value matches a
+/// string <c>_id</c> only. From 15.0.7 each 24-hex value is cast to an ObjectId and any other is
+/// compared as a string.</item>
+/// </list>
+/// Reads serve an ObjectId as lowercase hex, as a string <c>_id</c> is served, and honour
+/// <c>count</c>.
+/// </para>
 /// </remarks>
 internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHandler
 {
@@ -53,7 +67,10 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
         if (request.Method == HttpMethod.Get)
         {
             Reads.Add(request.RequestUri!);
-            return Json(HttpStatusCode.OK, new JsonArray([.. Find(request.RequestUri!).Select(d => d.DeepClone())]));
+            var found = Find(request.RequestUri!);
+            return found is null
+                ? Json(HttpStatusCode.InternalServerError, new JsonObject { ["message"] = "Argument passed in must be a string of 12 bytes or a string of 24 hex characters" })
+                : Json(HttpStatusCode.OK, new JsonArray([.. found.Select(d => d.DeepClone())]));
         }
 
         Writes.Add(request.Method);
@@ -79,11 +96,12 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
     public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>
-    /// A <c>find[identifier]</c>, bounded as <c>lib/server/query.js</c> bounds it: a find naming
-    /// neither <c>_id</c>, <c>created_at</c> nor <c>dateString</c> only sees <c>created_at</c> in the
-    /// last four days (<c>enforceDateFilter</c>, <c>deltaAgo = TWO_DAYS * 2</c>).
+    /// A find, bounded as <c>lib/server/query.js</c> bounds it: a find naming neither <c>_id</c>,
+    /// <c>created_at</c> nor <c>dateString</c> only sees <c>created_at</c> in the last four days
+    /// (<c>enforceDateFilter</c>, <c>deltaAgo = TWO_DAYS * 2</c>).
     /// </summary>
-    private IEnumerable<JsonObject> Find(Uri uri)
+    /// <returns>The documents found, or null where the upstream throws building the query.</returns>
+    private List<JsonObject>? Find(Uri uri)
     {
         var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Split('=', 2))
@@ -103,24 +121,38 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
             .Select(p => p.Value)
             .ToList();
         var id = find.Where(p => p.Key == "find[_id]").Select(p => p.Value).FirstOrDefault();
+        if (id is not null && version != "15.0.8" && !ObjectIdShape.IsMatch(id) && id.Length != 12)
+            return null;
+        var idIn = find.Where(p => p.Key.StartsWith("find[_id][$in]", StringComparison.Ordinal)).Select(p => p.Value).ToList();
         return Documents
-            .Where(d => id is null || IdMatches(d, id))
+            .Where(d => (id is null || IdMatches(d, id)) && (idIn.Count == 0 || idIn.Any(v => IdInMatches(d, v))))
             .Select(d => d.Document)
             .Where(d =>
                 (identifiers.Count == 0 || identifiers.Contains((string?)d["identifier"] ?? ""))
                 && bounds.All(b => InBound(DateTimeOffset.Parse((string)d["created_at"]!), b.Op, b.At)))
-            .Take(count);
+            .Take(count)
+            .ToList();
     }
 
-    /// <summary>
-    /// <c>updateIdQuery</c>: a 24-hex value is an ObjectId, which a string <c>_id</c> never equals;
-    /// any other value is compared as it is (from 15.0.7 a uuid also matches by identifier, which no
-    /// find here sends).
-    /// </summary>
-    private static bool IdMatches(Stored stored, string id) =>
-        ObjectIdShape.IsMatch(id)
-            ? stored.IsObjectId && stored.Id == id.ToLowerInvariant()
-            : !stored.IsObjectId && stored.Id == id;
+    private static readonly Regex UuidShape = new("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
+
+    /// <summary><c>updateIdQuery</c> for a plain <c>find[_id]</c>, once 15.0.6 has not thrown on it.</summary>
+    private bool IdMatches(Stored stored, string id)
+    {
+        if (ObjectIdShape.IsMatch(id))
+            return stored.IsObjectId && stored.Id == id.ToLowerInvariant();
+        if (version != "15.0.8")
+            return false;
+        if (UuidShape.IsMatch(id) && (string?)stored.Document["identifier"] == id)
+            return true;
+        return !stored.IsObjectId && stored.Id == id;
+    }
+
+    /// <summary><c>updateIdQuery</c> for one value of <c>find[_id][$in]</c>.</summary>
+    private bool IdInMatches(Stored stored, string value) =>
+        version == "15.0.8" && ObjectIdShape.IsMatch(value)
+            ? stored.IsObjectId && stored.Id == value.ToLowerInvariant()
+            : !stored.IsObjectId && stored.Id == value;
 
     private static bool InBound(DateTimeOffset at, string op, DateTimeOffset bound) => op switch
     {
@@ -189,7 +221,17 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
     private bool Save1506(JsonObject doc)
     {
-        var id = doc["_id"]!.GetValue<string>().ToLowerInvariant();
+        var sent = doc["_id"]?.GetValue<string>();
+        if (sent is null)
+        {
+            Replace(null, doc, Mint(), true);
+            return false;
+        }
+
+        if (!ObjectIdShape.IsMatch(sent))
+            return true;
+
+        var id = sent.ToLowerInvariant();
         var existing = Documents.FirstOrDefault(d => d.IsObjectId && d.Id == id);
         Replace(existing, doc, id, true);
         return false;

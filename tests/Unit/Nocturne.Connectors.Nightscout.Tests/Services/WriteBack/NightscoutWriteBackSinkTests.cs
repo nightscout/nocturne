@@ -642,12 +642,16 @@ public class NightscoutWriteBackSinkTests
 
     private const string CreatedAtFloor = "find[created_at][$gte]=1970-01-01T00%3A00%3A00.000Z";
 
-    /// <summary>A handler answering a find by identifier and a find by <c>_id</c> with the bodies given.</summary>
-    private static RecordingHttpMessageHandler Upstream(string byIdentifier, string byId = "[]") => new()
+    /// <summary>
+    /// A handler answering a find by identifier, a find by <c>_id</c> and a find by
+    /// <c>_id</c> <c>$in</c> with the bodies given.
+    /// </summary>
+    private static RecordingHttpMessageHandler Upstream(string byIdentifier, string byId = "[]", string byStringId = "[]") => new()
     {
-        Respond = uri => uri.Query.Contains("find[identifier]", StringComparison.Ordinal)
-            ? Json(HttpStatusCode.OK, byIdentifier)
-            : uri.Query.Contains("find[_id]", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, byId) : new HttpResponseMessage(HttpStatusCode.OK),
+        Respond = uri => uri.Query.Contains("find[identifier]", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, byIdentifier)
+            : uri.Query.Contains("find[_id][$in]", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, byStringId)
+            : uri.Query.Contains("find[_id]", StringComparison.Ordinal) ? Json(HttpStatusCode.OK, byId)
+            : new HttpResponseMessage(HttpStatusCode.OK),
     };
 
     private static Treatment Edit(string? legacyId) => new()
@@ -664,11 +668,12 @@ public class NightscoutWriteBackSinkTests
 
     /// <summary>
     /// An edit asks the upstream, in one find, for a copy under any identifier a write-back may have
-    /// sent the treatment under (its coerced key, its record's uuid prefix, its raw key), with a
-    /// <c>created_at</c> bound of its own so Nightscout's default four-day window does not hide the
-    /// copy of an older treatment. Finding none, it asks for one under its <c>_id</c>, which skips
-    /// that window; finding none there either, the edit is sent as a create is: under both keys, so
-    /// a later create upserts onto it.
+    /// sent the treatment under (its coerced key, its record's uuid prefix, its raw key, its record's
+    /// full uuid), with a <c>created_at</c> bound of its own so Nightscout's default four-day window
+    /// does not hide the copy of an older treatment. Finding none, it asks for one under its
+    /// <c>_id</c>, then, for a legacy id that is not an ObjectId, under that legacy id as a string
+    /// <c>_id</c>; both skip that window. Finding none there either, the edit is sent as a create is:
+    /// under both keys, so a later create upserts onto it.
     /// </summary>
     [Fact]
     public async Task TreatmentEdit_HeldNowhere_IsLookedForUnderEveryFormThenPostedAsACreate()
@@ -680,11 +685,68 @@ public class NightscoutWriteBackSinkTests
 
         await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));
 
-        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Get, HttpMethod.Post);
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Post);
         handler.Uris[0].PathAndQuery.Should().Be(
-            $"/api/v1/treatments.json?find[identifier][$in][0]={wire}&find[identifier][$in][1]={prefix}&find[identifier][$in][2]={legacyId}&{CreatedAtFloor}&count=10");
+            $"/api/v1/treatments.json?find[identifier][$in][0]={wire}&find[identifier][$in][1]={prefix}&find[identifier][$in][2]={legacyId}&find[identifier][$in][3]={RecordUuid}&{CreatedAtFloor}&count=10");
         handler.Uris[1].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[_id]={wire}&count=1");
+        handler.Uris[2].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[_id][$in][0]={legacyId}&count=1");
         IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wire, ["identifier"] = wire });
+    }
+
+    /// <summary>
+    /// A legacy id that is an ObjectId is its own wire key: the find under <c>_id</c> already asked
+    /// for it, so no string <c>_id</c> is looked for.
+    /// </summary>
+    [Fact]
+    public async Task TreatmentEdit_HeldNowhere_WithAnObjectIdLegacyId_IsNotLookedForUnderAStringId()
+    {
+        const string legacyId = "65a1b2c3d4e5f60718293a4b";
+        var handler = Upstream("[]");
+
+        await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Get, HttpMethod.Post);
+        IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId, ["identifier"] = legacyId });
+    }
+
+    /// <summary>
+    /// The original of a treatment a Nightscout migration imported from an uploader that sent its own
+    /// id is held up to 15.0.6 under that id as a string <c>_id</c>, with no identifier. The edit is
+    /// POSTed under it, with the identifier the original holds, else the legacy id: up to 15.0.6 the
+    /// POST matches it by time and event type and keeps its <c>_id</c>, and 15.0.7 and later match
+    /// the string <c>_id</c> through the identifier's <c>$or</c>.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("a3c1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b")]
+    public async Task TreatmentEdit_OfAnOriginalHeldUnderItsLegacyIdAsAStringId_IsPostedUnderIt(string? heldIdentifier)
+    {
+        const string legacyId = "xdrip-3a7c0e9f1b2d4c6e";
+        var held = heldIdentifier is null
+            ? $$"""[{"_id":"{{legacyId}}"}]"""
+            : $$"""[{"_id":"{{legacyId}}","identifier":"{{heldIdentifier}}"}]""";
+        var handler = Upstream("[]", byStringId: held);
+
+        await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Get, HttpMethod.Get, HttpMethod.Post);
+        IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId, ["identifier"] = heldIdentifier ?? legacyId });
+    }
+
+    /// <summary>
+    /// Up to v0.2.3 an edit went upstream under the record's full uuid, as both keys, whatever its
+    /// legacy id; 15.0.7 and later kept that uuid as the identifier of a copy under an ObjectId of
+    /// its own. The edit is PUT onto that copy.
+    /// </summary>
+    [Fact]
+    public async Task TreatmentEdit_OfACopyAnEarlierEditLeftUnderTheRecordsFullUuid_IsPutOntoIt()
+    {
+        var handler = Upstream($$"""[{"_id":"66b0c1d2e3f405162738495a","identifier":"{{RecordUuid}}"}]""");
+
+        await TreatmentSink(handler).OnUpdatedAsync(Edit("65a1b2c3d4e5f60718293a4b"));
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Put);
+        IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = "66b0c1d2e3f405162738495a", ["identifier"] = RecordUuid });
     }
 
     /// <summary>
@@ -735,6 +797,23 @@ public class NightscoutWriteBackSinkTests
 
         handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Post);
         IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = legacyId, ["identifier"] = legacyId });
+    }
+
+    /// <summary>
+    /// A copy found by its identifier but held under another string <c>_id</c> keeps that <c>_id</c>
+    /// on the POST: up to 15.0.6 an edit that moved the time or event type then inserts under a taken
+    /// <c>_id</c> and is refused, rather than stored beside the copy under a minted one.
+    /// </summary>
+    [Fact]
+    public async Task TreatmentEdit_OfACopyUnderAnotherStringId_IsPostedUnderThatId()
+    {
+        const string legacyId = "syn-3a7c0e9f1b2d4c6e";
+        var handler = Upstream($$"""[{"_id":"loop-override-7","identifier":"{{legacyId}}"}]""");
+
+        await TreatmentSink(handler).OnUpdatedAsync(Edit(legacyId));
+
+        handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Post);
+        IdKeys(Sent(handler)).Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = "loop-override-7", ["identifier"] = legacyId });
     }
 
     /// <summary>
@@ -800,6 +879,9 @@ public class NightscoutWriteBackSinkTests
     [InlineData(1, HttpStatusCode.InternalServerError, "", false)]
     [InlineData(1, HttpStatusCode.OK, "not json", false)]
     [InlineData(1, HttpStatusCode.OK, "", true)]
+    [InlineData(2, HttpStatusCode.InternalServerError, "", false)]
+    [InlineData(2, HttpStatusCode.OK, """[{"identifier":"x"}]""", false)]
+    [InlineData(2, HttpStatusCode.OK, "", true)]
     public async Task TreatmentEdit_WhenTheUpstreamCannotSayWhereItHoldsTheCopy_SendsNothingAndCountsAFailure(
         int failingRead, HttpStatusCode status, string body, bool throws)
     {
@@ -813,7 +895,7 @@ public class NightscoutWriteBackSinkTests
         for (var i = 0; i < 4; i++)
             Breaker.RecordFailure();
 
-        await TreatmentSink(handler).OnUpdatedAsync(Edit("65a1b2c3d4e5f60718293a4b"));
+        await TreatmentSink(handler).OnUpdatedAsync(Edit("syn-3a7c0e9f1b2d4c6e"));
 
         handler.Methods.Should().HaveCount(failingRead + 1).And.OnlyContain(m => m == HttpMethod.Get);
         Breaker.IsOpen.Should().BeTrue();

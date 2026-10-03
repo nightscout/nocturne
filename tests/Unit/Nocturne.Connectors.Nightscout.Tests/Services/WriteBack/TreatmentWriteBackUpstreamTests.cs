@@ -351,6 +351,144 @@ public class TreatmentWriteBackUpstreamTests
     }
 
     /// <summary>
+    /// The original of a treatment a Nightscout migration imported from an uploader that sent its own
+    /// id: held under that id as a string <c>_id</c>, written before 15.0.7 normalised such ids, with
+    /// no identifier. An edit sent under the create's keys missed it: up to 15.0.6 the POST matched it
+    /// by time and event type and was refused for changing its <c>_id</c>, on every edit; from 15.0.7
+    /// it matched neither arm of the identifier's <c>$or</c> and stored a second copy. Found under
+    /// its string <c>_id</c>, the edit lands on it.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task AnEditOfAnOriginalHeldUnderAStringIdWithNoIdentifier_LandsOnIt(string version)
+    {
+        const string legacyId = "xdrip-3a7c0e9f1b2d4c6e";
+        var upstream = new FakeNightscoutTreatments(version) { Now = DateTimeOffset.Parse(At).AddDays(30) };
+        upstream.Seed(new JsonObject { ["_id"] = legacyId, ["eventType"] = "Correction Bolus", ["insulin"] = 1.0, ["created_at"] = At }, asObjectId: false);
+
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 2));
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 3));
+
+        upstream.Documents.Select(d => (d.Id, d.IsObjectId, (string?)d.Document["identifier"], (double)d.Document["insulin"]!))
+            .Should().Equal((legacyId, false, legacyId, 3d));
+        upstream.Refusals.Should().Be(0);
+    }
+
+    /// <summary>
+    /// What the create's keys do to that original: up to 15.0.6 a refusal on every edit, which counts
+    /// against the circuit breaker every sink shares; from 15.0.7 a second copy.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task TheCreatesKeys_MissAnOriginalHeldUnderAStringId(string version)
+    {
+        const string legacyId = "xdrip-3a7c0e9f1b2d4c6e";
+        var upstream = new FakeNightscoutTreatments(version);
+        upstream.Seed(new JsonObject { ["_id"] = legacyId, ["eventType"] = "Correction Bolus", ["insulin"] = 1.0, ["created_at"] = At }, asObjectId: false);
+
+        await Sink(upstream).OnCreatedAsync([Created(legacyId, insulin: 2)]);
+
+        (upstream.Documents.Count, upstream.Refusals).Should().Be(version == "15.0.8" ? (2, 0) : (1, 1));
+    }
+
+    /// <summary>
+    /// Up to v0.2.3 an edit went upstream as the projection the update read back, served by the
+    /// record's full uuid, under it as both keys whatever the legacy id. 15.0.7 and later kept the
+    /// uuid as the identifier of a copy under a minted ObjectId; up to 15.0.6 <c>save()</c> threw on
+    /// it and stored nothing. A later edit lands on that copy.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8", "65a1b2c3d4e5f60718293a4b")]
+    [InlineData("15.0.8", "syn-3a7c0e9f1b2d4c6e")]
+    [InlineData("15.0.6", "65a1b2c3d4e5f60718293a4b")]
+    public async Task AnEditLandsOnTheCopyAV023EditLeftUnderTheRecordsFullUuid(string version, string legacyId)
+    {
+        var upstream = new FakeNightscoutTreatments(version);
+        using (var client = new HttpClient(upstream))
+        {
+            (await client.PutAsJsonAsync("https://nightscout.example.com/api/v1/treatments", new JsonObject
+            {
+                ["_id"] = RecordUuid, ["identifier"] = RecordUuid, ["eventType"] = "Correction Bolus", ["insulin"] = 1.0, ["created_at"] = At,
+            })).IsSuccessStatusCode.Should().Be(version == "15.0.8");
+        }
+
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 2));
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 3));
+
+        Copies(upstream).Should().Equal((version == "15.0.8" ? RecordUuid : MongoObjectId.Coerce(legacyId), 3d));
+    }
+
+    /// <summary>
+    /// A 15.0.8 that was a 15.0.6 when write-back POSTed the copy holds it under its 24-hex key as a
+    /// string, which <c>find[_id]</c> casts past. The edit is POSTed under it, and 15.0.8 matches its
+    /// identifier.
+    /// </summary>
+    [Fact]
+    public async Task On1508_AnEditLandsOnACopyA1506PostLeftUnderItsHexKeyAsAString()
+    {
+        const string key = "65a1b2c3d4e5f60718293a4b";
+        var upstream = new FakeNightscoutTreatments("15.0.8");
+        upstream.Seed(new JsonObject { ["_id"] = key, ["identifier"] = key, ["eventType"] = "Correction Bolus", ["insulin"] = 1.0, ["created_at"] = At }, asObjectId: false);
+
+        await Sink(upstream).OnUpdatedAsync(Edited(key, insulin: 2));
+
+        upstream.Documents.Select(d => (d.Id, d.IsObjectId, (string?)d.Document["identifier"], (double)d.Document["insulin"]!))
+            .Should().Equal((key, false, key, 2d));
+    }
+
+    /// <summary>
+    /// A copy found by its identifier under another string <c>_id</c>, such as a Loop override's
+    /// uuid kept up to 15.0.6. An edit that moves it inserts under that taken <c>_id</c> and is
+    /// refused, rather than stored beside it under a minted one; an edit that does not lands on it.
+    /// </summary>
+    [Fact]
+    public async Task On1506_AnEditOfACopyUnderAnotherStringId_LandsOnItOrIsRefused()
+    {
+        const string legacyId = "syn-3a7c0e9f1b2d4c6e";
+        var key = MongoObjectId.Coerce(legacyId)!;
+        var upstream = new FakeNightscoutTreatments("15.0.6");
+        upstream.Seed(new JsonObject { ["_id"] = "loop-override-7", ["identifier"] = key, ["eventType"] = "Correction Bolus", ["insulin"] = 1.0, ["created_at"] = At }, asObjectId: false);
+
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 2, at: "2026-09-01T08:05:00.000Z"));
+        upstream.Documents.Select(d => (d.Id, (double)d.Document["insulin"]!)).Should().Equal(("loop-override-7", 1d));
+        upstream.Refusals.Should().Be(1);
+
+        await Sink(upstream).OnUpdatedAsync(Edited(legacyId, insulin: 3));
+        upstream.Documents.Select(d => (d.Id, (string?)d.Document["identifier"], (double)d.Document["insulin"]!))
+            .Should().Equal(("loop-override-7", key, 3d));
+    }
+
+    /// <summary>The finds and the PUT the model answers as <c>query.js</c> and <c>save()</c> do at each version.</summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task TheModelAnswersIdFindsAndAnIdLessPutAsTheVersionDoes(string version)
+    {
+        const string hex = "65a1b2c3d4e5f60718293a4b";
+        var upstream = new FakeNightscoutTreatments(version);
+        upstream.Seed(new JsonObject { ["_id"] = "xdrip-1", ["eventType"] = "Note", ["created_at"] = At }, asObjectId: false);
+        upstream.Seed(new JsonObject { ["_id"] = hex, ["eventType"] = "Note", ["created_at"] = "2026-09-01T09:00:00.000Z" }, asObjectId: false);
+        using var client = new HttpClient(upstream);
+        const string url = "https://nightscout.example.com/api/v1/treatments.json";
+
+        var byId = await client.GetAsync($"{url}?find[_id]=xdrip-1");
+        if (version == "15.0.6")
+            byId.StatusCode.Should().Be(System.Net.HttpStatusCode.InternalServerError);
+        else
+            (await byId.Content.ReadAsStringAsync()).Should().Contain("xdrip-1");
+        (await client.GetStringAsync($"{url}?find[_id][$in][0]=xdrip-1")).Should().Contain("xdrip-1");
+        (await client.GetStringAsync($"{url}?find[_id]={hex}")).Should().Be("[]");
+        (await client.GetStringAsync($"{url}?find[_id][$in][0]={hex}")).Should().Be(version == "15.0.6" ? $$"""[{"_id":"{{hex}}","eventType":"Note","created_at":"2026-09-01T09:00:00.000Z"}]""" : "[]");
+
+        (await client.PutAsJsonAsync(url.Replace(".json", ""), new JsonObject { ["eventType"] = "Note", ["created_at"] = "2026-09-01T10:00:00.000Z", ["notes"] = "id-less" }))
+            .IsSuccessStatusCode.Should().BeTrue();
+        upstream.Documents.Should().HaveCount(3);
+        upstream.Documents[^1].IsObjectId.Should().BeTrue();
+    }
+
+    /// <summary>
     /// An edit that moves the treatment's time or event type finds no copy by them up to 15.0.6, and
     /// inserting it under the <c>_id</c> the copy holds is refused: the edit does not reach the
     /// upstream, and no second copy is stored.
