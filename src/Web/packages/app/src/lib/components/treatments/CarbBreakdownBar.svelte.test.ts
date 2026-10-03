@@ -9,6 +9,19 @@ const wash = (container: HTMLElement) => container.querySelector<HTMLElement>("[
 
 
 describe("CarbBreakdownBar wash", () => {
+  it("keeps the wash backing canvas inside the attributed extent", async () => {
+    const { container } = render(CarbBreakdownBar, { totalCarbs: 40, foods: [food("oats", 10), food("milk", 5)] });
+    await expect.poll(() => {
+      const painted = wash(container);
+      const canvas = painted?.querySelector("canvas");
+      if (!painted || !canvas) return false;
+      const bounds = painted.getBoundingClientRect();
+      const dpr = Math.min(2, devicePixelRatio);
+      return bounds.width > 0 && Math.abs(canvas.width - Math.round(bounds.width * dpr)) <= 1
+        && Math.abs(canvas.height - Math.round(bounds.height * dpr)) <= 1;
+    }).toBe(true);
+  });
+
   it("covers exactly the attributed bars", async () => {
     const { container } = render(CarbBreakdownBar, { totalCarbs: 40, foods: [food("oats", 10), food("milk", 5)] });
 
