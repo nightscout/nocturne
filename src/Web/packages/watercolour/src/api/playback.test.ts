@@ -119,6 +119,47 @@ describe('player statechange', () => {
     baked.dispose(); expensive.dispose();
   });
 
+  it('reports a baked seek only until its target is drawn, then plays on from it', async () => {
+    const manifest = { version: 1, frames: 2, width: 4, height: 4, durationMs: 100, layout: 'vertical' };
+    vi.stubGlobal('fetch', async (url: string) => url === 'manifest' ? new Response(JSON.stringify(manifest)) : new Response(new Blob([])));
+    vi.stubGlobal('createImageBitmap', async () => ({ width: 4, height: 8, close() {} }));
+    const frames = new Map<number, (time: number) => void>();
+    let clock = 0;
+    let handle = 0;
+    const scheduler = new Scheduler({
+      requestAnimationFrame: (cb) => {
+        frames.set(++handle, cb);
+        return handle;
+      },
+      cancelAnimationFrame: (h) => void frames.delete(h),
+      now: () => clock,
+    });
+    const nextFrame = () => {
+      clock += 16;
+      const pending = Array.from(frames.values());
+      frames.clear();
+      for (const cb of pending) cb(clock);
+    };
+    const onProgress = vi.fn();
+    const baked = createArtworkPlayer(canvas(), { id: 'suitcase' }, { mode: 'baked', autoplay: 'never', durationMs: 100, width: 64, height: 64, assets: { manifest: 'manifest', strip: 'strip' }, capabilities, scheduler, engineHost: new EngineHost(), onProgress });
+    await baked.ready;
+    expect(baked.state.seeking).toBe(false);
+    baked.resize(32, 32);
+    baked.reset();
+    expect(baked.state.seeking).toBe(false);
+    baked.play();
+    nextFrame();
+    baked.seekTo(0.5);
+    baked.play();
+    expect(baked.state.seeking).toBe(true);
+    nextFrame();
+    expect(baked.state).toMatchObject({ seeking: false, progress: 0.5 });
+    expect(onProgress).toHaveBeenLastCalledWith(0.5, false);
+    nextFrame();
+    expect(baked.state.progress).toBeGreaterThan(0.5);
+    baked.dispose();
+  });
+
   it('settles on none when it cannot start at all', async () => {
     const player = createArtworkPlayer(canvas(), { id: 'suitcase' }, {
       capabilities: () => Promise.reject(new Error('probe failed')),

@@ -61,13 +61,14 @@ player.dispose();
 
 Use `seekTo(progress)` for interaction-driven progress. Requests coalesce to the latest target;
 live checkpoint replay advances in bounded slices through the shared frame budget. Baked frames
-seek directly. `state.seeking` remains true until the target is presented. Live `play()`
-while seeking waits for that target, then continues the reveal. `pause()` cancels that continuation;
+seek directly. `state.seeking` is true from `seekTo` until its latest target is presented, and
+always false for a static player. `play()` while seeking waits for that target, then continues
+the reveal. `pause()` cancels that continuation;
 `reset()`, immediate `seek()`, and `finishImmediately()` replace pending work. Immediate `seek()`
 is for authoring and export code that needs the simulation at the target before returning.
 
-`state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `progress`,
-`error`, `fallbackReason`); it is never pushed per frame. Events:
+`state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `seeking`,
+`progress`, `error`, `fallbackReason`); it is never pushed per frame. Events:
 
 | Event | Payload | Fires |
 |---|---|---|
@@ -77,10 +78,12 @@ is for authoring and export code that needs the simulation at the target before 
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
 
-`onProgress` in `PlayerOptions` receives a numeric progress value after each
-presented live or baked frame. Use it for a coverage milestone without
-allocating `PlayerState` on every frame. It does not fire for an unavailable
-swapchain frame. A callback may dispose its player.
+`onProgress(progress, seeking)` in `PlayerOptions` runs after each presented
+live or baked frame. `progress` is that frame's, and `seeking` is
+`state.seeking` as of it: false on the frame that shows the latest `seekTo`
+target. It does not fire for an unavailable swapchain frame or for a static
+player. A callback may dispose its player or seek it again. `Artwork` passes
+its `onprogress` prop through.
 
 `player.ready` resolves once a backend is drawing. A player whose canvas is in
 the document does not start until the canvas is within 200 px of the viewport
@@ -97,13 +100,17 @@ replaced in place).
 glucose tile's three spreading charges. `colour` is an encoded RGB triple in
 `0..1`; `slope` is clamped to `-1..1`. Width and height are CSS pixels. The
 simulation grid is capped at 320 while the output follows the measured tile.
+Play it with `blendTicks: true`, which presents the bloom's growth between
+simulated ticks.
 
-`mountPlayer(frame, canvas, undefined, { scene, fit: 'fill', ... }, onready,
-onstatechange)` gives generated scenes the component resize and presentation
-lifecycle. Its `scene(module, width, height, dpr)` factory receives the measured
-box. Finished canvases stretch for small resizes and repaint after a large
-resize settles. Presentation changes rebuild the player; a finished reveal
-does not replay. `onstatechange` also reports `none`, which has no `ready` event.
+`mountPlayer(frame, canvas, { scene, fit: 'fill', blendTicks: true, onReady,
+onStateChange, onProgress, ... })` gives generated scenes the component resize
+and presentation lifecycle; the options name its source (`artwork`, `icon` or
+`scene`) and carry its callbacks. Its `scene(module, width, height, dpr)`
+factory receives the measured box. Finished canvases stretch for small resizes
+and repaint after a large resize settles. Presentation changes rebuild the
+player; a finished reveal does not replay. `onStateChange` also reports `none`,
+which has no `ready` event.
 
 ## `detectCapabilities`
 
@@ -151,8 +158,10 @@ its estimate; first admission still runs to prevent starvation.
 
 GPU timestamp queries sample the first eligible operation and then every 16th
 eligible operation after the previous readback completes. Tick samples include
-batched dab work; render samples include pigment shading. The scheduler combines
-those costs when reserving GPU work.
+batched dab work; render samples include pigment shading. A playing player
+reserves the ticks its clock is due this frame, a seek or settle slice its first
+tick (the slice then sizes itself to what is left), and a render only when it has
+a new tick or an invalidated frame to draw.
 
 ```ts
 import { getScheduler } from '@nocturne/watercolour';

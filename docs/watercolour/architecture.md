@@ -199,11 +199,13 @@ neighbor gradients from the paper field. Consecutive dab events share a
 compute pass with their simulation ticks when checkpoints are disabled.
 Control operations split these batches, and seeds retain the timeline index.
 
-Live dab scenes cache two rendered tick images in premultiplied linear
-RGBA16 textures. Between adjacent ticks, presentation blends those images
-with half a tick of latency, without advancing the simulation or repeating
-optics. A missed tick discards the older image; pause and seek clear history.
-Finished and paused scenes use direct presentation.
+A live instance with `blendTicks` set (the glucose bloom's) caches two rendered
+tick images in premultiplied linear RGBA16 textures while playing. Between
+adjacent ticks, presentation blends those images with half a tick of latency,
+without advancing the simulation or repeating optics. A missed tick, a restore
+or a reload discards the older image. Finished, paused and seeking scenes use
+direct presentation, which releases the images; the blend pipeline is cached
+per format and shared by forks.
 
 ### Stamps and masks
 

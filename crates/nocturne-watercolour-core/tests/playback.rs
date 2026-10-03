@@ -455,11 +455,11 @@ fn sliced_seek_retargets_and_matches_immediate_replay() {
         let mut sliced = unbudgeted(scene(), 3000.0);
         sliced.set_progress_curve(ProgressCurve::Linear);
         for target in [0.8, 0.2, 0.65, 0.0, 1.0, 0.3] {
+            let target_tick = sliced.tick_for_progress(target);
             for _ in 0..200 {
-                let before = sliced.current_tick();
-                let done = sliced.seek_towards_progress(target, budget).unwrap();
-                assert!(sliced.current_tick() <= before + budget);
-                if done {
+                let replayed = sliced.seek_towards_tick(target_tick, budget).unwrap();
+                assert!(replayed <= budget);
+                if sliced.current_tick() == target_tick {
                     break;
                 }
             }

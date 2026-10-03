@@ -22,6 +22,7 @@ export interface WasmInstance {
   attach(canvas: HTMLCanvasElement, width: number, height: number): void;
   resize(width: number, height: number): void;
   setCrop(x: number, y: number, width: number, height: number): void;
+  setBlendTicks(enabled: boolean): void;
   play(): void;
   pause(): void;
   reset(): void;
@@ -33,7 +34,9 @@ export interface WasmInstance {
   advanceTicks?(ticks: number): boolean;
   setProgressCurve(curve: 'frontLoaded' | 'linear' | 'reveal'): void;
   seekProgress(progress: number): void;
-  seekTowardsProgress(progress: number, ticks: number): boolean;
+  tickForProgress(progress: number): number;
+  /** Steps replayed towards `target`; the seek has arrived once `currentTick()` is `target`. */
+  seekTowardsTick(target: number, ticks: number): number;
   finishImmediately(): void;
   progress(): number;
   isFinished(): boolean;
@@ -48,7 +51,10 @@ export interface WasmInstance {
   simResolution(): number;
   /** Simulation steps the loaded scene's timeline runs. */
   totalTicks(): number;
-  tickBudget(): number;
+  /** Ticks `advanceByElapsed(elapsedSeconds)` would run now. */
+  ticksDue(elapsedSeconds: number): number;
+  /** Ticks `advanceToProgress(progress)` would run forward now. */
+  ticksDueAtProgress(progress: number): number;
   currentTick(): number;
   checkpointBytes(): number;
   detach(): void;

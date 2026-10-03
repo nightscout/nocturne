@@ -21,8 +21,8 @@ export interface SchedulerTarget {
   element?: Element | null;
   tick(elapsedSeconds: number): void;
   render(): void;
-  /** Combined tick/render estimate; chargeGpuMs accounts for work exceeding it. */
-  gpuCostMs?(): number;
+  /** GPU time the coming tick and render are expected to take; chargeGpuMs accounts for work exceeding it. */
+  gpuCostMs?(elapsedSeconds: number): number;
   onVisibilityChange?(visible: boolean): void;
 }
 
@@ -315,7 +315,7 @@ export class Scheduler {
         const entry = entries[(first + offset) % entries.length]!;
         if (!entry.active || !entry.visible) continue;
         if (!this.entries.has(entry)) continue;
-        const gpuMs = entry.target.gpuCostMs?.() ?? 0;
+        const gpuMs = entry.target.gpuCostMs?.(entry.elapsedSeconds) ?? 0;
         // One indivisible call may overrun; rotating first admission prevents starvation.
         if (admitted > 0 && (this.budgetRemainingMs() <= 0 || entry.tickMs + entry.renderMs > this.budgetRemainingMs() || gpuMs > this.gpuBudgetRemainingMs())) continue;
         const elapsed = entry.elapsedSeconds;

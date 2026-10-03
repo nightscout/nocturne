@@ -138,7 +138,7 @@ fn dab_matches_point_brush_deposits_and_paper_driven_flow() {
                         water: 0.5,
                         softness: 0.85,
                     };
-                    let op = nocturne_watercolour_core::domain::Operation::Dab(dab.clone());
+                    let op = Operation::Dab(dab.clone());
                     analytic.load(&scene).unwrap();
                     stamped.load(&scene).unwrap();
                     cpu.load(&scene).unwrap();
@@ -849,10 +849,9 @@ fn sliced_target_seek_preserves_the_gpu_frame() {
         playback.seek_progress(target).unwrap();
         let expected = playback.simulator().render(80, 60).unwrap().rgba;
         playback.seek_tick(0).unwrap();
-        for _ in 0..500 {
-            if playback.seek_towards_progress(target, 3).unwrap() {
-                break;
-            }
+        let target_tick = playback.tick_for_progress(target);
+        while playback.current_tick() != target_tick {
+            playback.seek_towards_tick(target_tick, 3).unwrap();
         }
         let actual = playback.simulator().render(80, 60).unwrap().rgba;
         assert_eq!(actual, expected);

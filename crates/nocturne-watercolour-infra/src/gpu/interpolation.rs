@@ -1,43 +1,31 @@
-pub(super) struct Interpolation {
-    pub width: u32,
-    pub height: u32,
-    pub format: wgpu::TextureFormat,
-    tick: Option<u32>,
-    reset_previous: bool,
-    textures: [wgpu::Texture; 2],
-    views: [wgpu::TextureView; 2],
-    current: usize,
-    uniform: wgpu::Buffer,
-    bind_groups: [wgpu::BindGroup; 2],
+use std::sync::{Arc, Mutex};
+
+/// Tick-blend pipelines by target format, built on first use and shared by an
+/// engine's forks; an [`Interpolation`] owns only its textures.
+#[derive(Clone, Default)]
+pub(super) struct BlendPipelines(Arc<Mutex<Vec<BlendPipeline>>>);
+
+#[derive(Clone)]
+pub(super) struct BlendPipeline {
+    format: wgpu::TextureFormat,
+    layout: wgpu::BindGroupLayout,
     pipeline: wgpu::RenderPipeline,
 }
 
-impl Interpolation {
-    pub fn new(
-        device: &wgpu::Device,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-    ) -> Self {
-        let texture = || {
-            device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("tick-image"),
-                size: wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba16Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            })
-        };
+impl BlendPipelines {
+    pub fn get(&self, device: &wgpu::Device, format: wgpu::TextureFormat) -> BlendPipeline {
+        let mut cache = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(blend) = cache.iter().find(|blend| blend.format == format) {
+            return blend.clone();
+        }
+        let blend = BlendPipeline::new(device, format);
+        cache.push(blend.clone());
+        blend
+    }
+}
+
+impl BlendPipeline {
+    fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let texture_entry = |binding| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -106,6 +94,49 @@ impl Interpolation {
             multiview_mask: None,
             cache: None,
         });
+        Self {
+            format,
+            layout,
+            pipeline,
+        }
+    }
+}
+
+pub(super) struct Interpolation {
+    pub width: u32,
+    pub height: u32,
+    pub format: wgpu::TextureFormat,
+    tick: Option<u32>,
+    reset_previous: bool,
+    textures: [wgpu::Texture; 2],
+    views: [wgpu::TextureView; 2],
+    current: usize,
+    uniform: wgpu::Buffer,
+    bind_groups: [wgpu::BindGroup; 2],
+    pipeline: wgpu::RenderPipeline,
+}
+
+impl Interpolation {
+    pub fn new(device: &wgpu::Device, blend: &BlendPipeline, width: u32, height: u32) -> Self {
+        let texture = || {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("tick-image"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_SRC
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            })
+        };
         let textures = [texture(), texture()];
         let views = textures
             .each_ref()
@@ -119,7 +150,7 @@ impl Interpolation {
         let bind_groups = [0, 1].map(|current| {
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("tick-blend"),
-                layout: &layout,
+                layout: &blend.layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -139,7 +170,7 @@ impl Interpolation {
         Self {
             width,
             height,
-            format,
+            format: blend.format,
             tick: None,
             reset_previous: true,
             textures,
@@ -147,7 +178,7 @@ impl Interpolation {
             current: 0,
             uniform,
             bind_groups,
-            pipeline,
+            pipeline: blend.pipeline.clone(),
         }
     }
 

@@ -301,12 +301,7 @@ impl WatercolourEngine {
         }
         self.shared.live.set(self.shared.live.get() + 1);
         let mut instance = SceneInstance {
-            has_dabs: playback.scene().timeline.events.iter().any(|event| {
-                matches!(
-                    event.op,
-                    nocturne_watercolour_core::domain::Operation::Dab(_)
-                )
-            }),
+            blend_ticks: false,
             playback,
             surface: None,
             ctx: self.ctx.clone(),
@@ -517,7 +512,7 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
-    has_dabs: bool,
+    blend_ticks: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
     ctx: GpuContext,
@@ -570,7 +565,7 @@ impl SceneInstance {
         let before_blend = self.playback.tick_blend();
         self.timed_step(f)?;
         Ok(self.playback.current_tick() != before
-            || (self.has_dabs && self.playback.tick_blend() != before_blend))
+            || (self.blend_ticks && self.playback.tick_blend() != before_blend))
     }
 
     async fn frames_async(
@@ -651,6 +646,15 @@ impl SceneInstance {
             .map_err(engine_err)
     }
 
+    /// Whether playing frames blend the last two ticks; see `PlayerOptions.blendTicks`.
+    #[wasm_bindgen(js_name = setBlendTicks)]
+    pub fn set_blend_ticks(&mut self, enabled: bool) {
+        self.blend_ticks = enabled;
+        if !enabled {
+            self.playback.simulator().clear_interpolation();
+        }
+    }
+
     /// Pixel size the swapchain is configured at; `null` until `attach`.
     #[wasm_bindgen(js_name = surfaceSize)]
     pub fn surface_size(&self) -> Option<Vec<u32>> {
@@ -672,9 +676,14 @@ impl SceneInstance {
         self.playback.total_ticks()
     }
 
-    #[wasm_bindgen(js_name = tickBudget)]
-    pub fn tick_budget(&self) -> u32 {
-        self.playback.tick_budget()
+    #[wasm_bindgen(js_name = ticksDue)]
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        self.playback.ticks_due(elapsed_seconds)
+    }
+
+    #[wasm_bindgen(js_name = ticksDueAtProgress)]
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.playback.ticks_due_at_progress(progress)
     }
 
     #[wasm_bindgen(js_name = currentTick)]
@@ -688,7 +697,6 @@ impl SceneInstance {
 
     pub fn pause(&mut self) {
         self.playback.pause();
-        self.playback.simulator().clear_interpolation();
     }
 
     pub fn reset(&mut self) -> Result<(), JsError> {
@@ -745,19 +753,23 @@ impl SceneInstance {
 
     #[wasm_bindgen(js_name = seekProgress)]
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), JsError> {
-        self.playback.simulator().clear_interpolation();
         self.timed_step(|p| p.seek_progress(progress))
     }
 
-    #[wasm_bindgen(js_name = seekTowardsProgress)]
-    pub fn seek_towards_progress(&mut self, progress: f32, ticks: u32) -> Result<bool, JsError> {
-        self.playback.simulator().clear_interpolation();
-        let mut reached = false;
+    #[wasm_bindgen(js_name = tickForProgress)]
+    pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.playback.tick_for_progress(progress)
+    }
+
+    /// Steps replayed; see `Playback::seek_towards_tick`.
+    #[wasm_bindgen(js_name = seekTowardsTick)]
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, JsError> {
+        let mut replayed = 0;
         self.timed_step(|p| {
-            reached = p.seek_towards_progress(progress, ticks)?;
+            replayed = p.seek_towards_tick(target, ticks)?;
             Ok(())
         })?;
-        Ok(reached)
+        Ok(replayed)
     }
 
     #[wasm_bindgen(js_name = finishImmediately)]
@@ -790,9 +802,11 @@ impl SceneInstance {
         let t0 = now_ms();
         let tick = self.playback.current_tick();
         let blend = self.playback.tick_blend();
-        let presented = if self.has_dabs && self.playback.state() == PlaybackState::Playing {
+        let presented = if self.blend_ticks && self.playback.state() == PlaybackState::Playing {
             self.playback.simulator().present_at(surface, tick, blend)
         } else {
+            // A paused or finished scene can hold its canvas indefinitely; its tick images are released.
+            self.playback.simulator().clear_interpolation();
             self.playback.simulator().present(surface)
         }
         .map_err(engine_err)?;

@@ -20,11 +20,12 @@ use nocturne_watercolour_core::domain::scene::isotropic_scale;
 use nocturne_watercolour_core::domain::sim::{self, PigmentCoefficients, SimParams};
 use nocturne_watercolour_core::domain::swirl;
 use nocturne_watercolour_core::domain::{
-    Image, MAX_SETTLE_SHARE, Operation, Paper, PaperField, Scene, Seed, SimulationGrid, StrokeSpan,
+    Dab, Image, MAX_SETTLE_SHARE, Operation, Paper, PaperField, Scene, Seed, SimulationGrid,
+    StrokeSpan,
 };
 
 use super::context::GpuContext;
-use super::interpolation::Interpolation;
+use super::interpolation::{BlendPipelines, Interpolation};
 use super::layout::StateLayout;
 use super::surface::PresentSurface;
 use super::timer::GpuTimer;
@@ -59,6 +60,10 @@ const WORKGROUP: u32 = 256;
 /// `BLUR_MAX_RADIUS` in `flow.wgsl`: the widest blur the one-dispatch `blur`
 /// holds in workgroup memory; a wider one runs as `blur_h` then `blur_v`.
 pub const BLUR_MAX_RADIUS: u32 = 8;
+
+/// `Stroke.kind` for a dab, whose coverage `apply.wgsl` evaluates from its
+/// `DabStamp` instead of reading an uploaded stamp.
+pub const STROKE_DAB: u32 = 3;
 
 /// Stroke uniforms one batch can hold (see [`Pending`]), each at its own
 /// dynamic offset; a batch with more events is submitted and a new one begun.
@@ -382,6 +387,18 @@ struct PresentPipeline {
     cached: Arc<Mutex<Vec<(wgpu::TextureFormat, wgpu::RenderPipeline)>>>,
 }
 
+/// The crop window of an uncropped render.
+const WHOLE_PAINTING: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
+/// The whole painting's pixel size when `width` x `height` shows only `crop`
+/// of it; paper grain and its band limit are scaled to this size.
+fn virtual_size(width: u32, height: u32, crop: [f32; 4]) -> (u32, u32) {
+    (
+        (width as f32 / crop[2]).round() as u32,
+        (height as f32 / crop[3]).round() as u32,
+    )
+}
+
 /// What a render-resolution paper field is a function of.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct PaperKey {
@@ -395,7 +412,14 @@ struct PaperKey {
 }
 
 impl PaperKey {
-    fn new(paper: &Paper, width: u32, height: u32, aspect: f32, pixel_scale: f32) -> PaperKey {
+    fn new(
+        paper: &Paper,
+        width: u32,
+        height: u32,
+        aspect: f32,
+        pixel_scale: f32,
+        crop: [f32; 4],
+    ) -> PaperKey {
         PaperKey {
             seed: paper.seed.0,
             paper: [
@@ -409,12 +433,7 @@ impl PaperKey {
             height,
             aspect: aspect.to_bits(),
             pixel_scale: pixel_scale.to_bits(),
-            crop: [
-                0.0f32.to_bits(),
-                0.0f32.to_bits(),
-                1.0f32.to_bits(),
-                1.0f32.to_bits(),
-            ],
+            crop: crop.map(f32::to_bits),
         }
     }
 }
@@ -445,10 +464,11 @@ impl PaperUniform {
         let (width, height) = (key.width, key.height);
         let (ax, ay) = isotropic_scale(f32::from_bits(key.aspect));
         let crop = key.crop.map(f32::from_bits);
+        let (virtual_width, virtual_height) = virtual_size(width, height, crop);
         let t = PaperTerms::new(
             paper,
             f32::from_bits(key.pixel_scale),
-            grain_band_window((width as f32 / crop[2]).max(height as f32 / crop[3])),
+            grain_band_window(virtual_width.max(virtual_height) as f32),
         );
         let mut seeds = [[0u32; 4]; 4];
         for (i, seed) in t.seeds.iter().enumerate() {
@@ -653,6 +673,7 @@ pub struct GpuEngine {
     paper_cache: PaperCache,
     pool: BufferPool,
     timers: Option<Timers>,
+    blend: BlendPipelines,
     interpolation: Option<Interpolation>,
     crop: [f32; 4],
 }
@@ -962,8 +983,9 @@ impl GpuEngine {
             paper_cache: Arc::default(),
             pool: Arc::default(),
             timers,
+            blend: BlendPipelines::default(),
             interpolation: None,
-            crop: [0.0, 0.0, 1.0, 1.0],
+            crop: WHOLE_PAINTING,
         };
         (engine, validation)
     }
@@ -982,8 +1004,9 @@ impl GpuEngine {
             present: self.present.clone(),
             paper: self.paper.clone(),
             loaded: None,
+            blend: self.blend.clone(),
             interpolation: None,
-            crop: [0.0, 0.0, 1.0, 1.0],
+            crop: WHOLE_PAINTING,
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
@@ -1448,11 +1471,7 @@ impl GpuEngine {
         self.dispatch_apply(pipeline, rect.w * rect.h, slot)
     }
 
-    fn dab_uniform(
-        &self,
-        dab: &nocturne_watercolour_core::domain::Dab,
-        seed: Seed,
-    ) -> Result<StrokeUniform, EngineError> {
+    fn dab_uniform(&self, dab: &Dab, seed: Seed) -> Result<StrokeUniform, EngineError> {
         let l = self.loaded()?;
         let geometry = paint::DabStamp::new(
             dab,
@@ -1463,7 +1482,7 @@ impl GpuEngine {
             self.params.stamp,
         );
         Ok(StrokeUniform {
-            kind: 3,
+            kind: STROKE_DAB,
             pigment: dab.pigment as u32,
             concentration: dab.concentration,
             water: dab.water,
@@ -1574,8 +1593,7 @@ impl GpuEngine {
                 (l.paper, l.paper_sim.aspect)
             };
             let pixel_scale = if band_limit {
-                let virtual_width = (width as f32 / self.crop[2]).round() as u32;
-                let virtual_height = (height as f32 / self.crop[3]).round() as u32;
+                let (virtual_width, virtual_height) = virtual_size(width, height, self.crop);
                 render_pixel_scale(virtual_width, virtual_height, aspect)
             } else {
                 0.0
@@ -1597,9 +1615,10 @@ impl GpuEngine {
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let mut paper_key = PaperKey::new(&paper, width, height, aspect, pixel_scale);
-        paper_key.crop = self.crop.map(f32::to_bits);
-        let paper_buf = self.paper_buffer(paper_key, &paper)?;
+        let paper_buf = self.paper_buffer(
+            PaperKey::new(&paper, width, height, aspect, pixel_scale, self.crop),
+            &paper,
+        )?;
         let (presence_len, pigments) = {
             let l = self.loaded()?;
             (
@@ -1781,7 +1800,7 @@ impl GpuEngine {
         aspect: f32,
         pixel_scale: f32,
     ) -> Result<Vec<f32>, EngineError> {
-        let key = PaperKey::new(paper, width, height, aspect, pixel_scale);
+        let key = PaperKey::new(paper, width, height, aspect, pixel_scale, WHOLE_PAINTING);
         let buffer = self.paper_buffer(key, paper)?;
         let staging = self.buffer(
             "paper-readback",
@@ -1939,7 +1958,7 @@ impl GpuEngine {
         if let Some(t) = self.timers.as_mut() {
             t.collect();
         }
-        let timer = self.render_timer();
+        let timer = self.claim_render_sample();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let readback = target
@@ -2006,7 +2025,7 @@ impl GpuEngine {
         if let Some(t) = self.timers.as_mut() {
             t.collect();
         }
-        let timer = self.render_timer();
+        let timer = self.claim_render_sample();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
@@ -2070,12 +2089,12 @@ impl GpuEngine {
         Ok(())
     }
 
-    /// The render timer when it is free to take a sample.
-    fn render_timer(&self) -> Option<&GpuTimer> {
+    /// The render timer if this render is to be sampled; see [`GpuTimer::claim_sample`].
+    fn claim_render_sample(&self) -> Option<&GpuTimer> {
         self.timers
             .as_ref()
             .map(|t| &t.render)
-            .filter(|t| t.sample_due())
+            .filter(|t| t.claim_sample())
     }
 
     /// The optics pass alone, with no readback or presentation; for timing.
@@ -2255,6 +2274,7 @@ impl GpuEngine {
         Ok(true)
     }
 
+    /// Drops the tick images; the next blended frame starts with no history.
     pub fn clear_interpolation(&mut self) {
         self.interpolation = None;
     }
@@ -2301,7 +2321,10 @@ impl GpuEngine {
             .filter(|images| {
                 images.width == width && images.height == height && images.format == format
             })
-            .unwrap_or_else(|| Interpolation::new(self.ctx.device(), width, height, format));
+            .unwrap_or_else(|| {
+                let blend = self.blend.get(self.ctx.device(), format);
+                Interpolation::new(self.ctx.device(), &blend, width, height)
+            });
         if images.advance(tick) {
             self.draw_frame(
                 images.current_view(),
@@ -2714,7 +2737,7 @@ impl Simulator for GpuEngine {
         let mut sample = false;
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            sample = sample_free && t.tick.sample_due();
+            sample = sample_free && t.tick.claim_sample();
             if sample {
                 t.sampled_ticks = ticks;
             }
@@ -2793,7 +2816,7 @@ impl Simulator for GpuEngine {
             let mut sample = false;
             if let Some(t) = self.timers.as_mut() {
                 t.collect();
-                sample = sample_free && t.tick.sample_due();
+                sample = sample_free && t.tick.claim_sample();
                 if sample {
                     t.sampled_ticks = batch;
                 }

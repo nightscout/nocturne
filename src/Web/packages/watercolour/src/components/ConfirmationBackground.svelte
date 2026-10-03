@@ -46,15 +46,15 @@
     return mountPlayer(
       frame,
       canvas,
-      'confirmation-background',
       {
+        artwork: 'confirmation-background',
         ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
         fit: fit ?? backgroundFit,
         surface,
         fitAnchor: 'bottom-left',
         releaseAfterFinish: true,
+        onReady: onready,
       },
-      onready,
     );
   });
 </script>
