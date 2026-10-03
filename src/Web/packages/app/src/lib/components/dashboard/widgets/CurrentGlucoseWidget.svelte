@@ -99,8 +99,8 @@
   {/if}
 {/snippet}
 
-<!-- The change and the uploader battery; the row is dropped when it would be empty, e.g. a stale
-     reading with no battery report. -->
+<!-- Dropped when empty (a stale reading with no battery report), so no blank gap sits under the
+     tile. -->
 {#snippet details(battery: Awaited<typeof batteryStatusPromise> | undefined)}
   {@const uploader = battery?.min && Object.keys(battery.devices ?? {}).length > 0 ? battery : undefined}
   {#if (!isLoading && !isStale) || uploader}

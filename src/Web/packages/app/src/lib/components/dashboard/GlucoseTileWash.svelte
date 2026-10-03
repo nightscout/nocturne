@@ -1,5 +1,5 @@
 <script module lang="ts">
-  import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
+  import { glucoseTileFill, type GlucoseTileVariant } from "@nocturne/ui/glucose";
 
   /** What the tile showed before this wash: a range fill, or the loading skeleton. */
   type PriorFill = GlucoseTileVariant | "skeleton";
@@ -11,7 +11,7 @@
   let fadedSeed = $state<number | null>(null);
   let shownFill: PriorFill = "skeleton";
 
-  export interface TileFill {
+  interface TileFill {
     loading: boolean;
     stale: boolean;
     disconnected: boolean;
@@ -19,16 +19,19 @@
   }
 
   /**
-   * Records the flat fill a host's tile shows while it paints no wash (loading, stale,
-   * disconnected or neutral; see GlucoseValueIndicator's `background`), so the next wash blooms
-   * over what was on screen. Call during component initialisation.
+   * Records the flat fill a host's tile shows while it paints no wash (the skeleton, or what
+   * `glucoseTileFill` leaves unpainted), so the next wash blooms over what was on screen. Call
+   * during component initialisation.
    */
   export function trackUnwashedFill(tile: () => TileFill): void {
     $effect(() => {
-      const { loading, stale, disconnected, variant } = tile();
-      if (loading) shownFill = "skeleton";
-      else if (stale) shownFill = "neutral";
-      else if (disconnected || variant === "neutral") shownFill = variant;
+      const { loading, variant, ...state } = tile();
+      if (loading) {
+        shownFill = "skeleton";
+        return;
+      }
+      const { fill, painted } = glucoseTileFill(variant, state);
+      if (!painted) shownFill = fill;
     });
   }
 </script>
@@ -49,12 +52,16 @@
 
   let { mills, variant, delta }: Props = $props();
   const washSeed = $derived((mills ?? 0) % 2_147_483_647);
-  // Each reading paints its own stroke, over the fill that was on screen when it arrived. Keyed
-  // by the derived seed, so it is taken again only when the seed changes.
-  const reading = $derived({ seed: washSeed, priorFill: shownFill });
   // Reduced motion and the Still preference keep one settled wash per range: a stroke per reading
   // that fades is animation they opted out of.
   const washPerReading = $derived(illustrations.current === "animated" && !prefersReducedMotion.current);
+  // Each reading paints its own stroke, over the fill that was on screen when it arrived or when
+  // strokes came back on. Keyed by the derived seed, so it is not retaken on every store update.
+  const reading = $derived({ seed: washSeed, priorFill: washPerReading ? shownFill : variant });
+  // The settled wash shows the flat range fill.
+  $effect(() => {
+    if (!washPerReading) shownFill = variant;
+  });
   const recolours = $derived(reading.priorFill !== variant);
   // With a 50% tail, this progress is past covered tick 140 for every stagger seed.
   const BLOOM_COVERED = 0.67;

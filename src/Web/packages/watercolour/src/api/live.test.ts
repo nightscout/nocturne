@@ -4,11 +4,15 @@ import { MAX_UNPRESENTED_RENDERS, type PlayerOptions, createArtworkPlayer } from
 import { Scheduler } from './scheduler';
 import type { WasmModule } from './wasm-types';
 
-/** A wasm instance whose timeline is `total` ticks, recording what the host asks of it. */
-function fakeInstance(total: number) {
+/**
+ * A wasm instance whose timeline is `total` ticks, run at `ticksPerSecond`,
+ * recording what the host asks of it.
+ */
+function fakeInstance(total: number, ticksPerSecond = 25) {
   const calls: string[] = [];
   let tick = 0;
   let playing = false;
+  let blending = false;
   let owed = 0;
   const instance = {
     calls,
@@ -22,7 +26,7 @@ function fakeInstance(total: number) {
       canvas.height = height;
     },
     setCrop: vi.fn(),
-    setBlendTicks: vi.fn(),
+    enableTickBlending: vi.fn(() => void (blending = true)),
     setProgressCurve() {},
     play: () => void (playing = true),
     pause: () => void (playing = false),
@@ -31,17 +35,17 @@ function fakeInstance(total: number) {
       calls.push(`ticks:${ticks}`);
       return tick >= total;
     },
-    /** 25 ticks a second: at 60 fps most frames run no tick at all. */
+    /** At the default 25 ticks a second most 60 fps frames run no tick; a blending one still has a new frame. */
     advanceByElapsed(seconds: number) {
       instance.advances++;
       if (!playing || tick >= total) return false;
-      owed += seconds * 25;
+      owed += seconds * ticksPerSecond;
       const whole = Math.floor(owed);
       owed -= whole;
       const next = Math.min(total, tick + whole);
       const moved = next !== tick;
       tick = next;
-      return moved;
+      return moved || blending;
     },
     tickForProgress: (progress: number) => Math.round(progress * total),
     seekTowardsTick(target: number, ticks: number) {
@@ -68,7 +72,7 @@ function fakeInstance(total: number) {
     dispose: () => void calls.push('dispose'),
     simResolution: () => 96,
     totalTicks: () => total,
-    ticksDue: (seconds: number) => (playing ? Math.min(total - tick, Math.floor(owed + seconds * 25)) : 0),
+    ticksDue: (seconds: number) => (playing ? Math.min(total - tick, Math.floor(owed + seconds * ticksPerSecond)) : 0),
     ticksDueAtProgress: (progress: number) => Math.max(0, Math.round(progress * total) - tick),
     currentTick: () => tick,
   };
@@ -79,7 +83,6 @@ function fakeHost(...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   return timedHost({}, ...instances);
 }
 
-/** A host whose engine reports these GPU timings. */
 function timedHost(gpuTimings: { gpuTickMs?: number; gpuRenderMs?: number }, ...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   const engine = {
     createInstance: () => instances.shift(),
@@ -218,8 +221,8 @@ describe('presented progress', () => {
     const { scheduler } = manualScheduler();
     const players = [player(blended, scheduler, { blendTicks: true }), player(plain, scheduler, {})];
     await Promise.all(players.map((live) => live.ready));
-    expect(blended.setBlendTicks).toHaveBeenCalledWith(true);
-    expect(plain.setBlendTicks).not.toHaveBeenCalled();
+    expect(blended.enableTickBlending).toHaveBeenCalled();
+    expect(plain.enableTickBlending).not.toHaveBeenCalled();
     for (const live of players) live.dispose();
   });
 
@@ -489,6 +492,26 @@ describe('target seeking', () => {
     live.dispose();
   });
 
+  it('holds play after a seek until the target frame is presented', async () => {
+    const instance = fakeInstance(100);
+    const render = vi.spyOn(instance, 'render').mockReturnValue(false);
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.seekTo(0.1);
+    live.play();
+    for (let i = 0; i < 10; i++) clock.frame();
+    expect(instance.tick).toBe(10);
+    expect(live.state).toMatchObject({ seeking: true, playing: false });
+    render.mockReturnValue(true);
+    clock.frame();
+    expect(instance.tick).toBe(10);
+    expect(live.state).toMatchObject({ seeking: false, playing: true });
+    for (let i = 0; i < 10; i++) clock.frame();
+    expect(instance.tick).toBeGreaterThan(10);
+    live.dispose();
+  });
+
   it('keeps a seek pending until a frame can actually be presented', async () => {
     const instance = fakeInstance(100);
     const render = vi.spyOn(instance, 'render').mockReturnValue(false);
@@ -545,6 +568,21 @@ describe('GPU reservation', () => {
     const timings = { gpuTickMs: 1, gpuRenderMs: 2 };
     const players = reveals.map((instance) => player(instance, scheduler, { engineHost: timedHost(timings, instance) }));
     await Promise.all(players.map((live) => live.ready));
+    for (let i = 0; i < 30; i++) frame();
+    expect(reveals.map((instance) => instance.advances)).toEqual([30, 30]);
+    for (const live of players) live.dispose();
+  });
+
+  it('does not let blend-only frames of one blended reveal crowd out the ticks of another', async () => {
+    const reveals = [fakeInstance(1000, 1), fakeInstance(1000)];
+    const { scheduler, frame } = manualScheduler();
+    const timings = { gpuTickMs: 1, gpuRenderMs: 6 };
+    const players = reveals.map((instance) =>
+      player(instance, scheduler, { blendTicks: true, engineHost: timedHost(timings, instance) }),
+    );
+    await Promise.all(players.map((live) => live.ready));
+    frame();
+    for (const instance of reveals) instance.advances = 0;
     for (let i = 0; i < 30; i++) frame();
     expect(reveals.map((instance) => instance.advances)).toEqual([30, 30]);
     for (const live of players) live.dispose();

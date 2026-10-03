@@ -261,10 +261,6 @@ impl<S: Simulator> Playback<S> {
         self
     }
 
-    pub fn tick_budget(&self) -> u32 {
-        self.tick_budget
-    }
-
     /// The ticks [`Self::advance_by_elapsed`] would run now for `elapsed_seconds`.
     pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
         if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {

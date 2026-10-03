@@ -126,8 +126,10 @@ describe("CurrentGlucoseWidget", () => {
     render(CurrentGlucoseWidget);
     await expect.element(page.getByText(/30 min/)).toBeVisible();
 
-    await expect.element(page.getByTestId("current-glucose-tile")).toBeVisible();
-    expect(page.getByTestId("current-glucose-tile").element().nextElementSibling).toBeNull();
+    await expect.element(tile()).toBeVisible();
+    const tileBottom = tile().element().getBoundingClientRect().bottom;
+    const contentBottom = tile().element().parentElement!.getBoundingClientRect().bottom;
+    expect(contentBottom - tileBottom).toBeLessThan(1);
   });
 
   it("says a stale reading is stale to a screen reader", async () => {

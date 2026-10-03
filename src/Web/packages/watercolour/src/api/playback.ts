@@ -142,7 +142,6 @@ interface Backend {
   readonly canvas: HTMLCanvasElement;
   readonly playing: boolean;
   readonly finished: boolean;
-  /** The latest `seekTo` target has not yet been presented. */
   readonly seeking: boolean;
   readonly progress: number;
   /** The eased value fed to the simulation; `progress` is the raw wall fraction. */
@@ -243,11 +242,16 @@ export const MAX_UNPRESENTED_RENDERS = 30;
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
+  /**
+   * The next frame shades the simulation: a tick ran or the frame was
+   * invalidated. Otherwise a `blendTicks` frame only blends the images
+   * already shaded, a cost `gpuRenderMs` does not measure.
+   */
+  private reshade = true;
   private unpresented = 0;
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
-  /** The tick a `seekTo` is replaying towards. */
   private seekTick: number | undefined;
   private playAfterSeek = false;
   private seekPresentPending = false;
@@ -305,7 +309,7 @@ class LiveBackend implements Backend {
           const { x, y, width, height } = options.crop;
           instance.setCrop(x, y, width, height);
         }
-        if (options.blendTicks) instance.setBlendTicks(true);
+        if (options.blendTicks) instance.enableTickBlending();
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });
@@ -410,7 +414,7 @@ class LiveBackend implements Backend {
 
   play(): void {
     if (this.disposed || this.released || this.settling) return;
-    if (this.seekTick !== undefined) {
+    if (this.seekPresentPending) {
       this.playAfterSeek = true;
       return;
     }
@@ -505,6 +509,7 @@ class LiveBackend implements Backend {
       const strip = await this.instance.exportStrip(frames, size);
       this.isPlaying = false;
       this.dirty = true;
+      this.reshade = true;
       this.handle.setActive(true);
       return strip;
     } catch (error) {
@@ -546,10 +551,7 @@ class LiveBackend implements Backend {
       this.scheduler.slices.record(replayed, this.scheduler.now() - started);
       this.scheduler.chargeGpuMs(replayed * (gpuTickMs ?? 0));
       if (this.easing) this.elapsedMs = invertEasing(this.easing, this.instance.progress()) * this.durationMs;
-      if (this.instance.currentTick() === target) {
-        this.seekTick = undefined;
-        if (this.playAfterSeek) this.play();
-      }
+      if (this.instance.currentTick() === target) this.seekTick = undefined;
       return;
     }
     if (this.settling) {
@@ -566,21 +568,22 @@ class LiveBackend implements Backend {
       } else {
         changed = this.instance.advanceByElapsed(dt);
       }
-      this.scheduler.chargeGpuMs((this.instance.currentTick() - before) * (this.host.stats()?.gpuTickMs ?? 0));
+      const ticked = this.instance.currentTick() - before;
+      this.scheduler.chargeGpuMs(ticked * (this.host.stats()?.gpuTickMs ?? 0));
+      if (ticked > 0) this.reshade = true;
       return changed;
-    });
+    }, false);
   }
 
   /**
    * The GPU time this frame's tick and render are expected to take. A seek or
    * settle slice sizes itself to the GPU budget left, so only its first tick
-   * is reserved. A frame that runs no tick and was not invalidated draws at
-   * most the tick blend, which is not reserved.
+   * is reserved. A render is reserved, and charged, only when it reshades.
    */
   private gpuCostMs(elapsedSeconds: number): number {
     const stats = this.host.stats();
     const ticks = this.seekTick !== undefined || this.settling ? 1 : this.isPlaying ? this.ticksDue(elapsedSeconds) : 0;
-    const renders = !this.settling && (ticks > 0 || this.dirty);
+    const renders = !this.settling && (ticks > 0 || this.reshade);
     return ticks * (stats?.gpuTickMs ?? 0) + (renders ? (stats?.gpuRenderMs ?? 0) : 0);
   }
 
@@ -634,7 +637,7 @@ class LiveBackend implements Backend {
       let presented: boolean | void;
       try {
         presented = this.instance.render();
-        this.scheduler.chargeGpuMs(this.host.stats()?.gpuRenderMs ?? 0);
+        if (this.reshade) this.scheduler.chargeGpuMs(this.host.stats()?.gpuRenderMs ?? 0);
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
@@ -643,9 +646,15 @@ class LiveBackend implements Backend {
       if (presented === false && (this.seekPresentPending || ++this.unpresented < MAX_UNPRESENTED_RENDERS)) return;
       this.unpresented = 0;
       this.dirty = false;
-      if (this.seekTick === undefined) this.seekPresentPending = false;
+      this.reshade = false;
+      const seekPresented = this.seekPresentPending && this.seekTick === undefined;
+      if (seekPresented) this.seekPresentPending = false;
       if (presented !== false) this.callbacks.onProgress?.(this.progress, this.seekPresentPending);
       if (this.disposed || this.released) return;
+      if (seekPresented && this.playAfterSeek) {
+        this.playAfterSeek = false;
+        this.play();
+      }
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -674,12 +683,16 @@ class LiveBackend implements Backend {
     this.endTurn?.();
   }
 
-  /** `action` returns `false` when it left the simulation as it was, which needs no new frame. */
-  private step(action: () => boolean | void): void {
+  /**
+   * `action` returns `false` when it left the simulation as it was, which
+   * needs no new frame. `reshades` false leaves `reshade` to the action.
+   */
+  private step(action: () => boolean | void, reshades = true): void {
     if (this.disposed || this.released) return;
     try {
       if (action() === false) return;
       this.dirty = true;
+      if (reshades) this.reshade = true;
       this.handle.setActive(true);
     } catch (error) {
       this.fault(toWatercolourError(error));
