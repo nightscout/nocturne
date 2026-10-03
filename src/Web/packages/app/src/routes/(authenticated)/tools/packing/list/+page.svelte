@@ -74,7 +74,7 @@
 
   $effect(() => {
     const target = totalCount ? (totalChecked / totalCount) * PAINT_END : 0;
-    // Unpacking jumps rather than animating paint backwards.
+    // Each backward frame is a checkpoint replay, so an unpack jumps.
     const instant = prefersReducedMotion.current || target < untrack(() => reveal.target);
     void reveal.set(target, { duration: instant ? 0 : 700 });
   });
