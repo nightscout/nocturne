@@ -34,16 +34,12 @@
     const colour = tokenColour(el, colourToken);
     const bloomSeed = readingSeed;
     const bloomSlope = slope;
-    return mountPlayer(
-      container, el, undefined,
-      {
-        scene: (module, width, height, dpr) => bloomScene(module, width, height, { seed: bloomSeed, slope: bloomSlope, dpr, colour }),
-        fit: "fill", mode: "live", durationMs: 5200, tail: 0.5, releaseAfterFinish: true,
-        onProgress: (progress) => untrack(() => onprogress(progress)),
-      },
-      undefined,
-      (state) => untrack(() => onstatechange(state)),
-    );
+    return mountPlayer(container, el, {
+      scene: (module, width, height, dpr) => bloomScene(module, width, height, { seed: bloomSeed, slope: bloomSlope, dpr, colour }),
+      fit: "fill", mode: "live", durationMs: 5200, tail: 0.5, releaseAfterFinish: true, blendTicks: true,
+      onProgress: (progress) => untrack(() => onprogress(progress)),
+      onStateChange: (state) => untrack(() => onstatechange(state)),
+    });
   });
 </script>
 
