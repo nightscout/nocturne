@@ -19,14 +19,6 @@
 
   let { totalCarbs, foods, seedKey, class: className }: Props = $props();
 
-  function cssGeometry(element: HTMLElement, properties: Record<string, string>) {
-    const update = (next: Record<string, string>) => {
-      for (const [name, value] of Object.entries(next)) element.style.setProperty(name, value);
-    };
-    update(properties);
-    return { update };
-  }
-
   const colorPalette = [
     "oklch(0.765 0.177 163.223)", // emerald-500
     "oklch(0.623 0.214 259.815)", // blue-500
@@ -159,7 +151,7 @@
 
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
-    <div class="relative isolate h-full w-(--chart-w)" use:cssGeometry={{ '--chart-w': `${chartWidthPercent}%` }}>
+    <div class="relative isolate h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
       {#key chartKey}
         <div bind:this={chartEl} class="h-full">
         <BarChart
@@ -196,12 +188,10 @@
           aria-hidden="true"
           data-carb-wash
           class="pointer-events-none absolute top-(--paint-y) left-(--paint-x) h-(--paint-h) w-(--paint-w) overflow-hidden"
-          use:cssGeometry={{
-            '--paint-x': `${paintBox.left}px`,
-            '--paint-y': `${paintBox.top}px`,
-            '--paint-w': `${paintBox.width}px`,
-            '--paint-h': `${paintBox.height}px`,
-          }}
+          style:--paint-x="{paintBox.left}px"
+          style:--paint-y="{paintBox.top}px"
+          style:--paint-w="{paintBox.width}px"
+          style:--paint-h="{paintBox.height}px"
         >
           <div class="absolute inset-0 wash-grain mix-blend-multiply">
             <Artwork
