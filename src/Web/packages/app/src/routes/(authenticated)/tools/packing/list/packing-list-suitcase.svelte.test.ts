@@ -34,7 +34,7 @@ function listUrl(items: Array<{ c: string; l: string; q: number; p?: 1 }>) {
 }
 
 const packed = (label: string) => page.getByRole("checkbox", { name: `Packed: ${label}` });
-const seeks = () => spyPlayer.seek.mock.calls.map(([at]) => at);
+const seeks = () => spyPlayer.seekTo.mock.calls.map(([at]) => at);
 const lastSeek = () => seeks().at(-1);
 
 describe("packing list suitcase", () => {
@@ -56,7 +56,7 @@ describe("packing list suitcase", () => {
     const rising = seeks();
     expect(rising.every((at, i) => i === 0 || at >= rising[i - 1])).toBe(true);
 
-    const before = spyPlayer.seek.mock.calls.length;
+    const before = spyPlayer.seekTo.mock.calls.length;
     await packed("Test strips").click();
     await expect.poll(lastSeek).toBe(0);
     expect(seeks().slice(before)).toEqual([0]);

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import {
-    currentGlucoseStatus,
+    displayedGlucose,
     refreshSummaryOnNewReading,
   } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
@@ -161,20 +161,18 @@
   );
   const isDisconnected = $derived(connection.isDisconnected);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
-  const glucoseStatus = $derived(
-    currentGlucoseStatus(realtimeStore.currentEntry?.mills)
-  );
-  const glucoseVariant = $derived(getGlucoseTileVariant(glucoseStatus));
+  const glucose = displayedGlucose(realtimeStore);
 
   $effect(() => {
     // Determine if we should update
     const enabled = titleFaviconSettings.enabled;
-    const bg = realtimeStore.currentBG;
+    const bg = glucose.currentBG;
 
     // Explicit dependencies for visual updates
     const title = timeSinceReading;
-    const delta = realtimeStore.bgDelta;
-    const dir = realtimeStore.direction;
+    const delta = glucose.bgDelta;
+    const dir = glucose.direction;
+    const variant = getGlucoseTileVariant(glucose.status);
 
     if (enabled && bg > 0) {
       titleFaviconService.update(
@@ -182,7 +180,7 @@
         dir,
         delta,
         titleFaviconSettings,
-        glucoseVariant,
+        variant,
         isDisconnected,
         isStale,
         title
@@ -200,13 +198,13 @@
   };
 
   $effect(() => {
-    const bg = realtimeStore.currentBG;
+    const bg = glucose.currentBG;
     if (
       bg &&
       titleFaviconSettings.enabled &&
       titleFaviconSettings.flashOnAlarm
     ) {
-      titleFaviconService.syncAlarmFlash(glucoseStatus, alarmVisual);
+      titleFaviconService.syncAlarmFlash(glucose.status, alarmVisual);
     }
   });
 </script>

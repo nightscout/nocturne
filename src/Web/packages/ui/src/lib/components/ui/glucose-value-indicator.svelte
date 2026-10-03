@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import * as Tooltip from "./tooltip";
   import { Skeleton } from "./skeleton";
-  import type { GlucoseTileVariant } from "../../glucose";
+  import { glucoseTileFill, type GlucoseTileVariant } from "../../glucose";
 
   interface Props {
     /** Glucose value to display (already formatted for units) */
@@ -29,8 +29,8 @@
      */
     size?: "xs" | "sm" | "lg" | "xl";
     /**
-     * Painted over the range fill and under the value, for a host that has artwork to lay there.
-     * Skipped while stale or disconnected, so those keep the flat neutral look.
+     * Painted over the range fill and under the value, for a host that has artwork to lay there,
+     * when `glucoseTileFill` says the tile is painted.
      */
     background?: Snippet;
     /** Set after the value inside the tile, in the tile's own foreground, e.g. a trend arrow */
@@ -81,10 +81,9 @@
     neutral: "bg-muted text-muted-foreground",
   };
 
-  const fillClasses = $derived(variantClasses[isStale ? "neutral" : variant]);
-  const showBackground = $derived(
-    background !== undefined && !isStale && !isDisconnected && variant !== "neutral"
-  );
+  const tileFill = $derived(glucoseTileFill(variant, { stale: isStale, disconnected: isDisconnected }));
+  const fillClasses = $derived(variantClasses[tileFill.fill]);
+  const showBackground = $derived(background !== undefined && tileFill.painted);
 
   // Get border style based on connection status
   const getBorderStyle = (disconnected: boolean, stale: boolean) => {
