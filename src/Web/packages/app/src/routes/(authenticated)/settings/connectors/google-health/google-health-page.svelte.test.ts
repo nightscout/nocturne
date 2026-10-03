@@ -292,6 +292,86 @@ describe("Google Health connector page", () => {
     googleHealthMocks.preview.mockResolvedValue({ items: [] });
   });
 
+  it("connects with the default seven-day history when no import date is entered", async () => {
+    googleHealthMocks.start.mockResolvedValue({ url: "" });
+    render(GoogleHealthPage);
+    await page
+      .getByLabelText("Google client ID", { exact: true })
+      .fill("test.apps.googleusercontent.com");
+    await page
+      .getByLabelText("Client secret", { exact: true })
+      .fill("test-secret");
+    await page
+      .getByLabelText("Callback URL", { exact: true })
+      .fill("https://nocturne.test/settings/connectors/google-health/callback");
+    await expect
+      .element(page.getByLabelText("Import data from"))
+      .toHaveValue("");
+    await page
+      .getByRole("button", { name: "Save and connect", exact: true })
+      .click();
+    await expect.poll(() => googleHealthMocks.save.mock.calls.length).toBe(1);
+    expect(googleHealthMocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ importFrom: null, historyDays: 7 })
+    );
+    expect(googleHealthMocks.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses frontend labels and reason copy instead of backend display text", async () => {
+    googleHealthMocks.status.mockResolvedValue(
+      status({
+        configured: true,
+        connected: true,
+        capabilities: [
+          {
+            dataType: "menstrual-period",
+            displayName: "Raw backend label",
+            category: "Cycle tracking",
+            supported: false,
+            unavailableReason: "readonly_scope_unavailable",
+          },
+          {
+            dataType: "cervical-mucus",
+            displayName: "Other backend label",
+            category: "Cycle tracking",
+            supported: false,
+            unavailableReason: "readable_type_unavailable",
+          },
+        ],
+      })
+    );
+    render(GoogleHealthPage);
+    await page.getByText("Cycle tracking", { exact: true }).click();
+    await expect
+      .element(page.getByText("Menstrual period", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Cervical mucus", { exact: true }))
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "Google Health currently provides no read-only scope for this type.",
+          { exact: true }
+        )
+      )
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "Not exposed as a readable Google Health API data type.",
+          { exact: true }
+        )
+      )
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Raw backend label", { exact: true }))
+      .not.toBeInTheDocument();
+    await expect
+      .element(page.getByText("readonly_scope_unavailable", { exact: true }))
+      .not.toBeInTheDocument();
+  });
+
   it("shows detected, supported, and unsupported data types", async () => {
     googleHealthMocks.status.mockResolvedValue(
       status({ configured: true, connected: true })

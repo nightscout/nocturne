@@ -59,10 +59,10 @@ public sealed class GoogleHealthClient(HttpClient http, ILogger<GoogleHealthClie
         new() { DataType = "daily-respiratory-rate", DisplayName = "Daily respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
         new() { DataType = "respiratory-rate-sleep-summary", DisplayName = "Sleep respiratory rate", Category = "Vitals", Unit = "breaths/min", RequiredScope = MetricsScope },
         new() { DataType = "core-body-temperature", DisplayName = "Core body temperature", Category = "Vitals", Unit = "C", RequiredScope = MetricsScope },
-        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
-        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "Google Health currently provides no read-only scope for this type." },
-        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." },
-        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "Not exposed as a readable Google Health API data type." }
+        new() { DataType = "menstrual-period", DisplayName = "Menstrual period", Category = "Cycle tracking", Unit = "interval", UnavailableReason = "readonly_scope_unavailable" },
+        new() { DataType = "ovulation-test", DisplayName = "Ovulation test", Category = "Cycle tracking", Unit = "result", UnavailableReason = "readonly_scope_unavailable" },
+        new() { DataType = "cervical-mucus", DisplayName = "Cervical mucus", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" },
+        new() { DataType = "sexual-activity", DisplayName = "Sexual activity", Category = "Cycle tracking", Unit = "observation", UnavailableReason = "readable_type_unavailable" }
     ];
     public static string[] SupportedTypes => Capabilities.Where(c => c.Supported).Select(c => c.DataType).ToArray();
     public static bool TryGetDataType(SyncDataType type, out string dataType) =>

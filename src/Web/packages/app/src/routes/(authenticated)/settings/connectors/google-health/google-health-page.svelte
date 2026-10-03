@@ -86,6 +86,38 @@
       CycleTracking: { label: "Cycle tracking", hideForMale: true },
     };
   const categoryOrder = Object.keys(categoryMeta);
+  const dataTypeLabels: Record<string, string> = {
+    steps: "Steps",
+    heartrate: "Heart rate",
+    weight: "Weight",
+    sleep: "Sleep sessions and stages",
+    activeenergyburned: "Active energy burned",
+    totalcalories: "Total calories",
+    distance: "Distance",
+    floors: "Floors",
+    exercise: "Workouts",
+    bodyfat: "Body fat",
+    height: "Height",
+    nutritionlog: "Nutrition log",
+    hydrationlog: "Hydration",
+    bloodglucose: "Blood glucose",
+    oxygensaturation: "Oxygen saturation",
+    heartratevariability: "Heart rate variability",
+    dailyrestingheartrate: "Resting heart rate",
+    dailyoxygensaturation: "Daily oxygen saturation",
+    dailyrespiratoryrate: "Daily respiratory rate",
+    respiratoryratesleepsummary: "Sleep respiratory rate",
+    corebodytemperature: "Core body temperature",
+    menstrualperiod: "Menstrual period",
+    ovulationtest: "Ovulation test",
+    cervicalmucus: "Cervical mucus",
+    sexualactivity: "Sexual activity",
+  };
+  function dataTypeLabel(type: string | null | undefined) {
+    return (
+      dataTypeLabels[(type ?? "").replaceAll("-", "")] ?? "Unknown data type"
+    );
+  }
   const categoryKey = (category: string | null | undefined) =>
     (category ?? "").replace(/[^a-z]/gi, "").toLowerCase();
   const categoryGroups = $derived.by(() => {
@@ -315,11 +347,16 @@
     inventoryMissing = false
   ) {
     if (item.errorCode) return `Read failed (${item.errorCode})`;
-    if (!item.supported)
-      return (
-        status?.capabilities?.find((entry) => entry.dataType === item.dataType)
-          ?.unavailableReason ?? "Not yet supported by Nocturne"
-      );
+    if (!item.supported) {
+      const reason = status?.capabilities?.find(
+        (entry) => entry.dataType === item.dataType
+      )?.unavailableReason;
+      if (reason === "readonly_scope_unavailable")
+        return "Google Health currently provides no read-only scope for this type.";
+      if (reason === "readable_type_unavailable")
+        return "Not exposed as a readable Google Health API data type.";
+      return "Not yet supported by Nocturne";
+    }
     if (inventoryMissing) return "Not scanned";
     if (!item.granted) return "Permission not granted";
     if (
@@ -348,7 +385,7 @@
       return "Refreshing the Google session";
     if (status.syncPhase === GoogleHealthSyncPhase.Reading)
       return status.syncDataType
-        ? `Reading ${status.capabilities?.find((entry) => entry.dataType === status?.syncDataType)?.displayName ?? status.syncDataType}`
+        ? `Reading ${dataTypeLabel(status.syncDataType)}`
         : "Reading Google Health data";
     if (status.syncPhase === GoogleHealthSyncPhase.Validating)
       return "Validating the downloaded data";
@@ -545,7 +582,6 @@
                 type="date"
                 min="2000-01-01"
                 max={day(new Date())}
-                required
                 bind:value={importFrom}
               />
             </label>
@@ -731,7 +767,7 @@
                           <tr class="border-b last:border-b-0">
                             <td class="p-3">
                               <Checkbox
-                                aria-label={`Import ${capability?.displayName ?? item.dataType}`}
+                                aria-label={`Import ${dataTypeLabel(item.dataType)}`}
                                 checked={selected.includes(item.dataType ?? "")}
                                 onCheckedChange={(checked) => {
                                   const dataType = item.dataType;
@@ -751,7 +787,7 @@
                               />
                             </td>
                             <td class="p-3 font-medium">
-                              {capability?.displayName ?? item.dataType}
+                              {dataTypeLabel(item.dataType)}
                             </td>
                             <td class="p-3">
                               {inventoryMissing

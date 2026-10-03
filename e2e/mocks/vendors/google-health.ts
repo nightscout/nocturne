@@ -14,6 +14,7 @@ interface Account {
 const codes = new Map<string, Account>();
 const refreshTokens = new Map<string, Account>();
 const accessTokens = new Map<string, Account>();
+const fixtureAnchors = new Map<string, number>();
 const failure = (error: string): VendorReply => ({ status: 400, body: { error } });
 const secret = () => randomBytes(24).toString("base64url");
 
@@ -53,9 +54,12 @@ export const googleHealth: Vendor = {
       if (q.response_type !== "code" || q.code_challenge_method !== "S256" || !q.state ||
           !q.code_challenge || !q.client_id || !q.redirect_uri || !q.scope || q.access_type !== "offline") return failure("invalid_request");
       const code = secret();
+      // Reauthorization changes credentials, not the account's existing health records.
+      const anchor = fixtureAnchors.get(q.client_id) ?? Date.now();
+      fixtureAnchors.set(q.client_id, anchor);
       const account: Account = {
         clientId: q.client_id, callback: q.redirect_uri!, scope: q.scope!, challenge: q.code_challenge,
-        anchor: Date.now(), refreshToken: secret(), revoked: false,
+        anchor, refreshToken: secret(), revoked: false,
       };
       codes.set(code, account);
       const redirect = new URL(account.callback);
