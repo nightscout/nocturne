@@ -35,7 +35,9 @@
 
 <script lang="ts">
   import { washInterior } from '$lib/watercolour-wash';
-  import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { Artwork } from "@nocturne/watercolour";
+  import { illustrations } from "$lib/stores/illustrations.svelte";
   import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
   import type { PlayerState } from "@nocturne/watercolour";
 
@@ -50,7 +52,9 @@
   // Each reading paints its own stroke, over the fill that was on screen when it arrived. Keyed
   // by the derived seed, so it is taken again only when the seed changes.
   const reading = $derived({ seed: washSeed, priorFill: shownFill });
-  const washPerReading = !prefersReducedMotion();
+  // Reduced motion and the Still preference keep one settled wash per range: a stroke per reading
+  // that fades is animation they opted out of.
+  const washPerReading = $derived(illustrations.current === "animated" && !prefersReducedMotion.current);
   const recolours = $derived(reading.priorFill !== variant);
   // With a 50% tail, this progress is past covered tick 140 for every stagger seed.
   const BLOOM_COVERED = 0.67;

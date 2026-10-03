@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { engine } from "$lib/test-stubs/Watercolour.test-stub.svelte";
+import { illustrations } from "$lib/stores/illustrations.svelte";
 import GlucoseTileWashHarness from "./GlucoseTileWashHarness.test.svelte";
 
 vi.mock("@nocturne/watercolour", async (importOriginal) => {
@@ -35,6 +36,10 @@ async function settledTile(variant: "high" | "low") {
   paintBloom(0.7);
   return view;
 }
+
+afterEach(() => {
+  illustrations.current = "animated";
+});
 
 describe("GlucoseTileWash", () => {
   it("blooms the first reading over the loading skeleton", async () => {
@@ -101,5 +106,14 @@ describe("GlucoseTileWash", () => {
     paintBloom(0.7);
     await expect.element(priorFill(), { timeout: 4000 }).toHaveStyle({ opacity: "0" });
     await expect.element(bloom()).toBeInTheDocument();
+  });
+
+  it("settles to one wash per range when the Still preference is chosen mid-reading", async () => {
+    await settledTile("high");
+
+    illustrations.current = "still";
+
+    await expect.element(bloom()).not.toBeInTheDocument();
+    await expect.element(greyWash()).toBeInTheDocument();
   });
 });
