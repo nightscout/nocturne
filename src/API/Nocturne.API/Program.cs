@@ -147,6 +147,7 @@ builder.Services.AddSingleton<IGoogleHealthSyncCoordinator>(provider =>
 builder.Services.AddScoped<IGoogleHealthService, GoogleHealthService>();
 builder.Services.AddScoped<IGoogleHealthReadingWriter, GoogleHealthReadingWriter>();
 builder.Services.AddHostedService<GoogleHealthWorker>();
+builder.Services.AddDevOnlyGoogleHealthMock(builder.Environment, builder.Configuration);
 
 // Consumed by the dev-only admin controllers (Development) and the demo admin
 // controller's seed-extras endpoint (demo container, all environments).
