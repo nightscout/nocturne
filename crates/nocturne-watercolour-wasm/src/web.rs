@@ -672,6 +672,16 @@ impl SceneInstance {
         self.playback.total_ticks()
     }
 
+    #[wasm_bindgen(js_name = tickBudget)]
+    pub fn tick_budget(&self) -> u32 {
+        self.playback.tick_budget()
+    }
+
+    #[wasm_bindgen(js_name = currentTick)]
+    pub fn current_tick(&self) -> u32 {
+        self.playback.current_tick()
+    }
+
     pub fn play(&mut self) {
         self.playback.play();
     }

@@ -8,7 +8,7 @@ import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
 import { getPresentation } from './presentation';
 import { type ArtworkRef, type IconRef, type InstanceArgs, type SceneSource, authoredSceneJson, createRefInstance, iconSvg, isArtworkRef, isIconRef, parseSceneDocument } from './scenes';
-import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
+import { MAX_SLICE_TICKS, type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 import { type ViewportWait, waitNearViewport } from './viewport';
 
 export type PlayerEvent = 'ready' | 'finished' | 'fallback' | 'error' | 'statechange';
@@ -250,10 +250,12 @@ class LiveBackend implements Backend {
     scheduler: Scheduler,
     callbacks: BackendCallbacks,
     options: PlayerOptions,
+    signal: AbortSignal,
     endTurn?: () => void,
   ): Promise<LiveBackend> {
     try {
       const lease = await host.acquire();
+      signal.throwIfAborted();
       // Live reveals pick the detail tier from the canvas's BACKING long edge
       // (the size passed in is DPR-scaled). The simulation grid is the tier's
       // own, whatever the canvas: the fluid moves in cells, so a different
@@ -303,7 +305,6 @@ class LiveBackend implements Backend {
       }
     } catch (error) {
       host.release();
-      endTurn?.();
       throw toWatercolourError(error);
     }
   }
@@ -335,6 +336,11 @@ class LiveBackend implements Backend {
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
       render: () => this.render(),
+      gpuCostMs: () => {
+        const stats = this.host.stats();
+        const ticks = this.settling ? MAX_SLICE_TICKS : this.isPlaying ? this.instance.tickBudget() : 0;
+        return ticks * (stats?.gpuTickMs ?? 0) + (stats?.gpuRenderMs ?? 0);
+      },
     });
     this.unsubscribeLost = host.onLost((message) => this.fault(new WatercolourError('DeviceLost', message)));
     this.handle.setActive(true);
@@ -485,12 +491,18 @@ class LiveBackend implements Backend {
       return;
     }
     if (!this.isPlaying || this.disposed || this.released) return;
-    if (this.easing) {
-      this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
-      this.step(() => this.instance.advanceToProgress(this.easing!(this.elapsedMs / this.durationMs)));
-    } else {
-      this.step(() => this.instance.advanceByElapsed(dt));
-    }
+    this.step(() => {
+      const before = this.instance.currentTick();
+      let changed: boolean | void;
+      if (this.easing) {
+        this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
+        changed = this.instance.advanceToProgress(this.easing(this.elapsedMs / this.durationMs));
+      } else {
+        changed = this.instance.advanceByElapsed(dt);
+      }
+      this.scheduler.chargeGpuMs((this.instance.currentTick() - before) * (this.host.stats()?.gpuTickMs ?? 0));
+      return changed;
+    });
   }
 
   /**
@@ -512,7 +524,7 @@ class LiveBackend implements Backend {
       let ran = false;
       while (!done) {
         const remaining = scheduler.budgetRemainingMs();
-        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs) : 0;
+        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.gpuBudgetRemainingMs(), gpuTickMs) : 0;
         if (ticks === 0) {
           if (ran || !inFrame) break;
           ticks = 1;
@@ -520,6 +532,7 @@ class LiveBackend implements Backend {
         const started = scheduler.now();
         done = this.instance.advanceTicks!(ticks);
         scheduler.slices.record(ticks, scheduler.now() - started);
+        scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
         ran = true;
       }
       return ran;
@@ -536,6 +549,7 @@ class LiveBackend implements Backend {
       let presented: boolean | void;
       try {
         presented = this.instance.render();
+        this.scheduler.chargeGpuMs(this.host.stats()?.gpuRenderMs ?? 0);
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
@@ -948,6 +962,7 @@ class Player implements ArtworkPlayer {
   private readonly host: EngineHost;
   private readonly scheduler: Scheduler;
   private readonly source: SceneSource;
+  private readonly creation = new AbortController();
   private readonly ref: ArtworkRef | undefined;
   private readonly icon: IconRef | undefined;
   readonly ready: Promise<void>;
@@ -1064,6 +1079,7 @@ class Player implements ArtworkPlayer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.creation.abort();
     this.viewportWait?.cancel();
     this.backend?.dispose();
     this.backend = undefined;
@@ -1212,7 +1228,7 @@ class Player implements ArtworkPlayer {
     switch (mode) {
       case 'live': {
         const create = (endTurn?: () => void) =>
-          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, endTurn);
+          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, this.creation.signal, endTurn);
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
@@ -1220,8 +1236,9 @@ class Player implements ArtworkPlayer {
         // with budget rather than joining the task that finished the still before it.
         return this.host.stillTurn().then(async (endTurn) => {
           try {
+            this.creation.signal.throwIfAborted();
             await this.scheduler.whenBudget();
-            if (this.disposed) throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+            this.creation.signal.throwIfAborted();
             return await create(endTurn);
           } catch (error) {
             endTurn();
