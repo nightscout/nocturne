@@ -283,7 +283,7 @@ internal sealed class ConnectorResetJob : IConnectorResetProgress
                              _connectors.Values.Any(connector => connector.State == ConnectorResetConnectorState.Failed);
                 _state = failed ? ConnectorResetJobState.Failed : ConnectorResetJobState.Completed;
                 if (failed)
-                    _errorMessage = "One or more connectors failed; review the connector details and retry the failed range.";
+                    _errorMessage = "connector_reset_failed";
             }
         }
         catch (OperationCanceledException)

@@ -26439,3 +26439,7 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr ""
+
+#: src/routes/(authenticated)/settings/admin/connector-cursors/+page.svelte
+msgid "One or more connectors failed; review the connector details and retry the failed range."
+msgstr "Один или несколько коннекторов завершились с ошибкой. Проверьте сведения о коннекторах и повторите импорт за период, завершившийся с ошибкой."

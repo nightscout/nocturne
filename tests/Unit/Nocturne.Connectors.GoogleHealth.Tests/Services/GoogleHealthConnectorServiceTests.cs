@@ -68,6 +68,33 @@ public class GoogleHealthConnectorServiceTests
             "weight", 0, 1, 10), Times.Once);
     }
 
+    [Fact]
+    public async Task First_live_import_uses_one_clock_snapshot_at_utc_midnight()
+    {
+        var now = new DateTimeOffset(2026, 9, 30, 23, 59, 59, TimeSpan.Zero);
+        var clock = new MidnightTimeProvider(now);
+        var fixture = new Fixture(request => request.RequestUri!.AbsolutePath == "/token"
+            ? Json($$"""{"access_token":"access","expires_in":3600,"scope":"{{GoogleHealthClient.MetricsScope}}"}""")
+            : Json("{\"dataPoints\":[]}"), clock);
+        var config = fixture.Configuration();
+        config.ImportFrom = now.UtcDateTime.Date.ToString("O");
+
+        var result = await fixture.Service.SyncDataAsync(new SyncRequest(), config, default);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, clock.Reads);
+        fixture.Writer.Verify(writer => writer.BeginReconciliationAsync(
+            It.IsAny<IReadOnlyCollection<string>>(),
+            new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero), now,
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private sealed class MidnightTimeProvider(DateTimeOffset initial) : TimeProvider
+    {
+        public int Reads { get; private set; }
+        public override DateTimeOffset GetUtcNow() => initial.AddSeconds(Reads++);
+    }
+
     private sealed class TestTimeProvider : TimeProvider
     {
         private long ticks;

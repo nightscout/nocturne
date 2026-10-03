@@ -150,12 +150,12 @@ public sealed class GoogleHealthConnectorService(
         return false;
     }
 
-    private async Task<DateTimeOffset> LiveFromAsync(CancellationToken ct)
+    private async Task<DateTimeOffset> LiveFromAsync(DateTimeOffset now, CancellationToken ct)
     {
         var watermark = await LoadWatermarkAsync(ct);
         var from = watermark is { } lastSyncedTo
             ? new DateTimeOffset(DateTime.SpecifyKind(lastSyncedTo, DateTimeKind.Utc)).AddMinutes(-5)
-            : new DateTimeOffset(DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc));
+            : new DateTimeOffset(DateTime.SpecifyKind(now.UtcDateTime.Date, DateTimeKind.Utc));
         // Minute-based heart-rate IDs must be recomputed from the entire overlapping minute.
         return new DateTimeOffset(from.Ticks - from.Ticks % TimeSpan.TicksPerMinute, TimeSpan.Zero);
     }
@@ -288,7 +288,7 @@ public sealed class GoogleHealthConnectorService(
                 throw new GoogleHealthException("permission_denied", stage: "scope_validation");
             var missingConsent = selected.Except(active, StringComparer.Ordinal).ToArray();
 
-            var now = DateTimeOffset.UtcNow;
+            var now = clock.GetUtcNow();
             var window = await ResolveWindowAsync(request, config, now, cancellationToken);
             await coordinator.ReportAsync(tenantId, GoogleHealthSyncPhase.Reading, completedDataTypes: 0, totalDataTypes: active.Length);
 
@@ -306,7 +306,7 @@ public sealed class GoogleHealthConnectorService(
                     : GoogleHealthErrorCode.Encode("partial_consent", missingConsent));
             }
 
-            var liveFrom = await LiveFromAsync(cancellationToken);
+            var liveFrom = await LiveFromAsync(now, cancellationToken);
             logger.LogInformation(
                 "Starting live Google Health sync for tenant {TenantId} from {From} to {To}. Active data types: {ActiveDataTypes}",
                 tenantId, liveFrom, now, string.Join(',', active));

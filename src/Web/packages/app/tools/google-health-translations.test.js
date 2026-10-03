@@ -21,6 +21,8 @@ const { po } = require("gettext-parser");
 const googleHealthReference = /google-health|GoogleHealthSourceRow/;
 const serverConnectorsReference = /ServerConnectorsCard/;
 const placeholderPattern = /(<\/?\d+\s*\/?>|\{[^}]+\})/g;
+const cursorResetFailureCopy =
+  "One or more connectors failed; review the connector details and retry the failed range.";
 const representativeCopy = [
   "Google Health",
   "Import recovery",
@@ -30,6 +32,7 @@ const representativeCopy = [
   "Historical import progress",
   "The requested history is complete.",
   "Each sync refreshes today and imports one older calendar month.",
+  cursorResetFailureCopy,
 ];
 const protectedProductNames = [
   "Google Health",
@@ -53,6 +56,7 @@ function isGoogleHealthEntry(entry) {
   const reference = String(entry.comments?.reference ?? "");
   return (
     googleHealthReference.test(reference) ||
+    entry.msgid === cursorResetFailureCopy ||
     (serverConnectorsReference.test(reference) &&
       /Google Health|Import steps, heart rate, weight, and sleep from Google Health/.test(
         entry.msgid
@@ -107,7 +111,11 @@ describe("Google Health production translations", () => {
     const plugin = wuchale({ configPath });
     await plugin.configResolved({ env: { DEV: false } });
     const fixture = representativeCopy
-      .map((copy) => `<span>${copy}</span>`)
+      .map((copy) =>
+        copy === cursorResetFailureCopy
+          ? `<span>{errorCode === "connector_reset_failed" ? ${JSON.stringify(copy)} : errorCode}</span>`
+          : `<span>${copy}</span>`
+      )
       .join("");
     const { code } = await plugin.transform.handler(
       fixture,
@@ -121,6 +129,7 @@ describe("Google Health production translations", () => {
       Number(match[1])
     );
     expect(messageIds).toHaveLength(representativeCopy.length);
+    expect(code).toMatch(/errorCode\s*===\s*["']connector_reset_failed["']/);
   });
 
   afterAll(async () => {
