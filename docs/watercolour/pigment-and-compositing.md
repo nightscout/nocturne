@@ -238,7 +238,7 @@ as dark clouds.
 
 **Resolution.** A finer grid is not the fix for a blocky outline. The fluid
 moves in cells per tick, so a 512 grid paints a different picture from a 256
-one (on `header-motif` the moon came out smaller and the ridges reshaped).
+one (on `header-motif` the strokes came out thinner and their dry ends finer).
 Every reveal runs its detail tier's own grid whatever the canvas size, so a tier
 is one painting at every size, and the outline is smoothed in the render by the
 mask above. At 256 over a 900 px hero a cell is 3.5 px; the mask rounds its

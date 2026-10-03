@@ -33,14 +33,14 @@
     return mountPlayer(
       frame,
       canvas,
-      'header-motif',
       {
+        artwork: 'header-motif',
         ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
         fit,
         surface,
         releaseAfterFinish: true,
+        onReady: onready,
       },
-      onready,
     );
   });
 </script>

@@ -301,6 +301,7 @@ impl WatercolourEngine {
         }
         self.shared.live.set(self.shared.live.get() + 1);
         let mut instance = SceneInstance {
+            blend_ticks: false,
             playback,
             surface: None,
             ctx: self.ctx.clone(),
@@ -511,6 +512,7 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
+    blend_ticks: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
     ctx: GpuContext,
@@ -560,8 +562,10 @@ impl SceneInstance {
         f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
     ) -> Result<bool, JsError> {
         let before = self.playback.current_tick();
+        let before_blend = self.playback.tick_blend();
         self.timed_step(f)?;
-        Ok(self.playback.current_tick() != before)
+        Ok(self.playback.current_tick() != before
+            || (self.blend_ticks && self.playback.tick_blend() != before_blend))
     }
 
     async fn frames_async(
@@ -634,6 +638,20 @@ impl SceneInstance {
         }
     }
 
+    #[wasm_bindgen(js_name = setCrop)]
+    pub fn set_crop(&mut self, x: f32, y: f32, width: f32, height: f32) -> Result<(), JsError> {
+        self.playback
+            .simulator()
+            .set_crop([x, y, width, height])
+            .map_err(engine_err)
+    }
+
+    /// Playing frames blend the last two ticks from now on; see `PlayerOptions.blendTicks`.
+    #[wasm_bindgen(js_name = enableTickBlending)]
+    pub fn enable_tick_blending(&mut self) {
+        self.blend_ticks = true;
+    }
+
     /// Pixel size the swapchain is configured at; `null` until `attach`.
     #[wasm_bindgen(js_name = surfaceSize)]
     pub fn surface_size(&self) -> Option<Vec<u32>> {
@@ -653,6 +671,21 @@ impl SceneInstance {
     #[wasm_bindgen(js_name = totalTicks)]
     pub fn total_ticks(&self) -> u32 {
         self.playback.total_ticks()
+    }
+
+    #[wasm_bindgen(js_name = ticksDue)]
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        self.playback.ticks_due(elapsed_seconds)
+    }
+
+    #[wasm_bindgen(js_name = ticksDueAtProgress)]
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.playback.ticks_due_at_progress(progress)
+    }
+
+    #[wasm_bindgen(js_name = currentTick)]
+    pub fn current_tick(&self) -> u32 {
+        self.playback.current_tick()
     }
 
     pub fn play(&mut self) {
@@ -720,6 +753,22 @@ impl SceneInstance {
         self.timed_step(|p| p.seek_progress(progress))
     }
 
+    #[wasm_bindgen(js_name = tickForProgress)]
+    pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.playback.tick_for_progress(progress)
+    }
+
+    /// Steps replayed; see `Playback::seek_towards_tick`.
+    #[wasm_bindgen(js_name = seekTowardsTick)]
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, JsError> {
+        let mut replayed = 0;
+        self.timed_step(|p| {
+            replayed = p.seek_towards_tick(target, ticks)?;
+            Ok(())
+        })?;
+        Ok(replayed)
+    }
+
     #[wasm_bindgen(js_name = finishImmediately)]
     pub fn finish_immediately(&mut self) -> Result<(), JsError> {
         self.timed_step(|p| p.finish_immediately())
@@ -748,11 +797,16 @@ impl SceneInstance {
             .as_ref()
             .ok_or_else(|| js_err("NoSurface", "attach a canvas before rendering"))?;
         let t0 = now_ms();
-        let presented = self
-            .playback
-            .simulator()
-            .present(surface)
-            .map_err(engine_err)?;
+        let tick = self.playback.current_tick();
+        let blend = self.playback.tick_blend();
+        let presented = if self.blend_ticks && self.playback.state() == PlaybackState::Playing {
+            self.playback.simulator().present_at(surface, tick, blend)
+        } else {
+            // A paused or finished scene can hold its canvas indefinitely; its tick images are released.
+            self.playback.simulator().clear_interpolation();
+            self.playback.simulator().present(surface)
+        }
+        .map_err(engine_err)?;
         self.shared.last_render_ms.set(now_ms() - t0);
         self.sync_gpu_timings();
         Ok(presented)

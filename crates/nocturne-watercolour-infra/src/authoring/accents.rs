@@ -3,7 +3,7 @@
 
 use nocturne_watercolour_core::domain::{Palette, Paper, PigmentRole, Point, Scene, SizeHint};
 
-use super::geometry::{Crescent, Frame, Hills};
+use super::geometry::Frame;
 use super::{Painting, SQUARE, Style, brush, role, tapered, water};
 
 pub(super) const TAB: SizeHint = SizeHint {
@@ -305,109 +305,112 @@ pub(super) fn confirmation_background(style: &Style, palette: &Palette) -> Scene
     )
 }
 
-/// A low horizon of distant hills with a small moon; very restrained.
+/// One `header_motif` stroke: its ends in frame units, belly radius and paint.
+struct HeaderStroke {
+    x: (f32, f32),
+    y: (f32, f32),
+    belly: f32,
+    pigment: usize,
+    concentration: f32,
+    water: f32,
+}
+
+/// Three loose horizontal brush strokes pulled left to right, of different
+/// weights and slightly offset. Each lands light, presses to its belly and
+/// thins as the brush runs dry, ending (from Medium up) in split bristle
+/// streaks. They are laid wet one after another, so a later stroke bleeds into
+/// an earlier one where they cross.
 pub(super) fn header_motif(style: &Style, palette: &Palette) -> Scene {
     let frame = Frame::new(HEADER_5_1);
     let base = role(palette, PigmentRole::BaseWash);
     let shadow = role(palette, PigmentRole::Shadow);
-    let glow = role(palette, PigmentRole::Glow);
-    let base_y = 0.97;
     let mut stream = style.stream(3);
-    let far = Hills {
-        base_y,
-        bumps: vec![(1.2, 0.7, 0.35), (3.0, 0.9, 0.42), (4.4, 0.6, 0.3)],
-        wobble: 0.03,
-        seed: nocturne_watercolour_core::domain::Seed(stream.next_u64()),
-    };
-    let near = Hills {
-        base_y,
-        bumps: vec![(0.5, 0.5, 0.18), (2.2, 0.6, 0.22), (3.9, 0.7, 0.2)],
-        wobble: 0.02,
-        seed: nocturne_watercolour_core::domain::Seed(stream.next_u64()),
-    };
     let mut p = Painting::new(style.ticks(420));
-    let fill = |pigment: usize, conc: f32, rows: usize| {
-        let radius = frame.hatch_radius(0.45, base_y, rows);
-        // The stencil owns the silhouette; the body only has to deliver pigment
-        // inside it. Pre-wet the footprint, then hatch the pigment in so the
-        // reveal has a path to pace. The turns sit outside the mask.
-        (
-            water(
-                frame.line(0.0, 0.75, 5.0, 0.75),
-                0.4,
-                style.water(0.75),
-                0.15,
-            ),
-            brush(
-                frame.hatch(0.0, 5.0, 0.45, base_y, rows),
-                radius,
-                pigment,
-                style.conc(conc * 0.6),
-                style.water(0.42),
-                0.75,
-            ),
-        )
-    };
-    p.mask(
-        0.0,
-        frame.ridge(0.0, 5.0, base_y, 60, |x| far.height(x)),
-        0.006,
-    );
-    let (far_wet, far_hatch) = fill(base, 0.35, if style.fine() { 8 } else { 5 });
-    p.at(0.0, far_wet);
-    p.at(0.0, far_hatch);
-    if style.fine() {
-        p.glaze(0.4, 0.1);
-        p.mask(
-            0.4,
-            frame.ridge(0.0, 5.0, base_y, 60, |x| near.height(x)),
-            0.006,
-        );
-        let (near_wet, near_hatch) = fill(shadow, 0.4, 8);
-        p.at(0.4, near_wet);
-        p.at(0.4, near_hatch);
-    }
-    let moon = 0.7;
-    let (mx, my, mr) = (0.9, 0.36, 0.14);
-    p.glaze(moon, 0.1);
-    if style.full() {
-        let crescent = Crescent::at(mx, my, mr, 0.3);
-        p.mask(moon, frame.map(&crescent.mask_outline(0.02, 64)), 0.004);
-        let spine = frame.map(&crescent.spine(7));
-        let mid = spine.len() / 2;
-        let body = |path: Vec<Point>, radius: (f32, f32)| {
-            let (conc, wet) = style.glow(1.3, 0.7);
-            tapered(path, radius, glow, conc, wet, 0.3)
-        };
-        p.at(moon, body(spine[..=mid].to_vec(), (0.03, 0.07)));
-        p.at(moon, body(spine[mid..].to_vec(), (0.07, 0.03)));
-        if !style.dark() {
-            let concave = frame.map(&crescent.concave_edge(0.4, 7));
-            p.at(
-                moon + 0.04,
-                brush(
-                    concave[2..=4].to_vec(),
-                    0.02,
-                    shadow,
-                    style.conc(0.4),
-                    style.water(0.2),
-                    0.9,
-                ),
-            );
-        }
-    } else {
-        p.mask(moon, frame.circle(mx, my, mr, 24), 0.004);
+    // The thin stroke leads: drawn first, the wide one would put half the
+    // finished area down in the reveal's first quarter.
+    let strokes = [
+        HeaderStroke {
+            x: (0.5, 3.4),
+            y: (0.2, 0.3),
+            belly: 0.035,
+            pigment: base,
+            concentration: 0.5,
+            water: 0.5,
+        },
+        HeaderStroke {
+            x: (0.15, 4.2),
+            y: (0.38, 0.54),
+            belly: 0.1,
+            pigment: base,
+            concentration: 0.55,
+            water: 0.9,
+        },
+        HeaderStroke {
+            x: (0.85, 4.5),
+            y: (0.74, 0.5),
+            belly: 0.06,
+            pigment: shadow,
+            concentration: 0.6,
+            water: 0.8,
+        },
+    ];
+    for HeaderStroke {
+        x: (x0, x1),
+        y: (y0, y1),
+        belly,
+        pigment,
+        concentration: conc,
+        water: wet,
+    } in strokes
+    {
+        let at = |x: f32| y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+        let pt = |x: f32, dy: f32| frame.pt(x, at(x) + dy);
+        let landing = x0 + (x1 - x0) * 0.12;
+        let mut body: Vec<Point> = vec![pt(landing, 0.0)];
+        body.extend((1..7).map(|i| {
+            let x = landing + (x1 - landing) * i as f32 / 6.0;
+            pt(x, stream.next_signed() * 0.02)
+        }));
         p.at(
-            moon,
-            brush(
-                vec![frame.pt(mx, my)],
-                0.16,
-                glow,
-                style.glow(1.4, 0.6).0,
-                style.glow(1.4, 0.6).1,
-                0.2,
+            0.0,
+            tapered(
+                vec![pt(x0, 0.0), pt(landing, 0.0)],
+                (belly * 0.45, belly),
+                pigment,
+                style.conc(conc),
+                style.water(wet),
+                0.5,
             ),
         );
+        p.at(
+            0.0,
+            tapered(
+                body,
+                (belly, belly * 0.5),
+                pigment,
+                style.conc(conc),
+                style.water(wet),
+                0.5,
+            ),
+        );
+        if style.fine() {
+            for k in [-1.0f32, 0.0, 1.0] {
+                let off = k * belly * 0.35;
+                let start = x1 - 0.35 + stream.next_signed().abs() * 0.15;
+                let len = 0.3 + stream.next_signed().abs() * 0.3;
+                p.at(
+                    0.0,
+                    tapered(
+                        vec![pt(start, off), pt(start + len, off + k * 0.01)],
+                        (belly * 0.18, belly * 0.06),
+                        pigment,
+                        style.conc(conc * 1.2),
+                        style.water(0.08),
+                        0.15,
+                    ),
+                );
+            }
+        }
     }
     p.settle(0.9, 3.0);
     style.scene(

@@ -34,14 +34,14 @@
     return mountPlayer(
       frame,
       canvas,
-      'selection-edge',
       {
+        artwork: 'selection-edge',
         ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
         fit: fit ?? 'fill',
         surface,
         releaseAfterFinish: true,
+        onReady: onready,
       },
-      onready,
     );
   });
 </script>

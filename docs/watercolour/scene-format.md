@@ -66,12 +66,17 @@ coordinates (measured in the isotropic metric - see Architecture).
 | Variant | Fields |
 |---|---|
 | `brush` | `path: [[x, y]]`, `radius: [start, end]`, `span: [start, end]`, `pigment: usize` (index into palette), `concentration`, `water`, `softness` |
+| `dab` | `center: [x, y]`, `radius`, `pigment`, `concentration`, `water`, `softness` |
 | `water` | `path`, `radius`, `span`, `water`, `softness` |
 | `lift` | `path`, `radius`, `span`, `strength`, `softness` |
 | `dry` | `rate` |
 | `dry_all` | - |
 | `set_mask` | `mask`: `{ polygon: { points, feather } }` or `{ path: { points, radius, feather } }` |
 | `clear_mask` | - |
+
+`dab` deposits one point brush with a uniform radius. It retains the brush's
+seeded radius jitter, paper-grain edge and outward flow. The CPU reference
+rasterises that brush; the GPU evaluates its coverage without a stamp upload.
 
 ### `span` on brush, water and lift strokes
 
