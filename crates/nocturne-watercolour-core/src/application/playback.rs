@@ -478,7 +478,12 @@ impl<S: Simulator> Playback<S> {
         Ok(())
     }
 
-    /// Without checkpoints, dabs may share a batch; control operations remain boundaries.
+    /// Ticks from the current one that can run as one `Simulator::step`: up
+    /// to `target`, the next event, or the next tick a periodic checkpoint
+    /// could be taken at, whichever comes first. A backend encodes a step as
+    /// one batch, where one tick at a time is a submission each. With
+    /// `batch_dabs`, dabs do not end the run: `step_with_dabs` charges them
+    /// inside it, and only other operations are boundaries.
     fn run_length(&self, target: u32, batch_dabs: bool) -> u32 {
         let next_event = self
             .scene
