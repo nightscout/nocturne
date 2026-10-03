@@ -219,6 +219,24 @@ impl Scene {
         }
     }
 
+    /// Validates operations to be appended to this scene's timeline: each
+    /// against the palette and the ranges, as [`Self::validate`] checks its
+    /// events, numbered from 0 in the order given.
+    pub fn validate_operations<'a>(
+        &self,
+        ops: impl IntoIterator<Item = &'a Operation>,
+    ) -> Result<(), Vec<ValidationError>> {
+        let mut errors = Vec::new();
+        for (i, op) in ops.into_iter().enumerate() {
+            self.validate_op(i, op, &mut errors);
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
     fn validate_paper(&self, errors: &mut Vec<ValidationError>) {
         let p = &self.paper;
         check_range(

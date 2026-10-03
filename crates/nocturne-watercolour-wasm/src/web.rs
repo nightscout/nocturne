@@ -14,7 +14,7 @@ use nocturne_watercolour_core::application::{
     EngineError, Exporter, Playback, PlaybackState, ProgressCurve,
 };
 use nocturne_watercolour_core::domain::{Image, Scene, Seed};
-use nocturne_watercolour_infra::document::parse_scene_json;
+use nocturne_watercolour_infra::document::{parse_appended_json, parse_scene_json};
 use nocturne_watercolour_infra::export::PngExporter;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine, PresentSurface};
 use wasm_bindgen::prelude::*;
@@ -772,6 +772,29 @@ impl SceneInstance {
     #[wasm_bindgen(js_name = finishImmediately)]
     pub fn finish_immediately(&mut self) -> Result<(), JsError> {
         self.timed_step(|p| p.finish_immediately())
+    }
+
+    /// Finishes the reveal and carries on as a live session that runs
+    /// `ticksPerSecond` and stops `idleTicks` after its last appended
+    /// operation; see `Playback::go_live`. Releases the checkpoints.
+    #[wasm_bindgen(js_name = goLive)]
+    pub fn go_live(&mut self, ticks_per_second: f32, idle_ticks: u32) -> Result<(), JsError> {
+        self.timed_step(|p| p.go_live(ticks_per_second, idle_ticks))
+    }
+
+    #[wasm_bindgen(js_name = isLive)]
+    pub fn is_live(&self) -> bool {
+        self.playback.is_live()
+    }
+
+    /// Appends a JSON array of `{ after_ticks, op }` to a live session from
+    /// its next tick, and plays; nothing is appended if any operation is invalid.
+    #[wasm_bindgen(js_name = appendOperations)]
+    pub fn append_operations(&mut self, json: &str) -> Result<(), JsError> {
+        let events = parse_appended_json(json).map_err(|e| js_err("InvalidScene", e))?;
+        self.playback
+            .append(events)
+            .map_err(|e| js_err("InvalidScene", e))
     }
 
     pub fn progress(&self) -> f32 {
