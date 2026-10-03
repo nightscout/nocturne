@@ -116,4 +116,53 @@ describe("GlucoseTileWash", () => {
     await expect.element(bloom()).not.toBeInTheDocument();
     await expect.element(greyWash()).toBeInTheDocument();
   });
+
+  it("does not replay a bloom cut short by the Still preference when animation comes back", async () => {
+    const view = await settledTile("high");
+    await view.rerender({ mills: newReading(), variant: "low" });
+    paintBloom(0.3);
+
+    illustrations.current = "still";
+    await expect.element(bloom()).not.toBeInTheDocument();
+    illustrations.current = "animated";
+
+    await expect.element(greyWash()).toBeInTheDocument();
+    await expect.element(bloom()).not.toBeInTheDocument();
+    await expect.element(priorFill()).not.toBeInTheDocument();
+  });
+
+  it("starts from the range fill the Still preference showed when animation comes back", async () => {
+    illustrations.current = "still";
+    const view = render(GlucoseTileWashHarness, { mills: undefined, variant: "neutral", isLoading: true });
+    await view.rerender({ mills: newReading(), variant: "high", isLoading: false });
+    await view.rerender({ mills: newReading(), variant: "low" });
+
+    illustrations.current = "animated";
+
+    await expect.element(greyWash()).toBeInTheDocument();
+    await expect.element(bloom()).not.toBeInTheDocument();
+  });
+
+  it("keeps the grey wash on reconnecting to a reading whose bloom the disconnect cut short", async () => {
+    const view = await settledTile("high");
+    await view.rerender({ mills: newReading(), variant: "low" });
+    paintBloom(0.3);
+
+    await view.rerender({ isDisconnected: true });
+    await expect.element(bloom()).not.toBeInTheDocument();
+    await view.rerender({ isDisconnected: false });
+
+    await expect.element(greyWash()).toBeInTheDocument();
+    await expect.element(bloom()).not.toBeInTheDocument();
+  });
+
+  it("blooms a reading in another range over the fill a disconnected tile kept", async () => {
+    const view = await settledTile("high");
+    await view.rerender({ isDisconnected: true });
+
+    await view.rerender({ mills: newReading(), variant: "low", isDisconnected: false });
+
+    await expect.element(bloom()).toBeInTheDocument();
+    await expect.element(priorFill()).toHaveClass("bg-glucose-high");
+  });
 });
