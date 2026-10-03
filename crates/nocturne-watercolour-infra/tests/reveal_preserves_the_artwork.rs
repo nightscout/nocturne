@@ -535,7 +535,7 @@ const MIN_WET_SHARE: f32 = 0.70;
 /// Artworks whose sheet is dry well before the end, and the tick share each
 /// one reaches today.
 ///
-/// These four are the wide landscape scenes. They lay many thin marks rather
+/// These three are the wide landscape scenes. They lay many thin marks rather
 /// than one deep body, and a thin film is finished off by the constant sinks —
 /// base evaporation and capillary absorption — long before the proportional
 /// settle would have taken it down. `Operation::Settle` equalises the *rate*
@@ -550,7 +550,6 @@ const KNOWN_EARLY_DRY: &[(&str, f32)] = &[
     ("moonlit-shoreline", 0.57),
     ("distant-mountains", 0.68),
     ("connected-shores", 0.62),
-    ("header-motif", 0.60),
 ];
 
 /// The share of its ticks at which the sheet last held water.

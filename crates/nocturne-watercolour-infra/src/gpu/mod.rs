@@ -5,11 +5,14 @@
 
 mod context;
 mod engine;
+mod interpolation;
 mod layout;
 mod surface;
 mod timer;
 
 pub use context::GpuContext;
-pub use engine::{BLUR_MAX_RADIUS, CHECKPOINT_BUDGET_BYTES, CommandCounts, GpuEngine, GpuTimings};
+pub use engine::{
+    BLUR_MAX_RADIUS, CHECKPOINT_BUDGET_BYTES, CommandCounts, GpuEngine, GpuTimings, STROKE_DAB,
+};
 pub use layout::StateLayout;
 pub use surface::PresentSurface;

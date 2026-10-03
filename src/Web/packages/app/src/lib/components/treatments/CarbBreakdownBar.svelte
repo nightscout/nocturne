@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { washInterior } from '$lib/watercolour-wash';
   import type { TreatmentFood } from "$lib/api";
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
@@ -18,7 +19,6 @@
 
   let { totalCarbs, foods, seedKey, class: className }: Props = $props();
 
-  // Color palette for food segments
   const colorPalette = [
     "oklch(0.765 0.177 163.223)", // emerald-500
     "oklch(0.623 0.214 259.815)", // blue-500
@@ -32,24 +32,16 @@
 
   const unattributedColor = "oklch(0.556 0.046 257.417)"; // muted gray
 
-  function getColorForIndex(index: number): string {
-    return colorPalette[index % colorPalette.length];
-  }
-
-  // Calculate attributed carbs first
   const attributedCarbs = $derived(
     foods.reduce((sum, f) => sum + (f.carbs ?? 0), 0)
   );
 
-  // Calculate unattributed carbs
   const unattributedCarbs = $derived(Math.max(0, totalCarbs - attributedCarbs));
 
-  // Generate a stable key for the chart based on food IDs to force re-render
   const chartKey = $derived(
     foods.map((f) => f.id ?? "").join("-") + `-${unattributedCarbs > 0}`
   );
 
-  // Build series config for each food + unattributed
   const seriesConfig = $derived.by(() => {
     if (totalCarbs <= 0) return [];
 
@@ -63,12 +55,11 @@
       const key = food.id ?? `food-${index}`;
       config.push({
         key,
-        color: getColorForIndex(index),
+        color: colorPalette[index % colorPalette.length],
         label: food.foodName ?? food.note ?? "Other",
       });
     });
 
-    // Add unattributed segment
     if (unattributedCarbs > 0) {
       config.push({
         key: "unattributed",
@@ -80,7 +71,6 @@
     return config;
   });
 
-  // Build data object with carb values for each food
   const chartData = $derived.by(() => {
     if (totalCarbs <= 0) return [];
 
@@ -91,7 +81,6 @@
       data[key] = food.carbs ?? 0;
     });
 
-    // Add unattributed
     if (unattributedCarbs > 0) {
       data["unattributed"] = unattributedCarbs;
     }
@@ -99,11 +88,8 @@
     return [data];
   });
 
-  // Always show chart if there are carbs
   const shouldShowChart = $derived(totalCarbs > 0);
 
-  // Calculate width as percentage of max carbs (100g = 100%)
-  // with minimum of 20% so small amounts are still visible
   const MAX_CARBS = 100;
   const MIN_WIDTH_PERCENT = 20;
   const chartWidthPercent = $derived(
@@ -133,19 +119,30 @@
       const next = right > left
         ? { left: left - host.left, top: top - host.top, width: right - left, height: bottom - top }
         : undefined;
-      if (JSON.stringify(next) !== JSON.stringify(untrack(() => paintBox))) paintBox = next;
+      const previous = untrack(() => paintBox);
+      if (next?.left !== previous?.left || next?.top !== previous?.top ||
+          next?.width !== previous?.width || next?.height !== previous?.height) paintBox = next;
     };
-    measure();
-    const mutations = new MutationObserver(measure);
+    let frame: number | undefined;
+    const scheduleMeasure = () => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+    };
+    scheduleMeasure();
+    const mutations = new MutationObserver(scheduleMeasure);
     mutations.observe(el, {
       subtree: true,
       childList: true,
       attributes: true,
       attributeFilter: ["x", "y", "width", "height", "fill"],
     });
-    const resizes = new ResizeObserver(measure);
+    const resizes = new ResizeObserver(scheduleMeasure);
     resizes.observe(el);
     return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
       mutations.disconnect();
       resizes.disconnect();
     };
@@ -186,10 +183,7 @@
         </div>
       {/key}
       {#if paintBox}
-        <!-- A grey wash multiplied over the attributed bars, so the paint takes each bar's own hue.
-             Multiply, where the glucose tile soft-lights: on a bar this light and this small a
-             soft-light wash vanishes, and there is no text over it to lose contrast. Cropped to the
-             wash's interior so no dried edge floats inside the bar. -->
+        <!-- Soft-light is too faint over these small, light bars. -->
         <div
           aria-hidden="true"
           data-carb-wash
@@ -199,7 +193,7 @@
           style:--paint-w="{paintBox.width}px"
           style:--paint-h="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-multiply">
+          <div class="absolute inset-0 wash-grain mix-blend-multiply">
             <Artwork
               artwork="wash"
               palette="slate"
@@ -208,6 +202,7 @@
               autoplay="never"
               releaseAfterFinish
               fit="fill"
+              crop={washInterior}
               class="size-full"
             />
           </div>
@@ -218,7 +213,7 @@
 </div>
 
 <style>
-  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  /* Grey first, for the reason given at GlucoseTileWash's .wash-grain. */
   .wash-grain {
     filter: grayscale(1) brightness(2.6) contrast(1.15);
   }

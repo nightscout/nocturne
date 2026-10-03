@@ -18,8 +18,8 @@ pub mod timeline;
 pub use grid::SimulationGrid;
 pub use image::Image;
 pub use ops::{
-    BrushStroke, LiftStroke, MAX_SETTLE_SHARE, Mask, Operation, Point, RadiusProfile, StrokeSpan,
-    WaterStroke,
+    BrushStroke, Dab, LiftStroke, MAX_SETTLE_SHARE, Mask, Operation, Point, RadiusProfile,
+    StrokeSpan, WaterStroke,
 };
 pub use optics::CompositeMode;
 pub use palette::{Palette, PaletteEntry, PigmentRole};

@@ -3,18 +3,22 @@
 //! finished one is collected on a later call. Needs `TIMESTAMP_QUERY`; see
 //! `GpuContext::has_timestamps`.
 
+use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 const IDLE: u8 = 0;
 const PENDING: u8 = 1;
 const MAPPED: u8 = 2;
+/// Operations per sample; each sample costs a query resolve and a map callback.
+const SAMPLE_INTERVAL: u8 = 16;
 
 pub(super) struct GpuTimer {
     set: wgpu::QuerySet,
     resolve: wgpu::Buffer,
     readback: wgpu::Buffer,
     state: Arc<AtomicU8>,
+    sample_wait: Cell<u8>,
 }
 
 impl GpuTimer {
@@ -39,12 +43,25 @@ impl GpuTimer {
                 mapped_at_creation: false,
             }),
             state: Arc::new(AtomicU8::new(IDLE)),
+            sample_wait: Cell::new(0),
         }
     }
 
-    /// Whether a new sample may start: the last one has been collected.
-    pub(super) fn idle(&self) -> bool {
-        self.state.load(Ordering::Acquire) == IDLE
+    /// Counts one operation and says whether to sample it: the first once
+    /// the last sample has been collected, then one in every
+    /// [`SAMPLE_INTERVAL`]. An operation while a sample is in flight is not
+    /// counted.
+    pub(super) fn claim_sample(&self) -> bool {
+        if self.state.load(Ordering::Acquire) != IDLE {
+            return false;
+        }
+        let remaining = self.sample_wait.get();
+        self.sample_wait.set(if remaining == 0 {
+            SAMPLE_INTERVAL - 1
+        } else {
+            remaining - 1
+        });
+        remaining == 0
     }
 
     pub(super) fn compute_writes(

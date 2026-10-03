@@ -21,6 +21,8 @@ export interface SchedulerTarget {
   element?: Element | null;
   tick(elapsedSeconds: number): void;
   render(): void;
+  /** GPU time the coming tick and render are expected to take; chargeGpuMs accounts for work exceeding it. */
+  gpuCostMs?(elapsedSeconds: number): number;
   onVisibilityChange?(visible: boolean): void;
 }
 
@@ -38,7 +40,7 @@ export interface FrameStats {
   lastMs: number;
 }
 
-/** Longest step handed to an instance; a stalled tab resumes gently instead of jumping. */
+/** Caps a stalled display interval; budget-skipped intervals accumulate per player. */
 export const MAX_FRAME_SECONDS = 0.25;
 const HISTOGRAM_SIZE = 120;
 const INTERVAL_SAMPLES = 16;
@@ -84,22 +86,15 @@ export class SlicePacer {
    */
   private msSum = 0;
   private tickSum = 0;
-  private frameTicks = 0;
-
-  beginFrame(): void {
-    this.frameTicks = 0;
-  }
 
   /** Ticks for the next call: 0 once the budget left fits none, or this frame's GPU share is queued. */
   next(remainingMs: number, budgetMs: number, gpuTickMs?: number | null): number {
     const ticks = sliceTicks(Math.max(0, remainingMs), this.tickSum > 0 ? this.msSum / this.tickSum : undefined);
     if (!gpuTickMs || gpuTickMs <= 0) return ticks;
-    const gpuLeft = Math.floor(budgetMs / gpuTickMs) - this.frameTicks;
-    return Math.min(ticks, this.frameTicks === 0 ? Math.max(1, gpuLeft) : Math.max(0, gpuLeft));
+    return Math.min(ticks, Math.max(0, Math.floor(budgetMs / gpuTickMs)));
   }
 
   record(ticks: number, ms: number): void {
-    this.frameTicks += ticks;
     this.msSum = this.msSum * 0.9 + ms;
     this.tickSum = this.tickSum * 0.9 + ticks;
   }
@@ -110,6 +105,10 @@ interface Entry {
   active: boolean;
   visible: boolean;
   observer?: IntersectionObserver;
+  lastFrameAt?: number;
+  elapsedSeconds: number;
+  tickMs: number;
+  renderMs: number;
 }
 
 function browserEnv(): SchedulerEnv {
@@ -130,6 +129,8 @@ export class Scheduler {
   /** `setActive(true)` from inside a tick must not queue a second loop; the frame reschedules itself. */
   private inFrame = false;
   private lastTime: number | undefined;
+  private nextEntry: Entry | undefined;
+  private gpuSpentMs = 0;
   private frameStartedAt: number | undefined;
   private hidden = false;
   private readonly durations = new Float64Array(HISTOGRAM_SIZE);
@@ -146,6 +147,10 @@ export class Scheduler {
       this.stopLoop();
     } else {
       this.lastTime = undefined;
+      for (const entry of this.entries) {
+        entry.lastFrameAt = undefined;
+        entry.elapsedSeconds = 0;
+      }
       this.ensureLoop();
     }
   };
@@ -187,6 +192,14 @@ export class Scheduler {
     return this.frameBudgetMs - (this.env.now() - this.frameStartedAt);
   }
 
+  gpuBudgetRemainingMs(): number {
+    return this.frameBudgetMs - this.gpuSpentMs;
+  }
+
+  chargeGpuMs(ms: number): void {
+    this.gpuSpentMs += ms;
+  }
+
   /** Resolves now if the current frame has budget left, else once the next frame has run. */
   whenBudget(): Promise<void> {
     if (this.budgetRemainingMs() > 0) return Promise.resolve();
@@ -197,7 +210,7 @@ export class Scheduler {
   }
 
   register(target: SchedulerTarget): SchedulerHandle {
-    const entry: Entry = { target, active: false, visible: true };
+    const entry: Entry = { target, active: false, visible: true, elapsedSeconds: 0, tickMs: 0, renderMs: 0 };
     if (target.element && this.env.IntersectionObserver) {
       entry.observer = new this.env.IntersectionObserver((records) => {
         const last = records[records.length - 1];
@@ -205,6 +218,8 @@ export class Scheduler {
         const visible = last.isIntersecting;
         if (visible === entry.visible) return;
         entry.visible = visible;
+        entry.lastFrameAt = undefined;
+        entry.elapsedSeconds = 0;
         target.onVisibilityChange?.(visible);
         if (visible) this.ensureLoop();
       });
@@ -220,6 +235,10 @@ export class Scheduler {
         return entry.visible;
       },
       setActive(active: boolean) {
+        if (entry.active !== active) {
+          entry.lastFrameAt = undefined;
+          entry.elapsedSeconds = 0;
+        }
         entry.active = active;
         if (active) scheduler.ensureLoop();
       },
@@ -273,19 +292,45 @@ export class Scheduler {
 
   private readonly frame = (time: number) => {
     this.frameHandle = undefined;
-    const elapsed = this.lastTime === undefined ? 0 : Math.min(MAX_FRAME_SECONDS, Math.max(0, (time - this.lastTime) / 1000));
     if (this.lastTime !== undefined && time > this.lastTime) this.sampleInterval(time - this.lastTime);
     this.lastTime = time;
     const started = this.env.now();
     this.frameStartedAt = started;
-    this.slices.beginFrame();
+    this.gpuSpentMs = 0;
     for (const resolve of this.budgetWaiters.splice(0)) resolve();
     this.inFrame = true;
     try {
-      for (const entry of Array.from(this.entries)) {
+      const entries = Array.from(this.entries).filter(entry => entry.active && entry.visible);
+      const first = Math.max(0, entries.indexOf(this.nextEntry!));
+      this.nextEntry = entries[first + 1] ?? entries[0];
+      for (const entry of entries) {
         if (!entry.active || !entry.visible) continue;
+        if (entry.lastFrameAt !== undefined) {
+          entry.elapsedSeconds += Math.min(MAX_FRAME_SECONDS, Math.max(0, (time - entry.lastFrameAt) / 1000));
+        }
+        entry.lastFrameAt = time;
+      }
+      let admitted = 0;
+      for (let offset = 0; offset < entries.length; offset++) {
+        const entry = entries[(first + offset) % entries.length]!;
+        if (!entry.active || !entry.visible) continue;
+        if (!this.entries.has(entry)) continue;
+        const gpuMs = entry.target.gpuCostMs?.(entry.elapsedSeconds) ?? 0;
+        // One indivisible call may overrun; rotating first admission prevents starvation.
+        if (admitted > 0 && (this.budgetRemainingMs() <= 0 || entry.tickMs + entry.renderMs > this.budgetRemainingMs() || gpuMs > this.gpuBudgetRemainingMs())) continue;
+        const elapsed = entry.elapsedSeconds;
+        entry.elapsedSeconds = 0;
+        const gpuBefore = this.gpuSpentMs;
+        const tickStarted = this.env.now();
         entry.target.tick(elapsed);
-        entry.target.render();
+        entry.tickMs = Math.max(entry.tickMs * 0.9, this.env.now() - tickStarted);
+        if (this.entries.has(entry)) {
+          const renderStarted = this.env.now();
+          entry.target.render();
+          entry.renderMs = Math.max(entry.renderMs * 0.9, this.env.now() - renderStarted);
+        }
+        this.gpuSpentMs = Math.max(this.gpuSpentMs, gpuBefore + gpuMs);
+        admitted++;
       }
     } finally {
       this.inFrame = false;

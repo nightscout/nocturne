@@ -1,8 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, parseBakedManifest, sharedStill, sharedStrip, stripFramePosition } from './baked';
+import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip, stripFramePosition } from './baked';
 import { WatercolourError } from './errors';
 
 const valid = { version: 1, frames: 12, width: 256, height: 256, durationMs: 600, layout: 'vertical' };
+
+describe('cropped fallback frames', () => {
+  it('uses the same source window in both neighbouring strip frames', () => {
+    const draw_image = vi.fn();
+    const context = { clearRect() {}, drawImage: draw_image } as unknown as CanvasRenderingContext2D;
+    const bitmap = { width: 256, height: 512 } as ImageBitmap;
+    const manifest = parseBakedManifest({ ...valid, frames: 2 });
+    drawStripFrame(context, { bitmap, manifest }, 0.5, 80, 30, { x: 0.25, y: 0.5, width: 0.5, height: 0.25 });
+    expect(draw_image.mock.calls).toEqual([
+      [bitmap, 64, 128, 128, 64, 0, 0, 80, 30],
+      [bitmap, 64, 384, 128, 64, 0, 0, 80, 30],
+    ]);
+  });
+
+  it('crops the final still at its decoded dimensions', () => {
+    const draw_image = vi.fn();
+    const context = { clearRect() {}, drawImage: draw_image } as unknown as CanvasRenderingContext2D;
+    const bitmap = { width: 800, height: 400 } as ImageBitmap;
+    drawStill(context, bitmap, 80, 30, { x: 0.25, y: 0.5, width: 0.5, height: 0.25 });
+    expect(draw_image).toHaveBeenCalledWith(bitmap, 200, 200, 400, 100, 0, 0, 80, 30);
+  });
+});
 
 describe('parseBakedManifest', () => {
   it('accepts the baked format and a JSON string of it', () => {

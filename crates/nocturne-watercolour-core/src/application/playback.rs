@@ -45,7 +45,7 @@
 
 use crate::domain::{Operation, Scene, SubSeed};
 
-use super::ports::{CheckpointId, EngineError, Simulator};
+use super::ports::{CheckpointId, DabCharge, EngineError, Simulator};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackState {
@@ -96,9 +96,10 @@ impl ProgressCurve {
             .iter()
             .rev()
             .find_map(|e| match &e.op {
-                Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
-                    Some(e.at_tick as f32 / total)
-                }
+                Operation::Brush(_)
+                | Operation::Dab(_)
+                | Operation::Water(_)
+                | Operation::Lift(_) => Some(e.at_tick as f32 / total),
                 _ => None,
             });
         let tick_split = match last_stroke {
@@ -260,8 +261,19 @@ impl<S: Simulator> Playback<S> {
         self
     }
 
-    pub fn tick_budget(&self) -> u32 {
-        self.tick_budget
+    /// The ticks [`Self::advance_by_elapsed`] would run now for `elapsed_seconds`.
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
+            return 0;
+        }
+        let target = self.tick_for_progress(self.progress_after(elapsed_seconds));
+        self.budgeted(target).saturating_sub(self.tick)
+    }
+
+    /// The ticks [`Self::advance_to_progress`] would run forward now for `progress`.
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.budgeted(self.linear_tick(progress))
+            .saturating_sub(self.tick)
     }
 
     /// The furthest tick one advance may reach from where it is now.
@@ -315,16 +327,26 @@ impl<S: Simulator> Playback<S> {
     }
 
     pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.fractional_tick(progress).round() as u32
+    }
+
+    /// Presentation lags simulation by half a tick, blending only states already simulated.
+    pub fn tick_blend(&self) -> f32 {
+        if self.state != PlaybackState::Playing {
+            return 1.0;
+        }
+        (self.fractional_tick(self.elapsed_progress) - self.tick as f32 + 0.5).clamp(0.0, 1.0)
+    }
+
+    fn fractional_tick(&self, progress: f32) -> f32 {
         let p = progress.clamp(0.0, 1.0);
         match self.curve {
-            ProgressCurve::FrontLoaded => (ease(p) * self.total_ticks() as f32).round() as u32,
-            ProgressCurve::Linear => (p * self.total_ticks() as f32).round() as u32,
+            ProgressCurve::FrontLoaded => ease(p) * self.total_ticks() as f32,
+            ProgressCurve::Linear => p * self.total_ticks() as f32,
             ProgressCurve::Reveal {
                 wall_split,
                 tick_split,
-            } => {
-                (reveal_ticks(p, wall_split, tick_split) * self.total_ticks() as f32).round() as u32
-            }
+            } => reveal_ticks(p, wall_split, tick_split) * self.total_ticks() as f32,
         }
     }
 
@@ -369,18 +391,11 @@ impl<S: Simulator> Playback<S> {
         if self.state != PlaybackState::Playing || !elapsed_seconds.is_finite() {
             return Ok(());
         }
-        self.elapsed_progress =
-            (self.elapsed_progress + elapsed_seconds.max(0.0) * 1000.0 / self.duration_ms).min(1.0);
+        self.elapsed_progress = self.progress_after(elapsed_seconds);
         let target = self.tick_for_progress(self.elapsed_progress);
         if target > self.tick {
             let reached = self.budgeted(target);
             self.run_to(reached)?;
-            if reached < target {
-                // Hold the clock to the tick actually reached. Carrying the
-                // shortfall forward would ask the next frame for even more
-                // ticks, which is the runaway the budget exists to stop.
-                self.elapsed_progress = self.progress();
-            }
         }
         Ok(())
     }
@@ -391,7 +406,7 @@ impl<S: Simulator> Playback<S> {
     /// easing before calling, so this can be driven from any curve.
     pub fn advance_to_progress(&mut self, progress: f32) -> Result<(), EngineError> {
         let p = progress.clamp(0.0, 1.0);
-        let target = (p * self.total_ticks() as f32).round() as u32;
+        let target = self.linear_tick(p);
         if target > self.tick {
             let reached = self.budgeted(target);
             self.run_to(reached)?;
@@ -408,6 +423,14 @@ impl<S: Simulator> Playback<S> {
         Ok(())
     }
 
+    fn progress_after(&self, elapsed_seconds: f32) -> f32 {
+        (self.elapsed_progress + elapsed_seconds.max(0.0) * 1000.0 / self.duration_ms).min(1.0)
+    }
+
+    fn linear_tick(&self, progress: f32) -> u32 {
+        (progress.clamp(0.0, 1.0) * self.total_ticks() as f32).round() as u32
+    }
+
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), EngineError> {
         let target = self.tick_for_progress(progress);
         self.seek_tick(target)?;
@@ -418,28 +441,49 @@ impl<S: Simulator> Playback<S> {
     pub fn seek_tick(&mut self, target: u32) -> Result<(), EngineError> {
         let target = target.min(self.total_ticks());
         if target < self.tick || self.state == PlaybackState::Finished {
-            let cp = self
-                .checkpoints
-                .iter()
-                .filter(|c| c.tick <= target)
-                .max_by_key(|c| c.tick)
-                .copied();
-            match cp {
-                Some(cp) => {
-                    self.sim.restore(cp.id)?;
-                    self.tick = cp.tick;
-                }
-                None => {
-                    self.sim.load(&self.scene)?;
-                    self.checkpoints.clear();
-                    self.tick = 0;
-                    self.take_checkpoint(true)?;
-                }
-            }
-            self.state = PlaybackState::Paused;
+            self.restore_for_seek(target)?;
         }
         self.run_to(target)?;
         self.elapsed_progress = self.progress();
+        Ok(())
+    }
+
+    /// Restores at most one checkpoint, then replays at most `ticks` steps
+    /// towards `target`, and returns the steps replayed; the seek has arrived
+    /// once `current_tick` is `target`. Repeated calls may replace the target
+    /// without completing an obsolete replay.
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, EngineError> {
+        let target = target.min(self.total_ticks());
+        if target < self.tick {
+            self.restore_for_seek(target)?;
+        }
+        self.pause();
+        let from = self.tick;
+        self.run_to(from.saturating_add(ticks).min(target))?;
+        self.elapsed_progress = self.progress();
+        Ok(self.tick - from)
+    }
+
+    fn restore_for_seek(&mut self, target: u32) -> Result<(), EngineError> {
+        let cp = self
+            .checkpoints
+            .iter()
+            .filter(|c| c.tick <= target)
+            .max_by_key(|c| c.tick)
+            .copied();
+        match cp {
+            Some(cp) => {
+                self.sim.restore(cp.id)?;
+                self.tick = cp.tick;
+            }
+            None => {
+                self.sim.load(&self.scene)?;
+                self.checkpoints.clear();
+                self.tick = 0;
+                self.take_checkpoint(true)?;
+            }
+        }
+        self.state = PlaybackState::Paused;
         Ok(())
     }
 
@@ -454,13 +498,16 @@ impl<S: Simulator> Playback<S> {
     /// Ticks from the current one that can run as one `Simulator::step`: up
     /// to `target`, the next event, or the next tick a periodic checkpoint
     /// could be taken at, whichever comes first. A backend encodes a step as
-    /// one batch, where one tick at a time is a submission each.
-    fn run_length(&self, target: u32) -> u32 {
+    /// one batch, where one tick at a time is a submission each. With
+    /// `batch_dabs`, dabs do not end the run: `step_with_dabs` charges them
+    /// inside it, and only other operations are boundaries.
+    fn run_length(&self, target: u32, batch_dabs: bool) -> u32 {
         let next_event = self
             .scene
             .timeline
             .events
             .iter()
+            .filter(|e| !batch_dabs || !matches!(e.op, Operation::Dab(_)))
             .map(|e| e.at_tick)
             .filter(|&t| t > self.tick)
             .min()
@@ -475,9 +522,33 @@ impl<S: Simulator> Playback<S> {
 
     fn run_to(&mut self, target: u32) -> Result<(), EngineError> {
         while self.tick < target {
-            self.apply_events_at(self.tick)?;
-            let ticks = self.run_length(target);
-            self.sim.step(ticks)?;
+            let batch_dabs = self.sim.checkpoint_capacity() == 0 && {
+                let mut events = self.scene.timeline.events_at(self.tick).peekable();
+                events.peek().is_some() && events.all(|(_, e)| matches!(e.op, Operation::Dab(_)))
+            };
+            let ticks = self.run_length(target, batch_dabs);
+            if batch_dabs {
+                let charges: Vec<_> = self
+                    .scene
+                    .timeline
+                    .events
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| e.at_tick >= self.tick && e.at_tick < self.tick + ticks)
+                    .filter_map(|(index, e)| match &e.op {
+                        Operation::Dab(dab) => Some(DabCharge {
+                            at_tick: e.at_tick - self.tick,
+                            dab,
+                            seed: self.scene.seed.derive(SubSeed::Brush(index as u32)),
+                        }),
+                        _ => None,
+                    })
+                    .collect();
+                self.sim.step_with_dabs(ticks, &charges)?;
+            } else {
+                self.apply_events_at(self.tick)?;
+                self.sim.step(ticks)?;
+            }
             self.tick += ticks;
             if self.tick < self.total_ticks() {
                 let at_event = self.scene.timeline.events_at(self.tick).next().is_some();
@@ -565,7 +636,7 @@ mod tests {
     use super::*;
     use crate::application::CpuEngine;
     use crate::domain::{
-        Background, BrushStroke, Palette, Paper, Point, RadiusProfile, SceneId, Seed,
+        Background, BrushStroke, Dab, Palette, Paper, Point, RadiusProfile, SceneId, Seed,
         SimResolution, SizeHint, StrokeSpan, Timeline,
     };
 
@@ -621,8 +692,6 @@ mod tests {
         assert_eq!(pb.current_tick() - before, 3, "the shortfall compounded");
     }
 
-    /// The clock follows the ticks that were actually run, so a reveal that
-    /// cannot keep up slips rather than stuttering — and still finishes.
     #[test]
     fn a_budgeted_reveal_slips_but_still_arrives() {
         let mut pb = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
@@ -651,6 +720,49 @@ mod tests {
         );
     }
 
+    #[test]
+    fn skipped_clock_time_is_retained_while_each_advance_stays_bounded() {
+        let mut playback = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        playback.play();
+        playback.advance_by_elapsed(1.0).unwrap();
+        assert_eq!(playback.current_tick(), 4);
+        while playback.state() != PlaybackState::Finished {
+            let before = playback.current_tick();
+            playback.advance_by_elapsed(0.0).unwrap();
+            assert!(playback.current_tick() - before <= 4);
+        }
+        let mut reference = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
+        reference.finish_immediately().unwrap();
+        assert_eq!(playback.simulator().grid(), reference.simulator().grid());
+    }
+
+    #[test]
+    fn ticks_due_are_the_ticks_the_next_advance_runs() {
+        let mut clock = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        assert_eq!(clock.ticks_due(0.1), 0, "paused");
+        clock.play();
+        for elapsed in [0.0, 0.004, 0.016, 0.1, 0.0, 0.5] {
+            let due = clock.ticks_due(elapsed);
+            let before = clock.current_tick();
+            clock.advance_by_elapsed(elapsed).unwrap();
+            assert_eq!(clock.current_tick() - before, due, "after {elapsed} s");
+        }
+        let mut eased = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        for progress in [0.001, 0.004, 0.02, 0.02, 0.5] {
+            let due = eased.ticks_due_at_progress(progress);
+            let before = eased.current_tick();
+            eased.advance_to_progress(progress).unwrap();
+            assert_eq!(eased.current_tick() - before, due, "at {progress}");
+        }
+        assert_eq!(eased.ticks_due_at_progress(0.0), 0, "backwards is a seek");
+    }
+
     /// Records the step sizes a playback asks for.
     struct Steps {
         inner: CpuEngine,
@@ -669,7 +781,9 @@ mod tests {
             self.step(1)
         }
         fn step(&mut self, ticks: u32) -> Result<(), EngineError> {
-            self.steps.push(ticks);
+            if ticks > 0 {
+                self.steps.push(ticks);
+            }
             self.inner.step(ticks)
         }
         fn snapshot(&mut self) -> Result<Option<CheckpointId>, EngineError> {
@@ -707,6 +821,33 @@ mod tests {
             assert_eq!(pb.simulator().steps, expected, "capacity {capacity}");
             assert_eq!(pb.state(), PlaybackState::Finished);
         }
+    }
+
+    /// Without checkpoints, ticks with no dab run up to the first dab, and the
+    /// runs between later dabs each reach `step` whole.
+    #[test]
+    fn a_dab_batch_steps_whole_runs_between_charges() {
+        let dab = |x| {
+            Operation::Dab(Dab {
+                center: Point::new(x, 0.5),
+                radius: 0.1,
+                pigment: 0,
+                concentration: 0.5,
+                water: 0.8,
+                softness: 0.4,
+            })
+        };
+        let mut timeline = Timeline::new(100);
+        timeline.push(10, dab(0.3));
+        timeline.push(30, dab(0.6));
+        let sim = Steps {
+            inner: CpuEngine::default(),
+            steps: Vec::new(),
+            capacity: 0,
+        };
+        let mut pb = Playback::new(sim, reveal_scene(timeline), 1000.0).unwrap();
+        pb.finish_immediately().unwrap();
+        assert_eq!(pb.simulator().steps, vec![10, 20, 70]);
     }
 
     /// A batched run lands on the same state as one tick at a time.

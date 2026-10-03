@@ -1,14 +1,11 @@
 //! Rasterising operations onto the simulation grid.
 //!
-//! Strokes become a [`Stamp`] (per-cell coverage in `0..1`) computed once on
-//! the CPU and then added into the grid. Backends share this code, so the
-//! shader port only has to add a coverage field rather than mirror the
-//! geometry. Coverage is perturbed by paper height (high grain resists paint,
-//! so a wash edge breaks up on rough paper) and by a small seeded jitter of
-//! the radius along the path.
+//! Coverage is perturbed by paper height and seeded radius jitter.
 
 use super::grid::SimulationGrid;
-use super::ops::{BrushStroke, LiftStroke, Mask, Point, RadiusProfile, StrokeSpan, WaterStroke};
+use super::ops::{
+    BrushStroke, Dab, LiftStroke, Mask, Point, RadiusProfile, StrokeSpan, WaterStroke,
+};
 use super::scene::isotropic_scale;
 use super::seed::{Seed, hash2};
 
@@ -17,6 +14,57 @@ pub struct Stamp {
     pub width: u32,
     pub height: u32,
     pub coverage: Vec<f32>,
+}
+
+/// A dab's jittered radius and raster bounds, resolved through the same
+/// [`StampParams`] as the CPU point brush; WGSL evaluates its coverage.
+#[derive(Debug, Clone, Copy)]
+pub struct DabStamp {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub center: (f32, f32),
+    pub radius: f32,
+    pub inner: f32,
+    pub cell: f32,
+    pub scale: (f32, f32),
+    pub edge_roughness: f32,
+}
+
+impl DabStamp {
+    pub fn new(
+        dab: &Dab,
+        width: u32,
+        height: u32,
+        aspect: f32,
+        seed: Seed,
+        params: StampParams,
+    ) -> Self {
+        let (ax, ay) = isotropic_scale(aspect);
+        let center = (dab.center.x * ax, dab.center.y * ay);
+        let bound = params.reach(dab.radius);
+        let x = ((center.0 - bound) / ax * width as f32).floor().max(0.0) as u32;
+        let y = ((center.1 - bound) / ay * height as f32).floor().max(0.0) as u32;
+        let x1 = ((center.0 + bound) / ax * width as f32)
+            .ceil()
+            .min(width as f32) as u32;
+        let y1 = ((center.1 + bound) / ay * height as f32)
+            .ceil()
+            .min(height as f32) as u32;
+        Self {
+            x,
+            y,
+            width: x1.saturating_sub(x),
+            height: y1.saturating_sub(y),
+            center,
+            radius: params.jittered_radius(dab.radius, seed, 0.0, 0),
+            inner: 1.0 - dab.softness.clamp(0.0, 1.0),
+            cell: (ax / width as f32).max(ay / height as f32),
+            scale: (ax, ay),
+            edge_roughness: params.edge_roughness,
+        }
+    }
 }
 
 /// Paper-driven edge break-up and radius jitter, as fractions of the radius.
@@ -32,6 +80,22 @@ impl Default for StampParams {
             edge_roughness: 0.45,
             jitter: 0.08,
         }
+    }
+}
+
+impl StampParams {
+    /// The farthest coverage reaches from the path for a widest radius of
+    /// `radius`: the most jitter can widen it plus the most the paper can
+    /// shift its edge.
+    pub fn reach(self, radius: f32) -> f32 {
+        radius.max(1e-4) * (1.0 + self.jitter + self.edge_roughness)
+    }
+
+    /// `radius` jittered by the seeded hash of full-path `t` on `segment`.
+    pub fn jittered_radius(self, radius: f32, seed: Seed, t: f32, segment: usize) -> f32 {
+        let jitter =
+            1.0 + self.jitter * (hash2(seed.0, (t * 64.0) as i32, segment as i32) * 2.0 - 1.0);
+        (radius * jitter).max(1e-5)
     }
 }
 
@@ -444,7 +508,7 @@ impl<'a> Chain<'a> {
             ax,
             ay,
             inner: 1.0 - softness.clamp(0.0, 1.0),
-            r_max: radius.max().max(1e-4) * (1.0 + params.jitter + params.edge_roughness),
+            r_max: params.reach(radius.max()),
             // A cell's size in the isotropic metric, for the anti-aliasing ramp.
             cell: (ax / w).max(ay / h),
             radius,
@@ -502,9 +566,8 @@ impl<'a> Chain<'a> {
 
     /// The jittered radius at `t` on segment `si`.
     fn radius_at(&self, si: usize, t: f32) -> f32 {
-        let jitter = 1.0
-            + self.params.jitter * (hash2(self.seed.0, (t * 64.0) as i32, si as i32) * 2.0 - 1.0);
-        (self.radius.at(t) * jitter).max(1e-5)
+        self.params
+            .jittered_radius(self.radius.at(t), self.seed, t, si)
     }
 
     /// The distance `walk` measures: a clipped segment keeps each cell's

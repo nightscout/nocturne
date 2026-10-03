@@ -1,94 +1,177 @@
 <script module lang="ts">
-  // Module state, not instance state: the tile unmounts this wash whenever it goes neutral, and
-  // the reading can move between the header tile and the Current glucose widget, so the settled
-  // and faded seeds must outlive any one mount. That also means one live wash at a time.
+  import { glucoseTileFill, type GlucoseTileVariant } from "@nocturne/ui/glucose";
+
+  /** What the tile showed before this wash: a range fill, or the loading skeleton. */
+  type PriorFill = GlucoseTileVariant | "skeleton";
+
+  // Module state, not instance state: the tile unmounts this wash whenever it shows a flat fill,
+  // and the reading can move between the header tile and the Current Glucose widget, so it must
+  // outlive any one mount. That also means one live wash at a time.
   let settledSeed = $state<number | null>(null);
-  // Once a stroke has faded its canvas unmounts, so a remount of the same reading never replays
-  // an invisible reveal.
   let fadedSeed = $state<number | null>(null);
-</script>
+  let shownFill: PriorFill = "skeleton";
 
-<script lang="ts">
-  import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
-  import type { GlucoseTileVariant } from "@nocturne/ui/glucose";
-
-  interface Props {
-    /** The reading the wash belongs to; each reading paints its own stroke. */
-    mills: number | undefined;
+  interface TileFill {
+    loading: boolean;
+    stale: boolean;
+    disconnected: boolean;
     variant: GlucoseTileVariant;
   }
 
-  let { mills, variant }: Props = $props();
+  /**
+   * Records the flat fill a host's tile shows while it paints no wash (the skeleton, or what
+   * `glucoseTileFill` leaves unpainted), so the next wash blooms over what was on screen. Call
+   * during component initialisation.
+   */
+  export function trackUnwashedFill(tile: () => TileFill): void {
+    $effect(() => {
+      const { loading, variant, ...state } = tile();
+      if (loading) {
+        shownFill = "skeleton";
+        return;
+      }
+      const { fill, painted } = glucoseTileFill(variant, state);
+      if (!painted) shownFill = fill;
+    });
+  }
+</script>
 
-  // Each reading paints its own stroke, which settles and fades back to the bare fill well
-  // before the next reading arrives.
+<script lang="ts">
+  import { washInterior } from '$lib/watercolour-wash';
+  import { prefersReducedMotion } from "svelte/motion";
+  import { Artwork } from "@nocturne/watercolour";
+  import { illustrations } from "$lib/stores/illustrations.svelte";
+  import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
+  import type { PlayerState } from "@nocturne/watercolour";
+
+  interface Props {
+    mills: number | undefined;
+    variant: GlucoseTileVariant;
+    delta: number;
+  }
+
+  let { mills, variant, delta }: Props = $props();
   const washSeed = $derived((mills ?? 0) % 2_147_483_647);
-  // Reduced motion or the Still preference keep one settled wash per range instead: a per-reading
-  // stroke that fades would be animation they opted out of.
-  const washPerReading = !prefersReducedMotion();
+  // Reduced motion and the Still preference keep one settled wash per range: a stroke per reading
+  // that fades is animation they opted out of.
+  const washPerReading = $derived(illustrations.current === "animated" && !prefersReducedMotion.current);
+  // Each reading paints its own stroke, over the fill that was on screen when it arrived or when
+  // strokes came back on. Keyed by the derived seed, so it is not retaken on every store update.
+  const reading = $derived({ seed: washSeed, priorFill: washPerReading ? shownFill : variant });
+  // The settled wash shows the flat range fill.
+  $effect(() => {
+    if (!washPerReading) shownFill = variant;
+  });
+  const recolours = $derived(reading.priorFill !== variant);
+  // With a 50% tail, this progress is past covered tick 140 for every stagger seed.
+  const BLOOM_COVERED = 0.67;
+  let spreadSeed = $state<number | null>(null);
+  const spread = $derived(spreadSeed === reading.seed);
+
+  let noBloomSeed = $state<number | null>(null);
+  const noBloom = $derived(noBloomSeed === reading.seed);
+
+  function markSpread() {
+    if (spreadSeed === reading.seed) return;
+    spreadSeed = reading.seed;
+    shownFill = variant;
+  }
+
+  function onWashState(state: PlayerState) {
+    if (state.finished) settledSeed = reading.seed;
+    if (state.mode === "none" || state.error !== undefined) markSpread();
+  }
+
+  function onBloomState(state: PlayerState) {
+    if (state.finished) settledSeed = reading.seed;
+    if (state.mode === "none" || state.error !== undefined) noBloomSeed = reading.seed;
+    if (noBloom || state.finished || state.progress >= BLOOM_COVERED) markSpread();
+  }
+  function onBloomProgress(progress: number) {
+    if (progress >= BLOOM_COVERED) markSpread();
+  }
+  const faded = $derived(
+    recolours
+      ? spread && (settledSeed === reading.seed || noBloom)
+      : settledSeed === reading.seed
+  );
 
   function markFaded(event: TransitionEvent) {
-    if (event.target === event.currentTarget && settledSeed === washSeed) fadedSeed = washSeed;
+    if (event.target === event.currentTarget && faded) fadedSeed = reading.seed;
   }
-  // A settled stroke unmounted mid-fade (the tile going neutral, or the reading moving to another
-  // tile) counts as faded, or its remount would replay the reveal at opacity 0.
+  // A settled reading unmounted mid-fade must not replay on its next mount.
   function fadedOnUnmount(_node: HTMLElement) {
     return {
       destroy: () => {
-        if (settledSeed === washSeed) fadedSeed = washSeed;
+        if (faded) fadedSeed = reading.seed;
       },
     };
   }
-
-  const softLight = "mix-blend-soft-light";
-  const darkenOnly = "mix-blend-multiply opacity-60";
-  const washBlend: Record<GlucoseTileVariant, string> = {
-    "very-low": darkenOnly,
-    low: softLight,
-    "in-range": softLight,
-    high: softLight,
-    "very-high": darkenOnly,
-    neutral: softLight,
+  const priorFillClass: Record<PriorFill, string> = {
+    skeleton: "bg-accent",
+    neutral: "bg-muted",
+    "very-low": "bg-glucose-very-low",
+    low: "bg-glucose-low",
+    "in-range": "bg-glucose-in-range",
+    high: "bg-glucose-high",
+    "very-high": "bg-glucose-very-high",
   };
+
+  // Soft-light keeps the range token's tone and the digits' contrast. The very-low and very-high
+  // tiles carry light digits in most themes, so their wash only darkens, faintly, and never lifts
+  // the fill toward the digits.
+  const washBlend = $derived(
+    variant === "very-low" || variant === "very-high" ? "mix-blend-multiply opacity-60" : "mix-blend-soft-light"
+  );
 </script>
 
-<!-- A grey wash soft-lit over the range fill: the tile keeps the range token's own hue in every
-     theme, and soft-light (not multiply) lightens as much as it darkens, so the tile keeps the
-     token's tone and the digits their contrast. The very-low and very-high tiles carry light
-     digits in most themes, so their wash only darkens (multiply, faint) and can never lift the
-     fill toward the digits. Cropped to the wash's interior so its dried edge
-     falls outside the tile. -->
 {#if washPerReading}
-  {#key washSeed}
-    {#if fadedSeed !== washSeed}
-      <span
-        class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain wash-fade {washBlend[variant]}"
-        class:faded={settledSeed === washSeed}
-        ontransitionend={markFaded}
-        ontransitioncancel={markFaded}
-        use:fadedOnUnmount
-      >
-        <Artwork
-          artwork="wash"
-          palette="slate"
-          surface="light"
-          seed={washSeed}
-          durationMs={11600}
-          tail={0.86}
-          releaseAfterFinish
-          onstatechange={(state) => {
-            if (state.finished) settledSeed = washSeed;
-          }}
-          fit="fill"
-          class="size-full"
-        />
-      </span>
+  {#key reading.seed}
+    {#if fadedSeed !== reading.seed}
+      {#if recolours}
+        <span
+          class="absolute inset-0 prior-fill {priorFillClass[reading.priorFill]}"
+          class:gone={spread}
+          data-testid="glucose-tile-prior-fill"
+        ></span>
+        <span
+          class="absolute inset-0 bloom"
+          class:faded
+          ontransitionend={markFaded}
+          ontransitioncancel={markFaded}
+          use:fadedOnUnmount
+        >
+          <GlucoseTileBloom seed={reading.seed} {delta} token="--glucose-{variant}" onstatechange={onBloomState} onprogress={onBloomProgress} />
+        </span>
+      {:else}
+        <span
+          class="absolute inset-0 wash-grain wash-fade {washBlend}"
+          class:faded
+          ontransitionend={markFaded}
+          ontransitioncancel={markFaded}
+          use:fadedOnUnmount
+        >
+          <Artwork
+            artwork="wash"
+            palette="slate"
+            surface="light"
+            seed={reading.seed}
+            durationMs={11600}
+            tail={0.86}
+            releaseAfterFinish
+            onstatechange={onWashState}
+            fit="fill"
+            crop={washInterior}
+            class="size-full"
+          />
+        </span>
+      {/if}
     {/if}
   {/key}
 {:else}
   {#key variant}
-    <span class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain {washBlend[variant]}">
-      <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" class="size-full" />
+    <span class="absolute inset-0 wash-grain {washBlend}">
+      <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" crop={washInterior} class="size-full" />
     </span>
   {/key}
 {/if}
@@ -101,8 +184,16 @@
   .wash-fade {
     transition: opacity 10s ease-out;
   }
-  /* Outranks the blend's own opacity utility, so every variant fades to the bare fill. */
+  /* Must outrank the blend opacity utility. */
   .wash-fade.faded {
+    opacity: 0;
+  }
+  .prior-fill,
+  .bloom {
+    transition: opacity 1.6s ease-in-out;
+  }
+  .prior-fill.gone,
+  .bloom.faded {
     opacity: 0;
   }
 </style>

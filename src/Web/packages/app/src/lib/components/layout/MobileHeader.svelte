@@ -11,7 +11,7 @@
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
   const realtimeStore = tryGetRealtimeStore();
@@ -24,14 +24,15 @@
   let scrollThreshold = 10; // Minimum scroll amount to trigger hide/show
 
   // Get direction info for arrow display
-  const directionInfo = $derived(getDirectionInfo(realtimeStore?.direction));
+  const glucose = displayedGlucose(realtimeStore);
+  const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   // This header is the glucose surface on a phone unless the Current Glucose widget is showing —
   // CurrentBGDisplay hides itself below @md — so it carries the same stale/disconnected states.
-  const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
+  const rawCurrentBG = $derived(glucose.currentBG);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
-    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore?.currentEntry?.mills))
+    getGlucoseTileVariant(glucose.status)
   );
   const now = $derived(realtimeStore?.now ?? Date.now());
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
@@ -111,7 +112,7 @@
             {/if}
           </span>
           <span class="text-muted-foreground">
-            {formatGlucoseDelta(realtimeStore.bgDelta, units)}
+            {formatGlucoseDelta(glucose.bgDelta, units)}
           </span>
         </div>
       {/if}

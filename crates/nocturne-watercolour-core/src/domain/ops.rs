@@ -91,6 +91,30 @@ pub struct BrushStroke {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct Dab {
+    pub center: Point,
+    pub radius: f32,
+    pub pigment: usize,
+    pub concentration: f32,
+    pub water: f32,
+    pub softness: f32,
+}
+
+impl Dab {
+    pub fn as_brush(&self) -> BrushStroke {
+        BrushStroke {
+            path: vec![self.center],
+            radius: RadiusProfile::uniform(self.radius),
+            pigment: self.pigment,
+            concentration: self.concentration,
+            water: self.water,
+            softness: self.softness,
+            span: StrokeSpan::FULL,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct WaterStroke {
     pub path: Vec<Point>,
     pub radius: RadiusProfile,
@@ -149,6 +173,7 @@ pub const MAX_SETTLE_SHARE: f32 = 0.5;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Brush(BrushStroke),
+    Dab(Dab),
     Water(WaterStroke),
     Lift(LiftStroke),
     /// Scales evaporation from this point on; `1.0` is the base rate.
@@ -179,6 +204,7 @@ impl Operation {
     pub fn path(&self) -> Option<&[Point]> {
         match self {
             Operation::Brush(s) => Some(&s.path),
+            Operation::Dab(s) => Some(std::slice::from_ref(&s.center)),
             Operation::Water(s) => Some(&s.path),
             Operation::Lift(s) => Some(&s.path),
             Operation::SetMask(m) => Some(m.points()),
