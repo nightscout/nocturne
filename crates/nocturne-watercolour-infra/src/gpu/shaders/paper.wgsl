@@ -36,6 +36,7 @@ struct PaperParams {
     height: vec4<f32>,
     // Zero; see `fenced`.
     fence: vec4<u32>,
+    crop: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> P: PaperParams;
@@ -169,8 +170,8 @@ fn generate_paper(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let width = P.dims.x;
-    let u = fenced(fenced((f32(i % width) + 0.5) * P.geom.x) * P.geom.z);
-    let v = fenced(fenced((f32(i / width) + 0.5) * P.geom.y) * P.geom.w);
+    let u = fenced(fenced(fenced((f32(i % width) + 0.5) * P.geom.x) * P.crop.z + P.crop.x) * P.geom.z);
+    let v = fenced(fenced(fenced((f32(i / width) + 0.5) * P.geom.y) * P.crop.w + P.crop.y) * P.geom.w);
     let ub = fenced(u * P.terms.x);
     let vb = fenced(v * P.terms.x);
     var noise: array<f32, 7>;

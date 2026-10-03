@@ -1,4 +1,4 @@
-import type { ArtworkAutoplay, ArtworkOptions, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, Surface } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
@@ -47,6 +47,7 @@ export interface FallbackDetail {
 }
 
 export interface PlayerOptions extends ArtworkOptions, AssetOptions {
+  crop?: CropWindow;
   surface?: Surface;
   /** Overrides the detail tier derived from the artwork reference (live). */
   detail?: DetailLevel;
@@ -115,6 +116,10 @@ interface BackendCallbacks {
 interface PixelSize {
   width: number;
   height: number;
+}
+
+function sourceEdge(size: PixelSize, crop?: CropWindow): number {
+  return Math.max(size.width / (crop?.width ?? 1), size.height / (crop?.height ?? 1));
 }
 
 interface Backend {
@@ -254,7 +259,7 @@ class LiveBackend implements Backend {
       // own, whatever the canvas: the fluid moves in cells, so a different
       // grid paints a different picture, and one tier must paint the same one
       // at every size. An explicit `detail`/`simResolution` option wins.
-      const longEdge = Math.max(size.width, size.height);
+      const longEdge = sourceEdge(size, options.crop);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
@@ -272,6 +277,10 @@ class LiveBackend implements Backend {
       }
       if (options.easing) instance.setProgressCurve('linear');
       try {
+        if (options.crop) {
+          const { x, y, width, height } = options.crop;
+          instance.setCrop(x, y, width, height);
+        }
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });
@@ -621,7 +630,7 @@ class BakedBackend implements Backend {
     const manifest = await loadManifest(urls.manifest);
     const strip = await sharedStrip(urls.strip, manifest);
     const target = acquire2d(canvas);
-    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing);
+    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing, options.crop);
   }
 
   private constructor(
@@ -633,6 +642,7 @@ class BakedBackend implements Backend {
     scheduler: Scheduler,
     private readonly callbacks: BackendCallbacks,
     easing: ((t: number) => number) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.durationMs = durationMs;
     this.easing = easing;
@@ -732,7 +742,7 @@ class BakedBackend implements Backend {
     if (this.disposed) return;
     if (this.dirty) {
       this.dirty = false;
-      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height);
+      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height, this.crop);
       this.callbacks.onProgress?.(this.progress);
       if (this.disposed) return;
       if (this.isPlaying && this.finished) {
@@ -771,10 +781,11 @@ class StaticBackend implements Backend {
     size: PixelSize,
     callbacks: BackendCallbacks,
     larger?: () => Promise<string>,
+    crop?: CropWindow,
   ): Promise<StaticBackend> {
     const image = await sharedStill(url);
     const target = acquire2d(canvas);
-    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger);
+    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger, crop);
     queueMicrotask(() => callbacks.onFinished());
     return backend;
   }
@@ -785,6 +796,7 @@ class StaticBackend implements Backend {
     private image: ImageBitmap,
     private size: PixelSize,
     private larger: (() => Promise<string>) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.draw();
   }
@@ -799,7 +811,7 @@ class StaticBackend implements Backend {
     this.size = size;
     this.draw();
     const larger = this.larger;
-    if (!larger || Math.max(size.width, size.height) <= SMALL_STILL_EDGE) return;
+    if (!larger || sourceEdge(size, this.crop) <= SMALL_STILL_EDGE) return;
     this.larger = undefined;
     void larger()
       .then(sharedStill)
@@ -822,7 +834,7 @@ class StaticBackend implements Backend {
     if (this.disposed) return;
     this.canvas.width = this.size.width;
     this.canvas.height = this.size.height;
-    drawStill(this.ctx, this.image, this.size.width, this.size.height);
+    drawStill(this.ctx, this.image, this.size.width, this.size.height, this.crop);
   }
 }
 
@@ -945,6 +957,12 @@ class Player implements ArtworkPlayer {
     source: SceneSource | string,
     private readonly options: PlayerOptions,
   ) {
+    if (options.crop) {
+      const { x, y, width, height } = options.crop;
+      if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) {
+        throw new TypeError('crop must be a positive window inside the unit square');
+      }
+    }
     this.currentCanvas = canvas;
     this.source = typeof source === 'string' ? { sceneJson: source } : source;
     this.ref = isArtworkRef(this.source) ? this.source : undefined;
@@ -1130,7 +1148,7 @@ class Player implements ArtworkPlayer {
 
   /** Withholding baked at hero sizes lets `resolveMode` pick static instead. */
   private bakedServesSize(): boolean {
-    return bakedServesEdge(Math.max(this.size.width, this.size.height));
+    return bakedServesEdge(sourceEdge(this.size, this.options.crop));
   }
 
   private assetOk(variant: AssetVariant): boolean {
@@ -1226,10 +1244,10 @@ class Player implements ArtworkPlayer {
   }
 
   private async createStatic(callbacks: BackendCallbacks): Promise<Backend> {
-    const variant = stillVariant(Math.max(this.size.width, this.size.height), this.assetOk('final-small'));
+    const variant = stillVariant(sourceEdge(this.size, this.options.crop), this.assetOk('final-small'));
     const [url] = await this.resolveUrls([variant]);
     const larger = variant === 'final-small' ? () => this.resolveUrls(['final']).then(([full]) => full!) : undefined;
-    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger);
+    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger, this.options.crop);
   }
 
   private async resolveUrls<const V extends readonly AssetVariant[]>(variants: V): Promise<string[]> {

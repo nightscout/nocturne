@@ -3,6 +3,7 @@ import type { IconNode } from '../types';
 import { EngineHost } from './engine-host';
 import { type PlayerState, SMALL_STILL_EDGE, autoplayAction, checkpointBudget, createArtworkPlayer, iconStaticBackend, stillVariant } from './playback';
 import { Scheduler } from './scheduler';
+import { clearSharedStills } from './baked';
 
 const clock: IconNode[] = [
   ['circle', { cx: '12', cy: '12', r: '10' }],
@@ -30,7 +31,28 @@ describe('player statechange', () => {
   const capabilities = async () => ({ webgpu: false, adapter: false, reducedMotion: false, offscreenCanvas: false });
 
   afterEach(() => {
+    clearSharedStills();
     vi.unstubAllGlobals();
+  });
+
+  it('upgrades a cropped static asset when its source outgrows the small still', async () => {
+    const requested_urls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      requested_urls.push(url);
+      return new Response(new Blob([]));
+    });
+    vi.stubGlobal('createImageBitmap', async () => ({ width: 128, height: 128, close() {} }));
+    const player = createArtworkPlayer(canvas(), { id: 'wash' }, {
+      mode: 'static', width: 60, height: 30, dpr: 1,
+      crop: { x: 0.25, y: 0, width: 0.5, height: 1 },
+      assets: { 'final-small': '/crop-small.webp', final: '/crop-full.webp' },
+      capabilities, engineHost: new EngineHost(),
+    });
+    await player.ready;
+    expect(requested_urls).toEqual(['/crop-small.webp']);
+    player.resize(100, 30, 1);
+    await vi.waitFor(() => expect(requested_urls).toEqual(['/crop-small.webp', '/crop-full.webp']));
+    player.dispose();
   });
 
   it('fires on a natural finish with the player finished and stopped', async () => {

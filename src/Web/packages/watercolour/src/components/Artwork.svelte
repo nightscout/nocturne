@@ -2,6 +2,7 @@
   import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface } from '../types';
   import { getPresentation, subscribePresentation } from '../api/presentation';
   import { iconSvg } from '../api/scenes';
+  import type { CropWindow } from '../types';
   import { type PlayerReadyCallback, type PlayerStateCallback, hostSurface, mountPlayer } from './helpers';
 
   let {
@@ -18,6 +19,7 @@
     mode,
     autoplay,
     fit,
+    crop,
     surface,
     position = 'relative',
     assetBaseUrl,
@@ -33,6 +35,7 @@
     surface?: Surface;
     /** `contain` (default) preserves the artwork's aspect; `fill` stretches to the container. */
     fit?: FitMode;
+    crop?: CropWindow;
     /**
      * The frame's `position`. The canvas is absolute within it, so the frame
      * has to be a containing block; any value but `static` is one. Set
@@ -83,6 +86,7 @@
         mode,
         autoplay,
         fit,
+        crop,
         surface,
         assetBaseUrl,
         releaseAfterFinish: releaseAfterFinish ?? autoplay !== 'never',

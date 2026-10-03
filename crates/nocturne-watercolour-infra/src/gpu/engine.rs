@@ -320,6 +320,7 @@ struct RenderUniform {
     surface_coverage_gain: f32,
     _p2: f32,
     _p3: f32,
+    crop: [f32; 4],
 }
 
 #[derive(Clone)]
@@ -390,6 +391,7 @@ struct PaperKey {
     height: u32,
     aspect: u32,
     pixel_scale: u32,
+    crop: [u32; 4],
 }
 
 impl PaperKey {
@@ -407,6 +409,12 @@ impl PaperKey {
             height,
             aspect: aspect.to_bits(),
             pixel_scale: pixel_scale.to_bits(),
+            crop: [
+                0.0f32.to_bits(),
+                0.0f32.to_bits(),
+                1.0f32.to_bits(),
+                1.0f32.to_bits(),
+            ],
         }
     }
 }
@@ -428,6 +436,7 @@ struct PaperUniform {
     mix_weights: [f32; 4],
     height: [f32; 4],
     fence: [u32; 4],
+    crop: [f32; 4],
 }
 
 impl PaperUniform {
@@ -435,10 +444,11 @@ impl PaperUniform {
     fn new(paper: &Paper, key: PaperKey, first: u32) -> PaperUniform {
         let (width, height) = (key.width, key.height);
         let (ax, ay) = isotropic_scale(f32::from_bits(key.aspect));
+        let crop = key.crop.map(f32::from_bits);
         let t = PaperTerms::new(
             paper,
             f32::from_bits(key.pixel_scale),
-            grain_band_window(width.max(height) as f32),
+            grain_band_window((width as f32 / crop[2]).max(height as f32 / crop[3])),
         );
         let mut seeds = [[0u32; 4]; 4];
         for (i, seed) in t.seeds.iter().enumerate() {
@@ -469,6 +479,7 @@ impl PaperUniform {
             ],
             height: [paper.height_amplitude, 0.0, 0.0, 0.0],
             fence: [0; 4],
+            crop,
         }
     }
 }
@@ -643,6 +654,7 @@ pub struct GpuEngine {
     pool: BufferPool,
     timers: Option<Timers>,
     interpolation: Option<Interpolation>,
+    crop: [f32; 4],
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -951,6 +963,7 @@ impl GpuEngine {
             pool: Arc::default(),
             timers,
             interpolation: None,
+            crop: [0.0, 0.0, 1.0, 1.0],
         };
         (engine, validation)
     }
@@ -970,6 +983,7 @@ impl GpuEngine {
             paper: self.paper.clone(),
             loaded: None,
             interpolation: None,
+            crop: [0.0, 0.0, 1.0, 1.0],
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
@@ -1560,7 +1574,9 @@ impl GpuEngine {
                 (l.paper, l.paper_sim.aspect)
             };
             let pixel_scale = if band_limit {
-                render_pixel_scale(width, height, aspect)
+                let virtual_width = (width as f32 / self.crop[2]).round() as u32;
+                let virtual_height = (height as f32 / self.crop[3]).round() as u32;
+                render_pixel_scale(virtual_width, virtual_height, aspect)
             } else {
                 0.0
             };
@@ -1581,10 +1597,9 @@ impl GpuEngine {
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let paper_buf = self.paper_buffer(
-            PaperKey::new(&paper, width, height, aspect, pixel_scale),
-            &paper,
-        )?;
+        let mut paper_key = PaperKey::new(&paper, width, height, aspect, pixel_scale);
+        paper_key.crop = self.crop.map(f32::to_bits);
+        let paper_buf = self.paper_buffer(paper_key, &paper)?;
         let (presence_len, pigments) = {
             let l = self.loaded()?;
             (
@@ -1886,6 +1901,7 @@ impl GpuEngine {
             surface_coverage_gain: self.render_params.surface_coverage_gain,
             _p2: 0.0,
             _p3: 0.0,
+            crop: self.crop,
         }
     }
 
@@ -2238,6 +2254,31 @@ impl GpuEngine {
 
     pub fn clear_interpolation(&mut self) {
         self.interpolation = None;
+    }
+
+    /// Normalised source window; output pixels and paper cover only this region.
+    pub fn set_crop(&mut self, crop: [f32; 4]) -> Result<(), EngineError> {
+        let [x, y, width, height] = crop;
+        if !crop.iter().all(|v| v.is_finite())
+            || x < 0.0
+            || y < 0.0
+            || width <= 0.0
+            || height <= 0.0
+            || x + width > 1.0
+            || y + height > 1.0
+        {
+            return Err(EngineError::new(
+                "crop must be a positive window inside the unit square",
+            ));
+        }
+        if self.crop != crop {
+            self.crop = crop;
+            if let Some(loaded) = self.loaded.as_mut() {
+                loaded.render_cache = None;
+            }
+            self.clear_interpolation();
+        }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]

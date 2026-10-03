@@ -21,6 +21,7 @@ export type {
   ArtworkQuality,
   ArtworkAutoplay,
   FitMode,
+  CropWindow,
   Surface,
   DetailLevel,
   IconNode,
