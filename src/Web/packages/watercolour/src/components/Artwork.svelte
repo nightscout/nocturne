@@ -76,8 +76,8 @@
     return mountPlayer(
       frame,
       canvas,
-      artwork,
       {
+        artwork,
         icon,
         palette,
         seed,
@@ -94,10 +94,10 @@
         surface,
         assetBaseUrl,
         releaseAfterFinish: releaseAfterFinish ?? autoplay !== 'never',
+        onReady: onready,
+        onStateChange: onstatechange,
         onProgress: onprogress,
       },
-      onready,
-      onstatechange,
     );
   });
 </script>

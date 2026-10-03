@@ -11,13 +11,19 @@ export type PlayerStateCallback = (state: PlayerState) => void;
 export type FitAnchor = 'center' | 'bottom-left';
 
 export interface MountOptions extends ArtworkOptions {
+  /** One of `artwork`, `icon` and `scene` is the source; `scene` wins, then `icon`. */
+  artwork?: ArtworkId;
+  /** A Lucide icon source. */
+  icon?: IconArtworkSource;
+  scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
   crop?: CropWindow;
   surface?: Surface;
   assetBaseUrl?: string;
-  /** A Lucide icon source; takes precedence over the artwork id. */
-  icon?: IconArtworkSource;
-  scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
   blendTicks?: boolean;
+  /** Fires once a backend is drawing; the returned cleanup runs with the player's disposal. */
+  onReady?: PlayerReadyCallback;
+  /** Fires on every player state change, including settling on `none`, where `onReady` never fires. */
+  onStateChange?: PlayerStateCallback;
   onProgress?: PlayerProgressCallback;
   /**
    * `contain` (default) or `fill`, or a function deciding per container
@@ -103,16 +109,11 @@ function resolveFitMode(options: MountOptions, containerWidth: number, container
   return options.fit ?? 'contain';
 }
 
-function resolveBox(
-  containerWidth: number,
-  containerHeight: number,
-  id: ArtworkId | undefined,
-  options: MountOptions,
-): FitBox {
+function resolveBox(containerWidth: number, containerHeight: number, options: MountOptions): FitBox {
   if (resolveFitMode(options, containerWidth, containerHeight) === 'fill') {
     return { width: containerWidth, height: containerHeight, offsetX: 0, offsetY: 0 };
   }
-  const aspect = options.icon || !id ? 1 : artworkAspect(id);
+  const aspect = options.icon || !options.artwork ? 1 : artworkAspect(options.artwork);
   return containBox(containerWidth, containerHeight, aspect, options.fitAnchor ?? 'center');
 }
 
@@ -188,24 +189,15 @@ function currentCanvas(frame: HTMLElement, canvas: HTMLCanvasElement): HTMLCanva
 /**
  * Creates a player sized to the artwork's fit box within the frame (in
  * `contain` the box follows the artwork's aspect, centred), re-creates it
- * when a prop changes, and disposes it on unmount. `onready` fires once a
- * backend is drawing and its returned cleanup runs with the player's
- * disposal. `onstatechange` also reports a player that settles on `none`,
- * which never fires `onready`.
+ * when a prop changes, and disposes it on unmount.
  *
  * A frame with no area (under `display: none`, say) gets no player until it
  * first has one: a still would otherwise paint and release at 1x1 and only
  * ever be stretched, and a reveal would hold a live slot it can never play.
  */
-export function mountPlayer(
-  frame: HTMLElement,
-  canvas: HTMLCanvasElement,
-  id: ArtworkId | undefined,
-  options: MountOptions,
-  onready?: PlayerReadyCallback,
-  onstatechange?: PlayerStateCallback,
-): () => void {
-  if (!options.scene && !options.icon && !id) throw new TypeError('Artwork requires an artwork, icon or scene.');
+export function mountPlayer(frame: HTMLElement, canvas: HTMLCanvasElement, options: MountOptions): () => void {
+  if (!options.scene && !options.icon && !options.artwork) throw new TypeError('Artwork requires an artwork, icon or scene.');
+  const { onReady, onStateChange } = options;
   const dpr = componentDpr();
   let player: ArtworkPlayer | undefined;
   let unready: (() => void) | undefined;
@@ -220,7 +212,7 @@ export function mountPlayer(
   };
 
   const start = (containerWidth: number, containerHeight: number, startFinished = false) => {
-    const box = resolveBox(containerWidth, containerHeight, id, options);
+    const box = resolveBox(containerWidth, containerHeight, options);
     applyCanvasFit(currentCanvas(frame, canvas), box, dpr);
     const detail = detailForEdge(Math.max(box.width, box.height));
     const surface = options.surface ?? hostSurface();
@@ -237,7 +229,7 @@ export function mountPlayer(
           surface,
           detail,
         }
-      : { id: id!, palette: options.palette, seed: options.seed, intensity: options.intensity, surface, detail };
+      : { id: options.artwork!, palette: options.palette, seed: options.seed, intensity: options.intensity, surface, detail };
     const created = createArtworkPlayer(currentCanvas(frame, canvas), source, {
       durationMs: options.durationMs,
       easing: options.easing,
@@ -256,12 +248,12 @@ export function mountPlayer(
       height: box.height,
       dpr,
     });
-    if (onready) {
+    if (onReady) {
       created.on('ready', () => {
-        unready = onready(created) ?? undefined;
+        unready = onReady(created) ?? undefined;
       });
     }
-    if (onstatechange) created.on('statechange', () => onstatechange(created.state));
+    if (onStateChange) created.on('statechange', () => onStateChange(created.state));
     player = created;
   };
 
@@ -277,7 +269,7 @@ export function mountPlayer(
       if (next) start(next.width, next.height);
       return;
     }
-    const nextBox = resolveBox(next?.width ?? 1, next?.height ?? 1, id, options);
+    const nextBox = resolveBox(next?.width ?? 1, next?.height ?? 1, options);
     const released = player.state.released === true;
     const target = currentCanvas(frame, canvas);
     applyCanvasFit(target, nextBox, dpr, released);

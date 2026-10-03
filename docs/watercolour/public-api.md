@@ -103,12 +103,14 @@ simulation grid is capped at 320 while the output follows the measured tile.
 Play it with `blendTicks: true`, which presents the bloom's growth between
 simulated ticks.
 
-`mountPlayer(frame, canvas, undefined, { scene, fit: 'fill', ... }, onready,
-onstatechange)` gives generated scenes the component resize and presentation
-lifecycle. Its `scene(module, width, height, dpr)` factory receives the measured
-box. Finished canvases stretch for small resizes and repaint after a large
-resize settles. Presentation changes rebuild the player; a finished reveal
-does not replay. `onstatechange` also reports `none`, which has no `ready` event.
+`mountPlayer(frame, canvas, { scene, fit: 'fill', blendTicks: true, onReady,
+onStateChange, onProgress, ... })` gives generated scenes the component resize
+and presentation lifecycle; the options name its source (`artwork`, `icon` or
+`scene`) and carry its callbacks. Its `scene(module, width, height, dpr)`
+factory receives the measured box. Finished canvases stretch for small resizes
+and repaint after a large resize settles. Presentation changes rebuild the
+player; a finished reveal does not replay. `onStateChange` also reports `none`,
+which has no `ready` event.
 
 ## `detectCapabilities`
 
