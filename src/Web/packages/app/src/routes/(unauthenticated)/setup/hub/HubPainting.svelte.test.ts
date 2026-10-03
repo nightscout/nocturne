@@ -19,7 +19,7 @@ beforeEach(() => {
   reducedMotion.value = false;
   fakePlayer.seeks = [];
   fakePlayer.plays = 0;
-  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false });
+  Object.assign(fakePlayer.state, { mode: "live", motion: "full", progress: 0, playing: false, finished: false });
 });
 
 describe("HubPainting", () => {
@@ -39,8 +39,9 @@ describe("HubPainting", () => {
     expect(fakePlayer.seeks).toEqual([0.5]);
 
     fakePlayer.state.progress = 4 / 6;
+    fakePlayer.present();
 
-    await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(4 / 6);
+    expect(fakePlayer.seeks.at(-1)).toBe(4 / 6);
     expect(fakePlayer.state.playing).toBe(false);
   });
 
@@ -75,16 +76,48 @@ describe("HubPainting", () => {
     expect(onpainted).toHaveBeenCalledWith(1);
   });
 
-  it("reports a stop only once it is on the canvas", async () => {
+  it("reports a painted-forward stop only once the frame at its exact position is presented", async () => {
     const onpainted = vi.fn();
     render(HubPainting, { stop: 6, from: 5, onpainted });
-
     await expect.poll(() => fakePlayer.plays).toBe(1);
-    expect(onpainted).not.toHaveBeenCalled();
+
+    fakePlayer.state.progress = 0.9;
+    fakePlayer.present();
+    expect(fakePlayer.seeks).toEqual([5 / 6]);
 
     fakePlayer.state.progress = 1;
+    fakePlayer.present();
+    expect(fakePlayer.seeks.at(-1)).toBe(1);
+    fakePlayer.present(true);
+    expect(onpainted).not.toHaveBeenCalled();
 
-    await expect.poll(() => onpainted.mock.calls).toEqual([[6]]);
+    fakePlayer.present();
+    expect(onpainted.mock.calls).toEqual([[6]]);
+  });
+
+  it("settles on the last stop when the play finishes just short of it", async () => {
+    const onpainted = vi.fn();
+    render(HubPainting, { stop: 6, from: 5, onpainted });
+    await expect.poll(() => fakePlayer.plays).toBe(1);
+
+    Object.assign(fakePlayer.state, { progress: 0.999, finished: true });
+    fakePlayer.present();
+    expect(fakePlayer.seeks.at(-1)).toBe(1);
+
+    fakePlayer.present();
+    expect(onpainted.mock.calls).toEqual([[6]]);
+  });
+
+  it("reports a jumped-to stop only once the frame showing it is presented", async () => {
+    const onpainted = vi.fn();
+    render(HubPainting, { stop: 3, onpainted });
+    await expect.poll(() => fakePlayer.seeks).toEqual([0.5]);
+
+    fakePlayer.present(true);
+    expect(onpainted).not.toHaveBeenCalled();
+
+    fakePlayer.present();
+    expect(onpainted.mock.calls).toEqual([[3]]);
   });
 
   it("shows half the first stage when nothing is resolved", async () => {

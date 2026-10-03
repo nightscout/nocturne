@@ -40,16 +40,7 @@ describe("StepArtwork", () => {
     await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(0.25);
 
     await view.rerender({ art: "import", progress: 0.504 });
-    await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(0.5);
-  });
-
-  it("does not seek within a whole percent", async () => {
-    const view = render(StepArtwork, { art: "import", progress: 0.3 });
-    await expect.poll(() => fakePlayer.seeks).toEqual([0.3]);
-
-    await view.rerender({ art: "import", progress: 0.3004 });
-
-    expect(fakePlayer.seeks).toEqual([0.3]);
+    await expect.poll(() => fakePlayer.seeks.at(-1)).toBe(0.504);
   });
 
   // Reduced motion shows the finished artwork; rewinding it to the import's

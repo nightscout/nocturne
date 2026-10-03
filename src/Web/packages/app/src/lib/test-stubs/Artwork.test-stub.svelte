@@ -8,10 +8,16 @@
       motion: "full" as "full" | "reduced",
       progress: 0,
       playing: false,
+      finished: false,
     },
-    seek(progress: number) {
+    onprogress: undefined as ((progress: number, seeking: boolean) => void) | undefined,
+    seekTo(progress: number) {
       fakePlayer.seeks.push(progress);
       fakePlayer.state.progress = progress;
+    },
+    /** Presents a frame; one that shows the latest `seekTo` target is presented with `seeking` false. */
+    present(seeking = false) {
+      fakePlayer.onprogress?.(fakePlayer.state.progress, seeking);
     },
     play() {
       fakePlayer.plays += 1;
@@ -28,6 +34,7 @@
 
   let {
     onready,
+    onprogress,
     autoplay,
     artwork,
     icon,
@@ -36,6 +43,7 @@
     class: className,
   }: {
     onready?: (player: typeof fakePlayer) => void | (() => void);
+    onprogress?: (progress: number, seeking: boolean) => void;
     autoplay?: string;
     artwork?: string;
     icon?: { name: string };
@@ -45,6 +53,10 @@
   } = $props();
 
   $effect(() => untrack(() => onready?.(fakePlayer)));
+  $effect(() => {
+    fakePlayer.onprogress = onprogress;
+    return () => (fakePlayer.onprogress = undefined);
+  });
 </script>
 
 <div

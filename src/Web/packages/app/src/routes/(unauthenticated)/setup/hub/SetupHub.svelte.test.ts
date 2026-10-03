@@ -126,6 +126,8 @@ describe("SetupHub", () => {
     await expect.element(page.getByTestId("hub-header")).toBeVisible();
 
     fakePlayer.state.progress = 1;
+    fakePlayer.present();
+    fakePlayer.present();
 
     await expect
       .poll(() => page.getByTestId("hub-all-set").query(), { timeout: 5000 })

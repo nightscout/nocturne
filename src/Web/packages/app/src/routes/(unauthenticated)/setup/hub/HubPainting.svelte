@@ -40,9 +40,13 @@
   const mode = prefersReducedMotion() ? "baked" : "auto";
   const linear = (t: number) => t;
 
-  /** The stop on the canvas, so a later stop is painted forward from it rather than jumped to. */
-  let painted: number | undefined = untrack(() => from);
+  /** The stop last targeted, which a later stop is painted forward from rather than jumped to. */
+  let lastStop: number | undefined = untrack(() => from);
   let seekable = $state(true);
+
+  /** Handles the next presented frame for the stop being painted towards. */
+  let onFrame: ((progress: number, seeking: boolean) => void) | undefined;
+  const handleProgress = (progress: number, seeking: boolean) => onFrame?.(progress, seeking);
 
   $effect(() => {
     const current = player;
@@ -52,35 +56,37 @@
     const { mode: resolved, motion } = current.state;
     seekable = resolved === "live" || resolved === "baked";
     // Untracked: the host's state written in the callback must not become this effect's input.
-    const reached = () => untrack(() => onpainted?.(target));
+    const reached = () => {
+      onFrame = undefined;
+      untrack(() => onpainted?.(target));
+    };
     if (!seekable) {
       reached();
       return;
     }
 
-    const previous = painted;
-    painted = target;
+    const previous = lastStop;
+    lastStop = target;
     const position = target / HUB_PAINTING_STOPS;
 
-    if (previous === undefined || previous >= target || motion === "reduced") {
+    const settle = () => {
       current.pause();
-      current.seek(position);
-      reached();
-      return;
+      current.seekTo(position);
+      onFrame = (_, seeking) => {
+        if (!seeking) reached();
+      };
+    };
+    if (previous === undefined || previous >= target || motion === "reduced") {
+      settle();
+    } else {
+      current.seekTo(previous / HUB_PAINTING_STOPS);
+      current.play();
+      // A live play finishes on its last whole tick, at a progress just short of 1.
+      onFrame = (progress, seeking) => {
+        if (!seeking && (progress >= position || current.state.finished)) settle();
+      };
     }
-
-    current.seek(previous / HUB_PAINTING_STOPS);
-    current.play();
-    let frame = requestAnimationFrame(function watch() {
-      if (current.state.progress >= position || !current.state.playing) {
-        current.pause();
-        current.seek(position);
-        reached();
-        return;
-      }
-      frame = requestAnimationFrame(watch);
-    });
-    return () => cancelAnimationFrame(frame);
+    return () => (onFrame = undefined);
   });
 </script>
 
@@ -93,5 +99,6 @@
   durationMs={9000}
   autoplay="never"
   onready={handleReady}
+  onprogress={handleProgress}
   class="{seekable ? '' : 'hidden'} {className ?? ''}"
 />

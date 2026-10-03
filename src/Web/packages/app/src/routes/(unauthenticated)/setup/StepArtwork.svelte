@@ -54,15 +54,10 @@
 
   const autoplay = $derived(progress === undefined ? "once" : "never");
 
-  // Whole percents: each seek replays the simulation from a checkpoint.
-  const target = $derived(
-    progress === undefined ? undefined : Math.round(progress * 100) / 100
-  );
-
   $effect(() => {
-    if (!player || target === undefined) return;
+    if (!player || progress === undefined) return;
     if (player.state.motion === "reduced") return;
-    player.seek(target);
+    player.seekTo(progress);
   });
 </script>
 
