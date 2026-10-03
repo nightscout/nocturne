@@ -88,6 +88,15 @@ export interface FitBox {
 }
 
 /**
+ * Fit for a 3:1 banner painted behind a host. Its washes run horizontally, so a host near (from 2.4:1) or wider
+ * than 3:1 fills: they stretch sideways and still reach both ends. A taller host, usually a card,
+ * would squash them, so it contains instead.
+ */
+export function bannerFit(containerWidth: number, containerHeight: number): FitMode {
+  return containerWidth / Math.max(1, containerHeight) >= 2.4 ? 'fill' : 'contain';
+}
+
+/**
  * The largest box of `aspect` (width / height) that fits `containerWidth` x
  * `containerHeight`, centred or anchored to the bottom-left.
  */
