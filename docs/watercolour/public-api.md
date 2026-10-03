@@ -52,12 +52,20 @@ scrubber - should pass it.
 ### Player methods and state
 
 ```ts
-player.play(); player.pause(); player.reset(); player.seek(0.5); player.finishImmediately();
+player.play(); player.pause(); player.reset(); player.seekTo(0.5); player.finishImmediately();
 player.resize(width, height, dpr);
 const png = await player.exportPng(512, 512);            // live only
 const { strip, manifest } = await player.exportStrip(12, 256);  // live only
 player.dispose();
 ```
+
+Use `seekTo(progress)` for interaction-driven progress. Requests coalesce to the latest target;
+live checkpoint replay advances in bounded slices through the shared frame budget. Baked frames
+seek directly. `state.seeking` remains true until the live target is presented. Calling `play()`
+while seeking waits for that target, then continues the reveal. `pause()` cancels that continuation;
+`reset()`, immediate `seek()`, and `finishImmediately()` replace pending work. Immediate `seek()`
+is for authoring and export code that needs the simulation at the target before returning.
+
 
 `state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `progress`,
 `error`, `fallbackReason`); it is never pushed per frame. Events:
