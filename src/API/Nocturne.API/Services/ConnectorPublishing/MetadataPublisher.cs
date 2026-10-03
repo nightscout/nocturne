@@ -4,6 +4,8 @@ using Nocturne.Connectors.Core.Interfaces;
 using Nocturne.Connectors.Core.Models;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
+using Nocturne.Infrastructure.Data.Extensions;
+using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Core.Contracts.Audit;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Connectors;
@@ -190,6 +192,13 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
         IEnumerable<Activity> activities,
         string source,
         WriteOrigin origin, CancellationToken cancellationToken = default)
+        => await WriteActivityAsync(activities, source, cancellationToken) is not null;
+
+    /// <returns>How many activities were written, or null when the write failed.</returns>
+    private async Task<int?> WriteActivityAsync(
+        IEnumerable<Activity> activities,
+        string source,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -199,16 +208,35 @@ internal sealed class MetadataPublisher : ConnectorPublisherBase, IMetadataPubli
             foreach (var activity in activityList)
                 activity.DataSource = source;
 
-            await _activityService.CreateActivitiesAsync(activityList, cancellationToken);
-            return true;
+            var written = await _activityService.CreateActivitiesAsync(activityList, cancellationToken);
+            return written.Count();
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to publish activities for {Source}", source);
-            return false;
+            return null;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// An activity is stored as a state span, heart rate, step count or sleep session, each carrying
+    /// the activity's id as its <c>OriginalId</c>.
+    /// </remarks>
+    public Task<int?> PublishRecentActivityAsync(
+        IEnumerable<Activity> activities,
+        string source,
+        WriteOrigin origin, CancellationToken cancellationToken = default)
+        => PublishUnheldAsync(
+            activities, a => a.Id,
+            unheld => WriteActivityAsync(unheld, source, cancellationToken),
+            source,
+            ids => _db.GetHeldOriginalIdsAsync<StateSpanEntity>(ids, cancellationToken),
+            ids => _db.GetHeldOriginalIdsAsync<HeartRateEntity>(ids, cancellationToken),
+            ids => _db.GetHeldOriginalIdsAsync<StepCountEntity>(ids, cancellationToken),
+            ids => _db.GetHeldOriginalIdsAsync<SleepSessionEntity>(
+                ids, s => s.Source == ActivityStateSpanMapper.SleepSessionSource, cancellationToken));
 
     public async Task<bool> PublishStateSpansAsync(
         IEnumerable<StateSpan> stateSpans,

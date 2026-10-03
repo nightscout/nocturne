@@ -42,6 +42,14 @@ public interface IActivityDecomposer
     Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether <paramref name="id"/> names an activity the user deleted, by the client id it was
+    /// stored under or by the id reads served it under, in any table an activity is stored in
+    /// (activity state spans, sleep sessions, heart rates, step counts). A record the system swept
+    /// does not count.
+    /// </summary>
+    Task<bool> IsDeletedByUserAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
     /// Determines whether an activity represents heart rate data (has "bpm" in AdditionalProperties).
     /// </summary>
     bool IsHeartRate(Activity activity);

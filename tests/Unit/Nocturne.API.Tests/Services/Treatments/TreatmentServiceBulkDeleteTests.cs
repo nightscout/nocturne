@@ -52,7 +52,7 @@ public class TreatmentServiceBulkDeleteTests
             .ReturnsAsync(matching);
         _store
             .Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
+            .ReturnsAsync(new TreatmentDeletion(null));
 
         var deleted = await _service.DeleteTreatmentsAsync(find);
 

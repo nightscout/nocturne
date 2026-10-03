@@ -24,7 +24,6 @@
     prefersHour12,
   } from "$lib/utils/formatting";
   import Clock from "@lucide/svelte/icons/clock";
-  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
@@ -51,9 +50,6 @@
     getGlucoseTileVariant(glucose.status)
   );
 
-  const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
-
-
   // Format values based on user's unit preference
   const units = $derived(glucoseUnits.current);
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
@@ -67,7 +63,7 @@
   const isStale = $derived(
     currentTime.getTime() - lastUpdated > STALE_THRESHOLD_MS
   );
-  const isDisconnected = $derived(connection.isDisconnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
 
   // Loading state - no data received yet
   const isLoading = $derived(

@@ -46,6 +46,14 @@ public class EntryDecomposerTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    [Fact]
+    public async Task DeleteStoredAsync_ARecordThatIsNotAnEntry_Throws()
+    {
+        var act = () => _decomposer.DeleteStoredAsync(new Note { Id = Guid.CreateVersion7() }, WriteOrigin.Live);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithParameterName("stored");
+    }
+
     #region SGV Decomposition
 
     [Fact]

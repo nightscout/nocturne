@@ -282,17 +282,18 @@ public class EntryService : IEntryService
 
     /// <inheritdoc />
     /// <remarks>
-    /// Deletes the entry's V4 records via <see cref="IEntryDecomposer.DeleteByLegacyIdAsync"/>,
-    /// which routes through the repository chokepoint that fires the deletion broadcast.
+    /// Resolves <paramref name="id"/> to the stored record <see cref="GetEntryByIdAsync"/> returns, then
+    /// deletes that record via <see cref="IEntryDecomposer.DeleteStoredAsync"/>, which routes through the
+    /// repository chokepoint that fires the deletion broadcast.
     /// </remarks>
     public async Task<bool> DeleteEntryAsync(
         string id,
         CancellationToken cancellationToken = default)
     {
-        var deletedCount = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
+        if (await _store.GetStoredByIdAsync(id, cancellationToken) is not { } stored)
+            return false;
 
-        var deleted = deletedCount > 0;
-        return deleted;
+        return await _decomposer.DeleteStoredAsync(stored, WriteOrigin.Live, cancellationToken) > 0;
     }
 
     /// <inheritdoc />

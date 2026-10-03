@@ -67,6 +67,12 @@ public static class ActivityStateSpanMapper
     }
 
     /// <summary>
+    /// The stored <c>Source</c> of every sleep session <see cref="ToSleepSession"/> projects: the half
+    /// of its (Source, OriginalId) dedup key an activity does not carry.
+    /// </summary>
+    public const string SleepSessionSource = nameof(SleepSource.Manual);
+
+    /// <summary>
     /// Projects a v1 Activity with a sleep-type into a <see cref="SleepSession"/>.
     /// </summary>
     public static SleepSession ToSleepSession(Activity activity)

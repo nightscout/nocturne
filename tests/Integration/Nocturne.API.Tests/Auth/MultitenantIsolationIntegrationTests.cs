@@ -166,6 +166,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         using var clientB = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugB, _baseDomain, _accessTokenB);
         var profilePayload = new
         {
+            _id = "5f8d0c1e8a7b4c3d9e5f1907",
             defaultProfile = "TenantBProfile",
             store = new Dictionary<string, object>
             {
@@ -184,7 +185,7 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
             startDate = DateTime.UtcNow.ToString("o")
         };
         var putResponse = await clientB.PutAsJsonAsync("/api/v1/profile", profilePayload);
-        putResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.Created, HttpStatusCode.NoContent);
+        putResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Act - GET profile from tenant A
         using var clientA = AuthTestHelpers.CreateAuthenticatedTenantClient(Fixture, _slugA, _baseDomain, _accessTokenA);
@@ -192,8 +193,11 @@ public class MultitenantIsolationIntegrationTests : ApiIntegrationTestBase
         var content = await getResponse.Content.ReadAsStringAsync();
 
         // Assert - tenant A should not see "TenantBProfile"
+        getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         content.Should().NotContain("TenantBProfile",
             "tenant A must not see profiles belonging to tenant B");
+        (await clientB.GetStringAsync("/api/v1/profile")).Should().Contain("TenantBProfile",
+            "tenant B must read back the profile it stored");
     }
 
     [Fact]

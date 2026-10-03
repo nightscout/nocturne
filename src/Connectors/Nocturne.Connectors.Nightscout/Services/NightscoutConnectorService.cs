@@ -8,6 +8,7 @@ using Nocturne.Connectors.Core.Services;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Connectors.Nightscout.Configurations;
 using Nocturne.Core.Constants;
+using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Net;
 
@@ -336,11 +337,22 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
                     ? ResumeFrom(request.From, await CalculateActivityCatchUpSinceAsync(config) ?? request.From)
                     : request.From;
 
+                var recent = openEnded && activityFrom is { } crawlFrom
+                    ? new RecentRecords<Activity>(crawlFrom - RecentReconcileWindow, Full: false,
+                        a => ParseCreatedAt(a.CreatedAt)?.UtcDateTime)
+                    : null;
+
                 var outcome = await CrawlAndPublishAsync(
                     "Activity", activityFrom, request.To,
-                    FetchActivityPagesAsync,
+                    (from, to) => FetchCreatedAtPagesAsync<Activity>(
+                        from, to, "activity", a => a.CreatedAt, "FetchActivity", observe: page => recent?.Collect(page)),
                     oldestOf: p => OldestCreatedAt(p, a => a.CreatedAt),
                     publishAsync: p => PublishActivityDataAsync(p, config, cancellationToken));
+
+                if (recent is not null && outcome.Success)
+                    outcome = outcome.Plus(await PublishUncrawledAsync(recent, activityFrom!.Value,
+                        async (p, uncrawled) => await p.Metadata.PublishRecentActivityAsync(
+                            uncrawled, ConnectorSource, WriteOrigin.Live, cancellationToken)));
 
                 RecordPublishOutcome(result, SyncDataType.Activity, outcome.Count, outcome.Success);
             }
@@ -730,7 +742,7 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
     ///     Publishes what the read returned below the crawl's resume point. The crawl resumes from the
     ///     newest stored time, so a record that reaches the source after a newer one is never crawled:
     ///     CGM readings backfilled after a signal loss, back-dated treatments, uploads from an offline
-    ///     phone.
+    ///     phone, activity a health app syncs hours late.
     /// </summary>
     /// <param name="crawledFrom">The crawl's own lower bound; it already published what lies above.</param>
     /// <param name="publishRecentAsync">Writes what the store does not already hold, returning how many, or null on failure.</param>
@@ -965,10 +977,6 @@ public class NightscoutConnectorServiceBase<TConfig> : BaseConnectorService<TCon
 
         return foods;
     }
-
-    private IAsyncEnumerable<Activity[]> FetchActivityPagesAsync(DateTime? from, DateTime? to) =>
-        FetchCreatedAtPagesAsync<Activity>(
-            from, to, "activity", a => a.CreatedAt, "FetchActivity");
 
     private async Task<T?> FetchDataAsync<T>(string url, string operationName) where T : class
     {

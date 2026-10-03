@@ -904,6 +904,7 @@ class Program
             builder.AddMermaidDiagramPublisher();
             builder.AddPortainerComposePublisher();
             builder.AddByoProxyComposePublisher();
+            builder.AddPostgresDataComposePublisher();
         }
 
         var app = builder.Build();

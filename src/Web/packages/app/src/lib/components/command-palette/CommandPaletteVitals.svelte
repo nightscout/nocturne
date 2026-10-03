@@ -7,7 +7,6 @@
   } from "$lib/utils/formatting";
   import { getDirectionInfo } from "$lib/utils";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
-  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseStatusClass } from "$lib/utils/glucose-status";
 
@@ -26,8 +25,7 @@
   const directionInfo = $derived(getDirectionInfo(glucose.direction));
 
   const isStale = $derived(currentTime - lastUpdated > STALE_THRESHOLD_MS);
-  const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
-  const isDisconnected = $derived(connection.isDisconnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isDimmed = $derived(isStale || isDisconnected);
   const hasData = $derived(currentBG > 0);
 

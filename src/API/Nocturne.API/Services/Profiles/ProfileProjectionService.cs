@@ -229,14 +229,9 @@ public class ProfileProjectionService : IProfileProjectionService
             TargetHigh = MapTargetHigh(targetRange.Result?.Entries),
         };
 
-        // Extract the profile record-level ID from the legacy ID prefix (before the colon)
-        var profileId = settings.LegacyId?.Contains(':') == true
-            ? settings.LegacyId.Split(':')[0]
-            : settings.LegacyId ?? settings.Id.ToString();
-
         return new Profile
         {
-            Id = profileId,
+            Id = TherapySettings.DocumentIdOf(settings),
             DefaultProfile = settings.ProfileName,
             StartDate = settings.StartDate ?? settings.Timestamp.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
             Mills = settings.Mills,

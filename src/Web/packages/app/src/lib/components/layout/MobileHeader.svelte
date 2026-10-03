@@ -10,7 +10,6 @@
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import { GlucoseValueIndicator } from "$lib/components/shared";
   import * as Sidebar from "$lib/components/ui/sidebar";
-  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
@@ -37,10 +36,7 @@
   const now = $derived(realtimeStore?.now ?? Date.now());
   const displayCurrentBG = $derived(formatGlucoseValue(rawCurrentBG, units));
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
-  const connection = createConnectionIndicator(
-    () => realtimeStore?.connectionStatus ?? "idle"
-  );
-  const isDisconnected = $derived(connection.isDisconnected);
+  const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
   // No reading yet: show the skeleton rather than rendering the 0 sentinel as a
   // glucose value.
   const isLoading = $derived(rawCurrentBG <= 0);

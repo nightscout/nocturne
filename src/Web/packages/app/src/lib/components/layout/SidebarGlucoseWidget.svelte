@@ -16,7 +16,6 @@
   import { Tween, prefersReducedMotion } from "svelte/motion";
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
   import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
@@ -58,10 +57,7 @@
   const now = $derived(realtimeStore?.now ?? Date.now());
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
 
-  const connection = createConnectionIndicator(
-    () => realtimeStore?.connectionStatus ?? "idle"
-  );
-  const isDisconnected = $derived(connection.isDisconnected);
+  const isDisconnected = $derived(realtimeStore?.connectionUnavailable ?? false);
   const isLoading = $derived(
     rawCurrentBG === 0 && (realtimeStore?.entries.length ?? 0) === 0
   );

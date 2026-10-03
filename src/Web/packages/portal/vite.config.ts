@@ -86,8 +86,14 @@ function releaseAssets(): Plugin {
         mkdirSync(variantDest, { recursive: true });
         // Copied under its release download name: Vite's dev server refuses to serve any
         // `.env.*` file (server.fs.deny), so a `.env.example?raw` import 403s in the browser.
-        const files = { 'docker-compose.yaml': 'docker-compose.yaml', '.env.example': 'default.env.example' };
-        for (const [file, destName] of Object.entries(files)) {
+        const files: Array<[string, string]> = [
+          ['docker-compose.yaml', 'docker-compose.yaml'],
+          ['.env.example', 'default.env.example'],
+        ];
+        if (variant === 'docker-compose') {
+          files.push(['docker-compose.bind-data.yaml', 'docker-compose.bind-data.yaml']);
+        }
+        for (const [file, destName] of files) {
           const src = resolve(srcDir, file);
           if (existsSync(src)) {
             cpSync(src, resolve(variantDest, destName));

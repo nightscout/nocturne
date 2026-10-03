@@ -1,5 +1,6 @@
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Queries;
+using Nocturne.Core.Models.V4;
 
 namespace Nocturne.Core.Contracts.Entries;
 
@@ -35,6 +36,15 @@ public interface IEntryStore
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The <see cref="Entry"/> if found, or <c>null</c>.</returns>
     Task<Entry?> GetByIdAsync(string id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the stored record <see cref="GetByIdAsync"/> projects for <paramref name="id"/>: a
+    /// <see cref="SensorGlucose"/>, <see cref="MeterGlucose"/> or <see cref="Calibration"/>.
+    /// </summary>
+    /// <param name="id">The entry identifier, resolved exactly as <see cref="GetByIdAsync"/> resolves it.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The stored record, or <c>null</c>.</returns>
+    Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default);
 
     /// <summary>
     /// Finds the stored entry an upload would duplicate: one of the same type, from the same

@@ -1,6 +1,7 @@
 using Nocturne.Core.Contracts.Profiles;
 using Nocturne.Core.Contracts.Events;
 using Nocturne.Core.Contracts.V4;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 
 namespace Nocturne.API.Services.Profiles;
@@ -15,6 +16,7 @@ namespace Nocturne.API.Services.Profiles;
 public class ProfileWriteService : IProfileWriteService
 {
     private readonly IProfileDecomposer _decomposer;
+    private readonly ITherapySettingsRepository _therapySettings;
     private readonly IWriteSideEffects _sideEffects;
     private readonly IDataEventSink<Profile> _events;
     private readonly ILogger<ProfileWriteService> _logger;
@@ -22,12 +24,14 @@ public class ProfileWriteService : IProfileWriteService
 
     public ProfileWriteService(
         IProfileDecomposer decomposer,
+        ITherapySettingsRepository therapySettings,
         IWriteSideEffects sideEffects,
         IDataEventSink<Profile> events,
         ILogger<ProfileWriteService> logger
     )
     {
         _decomposer = decomposer;
+        _therapySettings = therapySettings;
         _sideEffects = sideEffects;
         _events = events;
         _logger = logger;
@@ -70,10 +74,10 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        // Ensure the profile has the correct ID for decomposition
         profile.Id = id;
 
-        await _decomposer.DecomposeAsync(profile, WriteOrigin.Live, cancellationToken);
+        if (!await _decomposer.ReplaceDocumentAsync(profile, WriteOrigin.Live, cancellationToken))
+            return null;
 
         await _sideEffects.OnUpdatedAsync(
             CollectionName,
@@ -92,19 +96,47 @@ public class ProfileWriteService : IProfileWriteService
         CancellationToken cancellationToken = default
     )
     {
-        var deleted = await _decomposer.DeleteByLegacyIdAsync(id, WriteOrigin.Live, cancellationToken);
+        var deleted = await _decomposer.DeleteDocumentAsync(id, WriteOrigin.Live, cancellationToken) > 0;
 
-        if (deleted > 0)
+        if (deleted)
+            await OnDeletedAsync(cancellationToken);
+
+        return deleted;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Once the documents to delete are chosen the deletes run to the end, so a request dropped
+    /// part way leaves no half-pruned collection behind.
+    /// </remarks>
+    public async Task<int> PruneProfilesAsync(
+        int keep,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var documentIds = await _therapySettings.GetDocumentIdsAsync(cancellationToken);
+
+        var deleted = 0;
+        foreach (var id in documentIds.Skip(keep))
         {
-            await _sideEffects.OnDeletedAsync<Profile>(
-                CollectionName,
-                null,
-                cancellationToken: cancellationToken
-            );
-
-            await _events.OnDeletedAsync(null, cancellationToken);
+            if (await _decomposer.DeleteDocumentAsync(id, WriteOrigin.Live, CancellationToken.None) > 0)
+                deleted++;
         }
 
-        return deleted > 0;
+        if (deleted > 0)
+            await OnDeletedAsync(CancellationToken.None);
+
+        return deleted;
+    }
+
+    private async Task OnDeletedAsync(CancellationToken cancellationToken)
+    {
+        await _sideEffects.OnDeletedAsync<Profile>(
+            CollectionName,
+            null,
+            cancellationToken: cancellationToken
+        );
+
+        await _events.OnDeletedAsync(null, cancellationToken);
     }
 }

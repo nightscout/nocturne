@@ -162,9 +162,20 @@ public class EntryReadService : IEntryStore
 
     /// <inheritdoc />
     public async Task<Entry?> GetByIdAsync(string id, CancellationToken ct = default)
+        => await GetStoredByIdAsync(id, ct) switch
+        {
+            SensorGlucose sg => EntryProjection.FromSensorGlucose(sg),
+            MeterGlucose mg => EntryProjection.FromMeterGlucose(mg),
+            Calibration cal => EntryProjection.FromCalibration(cal),
+            _ => null,
+        };
+
+    /// <inheritdoc />
+    public async Task<IV4Record?> GetStoredByIdAsync(string id, CancellationToken ct = default)
     {
+        // A uuid-shaped id may also be a legacy id: older v1 uploads without an _id were given one.
         if (Guid.TryParse(id, out var guid))
-            return await GetByGuidAsync(guid, ct);
+            return await GetByGuidAsync(guid, ct) ?? await GetByLegacyIdAsync(id, ct);
 
         // A non-UUID id is either a legacy/AAPS-supplied ObjectId (stored as LegacyId) or a 24-hex
         // ObjectId we derived from the record's UUID; resolve the latter via its uuid prefix range.
@@ -547,56 +558,20 @@ public class EntryReadService : IEntryStore
 
     #region Private — GetById helpers
 
-    private async Task<Entry?> GetByGuidAsync(Guid id, CancellationToken ct)
-    {
-        var sg = await _sgRepo.GetByIdAsync(id, ct);
-        if (sg is not null)
-            return EntryProjection.FromSensorGlucose(sg);
+    private async Task<IV4Record?> GetByGuidAsync(Guid id, CancellationToken ct)
+        => await _sgRepo.GetByIdAsync(id, ct) as IV4Record
+            ?? await _mgRepo.GetByIdAsync(id, ct) as IV4Record
+            ?? await _calRepo.GetByIdAsync(id, ct);
 
-        var mg = await _mgRepo.GetByIdAsync(id, ct);
-        if (mg is not null)
-            return EntryProjection.FromMeterGlucose(mg);
+    private async Task<IV4Record?> GetByLegacyIdAsync(string legacyId, CancellationToken ct)
+        => await _sgRepo.GetByLegacyIdAsync(legacyId, ct) as IV4Record
+            ?? await _mgRepo.GetByLegacyIdAsync(legacyId, ct) as IV4Record
+            ?? await _calRepo.GetByLegacyIdAsync(legacyId, ct);
 
-        var cal = await _calRepo.GetByIdAsync(id, ct);
-        if (cal is not null)
-            return EntryProjection.FromCalibration(cal);
-
-        return null;
-    }
-
-    private async Task<Entry?> GetByLegacyIdAsync(string legacyId, CancellationToken ct)
-    {
-        var sg = await _sgRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (sg is not null)
-            return EntryProjection.FromSensorGlucose(sg);
-
-        var mg = await _mgRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (mg is not null)
-            return EntryProjection.FromMeterGlucose(mg);
-
-        var cal = await _calRepo.GetByLegacyIdAsync(legacyId, ct);
-        if (cal is not null)
-            return EntryProjection.FromCalibration(cal);
-
-        return null;
-    }
-
-    private async Task<Entry?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
-    {
-        var sg = await _sgRepo.GetByGuidRangeAsync(low, high, ct);
-        if (sg is not null)
-            return EntryProjection.FromSensorGlucose(sg);
-
-        var mg = await _mgRepo.GetByGuidRangeAsync(low, high, ct);
-        if (mg is not null)
-            return EntryProjection.FromMeterGlucose(mg);
-
-        var cal = await _calRepo.GetByGuidRangeAsync(low, high, ct);
-        if (cal is not null)
-            return EntryProjection.FromCalibration(cal);
-
-        return null;
-    }
+    private async Task<IV4Record?> GetByGuidRangeAsync(Guid low, Guid high, CancellationToken ct)
+        => await _sgRepo.GetByGuidRangeAsync(low, high, ct) as IV4Record
+            ?? await _mgRepo.GetByGuidRangeAsync(low, high, ct) as IV4Record
+            ?? await _calRepo.GetByGuidRangeAsync(low, high, ct);
 
     #endregion
 

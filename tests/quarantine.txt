@@ -5,7 +5,6 @@
 #
 # <FullyQualifiedName (no theory arguments)> | <bug>
 Nocturne.API.Tests.Integration.Auth.GuestLinkLifecycleIntegrationTests.GuestSession_CannotWriteV4TherapySettings | a guest session writing v4 therapy settings gets 500 instead of 401/403
-Nocturne.API.Tests.Integration.Auth.MultitenantIsolationIntegrationTests.TenantA_CannotSee_TenantB_Profiles | PUT /api/v1/profile is not routed (405); Nightscout accepts it
 Nocturne.API.Tests.Integration.Auth.TokenRevocationIntegrationTests.Introspect_ValidToken_ReturnsActive | /api/oauth/introspect names its fields tokenType/clientId; RFC 7662 has token_type/client_id
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatusById_ShouldReturnMatchingEntry | devicestatus reads return nothing after a POST
 Nocturne.API.Tests.Integration.DeviceStatusIntegrationTests.GetDeviceStatus_ShouldReturnCreatedEntries | devicestatus reads return nothing after a POST
@@ -101,7 +100,4 @@ Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSkip_R
 Nocturne.API.Tests.Integration.Parity.V3.TreatmentsParityTests.Search_WithSort_ReturnsSameShape | a Meal Bolus with insulin and carbs reads back as two treatments (bolus and carbs)
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_ReturnsSameShape | v3 /version lacks the {status, result} envelope
 Nocturne.API.Tests.Integration.Parity.V3.VersionParityTests.GetVersion_WithData_ReturnsSameShape | v3 /version lacks the {status, result} envelope
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.DeleteTreatment_ShouldRemoveTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.GetTreatmentById_ShouldReturnSpecificTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
-Nocturne.API.Tests.Integration.TreatmentsIntegrationTests.PutTreatment_ShouldUpdateExistingTreatment | GET/PUT/DELETE /api/v1/treatments/{id} answer 404 for a treatment just created
 Nocturne.API.Tests.Integration.V4.BasalInjectionIntegrationTests.POST_with_same_SyncIdentifier_after_soft_delete_creates_new_row | a soft-deleted basal injection still holds its sync identifier (409 on re-POST)

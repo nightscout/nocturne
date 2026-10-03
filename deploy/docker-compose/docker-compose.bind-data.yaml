@@ -1,0 +1,9 @@
+services:
+  nocturne-postgres-server:
+    volumes:
+      - type: bind
+        source: "${POSTGRES_DATA_PATH:?Set POSTGRES_DATA_PATH to an existing absolute directory on the Docker host}"
+        target: "/var/lib/postgresql/data"
+        read_only: false
+        bind:
+          create_host_path: false

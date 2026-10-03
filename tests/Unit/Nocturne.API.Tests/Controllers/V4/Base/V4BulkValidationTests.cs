@@ -396,6 +396,23 @@ public class V4BulkValidationTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task SleepBulk_LeavesOutASessionTheUserDeleted()
+    {
+        var deleted = new SleepSession { OriginalId = "sleep-deleted" };
+        var fresh = new SleepSession { OriginalId = "sleep-fresh" };
+        var service = new Mock<ISleepService>();
+        service.Setup(s => s.UpsertSessionAsync(deleted, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException("sleep session", "original id 'sleep-deleted'"));
+        service.Setup(s => s.UpsertSessionAsync(fresh, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(fresh);
+
+        var result = await Sleep(service).CreateSessionsBulk([deleted, fresh]);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.Value.Should().BeEquivalentTo(new[] { fresh });
+    }
+
     // ── The per-item validators auto-validation cannot reach ────────
 
     [Fact]

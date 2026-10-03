@@ -36,7 +36,6 @@
   import CoachParamHandler from "$lib/coach-marks/CoachParamHandler.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import ChartPrintPatterns from "$lib/components/charts/print/ChartPrintPatterns.svelte";
-  import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
 
   // LocalStorage key for title/favicon settings
   const SETTINGS_STORAGE_KEY = "nocturne-title-favicon-settings";
@@ -156,10 +155,7 @@
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const timeSinceReading = $derived(realtimeStore.timeSinceReading);
 
-  const connection = createConnectionIndicator(
-    () => realtimeStore.connectionStatus
-  );
-  const isDisconnected = $derived(connection.isDisconnected);
+  const isDisconnected = $derived(realtimeStore.connectionUnavailable);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const glucose = displayedGlucose(realtimeStore);
 

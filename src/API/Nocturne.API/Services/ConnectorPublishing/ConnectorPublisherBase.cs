@@ -90,10 +90,25 @@ internal abstract class ConnectorPublisherBase
     /// </summary>
     /// <param name="heldBy">One lookup per table the record type decomposes into.</param>
     /// <returns>How many were written, or null when a lookup or the write failed.</returns>
-    protected async Task<int?> PublishUnheldAsync<TRecord>(
+    protected Task<int?> PublishUnheldAsync<TRecord>(
         IEnumerable<TRecord> records,
         Func<TRecord, string?> legacyIdOf,
         Func<List<TRecord>, Task<bool>> publish,
+        string source,
+        params Func<IReadOnlyCollection<string>, Task<IReadOnlySet<string>>>[] heldBy)
+        => PublishUnheldAsync(
+            records, legacyIdOf,
+            async unheld => await publish(unheld) ? unheld.Count : (int?)null,
+            source, heldBy);
+
+    /// <summary>
+    /// As the other overload, for a <paramref name="publish"/> that reports how many records it
+    /// wrote, or null when the write failed.
+    /// </summary>
+    protected async Task<int?> PublishUnheldAsync<TRecord>(
+        IEnumerable<TRecord> records,
+        Func<TRecord, string?> legacyIdOf,
+        Func<List<TRecord>, Task<int?>> publish,
         string source,
         params Func<IReadOnlyCollection<string>, Task<IReadOnlySet<string>>>[] heldBy)
     {
@@ -122,7 +137,7 @@ internal abstract class ConnectorPublisherBase
         if (unheld.Count == 0)
             return 0;
 
-        return await publish(unheld) ? unheld.Count : null;
+        return await publish(unheld);
     }
 
     /// <summary>

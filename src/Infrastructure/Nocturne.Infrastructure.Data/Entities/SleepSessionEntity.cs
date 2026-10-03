@@ -8,7 +8,7 @@ namespace Nocturne.Infrastructure.Data.Entities;
 /// Maps to Nocturne.Core.Models.SleepSession.
 /// </summary>
 [Table("sleep_sessions")]
-public class SleepSessionEntity : ITenantScoped, IAuditable
+public class SleepSessionEntity : ITenantScoped, IAuditable, ISoftDeletable, IOriginalIdentified
 {
     /// <summary>
     /// The unique identifier of the tenant this record belongs to.
@@ -201,6 +201,13 @@ public class SleepSessionEntity : ITenantScoped, IAuditable
     [AuditIgnored]
     [Column("updated_at")]
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Soft-delete timestamp. When non-null the session is hidden by the global query filter.
+    /// </summary>
+    [AuditIgnored]
+    [Column("deleted_at")]
+    public DateTime? DeletedAt { get; set; }
 
     /// <summary>
     /// Sleep stages within this session.

@@ -738,6 +738,8 @@ public class TandemE2eSyncTests
             Task.FromResult<int?>(0);
         public Task<bool> PublishActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Task.FromResult(true);
+        public Task<int?> PublishRecentActivityAsync(IEnumerable<Activity> activities, string source, WriteOrigin origin, CancellationToken ct = default) =>
+            Task.FromResult<int?>(0);
         public Task<bool> PublishStateSpansAsync(IEnumerable<StateSpan> stateSpans, string source, WriteOrigin origin, CancellationToken ct = default) =>
             Record(StateSpans, stateSpans);
         public Task<bool> PublishSystemEventsAsync(IEnumerable<SystemEvent> systemEvents, string source, WriteOrigin origin, CancellationToken ct = default) =>

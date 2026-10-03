@@ -22431,9 +22431,8 @@ msgstr "Los conectores de fuentes de datos (Dexcom, LibreLinkUp, Glooko, etc.) s
 msgid "Ports <0/> and <1/> open to the internet. The bundled proxy uses them to obtain and serve TLS certificates."
 msgstr "Puertos <0/> y <1/> abiertos a Internet. El proxy incluido los usa para obtener y servir certificados TLS."
 
-#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
-msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
-msgstr "Descarga el paquete <0/> de la <1>última versión de GitHub</1>. El paquete es autocontenido: solo <2/> y la plantilla de entorno, que GitHub muestra como <3/>. El script de inicialización de la base de datos y la configuración del proxy TLS están integrados directamente en el archivo compose, por lo que no hay directorios adicionales que mantener junto a él. El paquete también incluye una configuración alternativa <4/> para quienes usan su propio proxy inverso (consulta abajo)."
+#~ msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below)."
+#~ msgstr "Descarga el paquete <0/> de la <1>última versión de GitHub</1>. El paquete es autocontenido: solo <2/> y la plantilla de entorno, que GitHub muestra como <3/>. El script de inicialización de la base de datos y la configuración del proxy TLS están integrados directamente en el archivo compose, por lo que no hay directorios adicionales que mantener junto a él. El paquete también incluye una configuración alternativa <4/> para quienes usan su propio proxy inverso (consulta abajo)."
 
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Edit <0/> and fill in your values. The required fields come first and are left blank; optional bot integrations are commented out. Use the generator below for each password field and <1/>."
@@ -26336,3 +26335,107 @@ msgstr "El reinicio se ejecuta en segundo plano. Los administradores de la plata
 #: src/routes/(authenticated)/settings/connectors/google-health/google-health-page.svelte
 msgid "Open connector reset"
 msgstr "Restablecimiento del conector abierto"
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "PostgreSQL host-directory storage"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/portainer/+page.svelte
+msgid "Portainer's stack editor and app template use the default named Docker volume; Portainer does not apply Compose override files. To put PostgreSQL data in a host directory, deploy the Docker Compose bundle from the command line with both <0/> and <1/>. See the <2>Docker Compose guide</2> for setup and existing-database migration precautions."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "POSTGRES_DATA_PATH=/srv/nocturne/postgres-data"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the directory on the machine running the Docker daemon, not merely on the computer where you run the Docker CLI. Use an absolute path and ensure the PostgreSQL container can write to it. For example: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Add the path to <0/>: <1/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "This replaces the default <0/> command in Step 3 below; do not run both commands. Start the stack with both files. Keep both <1/> arguments on every later Compose command, including updates and shutdown: <2/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Changing the path does not move your database"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "A new or empty directory initializes a separate, empty PostgreSQL database. For an existing install, take and verify a backup, stop the stack, and migrate the existing PostgreSQL data before starting with the override. Preserve file ownership and use the same PostgreSQL major version. Keep the original named volume until the new location has been verified. There is no automatic volume migration. Do not use <0/> while the original volume is your only copy."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Stop the stack without removing its containers or volumes, then record the stopped PostgreSQL container: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create and inspect a root-owned backup archive while the database is stopped: <0/> Keep this archive somewhere safe before continuing."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Create the host directory and copy the stopped data directory, preserving its contents and ownership: <0/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Set <0/> in <1/> and start with both Compose files: <2/> If you also use the BYO-proxy override, include it as well: <3/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Verify the PostgreSQL logs and your existing Nocturne data before allowing writes. Keep the original named volume and backup archive until verification is complete. To roll back before new writes, stop the override stack without deleting volumes, then start the original Compose file again: <0/> For a stack that also uses BYO proxy, keep that override when stopping and when returning to the named-volume configuration: <1/>"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Schedule downtime first. This copies PostgreSQL's physical data directory, so the source server must be stopped and the destination must use the same PostgreSQL major version. These commands assume Docker runs on this Linux host and you are in the directory containing the Compose files and <0/>."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Do not use <0/> during migration or rollback. It deletes named volumes. If the new database has accepted writes, it is no longer equivalent to the untouched original volume; plan any rollback or restore before reopening the service to users."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Move an existing database from the named volume"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "View docker-compose.bind-data.yaml"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Download the <0/> bundle from the <1>latest GitHub Release</1>. The bundle is self-contained: just <2/> and the environment template, which GitHub lists as <3/>. The database init script and the TLS proxy config are embedded directly in the compose file, so there are no extra directories to keep alongside it. The bundle also ships a <4/> override for operators who run their own reverse proxy (see below). A second, optional override lets PostgreSQL store its data in a directory on the Docker host."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Optional: use a host directory for PostgreSQL"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The default named Docker volume is recommended for most installs and needs no extra configuration. To place PostgreSQL's data on a specific disk or host directory, use the separate bind-data override. It fixes the mount type to <0/> and requires one path, so the mount type and source cannot be accidentally mismatched."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in the same ordered <0/> list on every Compose command for this stack. Include the bind-data file, the BYO-proxy file, and any local override file you use. Omitting an active override can restore the named-volume mount or bundled proxy configuration."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "The override requires <0/> and refuses to create a missing host directory. If the variable is unset or the path does not exist, Compose reports an error instead of silently starting PostgreSQL in a newly created directory. A path that exists but contains no database is still a new database."
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "If you also use the bind-data override, include both overrides in the same command:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Keep every active override in both the pull and update commands. For bind-data only:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "For bind-data with the BYO-proxy override:"
+msgstr ""
+
+#: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
+msgid "Omitting the bind-data override changes the declared storage back to the named volume."
+msgstr ""

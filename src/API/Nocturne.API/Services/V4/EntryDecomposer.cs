@@ -239,6 +239,33 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     }
 
     /// <inheritdoc />
+    public Task<int> DeleteStoredAsync(IV4Record stored, WriteOrigin origin, CancellationToken ct = default)
+        => stored.LegacyId is { } legacyId
+            ? DeleteByLegacyIdAsync(legacyId, origin, ct)
+            : stored switch
+            {
+                SensorGlucose => DeleteUnkeyedAsync(_sensorGlucoseRepository, stored.Id, origin, ct),
+                MeterGlucose => DeleteUnkeyedAsync(_meterGlucoseRepository, stored.Id, origin, ct),
+                Calibration => DeleteUnkeyedAsync(_calibrationRepository, stored.Id, origin, ct),
+                _ => throw new ArgumentException($"{stored.GetType().Name} is not an entry record", nameof(stored)),
+            };
+
+    private static async Task<int> DeleteUnkeyedAsync<TRecord>(
+        IV4Repository<TRecord> repository, Guid id, WriteOrigin origin, CancellationToken ct)
+        where TRecord : class, IV4Record
+    {
+        try
+        {
+            await repository.DeleteAsync(id, origin, ct);
+            return 1;
+        }
+        catch (KeyNotFoundException)
+        {
+            return 0;
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<long> BulkDeleteAsync(string? find, WriteOrigin origin, CancellationToken ct = default)
     {
         // origin is accepted for interface uniformity; bulk clear-by-time-range stays a coarse op that

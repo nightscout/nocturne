@@ -60,9 +60,27 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
         var auditEntries = new List<MutationAuditLogEntity>();
         var now = DateTime.UtcNow;
 
-        foreach (var entry in context.ChangeTracker.Entries<IAuditable>())
+        foreach (var entry in context.ChangeTracker.Entries())
         {
             if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                continue;
+
+            // Maintain the dedup flag carried by every soft-deletable row, audited or not: a
+            // user-initiated soft-delete blocks connector resync from re-creating the row; a system
+            // sweep or a restore does not. A hard delete removes the row, so only soft-delete
+            // transitions (Modified state) are read.
+            if (entry.State == EntityState.Modified && entry.Entity is ISoftDeletable)
+            {
+                var deletedAt = entry.Property(nameof(ISoftDeletable.DeletedAt));
+                var wasDeleted = deletedAt.OriginalValue is not null;
+                var isDeleted = deletedAt.CurrentValue is not null;
+                if (!wasDeleted && isDeleted)
+                    entry.Property("DeletedByUser").CurrentValue = !auditContext.IsSystemMutation();
+                else if (wasDeleted && !isDeleted)
+                    entry.Property("DeletedByUser").CurrentValue = false;
+            }
+
+            if (entry.Entity is not IAuditable)
                 continue;
 
             var (action, changesJson) = DetermineActionAndChanges(entry);
@@ -70,18 +88,6 @@ public class MutationAuditInterceptor : SaveChangesInterceptor
             // Skip if Modified state but no actual field changes
             if (action == "update" && changesJson is null)
                 continue;
-
-            // Maintain the dedup flag carried by soft-deletable rows: a user-initiated
-            // soft-delete blocks connector resync from re-creating the row; a system
-            // sweep or a restore does not. Only meaningful for soft-delete transitions
-            // (Modified state) — a hard delete (Deleted state) removes the row entirely.
-            if (entry.State == EntityState.Modified && entry.Entity is ISoftDeletable)
-            {
-                if (action == "delete")
-                    entry.Property("DeletedByUser").CurrentValue = !auditContext.IsSystemMutation();
-                else if (action == "restore")
-                    entry.Property("DeletedByUser").CurrentValue = false;
-            }
 
             // System/connector/background mutations have no human actor. They are high-volume
             // automated data ingestion (CGM readings, temp basals, etc.) whose provenance is
