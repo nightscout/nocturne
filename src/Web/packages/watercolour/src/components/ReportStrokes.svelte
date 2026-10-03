@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { reportStrokesCrop, reportStrokesScene } from '../api/report-strokes-scene';
+  import { reportStripCrop, reportStrokesScene } from '../api/report-header-scene';
   import { type Surface, seedFromName } from '../types';
   import { hostSurface, mountPlayer, watchSurface } from './helpers';
 
@@ -30,7 +30,7 @@
     const ground = surface;
     return mountPlayer(frame, canvas, {
       scene: (module, width, height, dpr) => reportStrokesScene(module, width, height, { seed, surface: ground, dpr }),
-      crop: reportStrokesCrop,
+      crop: reportStripCrop,
       fit: 'fill',
       releaseAfterFinish: true,
     });

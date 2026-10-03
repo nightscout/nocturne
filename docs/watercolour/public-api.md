@@ -126,13 +126,13 @@ The simulation grid is square and stretched to the painting, so a long strip
 painted on a canvas of its own shape would get cells many times wider than they
 are tall. A strip longer than 3:1 is instead painted on a 3:1 canvas at the
 strip's width, with the strokes in the band through its middle, and
-`reportStrokesCrop(width, height)` is the window that shows that band. Mount the
+`reportStripCrop(width, height)` is the window that shows that band. Mount the
 two together, as `ReportStrokes` does:
 
 ```ts
 mountPlayer(frame, canvas, {
   scene: (module, width, height, dpr) => reportStrokesScene(module, width, height, { seed, surface, dpr }),
-  crop: reportStrokesCrop,
+  crop: reportStripCrop,
   fit: 'fill',
   releaseAfterFinish: true,
 });

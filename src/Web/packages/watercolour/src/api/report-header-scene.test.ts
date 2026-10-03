@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FRAME_ASPECT } from './drop-scene';
-import { reportStrokesCrop, reportStrokesScene } from './report-strokes-scene';
+import { reportStripCrop, reportStrokesScene } from './report-header-scene';
 import { parseSceneDocument } from './scenes';
 
 const module = {
@@ -50,13 +50,13 @@ const chains = (scene: StrokesDocument) => {
     });
 };
 
-describe('reportStrokesCrop', () => {
+describe('reportStripCrop', () => {
   it('shows the whole painting for a strip the grid can carry', () => {
-    expect(reportStrokesCrop(120, 60)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+    expect(reportStripCrop(120, 60)).toEqual({ x: 0, y: 0, width: 1, height: 1 });
   });
 
   it('shows a full-width band no more elongated than the grid for a long strip', () => {
-    const crop = reportStrokesCrop(1100, 14);
+    const crop = reportStripCrop(1100, 14);
     expect(crop.width).toBe(1);
     expect(crop.height).toBeCloseTo((14 * MAX_FRAME_ASPECT) / 1100);
     expect(crop.y + crop.height / 2).toBeCloseTo(0.5);
@@ -67,7 +67,7 @@ describe('reportStrokesScene', () => {
   it('keeps every stroke within the engine bounds and inside the shown band', () => {
     const invalid: unknown[] = [];
     for (const [width, height] of [[1100, 56], [1100, 14], [600, 40], [120, 40], [80, 120]]) {
-      const crop = reportStrokesCrop(width!, height!);
+      const crop = reportStripCrop(width!, height!);
       for (let seed = 0; seed < 24; seed++) {
         const json = reportStrokesScene(module, width!, height!, { seed, dpr: 2 });
         expect(parseSceneDocument(json).version).toBe(1);
@@ -113,3 +113,4 @@ describe('reportStrokesScene', () => {
     expect(document(600, 40, 7).timeline).not.toEqual(document(600, 40, 8).timeline);
   });
 });
+

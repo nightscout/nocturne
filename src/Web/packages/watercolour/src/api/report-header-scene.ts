@@ -4,7 +4,7 @@ import type { WasmModule } from './wasm-types';
 import { MAX_FRAME_ASPECT, dropSimResolution } from './drop-scene';
 import { seededRandom } from './random';
 
-export interface ReportStrokesOptions {
+export interface ReportSceneOptions {
   seed?: number;
   surface?: Surface;
   dpr?: number;
@@ -14,6 +14,8 @@ interface SceneDocument {
   palette: { name: string; entries: { role: string; pigment: unknown }[] };
   [key: string]: unknown;
 }
+
+type SceneEvent = { at_tick: number; op: unknown };
 
 const DONOR = 'avatar-wash';
 const PALETTE = 'moonlight';
@@ -52,9 +54,64 @@ const PRESSURE_AT = [0, 0.08, 0.45, 0.8, 1];
  * {@link MAX_FRAME_ASPECT}) is painted on a canvas of that aspect at the
  * strip's width, and shows only the band through its middle.
  */
-export function reportStrokesCrop(width: number, height: number): CropWindow {
+export function reportStripCrop(width: number, height: number): CropWindow {
   const band = Math.min(1, (height * MAX_FRAME_ASPECT) / width);
   return { x: 0, y: (1 - band) / 2, width: 1, height: band };
+}
+
+/**
+ * A painting of a `width` x `height` strip on the donor's paper and palette,
+ * authored in strip pixels and shown through {@link reportStripCrop}.
+ */
+function stripPainting(
+  module: Pick<WasmModule, 'catalogueScene'>,
+  width: number,
+  height: number,
+  { seed = 0, surface = 'light', dpr = 1 }: ReportSceneOptions,
+) {
+  const crop = reportStripCrop(width, height);
+  const canvasHeight = height / crop.height;
+  const pxW = Math.max(1, Math.round(width * dpr));
+  const pxH = Math.max(1, Math.round(canvasHeight * dpr));
+  const simResolution = dropSimResolution(Math.max(pxW, pxH));
+  const doc = JSON.parse(
+    module.catalogueScene(DONOR, seed, PALETTE, DEFAULT_INTENSITY, 'large', surface, simResolution),
+  ) as SceneDocument;
+  const random = seededRandom(seed || 1);
+  const short = Math.min(width, canvasHeight);
+  // Every simulation cell carries every palette entry, so the scene keeps only
+  // the pigments it lays, in the order it first asks for them.
+  const used: number[] = [];
+  return {
+    random,
+    between: (lo: number, hi: number) => lo + random() * (hi - lo),
+    pt: (x: number, y: number): [number, number] => [
+      Math.min(1, Math.max(0, x / width)),
+      crop.y + Math.min(1, Math.max(0, y / height)) * crop.height,
+    ],
+    rad: (r: number) => r / short,
+    // The authoring `Style::conc` and `Style::water` factors at the default intensity.
+    conc: (share: number) => share * (0.4 + DEFAULT_INTENSITY * 0.857),
+    water: (share: number) => share * (0.8 + DEFAULT_INTENSITY * 0.3),
+    pigment(role: string): number {
+      const at = Math.max(0, doc.palette.entries.findIndex((e) => e.role === role));
+      if (!used.includes(at)) used.push(at);
+      return used.indexOf(at);
+    },
+    finish(id: string, events: SceneEvent[], dryAt: number, totalTicks: number): string {
+      events.push({ at_tick: dryAt, op: { dry: { rate: DRY_RATE } } });
+      events.push({ at_tick: totalTicks, op: 'dry_all' });
+      return JSON.stringify({
+        ...doc,
+        id: `${id}-${seed}`,
+        size_hint: [pxW, pxH],
+        seed,
+        sim_resolution: simResolution,
+        palette: { name: doc.palette.name, entries: used.map((at) => doc.palette.entries[at]!) },
+        timeline: { total_ticks: totalTicks, events },
+      });
+    },
+  };
 }
 
 /**
@@ -63,29 +120,15 @@ export function reportStrokesCrop(width: number, height: number): CropWindow {
  * later stroke bleeds into an earlier one where they cross. Each lands light,
  * presses to its belly and thins as the brush runs dry, ending in split
  * bristle streaks. The seed sets their heights, weights, curvature, overlap
- * and order. Show it through {@link reportStrokesCrop}.
+ * and order. Show it through {@link reportStripCrop}.
  */
 export function reportStrokesScene(
   module: Pick<WasmModule, 'catalogueScene'>,
   width: number,
   height: number,
-  { seed = 0, surface = 'light', dpr = 1 }: ReportStrokesOptions = {},
+  options: ReportSceneOptions = {},
 ): string {
-  const crop = reportStrokesCrop(width, height);
-  const canvasHeight = height / crop.height;
-  const pxW = Math.max(1, Math.round(width * dpr));
-  const pxH = Math.max(1, Math.round(canvasHeight * dpr));
-  const simResolution = dropSimResolution(Math.max(pxW, pxH));
-  const doc = JSON.parse(
-    module.catalogueScene(DONOR, seed, PALETTE, DEFAULT_INTENSITY, 'large', surface, simResolution),
-  ) as SceneDocument;
-  const role = (name: string) => Math.max(0, doc.palette.entries.findIndex((e) => e.role === name));
-  const base = role('base_wash');
-  const shadow = role('shadow');
-  const used = [...new Set([base, shadow])].sort((a, b) => a - b);
-
-  const random = seededRandom(seed || 1);
-  const between = (lo: number, hi: number) => lo + random() * (hi - lo);
+  const { random, between, pt, rad, conc, water, pigment, finish } = stripPainting(module, width, height, options);
   const shuffle = <T>(items: T[]) => {
     for (let i = items.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
@@ -93,15 +136,8 @@ export function reportStrokesScene(
     }
     return items;
   };
-  // The authoring `Style::conc` and `Style::water` factors at the default intensity.
-  const conc = (share: number) => share * (0.4 + DEFAULT_INTENSITY * 0.857);
-  const water = (share: number) => share * (0.8 + DEFAULT_INTENSITY * 0.3);
-  const short = Math.min(width, canvasHeight);
-  const pt = (x: number, y: number): [number, number] => [
-    Math.min(1, Math.max(0, x / width)),
-    crop.y + Math.min(1, Math.max(0, y / height)) * crop.height,
-  ];
-  const rad = (r: number) => r / short;
+  const base = pigment('base_wash');
+  const shadow = pigment('shadow');
 
   const scale = Math.max(height, MIN_STROKE_SCALE_PX);
   const bellies = WEIGHTS.map(({ belly: [lo, hi] }) => between(lo, hi) * scale);
@@ -128,7 +164,7 @@ export function reportStrokesScene(
   });
   const order = shuffle([THIN, BROAD, CROSSING]);
 
-  const events: { at_tick: number; op: unknown }[] = [];
+  const events: SceneEvent[] = [];
   let lastTick = 0;
   order.forEach((which, laid) => {
     const { weight, belly, x0, x1, start, end, bow, wobble, pressure } = strokes[which]!;
@@ -136,7 +172,7 @@ export function reportStrokesScene(
     const centre = (t: number) =>
       start + (end - start) * t + bow * Math.sin(Math.PI * t) + wobble.size * Math.sin(2 * Math.PI * wobble.cycles * t + wobble.phase);
     const along = (t: number, offset = 0) => pt(x0 + length * t, within(centre(t), belly) + offset);
-    const pigment = used.indexOf(weight.shadow ? shadow : base);
+    const laidPigment = weight.shadow ? shadow : base;
     let tick = laid * STROKE_STAGGER_TICKS;
     for (let k = 0; k + 1 < PRESSURE_AT.length; k++) {
       const t0 = PRESSURE_AT[k]!;
@@ -151,7 +187,7 @@ export function reportStrokesScene(
             brush: {
               path,
               radius: [rad(belly * pressure[k]!), rad(belly * pressure[k + 1]!)],
-              pigment,
+              pigment: laidPigment,
               concentration: conc(weight.concentration),
               water: water(weight.water),
               softness: 0.5,
@@ -171,7 +207,7 @@ export function reportStrokesScene(
           brush: {
             path: [along(t0, side * belly * 0.35), along(t1, side * belly * 0.35 + side * 0.01 * height)],
             radius: [rad(belly * 0.18), rad(belly * 0.06)],
-            pigment,
+            pigment: laidPigment,
             concentration: conc(weight.concentration * 1.2),
             water: water(0.08),
             softness: 0.15,
@@ -182,17 +218,6 @@ export function reportStrokesScene(
     lastTick = Math.max(lastTick, tick);
   });
   const dryAt = lastTick + BLEED_TICKS;
-  const totalTicks = dryAt + SETTLE_TICKS;
-  events.push({ at_tick: dryAt, op: { dry: { rate: DRY_RATE } } });
-  events.push({ at_tick: totalTicks, op: 'dry_all' });
-
-  return JSON.stringify({
-    ...doc,
-    id: `report-strokes-${seed}`,
-    size_hint: [pxW, pxH],
-    seed,
-    sim_resolution: simResolution,
-    palette: { name: doc.palette.name, entries: used.map((at) => doc.palette.entries[at]!) },
-    timeline: { total_ticks: totalTicks, events },
-  });
+  return finish('report-strokes', events, dryAt, dryAt + SETTLE_TICKS);
 }
+
