@@ -41,8 +41,8 @@ export async function waitForGoogleSync(tenant: Tenant, previous?: string | null
   }, { timeoutMs: 45_000, what: "Google Health import completion" });
 }
 
-interface Reading { _id: string; bpm?: number; metric?: number; weightKg?: number }
-interface Sleep { id: string; durationMs: number }
+interface Reading { _id: string; mills: number; bpm?: number; metric?: number; weightKg?: number }
+interface Sleep { id: string; startTime: string; endTime: string; durationMs: number }
 
 export async function googleReadings(tenant: Tenant) {
   const heart = await tenant.api.ok<Reading[]>("GET", "/api/v4/HeartRate?count=100");
@@ -50,4 +50,14 @@ export async function googleReadings(tenant: Tenant) {
   const weight = await tenant.api.ok<Reading[]>("GET", "/api/v4/body-weight?count=100");
   const sleep = await tenant.api.ok<{ data: Sleep[] }>("GET", "/api/v4/sleep/sessions");
   return { heart, steps, weight, sleep: sleep.data };
+}
+
+// Upserts can refresh storage metadata; compare the stored health records themselves.
+export function googleRecordSnapshot(readings: Awaited<ReturnType<typeof googleReadings>>) {
+  return {
+    heart: readings.heart.map(({ _id, mills, bpm }) => ({ _id, mills, bpm })).sort((a, b) => a._id.localeCompare(b._id)),
+    steps: readings.steps.map(({ _id, mills, metric }) => ({ _id, mills, metric })).sort((a, b) => a._id.localeCompare(b._id)),
+    weight: readings.weight.map(({ _id, mills, weightKg }) => ({ _id, mills, weightKg })).sort((a, b) => a._id.localeCompare(b._id)),
+    sleep: readings.sleep.map(({ id, startTime, endTime, durationMs }) => ({ id, startTime, endTime, durationMs })).sort((a, b) => a.id.localeCompare(b.id)),
+  };
 }

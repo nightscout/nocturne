@@ -1,5 +1,5 @@
 import { test, expect, signIn } from "./fixtures.ts";
-import { googleConsent, googleOptions, googleReadings, waitForGoogleSync } from "../helpers/google-health.ts";
+import { googleConsent, googleOptions, googleReadings, googleRecordSnapshot, waitForGoogleSync } from "../helpers/google-health.ts";
 import { env } from "../helpers/env.ts";
 import type { Page } from "@playwright/test";
 import type { Tenant } from "../helpers/tenant.ts";
@@ -74,7 +74,7 @@ test("disconnect Google Health, sign in again and sync without losing or duplica
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sign in with Google", exact: true })).toBeVisible();
   expect((await tenant.api.ok<{ connected: boolean }>("GET", "/api/v4/google-health")).connected).toBe(false);
-  expect(await googleReadings(tenant)).toEqual(first);
+  expect(googleRecordSnapshot(await googleReadings(tenant))).toEqual(googleRecordSnapshot(first));
 
   // Clear the old callback query so the URL assertion waits for the new OAuth round trip.
   await page.goto(`${tenant.webUrl}/settings/connectors/google-health`);
@@ -92,8 +92,5 @@ test("disconnect Google Health, sign in again and sync without losing or duplica
   await page.getByRole("button", { name: "Sync now", exact: true }).click();
   await waitForGoogleSync(tenant, connected.lastSync);
   const reconnected = await googleReadings(tenant);
-  for (const key of ["heart", "steps", "weight"] as const) {
-    expect(reconnected[key].map((row) => row._id).sort()).toEqual(first[key].map((row) => row._id).sort());
-  }
-  expect(reconnected.sleep.map((row) => row.id).sort()).toEqual(first.sleep.map((row) => row.id).sort());
+  expect(googleRecordSnapshot(reconnected)).toEqual(googleRecordSnapshot(first));
 });
