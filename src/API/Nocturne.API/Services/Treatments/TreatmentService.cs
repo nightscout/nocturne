@@ -166,10 +166,20 @@ public class TreatmentService : ITreatmentService
         var created = await _store.CreateAsync(treatmentList, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnCreatedAsync(created, cancellationToken);
+        await _events.OnCreatedAsync(Written(created), cancellationToken);
 
         return created;
     }
+
+    /// <summary>
+    /// The created treatments the store wrote. One the user had deleted is returned to the caller as
+    /// before but stored nothing, so no event announces it, and write-back does not put it upstream
+    /// again.
+    /// </summary>
+    private static IReadOnlyList<Treatment> Written(BulkWrite<Treatment> created) =>
+        created.Withheld.Count == 0
+            ? created
+            : created.Where(t => !created.Withheld.Contains(t, ReferenceEqualityComparer.Instance)).ToList();
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
@@ -208,11 +218,13 @@ public class TreatmentService : ITreatmentService
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
-        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId, so capture
-        // both and restore them after the merge. LegacyId is the key write-back sends the edit
-        // under (UpstreamIdentityJson.TreatmentWireKey); lost, the edit would go to another copy.
+        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId and RecordId,
+        // so capture them and restore them after the merge. They are what write-back finds the
+        // edit's upstream copy by (UpstreamIdentityJson.TreatmentWireForms); lost, the edit would go
+        // to another copy.
         var originalId = treatment.Id;
         var originalLegacyId = treatment.LegacyId;
+        var originalRecordId = treatment.RecordId;
 
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
@@ -245,6 +257,7 @@ public class TreatmentService : ITreatmentService
         // which would otherwise defeat the re-key and duplicate the record).
         treatment.Id = originalId;
         treatment.LegacyId = originalLegacyId;
+        treatment.RecordId = originalRecordId;
     }
 
     /// <inheritdoc />

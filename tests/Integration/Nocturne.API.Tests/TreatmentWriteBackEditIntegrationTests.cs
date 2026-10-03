@@ -155,4 +155,152 @@ public class TreatmentWriteBackEditIntegrationTests(ApiIntegrationTestFixture fi
         Copies(upstream).Should().Equal((createdUnder, 1.3));
         (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.3));
     }
+
+    private async Task<Guid> LiveTempBasalAsync(DateTimeOffset slot)
+    {
+        var from = Uri.EscapeDataString(slot.AddMinutes(-1).UtcDateTime.ToString("O"));
+        var to = Uri.EscapeDataString(slot.AddMinutes(1).UtcDateTime.ToString("O"));
+        var body = await AuthenticatedClient.GetFromJsonAsync<JsonElement>($"/api/v4/insulin/temp-basals?limit=50&from={from}&to={to}");
+        return body.GetProperty("data").EnumerateArray().Single().GetProperty("id").GetGuid();
+    }
+
+    private static async Task PostUpstreamAsync(FakeNightscoutTreatments upstream, JsonObject doc)
+    {
+        using var client = new HttpClient(upstream, disposeHandler: false);
+        (await client.PostAsJsonAsync($"{UpstreamUrl}/api/v1/treatments", new JsonArray(doc))).IsSuccessStatusCode.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// The identifier each release left a treatment's copy under, given its legacy id and its
+    /// record's uuid: the raw key (v0.0.1 to v0.2.3), the record's uuid prefix (temp basals with a
+    /// legacy id that is not an ObjectId from v0.2.4 to v0.2.7, every create on main after #1960),
+    /// and the coerced key (this release).
+    /// </summary>
+    private static string SentUnder(string release, string legacyId, Guid recordId) => release switch
+    {
+        "v0.2.3" => legacyId,
+        "v0.2.7" or "#1960" => MongoObjectId.FromGuid(recordId),
+        _ => MongoObjectId.Coerce(legacyId)!,
+    };
+
+    /// <summary>
+    /// A temp basal uploaded through v1 with a legacy id that is not an ObjectId, written back by an
+    /// earlier release under the form that release used, is shortened in Nocturne (as AAPS cancels
+    /// one early). The edit lands on that copy, on 15.0.8 and 15.0.6, and leaves one temp basal.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8", "v0.2.3")]
+    [InlineData("15.0.8", "v0.2.7")]
+    [InlineData("15.0.8", "current")]
+    [InlineData("15.0.6", "v0.2.3")]
+    [InlineData("15.0.6", "v0.2.7")]
+    [InlineData("15.0.6", "current")]
+    public async Task AnEditOfATempBasal_LandsOnTheCopyTheReleaseThatWroteItBackLeft(string version, string release)
+    {
+        var slot = UniqueSlot();
+        var legacyId = $"integration-tb-{Guid.NewGuid():N}";
+        var upload = new { _id = legacyId, eventType = "Temp Basal", duration = 30, absolute = 1.2, rate = 1.2, created_at = At(slot) };
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[] { upload })).IsSuccessStatusCode.Should().BeTrue();
+        var tempBasal = await LiveTempBasalAsync(slot);
+
+        var sentUnder = SentUnder(release, legacyId, tempBasal);
+        var upstream = new FakeNightscoutTreatments(version);
+        await PostUpstreamAsync(upstream, new JsonObject
+        {
+            ["_id"] = sentUnder, ["identifier"] = sentUnder, ["eventType"] = "Temp Basal", ["duration"] = 30.0, ["absolute"] = 1.2, ["created_at"] = At(slot),
+        });
+
+        await WithWriteBackAsync(upstream, service => service.UpdateTreatmentAsync(
+            tempBasal.ToString(),
+            new Treatment { Id = legacyId, EventType = "Temp Basal", Duration = 12, Absolute = 1.2, Rate = 1.2, CreatedAt = At(slot) }));
+
+        upstream.Documents.Select(d => ((string?)d.Document["identifier"], (double)d.Document["duration"]!)).Should().Equal((sentUnder, 12d));
+        upstream.Refusals.Should().Be(0);
+        (await LiveTempBasalAsync(slot)).Should().Be(tempBasal);
+    }
+
+    /// <summary>
+    /// A correction bolus an earlier release wrote back under its raw key (v0.0.1 to v0.2.3) or its
+    /// record's uuid prefix (main after #1960) is edited in Nocturne: the edit lands on that copy.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8", "v0.2.3")]
+    [InlineData("15.0.8", "#1960")]
+    [InlineData("15.0.6", "v0.2.3")]
+    [InlineData("15.0.6", "#1960")]
+    public async Task AnEditOfABolus_LandsOnTheCopyTheReleaseThatWroteItBackLeft(string version, string release)
+    {
+        var slot = UniqueSlot();
+        var legacyId = $"integration-tr-{Guid.NewGuid():N}";
+        var upload = new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) };
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[] { upload })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+
+        var sentUnder = SentUnder(release, legacyId, bolus);
+        var upstream = new FakeNightscoutTreatments(version);
+        await PostUpstreamAsync(upstream, new JsonObject
+        {
+            ["_id"] = sentUnder, ["identifier"] = sentUnder, ["eventType"] = "Correction Bolus", ["insulin"] = 0.7, ["created_at"] = At(slot),
+        });
+
+        await WithWriteBackAsync(upstream, service => service.PatchTreatmentAsync(
+            MongoObjectId.FromGuid(bolus), JsonSerializer.Deserialize<JsonElement>("""{"insulin":1.4}""")));
+
+        Copies(upstream).Should().Equal((sentUnder, 1.4));
+        upstream.Refusals.Should().Be(0);
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.4));
+    }
+
+    /// <summary>
+    /// A treatment edited while upstream held no copy of it, then uploaded again (a client's resend),
+    /// leaves one copy: the edit went up as a create does, under both keys, so the create's identifier
+    /// upsert lands on it.
+    /// </summary>
+    [Theory]
+    [InlineData("15.0.8")]
+    [InlineData("15.0.6")]
+    public async Task ATreatmentEditedWhileNothingWasUpstream_ThenUploadedAgain_LeavesOneCopy(string version)
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        var upstream = new FakeNightscoutTreatments(version);
+
+        await WithWriteBackAsync(upstream, service => service.UpdateTreatmentAsync(
+            MongoObjectId.FromGuid(bolus),
+            new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1.1, CreatedAt = At(slot) }));
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync(
+            [new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 1.1, CreatedAt = At(slot) }]));
+
+        Copies(upstream).Should().Equal((legacyId, 1.1));
+        (await LiveBolusesAsync(slot)).Should().Equal((bolus, 1.1));
+    }
+
+    /// <summary>
+    /// A treatment the user deleted, uploaded again, is not stored, and so is not written back:
+    /// upstream would otherwise hold a dose Nocturne does not.
+    /// </summary>
+    [Fact]
+    public async Task ACreateTheUsersDeletionWithholds_IsNotWrittenBack()
+    {
+        var slot = UniqueSlot();
+        var legacyId = MongoObjectId.NewObjectId();
+        var upload = new Treatment { Id = legacyId, EventType = "Correction Bolus", Insulin = 0.7, CreatedAt = At(slot) };
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/treatments", new[]
+        {
+            new { _id = legacyId, eventType = "Correction Bolus", insulin = 0.7, created_at = At(slot) },
+        })).IsSuccessStatusCode.Should().BeTrue();
+        var bolus = (await LiveBolusesAsync(slot)).Single().Id;
+        (await AuthenticatedClient.DeleteAsync($"/api/v1/treatments/{MongoObjectId.FromGuid(bolus)}")).IsSuccessStatusCode.Should().BeTrue();
+        var upstream = new FakeNightscoutTreatments("15.0.8");
+
+        await WithWriteBackAsync(upstream, service => service.CreateTreatmentsAsync([upload]));
+
+        upstream.Writes.Should().BeEmpty();
+        (await LiveBolusesAsync(slot)).Should().BeEmpty();
+    }
 }

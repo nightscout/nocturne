@@ -262,6 +262,27 @@ public class TreatmentReadServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_MarksATreatmentTheUsersDeletionWithheldAsWithheld()
+    {
+        var withheld = new Treatment { Id = "65a1b2c3d4e5f60718293a4b", Mills = 1000, EventType = "Correction Bolus", Insulin = 1 };
+        var stored = new Treatment { Id = "65a1b2c3d4e5f60718293a4c", Mills = 2000, EventType = "Note", Notes = "kept" };
+        var storedResult = new DecompositionResult { CorrelationId = Guid.NewGuid() };
+        storedResult.CreatedRecords.Add(new Note { Id = Guid.CreateVersion7(), LegacyId = stored.Id });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(withheld, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult { SkippedDeleted = 1 });
+        _decomposer
+            .Setup(d => d.DecomposeAsync(stored, It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(storedResult);
+
+        var created = await _service.CreateAsync([withheld, stored]);
+
+        created.Should().HaveCount(2);
+        created.SkippedDeleted.Should().Be(1);
+        created.Withheld.Should().ContainSingle().Which.Should().BeSameAs(created[0]);
+    }
+
+    [Fact]
     public async Task CreateAsync_MealBolus_ReturnsTheBolusIdTheMealIsReadBackUnder()
     {
         var treatment = new Treatment { Id = "meal-1", Mills = 1000, EventType = "Meal Bolus", Insulin = 2, Carbs = 30, Notes = "lunch" };

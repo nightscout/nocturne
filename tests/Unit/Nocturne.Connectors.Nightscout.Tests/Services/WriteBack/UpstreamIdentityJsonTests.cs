@@ -115,13 +115,41 @@ public class UpstreamIdentityJsonTests
     }
 
     [Fact]
-    public void A_treatment_written_id_only_carries_no_identifier()
+    public void A_treatment_payload_carries_the_ids_it_is_given_and_leaves_out_a_null_one()
     {
-        var json = JsonSerializer.SerializeToElement(
-            new Treatment { Id = "65a1b2c3d4e5f60718293a4b", EventType = "Note" }, UpstreamIdentityJson.IdOnlyOptions);
+        var treatment = new Treatment { Id = "65a1b2c3d4e5f60718293a4b", EventType = "Note", Notes = "kept" };
 
-        json.GetProperty("_id").GetString().Should().Be("65a1b2c3d4e5f60718293a4b");
-        json.TryGetProperty("identifier", out _).Should().BeFalse();
+        var idOnly = UpstreamIdentityJson.TreatmentPayload(treatment, "66b000000000000000000001", null);
+        var identifierOnly = UpstreamIdentityJson.TreatmentPayload(treatment, null, "syn-3a7c");
+
+        ((string?)idOnly["_id"], idOnly.ContainsKey("identifier"), (string?)idOnly["notes"])
+            .Should().Be(("66b000000000000000000001", false, "kept"));
+        (identifierOnly.ContainsKey("_id"), (string?)identifierOnly["identifier"]).Should().Be((false, "syn-3a7c"));
+    }
+
+    private const string RecordUuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+    private static readonly string RecordPrefix = MongoObjectId.FromGuid(Guid.Parse(RecordUuid));
+
+    /// <summary>
+    /// Every identifier a released or merged write-back left a treatment's copy under: this release's
+    /// coerced key, the record's own uuid prefix (v0.2.4 to v0.2.7 temp basals, main after #1960), and
+    /// the raw key (v0.0.1 to v0.2.3), most current first and without repeats.
+    /// </summary>
+    [Theory]
+    [InlineData("65a1b2c3d4e5f60718293a4b", new[] { "65a1b2c3d4e5f60718293a4b", "@prefix" })]
+    [InlineData("syn-3a7c0e9f1b2d4c6e", new[] { "@coerced", "@prefix", "syn-3a7c0e9f1b2d4c6e" })]
+    [InlineData("4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F", new[] { "4f1c1d2e3a4b4c5d8e6f7a8b", "@prefix", "4F1C1D2E-3A4B-4C5D-8E6F-7A8B9C0D1E2F" })]
+    [InlineData(null, new[] { "@prefix", RecordUuid })]
+    public void A_treatment_is_looked_for_under_every_form_a_write_back_sent_it_under(string? legacyId, string[] expected)
+    {
+        var treatment = new Treatment { Id = legacyId ?? RecordPrefix, LegacyId = legacyId, RecordId = Guid.Parse(RecordUuid), EventType = "Temp Basal" };
+
+        UpstreamIdentityJson.TreatmentWireForms(treatment).Should().Equal(expected.Select(f => f switch
+        {
+            "@prefix" => RecordPrefix,
+            "@coerced" => MongoObjectId.Coerce(legacyId),
+            _ => f,
+        }));
     }
 
     [Fact]

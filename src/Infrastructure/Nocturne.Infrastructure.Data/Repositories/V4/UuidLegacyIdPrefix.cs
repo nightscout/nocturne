@@ -5,7 +5,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// (<c>MongoObjectId.FromGuid</c>), for
 /// <see cref="V4RepositoryBase{TModel,TEntity}.ResolveUuidLegacyIdsAsync"/>. A query must repeat
 /// <see cref="Predicate"/> and <see cref="Key"/> exactly for Postgres to answer it from the partial
-/// expression index <c>AddWriteBackIdentityTracking</c> builds on each table it serves.
+/// expression index <c>AddWriteBackIdentityIndexes</c> builds on each table it serves.
 /// </summary>
 /// <remarks>
 /// The predicate admits every spelling <see cref="Guid.TryParse(string, out Guid)"/> reads as a

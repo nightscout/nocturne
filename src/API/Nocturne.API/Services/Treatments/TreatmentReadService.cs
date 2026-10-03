@@ -170,6 +170,7 @@ public class TreatmentReadService : ITreatmentStore
         IReadOnlyList<Treatment> treatments, CancellationToken ct = default)
     {
         var results = new List<Treatment>();
+        var withheld = new List<Treatment>();
         var skippedDeleted = 0;
 
         foreach (var treatment in treatments)
@@ -178,7 +179,10 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                results.Add(ToCreated(treatment, result));
+                var created = ToCreated(treatment, result);
+                results.Add(created);
+                if (result.SkippedDeleted > 0 && result.CreatedRecords.Count == 0 && result.UpdatedRecords.Count == 0)
+                    withheld.Add(created);
             }
             catch (OperationCanceledException)
             {
@@ -193,7 +197,7 @@ public class TreatmentReadService : ITreatmentStore
         }
 
         _logger.LogSkippedDeleted(nameof(Treatment), skippedDeleted);
-        return new BulkWrite<Treatment>(results, skippedDeleted);
+        return new BulkWrite<Treatment>(results, skippedDeleted) { Withheld = withheld };
     }
 
     /// <inheritdoc />
@@ -300,6 +304,7 @@ public class TreatmentReadService : ITreatmentStore
         if (served is not null)
         {
             treatment.LegacyId = served.LegacyId;
+            treatment.RecordId = served.Id;
             treatment.Id = served.Id.ToString();
         }
 

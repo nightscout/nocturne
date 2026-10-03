@@ -5,7 +5,7 @@ namespace Nocturne.Infrastructure.Data.Repositories.V4;
 /// neither an ObjectId nor a uuid, for
 /// <see cref="V4RepositoryBase{TModel,TEntity}.ResolveHashedLegacyIdsAsync"/>. A query must repeat
 /// <see cref="Predicate"/> and <see cref="Key"/> exactly for Postgres to answer it from the partial
-/// expression index <c>AddWriteBackIdentityTracking</c> builds on each treatment table.
+/// expression index <c>AddWriteBackIdentityIndexes</c> builds on each treatment table.
 /// </summary>
 /// <remarks>
 /// <c>legacy_id_wire_hash</c> is the migration's immutable wrapper over
