@@ -1,17 +1,19 @@
 <script lang="ts">
   import { reportWashCrop, reportWashScene } from '../api/report-wash-scene';
   import { type Surface, seedFromName } from '../types';
-  import { hostSurface, mountPlayer, watchSurface } from './helpers';
+  import { type PlayerReadyCallback, hostSurface, mountPlayer, watchSurface } from './helpers';
 
   let {
     name,
     position = 'relative',
+    onready,
     class: className = '',
   }: {
     /** Seeds the wash, so one name always paints the same. */
     name: string;
     /** The frame's `position`; see Artwork. */
     position?: 'relative' | 'absolute';
+    onready?: PlayerReadyCallback;
     class?: string;
   } = $props();
 
@@ -33,6 +35,7 @@
       crop: reportWashCrop,
       fit: 'fill',
       releaseAfterFinish: true,
+      onReady: onready,
     });
   });
 </script>

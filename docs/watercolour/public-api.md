@@ -272,14 +272,13 @@ disposal.
 | `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A 16px vertical or horizontal edge strip, `fit: 'fill'` by default so the stroke runs the item's full length; plays once on activation, then releases its live slot. |
 | `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
 | `ConfirmationBackground` | `confirmation-background` | - | Fills a container 2.4:1 or wider, so its horizontal washes span it; a taller container gets `contain` anchored bottom-left, so the washes are not squashed. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
-| `HeaderMotif` | `header-motif` | - | Three loose horizontal brush strokes, pulled left to right. Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
-| `ReportHeaderWash` | a wash generated for the box (`reportWashScene`) | `name: string`, `position = 'relative'` | Takes only `name`, `position` and `class`. Fills its box; the seed derives from `name` via `seedFromName`, so one name always paints the same wash. Repaints on a theme change; plays once, then releases its live slot. |
+| `ReportHeaderWash` | a wash generated for the box (`reportWashScene`) | `name: string`, `position = 'relative'` | Takes only `name`, `position`, `onready` and `class`. Fills its box; the seed derives from `name` via `seedFromName`, so one name always paints the same wash. Repaints on a theme change; plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
 
 ```svelte
 <Artwork artwork="crescent-moon" palette="moonlight" seed={42} surface="dark" class="size-32" />
-<HeaderMotif palette={settings.accentPalette} seed={settings.artworkSeed} class="hidden sm:flex" />
+<ReportHeaderWash name={page.url.pathname} position="absolute" class="inset-0 opacity-35" />
 ```
 
 ## Paint drops
