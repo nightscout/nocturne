@@ -231,7 +231,7 @@ describe("Google Health source presentation", () => {
               sourceType: "google-health-connector",
             },
           ],
-          availableConnectors: [],
+          availableConnectors: [{ id: "googlehealth", name: "Google Health" }],
         },
       });
       render(ConnectorsPage);
@@ -240,6 +240,9 @@ describe("Google Health source presentation", () => {
         .element(page.getByText("Generic Google source", { exact: true }))
         .toBeVisible();
       expect(overviewMocks.google).not.toHaveBeenCalled();
+      await expect
+        .element(page.getByText("Not Configured", { exact: true }))
+        .not.toBeInTheDocument();
       await expect
         .element(page.getByText("No data sources detected"))
         .not.toBeInTheDocument();

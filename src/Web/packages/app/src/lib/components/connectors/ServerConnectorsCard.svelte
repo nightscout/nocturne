@@ -80,6 +80,9 @@
       page.data.refusedAsDemoSubject
     )
   );
+  const visibleConnectors = $derived(
+    availableConnectors.filter((connector) => connector.id !== "googlehealth" || canManage)
+  );
 
   function getConnectorDataSource(
     connector: AvailableConnector
@@ -156,7 +159,7 @@
   </CardHeader>
   <CardContent>
     <div class="grid gap-3 @xl:grid-cols-2">
-      {#each availableConnectors as connector (connector.id)}
+      {#each visibleConnectors as connector (connector.id)}
         {#if connector.id === "googlehealth"}
           {#if googleHealth?.connected || googleHealth?.configured}
             <GoogleHealthSourceRow connection={googleHealth} />
