@@ -158,8 +158,10 @@ its estimate; first admission still runs to prevent starvation.
 
 GPU timestamp queries sample the first eligible operation and then every 16th
 eligible operation after the previous readback completes. Tick samples include
-batched dab work; render samples include pigment shading. The scheduler combines
-those costs when reserving GPU work.
+batched dab work; render samples include pigment shading. A playing player
+reserves the ticks its clock is due this frame, a seek or settle slice its first
+tick (the slice then sizes itself to what is left), and a render only when it has
+a new tick or an invalidated frame to draw.
 
 ```ts
 import { getScheduler } from '@nocturne/watercolour';
