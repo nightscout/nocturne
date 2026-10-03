@@ -189,7 +189,7 @@ size their canvas to the container via `ResizeObserver` (DPR capped at 2), creat
 the player in an effect and dispose it on destroy or when any prop changes.
 Every component accepts the `ArtworkOptions` props (`palette`, `seed`,
 `intensity`, `durationMs`, `motion`, `quality`, `mode`, `autoplay`), an
-optional `surface`, a `fit` prop, an `onready` callback, and `class`.
+optional `surface`, `fit` and `crop` props, an `onready` callback, and `class`.
 A component whose frame has no area (inside `display: none`) creates no player
 until the frame first has one, so a hidden artwork neither holds a live slot nor
 paints a 1x1 still.
@@ -199,7 +199,12 @@ icons and `wash` are square, the scenes and accents keep their authored ratio).
 With `fit="contain"` (default) the canvas is the largest box of that aspect
 inside the container, centred, and the surrounding area stays transparent;
 `fit="fill"` stretches to the container as the components did before aspect
-awareness. `fit` may also be a function of the container size -
+awareness. `crop={{ x, y, width, height }}` selects a normalised source window
+inside the painting. The backing canvas remains container-sized; live shading
+and paper generation cover only that window. Simulation detail and paper grain
+retain the full painting's virtual dimensions. Baked strips and stills select
+the same window. `createArtworkPlayer` and `mountPlayer` accept `crop` too.
+`fit` may also be a function of the container size -
 `ConfirmationBackground` uses that to fill only near its 3:1 aspect. `onready`
 fires once a backend is drawing; the returned cleanup runs with the player's
 disposal.

@@ -643,6 +643,14 @@ impl SceneInstance {
         }
     }
 
+    #[wasm_bindgen(js_name = setCrop)]
+    pub fn set_crop(&mut self, x: f32, y: f32, width: f32, height: f32) -> Result<(), JsError> {
+        self.playback
+            .simulator()
+            .set_crop([x, y, width, height])
+            .map_err(engine_err)
+    }
+
     /// Pixel size the swapchain is configured at; `null` until `attach`.
     #[wasm_bindgen(js_name = surfaceSize)]
     pub fn surface_size(&self) -> Option<Vec<u32>> {

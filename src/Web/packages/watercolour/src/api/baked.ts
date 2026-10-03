@@ -1,4 +1,7 @@
 import { WatercolourError } from './errors';
+import type { CropWindow } from '../types';
+
+const fullPainting: CropWindow = { x: 0, y: 0, width: 1, height: 1 };
 
 /**
  * Baked format: one PNG of `frames` equal frames stacked vertically, evenly
@@ -136,6 +139,7 @@ export function drawStripFrame(
   progress: number,
   width: number,
   height: number,
+  crop: CropWindow = fullPainting,
 ): void {
   const { manifest, bitmap } = strip;
   const { from, to, blend } = stripFramePosition(progress, manifest.frames);
@@ -143,10 +147,14 @@ export function drawStripFrame(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalAlpha = 1;
-  ctx.drawImage(bitmap, 0, from * manifest.height, manifest.width, manifest.height, 0, 0, width, height);
+  const source_x = crop.x * manifest.width;
+  const source_y = crop.y * manifest.height;
+  const source_width = crop.width * manifest.width;
+  const source_height = crop.height * manifest.height;
+  ctx.drawImage(bitmap, source_x, from * manifest.height + source_y, source_width, source_height, 0, 0, width, height);
   if (blend > 0) {
     ctx.globalAlpha = blend;
-    ctx.drawImage(bitmap, 0, to * manifest.height, manifest.width, manifest.height, 0, 0, width, height);
+    ctx.drawImage(bitmap, source_x, to * manifest.height + source_y, source_width, source_height, 0, 0, width, height);
     ctx.globalAlpha = 1;
   }
 }
@@ -221,10 +229,10 @@ export function clearSharedStills(): void {
   sharedStrips.clear();
 }
 
-export function drawStill(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number): void {
+export function drawStill(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, crop: CropWindow = fullPainting): void {
   ctx.clearRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalAlpha = 1;
-  ctx.drawImage(image, 0, 0, width, height);
+  ctx.drawImage(image, crop.x * image.width, crop.y * image.height, crop.width * image.width, crop.height * image.height, 0, 0, width, height);
 }

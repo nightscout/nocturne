@@ -1,3 +1,11 @@
+/** A normalised rectangle within the authored painting. */
+export interface CropWindow {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type ArtworkId =
   | 'wash'
   | 'crescent-moon'

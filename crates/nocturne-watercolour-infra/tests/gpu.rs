@@ -56,6 +56,64 @@ fn small_scene(name: &str) -> Scene {
 }
 
 #[test]
+fn crop_preserves_the_full_frames_pigment_and_paper_at_pixel_centres() {
+    let Some(engine) = gpu() else { return };
+    let mut playback = Playback::new(engine, small_scene("wash"), 1000.0).unwrap();
+    playback.finish_immediately().unwrap();
+    let full = playback
+        .simulator()
+        .present_offscreen(800, 600, true)
+        .unwrap()
+        .unwrap();
+    playback
+        .simulator()
+        .set_crop([0.25, 0.5, 0.25, 0.25])
+        .unwrap();
+    let cropped = playback
+        .simulator()
+        .present_offscreen(200, 150, true)
+        .unwrap()
+        .unwrap();
+    let mut largest = 0;
+    let mut total = 0usize;
+    for y in 0..150usize {
+        for x in 0..200usize {
+            for channel in 0..4 {
+                let expected = full[((y + 300) * 800 + x + 200) * 4 + channel];
+                let actual = cropped[(y * 200 + x) * 4 + channel];
+                let difference = expected.abs_diff(actual);
+                largest = largest.max(difference);
+                total += difference as usize;
+            }
+        }
+    }
+    assert!(largest <= 1, "largest channel difference: {largest}");
+    assert!(total as f64 / ((200 * 150 * 4) as f64) < 0.001);
+    playback.simulator().set_crop([0.0, 0.0, 1.0, 1.0]).unwrap();
+    assert_eq!(
+        playback
+            .simulator()
+            .present_offscreen(800, 600, true)
+            .unwrap()
+            .unwrap(),
+        full
+    );
+}
+
+#[test]
+fn crop_rejects_empty_nonfinite_and_outside_windows() {
+    let Some(mut engine) = gpu() else { return };
+    for window in [
+        [0.0, 0.0, 0.0, 1.0],
+        [-0.1, 0.0, 1.0, 1.0],
+        [0.5, 0.0, 0.6, 1.0],
+        [f32::NAN, 0.0, 1.0, 1.0],
+    ] {
+        assert!(engine.set_crop(window).is_err());
+    }
+}
+
+#[test]
 fn dab_matches_point_brush_deposits_and_paper_driven_flow() {
     use nocturne_watercolour_core::domain::{Dab, Operation, Point, SizeHint};
     let Some(mut analytic) = gpu() else { return };

@@ -1,6 +1,7 @@
 import { subscribePresentation } from '../api/presentation';
 import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
 import type { WasmModule } from '../api/engine-host';
+import type { CropWindow } from '../types';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
 
 export type PlayerReadyCallback = (player: ArtworkPlayer) => void | (() => void);
@@ -10,6 +11,7 @@ export type PlayerStateCallback = (state: PlayerState) => void;
 export type FitAnchor = 'center' | 'bottom-left';
 
 export interface MountOptions extends ArtworkOptions {
+  crop?: CropWindow;
   surface?: Surface;
   assetBaseUrl?: string;
   /** A Lucide icon source; takes precedence over the artwork id. */
@@ -246,6 +248,7 @@ export function mountPlayer(
       releaseAfterFinish: options.releaseAfterFinish,
       startFinished,
       onProgress: options.onProgress,
+      crop: options.crop,
       assetBaseUrl: options.assetBaseUrl,
       width: box.width,
       height: box.height,

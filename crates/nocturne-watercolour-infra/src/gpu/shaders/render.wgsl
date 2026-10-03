@@ -42,6 +42,7 @@ struct RenderParams {
     surface_coverage_gain: f32,
     _p2: f32,
     _p3: f32,
+    crop: vec4<f32>,
 };
 
 // Three vec4 per pigment: K rgb, S rgb, (granulation, 0, 0, 0).
@@ -218,8 +219,8 @@ fn presence_taps(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 // The premultiplied linear RGBA of output pixel (x, y).
 fn shade(x: u32, y: u32) -> vec4<f32> {
-    let u = (f32(x) + 0.5) / f32(R.out_width);
-    let v = (f32(y) + 0.5) / f32(R.out_height);
+    let u = (f32(x) + 0.5) / f32(R.out_width) * R.crop.z + R.crop.x;
+    let v = (f32(y) + 0.5) / f32(R.out_height) * R.crop.w + R.crop.y;
     let w = R.sim_width;
     let h = R.sim_height;
     let fx = clamp(u * f32(w) - 0.5, 0.0, f32(w - 1u));

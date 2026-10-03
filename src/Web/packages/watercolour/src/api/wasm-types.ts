@@ -21,6 +21,7 @@ export interface WasmInstance {
   free(): void;
   attach(canvas: HTMLCanvasElement, width: number, height: number): void;
   resize(width: number, height: number): void;
+  setCrop(x: number, y: number, width: number, height: number): void;
   play(): void;
   pause(): void;
   reset(): void;
