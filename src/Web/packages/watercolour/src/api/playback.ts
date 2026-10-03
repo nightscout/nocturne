@@ -25,8 +25,8 @@ export interface PlayerState {
   motion: 'full' | 'reduced';
   playing: boolean;
   finished: boolean;
-  /** The latest seek target has not yet been presented. */
-  seeking?: boolean;
+  /** The latest `seekTo` target has not yet been presented; always false for a static player. */
+  seeking: boolean;
   /** Raw wall-clock fraction: linear elapsed, or the engine's own curve. */
   progress: number;
   /** The value fed to the simulation: the caller easing applied to `progress`. */
@@ -137,7 +137,8 @@ interface Backend {
   readonly canvas: HTMLCanvasElement;
   readonly playing: boolean;
   readonly finished: boolean;
-  readonly seeking?: boolean;
+  /** The latest `seekTo` target has not yet been presented. */
+  readonly seeking: boolean;
   readonly progress: number;
   /** The eased value fed to the simulation; `progress` is the raw wall fraction. */
   readonly easedProgress: number;
@@ -149,7 +150,7 @@ interface Backend {
   pause(): void;
   reset(): void;
   seek(progress: number): void;
-  seekTo?(progress: number): void;
+  seekTo(progress: number): void;
   /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
   finish(sliced?: boolean): void;
   resize(size: PixelSize): void;
@@ -706,6 +707,7 @@ class BakedBackend implements Backend {
   private elapsedMs = 0;
   private isPlaying = false;
   private dirty = true;
+  private seekPending = false;
   private size: PixelSize;
   private readonly handle: SchedulerHandle;
   private disposed = false;
@@ -751,7 +753,7 @@ class BakedBackend implements Backend {
   }
 
   get seeking(): boolean {
-    return this.dirty;
+    return this.seekPending;
   }
 
   get playing(): boolean {
@@ -784,18 +786,27 @@ class BakedBackend implements Backend {
   reset(): void {
     this.elapsedMs = 0;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
   }
 
   seek(progress: number): void {
     this.elapsedMs = Math.min(1, Math.max(0, progress)) * this.durationMs;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
+  }
+
+  /** A strip frame is drawn directly; play waits for the target to be drawn, as live does. */
+  seekTo(progress: number): void {
+    this.seek(progress);
+    this.seekPending = true;
   }
 
   finish(): void {
     this.elapsedMs = this.durationMs;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
     this.callbacks.onFinished();
   }
@@ -825,7 +836,7 @@ class BakedBackend implements Backend {
   }
 
   private tick(dt: number): void {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.seekPending) return;
     this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
     this.dirty = true;
   }
@@ -841,6 +852,7 @@ class BakedBackend implements Backend {
     if (this.dirty) {
       this.dirty = false;
       drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height, this.crop);
+      this.seekPending = false;
       this.callbacks.onProgress?.(this.progress);
       if (this.disposed) return;
       if (this.isPlaying && this.finished) {
@@ -867,6 +879,7 @@ export function stillVariant(longEdgeDevicePx: number, hasSmall: boolean): 'fina
 class StaticBackend implements Backend {
   readonly mode = 'static' as const;
   readonly playing = false;
+  readonly seeking = false;
   readonly finished = true;
   readonly progress = 1;
   readonly easedProgress = 1;
@@ -903,6 +916,7 @@ class StaticBackend implements Backend {
   pause(): void {}
   reset(): void {}
   seek(): void {}
+  seekTo(): void {}
   finish(): void {}
 
   resize(size: PixelSize): void {
@@ -944,6 +958,7 @@ class StaticBackend implements Backend {
 class IconSvgBackend implements Backend {
   readonly mode = 'static' as const;
   readonly playing = false;
+  readonly seeking = false;
   readonly finished = true;
   readonly progress = 1;
   readonly easedProgress = 1;
@@ -973,6 +988,7 @@ class IconSvgBackend implements Backend {
   pause(): void {}
   reset(): void {}
   seek(): void {}
+  seekTo(): void {}
   finish(): void {}
 
   resize(size: PixelSize): void {
@@ -1091,7 +1107,7 @@ class Player implements ArtworkPlayer {
       motion: this.motion,
       playing: b?.playing ?? false,
       finished: b?.finished ?? false,
-      seeking: b?.seeking,
+      seeking: b?.seeking ?? false,
       progress: b?.progress ?? 0,
       easedProgress: b?.easedProgress ?? 0,
       error: this.error,
@@ -1134,9 +1150,7 @@ class Player implements ArtworkPlayer {
   }
 
   seekTo(progress: number): void {
-    const backend = this.backend;
-    if (backend?.seekTo) backend.seekTo(progress);
-    else backend?.seek(progress);
+    this.backend?.seekTo(progress);
     this.emit('statechange');
   }
 
