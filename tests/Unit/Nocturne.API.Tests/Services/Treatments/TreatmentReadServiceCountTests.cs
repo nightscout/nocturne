@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -36,6 +37,7 @@ public class TreatmentReadServiceCountTests
             _noteRepo.Object,
             _deviceEventRepo.Object,
             _bolusCalcRepo.Object,
+            Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
     }
 
@@ -49,10 +51,13 @@ public class TreatmentReadServiceCountTests
         _deviceEventRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(4);
         _tempBasalRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(8);
         _bolusCalcRepo.Setup(r => r.CountAsync(null, null, It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _projection
+            .Setup(p => p.CountProjectedStateSpanTreatmentsAsync(null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(6);
 
         var result = await _service.CountAsync();
 
-        result.Should().Be(33);
+        result.Should().Be(39);
     }
 
     [Fact]

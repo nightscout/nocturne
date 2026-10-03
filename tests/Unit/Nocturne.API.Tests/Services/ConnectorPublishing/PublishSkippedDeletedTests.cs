@@ -80,7 +80,7 @@ public class PublishSkippedDeletedTests : IDisposable
             Mock.Of<IV4ToLegacyProjectionService>(), decomposer.Object, Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), NullLogger<TreatmentReadService>.Instance);
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), NullLogger<TreatmentReadService>.Instance);
         var service = new TreatmentService(
             store, decomposer.Object, Mock.Of<ITreatmentCache>(), Mock.Of<IDataEventSink<Treatment>>(),
             Mock.Of<IPatientInsulinRepository>(), NullLogger<TreatmentService>.Instance);

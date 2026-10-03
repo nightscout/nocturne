@@ -40,7 +40,8 @@ public interface ITreatmentStore
     /// <summary>
     /// The treatment stored under <paramref name="id"/>, re-keyed to the <c>LegacyId</c> the
     /// decomposer upserts it on, so decomposing it again updates the stored record in place. A
-    /// record stored without a legacy id is first given the id the wire shows for it.
+    /// record stored without a legacy id is first given the id the wire shows for it. A state span
+    /// decomposed from a treatment is keyed to the treatment id it was written under.
     /// </summary>
     /// <param name="id">The identifier as received from the client.</param>
     /// <param name="ct">Cancellation token.</param>

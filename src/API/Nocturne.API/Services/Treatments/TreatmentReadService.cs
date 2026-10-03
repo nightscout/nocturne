@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Treatments;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
@@ -26,6 +28,7 @@ public class TreatmentReadService : ITreatmentStore
     private readonly INoteRepository _noteRepo;
     private readonly IDeviceEventRepository _deviceEventRepo;
     private readonly IBolusCalculationRepository _bolusCalcRepo;
+    private readonly IStateSpanService _stateSpans;
     private readonly ILogger<TreatmentReadService> _logger;
 
     public TreatmentReadService(
@@ -39,6 +42,7 @@ public class TreatmentReadService : ITreatmentStore
         INoteRepository noteRepo,
         IDeviceEventRepository deviceEventRepo,
         IBolusCalculationRepository bolusCalcRepo,
+        IStateSpanService stateSpans,
         ILogger<TreatmentReadService> logger)
     {
         _projection = projection;
@@ -51,6 +55,7 @@ public class TreatmentReadService : ITreatmentStore
         _noteRepo = noteRepo;
         _deviceEventRepo = deviceEventRepo;
         _bolusCalcRepo = bolusCalcRepo;
+        _stateSpans = stateSpans;
         _logger = logger;
     }
 
@@ -128,8 +133,9 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<Treatment?> GetByIdAsync(string id, CancellationToken ct = default)
     {
-        var stored = await FindStoredRecordAsync(id, ct);
-        return stored is null ? null : await ProjectAsync(stored.Record, ct);
+        var (stored, spanId) = await ResolveAsync(id, ct);
+        return (stored is null ? null : await ProjectAsync(stored.Record, ct))
+            ?? await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct);
     }
 
     /// <inheritdoc />
@@ -140,7 +146,8 @@ public class TreatmentReadService : ITreatmentStore
             || await _bgCheckRepo.IsDeletedByUserAsync(id, ct)
             || await _deviceEventRepo.IsDeletedByUserAsync(id, ct)
             || await _bolusCalcRepo.IsDeletedByUserAsync(id, ct)
-            || await _noteRepo.IsDeletedByUserAsync(id, ct);
+            || await _noteRepo.IsDeletedByUserAsync(id, ct)
+            || await _projection.IsStateSpanDeletedByUserAsync(id, ct);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Treatment>> GetByRangeAsync(
@@ -178,7 +185,7 @@ public class TreatmentReadService : ITreatmentStore
             {
                 var result = await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
                 skippedDeleted += result.SkippedDeleted;
-                results.Add(ToCreated(treatment, result));
+                results.Add(await ToCreatedAsync(treatment, result, ct));
             }
             catch (OperationCanceledException)
             {
@@ -199,8 +206,11 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<Treatment?> UpdateAsync(string id, Treatment treatment, CancellationToken ct = default)
     {
-        var stored = await FindStoredRecordAsync(id, ct);
-        if (stored is null || await ProjectAsync(stored.Record, ct) is not { } existing)
+        var (stored, spanId) = await ResolveAsync(id, ct);
+        if (stored is null)
+            return await UpdateStateSpanAsync(spanId, treatment, ct);
+
+        if (await ProjectAsync(stored.Record, ct) is not { } existing)
             return null;
 
         TreatmentClientId.KeepStored(treatment, existing);
@@ -223,24 +233,66 @@ public class TreatmentReadService : ITreatmentStore
         }
     }
 
+    /// <summary>
+    /// Updates the state span a treatment was decomposed into, by re-decomposing the update under the
+    /// treatment id the span was written under, which the decomposer upserts it on.
+    /// </summary>
+    private async Task<Treatment?> UpdateStateSpanAsync(string id, Treatment treatment, CancellationToken ct)
+    {
+        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId }
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } upsertKey)
+            return null;
+
+        treatment.Id = upsertKey;
+        try
+        {
+            await _decomposer.DecomposeAsync(treatment, WriteOrigin.Live, ct);
+            return await _projection.GetProjectedStateSpanTreatmentAsync(spanId, ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Failed to update state span treatment {SpanId}", spanId);
+            return null;
+        }
+    }
+
     /// <inheritdoc />
     public async Task<TreatmentDeletion?> DeleteAsync(string id, CancellationToken ct = default)
     {
-        var stored = await FindStoredRecordAsync(id, ct);
+        var (stored, spanId) = await ResolveAsync(id, ct);
         if (stored is null)
-            return null;
+            return await DeleteStateSpanAsync(spanId, ct);
 
         var served = await ProjectAsync(stored.Record, ct);
 
         // Every record one treatment decomposed into (a meal bolus's carb, a bolus wizard's
-        // calculation) shares its legacy id, so deleting by it leaves no sibling behind as a
-        // phantom treatment of its own.
-        if (!string.IsNullOrEmpty(stored.Record.LegacyId))
-            return await _pipeline.DeleteByLegacyIdAsync<Treatment>(stored.Record.LegacyId, WriteOrigin.Live, ct) > 0
-                ? new TreatmentDeletion(served)
+        // calculation, a correction's note) shares its legacy id, so deleting by it leaves no sibling
+        // behind as a phantom treatment of its own.
+        if (stored.Record.LegacyId is { Length: > 0 } legacyId)
+        {
+            var records = await _pipeline.DeleteByLegacyIdAsync<Treatment>(legacyId, WriteOrigin.Live, ct);
+            var span = await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
+                ? await DeleteStateSpanAsync(legacyId, ct)
                 : null;
+            return span ?? (records > 0 ? new TreatmentDeletion(served) : null);
+        }
 
         await stored.DeleteAsync(ct);
+        return new TreatmentDeletion(served);
+    }
+
+    /// <summary>
+    /// Deletes a served state span with the Note its treatment wrote beside it before notes were kept
+    /// on the span, which is served as part of the span and would otherwise outlive it.
+    /// </summary>
+    private async Task<TreatmentDeletion?> DeleteStateSpanAsync(string id, CancellationToken ct)
+    {
+        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { Id: { } spanId } served
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } treatmentId
+            || !await _stateSpans.DeleteStateSpanAsync(spanId, ct))
+            return null;
+
+        await _pipeline.DeleteByLegacyIdAsync<Treatment>(treatmentId, WriteOrigin.Live, ct);
         return new TreatmentDeletion(served);
     }
 
@@ -273,9 +325,10 @@ public class TreatmentReadService : ITreatmentStore
         var deviceEventCount = await _deviceEventRepo.CountAsync(from, to, ct);
         var tempBasalCount = await _tempBasalRepo.CountAsync(from, to, ct);
         var bolusCalcCount = await _bolusCalcRepo.CountAsync(from, to, ct);
+        var stateSpanCount = await _projection.CountProjectedStateSpanTreatmentsAsync(fromMills, toMills, ct);
 
         return bolusCount + carbCount + bgCheckCount + noteCount
-             + deviceEventCount + tempBasalCount + bolusCalcCount;
+             + deviceEventCount + tempBasalCount + bolusCalcCount + stateSpanCount;
     }
 
     #region Private - stored record resolution
@@ -286,11 +339,18 @@ public class TreatmentReadService : ITreatmentStore
     /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
     /// A treatment that wrote none of the projected tables keeps the id it was sent with.
     /// </summary>
-    private static Treatment ToCreated(Treatment treatment, DecompositionResult result)
+    private async Task<Treatment> ToCreatedAsync(Treatment treatment, DecompositionResult result, CancellationToken ct)
     {
         var written = result.CreatedRecords.Concat(result.UpdatedRecords).ToList();
         if (written.OfType<Core.Models.V4.TempBasal>().FirstOrDefault() is { } tempBasal)
             return TempBasalToTreatmentMapper.ToTreatment(tempBasal);
+
+        if (written.OfType<StateSpan>().FirstOrDefault(IsServedStateSpan) is { OriginalId: { } spanKey })
+        {
+            if (await _projection.GetProjectedStateSpanTreatmentAsync(spanKey, ct) is { Id: { } spanId })
+                treatment.Id = spanId;
+            return treatment;
+        }
 
         var served = ServedRecordTypes
             .Select(type => written.OfType<IV4Record>().FirstOrDefault(type.IsInstanceOfType))
@@ -302,6 +362,12 @@ public class TreatmentReadService : ITreatmentStore
     }
 
     /// <summary>
+    /// Whether a state span the decomposer wrote is read back as the treatment, under the span's id.
+    /// </summary>
+    private static bool IsServedStateSpan(StateSpan span) =>
+        span is { OriginalId: not null, Category: StateSpanCategory.Override or StateSpanCategory.TemporaryTarget or StateSpanCategory.Profile };
+
+    /// <summary>
     /// The record a decomposed treatment is read back under: a bolus heads a Meal Bolus, and a note
     /// is only its own treatment when nothing else was written.
     /// </summary>
@@ -311,11 +377,27 @@ public class TreatmentReadService : ITreatmentStore
     ];
 
     /// <summary>
+    /// The stored record a client-sent treatment id names, or none and the id to look a state span up
+    /// by. A Note a served span's treatment wrote beside it, before notes were kept on the span, is
+    /// served as that span, so it resolves to the span's treatment id.
+    /// </summary>
+    private async Task<(StoredRecord? Stored, string SpanId)> ResolveAsync(string id, CancellationToken ct)
+    {
+        if (await FindStoredRecordAsync(id, ct) is not { } stored)
+            return (null, id);
+
+        return stored.Record is Note { LegacyId: { Length: > 0 } legacyId }
+            && await _projection.GetStateSpanTreatmentIdAsync(legacyId, ct) == legacyId
+                ? (null, legacyId)
+                : (stored, id);
+    }
+
+    /// <summary>
     /// Resolves a client-sent treatment id to the stored record it names. Each key is tried against
     /// every table before the next, looser one, so an exact match always wins over a prefix or hash
     /// match. The records of one treatment share its legacy id, so the tables are tried in the order
-    /// <see cref="ToCreated"/> names a treatment by: a legacy id resolves to the record the create
-    /// returned, not to the note any treatment with notes also writes.
+    /// <see cref="ToCreatedAsync"/> names a treatment by: a legacy id resolves to the record the create
+    /// returned, not to the note a record treatment with notes also writes.
     /// </summary>
     private async Task<StoredRecord?> FindStoredRecordAsync(string id, CancellationToken ct)
     {
@@ -396,11 +478,24 @@ public class TreatmentReadService : ITreatmentStore
     /// <inheritdoc />
     public async Task<Treatment?> GetForUpdateAsync(string id, CancellationToken ct = default)
     {
-        var stored = await FindStoredRecordAsync(id, ct);
-        if (stored is null || await ProjectAsync(stored.Record, ct) is not { } existing)
+        var (stored, spanId) = await ResolveAsync(id, ct);
+        if (stored is null)
+            return await GetStateSpanForUpdateAsync(spanId, ct);
+
+        if (await ProjectAsync(stored.Record, ct) is not { } existing)
             return null;
 
         existing.Id = await UpsertKeyAsync(stored, ct);
+        return existing;
+    }
+
+    private async Task<Treatment?> GetStateSpanForUpdateAsync(string id, CancellationToken ct)
+    {
+        if (await _projection.GetProjectedStateSpanTreatmentAsync(id, ct) is not { } existing
+            || await _projection.GetStateSpanTreatmentIdAsync(id, ct) is not { } upsertKey)
+            return null;
+
+        existing.Id = upsertKey;
         return existing;
     }
 

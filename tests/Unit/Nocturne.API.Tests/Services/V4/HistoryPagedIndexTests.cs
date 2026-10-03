@@ -21,6 +21,7 @@ public class HistoryPagedIndexTests
     public void TheHistoryIndexCoversExactlyTheTablesHistoryPages()
     {
         var paged = LegacyTreatmentTables.All
+            .Except(LegacyTreatmentTables.StateSpanTables)
             .Select(t => t.GetType().GetGenericArguments()[1])
             .Append(typeof(ApsSnapshotEntity))
             .Concat(EntryHistoryTables)
@@ -36,6 +37,31 @@ public class HistoryPagedIndexTests
 
         indexed.Should().BeEquivalentTo(paged,
             "every table a history endpoint pages on sys_updated_at needs the index, and no other table does");
+    }
+
+    /// <summary>
+    /// The projection's state-span tables page <c>state_spans</c> on <c>updated_at</c> within one
+    /// category, so their index leads with the category after the tenant.
+    /// </summary>
+    [Fact]
+    public void TheStateSpanHistoryIndexServesTheStateSpanTablesHistoryPages()
+    {
+        LegacyTreatmentTables.StateSpanTables.Should().NotBeEmpty();
+
+        var indexes = Model().FindEntityType(typeof(StateSpanEntity))!.GetIndexes();
+
+        indexes.Should().ContainSingle(index =>
+            index.GetDatabaseName() == "ix_state_spans_tenant_category_updated_at"
+            && index.Properties.Select(p => p.Name).SequenceEqual(new[]
+            {
+                nameof(StateSpanEntity.TenantId),
+                nameof(StateSpanEntity.Category),
+                nameof(StateSpanEntity.UpdatedAt),
+                nameof(StateSpanEntity.Id),
+            })
+            && !index.IsUnique
+            && (index.IsDescending == null || !index.IsDescending.Contains(true))
+            && index.GetFilter() == "deleted_at IS NULL");
     }
 
     /// <summary>The glucose types <c>EntryReadService.GetModifiedSinceAsync</c> merges.</summary>

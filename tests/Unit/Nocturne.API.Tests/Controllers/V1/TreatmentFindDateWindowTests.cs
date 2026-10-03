@@ -9,6 +9,7 @@ using Nocturne.API.Controllers.V1;
 using Nocturne.API.Helpers;
 using Nocturne.API.Services.Treatments;
 using Nocturne.Core.Contracts.Entries;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Legacy;
 using Nocturne.Core.Contracts.Profiles;
@@ -265,5 +266,5 @@ public class TreatmentFindDateWindowTests
         new(projection, Mock.Of<ITreatmentDecomposer>(), Mock.Of<IDecompositionPipeline>(),
             Mock.Of<ITempBasalRepository>(), Mock.Of<IBolusRepository>(), Mock.Of<ICarbIntakeRepository>(),
             Mock.Of<IBGCheckRepository>(), Mock.Of<INoteRepository>(), Mock.Of<IDeviceEventRepository>(),
-            Mock.Of<IBolusCalculationRepository>(), logger);
+            Mock.Of<IBolusCalculationRepository>(), Mock.Of<IStateSpanService>(), logger);
 }

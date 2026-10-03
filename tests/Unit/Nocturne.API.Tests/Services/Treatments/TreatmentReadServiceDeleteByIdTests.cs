@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Treatments;
+using Nocturne.Core.Contracts.Glucose;
 using Nocturne.Core.Contracts.V4;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
@@ -26,6 +27,7 @@ public class TreatmentReadServiceDeleteByIdTests
     private readonly Mock<INoteRepository> _noteRepo = new();
     private readonly Mock<IDeviceEventRepository> _deviceEventRepo = new();
     private readonly Mock<IBolusCalculationRepository> _bolusCalcRepo = new();
+    private readonly Mock<IStateSpanService> _stateSpans = new();
     private readonly TreatmentReadService _service;
 
     public TreatmentReadServiceDeleteByIdTests()
@@ -41,7 +43,31 @@ public class TreatmentReadServiceDeleteByIdTests
             _noteRepo.Object,
             _deviceEventRepo.Object,
             _bolusCalcRepo.Object,
+            _stateSpans.Object,
             NullLogger<TreatmentReadService>.Instance);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_IdOfNoRecord_DeletesTheStateSpanItResolvesTo()
+    {
+        const string clientId = "8F2C1D4E-6B7A-4C3D-9E8F-1A2B3C4D5E6F";
+        var spanId = Guid.CreateVersion7().ToString();
+        _projection
+            .Setup(p => p.GetProjectedStateSpanTreatmentAsync(clientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Treatment { Id = spanId, EventType = "Temporary Override" });
+        _projection
+            .Setup(p => p.GetStateSpanTreatmentIdAsync(clientId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(clientId);
+        _stateSpans.Setup(s => s.DeleteStateSpanAsync(spanId, It.IsAny<CancellationToken>())).ReturnsAsync(true);
+
+        var deleted = await _service.DeleteAsync(clientId);
+
+        deleted.Should().NotBeNull();
+        deleted!.Served!.Id.Should().Be(spanId);
+        _stateSpans.Verify(s => s.DeleteStateSpanAsync(spanId, It.IsAny<CancellationToken>()), Times.Once);
+        _pipeline.Verify(
+            p => p.DeleteByLegacyIdAsync<Treatment>(clientId, WriteOrigin.Live, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]

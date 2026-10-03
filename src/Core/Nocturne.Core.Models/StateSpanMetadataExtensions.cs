@@ -29,6 +29,12 @@ public static class StateSpanMetadataExtensions
     public const string DeviceStatusCollection = "devicestatus";
 
     /// <summary>
+    /// Metadata key for the treatment's <c>utcOffset</c>, which the treatment decomposer writes on every
+    /// span it writes and no connector writes, so its presence marks a span written from a treatment.
+    /// </summary>
+    public const string UtcOffsetKey = "utcOffset";
+
+    /// <summary>
     /// Reads <paramref name="key"/> as a <see cref="decimal"/>; returns <see langword="null"/>
     /// if missing, non-finite, or unparseable. Numeric strings are parsed with
     /// <see cref="CultureInfo.InvariantCulture"/>.

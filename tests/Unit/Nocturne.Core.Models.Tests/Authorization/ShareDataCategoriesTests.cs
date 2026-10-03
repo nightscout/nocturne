@@ -111,4 +111,34 @@ public class ShareDataCategoriesTests
         ShareDataCategories.RecencyColumns.Keys.Should().OnlyContain(t => governed.Contains(t),
             "a recency entry for an ungoverned table is stale and would mislead");
     }
+
+    [Fact]
+    public void StateSpans_AreHiddenFromSharesButClampedForMembersByOverlap()
+    {
+        ShareDataCategories.GoverningScopeFor("state_spans").Should().BeNull();
+        ShareDataCategories.RecencyColumnFor("state_spans").Should().BeNull();
+        ShareDataCategories.SpanEndColumnFor("state_spans").Should().Be("end_timestamp");
+    }
+
+    [Fact]
+    public void HiddenSpanEndColumns_ReferenceOnlyUngovernedTablesWithoutARecencyColumn()
+    {
+        ShareDataCategories.HiddenSpanEndColumns.Keys.Should().OnlyContain(t =>
+            ShareDataCategories.GoverningScopeFor(t) == null && ShareDataCategories.RecencyColumnFor(t) == null);
+    }
+
+    [Fact]
+    public void Notes_AreHiddenFromSharesButClampedForMembers()
+    {
+        ShareDataCategories.GoverningScopeFor("notes").Should().BeNull();
+        ShareDataCategories.RecencyColumnFor("notes").Should().Be("timestamp");
+    }
+
+    [Fact]
+    public void HiddenRecencyColumns_ReferenceOnlyUngovernedTables()
+    {
+        ShareDataCategories.HiddenRecencyColumns.Keys
+            .Should().OnlyContain(t => ShareDataCategories.GoverningScopeFor(t) == null,
+                "a governed table declares its clamp in RecencyColumns");
+    }
 }

@@ -121,6 +121,7 @@ public class TreatmentClientIdRoundTripTests : IDisposable
         var store = new TreatmentReadService(
             projection, decomposer, pipeline,
             tempBasalRepo.Object, bolusRepo, carbRepo, bgCheckRepo, noteRepo, deviceEventRepo, bolusCalcRepo,
+            Mock.Of<IStateSpanService>(),
             NullLogger<TreatmentReadService>.Instance);
 
         _service = new TreatmentService(

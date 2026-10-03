@@ -1,5 +1,11 @@
+using System.Reflection;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Query;
+using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
+using Microsoft.EntityFrameworkCore.Sqlite.Query.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Nocturne.API.Services.Audit;
@@ -57,11 +63,9 @@ public class TreatmentDecomposerDeleteTests : IDisposable
 
     public TreatmentDecomposerDeleteTests()
     {
-        _db = TestDbContextFactory.CreateSqlite();
-
-        using var db = NewContext();
-        db.Tenants.Add(new TenantEntity { Id = TenantId, Slug = "test" });
-        db.SaveChanges();
+        _db = TestDbContextFactory.CreateSqliteWithTenant(
+            TenantId,
+            o => o.ReplaceService<IMethodCallTranslatorProvider, JsonTranslatingProvider>());
     }
 
     public void Dispose()
@@ -241,6 +245,49 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
     }
 
+    private void SeedStateSpan(string originalId, string category, string source, string? metadataJson, DateTime start)
+    {
+        using var db = NewContext();
+        db.StateSpans.Add(new StateSpanEntity
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = TenantId,
+            OriginalId = originalId,
+            Category = category,
+            State = "Active",
+            StartTimestamp = start,
+            Source = source,
+            MetadataJson = metadataJson,
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task BulkDelete_UserContext_TombstonesTheServedStateSpansInTheWindowOnly()
+    {
+        SeedOneOfEachType();
+        SeedStateSpan("override-1", "Override", "loop", """{"collection":"treatments","utcOffset":0}""", Inside);
+        SeedStateSpan("tt-1", "TemporaryTarget", "aaps", """{"utcOffset":0}""", Inside);
+        SeedStateSpan("ps-1", "Profile", "aaps", """{"profileName":"Weekend","utcOffset":0}""", Inside);
+        SeedStateSpan("ps-outside", "Profile", "aaps", """{"utcOffset":0}""", Outside);
+        SeedStateSpan("glooko-profile", "Profile", "glooko-connector", """{"profileName":"Unknown"}""", Inside);
+        SeedStateSpan("devicestatus-override", "Override", "loop", """{"collection":"devicestatus"}""", Inside);
+
+        var count = await BulkDeleteAsync(_userAuditContext);
+
+        await using var assertCtx = NewContext();
+        var deleted = await assertCtx.StateSpans.IgnoreQueryFilters()
+            .Where(s => s.DeletedAt != null)
+            .Select(s => new { s.OriginalId, ByUser = EF.Property<bool>(s, "DeletedByUser") })
+            .ToListAsync();
+        deleted.Select(s => s.OriginalId).Should().BeEquivalentTo(new[] { "override-1", "tt-1", "ps-1" });
+        count.Should().Be(10);
+        deleted.Should().OnlyContain(s => s.ByUser);
+        (await assertCtx.MutationAuditLog.Where(a => a.Action == "bulk_delete" && a.EntityType == "StateSpan")
+                .Select(a => a.ChangesJson).SingleAsync())
+            .Should().Contain("\"count\":3");
+    }
+
     private async Task<int> DeleteByLegacyIdAsync(IAuditContext auditContext)
     {
         await using var ctx = NewContext();
@@ -313,5 +360,47 @@ public class TreatmentDecomposerDeleteTests : IDisposable
         (await assertCtx.GetBlockingLegacyIdsAsync<BolusEntity>([LegacyTreatmentId])).Held.Should().BeEmpty();
         (await assertCtx.GetBlockingLegacyIdsAsync<TempBasalEntity>([LegacyTreatmentId])).Held.Should().BeEmpty();
         (await assertCtx.MutationAuditLog.AnyAsync()).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Translates the PostgreSQL JSON functions the served state-span filter uses into SQLite's
+    /// <c>json_type</c> and <c>json_extract</c>, for the constant keys and objects the filter passes.
+    /// </summary>
+#pragma warning disable EF1001
+    private sealed class JsonTranslatingProvider : SqliteMethodCallTranslatorProvider
+    {
+        public JsonTranslatingProvider(RelationalMethodCallTranslatorProviderDependencies dependencies)
+            : base(dependencies) =>
+            AddTranslators([new NpgsqlJsonTranslator(dependencies.SqlExpressionFactory)]);
+    }
+#pragma warning restore EF1001
+
+    private sealed class NpgsqlJsonTranslator(ISqlExpressionFactory sql) : IMethodCallTranslator
+    {
+        public SqlExpression? Translate(
+            SqlExpression? instance, MethodInfo method, IReadOnlyList<SqlExpression> arguments,
+            IDiagnosticsLogger<DbLoggerCategory.Query> logger)
+        {
+            if (method.DeclaringType != typeof(NpgsqlJsonDbFunctionsExtensions))
+                return null;
+
+            var json = arguments[1];
+            var operand = (string)((SqlConstantExpression)arguments[2]).Value!;
+
+            return method.Name switch
+            {
+                nameof(NpgsqlJsonDbFunctionsExtensions.JsonExists) => sql.IsNotNull(At("json_type", json, operand)),
+                nameof(NpgsqlJsonDbFunctionsExtensions.JsonContains) => JsonNode.Parse(operand)!.AsObject()
+                    .Select(p => (SqlExpression)sql.Equal(
+                        At("json_extract", json, p.Key), sql.Constant(p.Value!.GetValue<string>())))
+                    .Aggregate(sql.AndAlso),
+                _ => null,
+            };
+        }
+
+        private SqlExpression At(string function, SqlExpression json, string key) =>
+            sql.Function(function, [json, sql.Constant("$." + key)], nullable: true,
+                // A missing key is null too, so a null result does not follow from a null document alone.
+                argumentsPropagateNullability: [false, false], typeof(string));
     }
 }
