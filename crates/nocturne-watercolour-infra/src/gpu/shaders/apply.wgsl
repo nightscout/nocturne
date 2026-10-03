@@ -1,9 +1,22 @@
+// Operations (paint::apply_brush, apply_water, apply_lift, sim::dry_all).
+// Brush, water and lift coverage is rasterised on the CPU by the shared
+// `paint` module and uploaded (the rect holding its non-zero cells), so that
+// geometry is identical on both backends. A dab's coverage is evaluated here
+// from its paint::DabStamp as the CPU point brush computes it, to f32
+// rounding. These entry points only add coverage into the grid, with stroke
+// water modulated by paper height as in paint::stroke_water_factor. The
+// laydown flow (paint::StrokeFlow) arrives already computed in the stroke
+// uniform, and only its outward direction is evaluated here, off the same
+// coverage the CPU reads.
+
+// Coverage at grid cell (x, y); zero outside the stroke's rect, which holds
+// every non-zero cell of its stamp.
 fn stamp_at(x: u32, y: u32) -> f32 {
     if x < stroke.rect_x || y < stroke.rect_y { return 0.0; }
     let lx = x - stroke.rect_x;
     let ly = y - stroke.rect_y;
     if lx >= stroke.rect_w || ly >= stroke.rect_h { return 0.0; }
-    if stroke.kind == 3u {
+    if stroke.kind == STROKE_DAB {
         let pu = (f32(x) + 0.5) / f32(P.width) * stroke.scale_x;
         let pv = (f32(y) + 0.5) / f32(P.height) * stroke.scale_y;
         let dx = pu - stroke.center_x;
@@ -27,7 +40,11 @@ fn stamp_cell(li: u32) -> u32 {
     return (stroke.rect_y + li / stroke.rect_w) * P.width + stroke.rect_x + li % stroke.rect_w;
 }
 
-// Flow follows coverage gradients, including paper grain.
+// Mirror of paint::outward_at. Coverage is highest on the centre line and
+// falls to zero at the rim, so the descent direction of the stamp field is
+// the direction the landing water is shouldered. The neighbour clamps match
+// the Rust saturating/min pair cell for cell; the lockstep tests compare
+// intermediate ticks and will catch any drift.
 fn outward_at(i: u32) -> vec2<f32> {
     let w = P.width;
     let h = P.height;

@@ -84,6 +84,19 @@ Build `bloom.json` by passing the donor through `bloomScene` with the tile's
 size, reading seed, slope and token colour. The render command validates the
 document through the Rust parser before painting.
 
+`bloom_cadence` replays 60 Hz refreshes through that scene's paint phase, with
+the tile's 5200 ms duration and 0.5 tail, and reports how many distinct frames
+it presented, the refreshes after the first 200 ms that repeated the previous
+frame, and CPU and frame timings:
+
+```bash
+cargo run -p nocturne-watercolour-wasm --example bloom_cadence --release -- bloom.json
+cargo run -p nocturne-watercolour-wasm --example bloom_cadence --release -- bloom.json --discrete
+```
+
+With tick blending (`blendTicks`) no refresh after landing should repeat;
+`--discrete` presents whole ticks for comparison.
+
 Two `nocturne-watercolour-infra` examples exist to check the reveal rather
 than squint at it. Both are CPU-reference by default and take catalogue ids
 and palettes:

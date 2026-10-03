@@ -2,8 +2,8 @@
 //! serde-free domain types.
 
 use nocturne_watercolour_core::domain::{
-    Background, BrushStroke, LiftStroke, Mask, Operation, Palette, PaletteEntry, Paper, Pigment,
-    PigmentRole, Point, RadiusProfile, Rgb, Scene, SceneId, Seed, SimResolution, SizeHint,
+    Background, BrushStroke, Dab, LiftStroke, Mask, Operation, Palette, PaletteEntry, Paper,
+    Pigment, PigmentRole, Point, RadiusProfile, Rgb, Scene, SceneId, Seed, SimResolution, SizeHint,
     StrokeSpan, Timeline, TimelineEvent, ValidationError, WaterStroke,
 };
 use serde::{Deserialize, Serialize};
@@ -333,7 +333,7 @@ fn op_from_doc(op: OperationDoc) -> Operation {
             concentration,
             water,
             softness,
-        } => Operation::Dab(nocturne_watercolour_core::domain::ops::Dab {
+        } => Operation::Dab(Dab {
             center: Point::new(center[0], center[1]),
             radius,
             pigment,

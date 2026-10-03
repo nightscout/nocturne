@@ -12,6 +12,8 @@ function fakeInstance(total: number) {
   let owed = 0;
   const instance = {
     calls,
+    /** Frames the scheduler admitted this instance to advance in. */
+    advances: 0,
     get tick() {
       return tick;
     },
@@ -20,6 +22,7 @@ function fakeInstance(total: number) {
       canvas.height = height;
     },
     setCrop: vi.fn(),
+    setBlendTicks: vi.fn(),
     setProgressCurve() {},
     play: () => void (playing = true),
     pause: () => void (playing = false),
@@ -30,6 +33,7 @@ function fakeInstance(total: number) {
     },
     /** 25 ticks a second: at 60 fps most frames run no tick at all. */
     advanceByElapsed(seconds: number) {
+      instance.advances++;
       if (!playing || tick >= total) return false;
       owed += seconds * 25;
       const whole = Math.floor(owed);
@@ -39,13 +43,14 @@ function fakeInstance(total: number) {
       tick = next;
       return moved;
     },
-    seekTowardsProgress(progress: number, ticks: number) {
+    tickForProgress: (progress: number) => Math.round(progress * total),
+    seekTowardsTick(target: number, ticks: number) {
       playing = false;
-      const target = Math.round(progress * total);
       if (target < tick) tick = 0;
+      const from = tick;
       tick = Math.min(target, tick + ticks);
-      calls.push(`seek:${progress}:${ticks}`);
-      return tick === target;
+      calls.push(`seek:${target}:${ticks}`);
+      return tick - from;
     },
     seekProgress(progress: number) { tick = Math.round(progress * total); playing = false; },
     reset() { tick = 0; playing = false; },
@@ -63,17 +68,23 @@ function fakeInstance(total: number) {
     dispose: () => void calls.push('dispose'),
     simResolution: () => 96,
     totalTicks: () => total,
-    tickBudget: () => 6,
+    ticksDue: (seconds: number) => (playing ? Math.min(total - tick, Math.floor(owed + seconds * 25)) : 0),
+    ticksDueAtProgress: (progress: number) => Math.max(0, Math.round(progress * total) - tick),
     currentTick: () => tick,
   };
   return instance;
 }
 
 function fakeHost(...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
+  return timedHost({}, ...instances);
+}
+
+/** A host whose engine reports these GPU timings. */
+function timedHost(gpuTimings: { gpuTickMs?: number; gpuRenderMs?: number }, ...instances: ReturnType<typeof fakeInstance>[]): EngineHost {
   const engine = {
     createInstance: () => instances.shift(),
     onDeviceLost() {},
-    stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }),
+    stats: () => ({ liveInstances: 0, maxLiveInstances: 4, ...gpuTimings }),
     maxLiveInstances: 4,
   };
   const module = {
@@ -201,6 +212,17 @@ describe('presented progress', () => {
     live.dispose();
   });
 
+  it('blends ticks only for a player that asks', async () => {
+    const blended = fakeInstance(1);
+    const plain = fakeInstance(1);
+    const { scheduler } = manualScheduler();
+    const players = [player(blended, scheduler, { blendTicks: true }), player(plain, scheduler, {})];
+    await Promise.all(players.map((live) => live.ready));
+    expect(blended.setBlendTicks).toHaveBeenCalledWith(true);
+    expect(plain.setBlendTicks).not.toHaveBeenCalled();
+    for (const live of players) live.dispose();
+  });
+
   it('rejects a crop outside the authored painting before acquiring an engine', () => {
     const instance = fakeInstance(1);
     const { scheduler } = manualScheduler();
@@ -250,7 +272,7 @@ describe('presented progress', () => {
     expect(onProgress).not.toHaveBeenCalled();
     instance.render = () => true;
     frame();
-    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40);
+    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40, false);
     live.dispose();
   });
 });
@@ -427,7 +449,7 @@ describe('target seeking', () => {
     for (let i = 0; i < 100 && !live.state.playing; i++) clock.frame();
     expect(instance.tick).toBe(60);
     expect(live.state.playing).toBe(true);
-    expect(instance.calls.filter(call => call.startsWith('seek:')).every(call => call.startsWith('seek:0.6:'))).toBe(true);
+    expect(instance.calls.filter(call => call.startsWith('seek:')).every(call => call.startsWith('seek:60:'))).toBe(true);
     live.dispose();
   });
 
@@ -451,6 +473,22 @@ describe('target seeking', () => {
     expect(instance.calls.at(-1)).toBe('dispose');
   });
 
+  it('tells the progress callback which presented frame shows the latest target', async () => {
+    const instance = fakeInstance(100);
+    const clock = manualScheduler();
+    const presented: Array<[number, boolean]> = [];
+    const live = player(instance, clock.scheduler, { autoplay: 'never', onProgress: (progress, seeking) => presented.push([progress, seeking]) });
+    await live.ready;
+    clock.frame();
+    presented.length = 0;
+    live.seekTo(0.6);
+    for (let i = 0; i < 100 && presented.at(-1)?.[1] !== false; i++) clock.frame();
+    expect(presented.at(-1)).toEqual([0.6, false]);
+    expect(presented.length).toBeGreaterThan(1);
+    expect(presented.slice(0, -1).every(([, seeking]) => seeking)).toBe(true);
+    live.dispose();
+  });
+
   it('keeps a seek pending until a frame can actually be presented', async () => {
     const instance = fakeInstance(100);
     const render = vi.spyOn(instance, 'render').mockReturnValue(false);
@@ -469,7 +507,7 @@ describe('target seeking', () => {
 
   it('does not read a freed instance after a seek fault with easing', async () => {
     const instance = fakeInstance(100);
-    vi.spyOn(instance, 'seekTowardsProgress').mockImplementation(() => { throw new Error('seek failed'); });
+    vi.spyOn(instance, 'seekTowardsTick').mockImplementation(() => { throw new Error('seek failed'); });
     const progress = vi.spyOn(instance, 'progress').mockImplementation(() => {
       if (instance.calls.includes('dispose')) throw new Error('freed instance');
       return 0;
@@ -497,5 +535,18 @@ describe('target seeking', () => {
     live.seekTo(0.2); live.finishImmediately(); clock.frame();
     expect(instance.tick).toBe(100);
     live.dispose();
+  });
+});
+
+describe('GPU reservation', () => {
+  it('admits two playing reveals every frame when the ticks they run fit the budget', async () => {
+    const reveals = [fakeInstance(1000), fakeInstance(1000)];
+    const { scheduler, frame } = manualScheduler();
+    const timings = { gpuTickMs: 1, gpuRenderMs: 2 };
+    const players = reveals.map((instance) => player(instance, scheduler, { engineHost: timedHost(timings, instance) }));
+    await Promise.all(players.map((live) => live.ready));
+    for (let i = 0; i < 30; i++) frame();
+    expect(reveals.map((instance) => instance.advances)).toEqual([30, 30]);
+    for (const live of players) live.dispose();
   });
 });

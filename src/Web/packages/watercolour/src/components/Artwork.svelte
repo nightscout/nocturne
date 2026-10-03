@@ -3,6 +3,7 @@
   import { getPresentation, subscribePresentation } from '../api/presentation';
   import { iconSvg } from '../api/scenes';
   import type { CropWindow } from '../types';
+  import type { PlayerProgressCallback } from '../api/playback';
   import { type PlayerReadyCallback, type PlayerStateCallback, hostSurface, mountPlayer } from './helpers';
 
   let {
@@ -26,6 +27,7 @@
     releaseAfterFinish,
     onready,
     onstatechange,
+    onprogress,
     class: className = '',
   }: {
     artwork?: ArtworkId;
@@ -55,6 +57,8 @@
     onready?: PlayerReadyCallback;
     /** Fires on every player state change, including settling on `none`, where `onready` never fires. */
     onstatechange?: PlayerStateCallback;
+    /** Runs after each presented live or baked frame; a host waiting on `seekTo` reads its `seeking` argument. */
+    onprogress?: PlayerProgressCallback;
     class?: string;
   } & ArtworkOptions = $props();
 
@@ -72,8 +76,8 @@
     return mountPlayer(
       frame,
       canvas,
-      artwork,
       {
+        artwork,
         icon,
         palette,
         seed,
@@ -90,9 +94,10 @@
         surface,
         assetBaseUrl,
         releaseAfterFinish: releaseAfterFinish ?? autoplay !== 'never',
+        onReady: onready,
+        onStateChange: onstatechange,
+        onProgress: onprogress,
       },
-      onready,
-      onstatechange,
     );
   });
 </script>

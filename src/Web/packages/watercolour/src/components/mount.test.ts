@@ -79,10 +79,16 @@ describe('measuredSize', () => {
 });
 
 describe('mountPlayer', () => {
+  it('passes tick blending and the progress callback to the player', () => {
+    const onProgress = vi.fn();
+    mount(fakeFrame(160, 60), canvas, { scene: () => '{}', blendTicks: true, onProgress });
+    expect(created[0].options).toMatchObject({ blendTicks: true, onProgress });
+  });
+
   it('builds a generated scene at the measured size and repaints a released scene after resize', () => {
     vi.useFakeTimers();
     const scene = vi.fn(() => '{}');
-    mount(fakeFrame(160, 60), canvas, undefined, { scene, fit: 'fill', releaseAfterFinish: true });
+    mount(fakeFrame(160, 60), canvas, { scene, fit: 'fill', releaseAfterFinish: true });
     const module = {} as WasmModule;
     const first = created[0].source as AuthoredScene;
     if (!('scene' in first)) throw new Error('expected a generated scene');
@@ -99,7 +105,7 @@ describe('mountPlayer', () => {
   });
 
   it('creates no player while the frame has no area, then one at its first real size', () => {
-    mount(fakeFrame(0, 0), canvas, 'header-motif', { surface: 'light' });
+    mount(fakeFrame(0, 0), canvas, { artwork: 'header-motif', surface: 'light' });
     expect(created).toHaveLength(0);
 
     observed!([{ contentRect: { width: 0, height: 0 } }]);
@@ -112,12 +118,12 @@ describe('mountPlayer', () => {
   });
 
   it('creates the player at once for a frame that already has area', () => {
-    mount(fakeFrame(160, 32), canvas, 'header-motif', { surface: 'light' });
+    mount(fakeFrame(160, 32), canvas, { artwork: 'header-motif', surface: 'light' });
     expect(created).toHaveLength(1);
   });
 
   it('hands the surface it is given to the player', () => {
-    mount(fakeFrame(96, 32), canvas, 'confirmation-background', { surface: 'dark' });
+    mount(fakeFrame(96, 32), canvas, { artwork: 'confirmation-background', surface: 'dark' });
     expect(created[0].source.surface).toBe('dark');
   });
 });
@@ -126,7 +132,7 @@ describe('a change of presentation', () => {
   afterEach(() => setPresentation('animated'));
 
   it('rebuilds a finished player finished, and one mid-reveal from the start', () => {
-    mount(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light' });
+    mount(fakeFrame(64, 64), canvas, { artwork: 'avatar-wash', surface: 'light' });
     setPresentation('still');
     expect(created).toHaveLength(2);
     expect(created[0].disposed).toBe(true);
@@ -142,7 +148,7 @@ describe('a change of presentation', () => {
 describe('a released still that is resized', () => {
   it('only stretches for a small change, and paints again, finished, once a large one settles', () => {
     vi.useFakeTimers();
-    mount(fakeFrame(64, 64), canvas, 'avatar-wash', { surface: 'light', releaseAfterFinish: true });
+    mount(fakeFrame(64, 64), canvas, { artwork: 'avatar-wash', surface: 'light', releaseAfterFinish: true });
     released = true;
 
     observed!([{ contentRect: { width: 72, height: 72 } }]);
