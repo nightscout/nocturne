@@ -3,7 +3,7 @@
   import type { ArtworkPlayer, PlayerState, PlayerStateCallback } from "@nocturne/watercolour";
 
   export const spyPlayer = {
-    seek: vi.fn<(progress: number) => void>(),
+    seekTo: vi.fn<(progress: number) => void>(),
     play: vi.fn<() => void>(),
     finishImmediately: vi.fn<() => void>(),
   };

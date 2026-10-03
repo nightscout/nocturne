@@ -28,9 +28,9 @@
   } from "$lib/utils/formatting";
   import Clock from "@lucide/svelte/icons/clock";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
-  import GlucoseTileWash from "./GlucoseTileWash.svelte";
+  import GlucoseTileWash, { trackUnwashedFill } from "./GlucoseTileWash.svelte";
   import { showsCurrentGlucoseWidget } from "./top-widget-ids";
 
   interface ComponentProps {
@@ -52,11 +52,12 @@
   // the pills; otherwise the tile stays here so the reading never leaves the desktop dashboard.
   const readingInWidget = $derived(showsCurrentGlucoseWidget(dashboardTopWidgets.current));
 
-  const rawCurrentBG = $derived(realtimeStore.currentBG);
-  const rawBgDelta = $derived(realtimeStore.bgDelta);
+  const glucose = displayedGlucose(realtimeStore);
+  const rawCurrentBG = $derived(glucose.currentBG);
+  const rawBgDelta = $derived(glucose.bgDelta);
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const tileVariant = $derived(
-    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore.currentEntry?.mills))
+    getGlucoseTileVariant(glucose.status)
   );
 
   const connection = createConnectionIndicator(() => realtimeStore.connectionStatus);
@@ -80,6 +81,12 @@
   const isLoading = $derived(
     rawCurrentBG === 0 && realtimeStore.entries.length === 0
   );
+  trackUnwashedFill(() => ({
+    loading: isLoading,
+    stale: isStale,
+    disconnected: isDisconnected,
+    variant: tileVariant,
+  }));
 
   function formatTimeSinceLastReading(): string {
     return minutesAgo(lastUpdated, currentTime.getTime());
@@ -139,11 +146,7 @@
 </script>
 
 {#snippet rangeWash()}
-  <GlucoseTileWash
-    mills={realtimeStore.currentEntry?.mills}
-    variant={tileVariant}
-    delta={realtimeStore.currentEntry?.mills && currentTime.getTime() - realtimeStore.currentEntry.mills <= STALE_THRESHOLD_MS ? rawBgDelta : 0}
-  />
+  <GlucoseTileWash mills={glucose.mills} variant={tileVariant} delta={rawBgDelta} />
 {/snippet}
 
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->

@@ -17,7 +17,7 @@
   import { cubicOut } from "svelte/easing";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
 
   const realtimeStore = tryGetRealtimeStore();
@@ -49,10 +49,11 @@
   };
 
   // Collapsed state needs basic BG info
-  const rawCurrentBG = $derived(realtimeStore?.currentBG ?? 0);
+  const glucose = displayedGlucose(realtimeStore);
+  const rawCurrentBG = $derived(glucose.currentBG);
   const lastUpdated = $derived(realtimeStore?.lastUpdated ?? 0);
   const tileVariant = $derived(
-    getGlucoseTileVariant(currentGlucoseStatus(realtimeStore?.currentEntry?.mills))
+    getGlucoseTileVariant(glucose.status)
   );
   const now = $derived(realtimeStore?.now ?? Date.now());
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
@@ -68,8 +69,8 @@
   const displayBG = $derived(formatGlucoseValue(rawCurrentBG, units));
 
   // Trend metadata
-  const bgDelta = $derived(realtimeStore?.bgDelta ?? 0);
-  const direction = $derived(realtimeStore?.direction ?? "");
+  const bgDelta = $derived(glucose.bgDelta);
+  const direction = $derived(glucose.direction);
   const timeSinceReading = $derived(realtimeStore?.timeSinceReading ?? "");
   const displayDelta = $derived(formatGlucoseDelta(bgDelta, units));
   const hasData = $derived(!isLoading && rawCurrentBG > 0);

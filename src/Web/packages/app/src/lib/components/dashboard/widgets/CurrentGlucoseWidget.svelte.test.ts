@@ -1,22 +1,19 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
+import { engine } from "$lib/test-stubs/Watercolour.test-stub.svelte";
+import { GlucoseStatus } from "$lib/api/generated/nocturne-api-client";
 
 const now = Date.UTC(2026, 5, 14, 9, 30, 0);
 
-const store = vi.hoisted(() => ({
-  currentBG: 123,
-  currentEntry: { mills: 0 },
-  bgDelta: 4,
-  lastUpdated: 0,
-  now: 0,
-  connectionStatus: "connected",
-  entries: [{ mills: 0, sgv: 123 }],
-  direction: "Flat",
+const mocked = vi.hoisted(() => ({
+  store: undefined as unknown,
+  summary: undefined as unknown,
 }));
 
 vi.mock("$lib/stores/realtime-store.svelte", () => ({
-  getRealtimeStore: () => store,
+  getRealtimeStore: () => mocked.store,
 }));
 
 const battery = vi.hoisted(() => ({ status: undefined as unknown }));
@@ -25,10 +22,35 @@ vi.mock("$api/generated/batteries.generated.remote", () => ({
   getCurrentBatteryStatus: () => Promise.resolve(battery.status),
 }));
 
-// Neutral keeps the watercolour engine out of the test.
-vi.mock("$lib/stores/current-glucose-status.svelte", () => ({
-  currentGlucoseStatus: () => undefined,
+vi.mock("$api/generated/summaries.generated.remote", () => ({
+  getSummary: () => remoteQuery(() => mocked.summary),
 }));
+
+vi.mock("@nocturne/watercolour", async (importOriginal) => {
+  const fake = await import("$lib/test-stubs/Watercolour.test-stub.svelte");
+  return {
+    ...(await importOriginal<typeof import("@nocturne/watercolour")>()),
+    Artwork: fake.default,
+    mountPlayer: fake.mountPlayer,
+    bloomScene: fake.bloomScene,
+  };
+});
+
+const store = $state({
+  currentBG: 123,
+  currentEntry: { mills: 0 },
+  bgDelta: 4,
+  lastUpdated: 0,
+  now: 0,
+  connectionStatus: "connected",
+  entries: [{ mills: 0, sgv: 123 }],
+  direction: "Flat",
+});
+mocked.store = store;
+
+// No current status keeps the tile neutral, so it paints no wash.
+const summary = $state<{ current?: { mills: number; status: GlucoseStatus } }>({});
+mocked.summary = summary;
 
 import { setGlucoseUnits } from "$lib/stores/appearance-store.svelte";
 import CurrentGlucoseWidget from "./CurrentGlucoseWidget.svelte";
@@ -41,6 +63,7 @@ describe("CurrentGlucoseWidget", () => {
     store.lastUpdated = now - 2 * 60_000;
     store.now = now;
     battery.status = undefined;
+    summary.current = undefined;
     setGlucoseUnits("mg/dl");
   });
 
@@ -61,7 +84,7 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(page.getByText("+4", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("shows the uploader battery beside the change", async () => {
+  it("shows the uploader battery, named for a screen reader, beside the change", async () => {
     battery.status = {
       level: 62,
       display: "62%",
@@ -71,7 +94,40 @@ describe("CurrentGlucoseWidget", () => {
     };
     render(CurrentGlucoseWidget);
 
-    await expect.element(page.getByText("62%", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("62%")).toBeVisible();
+    await expect.element(page.getByText("Uploader battery", { exact: true })).toBeInTheDocument();
+  });
+
+  it("keeps the grey wash while a new reading in the same range waits for its status", async () => {
+    const first = store.currentEntry.mills;
+    summary.current = { mills: first, status: GlucoseStatus.High };
+    render(CurrentGlucoseWidget);
+    await expect.element(page.getByTestId("glucose-tile-bloom")).toBeInTheDocument();
+    for (const painting of engine.live()) painting.paint(0.7);
+
+    const second = first + 5 * 60_000;
+    store.currentEntry = { mills: second };
+    store.currentBG = 130;
+    store.lastUpdated = second;
+    store.now = second + 60_000;
+
+    await expect.element(tile()).toHaveTextContent(/^123/);
+    await expect.element(page.getByTestId("glucose-tile-bloom")).toBeInTheDocument();
+
+    summary.current = { mills: second, status: GlucoseStatus.High };
+
+    await expect.element(tile()).toHaveTextContent(/^130/);
+    await expect.element(page.getByTestId("artwork-wash")).toBeInTheDocument();
+    await expect.element(page.getByTestId("glucose-tile-bloom")).not.toBeInTheDocument();
+  });
+
+  it("drops the row under the tile when a stale reading has no battery to show", async () => {
+    store.lastUpdated = now - 30 * 60_000;
+    render(CurrentGlucoseWidget);
+    await expect.element(page.getByText(/30 min/)).toBeVisible();
+
+    await expect.element(page.getByTestId("current-glucose-tile")).toBeVisible();
+    expect(page.getByTestId("current-glucose-tile").element().nextElementSibling).toBeNull();
   });
 
   it("says a stale reading is stale to a screen reader", async () => {
