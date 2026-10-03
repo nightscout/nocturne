@@ -68,6 +68,8 @@ const HARDWARE_WATER = 0.3;
  * into wet indigo to green.
  */
 const HARDWARE_WAIT_TICKS = 4 * LIVE_TICKS_PER_SECOND;
+/** Ticks a replayed band gets to spread before the sheet is dried for the next, or for the hardware. */
+const REPLAY_SPREAD_TICKS = 6;
 const CLASP_WAIT_TICKS = 2 * LIVE_TICKS_PER_SECOND;
 const STRAP_Y = 0.59;
 const STRAP_RADIUS = 0.05;
@@ -84,6 +86,7 @@ const CLASP_RADIUS = 0.038;
 interface Band {
   top: number;
   bottom: number;
+  pigment: number;
 }
 
 interface Stroke {
@@ -148,9 +151,9 @@ export class PackingSuitcase {
     if (this.y1 - filled < 1e-4) {
       paint = this.glaze(pigment);
     } else {
-      const band = { top: filled, bottom: filled + (this.y1 - filled) / (stillUnpacked + 1) };
+      const band = { top: filled, bottom: filled + (this.y1 - filled) / (stillUnpacked + 1), pigment };
       this.bands.push(band);
-      paint = this.band(band, pigment);
+      paint = this.band(band);
     }
     // The handle is painted with the mask cleared, so every pack restores it.
     const ops = [{ afterTicks: 0, op: this.mask() }, ...paint];
@@ -158,6 +161,24 @@ export class PackingSuitcase {
       this.hardware = true;
       ops.push(...this.hardwareOps(replay));
     }
+    return ops;
+  }
+
+  /**
+   * The list changed with no pack: an unpacked item was removed, leaving
+   * `stillUnpacked`. When that completes the list, the lowest band runs on to
+   * the bottom of the body and the hardware goes on.
+   */
+  countChanged(stillUnpacked: number): TimedOp[] {
+    const last = this.bands.at(-1);
+    if (stillUnpacked > 0 || this.hardware || !last) return [];
+    const ops = [{ afterTicks: 0, op: this.mask() }];
+    if (this.y1 - last.bottom >= 1e-4) {
+      ops.push(...this.band({ top: last.bottom, bottom: this.y1, pigment: last.pigment }));
+      last.bottom = this.y1;
+    }
+    this.hardware = true;
+    ops.push(...this.hardwareOps(false));
     return ops;
   }
 
@@ -196,7 +217,7 @@ export class PackingSuitcase {
     return this.hatchAcross(band.top - overlap, band.bottom);
   }
 
-  private band(band: Band, pigment: number): TimedOp[] {
+  private band(band: Band): TimedOp[] {
     const { path, radius } = this.bandStroke(band);
     const centre = (band.top + band.bottom) / 2;
     const wetRadius = ((band.bottom - band.top) / 2) * PREWET_REACH;
@@ -217,7 +238,7 @@ export class PackingSuitcase {
       ),
       ...spread(
         'brush',
-        { path, radius: [radius, radius], pigment, concentration: BAND_CONCENTRATION, water: BAND_WATER, softness: BAND_SOFTNESS },
+        { path, radius: [radius, radius], pigment: band.pigment, concentration: BAND_CONCENTRATION, water: BAND_WATER, softness: BAND_SOFTNESS },
         BAND_TICKS - PREWET_TICKS,
         PREWET_TICKS,
       ),
@@ -259,7 +280,7 @@ export class PackingSuitcase {
         ticks,
         at,
       );
-    const start = BAND_TICKS + (replay ? 0 : HARDWARE_WAIT_TICKS);
+    const start = BAND_TICKS + (replay ? REPLAY_SPREAD_TICKS : HARDWARE_WAIT_TICKS);
     const strapAt = start + LIFT_STAGGER_TICKS;
     const handleAt = strapAt + 12;
     const claspAt = handleAt + 10 + (replay ? 2 : CLASP_WAIT_TICKS);
@@ -293,8 +314,6 @@ interface SceneDocument {
 /** The catalogue artwork that donates the paper, the palette and the silhouette. */
 const DONOR = 'suitcase';
 const DONOR_PALETTE = 'dusk';
-/** Ticks a replayed band gets to spread before the sheet is dried for the next. */
-const REPLAY_SPREAD_TICKS = 6;
 const REPLAY_SETTLE_SHARE = 0.25;
 /** Ticks after the last replayed operation for the reveal to come to rest. */
 const REPLAY_TAIL_TICKS = 20;
@@ -339,7 +358,11 @@ export function packingSuitcaseScene(
   const doc = JSON.parse(
     module.catalogueScene(DONOR, seed, DONOR_PALETTE, DEFAULT_INTENSITY, 'large', 'light', simResolution),
   ) as SceneDocument;
-  const role = (name: string) => doc.palette.entries.findIndex((e) => e.role === name);
+  const role = (name: string) => {
+    const index = doc.palette.entries.findIndex((e) => e.role === name);
+    if (index < 0) throw new Error(`catalogue ${DONOR} in ${DONOR_PALETTE} has no ${name} pigment`);
+    return index;
+  };
   const painter = new PackingSuitcase({
     outline: donorOutline(doc),
     pigments: { bands: [role('base_wash'), role('accent'), role('glow')], hardware: role('shadow'), clasp: role('glow') },

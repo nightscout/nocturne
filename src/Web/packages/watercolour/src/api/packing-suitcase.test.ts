@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import appendedOperations from '../../../../../../crates/nocturne-watercolour-infra/tests/fixtures/appended-operations.json';
 import type { TimedOp } from '../types';
 import { PackingSuitcase, packingSuitcaseScene } from './packing-suitcase';
 
@@ -103,6 +104,30 @@ describe('PackingSuitcase', () => {
     expect(hasHardware(painter.pack('again', 0))).toBe(true);
   });
 
+  it('runs the lowest band to the bottom and adds the hardware when removing an item completes the list', () => {
+    const painter = suitcase();
+    const packs = [painter.pack('a', 2), painter.pack('b', 1)];
+    expect(painter.countChanged(1)).toEqual([]);
+    const done = painter.countChanged(0);
+    expect(hasHardware(done)).toBe(true);
+    expect(BODY_BOTTOM - lowestRow(done)).toBeLessThanOrEqual(rowRadius(done));
+    expect(rowsOf(done)[0]!.pigment).toBe(rowsOf(packs[1]!)[0]!.pigment);
+    expect(painter.countChanged(0)).toEqual([]);
+    const lifted = lifts(painter.unpack()).at(-1)!;
+    expect(Math.max(...lifted.path.map((p) => p[1]))).toBeGreaterThan(lowestRow(packs[1]!));
+  });
+
+  it('sends only the operation forms the engine reads', () => {
+    const fixture = appendedOperations as { op: unknown }[];
+    const shape = (op: unknown): string =>
+      typeof op === 'string' ? op : Object.entries(op as Record<string, unknown>).map(([kind, body]) => `${kind}:${Object.keys(body as object).sort().join(',')}`).join();
+    const forms = new Set(fixture.map(({ op }) => shape(op)));
+    const painter = suitcase();
+    const ops = [...packAll(painter, 3).flat(), ...painter.pack('late', 0), ...painter.unpack(), ...painter.unpack(), ...painter.countChanged(0)];
+    const sent = new Set(ops.map(({ op }) => shape(op)));
+    for (const form of sent) expect(forms).toContain(form);
+  });
+
   it('does nothing for an unpack with nothing painted', () => {
     expect(suitcase().unpack()).toEqual([]);
   });
@@ -179,6 +204,20 @@ describe('packingSuitcaseScene', () => {
     const last = timeline.events.at(-1)!.op as { settle?: { share: number } };
     expect(last.settle?.share).toBeGreaterThan(0);
     expect(Math.max(...ticks)).toBeLessThan(timeline.total_ticks);
+  });
+
+  it('gives the last replayed band time to spread before the sheet dries for the hardware', () => {
+    const { sceneJson } = packingSuitcaseScene(module, 120, 120, { packed: ['a', 'b'], unpacked: 0 });
+    const { timeline } = JSON.parse(sceneJson) as Doc;
+    const isBand = (op: unknown) => typeof op === 'object' && op !== null && 'brush' in op && (op as { brush: Brush }).brush.pigment !== 1;
+    const lastBandTick = Math.max(...timeline.events.filter((e) => isBand(e.op)).map((e) => e.at_tick));
+    const dried = timeline.events.find((e) => e.op === 'dry_all' && e.at_tick >= lastBandTick)!;
+    expect(dried.at_tick - lastBandTick).toBeGreaterThanOrEqual(5);
+  });
+
+  it('refuses a donor without the pigments it paints with', () => {
+    const noShadow = { catalogueScene: () => donor.replace('"shadow"', '"other"') };
+    expect(() => packingSuitcaseScene(noShadow, 120, 120, { packed: [], unpacked: 1 })).toThrow(/shadow/);
   });
 
   it('lays a completed list’s hardware without the live drying waits', () => {

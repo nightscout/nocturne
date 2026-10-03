@@ -85,7 +85,7 @@ export { dropScene, strokeFrame } from './api/drop-scene';
 export type { DropScene, DropSceneOptions, DropDeposit } from './api/drop-scene';
 
 export { PackingSuitcase, packingSuitcaseScene, PACKING_LIVE_CLOCK } from './api/packing-suitcase';
-export type { PackingSuitcaseScene, PackingSuitcaseOptions, SuitcaseGeometry } from './api/packing-suitcase';
+export type { PackingSuitcaseScene, PackingSuitcaseOptions } from './api/packing-suitcase';
 
 export { measureObstacles, textBoxes, DROP_TEXT_PAD } from './api/drop-text';
 export type { DropFont, DropFonts } from './api/drop-text';
