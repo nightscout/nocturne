@@ -105,25 +105,13 @@
     high: "bg-glucose-high",
     "very-high": "bg-glucose-very-high",
   };
-  const bloomToken: Record<GlucoseTileVariant, string> = {
-    neutral: "--muted",
-    "very-low": "--glucose-very-low",
-    low: "--glucose-low",
-    "in-range": "--glucose-in-range",
-    high: "--glucose-high",
-    "very-high": "--glucose-very-high",
-  };
 
-  const softLight = "mix-blend-soft-light";
-  const darkenOnly = "mix-blend-multiply opacity-60";
-  const washBlend: Record<GlucoseTileVariant, string> = {
-    "very-low": darkenOnly,
-    low: softLight,
-    "in-range": softLight,
-    high: softLight,
-    "very-high": darkenOnly,
-    neutral: softLight,
-  };
+  // Soft-light keeps the range token's tone and the digits' contrast. The very-low and very-high
+  // tiles carry light digits in most themes, so their wash only darkens, faintly, and never lifts
+  // the fill toward the digits.
+  const washBlend = $derived(
+    variant === "very-low" || variant === "very-high" ? "mix-blend-multiply opacity-60" : "mix-blend-soft-light"
+  );
 </script>
 
 {#if washPerReading}
@@ -136,17 +124,17 @@
           data-testid="glucose-tile-prior-fill"
         ></span>
         <span
-          class="absolute inset-0 wash-tint"
+          class="absolute inset-0 bloom"
           class:faded
           ontransitionend={markFaded}
           ontransitioncancel={markFaded}
           use:fadedOnUnmount
         >
-          <GlucoseTileBloom seed={reading.seed} {delta} token={bloomToken[variant]} onstatechange={onBloomState} onprogress={onBloomProgress} />
+          <GlucoseTileBloom seed={reading.seed} {delta} token="--glucose-{variant}" onstatechange={onBloomState} onprogress={onBloomProgress} />
         </span>
       {:else}
         <span
-          class="absolute inset-0 wash-grain wash-fade {washBlend[variant]}"
+          class="absolute inset-0 wash-grain wash-fade {washBlend}"
           class:faded
           ontransitionend={markFaded}
           ontransitioncancel={markFaded}
@@ -171,14 +159,14 @@
   {/key}
 {:else}
   {#key variant}
-    <span class="absolute inset-0 wash-grain {washBlend[variant]}">
+    <span class="absolute inset-0 wash-grain {washBlend}">
       <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" crop={washInterior} class="size-full" />
     </span>
   {/key}
 {/if}
 
 <style>
-  /* Grayscale precedes brightening to avoid clipping individual pigment channels. */
+  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
   .wash-grain {
     filter: grayscale(1) brightness(1.5) contrast(1.6);
   }
@@ -190,11 +178,11 @@
     opacity: 0;
   }
   .prior-fill,
-  .wash-tint {
+  .bloom {
     transition: opacity 1.6s ease-in-out;
   }
   .prior-fill.gone,
-  .wash-tint.faded {
+  .bloom.faded {
     opacity: 0;
   }
 </style>

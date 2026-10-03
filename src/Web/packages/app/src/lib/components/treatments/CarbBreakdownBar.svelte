@@ -223,7 +223,7 @@
 </div>
 
 <style>
-  /* Grey first: brightening a tinted pigment clips its channels unevenly and the grain breaks up. */
+  /* Grey first, for the reason given at GlucoseTileWash's .wash-grain. */
   .wash-grain {
     filter: grayscale(1) brightness(2.6) contrast(1.15);
   }
