@@ -22060,9 +22060,8 @@ msgstr ""
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 #: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
-#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
 msgid "No estimate"
-msgstr ""
+msgstr "暂无估算"
 
 #~ msgid "A typical split is around 50/50; 40/60 and 60/40 are both common. Diet, activity and pump settings all move it."
 #~ msgstr ""
@@ -24759,13 +24758,11 @@ msgstr ""
 msgid "Assess the reliability of your data"
 msgstr ""
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "Estimated HbA1c"
-msgstr ""
+#~ msgid "Estimated HbA1c"
+#~ msgstr ""
 
-#: src/lib/navigation/report-navigation.svelte.ts
-msgid "How your estimated HbA1c has trended over the years"
-msgstr ""
+#~ msgid "How your estimated HbA1c has trended over the years"
+#~ msgstr ""
 
 #: src/lib/navigation/report-navigation.svelte.ts
 msgid "Patterns & Trends"
@@ -25825,3 +25822,89 @@ msgstr ""
 #: ../portal/src/routes/docs/installation/docker-compose/+page.svelte
 msgid "Omitting the bind-data override changes the declared storage back to the named volume."
 msgstr ""
+
+#. 0: a1cLabel()
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "Estimated {0}"
+msgstr "估算 {0}"
+
+#. 0: a1cLabel(true)
+#: src/lib/navigation/report-navigation.svelte.ts
+msgid "How your {0} has trended over the years"
+msgstr "您的 {0} 多年来的变化趋势"
+
+#. 0: a1cLabel(true)
+#: src/lib/components/rbac/PermissionCategorySelector.svelte
+msgid "Time-in-range, {0} estimates, and averages"
+msgstr "目标范围内时间、{0} 估算值和平均值"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "A1c display name"
+msgstr "A1c 显示名称"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Estimated values retain the e prefix: eHbA1c or eA1c."
+msgstr "估算值保留前缀 e：eHbA1c 或 eA1c。"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "A1c display unit"
+msgstr "A1c 显示单位"
+
+#: src/routes/(authenticated)/settings/appearance/+page.svelte
+msgid "Use % (NGSP) or mmol/mol (IFCC) for measured and estimated A1c. Blood glucose units are set separately."
+msgstr "实测和估算 A1c 可使用 % (NGSP) 或 mmol/mol (IFCC)。血糖单位需单独设置。"
+
+#. 0: formatA1c(variability?.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: <{0}"
+msgstr "目标：<{0}"
+
+#. 0: formatA1c(variability?.a1cTarget)
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Target: below {0}. Your care team sets your individual target."
+msgstr "目标：低于 {0}。您的医疗团队会制定个人目标值。"
+
+#. 0: a1cLabel(true); 1: bgOr(stats?.mean); 2: bgLabel(); 3: dayCount
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "Calculated using the ADAG formula (NGSP %): {0} = (mean glucose in mmol/L + 2.59) / 1.59. Based on mean glucose of {1} {2} over {3} days."
+msgstr "使用 ADAG 公式计算（NGSP %）：{0} =（平均血糖，单位 mmol/L + 2.59）/ 1.59。基于 {3} 天内的平均血糖 {1} {2}。"
+
+#. 0.0: a1cLabel(true); 0: a1cLabel()
+#: src/routes/(authenticated)/reports/executive-summary/+page.svelte
+msgid "<0>What is {0}?</0> This estimates what your lab {0} would be based on your average glucose."
+msgstr "<0>什么是 {0}？</0> 根据平均血糖估算您的实验室 {0} 检测结果。"
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/glucose-distribution/+page.svelte
+msgid "Distribution, {0} estimation and variability statistics need glucose readings to be calculated. Try a wider date range."
+msgstr "分布、{0} 估算和变异性统计需要血糖读数。请尝试更长的日期范围。"
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Estimated {0} ({1})"
+msgstr "<0/> 估算 {0}（{1}）"
+
+#. 0: a1cLabel(true); 1: a1cLabel(); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "{0} estimates what a lab {1} test would read on a given day. For each day, it takes the average glucose from every reading in the trailing 90 days and weights each day's contribution by recency — the most recent ~30 days count for roughly half the estimate, tapering off exponentially for older days, similar to how glycated hemoglobin reflects glucose exposure over a red blood cell's ~90–120 day lifespan. That weighted average glucose is then converted to NGSP percent with the ADAG formula: {2} (%) = (average glucose in mg/dL + 46.7) / 28.7."
+msgstr "{0} 估算某一天的实验室 {1} 检测可能得到的结果。每天使用此前 90 天所有读数的平均血糖，并给予较近日期更高的权重。最近约 30 天贡献大约一半的估算值，更早日期的权重呈指数递减。这类似于糖化血红蛋白反映红细胞约 90–120 天寿命内的葡萄糖暴露情况。随后使用 ADAG 公式将加权平均血糖转换为 NGSP 百分比：{2} (%) =（平均血糖，单位 mg/dL + 46.7）/ 28.7。"
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "<0/> Loading {0} timeline..."
+msgstr "<0/> 正在加载 {0} 时间线..."
+
+#. 0: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Failed to load {0} data. Please try again later."
+msgstr "无法加载 {0} 数据。请稍后重试。"
+
+#. 0: a1cLabel(); 1: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Lab {0} draws, shown as triangles on the chart above. They are not included in the {1} calculation."
+msgstr "实验室 {0} 检测值以三角形显示在上方图表中，不参与 {1} 的计算。"
+
+#. 0: a1cLabel(); 1: a1cLabel(true); 2: a1cLabel(true)
+#: src/routes/(authenticated)/reports/ehba1c/+page.svelte
+msgid "Enter a lab {0} result here — shown as a triangle marker on the chart above, so you can see how closely the {1} estimate tracks an actual lab draw. Lab results are not included in the {2} calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
+msgstr "在此输入实验室 {0} 检测结果。结果将以三角形显示在上方图表中，便于比较 {1} 估算值与实际实验室检测值的接近程度。实验室结果不参与 {2} 的计算。下方日期是采血日期，而非输入结果的日期。"

@@ -23,7 +23,7 @@ export default defineConfig({
       {
         // Before the $lib prefix, so it wins for this one module: the real
         // barrel re-exports formatting, which reaches the generated client.
-        find: "$lib/utils",
+        find: /^\$lib\/utils$/,
         replacement: fileURLToPath(new URL("./src/lib/test-stubs/utils-cn.ts", import.meta.url)),
       },
       { find: /^\$lib\//, replacement: fileURLToPath(new URL("./src/lib/", import.meta.url)) },
