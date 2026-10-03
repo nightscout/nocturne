@@ -84,7 +84,7 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(page.getByText("+4", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("shows the uploader battery beside the change", async () => {
+  it("shows the uploader battery, named for a screen reader, beside the change", async () => {
     battery.status = {
       level: 62,
       display: "62%",
@@ -94,7 +94,8 @@ describe("CurrentGlucoseWidget", () => {
     };
     render(CurrentGlucoseWidget);
 
-    await expect.element(page.getByText("62%", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("62%")).toBeVisible();
+    await expect.element(page.getByText("Uploader battery", { exact: true })).toBeInTheDocument();
   });
 
   it("keeps the grey wash while a new reading in the same range waits for its status", async () => {
@@ -118,6 +119,15 @@ describe("CurrentGlucoseWidget", () => {
     await expect.element(tile()).toHaveTextContent(/^130/);
     await expect.element(page.getByTestId("artwork-wash")).toBeInTheDocument();
     await expect.element(page.getByTestId("glucose-tile-bloom")).not.toBeInTheDocument();
+  });
+
+  it("drops the row under the tile when a stale reading has no battery to show", async () => {
+    store.lastUpdated = now - 30 * 60_000;
+    render(CurrentGlucoseWidget);
+    await expect.element(page.getByText(/30 min/)).toBeVisible();
+
+    await expect.element(page.getByTestId("current-glucose-tile")).toBeVisible();
+    expect(page.getByTestId("current-glucose-tile").element().nextElementSibling).toBeNull();
   });
 
   it("says a stale reading is stale to a screen reader", async () => {
