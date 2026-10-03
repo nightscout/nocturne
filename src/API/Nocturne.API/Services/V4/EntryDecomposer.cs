@@ -214,6 +214,12 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
     /// <see cref="DecomposerBase.PointAtStoredRecordsAsync"/> for each entry type, against the one
     /// table that type is stored in.
     /// </summary>
+    /// <remarks>
+    /// An entry another uploader sent names a stored record only by the 24-hex prefix the v1 reads
+    /// serve. A uuid it sends is a legacy id of its own, stored beside the record that uuid names,
+    /// which <see cref="Entries.EntryReadService.GetByIdAsync"/> resolves ahead of it. A pulled copy may still
+    /// carry the raw uuid older write-backs sent.
+    /// </remarks>
     /// <returns>The write-back echoes, which store nothing.</returns>
     private async Task<IReadOnlySet<Entry>> PointEntriesAtStoredRecordsAsync(IEnumerable<Entry> entries, CancellationToken ct)
     {
@@ -228,7 +234,8 @@ public class EntryDecomposer : DecomposerBase, IEntryDecomposer, IDecomposer<Ent
                 _ => (KeyedTable?)null,
             };
             if (table is { } keyed)
-                echoes.UnionWith(await PointAtStoredRecordsAsync(byType, [keyed], PulledFromNightscout, ct));
+                echoes.UnionWith(await PointAtStoredRecordsAsync(
+                    byType, [keyed], PulledFromNightscout, ct, MongoObjectId.IsGuidPrefixShaped));
         }
 
         return echoes;

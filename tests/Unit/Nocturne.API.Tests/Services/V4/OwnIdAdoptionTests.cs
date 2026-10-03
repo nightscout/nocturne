@@ -103,7 +103,7 @@ public class OwnIdAdoptionTests : IDisposable
 
         await EntryDecomposer(sg, mg, cal).DecomposeBatchAsync(
         [
-            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
+            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120, DataSource = DataSources.NightscoutConnector },
             new Entry { Id = "dexcom_7f3c2a91", Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
             new Entry { Id = UuidPrefix, Type = "mbg", Mills = 1_700_000_600_000, Mbg = 140 },
             new Entry { Id = "cal-1", Type = "cal", Mills = 1_700_000_900_000, Slope = 850 },
@@ -141,6 +141,7 @@ public class OwnIdAdoptionTests : IDisposable
         [
             new Entry { Id = "507f1f77bcf80cd799439011", Type = "sgv", Mills = 1_700_000_000_000, Sgv = 120 },
             new Entry { Id = Uuid.ToUpperInvariant(), Type = "sgv", Mills = 1_700_000_300_000, Sgv = 125 },
+            new Entry { Id = Uuid, Type = "sgv", Mills = 1_700_000_450_000, Sgv = 128 },
             new Entry { Id = null, Type = "sgv", Mills = 1_700_000_600_000, Sgv = 130 },
         ], WriteOrigin.Live);
 

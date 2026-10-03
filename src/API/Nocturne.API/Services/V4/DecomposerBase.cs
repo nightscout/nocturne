@@ -210,10 +210,12 @@ public abstract class DecomposerBase
         IEnumerable<TDocument> documents,
         IReadOnlyList<KeyedTable> tables,
         Func<TDocument, bool> pulledFromNightscout,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, bool>? uploadedNameCanNameRecord = null)
         where TDocument : ProcessableDocumentBase
         => await ApplyStoredIdentitiesAsync(
-            await PlanStoredIdentitiesAsync(documents, tables, pulledFromNightscout, ct), tables, ct);
+            await PlanStoredIdentitiesAsync(documents, tables, pulledFromNightscout, ct, uploadedNameCanNameRecord),
+            tables, ct);
 
     /// <summary>
     /// Works out, reading only, which stored record each document names: by its legacy id, or by a
@@ -241,11 +243,16 @@ public abstract class DecomposerBase
     /// </para>
     /// </remarks>
     /// <param name="pulledFromNightscout">Whether a document came from the Nightscout connector.</param>
+    /// <param name="uploadedNameCanNameRecord">
+    /// Which ids of a document another uploader sent may name a stored record; by default its own
+    /// uuid or that uuid's prefix (<see cref="MongoObjectId.TryGetOwnIdRange"/>).
+    /// </param>
     protected static async Task<Dictionary<TDocument, PlannedIdentity>> PlanStoredIdentitiesAsync<TDocument>(
         IEnumerable<TDocument> documents,
         IReadOnlyList<KeyedTable> tables,
         Func<TDocument, bool> pulledFromNightscout,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<string, bool>? uploadedNameCanNameRecord = null)
         where TDocument : ProcessableDocumentBase
     {
         var all = documents.Distinct<TDocument>(ReferenceEqualityComparer.Instance).ToList();
@@ -257,7 +264,7 @@ public abstract class DecomposerBase
         // may carry any id write-back sends.
         var pulledNames = pulled.SelectMany(NamesOf).ToHashSet(StringComparer.Ordinal);
         var names = all.Where(d => !pulled.Contains(d)).SelectMany(NamesOf)
-            .Where(n => MongoObjectId.TryGetOwnIdRange(n, out _, out _))
+            .Where(uploadedNameCanNameRecord ?? (n => MongoObjectId.TryGetOwnIdRange(n, out _, out _)))
             .ToHashSet(StringComparer.Ordinal);
         names.UnionWith(pulledNames);
         if (names.Count == 0)
