@@ -16,7 +16,8 @@ export interface MountOptions extends ArtworkOptions {
   /** A Lucide icon source. */
   icon?: IconArtworkSource;
   scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
-  crop?: CropWindow;
+  /** A window, or one per box size for a `scene` authored to match it. */
+  crop?: CropWindow | ((width: number, height: number) => CropWindow);
   surface?: Surface;
   assetBaseUrl?: string;
   blendTicks?: boolean;
@@ -242,7 +243,7 @@ export function mountPlayer(frame: HTMLElement, canvas: HTMLCanvasElement, optio
       startFinished,
       onProgress: options.onProgress,
       blendTicks: options.blendTicks,
-      crop: options.crop,
+      crop: typeof options.crop === 'function' ? options.crop(box.width, box.height) : options.crop,
       assetBaseUrl: options.assetBaseUrl,
       width: box.width,
       height: box.height,

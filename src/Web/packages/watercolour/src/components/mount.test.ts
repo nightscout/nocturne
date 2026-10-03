@@ -104,6 +104,17 @@ describe('mountPlayer', () => {
     expect(created[1].options.startFinished).toBe(true);
   });
 
+  it('crops each painting to the window chosen for its box', () => {
+    vi.useFakeTimers();
+    const crop = (width: number, height: number) => ({ x: 0, y: 0, width: 1, height: height / width });
+    mount(fakeFrame(400, 40), canvas, { scene: () => '{}', fit: 'fill', releaseAfterFinish: true, crop });
+    expect(created[0].options).toMatchObject({ crop: { height: 0.1 } });
+    released = true;
+    observed!([{ contentRect: { width: 800, height: 40 } }]);
+    vi.advanceTimersByTime(200);
+    expect(created[1].options).toMatchObject({ crop: { height: 0.05 } });
+  });
+
   it('creates no player while the frame has no area, then one at its first real size', () => {
     mount(fakeFrame(0, 0), canvas, { artwork: 'header-motif', surface: 'light' });
     expect(created).toHaveLength(0);
