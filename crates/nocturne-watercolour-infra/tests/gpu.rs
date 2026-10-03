@@ -839,3 +839,22 @@ fn the_gpu_paper_is_bit_identical_to_the_cpu_paper() {
         }
     }
 }
+
+#[test]
+fn sliced_target_seek_preserves_the_gpu_frame() {
+    let Some(gpu) = gpu() else { return };
+    let scene = small_scene("wash");
+    let mut playback = Playback::new(gpu, scene, 1000.0).unwrap();
+    for target in [0.7, 0.2, 1.0, 0.35] {
+        playback.seek_progress(target).unwrap();
+        let expected = playback.simulator().render(80, 60).unwrap().rgba;
+        playback.seek_tick(0).unwrap();
+        for _ in 0..500 {
+            if playback.seek_towards_progress(target, 3).unwrap() {
+                break;
+            }
+        }
+        let actual = playback.simulator().render(80, 60).unwrap().rgba;
+        assert_eq!(actual, expected);
+    }
+}

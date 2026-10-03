@@ -451,6 +451,40 @@ describe('target seeking', () => {
     expect(instance.calls.at(-1)).toBe('dispose');
   });
 
+  it('keeps a seek pending until a frame can actually be presented', async () => {
+    const instance = fakeInstance(100);
+    const render = vi.spyOn(instance, 'render').mockReturnValue(false);
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never' });
+    await live.ready;
+    live.seekTo(0.1);
+    for (let i = 0; i < MAX_UNPRESENTED_RENDERS + 10; i++) clock.frame();
+    expect(instance.tick).toBe(10);
+    expect(live.state.seeking).toBe(true);
+    render.mockReturnValue(true);
+    clock.frame();
+    expect(live.state.seeking).toBe(false);
+    live.dispose();
+  });
+
+  it('does not read a freed instance after a seek fault with easing', async () => {
+    const instance = fakeInstance(100);
+    vi.spyOn(instance, 'seekTowardsProgress').mockImplementation(() => { throw new Error('seek failed'); });
+    const progress = vi.spyOn(instance, 'progress').mockImplementation(() => {
+      if (instance.calls.includes('dispose')) throw new Error('freed instance');
+      return 0;
+    });
+    const clock = manualScheduler();
+    const live = player(instance, clock.scheduler, { autoplay: 'never', easing: t => t });
+    await live.ready;
+    live.seekTo(0.5);
+    progress.mockClear();
+    expect(() => clock.frame()).not.toThrow();
+    expect(instance.calls).toContain('dispose');
+    expect(progress).not.toHaveBeenCalled();
+    live.dispose();
+  });
+
   it('lets immediate seek, reset and finish replace queued work', async () => {
     const instance = fakeInstance(100);
     const clock = manualScheduler();

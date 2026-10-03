@@ -99,6 +99,26 @@ describe('player statechange', () => {
     expect(states.at(-1)).toMatchObject({ mode: 'baked', finished: true, playing: false });
   });
 
+  it('keeps a baked target pending until its admitted frame draws', async () => {
+    const manifest = { version: 1, frames: 2, width: 4, height: 4, durationMs: 100, layout: 'vertical' };
+    vi.stubGlobal('fetch', async (url: string) => url === 'manifest' ? new Response(JSON.stringify(manifest)) : new Response(new Blob([])));
+    vi.stubGlobal('createImageBitmap', async () => ({ width: 4, height: 8, close() {} }));
+    let frame!: (time: number) => void;
+    let clock = 0;
+    const scheduler = new Scheduler({ requestAnimationFrame: cb => { frame = cb; return 1; }, cancelAnimationFrame() {}, now: () => clock });
+    const expensive = scheduler.register({ element: null, tick: () => { clock += 20; }, render() {} });
+    expensive.setActive(true);
+    const baked = createArtworkPlayer(canvas(), { id: 'suitcase' }, { mode: 'baked', autoplay: 'never', width: 64, height: 64, assets: { manifest: 'manifest', strip: 'strip' }, capabilities, scheduler, engineHost: new EngineHost() });
+    await baked.ready;
+    baked.seekTo(0.5);
+    expect(baked.state.seeking).toBe(true);
+    clock = 16; frame(clock);
+    expect(baked.state.seeking).toBe(true);
+    clock += 16; frame(clock);
+    expect(baked.state.seeking).toBe(false);
+    baked.dispose(); expensive.dispose();
+  });
+
   it('settles on none when it cannot start at all', async () => {
     const player = createArtworkPlayer(canvas(), { id: 'suitcase' }, {
       capabilities: () => Promise.reject(new Error('probe failed')),
