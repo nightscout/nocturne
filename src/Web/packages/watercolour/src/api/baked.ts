@@ -1,4 +1,7 @@
 import { WatercolourError } from './errors';
+import type { CropWindow } from '../types';
+
+const fullPainting: CropWindow = { x: 0, y: 0, width: 1, height: 1 };
 
 /**
  * Baked format: one PNG of `frames` equal frames stacked vertically, evenly
@@ -136,6 +139,7 @@ export function drawStripFrame(
   progress: number,
   width: number,
   height: number,
+  crop: CropWindow = fullPainting,
 ): void {
   const { manifest, bitmap } = strip;
   const { from, to, blend } = stripFramePosition(progress, manifest.frames);
@@ -143,10 +147,14 @@ export function drawStripFrame(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalAlpha = 1;
-  ctx.drawImage(bitmap, 0, from * manifest.height, manifest.width, manifest.height, 0, 0, width, height);
+  const sourceX = crop.x * manifest.width;
+  const sourceY = crop.y * manifest.height;
+  const sourceWidth = crop.width * manifest.width;
+  const sourceHeight = crop.height * manifest.height;
+  ctx.drawImage(bitmap, sourceX, from * manifest.height + sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
   if (blend > 0) {
     ctx.globalAlpha = blend;
-    ctx.drawImage(bitmap, 0, to * manifest.height, manifest.width, manifest.height, 0, 0, width, height);
+    ctx.drawImage(bitmap, sourceX, to * manifest.height + sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
     ctx.globalAlpha = 1;
   }
 }
@@ -165,6 +173,26 @@ export async function loadStill(url: string): Promise<ImageBitmap> {
 export const MAX_SHARED_STILLS = 8;
 
 const shared = new Map<string, Promise<ImageBitmap>>();
+const sharedStrips = new Map<string, Promise<StripBitmap>>();
+
+/** The least recently used entry goes first once `cache` is past the cap. */
+function lend<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit) {
+    // Re-inserted, so the cap evicts whatever has gone longest unused.
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
+  const pending = load().catch((error: unknown) => {
+    // Not cached: the next attempt can succeed where this one did not.
+    cache.delete(key);
+    throw error;
+  });
+  cache.set(key, pending);
+  if (cache.size > MAX_SHARED_STILLS) cache.delete(cache.keys().next().value!);
+  return pending;
+}
 
 /**
  * A still decoded once and drawn by everything that needs it.
@@ -181,32 +209,30 @@ const shared = new Map<string, Promise<ImageBitmap>>();
  * is untouched for callers that want a bitmap of their own.
  */
 export function sharedStill(url: string): Promise<ImageBitmap> {
-  const hit = shared.get(url);
-  if (hit) {
-    // Re-inserted, so the cap evicts whatever has gone longest unused.
-    shared.delete(url);
-    shared.set(url, hit);
-    return hit;
-  }
-  const pending = loadStill(url).catch((error: unknown) => {
-    // Not cached: the next attempt can succeed where this one did not.
-    shared.delete(url);
-    throw error;
-  });
-  shared.set(url, pending);
-  if (shared.size > MAX_SHARED_STILLS) shared.delete(shared.keys().next().value!);
-  return pending;
+  return lend(shared, url, () => loadStill(url));
 }
 
-/** Drops every cached still, for tests and for a host reclaiming memory. */
+/**
+ * A strip decoded once and drawn by every baked reveal of the same artwork
+ * and palette, on the terms of {@link sharedStill}: a borrower never closes
+ * the bitmap. A row of tabs past the live cap no longer decodes one strip per
+ * tab.
+ */
+export function sharedStrip(stripUrl: string, manifest: BakedManifest): Promise<StripBitmap> {
+  const key = `${stripUrl}#${manifest.frames}x${manifest.width}x${manifest.height}`;
+  return lend(sharedStrips, key, () => loadStrip(stripUrl, manifest));
+}
+
+/** Drops every cached still and strip, for tests and for a host reclaiming memory. */
 export function clearSharedStills(): void {
   shared.clear();
+  sharedStrips.clear();
 }
 
-export function drawStill(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number): void {
+export function drawStill(ctx: CanvasRenderingContext2D, image: ImageBitmap, width: number, height: number, crop: CropWindow = fullPainting): void {
   ctx.clearRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalAlpha = 1;
-  ctx.drawImage(image, 0, 0, width, height);
+  ctx.drawImage(image, crop.x * image.width, crop.y * image.height, crop.width * image.width, crop.height * image.height, 0, 0, width, height);
 }

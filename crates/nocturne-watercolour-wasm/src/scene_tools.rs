@@ -213,8 +213,13 @@ pub fn apply_intensity(scene: &mut Scene, intensity: f32) {
         return;
     }
     for event in &mut scene.timeline.events {
-        if let Operation::Brush(b) = &mut event.op {
-            b.concentration = (b.concentration * factor).clamp(0.0, MAX_CONCENTRATION);
+        let concentration = match &mut event.op {
+            Operation::Brush(b) => Some(&mut b.concentration),
+            Operation::Dab(d) => Some(&mut d.concentration),
+            _ => None,
+        };
+        if let Some(concentration) = concentration {
+            *concentration = (*concentration * factor).clamp(0.0, MAX_CONCENTRATION);
         }
     }
 }
@@ -324,11 +329,11 @@ pub fn catalogue_scene_json_with_resolution(
     scene_to_json(&scene).map_err(|e| SceneToolError::InvalidScene(e.to_string()))
 }
 
-/// A watercolour scene for a Lucide icon: parses the element list, authors it
-/// with the catalogue's stencil-and-fill mapping and returns the scene JSON.
-/// `hints_json` is the per-icon tuning (`""` keeps the defaults).
+/// A watercolour scene for a Lucide icon: parses the element list and
+/// authors it with the catalogue's stencil-and-fill mapping. `hints_json` is
+/// the per-icon tuning (`""` keeps the defaults).
 #[allow(clippy::too_many_arguments)]
-pub fn icon_scene_json(
+pub fn icon_scene(
     elements_json: &str,
     name: &str,
     seed: Seed,
@@ -338,7 +343,7 @@ pub fn icon_scene_json(
     surface: Surface,
     sim_resolution: Option<u32>,
     hints_json: &str,
-) -> Result<String, SceneToolError> {
+) -> Result<Scene, SceneToolError> {
     let palette = parse_palette(palette)?;
     let elements = parse_icon_elements(elements_json)
         .map_err(|e| SceneToolError::InvalidIcon(e.to_string()))?;
@@ -358,6 +363,33 @@ pub fn icon_scene_json(
     scene
         .validate()
         .map_err(|e| SceneToolError::InvalidScene(format!("{e:?}")))?;
+    Ok(scene)
+}
+
+/// [`icon_scene`] as a scene document.
+#[allow(clippy::too_many_arguments)]
+pub fn icon_scene_json(
+    elements_json: &str,
+    name: &str,
+    seed: Seed,
+    palette: &str,
+    intensity: f32,
+    detail: DetailLevel,
+    surface: Surface,
+    sim_resolution: Option<u32>,
+    hints_json: &str,
+) -> Result<String, SceneToolError> {
+    let scene = icon_scene(
+        elements_json,
+        name,
+        seed,
+        palette,
+        intensity,
+        detail,
+        surface,
+        sim_resolution,
+        hints_json,
+    )?;
     scene_to_json(&scene).map_err(|e| SceneToolError::InvalidScene(e.to_string()))
 }
 
@@ -450,6 +482,46 @@ mod tests {
                 .is_ok(),
                 "{id} small"
             );
+        }
+    }
+
+    /// `createCatalogueInstance` and `createIconInstance` play the scene they
+    /// author; `createInstance` plays that scene's document read back. They
+    /// must be the same scene, to the bit.
+    #[test]
+    fn an_authored_scene_is_the_scene_its_document_reads_back_as() {
+        let clock = r#"[["circle",{"cx":"12","cy":"12","r":"10"}],["path",{"d":"M12 6v6l4 2"}]]"#;
+        for detail in DetailLevel::ALL {
+            for surface in [Surface::Light, Surface::Dark] {
+                for id in catalogue_ids() {
+                    let scene = catalogue_scene_with_resolution(
+                        &id,
+                        Seed(11),
+                        "dusk",
+                        0.8,
+                        detail,
+                        surface,
+                        None,
+                    )
+                    .unwrap();
+                    let json = scene_to_json(&scene).unwrap();
+                    assert_eq!(parse_scene_json(&json).unwrap(), scene, "{id} {detail:?}");
+                }
+                let scene = icon_scene(
+                    clock,
+                    "clock",
+                    Seed(3),
+                    "moonlight",
+                    0.7,
+                    detail,
+                    surface,
+                    Some(200),
+                    r#"{"fill":[0]}"#,
+                )
+                .unwrap();
+                let json = scene_to_json(&scene).unwrap();
+                assert_eq!(parse_scene_json(&json).unwrap(), scene, "clock {detail:?}");
+            }
         }
     }
 

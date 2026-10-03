@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { artworkAspect, detailForEdge, seedFromName } from '../types';
-import { artworkOptionsFrom, containBox, hostSurface } from './helpers';
+import { artworkOptionsFrom, bannerFit, containBox, hostSurface } from './helpers';
+import heroSource from './ArtworkHero.svelte?raw';
+import confirmationSource from './ConfirmationBackground.svelte?raw';
 
 describe('detailForEdge (size to detail)', () => {
   it('maps the backing long edge to the catalogue detail level', () => {
@@ -14,6 +16,23 @@ describe('detailForEdge (size to detail)', () => {
     expect(detailForEdge(319)).toBe('large');
     expect(detailForEdge(320)).toBe('extraLarge');
     expect(detailForEdge(512)).toBe('extraLarge');
+  });
+});
+
+describe('bannerFit', () => {
+  it('fills a host near or wider than the banner, so the washes reach both ends', () => {
+    expect(bannerFit(300, 100)).toBe('fill');
+    expect(bannerFit(240, 100)).toBe('fill');
+    expect(bannerFit(390, 70)).toBe('fill');
+  });
+
+  it('contains a host taller than the banner, so the washes are not squashed', () => {
+    expect(bannerFit(230, 100)).toBe('contain');
+    expect(bannerFit(320, 240)).toBe('contain');
+  });
+
+  it('is the confirmation background unless the host picks a fit', () => {
+    expect(confirmationSource).toContain('fit: fit ?? bannerFit');
   });
 });
 
@@ -70,6 +89,16 @@ describe('artworkOptionsFrom (prop to option)', () => {
   it('lets an explicit option win over its default', () => {
     const options = artworkOptionsFrom({ mode: 'live' }, { mode: 'static' });
     expect(options.mode).toBe('live');
+  });
+
+  it('refuses the mount-only options it would drop', () => {
+    // A surface or fit passed here never reached the player; `pnpm check` holds these errors.
+    // @ts-expect-error surface is a mount option
+    const surfaced = artworkOptionsFrom({ surface: 'dark' });
+    // @ts-expect-error fit is a mount option
+    const fitted = artworkOptionsFrom({ fit: 'fill' });
+    expect(surfaced).not.toHaveProperty('surface');
+    expect(fitted).not.toHaveProperty('fit');
   });
 });
 
@@ -136,7 +165,6 @@ describe('artworkAspect (per-artwork aspect table)', () => {
     expect(artworkAspect('avatar-wash')).toBe(1);
     expect(artworkAspect('tab-underline')).toBe(8);
     expect(artworkAspect('selection-edge')).toBe(1 / 6);
-    expect(artworkAspect('header-motif')).toBe(5);
     expect(artworkAspect('confirmation-background')).toBe(3);
     expect(artworkAspect('distant-mountains')).toBe(2);
     expect(artworkAspect('moonlit-shoreline')).toBeCloseTo(16 / 9, 5);
@@ -163,5 +191,18 @@ describe('containBox (aspect-fit canvas box)', () => {
     expect(box.height).toBeCloseTo(235 / 3, 5);
     expect(box.offsetX).toBe(0);
     expect(box.offsetY).toBeCloseTo(172 - 235 / 3, 5);
+  });
+});
+describe('ArtworkHero stacked layout', () => {
+  it('feeds aspect-ratio only properties set without units', () => {
+    const source = heroSource;
+    const set = new Map([...source.matchAll(/style:(--[\w-]+)="([^"]*)"/g)].map((m) => [m[1]!, m[2]!]));
+    const ratios = [...source.matchAll(/aspect-ratio:\s*([^;]+);/g)].map((m) => m[1]!.trim()).filter((v) => v !== 'auto');
+    expect(ratios.length).toBeGreaterThan(0);
+    for (const ratio of ratios) {
+      const vars = [...ratio.matchAll(/var\((--[\w-]+)\)/g)].map((m) => m[1]!);
+      expect(vars.length).toBeGreaterThan(0);
+      for (const name of vars) expect(set.get(name), name).toMatch(/^\{\w+\} \/ \{\w+\}$|^[^a-z%]*$/);
+    }
   });
 });

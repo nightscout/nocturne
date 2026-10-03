@@ -18,7 +18,6 @@ described in Curtis, Banks and Beier 1997, *Computer-Generated Watercolor*
 | `crates/nocturne-watercolour-infra/` | wgpu/WGSL simulation and rendering, versioned serde scene documents, PNG export, the artwork catalogue, Lucide icon authoring (`authoring/svg.rs`). |
 | `crates/nocturne-watercolour-wasm/` | wasm-bindgen web adapter (thin). |
 | `src/Web/packages/watercolour/` | `@nocturne/watercolour` - the TypeScript API, Svelte components, baked/static assets, wasm output, per-icon hints (`src/api/icon-hints.ts`). `lucide` is a peer dependency: hosts supply icon element lists. |
-| `src/Web/packages/watercolour-showcase/` | `@nocturne/watercolour-showcase` - SvelteKit showcase app on port 5181. |
 
 ## What is where
 
@@ -68,13 +67,6 @@ curated set):
 pnpm --filter @nocturne/watercolour bake
 ```
 
-Run the showcase app (serves on port 5181):
-
-```bash
-cd src/Web
-pnpm --filter @nocturne/watercolour-showcase dev
-```
-
 ### Tests
 
 ```bash
@@ -88,9 +80,6 @@ cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_a
 # Web, from src/Web/
 pnpm --filter @nocturne/watercolour check
 pnpm --filter @nocturne/watercolour test
-pnpm --filter @nocturne/watercolour-showcase check
-pnpm --filter @nocturne/watercolour-showcase test
-pnpm --filter @nocturne/watercolour-showcase build
 ```
 
 The engine-level tests in `nocturne-watercolour-infra` need a GPU; without an
@@ -108,7 +97,7 @@ decisions and measured numbers):
 | 3. Components + artwork catalogue + export/baked pipeline | **Implemented + tested**: 15 catalogue ids, curated baked assets (5.98 MB, tracked), palette fallback, accent components (fit prop, avatar release, dark opacity). Host-app reports-page integration added. |
 | 4. Showcase pages | **Implemented + tested**: twelve routes wired to the real package, `check`/`test`/`build` clean. Browser pass done (see verification). |
 | 5. Visual verification, performance measurement, docs | **Browser-verified** (Chrome 153, all routes; screenshots in `.playwright-mcp/stage3/`); visual review done (light surfaces strong, dark surfaces murky - see limitations); performance measured (native + browser). Multi-instance measurement and the live reveal at the biggest grids are the unverified remainder. |
-| 6. Lucide icons | **Implemented + tested**: `svg_icon_scene`/`iconScene` map a Lucide element list onto the stencil-and-mark pattern with per-icon hints, the showcase Playground plays them, and twelve Lucide icons (eleven wishlist proposals plus `cpu`) are baked into the curated asset set (96 files / 4.6 MB). |
+| 6. Lucide icons | **Implemented + tested**: `svg_icon_scene`/`iconScene` map a Lucide element list onto the stencil-and-mark pattern with per-icon hints, and twelve Lucide icons (eleven wishlist proposals plus `cpu`) are baked into the curated asset set (96 files / 4.6 MB). |
 
 ## Limitations
 

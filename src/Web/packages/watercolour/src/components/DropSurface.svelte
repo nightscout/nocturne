@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack, type Snippet } from 'svelte';
   import { prefersReducedMotion } from '../api/capabilities';
+  import { getPresentation, subscribePresentation } from '../api/presentation';
   import { resolveMotion } from '../api/mode';
   import { SURFACE_TINT_ALPHA, surfaceTint } from '../api/drop-colour';
   import { measureObstacles, type DropFonts } from '../api/drop-text';
@@ -176,7 +177,11 @@
 
   /** A pinned surface is not animating: the host is driving the clock. */
   const scrubbed = $derived(progress !== undefined);
-  const animated = $derived(!scrubbed && resolveMotion(motion, prefersReducedMotion()) === 'full');
+  let presentation = $state(getPresentation());
+  $effect(() => subscribePresentation((value) => (presentation = value)));
+  const animated = $derived(
+    !scrubbed && presentation === 'animated' && resolveMotion(motion, prefersReducedMotion()) === 'full',
+  );
   const open = $derived(
     scrubbed ||
       (shown ??
@@ -436,7 +441,7 @@
     <div class="nwc-drops__tint pointer-events-none absolute inset-0 z-0" style:background-color={tint}></div>
   {/if}
   <div class="pointer-events-none absolute inset-0 z-0">
-    {#if stroke && frame && lingering && visible}
+    {#if stroke && frame && lingering && visible && presentation !== 'off'}
       <div
         class="nwc-drop"
         data-kind={stroke.kind}

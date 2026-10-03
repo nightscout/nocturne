@@ -11,7 +11,7 @@ describe('curated bundle', () => {
     expect(hasBundledAsset({ id: 'crescent-moon', palette: 'moonlight', surface: 'light' }, 'final')).toBe(true);
     expect(hasBundledAsset({ id: 'crescent-moon', palette: 'ember', surface: 'light' }, 'final')).toBe(true);
     expect(hasBundledAsset({ id: 'crescent-moon', palette: 'ember', surface: 'dark' }, 'final')).toBe(true);
-    expect(hasBundledAsset({ id: 'header-motif', palette: 'dusk', surface: 'dark' }, 'strip')).toBe(true);
+    expect(hasBundledAsset({ id: 'confirmation-background', palette: 'dusk', surface: 'dark' }, 'strip')).toBe(true);
   });
 
   it('still reports missing assets for unknown artworks', () => {

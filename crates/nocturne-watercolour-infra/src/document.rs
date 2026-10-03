@@ -2,8 +2,8 @@
 //! serde-free domain types.
 
 use nocturne_watercolour_core::domain::{
-    Background, BrushStroke, LiftStroke, Mask, Operation, Palette, PaletteEntry, Paper, Pigment,
-    PigmentRole, Point, RadiusProfile, Rgb, Scene, SceneId, Seed, SimResolution, SizeHint,
+    Background, BrushStroke, Dab, LiftStroke, Mask, Operation, Palette, PaletteEntry, Paper,
+    Pigment, PigmentRole, Point, RadiusProfile, Rgb, Scene, SceneId, Seed, SimResolution, SizeHint,
     StrokeSpan, Timeline, TimelineEvent, ValidationError, WaterStroke,
 };
 use serde::{Deserialize, Serialize};
@@ -114,6 +114,14 @@ pub struct EventDoc {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationDoc {
+    Dab {
+        center: [f32; 2],
+        radius: f32,
+        pigment: usize,
+        concentration: f32,
+        water: f32,
+        softness: f32,
+    },
     Brush {
         path: Vec<[f32; 2]>,
         radius: [f32; 2],
@@ -275,6 +283,14 @@ fn span_from_doc(span: [f32; 2]) -> StrokeSpan {
 
 fn op_to_doc(op: &Operation) -> OperationDoc {
     match op {
+        Operation::Dab(s) => OperationDoc::Dab {
+            center: [s.center.x, s.center.y],
+            radius: s.radius,
+            pigment: s.pigment,
+            concentration: s.concentration,
+            water: s.water,
+            softness: s.softness,
+        },
         Operation::Brush(s) => OperationDoc::Brush {
             path: points_to_doc(&s.path),
             radius: radius_to_doc(s.radius),
@@ -310,6 +326,21 @@ fn op_to_doc(op: &Operation) -> OperationDoc {
 
 fn op_from_doc(op: OperationDoc) -> Operation {
     match op {
+        OperationDoc::Dab {
+            center,
+            radius,
+            pigment,
+            concentration,
+            water,
+            softness,
+        } => Operation::Dab(Dab {
+            center: Point::new(center[0], center[1]),
+            radius,
+            pigment,
+            concentration,
+            water,
+            softness,
+        }),
         OperationDoc::Brush {
             path,
             radius,
@@ -471,13 +502,19 @@ pub fn scene_to_json(scene: &Scene) -> Result<String, DocumentError> {
     Ok(serde_json::to_string_pretty(&to_document(scene))?)
 }
 
-/// Reads `version` first so a newer document fails with
-/// `UnsupportedVersion` rather than a field error deep in the body.
+/// Parses the body once; only when that fails is `version` read on its own,
+/// so a newer document fails with `UnsupportedVersion` (or a document
+/// without one with `MissingVersion`) rather than a field error deep in the
+/// body.
 pub fn parse_scene_json(json: &str) -> Result<Scene, DocumentError> {
     #[derive(Deserialize)]
     struct VersionOnly {
         version: Option<u32>,
     }
+    let body_error = match serde_json::from_str::<SceneDocumentV1>(json) {
+        Ok(doc) => return from_document(doc),
+        Err(e) => e,
+    };
     let head: VersionOnly = serde_json::from_str(json)?;
     let version = head.version.ok_or(DocumentError::MissingVersion)?;
     if version != CURRENT_VERSION {
@@ -486,8 +523,7 @@ pub fn parse_scene_json(json: &str) -> Result<Scene, DocumentError> {
             supported: CURRENT_VERSION,
         });
     }
-    let doc: SceneDocumentV1 = serde_json::from_str(json)?;
-    from_document(doc)
+    Err(body_error.into())
 }
 
 #[cfg(test)]

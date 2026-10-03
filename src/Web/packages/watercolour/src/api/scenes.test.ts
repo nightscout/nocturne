@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { type IconHints, type IconNode } from '../types';
 import { WatercolourError, toWatercolourError } from './errors';
 import { ICON_HINTS } from './icon-hints';
-import { type IconRef, authoredSceneJson, iconSvg, isIconRef, mergeIconHints, paletteKey, parseSceneDocument, resolveSceneJson } from './scenes';
+import { type IconRef, authoredSceneJson, createRefInstance, iconSvg, isIconRef, mergeIconHints, paletteKey, parseSceneDocument, resolveSceneJson } from './scenes';
+import type { WasmEngine } from './wasm-types';
 import { type IconArtworkSource, type PigmentRole, type IconNode as IndexIconNode, type IconHints as IndexIconHints, ICON_HINTS as INDEX_ICON_HINTS, mergeIconHints as indexMergeIconHints, iconSvg as indexIconSvg } from '../index';
 
 vi.mock('../components/Artwork.svelte', () => ({ default: {} }));
@@ -11,7 +12,7 @@ vi.mock('../components/PaintedUnderline.svelte', () => ({ default: {} }));
 vi.mock('../components/SelectionEdge.svelte', () => ({ default: {} }));
 vi.mock('../components/AvatarWash.svelte', () => ({ default: {} }));
 vi.mock('../components/ConfirmationBackground.svelte', () => ({ default: {} }));
-vi.mock('../components/HeaderMotif.svelte', () => ({ default: {} }));
+vi.mock('../components/ReportHeaderWash.svelte', () => ({ default: {} }));
 vi.mock('../components/DropSurface.svelte', () => ({ default: {} }));
 vi.mock('../components/DropGroup.svelte', () => ({ default: {} }));
 
@@ -95,6 +96,41 @@ describe('resolveSceneJson', () => {
       expect((error as WatercolourError).code).toBe('UnknownArtwork');
       expect((error as WatercolourError).message).toBe('alarm-bell');
     }
+  });
+});
+
+describe('createRefInstance', () => {
+  const clock: IconNode[] = [['circle', { cx: '12', cy: '12', r: '10' }]];
+  const instanceArgs = [4000, 0, 0.8, 1] as [number, number, number, number];
+  const documents = {
+    catalogueScene: (...args: unknown[]) => `catalogue:${args.join('|')}`,
+    iconScene: (...args: unknown[]) => `icon:${args[1]}`,
+  };
+
+  it('authors a reference inside the engine when the build can, with no document', () => {
+    const calls: unknown[][] = [];
+    const engine = {
+      createInstance: () => {
+        throw new Error('no document expected');
+      },
+      createCatalogueInstance: (...args: unknown[]) => (calls.push(['catalogue', ...args]), {}),
+      createIconInstance: (...args: unknown[]) => (calls.push(['icon', ...args]), {}),
+    } as unknown as WasmEngine;
+    createRefInstance(engine, documents, { id: 'avatar-wash', seed: 3 }, { detail: 'small', simResolution: 0 }, instanceArgs);
+    createRefInstance(engine, documents, { icon: clock, name: 'clock' }, {}, instanceArgs);
+    expect(calls[0]).toEqual(['catalogue', 'avatar-wash', 3, 'water', 0.7, 'small', 'light', 0, 4000, 0, 0.8, 1]);
+    expect(calls[1]).toEqual(['icon', JSON.stringify(clock), 'clock', 0, 'moonlight', 0.7, 'large', 'light', 0, '{"markRadius":1.4}', 4000, 0, 0.8, 1]);
+  });
+
+  it('goes through the scene document on a build without the direct constructors', () => {
+    const calls: unknown[][] = [];
+    const engine = { createInstance: (...args: unknown[]) => (calls.push(args), {}) } as unknown as WasmEngine;
+    createRefInstance(engine, documents, { id: 'avatar-wash', seed: 3 }, { detail: 'small' }, instanceArgs);
+    createRefInstance(engine, documents, { icon: clock, name: 'clock' }, {}, instanceArgs);
+    expect(calls).toEqual([
+      ['catalogue:avatar-wash|3|water|0.7|small|light|0', 4000, 0, 0.8, 1],
+      ['icon:clock', 4000, 0, 0.8, 1],
+    ]);
   });
 });
 

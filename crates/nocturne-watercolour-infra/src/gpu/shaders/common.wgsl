@@ -2,9 +2,11 @@
 //
 // All per-cell fields live in one `state` buffer and one `scratch` buffer,
 // each a flat array<f32> of `n = width * height` cells per field. Offsets
-// mirror `gpu::layout` on the Rust side; a pass reads `state`, writes the
-// matching `scratch` region, and the host copies it back, so no pass ever
-// reads its own output (the CPU reference's double-buffer discipline).
+// mirror `gpu::layout` on the Rust side. A pass that reads a field at its
+// neighbours writes the new value to the other buffer, so no pass ever reads
+// its own output (the CPU reference's double-buffer discipline); the next
+// reader takes it from there, and the last one in the tick writes it back
+// into `state`, which holds every field between ticks.
 
 struct Params {
     width: u32,
@@ -74,7 +76,29 @@ struct Stroke {
     water: f32,
     strength: f32,
     splat_out: f32,
+    // The grid rect the stamp covers, stored row-major.
+    rect_x: u32,
+    rect_y: u32,
+    rect_w: u32,
+    rect_h: u32,
+    // Where this stroke's rect starts in `stamp`, which holds the rects of
+    // every stroke in a batch back to back.
+    stamp_offset: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    inner: f32,
+    cell: f32,
+    scale_x: f32,
+    scale_y: f32,
+    edge_roughness: f32,
 };
+
+// Stroke.kind of a dab; mirrors gpu::STROKE_DAB.
+const STROKE_DAB: u32 = 3u;
 
 struct PigmentCoef {
     density: f32,

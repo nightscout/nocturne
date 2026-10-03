@@ -20,7 +20,7 @@
     active?: boolean;
     side?: 'left' | 'top';
     surface?: Surface;
-    /** `contain` (default) preserves the artwork's aspect; `fill` stretches to the container. */
+    /** `fill` (default) runs the stroke the item's full length; `contain` keeps the artwork's aspect. */
     fit?: FitMode;
     onready?: PlayerReadyCallback;
     class?: string;
@@ -34,9 +34,14 @@
     return mountPlayer(
       frame,
       canvas,
-      'selection-edge',
-      artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode, fit, surface }, { autoplay: 'once' }),
-      onready,
+      {
+        artwork: 'selection-edge',
+        ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
+        fit: fit ?? 'fill',
+        surface,
+        releaseAfterFinish: true,
+        onReady: onready,
+      },
     );
   });
 </script>
@@ -45,8 +50,8 @@
   bind:this={frame}
   aria-hidden="true"
   class="pointer-events-none absolute transition-opacity duration-300 {side === 'left'
-    ? 'inset-y-0 left-0 w-1.5'
-    : 'inset-x-0 top-0 h-1.5'} {active ? 'opacity-100' : 'opacity-0'} {className}"
+    ? 'inset-y-0 left-0 w-4'
+    : 'inset-x-0 top-0 h-4'} {active ? 'opacity-100' : 'opacity-0'} {className}"
 >
   {#if active}
     <canvas bind:this={canvas} class="block h-full w-full"></canvas>

@@ -6,19 +6,21 @@
 //! `InstanceLimit`, `DeviceLost`, `NoSurface` and `Engine`).
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use nocturne_watercolour_core::application::playback::DEFAULT_PAINT_WALL_FRACTION;
 use nocturne_watercolour_core::application::{
     EngineError, Exporter, Playback, PlaybackState, ProgressCurve,
 };
-use nocturne_watercolour_core::domain::{Image, Seed};
+use nocturne_watercolour_core::domain::{Image, Scene, Seed};
 use nocturne_watercolour_infra::document::parse_scene_json;
 use nocturne_watercolour_infra::export::PngExporter;
 use nocturne_watercolour_infra::gpu::{GpuContext, GpuEngine, PresentSurface};
 use wasm_bindgen::prelude::*;
 
 use crate::scene_tools::{self, BakedManifest, Surface};
+use nocturne_watercolour_infra::authoring::DetailLevel;
 
 const DEFAULT_MAX_LIVE_INSTANCES: u32 = 4;
 
@@ -35,13 +37,22 @@ export interface EngineStats {
   checkpointBytes: number;
   lastStepMs: number;
   lastRenderMs: number;
+  /** GPU milliseconds per tick from timestamp queries; null without the
+   * `timestamp-query` feature or before the first sample is read back. */
+  gpuTickMs: number | null;
+  /** GPU milliseconds of the latest sampled frame's optics. */
+  gpuRenderMs: number | null;
   initMs: number;
   adapterName: string;
 }
 "#;
 
 thread_local! {
-    static LOST_CALLBACKS: RefCell<Vec<js_sys::Function>> = const { RefCell::new(Vec::new()) };
+    /// Keyed by engine: a host that rebuilds its engine after a loss must not
+    /// hear the dead device again, nor an old engine's listeners fire for the
+    /// new device. A thread-local because the device-lost hook must be `Send`.
+    static LOST_CALLBACKS: RefCell<HashMap<u32, Vec<js_sys::Function>>> = RefCell::new(HashMap::new());
+    static NEXT_ENGINE_ID: Cell<u32> = const { Cell::new(0) };
 }
 
 fn now_ms() -> f64 {
@@ -80,6 +91,8 @@ struct Shared {
     checkpoint_bytes: Cell<f64>,
     last_step_ms: Cell<f64>,
     last_render_ms: Cell<f64>,
+    gpu_tick_ms: Cell<Option<f64>>,
+    gpu_render_ms: Cell<Option<f64>>,
     init_ms: Cell<f64>,
 }
 
@@ -88,6 +101,14 @@ pub struct WatercolourEngine {
     ctx: GpuContext,
     template: GpuEngine,
     shared: Rc<Shared>,
+    id: u32,
+}
+
+impl Drop for WatercolourEngine {
+    fn drop(&mut self) {
+        let id = self.id;
+        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().remove(&id));
+    }
 }
 
 #[wasm_bindgen]
@@ -105,9 +126,14 @@ impl WatercolourEngine {
             .await
             .map_err(|e| js_err("InitFailed", e))?
             .with_checkpoint_budget(BROWSER_CHECKPOINT_BUDGET_BYTES);
-        ctx.on_device_lost(|message| {
+        let id = NEXT_ENGINE_ID.with(|next| {
+            let id = next.get();
+            next.set(id.wrapping_add(1));
+            id
+        });
+        ctx.on_device_lost(move |message| {
             LOST_CALLBACKS.with(|cbs| {
-                for cb in cbs.borrow().iter() {
+                for cb in cbs.borrow().get(&id).into_iter().flatten() {
                     let _ = cb.call1(&JsValue::NULL, &JsValue::from_str(&message));
                 }
             });
@@ -119,6 +145,7 @@ impl WatercolourEngine {
             ctx,
             template,
             shared,
+            id,
         })
     }
 
@@ -132,8 +159,8 @@ impl WatercolourEngine {
     /// paint_wall_fraction)`, so the tail covers the settling after the pen
     /// leaves the paper. `checkpoint_budget_bytes` (absent or 0 = the
     /// engine's [`BROWSER_CHECKPOINT_BUDGET_BYTES`]) is this instance's own
-    /// seek-checkpoint budget; anything below one checkpoint still keeps the
-    /// one at tick 0, so `seek` falls back to replaying from the start.
+    /// seek-checkpoint budget; below one checkpoint it keeps none, so `seek`
+    /// falls back to reloading the scene and replaying from the start.
     #[wasm_bindgen(js_name = createInstance)]
     pub fn create_instance(
         &self,
@@ -143,6 +170,99 @@ impl WatercolourEngine {
         paint_wall_fraction: f64,
         checkpoint_budget_bytes: Option<f64>,
     ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = parse_scene_json(scene_json).map_err(|e| js_err("InvalidScene", e))?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// `createInstance` for a catalogue artwork: `catalogueScene`'s
+    /// arguments, then `createInstance`'s after the document. The scene is
+    /// authored straight into the playback and never crosses as JSON.
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(js_name = createCatalogueInstance)]
+    pub fn create_catalogue_instance(
+        &self,
+        artwork_id: &str,
+        seed: f64,
+        palette: &str,
+        intensity: f32,
+        detail: &str,
+        surface: &str,
+        sim_resolution: f64,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = catalogue_scene_value(
+            artwork_id,
+            seed,
+            palette,
+            intensity,
+            detail,
+            surface,
+            sim_resolution,
+        )?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// `createInstance` for a Lucide icon: `iconScene`'s arguments, then
+    /// `createInstance`'s after the document, with no JSON in between.
+    #[allow(clippy::too_many_arguments)]
+    #[wasm_bindgen(js_name = createIconInstance)]
+    pub fn create_icon_instance(
+        &self,
+        elements_json: &str,
+        name: &str,
+        seed: f64,
+        palette: &str,
+        intensity: f32,
+        detail: &str,
+        surface: &str,
+        sim_resolution: f64,
+        hints_json: &str,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
+        self.admit()?;
+        let scene = icon_scene_value(
+            elements_json,
+            name,
+            seed,
+            palette,
+            intensity,
+            detail,
+            surface,
+            sim_resolution,
+            hints_json,
+        )?;
+        self.instance(
+            scene,
+            duration_ms,
+            settle_fraction,
+            paint_wall_fraction,
+            checkpoint_budget_bytes,
+        )
+    }
+
+    /// Refuses a new instance on a lost or faulted device or past the cap,
+    /// before any scene is authored or parsed for it.
+    fn admit(&self) -> Result<(), JsError> {
         guard_device(&self.ctx)?;
         if self.shared.live.get() >= self.shared.max_live.get() {
             return Err(js_err(
@@ -153,7 +273,17 @@ impl WatercolourEngine {
                 ),
             ));
         }
-        let mut scene = parse_scene_json(scene_json).map_err(|e| js_err("InvalidScene", e))?;
+        Ok(())
+    }
+
+    fn instance(
+        &self,
+        mut scene: Scene,
+        duration_ms: f64,
+        settle_fraction: f64,
+        paint_wall_fraction: f64,
+        checkpoint_budget_bytes: Option<f64>,
+    ) -> Result<SceneInstance, JsError> {
         if settle_fraction.is_finite() && settle_fraction > 0.0 {
             scene_tools::apply_settle_fraction(&mut scene, settle_fraction as f32);
         }
@@ -171,6 +301,7 @@ impl WatercolourEngine {
         }
         self.shared.live.set(self.shared.live.get() + 1);
         let mut instance = SceneInstance {
+            blend_ticks: false,
             playback,
             surface: None,
             ctx: self.ctx.clone(),
@@ -189,7 +320,7 @@ impl WatercolourEngine {
     /// `callback(message)` runs when the browser reports the device lost.
     #[wasm_bindgen(js_name = onDeviceLost)]
     pub fn on_device_lost(&self, callback: js_sys::Function) {
-        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().push(callback));
+        LOST_CALLBACKS.with(|cbs| cbs.borrow_mut().entry(self.id).or_default().push(callback));
     }
 
     #[wasm_bindgen(getter, js_name = maxLiveInstances)]
@@ -207,8 +338,10 @@ impl WatercolourEngine {
         self.ctx.adapter_name().to_string()
     }
 
-    /// Timings are CPU-side (submission, not GPU completion) in
-    /// `performance.now()` milliseconds.
+    /// `lastStepMs` and `lastRenderMs` are CPU-side (submission, not GPU
+    /// completion) in `performance.now()` milliseconds; `gpuTickMs` and
+    /// `gpuRenderMs` are GPU timestamps, quantised by the browser (100 us in
+    /// Chrome unless it runs with `--enable-dawn-features=allow_unsafe_apis`).
     #[wasm_bindgen(unchecked_return_type = "EngineStats")]
     pub fn stats(&self) -> Result<JsValue, JsError> {
         let obj = js_sys::Object::new();
@@ -222,6 +355,9 @@ impl WatercolourEngine {
         set("checkpointBytes", self.shared.checkpoint_bytes.get().into())?;
         set("lastStepMs", self.shared.last_step_ms.get().into())?;
         set("lastRenderMs", self.shared.last_render_ms.get().into())?;
+        let or_null = |v: Option<f64>| v.map_or(JsValue::NULL, JsValue::from);
+        set("gpuTickMs", or_null(self.shared.gpu_tick_ms.get()))?;
+        set("gpuRenderMs", or_null(self.shared.gpu_render_ms.get()))?;
         set("initMs", self.shared.init_ms.get().into())?;
         set("adapterName", JsValue::from_str(self.ctx.adapter_name()))?;
         Ok(obj.into())
@@ -247,26 +383,87 @@ pub fn catalogue_scene(
     surface: &str,
     sim_resolution: f64,
 ) -> Result<String, JsError> {
-    let seed = Seed(if seed.is_finite() {
+    scene_tools::catalogue_scene_json_with_resolution(
+        artwork_id,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+}
+
+fn seed_arg(seed: f64) -> Seed {
+    Seed(if seed.is_finite() {
         seed.max(0.0) as u64
     } else {
         0
-    });
-    let detail = scene_tools::parse_detail(detail).ok_or_else(|| {
+    })
+}
+
+fn detail_arg(detail: &str) -> Result<DetailLevel, JsError> {
+    scene_tools::parse_detail(detail).ok_or_else(|| {
         js_err(
             "InvalidDetail",
             format!("{detail:?} is not small|medium|large|extralarge"),
         )
-    })?;
-    let surface = Surface::parse(surface)
-        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))?;
-    let sim = if sim_resolution.is_finite() && sim_resolution > 0.0 {
-        Some(sim_resolution as u32)
-    } else {
-        None
-    };
-    scene_tools::catalogue_scene_json_with_resolution(
-        artwork_id, seed, palette, intensity, detail, surface, sim,
+    })
+}
+
+fn surface_arg(surface: &str) -> Result<Surface, JsError> {
+    Surface::parse(surface)
+        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))
+}
+
+fn sim_arg(sim_resolution: f64) -> Option<u32> {
+    (sim_resolution.is_finite() && sim_resolution > 0.0).then_some(sim_resolution as u32)
+}
+
+fn catalogue_scene_value(
+    artwork_id: &str,
+    seed: f64,
+    palette: &str,
+    intensity: f32,
+    detail: &str,
+    surface: &str,
+    sim_resolution: f64,
+) -> Result<Scene, JsError> {
+    scene_tools::catalogue_scene_with_resolution(
+        artwork_id,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+    )
+    .map_err(|e| JsError::new(&e.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn icon_scene_value(
+    elements_json: &str,
+    name: &str,
+    seed: f64,
+    palette: &str,
+    intensity: f32,
+    detail: &str,
+    surface: &str,
+    sim_resolution: f64,
+    hints_json: &str,
+) -> Result<Scene, JsError> {
+    scene_tools::icon_scene(
+        elements_json,
+        name,
+        seed_arg(seed),
+        palette,
+        intensity,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
+        hints_json,
     )
     .map_err(|e| JsError::new(&e.to_string()))
 }
@@ -294,33 +491,15 @@ pub fn icon_scene(
     sim_resolution: f64,
     hints_json: &str,
 ) -> Result<String, JsError> {
-    let seed = Seed(if seed.is_finite() {
-        seed.max(0.0) as u64
-    } else {
-        0
-    });
-    let detail = scene_tools::parse_detail(detail).ok_or_else(|| {
-        js_err(
-            "InvalidDetail",
-            format!("{detail:?} is not small|medium|large|extralarge"),
-        )
-    })?;
-    let surface = Surface::parse(surface)
-        .ok_or_else(|| js_err("InvalidSurface", format!("{surface:?} is not light|dark")))?;
-    let sim = if sim_resolution.is_finite() && sim_resolution > 0.0 {
-        Some(sim_resolution as u32)
-    } else {
-        None
-    };
     scene_tools::icon_scene_json(
         elements_json,
         name,
-        seed,
+        seed_arg(seed),
         palette,
         intensity,
-        detail,
-        surface,
-        sim,
+        detail_arg(detail)?,
+        surface_arg(surface)?,
+        sim_arg(sim_resolution),
         hints_json,
     )
     .map_err(|e| JsError::new(&e.to_string()))
@@ -333,6 +512,7 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
+    blend_ticks: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
     ctx: GpuContext,
@@ -354,6 +534,16 @@ impl SceneInstance {
         guard_device(&self.ctx)
     }
 
+    fn sync_gpu_timings(&mut self) {
+        let timings = self.playback.simulator().gpu_timings();
+        if timings.tick_ms.is_some() {
+            self.shared.gpu_tick_ms.set(timings.tick_ms);
+        }
+        if timings.render_ms.is_some() {
+            self.shared.gpu_render_ms.set(timings.render_ms);
+        }
+    }
+
     fn timed_step(
         &mut self,
         f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
@@ -363,7 +553,19 @@ impl SceneInstance {
         let result = f(&mut self.playback).map_err(engine_err);
         self.shared.last_step_ms.set(now_ms() - t0);
         self.sync_checkpoint_bytes();
+        self.sync_gpu_timings();
         result
+    }
+
+    fn timed_advance(
+        &mut self,
+        f: impl FnOnce(&mut Playback<GpuEngine>) -> Result<(), EngineError>,
+    ) -> Result<bool, JsError> {
+        let before = self.playback.current_tick();
+        let before_blend = self.playback.tick_blend();
+        self.timed_step(f)?;
+        Ok(self.playback.current_tick() != before
+            || (self.blend_ticks && self.playback.tick_blend() != before_blend))
     }
 
     async fn frames_async(
@@ -436,6 +638,20 @@ impl SceneInstance {
         }
     }
 
+    #[wasm_bindgen(js_name = setCrop)]
+    pub fn set_crop(&mut self, x: f32, y: f32, width: f32, height: f32) -> Result<(), JsError> {
+        self.playback
+            .simulator()
+            .set_crop([x, y, width, height])
+            .map_err(engine_err)
+    }
+
+    /// Playing frames blend the last two ticks from now on; see `PlayerOptions.blendTicks`.
+    #[wasm_bindgen(js_name = enableTickBlending)]
+    pub fn enable_tick_blending(&mut self) {
+        self.blend_ticks = true;
+    }
+
     /// Pixel size the swapchain is configured at; `null` until `attach`.
     #[wasm_bindgen(js_name = surfaceSize)]
     pub fn surface_size(&self) -> Option<Vec<u32>> {
@@ -457,6 +673,21 @@ impl SceneInstance {
         self.playback.total_ticks()
     }
 
+    #[wasm_bindgen(js_name = ticksDue)]
+    pub fn ticks_due(&self, elapsed_seconds: f32) -> u32 {
+        self.playback.ticks_due(elapsed_seconds)
+    }
+
+    #[wasm_bindgen(js_name = ticksDueAtProgress)]
+    pub fn ticks_due_at_progress(&self, progress: f32) -> u32 {
+        self.playback.ticks_due_at_progress(progress)
+    }
+
+    #[wasm_bindgen(js_name = currentTick)]
+    pub fn current_tick(&self) -> u32 {
+        self.playback.current_tick()
+    }
+
     pub fn play(&mut self) {
         self.playback.play();
     }
@@ -469,17 +700,30 @@ impl SceneInstance {
         self.timed_step(|p| p.reset())
     }
 
+    /// `true` when the call moved the simulation, so the state on screen is
+    /// stale; a frame that ran no tick has nothing new to render.
     #[wasm_bindgen(js_name = advanceByElapsed)]
-    pub fn advance_by_elapsed(&mut self, seconds: f32) -> Result<(), JsError> {
-        self.timed_step(|p| p.advance_by_elapsed(seconds))
+    pub fn advance_by_elapsed(&mut self, seconds: f32) -> Result<bool, JsError> {
+        self.timed_advance(|p| p.advance_by_elapsed(seconds))
     }
 
     /// Drives the reveal from a caller-supplied progress (0..1, clamped) with
     /// a linear progress-to-tick mapping and no internal easing; steps
     /// forward, seeks backwards. Callers apply their own easing first.
+    /// Returns whether the simulation moved, as `advanceByElapsed`.
     #[wasm_bindgen(js_name = advanceToProgress)]
-    pub fn advance_to_progress(&mut self, progress: f32) -> Result<(), JsError> {
-        self.timed_step(|p| p.advance_to_progress(progress))
+    pub fn advance_to_progress(&mut self, progress: f32) -> Result<bool, JsError> {
+        self.timed_advance(|p| p.advance_to_progress(progress))
+    }
+
+    /// Runs up to `ticks` more steps whatever the play state, finishing (and
+    /// drying) at the end of the timeline; `true` once finished. The same
+    /// steps as `finishImmediately`, so a host can spread a still's run over
+    /// several frames instead of blocking one.
+    #[wasm_bindgen(js_name = advanceTicks)]
+    pub fn advance_ticks(&mut self, ticks: u32) -> Result<bool, JsError> {
+        self.timed_step(|p| p.advance_ticks(ticks))?;
+        Ok(self.is_finished())
     }
 
     /// Swaps the curve `advanceByElapsed`/`seekProgress` map progress with;
@@ -507,6 +751,22 @@ impl SceneInstance {
     #[wasm_bindgen(js_name = seekProgress)]
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), JsError> {
         self.timed_step(|p| p.seek_progress(progress))
+    }
+
+    #[wasm_bindgen(js_name = tickForProgress)]
+    pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.playback.tick_for_progress(progress)
+    }
+
+    /// Steps replayed; see `Playback::seek_towards_tick`.
+    #[wasm_bindgen(js_name = seekTowardsTick)]
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, JsError> {
+        let mut replayed = 0;
+        self.timed_step(|p| {
+            replayed = p.seek_towards_tick(target, ticks)?;
+            Ok(())
+        })?;
+        Ok(replayed)
     }
 
     #[wasm_bindgen(js_name = finishImmediately)]
@@ -537,12 +797,18 @@ impl SceneInstance {
             .as_ref()
             .ok_or_else(|| js_err("NoSurface", "attach a canvas before rendering"))?;
         let t0 = now_ms();
-        let presented = self
-            .playback
-            .simulator()
-            .present(surface)
-            .map_err(engine_err)?;
+        let tick = self.playback.current_tick();
+        let blend = self.playback.tick_blend();
+        let presented = if self.blend_ticks && self.playback.state() == PlaybackState::Playing {
+            self.playback.simulator().present_at(surface, tick, blend)
+        } else {
+            // A paused or finished scene can hold its canvas indefinitely; its tick images are released.
+            self.playback.simulator().clear_interpolation();
+            self.playback.simulator().present(surface)
+        }
+        .map_err(engine_err)?;
         self.shared.last_render_ms.set(now_ms() - t0);
+        self.sync_gpu_timings();
         Ok(presented)
     }
 

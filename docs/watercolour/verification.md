@@ -60,12 +60,6 @@ cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_a
 | Player static rung | `playback.test.ts`: `iconStaticBackend` routes a baked icon to its final and an unbaked one to the SVG backend |
 | Components | `components.test.ts`: `detailForEdge` thresholds, `seedFromName` determinism/FNV-1a, `artworkOptionsFrom` defaults, `hostSurface` |
 
-### Showcase (`@nocturne/watercolour-showcase`)
-
-Vitest unit tests for the synthetic data (`units`, `history`) and the
-`ShowcaseSettings` store (defaults, option forwarding, reset). `check`,
-`test` and `build` run clean for the scaffold.
-
 ## What was verified in a browser
 
 - **Stage 2 (wasm adapter + TS API) was verified live in Chrome 153**: WebGPU
@@ -77,6 +71,31 @@ Vitest unit tests for the synthetic data (`units`, `history`) and the
   orchestrator, not by the worker agents.
 
 ## The reveal instruments
+
+`nocturne-watercolour-wasm/examples/bloom_frames.rs` exports the `avatar-wash`
+donor used by `bloomScene` and renders authored scene JSON at selected ticks:
+
+```bash
+cargo run -p nocturne-watercolour-wasm --example bloom_frames --release -- donor donor.json 320
+cargo run -p nocturne-watercolour-wasm --example bloom_frames --release -- render bloom.json bloom-frames 400 150 2,8,16,26,38,52,70,90,115,150,220
+```
+
+Build `bloom.json` by passing the donor through `bloomScene` with the tile's
+size, reading seed, slope and token colour. The render command validates the
+document through the Rust parser before painting.
+
+`bloom_cadence` replays 60 Hz refreshes through that scene's paint phase, with
+the tile's 5200 ms duration and 0.5 tail, and reports how many distinct frames
+it presented, the refreshes after the first 200 ms that repeated the previous
+frame, and CPU and frame timings:
+
+```bash
+cargo run -p nocturne-watercolour-wasm --example bloom_cadence --release -- bloom.json
+cargo run -p nocturne-watercolour-wasm --example bloom_cadence --release -- bloom.json --discrete
+```
+
+With tick blending (`blendTicks`) no refresh after landing should repeat;
+`--discrete` presents whole ticks for comparison.
 
 Two `nocturne-watercolour-infra` examples exist to check the reveal rather
 than squint at it. Both are CPU-reference by default and take catalogue ids
@@ -113,13 +132,6 @@ as a dead tail), and `--reference <dir>` diffs the final frame against an
 earlier run. Choreography flags (`--tip-scale`, `--paint-spread`,
 `--bloom-trail`, `--settle-fraction`, `--settle-budget`, `--wet-sheen`, ...)
 sweep parameters without rebuilding.
-
-## Showcase browser pass
-
-All twelve showcase routes were loaded in Chrome 153 at 1280 px with a clean
-console apart from Chrome's `powerPreference` notice; row selection, filtering
-to the empty state, tab switching, dark-mode toggling and exports were
-exercised. Screenshots live in `.playwright-mcp/stage3/` (gitignored).
 
 The visual review of those captures (the luminous review's Folder B) found:
 
@@ -203,20 +215,62 @@ re-measured the whole catalogue at 165.4 ms (`Large`) and 391.3 ms
 output is asserted by the FNV-1a snapshot tests named above, which go red under
 a deliberately wrong band.
 
-### Browser (Chrome 153, Windows 11, RTX 5060 Laptop GPU; 512^2 canvas, 256^2 sim grid, showcase defaults)
+### Browser (Chrome 153, Windows 11, RTX 5060 Laptop GPU; 512^2 canvas, 256^2 sim grid, the former showcase's defaults)
 
 | Measurement | Value |
 |---|---|
 | wasm module | 652,953 B, 274,570 B gzip with `wasm-opt -Os` (binaryen 132); 966,642 B / 339,648 B gzip when the build machine lacks `wasm-opt` and the build script skips the pass. The `iconScene` surface added +163 KB raw / +56 KB gzip before optimisation. |
 | GPU init (adapter + device + pipeline compile, once per page) | 59-90 ms warm; ~2.1 s cold (`engine.stats().initMs`) |
-| First painted frame after a cold `createArtworkPlayer` | 1.1-1.6 s warm (from `performance.mark` around module load, engine init, first presented frame; the showcase exposes `watercolour:first-paint`) |
+| First painted frame after a cold `createArtworkPlayer` | 1.1-1.6 s warm (from `performance.mark` around module load, engine init, first presented frame; the former showcase exposed `watercolour:first-paint`) |
 | Steady-state scheduler cost | ~0.2 ms per frame (CPU step + render submission; `getScheduler().stats()` histogram) |
 | Checkpoints | ~44 MB per live instance in the browser (10 checkpoints at 256^2 x 4 pigments) |
 | Baked assets | 5.4 MB on disk as WebP, from 20.3 MB as PNG (400 files: 100 sets x 4 files, of which the twelve `lucide-<name>` sets are 96) |
 
 Methodology: `performance.mark`/`performance.now` around module load,
 `WatercolourEngine.create`, first paint and each scheduler tick; single-run
-spot checks on the machine above, not a benchmark harness.
+spot checks on the machine above. The repeatable harness is below.
+
+### Benchmark harness
+
+`packages/watercolour/bench/` builds plain scenario pages (`avatars`, `tabs`,
+`empty`, `hero`, `drops`, `wash`, `edge`, `mixed`; `?s=<name>&n=<count>`) from
+the package's public components, and `run.mjs` drives them in real Chrome
+through Playwright against a production `vite build` served by `vite preview`.
+It depends on nothing but the package's own source, so it runs against any
+revision of the engine.
+
+```bash
+pnpm --filter @nocturne/watercolour build:wasm     # needs wasm-opt on PATH (npm i -g binaryen)
+pnpm --filter @nocturne/watercolour bench                                   # all scenarios x all profiles x 3
+pnpm --filter @nocturne/watercolour bench -- --scenarios "avatars&n=80,tabs" --profiles desktop,phone-low --repeats 2
+pnpm --filter @nocturne/watercolour bench -- --no-webgpu --headed --out /tmp/wc
+pnpm --filter @nocturne/watercolour bench -- --url https://paint.nocturne.localhost:59251/ --ignore-https-errors --wait 10
+```
+
+Profiles are `desktop` (no throttle), `laptop` (CPU 2x), `phone-high` (CPU 4x,
+390x844 at DPR 3) and `phone-low` (CPU 6x, 360x740 at DPR 2). CPU throttling
+does not slow the GPU, so phone rows are a lower bound. Scenarios run in a 6000 px tall viewport at the profile width (`--viewport-height`), because the scheduler pauses artwork outside the viewport and a component below the fold would never finish. Each run is a fresh
+Chrome (cold caches) with `--enable-unsafe-webgpu
+--enable-dawn-features=allow_unsafe_apis --enable-precise-memory-info`. It writes
+one JSON per run plus `summary.md` and `summary.json` (median of repeats) to
+`bench/results/<timestamp>/` (gitignored).
+
+Per run: time to ready and first artwork (from mount), long tasks, long
+animation frames and total blocking time, interaction latency (input to the
+second following frame) and Event Timing for the tab, edge and drop clicks and
+hovers, rAF callbacks per second over an idle window after settle (target 0),
+WebGPU call counts (encoders, passes, copies, submits, `writeBuffer` bytes,
+buffer and texture bytes allocated, live and peak estimates, pipelines) in total
+and per rAF frame, live WebGPU canvases, JS heap after GC, and wasm, glue, JS and
+image transfer bytes. "Submit drain" is `onSubmittedWorkDone` after a sampled
+submit: an approximation of GPU time, not a timestamp query. Compare runs by
+diffing two `summary.json` files.
+
+To attribute main-thread time inside the engine, build the wasm with
+`WATERCOLOUR_WASM_PROFILE=1 pnpm --filter @nocturne/watercolour build:wasm`,
+which keeps the name section, and record a CPU profile of the scenario (DevTools,
+or CDP `Profiler` from Playwright). Wasm-opt inlines single-caller functions, so
+a function's self time can include a callee that no longer appears by name.
 
 ## Limitations
 

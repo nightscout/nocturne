@@ -98,12 +98,16 @@ impl PaperField {
         let mut cap = Vec::with_capacity(n);
         let inv_w = 1.0 / width.max(1) as f32;
         let inv_h = 1.0 / height.max(1) as f32;
-        let band = grain_band_window(width.max(height) as f32);
+        let terms = PaperTerms::new(
+            paper,
+            pixel_scale,
+            grain_band_window(width.max(height) as f32),
+        );
         for y in 0..height {
             for x in 0..width {
                 let u = (x as f32 + 0.5) * inv_w;
                 let v = (y as f32 + 0.5) * inv_h;
-                let value = sample_height_aspect(paper, u, v, aspect, pixel_scale, band);
+                let value = sample_height_banded(paper, u, v, aspect, &terms);
                 h.push(value);
                 let t = ((value - 0.5) / paper.height_amplitude.max(1e-3) + 0.5).clamp(0.0, 1.0);
                 cap.push(paper.absorbency[0] + (paper.absorbency[1] - paper.absorbency[0]) * t);
@@ -216,41 +220,99 @@ pub fn sample_height_aspect(
     pixel_scale: f32,
     band: (f32, f32),
 ) -> f32 {
-    let (min_px, full_px) = band;
+    sample_height_banded(
+        paper,
+        u,
+        v,
+        aspect,
+        &PaperTerms::new(paper, pixel_scale, band),
+    )
+}
+
+/// What one field's height reads that depends on the paper and the output
+/// alone, computed once per field rather than per pixel. The GPU generator
+/// uploads these as its uniform, so both backends sample from the same `f32`
+/// values.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PaperTerms {
+    /// Lattice seeds of the four grain octaves, the two pooling octaves and
+    /// the fibre, in that order.
+    pub seeds: [u64; 7],
+    /// `grain_scale`, at least one cell across.
+    pub base: f32,
+    pub grain_freq: [f32; 4],
+    pub grain_amp: [f32; 4],
+    /// [`octave_band`] weight of each grain octave.
+    pub grain_band: [f32; 4],
+    /// [`octave_band`] weight of the fibre's fine axis.
+    pub fibre_band: f32,
+    /// Sum of the uncut grain amplitudes.
+    pub full_weight: f32,
+    /// `fibre_anisotropy * 0.6`.
+    pub fibre_weight: f32,
+}
+
+impl PaperTerms {
+    pub fn new(paper: &Paper, pixel_scale: f32, band: (f32, f32)) -> PaperTerms {
+        let (min_px, full_px) = band;
+        let seed = paper.seed.0;
+        let base = paper.grain_scale.max(1.0);
+        let mut grain_freq = [0.0; 4];
+        let mut grain_amp = [0.0; 4];
+        let mut grain_band = [0.0; 4];
+        let (mut freq, mut amp) = (base, 1.0);
+        for octave in 0..4 {
+            grain_freq[octave] = freq;
+            grain_amp[octave] = amp;
+            grain_band[octave] = octave_band(pixel_scale, min_px, full_px, freq);
+            amp *= 0.55;
+            freq *= 2.3;
+        }
+        PaperTerms {
+            seeds: [
+                seed,
+                seed.wrapping_add(0x1F1F),
+                seed.wrapping_add(2 * 0x1F1F),
+                seed.wrapping_add(3 * 0x1F1F),
+                seed ^ 0x3A7C,
+                seed ^ 0x5C21,
+                seed ^ 0xF1B7,
+            ],
+            base,
+            grain_freq,
+            grain_amp,
+            grain_band,
+            fibre_band: octave_band(pixel_scale, min_px, full_px, base * 1.6),
+            full_weight: (1.0 - 0.55_f32.powi(4)) / (1.0 - 0.55),
+            fibre_weight: paper.fibre_anisotropy * 0.6,
+        }
+    }
+}
+
+fn sample_height_banded(paper: &Paper, u: f32, v: f32, aspect: f32, terms: &PaperTerms) -> f32 {
     let (ax, ay) = isotropic_scale(aspect);
     let (u, v) = (u * ax, v * ay);
-    let seed = paper.seed.0;
-    let base = paper.grain_scale.max(1.0);
+    let [g0, g1, g2, g3, pool_a, pool_b, fibre_seed] = terms.seeds;
+    let base = terms.base;
     // The noise is 0..1 centred on 0.5; the deviations are divided by the full
     // octave weight so a cut octave leaves the surviving coarse tooth at its
     // exact original amplitude (renormalising by the surviving weight would
     // amplify it, making the paper resolution-dependent).
-    let full_weight = (1.0 - 0.55_f32.powi(4)) / (1.0 - 0.55);
     let mut deviation = 0.0;
-    let mut amp = 1.0;
-    let mut freq = base;
-    for octave in 0..4u64 {
-        let band = octave_band(pixel_scale, min_px, full_px, freq);
-        deviation += amp
-            * band
-            * (value_noise(seed.wrapping_add(octave * 0x1F1F), u * freq, v * freq) - 0.5);
-        amp *= 0.55;
-        freq *= 2.3;
+    for (octave, seed) in [g0, g1, g2, g3].into_iter().enumerate() {
+        let freq = terms.grain_freq[octave];
+        deviation += terms.grain_amp[octave]
+            * terms.grain_band[octave]
+            * (value_noise(seed, u * freq, v * freq) - 0.5);
     }
-    let grain = 0.5 + deviation / full_weight;
-    let pool = (value_noise(seed ^ 0x3A7C, u * base * 0.1, v * base * 0.1)
-        + 0.7
-            * value_noise(
-                seed ^ 0x5C21,
-                u * base * 0.05 + 0.37,
-                v * base * 0.05 + 0.11,
-            ))
+    let grain = 0.5 + deviation / terms.full_weight;
+    let pool = (value_noise(pool_a, u * base * 0.1, v * base * 0.1)
+        + 0.7 * value_noise(pool_b, u * base * 0.05 + 0.37, v * base * 0.05 + 0.11))
         / 1.7;
-    let fibre = 0.5
-        + (value_noise(seed ^ 0xF1B7, u * base * 0.12, v * base * 1.6) - 0.5)
-            * octave_band(pixel_scale, min_px, full_px, base * 1.6);
+    let fibre =
+        0.5 + (value_noise(fibre_seed, u * base * 0.12, v * base * 1.6) - 0.5) * terms.fibre_band;
     let body = grain * (1.0 - POOL_WEIGHT) + pool * POOL_WEIGHT;
-    let fibre_w = paper.fibre_anisotropy * 0.6;
+    let fibre_w = terms.fibre_weight;
     // The fibre's cross-streak period is its fine axis (`base * 1.6`); the
     // long-axis variation it shares is far too coarse to limit.
     let mixed = body * (1.0 - fibre_w) + fibre * fibre_w;

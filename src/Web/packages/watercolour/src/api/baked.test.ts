@@ -1,8 +1,30 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, parseBakedManifest, sharedStill, stripFramePosition } from './baked';
+import { MAX_BAKED_FRAMES, MAX_BAKED_FRAME_EDGE, MAX_BAKED_UPSCALE, MAX_SHARED_STILLS, bakedServesEdge, clearSharedStills, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip, stripFramePosition } from './baked';
 import { WatercolourError } from './errors';
 
 const valid = { version: 1, frames: 12, width: 256, height: 256, durationMs: 600, layout: 'vertical' };
+
+describe('cropped fallback frames', () => {
+  it('uses the same source window in both neighbouring strip frames', () => {
+    const draw_image = vi.fn();
+    const context = { clearRect() {}, drawImage: draw_image } as unknown as CanvasRenderingContext2D;
+    const bitmap = { width: 256, height: 512 } as ImageBitmap;
+    const manifest = parseBakedManifest({ ...valid, frames: 2 });
+    drawStripFrame(context, { bitmap, manifest }, 0.5, 80, 30, { x: 0.25, y: 0.5, width: 0.5, height: 0.25 });
+    expect(draw_image.mock.calls).toEqual([
+      [bitmap, 64, 128, 128, 64, 0, 0, 80, 30],
+      [bitmap, 64, 384, 128, 64, 0, 0, 80, 30],
+    ]);
+  });
+
+  it('crops the final still at its decoded dimensions', () => {
+    const draw_image = vi.fn();
+    const context = { clearRect() {}, drawImage: draw_image } as unknown as CanvasRenderingContext2D;
+    const bitmap = { width: 800, height: 400 } as ImageBitmap;
+    drawStill(context, bitmap, 80, 30, { x: 0.25, y: 0.5, width: 0.5, height: 0.25 });
+    expect(draw_image).toHaveBeenCalledWith(bitmap, 200, 200, 400, 100, 0, 0, 80, 30);
+  });
+});
 
 describe('parseBakedManifest', () => {
   it('accepts the baked format and a JSON string of it', () => {
@@ -162,5 +184,31 @@ describe('sharedStill (one decode, many marks)', () => {
     await expect(sharedStill('/missing.png')).rejects.toThrow();
     await expect(sharedStill('/missing.png')).rejects.toThrow();
     expect(attempts).toBe(2);
+  });
+});
+
+describe('sharedStrip (one decode per artwork and palette)', () => {
+  const manifest = parseBakedManifest({ version: 1, frames: 10, width: 16, height: 16, durationMs: 600, layout: 'vertical' });
+
+  afterEach(() => {
+    clearSharedStills();
+    vi.unstubAllGlobals();
+  });
+
+  it('decodes a strip once for every baked reveal of it, and never closes it', async () => {
+    let decodes = 0;
+    const close = vi.fn();
+    vi.stubGlobal('fetch', async () => ({ ok: true, blob: async () => ({}) as Blob }));
+    vi.stubGlobal('createImageBitmap', async () => {
+      decodes += 1;
+      return { width: 16, height: 160, close } as unknown as ImageBitmap;
+    });
+
+    const first = await sharedStrip('/tab/strip.webp', manifest);
+    const second = await sharedStrip('/tab/strip.webp', manifest);
+
+    expect(decodes).toBe(1);
+    expect(second).toBe(first);
+    expect(close).not.toHaveBeenCalled();
   });
 });

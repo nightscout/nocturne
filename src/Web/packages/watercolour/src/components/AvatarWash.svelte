@@ -41,12 +41,14 @@
     return mountPlayer(
       frame,
       canvas,
-      'avatar-wash',
       {
-        ...artworkOptionsFrom({ palette, seed: resolvedSeed, intensity, durationMs, motion: resolvedMotion, quality, mode, fit, surface }),
+        artwork: 'avatar-wash',
+        ...artworkOptionsFrom({ palette, seed: resolvedSeed, intensity, durationMs, motion: resolvedMotion, quality, mode }),
+        fit,
+        surface,
         releaseAfterFinish: true,
+        onReady: onready,
       },
-      onready,
     );
   });
 </script>

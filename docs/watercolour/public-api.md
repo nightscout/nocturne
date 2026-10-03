@@ -43,36 +43,104 @@ frames. `tail` used to mean a share of simulation ticks, and for baked reveals
 a hold on the finished frame; both are gone.
 
 `checkpointBudgetBytes` (live only) is the GPU memory the instance may spend on
-seek checkpoints. Absent keeps the engine's 48 MB default; `0` leaves it the
-single checkpoint at tick 0, so a backwards `seek` reloads and replays from the
-start rather than restoring a nearer state. A player nothing ever seeks - every
-drop outside the showcase scrubber - should pass it.
+seek checkpoints. Absent keeps the engine's 48 MB default, except on a
+`releaseAfterFinish` player, which nothing can seek once it has let go and so
+keeps none; `0` leaves it no checkpoint, so a backwards `seek` reloads the
+scene and replays from the start rather than restoring a nearer state. A player nothing ever seeks - every drop outside a seeking
+scrubber - should pass it.
 
 ### Player methods and state
 
 ```ts
-player.play(); player.pause(); player.reset(); player.seek(0.5); player.finishImmediately();
+player.play(); player.pause(); player.reset(); player.seekTo(0.5); player.finishImmediately();
 player.resize(width, height, dpr);
 const png = await player.exportPng(512, 512);            // live only
 const { strip, manifest } = await player.exportStrip(12, 256);  // live only
 player.dispose();
 ```
 
-`state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `progress`,
-`error`, `fallbackReason`); it is never pushed per frame. Events:
+Use `seekTo(progress)` for interaction-driven progress. Requests coalesce to the latest target;
+live checkpoint replay advances in bounded slices through the shared frame budget. Baked frames
+seek directly. `state.seeking` is true from `seekTo` until its latest target is presented, and
+always false for a static player. `play()` while seeking waits for that target, then continues
+the reveal. `pause()` cancels that continuation;
+`reset()`, immediate `seek()`, and `finishImmediately()` replace pending work. Immediate `seek()`
+is for authoring and export code that needs the simulation at the target before returning.
+
+`state` is a snapshot (`mode`, `motion`, `playing`, `finished`, `seeking`,
+`progress`, `error`, `fallbackReason`); it is never pushed per frame. Events:
 
 | Event | Payload | Fires |
 |---|---|---|
-| `ready` | - | a backend is drawing (or the player settled on `none`) |
+| `ready` | - | a backend is drawing |
 | `finished` | - | the reveal completed |
 | `fallback` | `{ from, error }` | a backend failed; a lower one took over |
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
 
-`player.ready` resolves once a backend is drawing. `player.canvas` is the
+`onProgress(progress, seeking)` in `PlayerOptions` runs after each presented
+live or baked frame. `progress` is that frame's, and `seeking` is
+`state.seeking` as of it: false on the frame that shows the latest `seekTo`
+target. It does not fire for an unavailable swapchain frame or for a static
+player. A callback may dispose its player or seek it again. `Artwork` passes
+its `onprogress` prop through.
+
+`player.ready` resolves once a backend is drawing. A player whose canvas is in
+the document does not start until the canvas is within 200 px of the viewport
+(`NEAR_VIEWPORT_MARGIN`), so for one below the fold `ready` waits for the
+scroll; a canvas outside the document, or a page without
+`IntersectionObserver`, starts at once. `player.canvas` is the
 current element, which differs from the one passed in only after a live-to-baked
 fallback (a WebGPU canvas can never give a 2D context, so the element is
 replaced in place).
+
+## Generated blooms
+
+`bloomScene(module, width, height, { colour, seed?, slope?, dpr? })` authors the
+glucose tile's three spreading charges. `colour` is an encoded RGB triple in
+`0..1`; `slope` is clamped to `-1..1`. Width and height are CSS pixels. The
+simulation grid is capped at 320 while the output follows the measured tile.
+Play it with `blendTicks: true`, which presents the bloom's growth between
+simulated ticks.
+
+`mountPlayer(frame, canvas, { scene, fit: 'fill', blendTicks: true, onReady,
+onStateChange, onProgress, ... })` gives generated scenes the component resize
+and presentation lifecycle; the options name its source (`artwork`, `icon` or
+`scene`) and carry its callbacks. Its `scene(module, width, height, dpr)`
+factory receives the measured box. Finished canvases stretch for small resizes
+and repaint after a large resize settles. Presentation changes rebuild the
+player; a finished reveal does not replay. `onStateChange` also reports `none`,
+which has no `ready` event. `crop` may be a function of the measured box, for a
+`scene` authored to match it.
+
+## Generated report wash
+
+`reportWashScene(module, width, height, { seed?, surface?, dpr? })` paints a
+report header's wash in the `moonlight` palette's base wash: one loose wash laid
+wet into wet in five or six overlapping horizontal passes from the left, over
+nearly the full height and 70-85% of the width. The brush runs out toward the
+right, water dropped back into the drying edge blooms it, and it dries to a hard
+line where it stops; a few heavier drops pool along the bottom. The seed sets
+its reach, the edge and the passes.
+
+The simulation grid is square and stretched to the painting, so a long strip
+painted on a canvas of its own shape would get cells many times wider than they
+are tall. A strip longer than 3:1 is instead painted on a 3:1 canvas at the
+strip's width, in the band through its middle, and `reportWashCrop(width,
+height)` is the window that shows that band. Mount the two together, as
+`ReportHeaderWash` does:
+
+```ts
+mountPlayer(frame, canvas, {
+  scene: (module, width, height, dpr) => reportWashScene(module, width, height, { seed, surface, dpr }),
+  crop: reportWashCrop,
+  fit: 'fill',
+  releaseAfterFinish: true,
+});
+```
+
+It is live only, with no baked or static fallback: presentation `off` paints
+nothing, and reduced motion or `still` paints the finished wash.
 
 ## `detectCapabilities`
 
@@ -111,7 +179,19 @@ first artwork mounts. The wasm bindings are loaded through a Vite glob because
 baked instance on the page. Hidden time is not counted as elapsed, so a reveal
 resumes where it paused instead of jumping to the end. Off-screen artworks are
 neither stepped nor rendered (`IntersectionObserver`); a stalled frame is
-clamped to `MAX_FRAME_SECONDS = 0.25`.
+clamped to `MAX_FRAME_SECONDS = 0.25`. Visible, active players rotate first
+admission through a shared CPU/GPU frame budget. Tick and render costs are
+estimated separately. A skipped player's visible elapsed intervals accumulate;
+hidden, offscreen and inactive time does not. The engine retains clock shortfall
+while limiting each advance's tick count. A single indivisible call can overrun
+its estimate; first admission still runs to prevent starvation.
+
+GPU timestamp queries sample the first eligible operation and then every 16th
+eligible operation after the previous readback completes. Tick samples include
+batched dab work; render samples include pigment shading. A playing player
+reserves the ticks its clock is due this frame, a seek or settle slice its first
+tick (the slice then sizes itself to what is left), and a render only when it has
+a new tick or an invalidated frame to draw.
 
 ```ts
 import { getScheduler } from '@nocturne/watercolour';
@@ -165,32 +245,40 @@ size their canvas to the container via `ResizeObserver` (DPR capped at 2), creat
 the player in an effect and dispose it on destroy or when any prop changes.
 Every component accepts the `ArtworkOptions` props (`palette`, `seed`,
 `intensity`, `durationMs`, `motion`, `quality`, `mode`, `autoplay`), an
-optional `surface`, a `fit` prop, an `onready` callback, and `class`.
+optional `surface`, `fit` and `crop` props, an `onready` callback, and `class`.
+A component whose frame has no area (inside `display: none`) creates no player
+until the frame first has one, so a hidden artwork neither holds a live slot nor
+paints a 1x1 still.
 
 Each artwork has a natural aspect (`ARTWORK_ASPECT` / `artworkAspect(id)`; the
 icons and `wash` are square, the scenes and accents keep their authored ratio).
 With `fit="contain"` (default) the canvas is the largest box of that aspect
 inside the container, centred, and the surrounding area stays transparent;
 `fit="fill"` stretches to the container as the components did before aspect
-awareness. `fit` may also be a function of the container size -
-`ConfirmationBackground` uses that to fill only near its 3:1 aspect. `onready`
+awareness. `crop={{ x, y, width, height }}` selects a normalised source window
+inside the painting. The backing canvas remains container-sized; live shading
+and paper generation cover only that window. Simulation detail and paper grain
+retain the full painting's virtual dimensions. Baked strips and stills select
+the same window. `createArtworkPlayer` and `mountPlayer` accept `crop` too.
+`fit` may also be a function of the container size -
+`ConfirmationBackground` uses that to fill a host 2.4:1 or wider and contain a taller one. `onready`
 fires once a backend is drawing; the returned cleanup runs with the player's
 disposal.
 
 | Component | Artwork id it renders | Extra props | Notes |
 |---|---|---|---|
-| `Artwork` | the `artwork` prop, or the `icon` prop (a Lucide element list, takes precedence) | `artwork: ArtworkId`, `icon?: IconArtworkSource`, `assetBaseUrl` | Renders `detailForEdge` from its rendered box's backing long edge (below 64 px small, below 192 px medium, below 320 px large, 320 px and above extraLarge; sim grids 96/160/256/384, the tier's own whatever the canvas size); `surface` defaults from the host theme: a `.dark`/`.light` class on `<html>`, then `<html>`'s computed `color-scheme`, then `prefers-color-scheme`. |
-| `PaintedUnderline` | `tab-underline` | `active: boolean` | `opacity-0` unless `active`; plays once on activation. A 2px hairline in a tab row. |
-| `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A vertical or horizontal edge strip; plays once on activation. |
-| `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `auto` mode with `releaseAfterFinish`, so each head paints one frame live and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
-| `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. |
-| `HeaderMotif` | `header-motif` | - | Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once. |
+| `Artwork` | the `artwork` prop, or the `icon` prop (a Lucide element list, takes precedence) | `artwork: ArtworkId`, `icon?: IconArtworkSource`, `assetBaseUrl` | Renders `detailForEdge` from its rendered box's backing long edge (below 64 px small, below 192 px medium, below 320 px large, 320 px and above extraLarge; sim grids 96/160/256/384, the tier's own whatever the canvas size); `surface` defaults from the host theme: a `.dark`/`.light` class on `<html>`, then `<html>`'s computed `color-scheme`, then `prefers-color-scheme`. `releaseAfterFinish` defaults on unless `autoplay="never"`, so a mounted reveal frees its live slot and GPU memory once its last frame is presented; a host that drives the player with `seek` sets `autoplay="never"`. A released artwork resized past 1.5x (or 1/1.5x) repaints, finished, at its new size once the resize settles; a smaller change only rescales. |
+| `PaintedUnderline` | `tab-underline` | `active: boolean` | `opacity-0` unless `active`; plays once on activation, then releases its live slot. A 6px strip along the bottom of a tab. |
+| `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A 16px vertical or horizontal edge strip, `fit: 'fill'` by default so the stroke runs the item's full length; plays once on activation, then releases its live slot. |
+| `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
+| `ConfirmationBackground` | `confirmation-background` | - | Fills a container 2.4:1 or wider, so its horizontal washes span it; a taller container gets `contain` anchored bottom-left, so the washes are not squashed. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
+| `ReportHeaderWash` | a wash generated for the box (`reportWashScene`) | `name: string`, `position = 'relative'` | Takes only `name`, `position`, `onready` and `class`. Fills its box; the seed derives from `name` via `seedFromName`, so one name always paints the same wash. Repaints on a theme change; plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
 
 ```svelte
 <Artwork artwork="crescent-moon" palette="moonlight" seed={42} surface="dark" class="size-32" />
-<HeaderMotif palette={settings.accentPalette} seed={settings.artworkSeed} class="hidden sm:flex" />
+<ReportHeaderWash name={page.url.pathname} position="absolute" class="inset-0 opacity-35" />
 ```
 
 ## Paint drops
@@ -288,7 +376,7 @@ when nothing fits is nothing drawn.
 
 The catalogue marks this replaced were sized from the surface's short edge, so a
 squarish card got a disc wider than itself - the three surfaces on which that
-blobbed (245x205, 330x330, 403x142) are fixtures on the showcase page.
+blobbed (245x205, 330x330, 403x142) were fixtures on the former showcase.
 
 ### How the stroke is painted
 
@@ -316,7 +404,7 @@ flick and lands with the stroke.
 | `deposit` | What it does |
 |---|---|
 | `wet` (default) | Charges the paper with water along the path first, drops the pigment into it, and adds a darker drop of the shadow pigment at the head. Blooms with a soft edge and granulates. |
-| `stamp` | The pigment stroke alone. Flatter; kept for comparison on the showcase scrubber. |
+| `stamp` | The pigment stroke alone. Flatter; kept for comparison. |
 
 Droplets are flicked, not washed: little water and higher concentration, so they
 dry with an edge.
@@ -329,8 +417,10 @@ page is already at its cap of `DEFAULT_MAX_LIVE_INSTANCES` (4) - the surface sho
 its ordinary hover state and **no mark**. That is the intended behaviour, not an
 error; the old catalogue fallback was judged not worth keeping alongside. One
 surface is one instance, whatever its size, and hover rarely holds more than one
-open. A host that wants the marks calls `getEngineHost().warm()` at idle; without
-it the first pointer pays the engine boot inside its own transition.
+open. A host that wants the marks calls `getEngineHost().warmWhenIdle()` (or
+`warm()` from its own idle hook); without it the first pointer pays the engine
+boot inside its own transition. Warming asks for a WebGPU adapter first, so a
+machine without one fetches and compiles no wasm at all.
 
 The canvas is only as large as the mark needs (`strokeFrame`): the paint plus room
 for the bloom, clipped to the bleed the surface allows, and never more elongated
@@ -379,7 +469,7 @@ request stays live and the player shows the settled frame at once.
 `revealMs` (420 ms by default) is the hover clock, with the settle running 1.45x
 that; the engine's 3 s default reads as a hang on a card. `progress` pins the stroke
 at a point of its settle with the player paused, which is how the two deposits are
-compared at the same instant on the showcase scrubber.
+compared at the same instant.
 
 ### Colour
 
@@ -475,12 +565,7 @@ The live instance costs what any live artwork costs: a device, 50-90 ms to creat
 and a simulation grid sized from the canvas's backing long edge (capped at 512 for a
 drop, about four times the tick cost of 256, affordable because a drop holds one
 checkpoint and two pigments). One surface is one instance, and it runs for well
-under a second. A drop is never seeked unless the showcase scrubber pins it with
-`progress`, so it takes `checkpointBudgetBytes: 1` and holds the single checkpoint
-at tick 0. Measured on the showcase with sixteen surfaces held open at 512, that is
-about 7 MB of checkpoint memory per instance against 25 MB before.
+under a second. A drop is never seeked unless a scrubber pins it with
+`progress`, so it takes `checkpointBudgetBytes: 1` and holds no checkpoint.
 
-`/drops` in the showcase is the working reference: the two deposits side by side on
-a scrubber, the feature cards, buttons and rows, and the three surfaces that blobbed
-in both themes. The page raises the live cap so every surface can be held open at
-once; production keeps the cap of four.
+Production keeps a live cap of four drop surfaces.

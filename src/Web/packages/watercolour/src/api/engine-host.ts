@@ -1,3 +1,5 @@
+import { type Capabilities, detectCapabilities, takeProbedAdapter } from './capabilities';
+import { getPresentation } from './presentation';
 import { WatercolourError, toWatercolourError } from './errors';
 import type { EngineStats, WasmEngine, WasmModule } from './wasm-types';
 
@@ -13,7 +15,14 @@ export interface EngineHostOptions {
   maxLiveInstances?: number;
   /** Test seam: supplies the bindings instead of importing `../wasm`. */
   loadModule?: () => Promise<WasmModule>;
+  /** Test seam: the probe asked before the module is fetched. */
+  capabilities?: () => Promise<Capabilities>;
+  /** Test seam: the adapter the probe was handed, taken once. */
+  probedAdapter?: () => unknown;
 }
+
+/** How long {@link EngineHost.warmWhenIdle} waits for an idle period before warming anyway. */
+export const WARM_IDLE_TIMEOUT_MS = 3000;
 
 export const DEFAULT_MAX_LIVE_INSTANCES = 4;
 
@@ -50,16 +59,21 @@ export class EngineHost {
   private module: WasmModule | undefined;
   private engine: WasmEngine | undefined;
   private leases = 0;
+  private stillQueue: Promise<void> = Promise.resolve();
   private lostFlag = false;
   private readonly lostListeners = new Set<(message: string) => void>();
   private maxLive: number;
   private readonly loadModule: () => Promise<WasmModule>;
+  private readonly capabilities: () => Promise<Capabilities>;
+  private readonly probedAdapter: () => unknown;
   /** Marks for `performance.getEntriesByName`, so hosts can time first paint against init. */
   readonly marks = { moduleLoaded: 'watercolour:module-loaded', engineReady: 'watercolour:engine-ready' };
 
   constructor(options: EngineHostOptions = {}) {
     this.maxLive = options.maxLiveInstances ?? DEFAULT_MAX_LIVE_INSTANCES;
     this.loadModule = options.loadModule ?? importBindings;
+    this.capabilities = options.capabilities ?? detectCapabilities;
+    this.probedAdapter = options.probedAdapter ?? (options.capabilities ? () => undefined : takeProbedAdapter);
   }
 
   get lost(): boolean {
@@ -109,6 +123,29 @@ export class EngineHost {
   }
 
   /**
+   * Waits for the turn of a live instance that renders one frame and releases
+   * (a still), and resolves with the function that ends it.
+   *
+   * Stills mount in bursts - a member list's avatars - and each resolves its
+   * mode before any has taken a slot, so unqueued they claim the whole cap at
+   * once and starve whatever else mounts beside them. One at a time they hold
+   * a single slot.
+   *
+   * A still settles over several frames and holds its turn until it releases.
+   * That costs no throughput: the stills share one frame budget, and a turn
+   * handed over inside a frame starts on what that frame has left (see
+   * `LiveBackend.settle`), so running them side by side would only split the
+   * same budget between them.
+   */
+  stillTurn(): Promise<() => void> {
+    let end!: () => void;
+    const turn = new Promise<void>((resolve) => (end = resolve));
+    const ready = this.stillQueue.then(() => end);
+    this.stillQueue = this.stillQueue.then(() => turn);
+    return ready;
+  }
+
+  /**
    * Builds the device and its pipelines without holding a slot.
    *
    * The first `acquire` blocks the main thread while the wasm module loads and
@@ -118,8 +155,13 @@ export class EngineHost {
    *
    * Resolves `false` when there is no usable GPU. That is not an error: the
    * baked and static paths cover it, and they are what would have been chosen.
+   * The adapter is asked for before the module is fetched, so a machine
+   * without one downloads and compiles nothing.
+   *
+   * Does nothing while the presentation is `off`: nothing will be drawn.
    */
   async warm(): Promise<boolean> {
+    if (getPresentation() === 'off') return false;
     try {
       await this.acquire();
       return true;
@@ -128,6 +170,17 @@ export class EngineHost {
     } finally {
       this.release();
     }
+  }
+
+  /**
+   * {@link warm} in the browser's next idle period, or after `timeoutMs` if
+   * the page never goes idle, so the boot does not compete with first paint.
+   */
+  warmWhenIdle(timeoutMs = WARM_IDLE_TIMEOUT_MS): Promise<boolean> {
+    return new Promise<void>((resolve) => {
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout: timeoutMs });
+      else setTimeout(resolve, 0);
+    }).then(() => this.warm());
   }
 
   onLost(listener: (message: string) => void): () => void {
@@ -146,10 +199,15 @@ export class EngineHost {
 
   private async create(): Promise<EngineLease> {
     if (!this.module) {
+      const capabilities = await this.capabilities();
+      if (!capabilities.webgpu || !capabilities.adapter) {
+        throw new WatercolourError('WebGpuUnavailable', capabilities.reason ?? 'no WebGPU adapter');
+      }
       this.module = await this.loadModule();
       performance.mark?.(this.marks.moduleLoaded);
     }
-    const engine = await this.module.WatercolourEngine.create();
+    const module = this.module;
+    const engine = await answeringAdapterRequest(this.probedAdapter(), () => module.WatercolourEngine.create());
     engine.maxLiveInstances = this.maxLive;
     engine.onDeviceLost((message: string) => this.handleLost(message));
     this.engine = engine;
@@ -163,6 +221,32 @@ export class EngineHost {
     this.lease = undefined;
     const error = new WatercolourError('DeviceLost', message);
     for (const listener of Array.from(this.lostListeners)) listener(error.message);
+  }
+}
+
+/**
+ * Runs `create` with `navigator.gpu.requestAdapter` answering its first call
+ * with `adapter`: the engine asks WebGPU for an adapter of its own, and a
+ * second request is another round trip to the GPU process for the one the
+ * probe already holds. Only that first call is answered.
+ */
+export async function answeringAdapterRequest<T>(adapter: unknown, create: () => Promise<T>): Promise<T> {
+  const gpu = typeof navigator === 'undefined' ? undefined : (navigator as unknown as { gpu?: Record<string, unknown> }).gpu;
+  if (!adapter || !gpu) return create();
+  const own = Object.prototype.hasOwnProperty.call(gpu, 'requestAdapter');
+  const previous = gpu.requestAdapter;
+  const restore = () => {
+    if (own) gpu.requestAdapter = previous;
+    else delete gpu.requestAdapter;
+  };
+  gpu.requestAdapter = () => {
+    restore();
+    return Promise.resolve(adapter);
+  };
+  try {
+    return await create();
+  } finally {
+    restore();
   }
 }
 

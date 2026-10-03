@@ -99,11 +99,5 @@ for the `icon` prop). Build/dev tools are dev-only: `svelte` (5.55.5, MIT),
 `@sveltejs/vite-plugin-svelte` (MIT), `vite` (6.4.1, MIT), `vitest` (4.1.6,
 MIT), `svelte-check`, `typescript`, `@types/node` - none ship to consumers.
 
-The showcase package (`@nocturne/watercolour-showcase`) additionally depends on
-`@nocturne/ui` (workspace), `lucide` (ISC, ^1.47.0 - the Playground's icon
-source), `@lucide/svelte` (ISC), `bits-ui`, `mode-watcher`, `svelte-sonner`,
-`tailwindcss`, `@tailwindcss/vite` and the SvelteKit toolchain for its own
-pages; its licences were not individually re-verified here.
-
 All licences above were confirmed from local metadata. Nothing in this set is
 unconfirmed.

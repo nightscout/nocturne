@@ -46,7 +46,8 @@ Non-square scenes: the core measures paper grain, stamps and feathers in the iso
 metric of `Scene::aspect()` (see the core README). The GPU engine gets that for free
 once its three core calls take the aspect: `PaperField::generate_with_aspect(&scene.paper,
 res, res, scene.aspect())` in `load`, `PaperField::generate_with_pixel_scale(&paper, width,
-height, aspect, render_pixel_scale(width, height, aspect))` for the render paper (the
+height, aspect, render_pixel_scale(width, height, aspect))` for the render paper, which
+`paper.wgsl` reproduces on the GPU (the
 pixel scale sizes one output pixel; the grain band window `grain_band_window(max(w,h))`
 grows with the long edge, so large outputs drop fine octaves), and `paint::rasterize_path_aspect` /
 `rasterize_mask_aspect` with the same aspect where strokes and masks are rasterised.
@@ -54,9 +55,10 @@ Until then the GPU renders non-square scenes in the square metric (stretched gra
 stamps); stamps are CPU-rasterised on both backends, so no shader changes are involved.
 
 Checkpoints are GPU buffer copies under a 256 MB budget
-(`clamp(budget / state_bytes, 1, 64)`: 10 at 512² × 8 pigments, 54 at 256² × 4);
+(`min(budget / state_bytes, 64)`: 10 at 512² × 8 pigments, 54 at 256² × 4, none
+below one);
 `Playback` falls back to reload-and-replay from tick 0 when no checkpoint precedes the
-target. Ticks are encoded in batches of up to 64 per command buffer.
+target. Ticks are encoded in batches of up to 16 per command buffer.
 
 ### Which rules run in shaders
 
@@ -68,6 +70,7 @@ target. Ticks are encoded in batches of up to 64 per command buffer.
 | `transfer.wgsl` | `transfer` | Curtis TransferPigment + evaporation, capillary absorption, drying (`pass_transfer`) | none |
 | `capillary.wgsl` | `capillary`, `capillary_wet` | Curtis SimulateCapillaryFlow (`pass_capillary`): symmetric pair transfer into `s2`, then bloom wetting | none |
 | `apply.wgsl` | `apply_brush`, `apply_water`, `apply_lift`, `dry_all` | `paint::apply_*`, `sim::dry_all` on an uploaded stamp; stroke water scaled by `paint::stroke_water_factor(h)` | none |
+| `paper.wgsl` | `generate_paper` | `PaperField::generate_with_pixel_scale` for the render paper: splitmix64 lattice hash on `u32` pairs, every product that feeds a sum fenced through an integer round trip so no driver fuses it, divisions by integer long division rounded to nearest even, per-field terms from `PaperTerms` | none: bit-identical (`the_gpu_paper_is_bit_identical_to_the_cpu_paper`) |
 | `render.wgsl` | `render` | `optics::render`: cubic B-spline reconstruction (16 taps, ~4× the cell reads of bilinear; see `optics`' module doc), granulation, mixed KM layer, premultiplied conversion with `ALPHA_SOFTNESS` in the `CompositeMode` read from the state header (`StateLayout::composite_mode`, the float after `dry_rate`) | f32 transcendental precision only |
 
 Shared constants (`DRAIN_DEPTH`, `DRAIN_MIN`, `DRAIN_MAX`, `STROKE_WATER_PAPER_GAIN` in
@@ -139,7 +142,7 @@ Ids (they match the TypeScript union): hero icons `crescent-moon`, `alarm-bell`,
 `linked-rings`, `report-pages`, `magnifying-glass`, `confirmation-mark`; scenes
 `moonlit-shoreline` (16:9), `distant-mountains`, `connected-shores` (2:1),
 `overlapping-shapes`; accents `avatar-wash`, `tab-underline` (8:1), `selection-edge`
-(1:6), `confirmation-background` (3:1), `header-motif` (5:1). Unknown ids return `None`.
+(1:6), `confirmation-background` (3:1). Unknown ids return `None`.
 Every artwork derives all randomness from the seed, addresses pigments by
 `PigmentRole` so any palette works, and paints nothing outside its shapes.
 

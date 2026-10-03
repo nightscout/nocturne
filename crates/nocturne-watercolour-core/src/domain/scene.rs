@@ -289,6 +289,26 @@ impl Scene {
             }
         }
         match op {
+            Operation::Dab(s) => {
+                if s.pigment >= self.palette.len() {
+                    errors.push(ValidationError::PigmentIndexOutOfRange {
+                        event,
+                        index: s.pigment,
+                        count: self.palette.len(),
+                    });
+                }
+                check_range(errors, ev, "radius", s.radius, 0.0, MAX_RADIUS);
+                check_range(
+                    errors,
+                    ev,
+                    "concentration",
+                    s.concentration,
+                    0.0,
+                    MAX_CONCENTRATION,
+                );
+                check_range(errors, ev, "water", s.water, 0.0, MAX_WATER);
+                check_range(errors, ev, "softness", s.softness, 0.0, 1.0);
+            }
             Operation::Brush(s) => {
                 if s.pigment >= self.palette.len() {
                     errors.push(ValidationError::PigmentIndexOutOfRange {

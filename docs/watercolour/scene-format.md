@@ -66,12 +66,17 @@ coordinates (measured in the isotropic metric - see Architecture).
 | Variant | Fields |
 |---|---|
 | `brush` | `path: [[x, y]]`, `radius: [start, end]`, `span: [start, end]`, `pigment: usize` (index into palette), `concentration`, `water`, `softness` |
+| `dab` | `center: [x, y]`, `radius`, `pigment`, `concentration`, `water`, `softness` |
 | `water` | `path`, `radius`, `span`, `water`, `softness` |
 | `lift` | `path`, `radius`, `span`, `strength`, `softness` |
 | `dry` | `rate` |
 | `dry_all` | - |
 | `set_mask` | `mask`: `{ polygon: { points, feather } }` or `{ path: { points, radius, feather } }` |
 | `clear_mask` | - |
+
+`dab` deposits one point brush with a uniform radius. It retains the brush's
+seeded radius jitter, paper-grain edge and outward flow. The CPU reference
+rasterises that brush; the GPU evaluates its coverage without a stamp upload.
 
 ### `span` on brush, water and lift strokes
 
@@ -121,6 +126,13 @@ instead of a catalogue id. Its arguments are the element list JSON, the icon
 `name`, then the same `seed`/`palette`/`intensity`/`detail`/`surface`/
 `simResolution` as `catalogueScene`, and the hints JSON (`""` keeps the
 defaults).
+
+A live player does not take either document: `createCatalogueInstance` and
+`createIconInstance` on the engine take the same arguments followed by
+`createInstance`'s, and author the scene straight into the playback, so it never
+crosses to JavaScript as JSON. `createInstance` with the document plays the same
+scene to the bit (tested); a build without the direct constructors is driven
+through the document.
 
 **The element list** is the vanilla `lucide` package's `IconNode` shape: a
 `[tag, attrs]` pair per element in a 24-grid stroke-drawn icon. The authoring
@@ -211,7 +223,7 @@ bundled set only - an `assetBaseUrl` is served exactly as requested.
 
 | Artwork | Default palette |
 |---|---|
-| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell` | `moonlight` |
+| `crescent-moon`, `moonlit-shoreline`, `alarm-bell` | `moonlight` |
 | `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge` | `water` |
 | `overlapping-shapes`, `linked-rings` | `dusk` |
 | `confirmation-mark`, `confirmation-background` | `moss` |

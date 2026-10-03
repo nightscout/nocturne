@@ -4,13 +4,13 @@ export { default as PaintedUnderline } from './components/PaintedUnderline.svelt
 export { default as SelectionEdge } from './components/SelectionEdge.svelte';
 export { default as AvatarWash } from './components/AvatarWash.svelte';
 export { default as ConfirmationBackground } from './components/ConfirmationBackground.svelte';
-export { default as HeaderMotif } from './components/HeaderMotif.svelte';
+export { default as ReportHeaderWash } from './components/ReportHeaderWash.svelte';
 export { default as DropSurface } from './components/DropSurface.svelte';
 export { default as DropGroup } from './components/DropGroup.svelte';
 export { createDropGroup, getDropGroup, setDropGroup } from './components/drop-group';
 export type { DropGroupContext } from './components/drop-group';
-export type { PlayerReadyCallback } from './components/helpers';
-export { hostSurface, watchSurface } from './components/helpers';
+export type { MountOptions, PlayerReadyCallback, PlayerStateCallback } from './components/helpers';
+export { hostSurface, watchSurface, mountPlayer } from './components/helpers';
 
 export type {
   ArtworkId,
@@ -21,6 +21,7 @@ export type {
   ArtworkQuality,
   ArtworkAutoplay,
   FitMode,
+  CropWindow,
   Surface,
   DetailLevel,
   IconNode,
@@ -31,18 +32,22 @@ export type {
 export { ARTWORK_IDS, PALETTE_IDS, DEFAULT_INTENSITY, DEFAULT_DURATION_MS, DEFAULT_TAIL, DEFAULT_REVEAL_MS, REVEAL_SETTLE_RATIO, ARTWORK_ASPECT, artworkAspect, seedFromName, detailForEdge } from './types';
 
 export { createArtworkPlayer } from './api/playback';
-export type { ArtworkPlayer, PlayerOptions, PlayerState, PlayerEvent, FallbackDetail } from './api/playback';
+export type { ArtworkPlayer, PlayerOptions, PlayerProgressCallback, PlayerState, PlayerEvent, FallbackDetail } from './api/playback';
 
 export { catalogueIds } from './api/catalogue';
 
 export { detectCapabilities, probeCapabilities, resetCapabilitiesCache, prefersReducedMotion } from './api/capabilities';
 export type { Capabilities, CapabilityEnvironment } from './api/capabilities';
 
-export { EngineHost, getEngineHost, configureEngineHost, DEFAULT_MAX_LIVE_INSTANCES } from './api/engine-host';
+export { EngineHost, getEngineHost, configureEngineHost, DEFAULT_MAX_LIVE_INSTANCES, WARM_IDLE_TIMEOUT_MS } from './api/engine-host';
 export type { EngineHostOptions, EngineLease, EngineStats, WasmModule } from './api/engine-host';
 
 export { Scheduler, getScheduler, MAX_FRAME_SECONDS } from './api/scheduler';
+export { NEAR_VIEWPORT_MARGIN } from './api/viewport';
 export type { SchedulerEnv, SchedulerHandle, SchedulerTarget, FrameStats } from './api/scheduler';
+
+export { getPresentation, setPresentation, subscribePresentation, PRESENTATIONS } from './api/presentation';
+export type { Presentation } from './api/presentation';
 
 export { resolveMode, resolveMotion, fallbackOrder } from './api/mode';
 export type { ResolvedMode, ModeInputs } from './api/mode';
@@ -87,3 +92,9 @@ export type { PigmentColours } from './api/drop-colour';
 
 export { WatercolourError, toWatercolourError } from './api/errors';
 export type { WatercolourErrorCode } from './api/errors';
+
+export { bloomScene } from './api/bloom-scene';
+export type { BloomSceneOptions } from './api/bloom-scene';
+
+export { reportWashScene, reportWashCrop } from './api/report-wash-scene';
+export type { ReportWashOptions } from './api/report-wash-scene';

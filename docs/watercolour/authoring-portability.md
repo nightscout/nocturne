@@ -12,8 +12,7 @@ existing Lucide icon set feed the engine so icons stop being hand-authored?
   generated, seven need mark-thickness or fill tuning, none is structurally
   impossible. Two Lucide-derived icons (`calendar`, `bell`) read better than
   their hand-authored counterparts. This is now in the library (`svg_icon_scene`,
-  wasm `iconScene`, TS `{ icon, name }` source, `Artwork icon=` prop) and in the
-  showcase Playground.
+  wasm `iconScene`, TS `{ icon, name }` source, `Artwork icon=` prop).
 - **JSON is the wrong target for the procedural scenes.** The nine wide scenes and
   accents are seeded, procedural geometry (crescent, hills, water body, wobble);
   expressing them as a document means re-implementing those primitives in a

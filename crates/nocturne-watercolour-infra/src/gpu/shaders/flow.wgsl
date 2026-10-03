@@ -6,9 +6,11 @@
 // Deviations from Curtis are those of the CPU reference (water advected,
 // pigment diffusion, depth- and height-scaled drain).
 //
-// Then the standing-water swirl (sim::swirl_tick, domain::swirl): the
-// taper's distance field, the corner stream function once per tick, and the
-// upwind substeps the host dispatches; and the tick clock.
+// Advect leaves water and suspended pigment in scratch. Then the
+// standing-water swirl (sim::swirl_tick, domain::swirl): the taper's
+// distance field, the corner stream function once per tick, and the upwind
+// substeps the host dispatches, alternating the suspended pigment between
+// scratch and state; `transfer` reads whichever holds the latest.
 //
 // No deviation from the CPU reference.
 
@@ -45,6 +47,50 @@ fn blur_v(@builtin(global_invocation_id) gid: vec3<u32>) {
         sum += scratch[so_blur_tmp() + u32(sy * w + x)];
     }
     scratch[so_blurred() + i] = sum * inv;
+}
+
+// blur_h and blur_v in one dispatch, for a radius up to BLUR_MAX_RADIUS. A
+// workgroup covers a 16x16 tile: it runs blur_h over the tile's columns for
+// its rows and `radius` rows either side into workgroup memory, then blur_v
+// over the tile from there. Each value is blur_h's and blur_v's own sum, in
+// their order, so the blurred mask is the two-pass one.
+const BLUR_MAX_RADIUS: u32 = 8u;
+var<workgroup> blur_rows: array<f32, 512>;
+
+@compute @workgroup_size(256)
+fn blur(
+    @builtin(workgroup_id) wg: vec3<u32>,
+    @builtin(local_invocation_index) lid: u32,
+) {
+    let w = i32(P.width);
+    let h = i32(P.height);
+    let radius = i32(P.blur_radius);
+    let inv = 1.0 / f32(2 * radius + 1);
+    let x0 = i32(wg.x * 16u);
+    let top = i32(wg.y * 16u);
+    let y0 = top - radius;
+    for (var c = lid; c < (16u + 2u * u32(radius)) * 16u; c += 256u) {
+        let x = x0 + i32(c % 16u);
+        let y = y0 + i32(c / 16u);
+        if x < w && y >= 0 && y < h {
+            var sum = 0.0;
+            for (var dx = -radius; dx <= radius; dx++) {
+                let sx = clamp(x + dx, 0, w - 1);
+                sum += state[o_wet() + u32(y * w + sx)];
+            }
+            blur_rows[c] = sum * inv;
+        }
+    }
+    workgroupBarrier();
+    let x = x0 + i32(lid % 16u);
+    let y = top + i32(lid / 16u);
+    if x >= w || y >= h { return; }
+    var sum = 0.0;
+    for (var dy = -radius; dy <= radius; dy++) {
+        let sy = clamp(y + dy, 0, h - 1);
+        sum += blur_rows[u32(sy - y0) * 16u + u32(x - x0)];
+    }
+    scratch[so_blurred() + u32(y * w + x)] = sum * inv;
 }
 
 fn diffusion_weight(i: u32, j: u32, coef: f32, pi: f32) -> f32 {
@@ -135,7 +181,7 @@ fn swirl_value_noise(qx: f32, qy: f32, seed: u32) -> f32 {
 }
 
 fn swirl_blocks(j: u32) -> bool {
-    return wet(j) == 0.0 || state[o_p() + j] < P.swirl_depth;
+    return wet(j) == 0.0 || scratch[so_p() + j] < P.swirl_depth;
 }
 
 // sim::pass_swirl_distance_h.
@@ -218,11 +264,9 @@ fn swirl_stream(@builtin(global_invocation_id) gid: vec3<u32>) {
     scratch[so_psi() + c] = psi;
 }
 
-// sim::pass_swirl: one substep.
-@compute @workgroup_size(256)
-fn swirl(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if i >= P.n { return; }
+// sim::pass_swirl: one substep, from scratch into state when
+// `from_scratch`, else the other way.
+fn swirl_substep(i: u32, from_scratch: bool) {
     let cw = P.width + 1u;
     let x = i % P.width;
     let y = i / P.width;
@@ -238,14 +282,34 @@ fn swirl(@builtin(global_invocation_id) gid: vec3<u32>) {
     let in_u = max(s.z, 0.0) * P.dt;
     let in_d = max(-s.w, 0.0) * P.dt;
     for (var k = 0u; k < P.pigment_count; k++) {
-        let base = o_g(k);
-        let ng = state[base + i] * keep + in_l * state[base + nb.x] + in_r * state[base + nb.y] + in_u * state[base + nb.z] + in_d * state[base + nb.w];
-        scratch[so_g(k) + i] = clamp(ng, 0.0, P.max_suspended);
+        if from_scratch {
+            let base = so_g(k);
+            let ng = scratch[base + i] * keep + in_l * scratch[base + nb.x] + in_r * scratch[base + nb.y] + in_u * scratch[base + nb.z] + in_d * scratch[base + nb.w];
+            state[o_g(k) + i] = clamp(ng, 0.0, P.max_suspended);
+        } else {
+            let base = o_g(k);
+            let ng = state[base + i] * keep + in_l * state[base + nb.x] + in_r * state[base + nb.y] + in_u * state[base + nb.z] + in_d * state[base + nb.w];
+            scratch[so_g(k) + i] = clamp(ng, 0.0, P.max_suspended);
+        }
     }
 }
 
-// sim::step's closing `grid.tick = (grid.tick + 1).min(MAX_TICK)`.
-@compute @workgroup_size(1)
-fn clock() {
+@compute @workgroup_size(256)
+fn swirl_from_scratch(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    swirl_substep(i, true);
+}
+
+@compute @workgroup_size(256)
+fn swirl_from_state(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if i >= P.n { return; }
+    swirl_substep(i, false);
+}
+
+// sim::step's closing `grid.tick = (grid.tick + 1).min(MAX_TICK)`, run by
+// the tick's last dispatch; nothing in that dispatch reads the tick.
+fn advance_clock() {
     state[o_tick()] = min(state[o_tick()] + 1.0, MAX_TICK);
 }

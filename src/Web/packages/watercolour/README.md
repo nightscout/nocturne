@@ -114,7 +114,8 @@ The component sizes its canvas to the container (`ResizeObserver`, DPR capped at
 canvas to the largest box of that aspect that fits and centring it, leaving the
 surrounding area transparent; `fit="fill"` stretches to the container. The
 accent components (`PaintedUnderline`, `SelectionEdge`, `AvatarWash`,
-`ConfirmationBackground`, `HeaderMotif`) take the same `fit` prop; the artwork
+`ConfirmationBackground`) take the same `fit` prop
+(`ConfirmationBackground` defaults to filling a host 2.4:1 or wider); the artwork
 is `aria-hidden` with `role="presentation"`. The player is created in an effect
 and disposed on destroy or when any prop changes. It maps props to
 `createArtworkPlayer` options and nothing else.
@@ -144,7 +145,6 @@ through a radial mask spreading from where the brush touched down.
 The full contract - the three-layer stack, the placement rules, the reveal
 curves and both colour directions - is in
 [`docs/watercolour/public-api.md`](../../../docs/watercolour/public-api.md#paint-drops).
-`/drops` in the showcase is the working reference.
 
 ## Modes and fallbacks
 
@@ -152,7 +152,7 @@ curves and both colour directions - is in
 |---|---|---|---|
 | `live` | WebGPU via the wasm engine, presented straight to the canvas | `navigator.gpu`, an adapter, a free slot under `maxLiveInstances` (default 4) | Preferred when available and motion is not reduced |
 | `baked` | 2D canvas, cross-fading two frames of a PNG strip | the strip + manifest asset (bundled or `assetBaseUrl`) | No usable GPU or the instance cap is reached |
-| `static` | 2D canvas, the finished PNG drawn once | the final asset | Reduced motion (first choice), or nothing else works |
+| `static` | 2D canvas, the finished still drawn once: `final-128` up to 128 device px on the long edge, else `final-512` | the final asset | Reduced motion (first choice), or nothing else works |
 | `none` | nothing | - | No GPU and no asset; `error` fires with a typed code |
 
 Explicit modes fall down the same chain when unavailable (`live` -> `baked` ->
@@ -161,11 +161,21 @@ that dies at runtime (device lost, render error) emits `fallback` and the player
 moves down the chain without retrying live. Reduced motion (`motion: 'reduced'`,
 or `'auto'` with `prefers-reduced-motion`) shows the finished frame at once: static
 if an asset exists, else the live engine finished immediately, else the strip's
-last frame. `releaseAfterFinish` makes live finish on first appearance, present
-one frame and then dispose the engine instance (the canvas keeps the pixels), so
-the artwork holds no live slot or checkpoints; under reduced motion it also lets
-`auto` pick live over the identical baked still, which is what gives `AvatarWash`
-its per-name wash. `autoplay: 'once'` starts on first appearance (the shared
+last frame. `releaseAfterFinish` disposes the engine instance once the reveal has
+finished and its frame is presented (the canvas keeps the pixels, and a later
+resize only rescales them), so the artwork holds no live slot or checkpoints
+afterwards. Under reduced motion or `autoplay: 'never'` it runs straight to the
+end and presents once: the run is spread over frames, a few milliseconds of main
+thread each (`SETTLE_FRAME_BUDGET_MS`), and it keeps going off screen once started
+so it can let go. Such stills take their live turn one at a time
+(`EngineHost.stillTurn`), so a burst of them - a member list's avatars - holds one
+slot rather than the whole cap. Under reduced motion it lets `auto` pick live over
+the baked still only when the caller set a `seed` or `intensity` the bake cannot
+show, which is what gives `AvatarWash` its per-name wash; an unseeded artwork
+draws its still. No player resolves its mode, decodes an asset or takes a live
+slot until its canvas is within 200 px of the viewport. The
+accent components (`PaintedUnderline`, `SelectionEdge`) set it too,
+so a one-shot accent does not pin a slot for as long as it is mounted. `autoplay: 'once'` starts on first appearance (the shared
 `IntersectionObserver`) and never loops; `'never'` waits for `play()`.
 
 A canvas that has produced a WebGPU context cannot produce a 2D one, so a fallback
@@ -199,7 +209,7 @@ intensity 0.7 and `large` detail by
 
 | Artwork | Palette |
 |---|---|
-| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell` | `moonlight` |
+| `crescent-moon`, `moonlit-shoreline`, `alarm-bell` | `moonlight` |
 | `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge` | `water` |
 | `overlapping-shapes`, `linked-rings` | `dusk` |
 | `confirmation-mark`, `confirmation-background` | `moss` |
@@ -227,14 +237,14 @@ to the bundled set only - an `assetBaseUrl` is served exactly as requested.
 ## Performance
 
 Measured on Chrome 153, Windows 11, RTX 5060 Laptop GPU, at a 512 x 512 canvas
-with a 256 x 256 simulation grid (the showcase defaults), unless noted.
+with a 256 x 256 simulation grid (the former showcase's defaults; the bench harness in `bench/` is the measurement tool now), unless noted.
 
 - **wasm module**: 778 KB, 277 KB gzip (`build:wasm` reports the live sizes).
 - **GPU init** (adapter + device + pipeline compile, one per page): 59-90 ms
   warm; about 2.1 s cold. Reported as `engine.stats().initMs`.
 - **First painted frame**: 1.1-1.6 s warm after a cold `createArtworkPlayer`,
   from `performance.mark` around module load, engine init and the first
-  presented frame (the showcase exposes it as `watercolour:first-paint`).
+  presented frame (the former showcase exposed it as `watercolour:first-paint`).
 - **Steady-state scheduler cost**: about 0.2 ms per frame (CPU step + render
   submission, measured with `performance.now`); the scheduler keeps a frame-time
   histogram (`getScheduler().stats()`).
@@ -265,7 +275,7 @@ single-run spot checks on the machine above, not a benchmark harness.
 portable; the wasm crate is ~400 lines of glue. A native host implements the same
 three things this package does around them: create a `GpuContext`, attach a
 `PresentSurface` (`GpuContext::create_window_surface` takes any
-`wgpu::SurfaceTarget`; `GpuEngine::present` blits the frame with `present.wgsl`),
+`wgpu::SurfaceTarget`; `GpuEngine::present` shades the frame straight into it),
 and resolve assets for the baked/static paths. `PngExporter`, `FrameSequence` and
 the `scene_tools` module (catalogue lookup, intensity, strip stitching, manifest)
 run unchanged on the host.

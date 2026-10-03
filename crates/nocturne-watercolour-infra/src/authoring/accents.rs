@@ -3,7 +3,7 @@
 
 use nocturne_watercolour_core::domain::{Palette, Paper, PigmentRole, Point, Scene, SizeHint};
 
-use super::geometry::{Crescent, Frame, Hills};
+use super::geometry::Frame;
 use super::{Painting, SQUARE, Style, brush, role, tapered, water};
 
 pub(super) const TAB: SizeHint = SizeHint {
@@ -19,11 +19,6 @@ pub(super) const EDGE: SizeHint = SizeHint {
 pub(super) const BANNER_3_1: SizeHint = SizeHint {
     width: 512,
     height: 171,
-};
-
-pub(super) const HEADER_5_1: SizeHint = SizeHint {
-    width: 512,
-    height: 102,
 };
 
 /// A loose disc of the base pigment with the accent and shadow dropped in
@@ -300,120 +295,6 @@ pub(super) fn confirmation_background(style: &Style, palette: &Palette) -> Scene
         "confirmation-background",
         palette,
         BANNER_3_1,
-        Paper::cold_press(style.seed()),
-        p.finish(),
-    )
-}
-
-/// A low horizon of distant hills with a small moon; very restrained.
-pub(super) fn header_motif(style: &Style, palette: &Palette) -> Scene {
-    let frame = Frame::new(HEADER_5_1);
-    let base = role(palette, PigmentRole::BaseWash);
-    let shadow = role(palette, PigmentRole::Shadow);
-    let glow = role(palette, PigmentRole::Glow);
-    let base_y = 0.97;
-    let mut stream = style.stream(3);
-    let far = Hills {
-        base_y,
-        bumps: vec![(1.2, 0.7, 0.35), (3.0, 0.9, 0.42), (4.4, 0.6, 0.3)],
-        wobble: 0.03,
-        seed: nocturne_watercolour_core::domain::Seed(stream.next_u64()),
-    };
-    let near = Hills {
-        base_y,
-        bumps: vec![(0.5, 0.5, 0.18), (2.2, 0.6, 0.22), (3.9, 0.7, 0.2)],
-        wobble: 0.02,
-        seed: nocturne_watercolour_core::domain::Seed(stream.next_u64()),
-    };
-    let mut p = Painting::new(style.ticks(420));
-    let fill = |pigment: usize, conc: f32, rows: usize| {
-        let radius = frame.hatch_radius(0.45, base_y, rows);
-        // The stencil owns the silhouette; the body only has to deliver pigment
-        // inside it. Pre-wet the footprint, then hatch the pigment in so the
-        // reveal has a path to pace. The turns sit outside the mask.
-        (
-            water(
-                frame.line(0.0, 0.75, 5.0, 0.75),
-                0.4,
-                style.water(0.75),
-                0.15,
-            ),
-            brush(
-                frame.hatch(0.0, 5.0, 0.45, base_y, rows),
-                radius,
-                pigment,
-                style.conc(conc * 0.6),
-                style.water(0.42),
-                0.75,
-            ),
-        )
-    };
-    p.mask(
-        0.0,
-        frame.ridge(0.0, 5.0, base_y, 60, |x| far.height(x)),
-        0.006,
-    );
-    let (far_wet, far_hatch) = fill(base, 0.35, if style.fine() { 8 } else { 5 });
-    p.at(0.0, far_wet);
-    p.at(0.0, far_hatch);
-    if style.fine() {
-        p.glaze(0.4, 0.1);
-        p.mask(
-            0.4,
-            frame.ridge(0.0, 5.0, base_y, 60, |x| near.height(x)),
-            0.006,
-        );
-        let (near_wet, near_hatch) = fill(shadow, 0.4, 8);
-        p.at(0.4, near_wet);
-        p.at(0.4, near_hatch);
-    }
-    let moon = 0.7;
-    let (mx, my, mr) = (0.9, 0.36, 0.14);
-    p.glaze(moon, 0.1);
-    if style.full() {
-        let crescent = Crescent::at(mx, my, mr, 0.3);
-        p.mask(moon, frame.map(&crescent.mask_outline(0.02, 64)), 0.004);
-        let spine = frame.map(&crescent.spine(7));
-        let mid = spine.len() / 2;
-        let body = |path: Vec<Point>, radius: (f32, f32)| {
-            let (conc, wet) = style.glow(1.3, 0.7);
-            tapered(path, radius, glow, conc, wet, 0.3)
-        };
-        p.at(moon, body(spine[..=mid].to_vec(), (0.03, 0.07)));
-        p.at(moon, body(spine[mid..].to_vec(), (0.07, 0.03)));
-        if !style.dark() {
-            let concave = frame.map(&crescent.concave_edge(0.4, 7));
-            p.at(
-                moon + 0.04,
-                brush(
-                    concave[2..=4].to_vec(),
-                    0.02,
-                    shadow,
-                    style.conc(0.4),
-                    style.water(0.2),
-                    0.9,
-                ),
-            );
-        }
-    } else {
-        p.mask(moon, frame.circle(mx, my, mr, 24), 0.004);
-        p.at(
-            moon,
-            brush(
-                vec![frame.pt(mx, my)],
-                0.16,
-                glow,
-                style.glow(1.4, 0.6).0,
-                style.glow(1.4, 0.6).1,
-                0.2,
-            ),
-        );
-    }
-    p.settle(0.9, 3.0);
-    style.scene(
-        "header-motif",
-        palette,
-        HEADER_5_1,
         Paper::cold_press(style.seed()),
         p.finish(),
     )
