@@ -19,7 +19,9 @@ namespace Nocturne.API.Tests.Integration;
 /// Nightscout write-back sends a record upstream under a 24-hex id: its uuid-shaped legacy id's
 /// prefix, or, with no legacy id, its own uuid's prefix (older write-backs sent the raw uuid). The
 /// Nightscout connector pulls the copy back through the same decomposers a v1 upload reaches, so
-/// replaying that copy as a v1 upload exercises the round trip end to end against Postgres (#1804).
+/// replaying a prefixed copy as a v1 upload exercises the round trip end to end against Postgres
+/// (#1804). A raw uuid names the reading only on a pulled copy: from any other uploader it is a
+/// legacy id of its own (#1849).
 /// </summary>
 [Trait("Category", "Integration")]
 public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, ITestOutputHelper output)
@@ -75,27 +77,58 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
     private static long PastTheV1DuplicateWindow(long date) => date + (long)TimeSpan.FromMinutes(6).TotalMilliseconds;
 
     /// <summary>
-    /// The uuid is what write-back sends today; the 24-hex prefix is what every v1/v3 read serves
-    /// for the reading, and so what a client echoing a read sends.
+    /// The uuid is what older write-backs sent, so it comes back on a copy the connector pulls; the
+    /// 24-hex prefix is what every v1/v3 read serves for the reading, and so what a client echoing a
+    /// read uploads. A copy the connector pulls of a reading write-back may have sent is its echo and
+    /// changes nothing; an upload is an edit.
     /// </summary>
     public static TheoryData<string> WireForms => new() { "uuid", "prefix" };
 
     private static string WireId(Guid id, string form) => form == "uuid" ? id.ToString() : MongoObjectId.FromGuid(id);
 
-    [Theory]
-    [MemberData(nameof(WireForms))]
-    public async Task APulledBackReading_UpdatesTheReadingItCameFrom(string form)
+    private async Task EchoReadingAsync(Guid id, string form, string device, long date, int sgv)
+    {
+        if (form == "uuid")
+        {
+            var pulled = PulledReading(device, date, sgv, null);
+            pulled.Id = id.ToString();
+            await PublishAsync(p => p.Glucose.PublishEntriesAsync([pulled], ConnectorSource, WriteOrigin.Live));
+            return;
+        }
+
+        (await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", new[] { Reading(device, date, sgv, WireId(id, form)) }))
+            .IsSuccessStatusCode.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task AnUploadedReadingUnderTheServedPrefix_UpdatesTheReadingItCameFrom()
     {
         var device = $"echo-{Guid.NewGuid():N}";
         var date = DateTimeOffset.UtcNow.AddMinutes(-30).ToUnixTimeMilliseconds();
         var id = await CreateUnkeyedReadingAsync(device, date);
         var servedAs = (await V1Async("entries", device)).Single().Id;
 
-        var echoed = await AuthenticatedClient.PostAsJsonAsync(
-            "/api/v1/entries", new[] { Reading(device, PastTheV1DuplicateWindow(date), sgv: 112, WireId(id, form)) });
+        await EchoReadingAsync(id, "prefix", device, PastTheV1DuplicateWindow(date), sgv: 112);
 
-        echoed.IsSuccessStatusCode.Should().BeTrue();
         (await LiveSensorReadingsAsync(device)).Should().Equal((id, 112d));
+        (await V1Async("entries", device)).Select(r => r.Id).Should().Equal(servedAs);
+    }
+
+    /// <summary>
+    /// A copy pulled back under the raw uuid an older write-back sent is that reading's write-back
+    /// echo: it lands on the reading and changes nothing.
+    /// </summary>
+    [Fact]
+    public async Task APulledBackReadingUnderItsRawUuid_LandsOnTheReadingItCameFromAndChangesNothing()
+    {
+        var device = $"echo-{Guid.NewGuid():N}";
+        var date = DateTimeOffset.UtcNow.AddMinutes(-35).ToUnixTimeMilliseconds();
+        var id = await CreateUnkeyedReadingAsync(device, date);
+        var servedAs = (await V1Async("entries", device)).Single().Id;
+
+        await EchoReadingAsync(id, "uuid", device, PastTheV1DuplicateWindow(date), sgv: 112);
+
+        (await LiveSensorReadingsAsync(device)).Should().Equal((id, 111d));
         (await V1Async("entries", device)).Select(r => r.Id).Should().Equal(servedAs);
     }
 
@@ -108,7 +141,7 @@ public class WriteBackEchoIntegrationTests(ApiIntegrationTestFixture fixture, IT
         var id = await CreateUnkeyedReadingAsync(device, date);
         (await AuthenticatedClient.DeleteAsync($"/api/v4/glucose/sensor/{id}")).IsSuccessStatusCode.Should().BeTrue();
 
-        await AuthenticatedClient.PostAsJsonAsync("/api/v1/entries", new[] { Reading(device, PastTheV1DuplicateWindow(date), sgv: 112, WireId(id, form)) });
+        await EchoReadingAsync(id, form, device, PastTheV1DuplicateWindow(date), sgv: 112);
 
         (await LiveSensorReadingsAsync(device)).Should().BeEmpty();
         (await V1Async("entries", device)).Should().BeEmpty();
