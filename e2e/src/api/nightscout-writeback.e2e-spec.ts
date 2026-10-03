@@ -501,12 +501,6 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.9]);
   });
 
-  const tempBasalsAround = (at: string) => {
-    const from = encodeURIComponent(new Date(Date.parse(at) - MINUTE).toISOString());
-    const to = encodeURIComponent(new Date(Date.parse(at) + MINUTE).toISOString());
-    return tenant.api.ok<Page<{ id: string }>>("GET", `/api/v4/insulin/temp-basals?limit=50&from=${from}&to=${to}`);
-  };
-
   /** Stores a v1 upload with write-back off, so that only what the spec puts upstream is there. */
   async function uploadWithoutWriteBack(upload: Record<string, unknown>): Promise<void> {
     await writeBack(false);
