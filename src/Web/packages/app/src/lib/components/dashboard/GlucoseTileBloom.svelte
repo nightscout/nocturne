@@ -34,16 +34,12 @@
       slope: Math.min(1, Math.max(-1, delta / 15)),
       colour: tokenColour(el, token),
     }));
-    return mountPlayer(
-      container, el, undefined,
-      {
-        scene: (module, width, height, dpr) => bloomScene(module, width, height, { ...reading, dpr }),
-        fit: "fill", mode: "live", durationMs: 5200, tail: 0.5, releaseAfterFinish: true,
-        onProgress: (progress) => untrack(() => onprogress(progress)),
-      },
-      undefined,
-      (state) => untrack(() => onstatechange(state)),
-    );
+    return mountPlayer(container, el, {
+      scene: (module, width, height, dpr) => bloomScene(module, width, height, { ...reading, dpr }),
+      fit: "fill", mode: "live", durationMs: 5200, tail: 0.5, releaseAfterFinish: true,
+      onProgress: (progress) => untrack(() => onprogress(progress)),
+      onStateChange: (state) => untrack(() => onstatechange(state)),
+    });
   });
 </script>
 

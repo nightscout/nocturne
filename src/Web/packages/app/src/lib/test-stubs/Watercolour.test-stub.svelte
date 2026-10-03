@@ -5,7 +5,13 @@
 -->
 <script module lang="ts">
   import { SvelteSet } from "svelte/reactivity";
-  import type { mountPlayer as MountPlayer, PlayerState, PlayerStateCallback, WasmModule } from "@nocturne/watercolour";
+  import type {
+    mountPlayer as MountPlayer,
+    PlayerProgressCallback,
+    PlayerState,
+    PlayerStateCallback,
+    WasmModule,
+  } from "@nocturne/watercolour";
 
   export interface FakePainting {
     /** `artwork` for an `Artwork`, `scene` for a scene-built player. */
@@ -20,12 +26,12 @@
     live: () => [...live],
   };
 
-  function start(painting: Omit<FakePainting, "paint">, onstatechange?: PlayerStateCallback, onProgress?: (progress: number) => void) {
+  function start(painting: Omit<FakePainting, "paint">, onstatechange?: PlayerStateCallback, onProgress?: PlayerProgressCallback) {
     const playing: FakePainting = {
       ...painting,
       paint(progress, finished = false) {
-        onProgress?.(progress);
-        const state: PlayerState = { mode: "live", motion: "full", playing: !finished, finished, progress, easedProgress: progress };
+        onProgress?.(progress, false);
+        const state: PlayerState = { mode: "live", motion: "full", playing: !finished, finished, seeking: false, progress, easedProgress: progress };
         onstatechange?.(state);
       },
     };
@@ -35,8 +41,8 @@
     };
   }
 
-  export const mountPlayer: typeof MountPlayer = (_frame, _canvas, _id, options, _onready, onstatechange) =>
-    start({ scene: options.scene?.({} as WasmModule, 300, 100, 1) }, onstatechange, options.onProgress);
+  export const mountPlayer: typeof MountPlayer = (_frame, _canvas, options) =>
+    start({ scene: options.scene?.({} as WasmModule, 300, 100, 1) }, options.onStateChange, options.onProgress);
 
   export const bloomScene = (_module: unknown, _width: number, _height: number, options: unknown) => options;
 </script>
