@@ -1957,7 +1957,7 @@ impl GpuEngine {
         if let Some(t) = self.timers.as_mut() {
             t.collect();
         }
-        let timer = self.render_timer();
+        let timer = self.claim_render_sample();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let readback = target
@@ -2024,7 +2024,7 @@ impl GpuEngine {
         if let Some(t) = self.timers.as_mut() {
             t.collect();
         }
-        let timer = self.render_timer();
+        let timer = self.claim_render_sample();
         let l = self.loaded()?;
         let target = self.render_target()?;
         let uniform = self.render_uniform(l, width, height, 0, encode_srgb);
@@ -2088,12 +2088,12 @@ impl GpuEngine {
         Ok(())
     }
 
-    /// The render timer when it is free to take a sample.
-    fn render_timer(&self) -> Option<&GpuTimer> {
+    /// The render timer if this render is to be sampled; see [`GpuTimer::claim_sample`].
+    fn claim_render_sample(&self) -> Option<&GpuTimer> {
         self.timers
             .as_ref()
             .map(|t| &t.render)
-            .filter(|t| t.sample_due())
+            .filter(|t| t.claim_sample())
     }
 
     /// The optics pass alone, with no readback or presentation; for timing.
@@ -2736,7 +2736,7 @@ impl Simulator for GpuEngine {
         let mut sample = false;
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            sample = sample_free && t.tick.sample_due();
+            sample = sample_free && t.tick.claim_sample();
             if sample {
                 t.sampled_ticks = ticks;
             }
@@ -2815,7 +2815,7 @@ impl Simulator for GpuEngine {
             let mut sample = false;
             if let Some(t) = self.timers.as_mut() {
                 t.collect();
-                sample = sample_free && t.tick.sample_due();
+                sample = sample_free && t.tick.claim_sample();
                 if sample {
                     t.sampled_ticks = batch;
                 }
