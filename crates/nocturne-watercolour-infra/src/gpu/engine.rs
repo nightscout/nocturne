@@ -24,7 +24,7 @@ use nocturne_watercolour_core::domain::{
 };
 
 use super::context::GpuContext;
-use super::interpolation::Interpolation;
+use super::interpolation::{BlendPipelines, Interpolation};
 use super::layout::StateLayout;
 use super::surface::PresentSurface;
 use super::timer::GpuTimer;
@@ -653,6 +653,7 @@ pub struct GpuEngine {
     paper_cache: PaperCache,
     pool: BufferPool,
     timers: Option<Timers>,
+    blend: BlendPipelines,
     interpolation: Option<Interpolation>,
     crop: [f32; 4],
 }
@@ -962,6 +963,7 @@ impl GpuEngine {
             paper_cache: Arc::default(),
             pool: Arc::default(),
             timers,
+            blend: BlendPipelines::default(),
             interpolation: None,
             crop: [0.0, 0.0, 1.0, 1.0],
         };
@@ -982,6 +984,7 @@ impl GpuEngine {
             present: self.present.clone(),
             paper: self.paper.clone(),
             loaded: None,
+            blend: self.blend.clone(),
             interpolation: None,
             crop: [0.0, 0.0, 1.0, 1.0],
             next_checkpoint: 1,
@@ -2255,6 +2258,7 @@ impl GpuEngine {
         Ok(true)
     }
 
+    /// Drops the tick images; the next blended frame starts with no history.
     pub fn clear_interpolation(&mut self) {
         self.interpolation = None;
     }
@@ -2301,7 +2305,10 @@ impl GpuEngine {
             .filter(|images| {
                 images.width == width && images.height == height && images.format == format
             })
-            .unwrap_or_else(|| Interpolation::new(self.ctx.device(), width, height, format));
+            .unwrap_or_else(|| {
+                let blend = self.blend.get(self.ctx.device(), format);
+                Interpolation::new(self.ctx.device(), &blend, width, height)
+            });
         if images.advance(tick) {
             self.draw_frame(
                 images.current_view(),

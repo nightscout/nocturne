@@ -688,7 +688,6 @@ impl SceneInstance {
 
     pub fn pause(&mut self) {
         self.playback.pause();
-        self.playback.simulator().clear_interpolation();
     }
 
     pub fn reset(&mut self) -> Result<(), JsError> {
@@ -745,13 +744,11 @@ impl SceneInstance {
 
     #[wasm_bindgen(js_name = seekProgress)]
     pub fn seek_progress(&mut self, progress: f32) -> Result<(), JsError> {
-        self.playback.simulator().clear_interpolation();
         self.timed_step(|p| p.seek_progress(progress))
     }
 
     #[wasm_bindgen(js_name = seekTowardsProgress)]
     pub fn seek_towards_progress(&mut self, progress: f32, ticks: u32) -> Result<bool, JsError> {
-        self.playback.simulator().clear_interpolation();
         let mut reached = false;
         self.timed_step(|p| {
             reached = p.seek_towards_progress(progress, ticks)?;
@@ -793,6 +790,8 @@ impl SceneInstance {
         let presented = if self.has_dabs && self.playback.state() == PlaybackState::Playing {
             self.playback.simulator().present_at(surface, tick, blend)
         } else {
+            // A paused or finished scene can hold its canvas indefinitely; its tick images are released.
+            self.playback.simulator().clear_interpolation();
             self.playback.simulator().present(surface)
         }
         .map_err(engine_err)?;
