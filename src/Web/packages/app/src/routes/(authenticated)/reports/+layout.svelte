@@ -15,7 +15,7 @@
     import Filter from "@lucide/svelte/icons/funnel";
     import Calendar from "@lucide/svelte/icons/calendar";
     import ChevronDown from "@lucide/svelte/icons/chevron-down";
-    import {ReportStrokes} from "@nocturne/watercolour";
+    import {ReportHeaderWash} from "@nocturne/watercolour";
     import {useDateParams, setDateParamsContext, createSharedRangeUse} from "$lib/hooks/date-params.svelte";
     import {createResourceContext} from "$lib/hooks/resource-context.svelte";
 
@@ -115,7 +115,9 @@
         <div
                 class="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/60 print:hidden"
         >
-            <div class="flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
+            <!-- At 35% the darkest wash keeps the bar's text above 9:1 in either theme. -->
+            <ReportHeaderWash name={page.url.pathname} position="absolute" class="inset-0 opacity-35"/>
+            <div class="relative flex h-14 items-center justify-between gap-2 px-3 @md:px-6">
                 <!-- Report info -->
                 <div class="flex items-center gap-3">
                     <h1 class="text-lg font-semibold text-foreground">{reportName}</h1>
@@ -132,10 +134,6 @@
                             <ChevronDown class="h-3 w-3 opacity-60"/>
                         </Button>
                     {/if}
-                </div>
-
-                <div class="@container h-10 min-w-0 flex-1 px-2">
-                    <ReportStrokes name={page.url.pathname} class="hidden size-full @[8rem]:block"/>
                 </div>
 
                 <div class="flex items-center gap-2">
