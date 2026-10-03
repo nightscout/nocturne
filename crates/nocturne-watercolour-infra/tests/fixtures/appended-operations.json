@@ -1,0 +1,9 @@
+[
+  { "after_ticks": 0, "op": { "set_mask": { "mask": { "polygon": { "points": [[0.12, 0.34], [0.88, 0.34], [0.88, 0.84], [0.12, 0.84]], "feather": 0.012 } } } } },
+  { "after_ticks": 0, "op": { "water": { "path": [[0.0, 0.4], [1.0, 0.4]], "radius": [0.05, 0.05], "water": 0.6, "softness": 0.3, "span": [0.0, 1.0] } } },
+  { "after_ticks": 1, "op": { "brush": { "path": [[0.0, 0.4], [1.0, 0.4]], "radius": [0.05, 0.05], "pigment": 0, "concentration": 0.44, "water": 0.5, "softness": 0.75, "span": [0.0, 0.5] } } },
+  { "after_ticks": 2, "op": { "lift": { "path": [[0.1, 0.59], [0.9, 0.59]], "radius": [0.055, 0.055], "strength": 0.9, "softness": 0.6, "span": [0.0, 1.0] } } },
+  { "after_ticks": 3, "op": { "settle": { "share": 0.25 } } },
+  { "after_ticks": 3, "op": "clear_mask" },
+  { "after_ticks": 4, "op": "dry_all" }
+]
