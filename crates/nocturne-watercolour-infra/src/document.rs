@@ -526,10 +526,57 @@ pub fn parse_scene_json(json: &str) -> Result<Scene, DocumentError> {
     Err(body_error.into())
 }
 
+/// An operation appended to a live session, `after_ticks` from its next tick.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AppendedEventDoc {
+    pub after_ticks: u32,
+    pub op: OperationDoc,
+}
+
+/// Parses a JSON array of [`AppendedEventDoc`]. Validating the operations
+/// needs the scene they join, so it is left to the session.
+pub fn parse_appended_json(json: &str) -> Result<Vec<(u32, Operation)>, DocumentError> {
+    let docs: Vec<AppendedEventDoc> = serde_json::from_str(json)?;
+    Ok(docs
+        .into_iter()
+        .map(|d| (d.after_ticks, op_from_doc(d.op)))
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::authoring::ArtworkCatalogue;
+
+    #[test]
+    fn parses_appended_operations_with_their_offsets() {
+        let ops = parse_appended_json(
+            r#"[{"after_ticks": 0, "op": "clear_mask"}, {"after_ticks": 4, "op": {"dry": {"rate": 2.0}}}]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            ops,
+            vec![(0, Operation::ClearMask), (4, Operation::Dry { rate: 2.0 })]
+        );
+        assert!(parse_appended_json(r#"[{"op": "clear_mask"}]"#).is_err());
+    }
+
+    /// The packing suitcase's operations, in the forms its painter sends; its
+    /// TypeScript test holds every operation it emits to these same forms.
+    #[test]
+    fn parses_every_operation_form_the_packing_suitcase_sends() {
+        let json = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/appended-operations.json"
+        ))
+        .expect("tests/fixtures/appended-operations.json");
+        let ops = parse_appended_json(&json).unwrap();
+        assert_eq!(ops.len(), 7);
+        let scene = (ArtworkCatalogue::entries()[0].build)(Seed(1), Palette::dusk());
+        scene
+            .validate_operations(ops.iter().map(|(_, op)| op))
+            .unwrap();
+    }
 
     #[test]
     fn round_trips_every_catalogue_scene() {
