@@ -46,17 +46,15 @@ pub trait Simulator {
         Ok(())
     }
 
-    /// Charge ticks are relative to this batch; tied charges retain timeline order.
+    /// Charge ticks are relative to this batch, ascending; tied charges retain timeline order.
     fn step_with_dabs(&mut self, ticks: u32, charges: &[DabCharge<'_>]) -> Result<(), EngineError> {
-        let mut charges = charges.iter().peekable();
-        for tick in 0..ticks {
-            while charges.peek().is_some_and(|charge| charge.at_tick == tick) {
-                let charge = charges.next().unwrap();
-                self.apply(&Operation::Dab(charge.dab.clone()), charge.seed)?;
-            }
-            self.tick()?;
+        let mut stepped = 0;
+        for charge in charges {
+            self.step(charge.at_tick - stepped)?;
+            stepped = charge.at_tick;
+            self.apply(&Operation::Dab(charge.dab.clone()), charge.seed)?;
         }
-        Ok(())
+        self.step(ticks - stepped)
     }
 
     /// Captures the current state. `None` means the backend's checkpoint

@@ -500,12 +500,10 @@ impl<S: Simulator> Playback<S> {
 
     fn run_to(&mut self, target: u32) -> Result<(), EngineError> {
         while self.tick < target {
-            let batch_dabs = self.sim.checkpoint_capacity() == 0
-                && self
-                    .scene
-                    .timeline
-                    .events_at(self.tick)
-                    .all(|(_, e)| matches!(e.op, Operation::Dab(_)));
+            let batch_dabs = self.sim.checkpoint_capacity() == 0 && {
+                let mut events = self.scene.timeline.events_at(self.tick).peekable();
+                events.peek().is_some() && events.all(|(_, e)| matches!(e.op, Operation::Dab(_)))
+            };
             let ticks = self.run_length(target, batch_dabs);
             if batch_dabs {
                 let charges: Vec<_> = self
@@ -616,7 +614,7 @@ mod tests {
     use super::*;
     use crate::application::CpuEngine;
     use crate::domain::{
-        Background, BrushStroke, Palette, Paper, Point, RadiusProfile, SceneId, Seed,
+        Background, BrushStroke, Dab, Palette, Paper, Point, RadiusProfile, SceneId, Seed,
         SimResolution, SizeHint, StrokeSpan, Timeline,
     };
 
@@ -736,7 +734,9 @@ mod tests {
             self.step(1)
         }
         fn step(&mut self, ticks: u32) -> Result<(), EngineError> {
-            self.steps.push(ticks);
+            if ticks > 0 {
+                self.steps.push(ticks);
+            }
             self.inner.step(ticks)
         }
         fn snapshot(&mut self) -> Result<Option<CheckpointId>, EngineError> {
@@ -774,6 +774,33 @@ mod tests {
             assert_eq!(pb.simulator().steps, expected, "capacity {capacity}");
             assert_eq!(pb.state(), PlaybackState::Finished);
         }
+    }
+
+    /// Without checkpoints, ticks with no dab run up to the first dab, and the
+    /// runs between later dabs each reach `step` whole.
+    #[test]
+    fn a_dab_batch_steps_whole_runs_between_charges() {
+        let dab = |x| {
+            Operation::Dab(Dab {
+                center: Point::new(x, 0.5),
+                radius: 0.1,
+                pigment: 0,
+                concentration: 0.5,
+                water: 0.8,
+                softness: 0.4,
+            })
+        };
+        let mut timeline = Timeline::new(100);
+        timeline.push(10, dab(0.3));
+        timeline.push(30, dab(0.6));
+        let sim = Steps {
+            inner: CpuEngine::default(),
+            steps: Vec::new(),
+            capacity: 0,
+        };
+        let mut pb = Playback::new(sim, reveal_scene(timeline), 1000.0).unwrap();
+        pb.finish_immediately().unwrap();
+        assert_eq!(pb.simulator().steps, vec![10, 20, 70]);
     }
 
     /// A batched run lands on the same state as one tick at a time.
