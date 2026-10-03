@@ -14,6 +14,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { wuchale } from "wuchale/vite";
 import toRuntime from "wuchale/runtime";
+import { compileTranslation } from "wuchale/compiler";
 import supportedLocales from "../../../supportedLocales.json";
 
 const require = createRequire(import.meta.url);
@@ -51,7 +52,7 @@ const labLabels = {
 
 // The browser component suite does not apply Wuchale. Missing catalogue entries
 // still get IDs during a production transform, but resolve to empty text at runtime.
-describe("eHbA1c tooltip production translations", () => {
+describe("A1c production translations", () => {
   let root;
   let messageIds;
   let productionIds;
@@ -97,6 +98,7 @@ describe("eHbA1c tooltip production translations", () => {
     );
     expect(messageIds).toHaveLength(2);
     productionIds = new Set();
+    const reportIds = new Set();
     for (const file of sourceFiles) {
       const source = await readFile(
         new URL(`../src/${file}`, import.meta.url),
@@ -112,6 +114,8 @@ describe("eHbA1c tooltip production translations", () => {
         ...transformed.code.matchAll(/_w_runtime_\.[a-z]+\((\d+)/g),
       ]) {
         productionIds.add(Number(id));
+        if (file === "routes/(authenticated)/reports/ehba1c/+page.svelte")
+          reportIds.add(Number(id));
       }
       if (file.includes("settings/appearance")) {
         // Translated select values can persist an empty name and leave only the estimate's e prefix.
@@ -157,6 +161,23 @@ describe("eHbA1c tooltip production translations", () => {
           item.msgid.startsWith("Target: below {0}"))
     );
     expect(a1cMessages).toHaveLength(18);
+    const compiledEnglish = await import(
+      /* @vite-ignore */ pathToFileURL(
+        join(root, "locales/.wuchale/main.0.en.compiled.js")
+      ).href
+    );
+    const reportMessages = [...reportIds].map((id) =>
+      english.items.find(
+        (item) =>
+          item.references.includes(
+            "src/routes/(authenticated)/reports/ehba1c/+page.svelte"
+          ) &&
+          JSON.stringify(compileTranslation(item.msgid, "")) ===
+            JSON.stringify(compiledEnglish.c[id])
+      )
+    );
+    expect(reportMessages).not.toContain(undefined);
+    a1cMessages = [...new Set([...a1cMessages, ...reportMessages])];
   });
 
   afterAll(async () => {
@@ -164,7 +185,7 @@ describe("eHbA1c tooltip production translations", () => {
   });
 
   it.each(supportedLocales)(
-    "keeps both labels visible in %s",
+    "keeps controls, navigation and the complete A1c report translated in %s",
     async (locale) => {
       const catalogUrl = pathToFileURL(
         join(root, "locales/.wuchale", `main.0.${locale}.compiled.js`)

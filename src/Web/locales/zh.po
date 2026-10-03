@@ -799,7 +799,7 @@ msgstr ""
 #: src/routes/(authenticated)/settings/trackers/+page.svelte
 #: src/routes/(authenticated)/settings/weight/+page.svelte
 msgid "Delete"
-msgstr ""
+msgstr "删除"
 
 #: src/lib/components/admin/RoleDialog.svelte
 msgid "API - Entries"
@@ -8175,7 +8175,7 @@ msgstr ""
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Note (optional)"
-msgstr ""
+msgstr "备注（可选）"
 
 #: src/lib/components/treatments/TreatmentPortionsForm.svelte
 msgid "What did you eat?"
@@ -23058,27 +23058,27 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Non-diabetic range"
-msgstr ""
+msgstr "非糖尿病范围"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Type 1 diabetes target"
-msgstr ""
+msgstr "1 型糖尿病目标"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Elevated"
-msgstr ""
+msgstr "偏高"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Very high"
-msgstr ""
+msgstr "很高"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Failed to save lab result"
-msgstr ""
+msgstr "无法保存实验室结果"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Failed to delete lab result"
-msgstr ""
+msgstr "无法删除实验室结果"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "<0/> Estimated HbA1c (eHbA1c)"
@@ -23110,35 +23110,35 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Not enough glucose history yet — each point needs at least a month of readings within the trailing 90 days."
-msgstr ""
+msgstr "血糖历史数据尚不足：每个点需要此前 90 天内至少一个月的读数。"
 
 #. 0: formatLongDate(latest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "latest estimate ({0})"
-msgstr ""
+msgstr "最新估算（{0}）"
 
 #. 0: bg(latest.weightedAverageGlucoseMgdl); 1: bgLabel()
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Weighted mean glucose: {0} {1}"
-msgstr ""
+msgstr "加权平均血糖：{0} {1}"
 
 #. 0: formatLongDate(extremes.highest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Highest: <0/> ({0})"
-msgstr ""
+msgstr "最高：<0/>（{0}）"
 
 #. 0: formatLongDate(extremes.lowest.date)
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lowest: <0/> ({0})"
-msgstr ""
+msgstr "最低：<0/>（{0}）"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result (not included in the calculation)"
-msgstr ""
+msgstr "实验室结果（不参与计算）"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab results"
-msgstr ""
+msgstr "实验室结果"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Enter a lab HbA1c result here — shown as a triangle marker on the chart above, so you can see how closely the eHbA1c estimate tracks an actual lab draw. Lab results are not included in the eHbA1c calculation itself. The date below is the date the blood was drawn, not the date you enter it here."
@@ -23146,38 +23146,38 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "No lab results added yet."
-msgstr ""
+msgstr "尚未添加实验室结果。"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete lab result"
-msgstr ""
+msgstr "删除实验室结果"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Date of blood draw"
-msgstr ""
+msgstr "采血日期"
 
 #. 0: a1cUnit === "percent" ? "%" \\: "mmol/mol"
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Result ({0})"
-msgstr ""
+msgstr "结果（{0}）"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "<0/> Add lab result"
-msgstr ""
+msgstr "<0/> 添加实验室结果"
 
 #. 0: formatA1c(point.data.valuePercent); 1: formatLongDate(point.data.date); 2: point.data.note ? ` — ${point.data.note}` \\: ""
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab result: {0} ({1}){2}"
-msgstr ""
+msgstr "实验室结果：{0}（{1}）{2}"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete this lab result?"
-msgstr ""
+msgstr "删除此实验室结果？"
 
 #. 0: formatA1c(pendingDeleteLabResult.valuePercent ?? 0); 1: formatLongDate(toDate(pendingDeleteLabResult.measuredAt))
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Delete the {0} lab result from {1}."
-msgstr ""
+msgstr "删除 {1} 的实验室结果 {0}。"
 
 #: src/routes/(authenticated)/settings/access/+page.svelte
 msgid "The browsers signed in to this account, and where to find everything else that can reach your data."
@@ -24051,11 +24051,11 @@ msgstr ""
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Shown in % (NGSP)"
-msgstr ""
+msgstr "以 % (NGSP) 显示"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Shown in mmol/mol (IFCC)"
-msgstr ""
+msgstr "以 mmol/mol (IFCC) 显示"
 
 #: src/routes/(authenticated)/reports/ehba1c/+page.svelte
 msgid "Lab HbA1c draws, shown as triangles on the chart above. They are not included in the eHbA1c calculation."
