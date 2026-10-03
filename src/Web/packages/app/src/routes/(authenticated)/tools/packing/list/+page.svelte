@@ -74,8 +74,7 @@
 
   $effect(() => {
     const target = totalCount ? (totalChecked / totalCount) * PAINT_END : 0;
-    // Unpainting is not something paint does, and each backwards frame is a
-    // checkpoint replay, so an unpack jumps.
+    // Unpacking jumps rather than animating paint backwards.
     const instant = prefersReducedMotion.current || target < untrack(() => reveal.target);
     void reveal.set(target, { duration: instant ? 0 : 700 });
   });
@@ -84,7 +83,7 @@
     const player = suitcase;
     if (!player) return;
     const at = reveal.current;
-    if (!complete || at < PAINT_END) player.seek(at);
+    if (!complete || at < PAINT_END) player.seekTo(at);
     else if (prefersReducedMotion.current) player.finishImmediately();
     else player.play();
   });

@@ -127,19 +127,30 @@
       const next = right > left
         ? { left: left - host.left, top: top - host.top, width: right - left, height: bottom - top }
         : undefined;
-      if (JSON.stringify(next) !== JSON.stringify(untrack(() => paintBox))) paintBox = next;
+      const previous = untrack(() => paintBox);
+      if (next?.left !== previous?.left || next?.top !== previous?.top ||
+          next?.width !== previous?.width || next?.height !== previous?.height) paintBox = next;
     };
-    measure();
-    const mutations = new MutationObserver(measure);
+    let frame: number | undefined;
+    const scheduleMeasure = () => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        measure();
+      });
+    };
+    scheduleMeasure();
+    const mutations = new MutationObserver(scheduleMeasure);
     mutations.observe(el, {
       subtree: true,
       childList: true,
       attributes: true,
       attributeFilter: ["x", "y", "width", "height", "fill"],
     });
-    const resizes = new ResizeObserver(measure);
+    const resizes = new ResizeObserver(scheduleMeasure);
     resizes.observe(el);
     return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
       mutations.disconnect();
       resizes.disconnect();
     };
