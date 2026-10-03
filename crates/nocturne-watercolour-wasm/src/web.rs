@@ -759,14 +759,20 @@ impl SceneInstance {
         self.timed_step(|p| p.seek_progress(progress))
     }
 
-    #[wasm_bindgen(js_name = seekTowardsProgress)]
-    pub fn seek_towards_progress(&mut self, progress: f32, ticks: u32) -> Result<bool, JsError> {
-        let mut reached = false;
+    #[wasm_bindgen(js_name = tickForProgress)]
+    pub fn tick_for_progress(&self, progress: f32) -> u32 {
+        self.playback.tick_for_progress(progress)
+    }
+
+    /// Steps replayed; see `Playback::seek_towards_tick`.
+    #[wasm_bindgen(js_name = seekTowardsTick)]
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, JsError> {
+        let mut replayed = 0;
         self.timed_step(|p| {
-            reached = p.seek_towards_progress(progress, ticks)?;
+            replayed = p.seek_towards_tick(target, ticks)?;
             Ok(())
         })?;
-        Ok(reached)
+        Ok(replayed)
     }
 
     #[wasm_bindgen(js_name = finishImmediately)]

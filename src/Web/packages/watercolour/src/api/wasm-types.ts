@@ -34,7 +34,9 @@ export interface WasmInstance {
   advanceTicks?(ticks: number): boolean;
   setProgressCurve(curve: 'frontLoaded' | 'linear' | 'reveal'): void;
   seekProgress(progress: number): void;
-  seekTowardsProgress(progress: number, ticks: number): boolean;
+  tickForProgress(progress: number): number;
+  /** Steps replayed towards `target`; the seek has arrived once `currentTick()` is `target`. */
+  seekTowardsTick(target: number, ticks: number): number;
   finishImmediately(): void;
   progress(): number;
   isFinished(): boolean;

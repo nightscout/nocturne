@@ -43,13 +43,14 @@ function fakeInstance(total: number) {
       tick = next;
       return moved;
     },
-    seekTowardsProgress(progress: number, ticks: number) {
+    tickForProgress: (progress: number) => Math.round(progress * total),
+    seekTowardsTick(target: number, ticks: number) {
       playing = false;
-      const target = Math.round(progress * total);
       if (target < tick) tick = 0;
+      const from = tick;
       tick = Math.min(target, tick + ticks);
-      calls.push(`seek:${progress}:${ticks}`);
-      return tick === target;
+      calls.push(`seek:${target}:${ticks}`);
+      return tick - from;
     },
     seekProgress(progress: number) { tick = Math.round(progress * total); playing = false; },
     reset() { tick = 0; playing = false; },
@@ -448,7 +449,7 @@ describe('target seeking', () => {
     for (let i = 0; i < 100 && !live.state.playing; i++) clock.frame();
     expect(instance.tick).toBe(60);
     expect(live.state.playing).toBe(true);
-    expect(instance.calls.filter(call => call.startsWith('seek:')).every(call => call.startsWith('seek:0.6:'))).toBe(true);
+    expect(instance.calls.filter(call => call.startsWith('seek:')).every(call => call.startsWith('seek:60:'))).toBe(true);
     live.dispose();
   });
 
@@ -490,7 +491,7 @@ describe('target seeking', () => {
 
   it('does not read a freed instance after a seek fault with easing', async () => {
     const instance = fakeInstance(100);
-    vi.spyOn(instance, 'seekTowardsProgress').mockImplementation(() => { throw new Error('seek failed'); });
+    vi.spyOn(instance, 'seekTowardsTick').mockImplementation(() => { throw new Error('seek failed'); });
     const progress = vi.spyOn(instance, 'progress').mockImplementation(() => {
       if (instance.calls.includes('dispose')) throw new Error('freed instance');
       return 0;

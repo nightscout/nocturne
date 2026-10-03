@@ -849,10 +849,9 @@ fn sliced_target_seek_preserves_the_gpu_frame() {
         playback.seek_progress(target).unwrap();
         let expected = playback.simulator().render(80, 60).unwrap().rgba;
         playback.seek_tick(0).unwrap();
-        for _ in 0..500 {
-            if playback.seek_towards_progress(target, 3).unwrap() {
-                break;
-            }
+        let target_tick = playback.tick_for_progress(target);
+        while playback.current_tick() != target_tick {
+            playback.seek_towards_tick(target_tick, 3).unwrap();
         }
         let actual = playback.simulator().render(80, 60).unwrap().rgba;
         assert_eq!(actual, expected);

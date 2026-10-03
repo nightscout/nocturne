@@ -241,7 +241,8 @@ class LiveBackend implements Backend {
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
-  private seekTarget: number | undefined;
+  /** The tick a `seekTo` is replaying towards. */
+  private seekTick: number | undefined;
   private playAfterSeek = false;
   private seekPresentPending = false;
   private handle: SchedulerHandle;
@@ -403,7 +404,7 @@ class LiveBackend implements Backend {
 
   play(): void {
     if (this.disposed || this.released || this.settling) return;
-    if (this.seekTarget !== undefined) {
+    if (this.seekTick !== undefined) {
       this.playAfterSeek = true;
       return;
     }
@@ -421,7 +422,7 @@ class LiveBackend implements Backend {
   }
 
   reset(): void {
-    this.seekTarget = undefined;
+    this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
     this.settling = false;
@@ -431,7 +432,7 @@ class LiveBackend implements Backend {
   }
 
   seek(progress: number): void {
-    this.seekTarget = undefined;
+    this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
     this.settling = false;
@@ -449,7 +450,7 @@ class LiveBackend implements Backend {
 
   seekTo(progress: number): void {
     if (this.disposed || this.released) return;
-    this.seekTarget = Math.min(1, Math.max(0, progress));
+    this.seekTick = this.instance.tickForProgress(Math.min(1, Math.max(0, progress)));
     this.seekPresentPending = true;
     this.playAfterSeek = false;
     this.isPlaying = false;
@@ -459,7 +460,7 @@ class LiveBackend implements Backend {
 
   finish(sliced = false): void {
     if (this.disposed || this.released) return;
-    this.seekTarget = undefined;
+    this.seekTick = undefined;
     this.seekPresentPending = false;
     this.playAfterSeek = false;
     if (this.easing) this.elapsedMs = this.durationMs;
@@ -527,20 +528,20 @@ class LiveBackend implements Backend {
   }
 
   private tick(dt: number): void {
-    if (this.seekTarget !== undefined) {
-      const target = this.seekTarget;
+    if (this.seekTick !== undefined) {
+      const target = this.seekTick;
       const remaining = this.scheduler.budgetRemainingMs();
       const gpuTickMs = this.host.stats()?.gpuTickMs;
       const ticks = Math.max(1, this.scheduler.slices.next(remaining, this.scheduler.gpuBudgetRemainingMs(), gpuTickMs));
       const started = this.scheduler.now();
-      let reached = false;
-      this.step(() => { reached = this.instance.seekTowardsProgress(target, ticks); });
+      let replayed = 0;
+      this.step(() => { replayed = this.instance.seekTowardsTick(target, ticks); });
       if (this.disposed || this.released) return;
-      this.scheduler.slices.record(ticks, this.scheduler.now() - started);
-      this.scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
+      this.scheduler.slices.record(replayed, this.scheduler.now() - started);
+      this.scheduler.chargeGpuMs(replayed * (gpuTickMs ?? 0));
       if (this.easing) this.elapsedMs = invertEasing(this.easing, this.instance.progress()) * this.durationMs;
-      if (reached) {
-        this.seekTarget = undefined;
+      if (this.instance.currentTick() === target) {
+        this.seekTick = undefined;
         if (this.playAfterSeek) this.play();
       }
       return;
@@ -572,7 +573,7 @@ class LiveBackend implements Backend {
    */
   private gpuCostMs(elapsedSeconds: number): number {
     const stats = this.host.stats();
-    const ticks = this.seekTarget !== undefined || this.settling ? 1 : this.isPlaying ? this.ticksDue(elapsedSeconds) : 0;
+    const ticks = this.seekTick !== undefined || this.settling ? 1 : this.isPlaying ? this.ticksDue(elapsedSeconds) : 0;
     const renders = !this.settling && (ticks > 0 || this.dirty);
     return ticks * (stats?.gpuTickMs ?? 0) + (renders ? (stats?.gpuRenderMs ?? 0) : 0);
   }
@@ -636,7 +637,7 @@ class LiveBackend implements Backend {
       if (presented === false && (this.seekPresentPending || ++this.unpresented < MAX_UNPRESENTED_RENDERS)) return;
       this.unpresented = 0;
       this.dirty = false;
-      if (this.seekTarget === undefined) this.seekPresentPending = false;
+      if (this.seekTick === undefined) this.seekPresentPending = false;
       if (presented !== false) this.callbacks.onProgress?.(this.progress);
       if (this.disposed || this.released) return;
       if (this.isPlaying && this.instance.isFinished()) {
@@ -649,7 +650,7 @@ class LiveBackend implements Backend {
         return;
       }
     }
-    if (!this.isPlaying && this.seekTarget === undefined && !this.dirty && !this.released) this.handle.setActive(false);
+    if (!this.isPlaying && this.seekTick === undefined && !this.dirty && !this.released) this.handle.setActive(false);
   }
 
   private releaseResources(): void {

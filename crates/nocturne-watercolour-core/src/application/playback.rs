@@ -452,21 +452,20 @@ impl<S: Simulator> Playback<S> {
         Ok(())
     }
 
-    /// Restores at most one checkpoint, then replays at most `ticks` steps.
-    /// Repeated calls may replace the target without completing an obsolete replay.
-    pub fn seek_towards_progress(
-        &mut self,
-        progress: f32,
-        ticks: u32,
-    ) -> Result<bool, EngineError> {
-        let target = self.tick_for_progress(progress);
+    /// Restores at most one checkpoint, then replays at most `ticks` steps
+    /// towards `target`, and returns the steps replayed; the seek has arrived
+    /// once `current_tick` is `target`. Repeated calls may replace the target
+    /// without completing an obsolete replay.
+    pub fn seek_towards_tick(&mut self, target: u32, ticks: u32) -> Result<u32, EngineError> {
+        let target = target.min(self.total_ticks());
         if target < self.tick {
             self.restore_for_seek(target)?;
         }
         self.pause();
-        self.run_to(self.tick.saturating_add(ticks).min(target))?;
+        let from = self.tick;
+        self.run_to(from.saturating_add(ticks).min(target))?;
         self.elapsed_progress = self.progress();
-        Ok(self.tick == target)
+        Ok(self.tick - from)
     }
 
     fn restore_for_seek(&mut self, target: u32) -> Result<(), EngineError> {
