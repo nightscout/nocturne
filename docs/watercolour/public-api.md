@@ -242,7 +242,7 @@ disposal.
 | `SelectionEdge` | `selection-edge` | `active: boolean`, `side: 'left' \| 'top'` | A 16px vertical or horizontal edge strip, `fit: 'fill'` by default so the stroke runs the item's full length; plays once on activation, then releases its live slot. |
 | `AvatarWash` | `avatar-wash` | `name: string`, `size = 32` | Seed derives from `name` via `seedFromName` unless given. Defaults to `motion: 'reduced'` with `releaseAfterFinish`, so each head paints one frame live once it nears the viewport, spread over a few frames, and releases the engine (the canvas keeps the pixels) - a member list holds dozens of avatars and a live slot per head would exhaust the cap. |
 | `ConfirmationBackground` | `confirmation-background` | - | Fills its container only when it is within 20% of the artwork's 3:1 aspect, else `contain` anchored bottom-left. On dark surfaces the canvas runs at CSS opacity 0.45 because Luminous alpha saturates. Plays once, then releases its live slot. |
-| `HeaderMotif` | `header-motif` | - | Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
+| `HeaderMotif` | `header-motif` | - | Three loose horizontal brush strokes, pulled left to right. Fixed `aspect-ratio: 5/1; width: 10rem` (160x32); plays once, then releases its live slot. |
 | `DropSurface` | a stroke generated for the surface (`fitStroke`, `dropScene`) | see [Paint drops](#paint-drops) | Wraps arbitrary content and paints one brush stroke in its empty space on hover, selection or focus. Live only. |
 | `DropGroup` | - | `name?: string` | Hands each `DropSurface` inside it an index and a shared seed, so a run varies by seed. |
 
