@@ -4,8 +4,7 @@ export { default as PaintedUnderline } from './components/PaintedUnderline.svelt
 export { default as SelectionEdge } from './components/SelectionEdge.svelte';
 export { default as AvatarWash } from './components/AvatarWash.svelte';
 export { default as ConfirmationBackground } from './components/ConfirmationBackground.svelte';
-export { default as HeaderMotif } from './components/HeaderMotif.svelte';
-export { default as ReportStrokes } from './components/ReportStrokes.svelte';
+export { default as ReportHeaderWash } from './components/ReportHeaderWash.svelte';
 export { default as DropSurface } from './components/DropSurface.svelte';
 export { default as DropGroup } from './components/DropGroup.svelte';
 export { createDropGroup, getDropGroup, setDropGroup } from './components/drop-group';
@@ -94,5 +93,5 @@ export type { WatercolourErrorCode } from './api/errors';
 export { bloomScene } from './api/bloom-scene';
 export type { BloomSceneOptions } from './api/bloom-scene';
 
-export { reportStrokesScene, reportStrokesCrop } from './api/report-strokes-scene';
-export type { ReportStrokesOptions } from './api/report-strokes-scene';
+export { reportWashScene, reportWashCrop } from './api/report-wash-scene';
+export type { ReportWashOptions } from './api/report-wash-scene';

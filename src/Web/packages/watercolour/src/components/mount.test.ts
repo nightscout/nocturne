@@ -116,20 +116,20 @@ describe('mountPlayer', () => {
   });
 
   it('creates no player while the frame has no area, then one at its first real size', () => {
-    mount(fakeFrame(0, 0), canvas, { artwork: 'header-motif', surface: 'light' });
+    mount(fakeFrame(0, 0), canvas, { artwork: 'confirmation-background', surface: 'light' });
     expect(created).toHaveLength(0);
 
     observed!([{ contentRect: { width: 0, height: 0 } }]);
     expect(created).toHaveLength(0);
 
-    observed!([{ contentRect: { width: 160, height: 32 } }]);
+    observed!([{ contentRect: { width: 96, height: 32 } }]);
     expect(created).toHaveLength(1);
-    expect(created[0].options.width).toBe(160);
+    expect(created[0].options.width).toBe(96);
     expect(created[0].options.height).toBe(32);
   });
 
   it('creates the player at once for a frame that already has area', () => {
-    mount(fakeFrame(160, 32), canvas, { artwork: 'header-motif', surface: 'light' });
+    mount(fakeFrame(96, 32), canvas, { artwork: 'confirmation-background', surface: 'light' });
     expect(created).toHaveLength(1);
   });
 

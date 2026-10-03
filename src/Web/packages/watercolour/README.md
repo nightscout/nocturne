@@ -114,7 +114,7 @@ The component sizes its canvas to the container (`ResizeObserver`, DPR capped at
 canvas to the largest box of that aspect that fits and centring it, leaving the
 surrounding area transparent; `fit="fill"` stretches to the container. The
 accent components (`PaintedUnderline`, `SelectionEdge`, `AvatarWash`,
-`ConfirmationBackground`, `HeaderMotif`) take the same `fit` prop
+`ConfirmationBackground`) take the same `fit` prop
 (`ConfirmationBackground` defaults to filling a host 2.4:1 or wider); the artwork
 is `aria-hidden` with `role="presentation"`. The player is created in an effect
 and disposed on destroy or when any prop changes. It maps props to
@@ -174,7 +174,7 @@ the baked still only when the caller set a `seed` or `intensity` the bake cannot
 show, which is what gives `AvatarWash` its per-name wash; an unseeded artwork
 draws its still. No player resolves its mode, decodes an asset or takes a live
 slot until its canvas is within 200 px of the viewport. The
-accent components (`PaintedUnderline`, `SelectionEdge`, `HeaderMotif`) set it too,
+accent components (`PaintedUnderline`, `SelectionEdge`) set it too,
 so a one-shot accent does not pin a slot for as long as it is mounted. `autoplay: 'once'` starts on first appearance (the shared
 `IntersectionObserver`) and never loops; `'never'` waits for `play()`.
 
@@ -209,7 +209,7 @@ intensity 0.7 and `large` detail by
 
 | Artwork | Palette |
 |---|---|
-| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell` | `moonlight` |
+| `crescent-moon`, `moonlit-shoreline`, `alarm-bell` | `moonlight` |
 | `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge` | `water` |
 | `overlapping-shapes`, `linked-rings` | `dusk` |
 | `confirmation-mark`, `confirmation-background` | `moss` |

@@ -22,7 +22,6 @@ export type ArtworkId =
   | 'tab-underline'
   | 'selection-edge'
   | 'confirmation-background'
-  | 'header-motif'
   | 'calendar'
   | 'clock'
   | 'stopwatch'
@@ -165,7 +164,6 @@ export const ARTWORK_IDS: readonly ArtworkId[] = [
   'tab-underline',
   'selection-edge',
   'confirmation-background',
-  'header-motif',
   'calendar',
   'clock',
   'stopwatch',
@@ -235,7 +233,6 @@ export const ARTWORK_ASPECT: Readonly<Record<ArtworkId, number>> = {
   'tab-underline': 8,
   'selection-edge': 1 / 6,
   'confirmation-background': 3,
-  'header-motif': 5,
   'calendar': 1,
   'clock': 1,
   'stopwatch': 1,
