@@ -87,6 +87,14 @@ struct Stroke {
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    inner: f32,
+    cell: f32,
+    scale_x: f32,
+    scale_y: f32,
+    edge_roughness: f32,
 };
 
 struct PigmentCoef {

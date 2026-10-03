@@ -64,11 +64,16 @@ player.dispose();
 
 | Event | Payload | Fires |
 |---|---|---|
-| `ready` | - | a backend is drawing (or the player settled on `none`) |
+| `ready` | - | a backend is drawing |
 | `finished` | - | the reveal completed |
 | `fallback` | `{ from, error }` | a backend failed; a lower one took over |
 | `error` | `WatercolourError` (typed `code`) | nothing could draw |
 | `statechange` | - | any state change |
+
+`onProgress` in `PlayerOptions` receives a numeric progress value after each
+presented live or baked frame. Use it for a coverage milestone without
+allocating `PlayerState` on every frame. It does not fire for an unavailable
+swapchain frame. A callback may dispose its player.
 
 `player.ready` resolves once a backend is drawing. A player whose canvas is in
 the document does not start until the canvas is within 200 px of the viewport
@@ -78,6 +83,20 @@ scroll; a canvas outside the document, or a page without
 current element, which differs from the one passed in only after a live-to-baked
 fallback (a WebGPU canvas can never give a 2D context, so the element is
 replaced in place).
+
+## Generated blooms
+
+`bloomScene(module, width, height, { colour, seed?, slope?, dpr? })` authors the
+glucose tile's three spreading charges. `colour` is an encoded RGB triple in
+`0..1`; `slope` is clamped to `-1..1`. Width and height are CSS pixels. The
+simulation grid is capped at 320 while the output follows the measured tile.
+
+`mountPlayer(frame, canvas, undefined, { scene, fit: 'fill', ... }, onready,
+onstatechange)` gives generated scenes the component resize and presentation
+lifecycle. Its `scene(module, width, height, dpr)` factory receives the measured
+box. Finished canvases stretch for small resizes and repaint after a large
+resize settles. Presentation changes rebuild the player; a finished reveal
+does not replay. `onstatechange` also reports `none`, which has no `ready` event.
 
 ## `detectCapabilities`
 
@@ -116,7 +135,17 @@ first artwork mounts. The wasm bindings are loaded through a Vite glob because
 baked instance on the page. Hidden time is not counted as elapsed, so a reveal
 resumes where it paused instead of jumping to the end. Off-screen artworks are
 neither stepped nor rendered (`IntersectionObserver`); a stalled frame is
-clamped to `MAX_FRAME_SECONDS = 0.25`.
+clamped to `MAX_FRAME_SECONDS = 0.25`. Visible, active players rotate first
+admission through a shared CPU/GPU frame budget. Tick and render costs are
+estimated separately. A skipped player's visible elapsed intervals accumulate;
+hidden, offscreen and inactive time does not. The engine retains clock shortfall
+while limiting each advance's tick count. A single indivisible call can overrun
+its estimate; first admission still runs to prevent starvation.
+
+GPU timestamp queries sample the first eligible operation and then every 16th
+eligible operation after the previous readback completes. Tick samples include
+batched dab work; render samples include pigment shading. The scheduler combines
+those costs when reserving GPU work.
 
 ```ts
 import { getScheduler } from '@nocturne/watercolour';
@@ -170,7 +199,7 @@ size their canvas to the container via `ResizeObserver` (DPR capped at 2), creat
 the player in an effect and dispose it on destroy or when any prop changes.
 Every component accepts the `ArtworkOptions` props (`palette`, `seed`,
 `intensity`, `durationMs`, `motion`, `quality`, `mode`, `autoplay`), an
-optional `surface`, a `fit` prop, an `onready` callback, and `class`.
+optional `surface`, `fit` and `crop` props, an `onready` callback, and `class`.
 A component whose frame has no area (inside `display: none`) creates no player
 until the frame first has one, so a hidden artwork neither holds a live slot nor
 paints a 1x1 still.
@@ -180,7 +209,12 @@ icons and `wash` are square, the scenes and accents keep their authored ratio).
 With `fit="contain"` (default) the canvas is the largest box of that aspect
 inside the container, centred, and the surrounding area stays transparent;
 `fit="fill"` stretches to the container as the components did before aspect
-awareness. `fit` may also be a function of the container size -
+awareness. `crop={{ x, y, width, height }}` selects a normalised source window
+inside the painting. The backing canvas remains container-sized; live shading
+and paper generation cover only that window. Simulation detail and paper grain
+retain the full painting's virtual dimensions. Baked strips and stills select
+the same window. `createArtworkPlayer` and `mountPlayer` accept `crop` too.
+`fit` may also be a function of the container size -
 `ConfirmationBackground` uses that to fill only near its 3:1 aspect. `onready`
 fires once a backend is drawing; the returned cleanup runs with the player's
 disposal.

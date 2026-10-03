@@ -23,6 +23,8 @@ vi.mock('../api/playback', () => ({
 
 import { setPresentation } from '../api/presentation';
 import { measuredSize, mountPlayer, needsRepaint } from './helpers';
+import type { AuthoredScene } from '../api/scenes';
+import type { WasmModule } from '../api/engine-host';
 
 type Resize = (entries: Array<{ contentRect: { width: number; height: number } }>) => void;
 
@@ -77,6 +79,25 @@ describe('measuredSize', () => {
 });
 
 describe('mountPlayer', () => {
+  it('builds a generated scene at the measured size and repaints a released scene after resize', () => {
+    vi.useFakeTimers();
+    const scene = vi.fn(() => '{}');
+    mount(fakeFrame(160, 60), canvas, undefined, { scene, fit: 'fill', releaseAfterFinish: true });
+    const module = {} as WasmModule;
+    const first = created[0].source as AuthoredScene;
+    if (!('scene' in first)) throw new Error('expected a generated scene');
+    first.scene(module);
+    expect(scene).toHaveBeenLastCalledWith(module, 160, 60, 1);
+    released = true;
+    observed!([{ contentRect: { width: 320, height: 120 } }]);
+    vi.advanceTimersByTime(200);
+    const resized = created[1].source as AuthoredScene;
+    if (!('scene' in resized)) throw new Error('expected a generated scene');
+    resized.scene(module);
+    expect(scene).toHaveBeenLastCalledWith(module, 320, 120, 1);
+    expect(created[1].options.startFinished).toBe(true);
+  });
+
   it('creates no player while the frame has no area, then one at its first real size', () => {
     mount(fakeFrame(0, 0), canvas, 'header-motif', { surface: 'light' });
     expect(created).toHaveLength(0);

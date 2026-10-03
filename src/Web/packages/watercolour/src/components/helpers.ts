@@ -1,5 +1,7 @@
 import { subscribePresentation } from '../api/presentation';
 import { createArtworkPlayer, type ArtworkPlayer, type PlayerState } from '../api/playback';
+import type { WasmModule } from '../api/engine-host';
+import type { CropWindow } from '../types';
 import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface, artworkAspect, detailForEdge } from '../types';
 
 export type PlayerReadyCallback = (player: ArtworkPlayer) => void | (() => void);
@@ -9,10 +11,13 @@ export type PlayerStateCallback = (state: PlayerState) => void;
 export type FitAnchor = 'center' | 'bottom-left';
 
 export interface MountOptions extends ArtworkOptions {
+  crop?: CropWindow;
   surface?: Surface;
   assetBaseUrl?: string;
   /** A Lucide icon source; takes precedence over the artwork id. */
   icon?: IconArtworkSource;
+  scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
+  onProgress?: (progress: number) => void;
   /**
    * `contain` (default) or `fill`, or a function deciding per container
    * size (e.g. ConfirmationBackground fills only near its 3:1 aspect).
@@ -199,7 +204,7 @@ export function mountPlayer(
   onready?: PlayerReadyCallback,
   onstatechange?: PlayerStateCallback,
 ): () => void {
-  if (!options.icon && !id) throw new TypeError('Artwork requires either `artwork` or `icon`.');
+  if (!options.scene && !options.icon && !id) throw new TypeError('Artwork requires an artwork, icon or scene.');
   const dpr = componentDpr();
   let player: ArtworkPlayer | undefined;
   let unready: (() => void) | undefined;
@@ -218,7 +223,9 @@ export function mountPlayer(
     applyCanvasFit(currentCanvas(frame, canvas), box, dpr);
     const detail = detailForEdge(Math.max(box.width, box.height));
     const surface = options.surface ?? hostSurface();
-    const source = options.icon
+    const source = options.scene
+      ? { scene: (module: WasmModule) => options.scene!(module, box.width, box.height, dpr) }
+      : options.icon
       ? {
           icon: options.icon.icon,
           name: options.icon.name,
@@ -240,6 +247,8 @@ export function mountPlayer(
       autoplay: options.autoplay,
       releaseAfterFinish: options.releaseAfterFinish,
       startFinished,
+      onProgress: options.onProgress,
+      crop: options.crop,
       assetBaseUrl: options.assetBaseUrl,
       width: box.width,
       height: box.height,

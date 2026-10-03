@@ -1,4 +1,4 @@
-import type { ArtworkAutoplay, ArtworkOptions, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, Surface } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
@@ -8,7 +8,7 @@ import { WatercolourError, toWatercolourError } from './errors';
 import { type ResolvedMode, fallbackOrder, resolveMode, resolveMotion } from './mode';
 import { getPresentation } from './presentation';
 import { type ArtworkRef, type IconRef, type InstanceArgs, type SceneSource, authoredSceneJson, createRefInstance, iconSvg, isArtworkRef, isIconRef, parseSceneDocument } from './scenes';
-import { type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
+import { MAX_SLICE_TICKS, type Scheduler, type SchedulerHandle, getScheduler } from './scheduler';
 import { type ViewportWait, waitNearViewport } from './viewport';
 
 export type PlayerEvent = 'ready' | 'finished' | 'fallback' | 'error' | 'statechange';
@@ -47,6 +47,7 @@ export interface FallbackDetail {
 }
 
 export interface PlayerOptions extends ArtworkOptions, AssetOptions {
+  crop?: CropWindow;
   surface?: Surface;
   /** Overrides the detail tier derived from the artwork reference (live). */
   detail?: DetailLevel;
@@ -78,6 +79,8 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   scheduler?: Scheduler;
   engineHost?: EngineHost;
   capabilities?: () => Promise<Capabilities>;
+  /** Runs after a live or baked frame is presented; does not allocate PlayerState. */
+  onProgress?: (progress: number) => void;
 }
 
 export interface ArtworkPlayer {
@@ -107,11 +110,16 @@ export interface ArtworkPlayer {
 interface BackendCallbacks {
   onFinished(): void;
   onFault(error: WatercolourError): void;
+  onProgress?: (progress: number) => void;
 }
 
 interface PixelSize {
   width: number;
   height: number;
+}
+
+function sourceEdge(size: PixelSize, crop?: CropWindow): number {
+  return Math.max(size.width / (crop?.width ?? 1), size.height / (crop?.height ?? 1));
 }
 
 interface Backend {
@@ -242,16 +250,18 @@ class LiveBackend implements Backend {
     scheduler: Scheduler,
     callbacks: BackendCallbacks,
     options: PlayerOptions,
+    signal: AbortSignal,
     endTurn?: () => void,
   ): Promise<LiveBackend> {
     try {
       const lease = await host.acquire();
+      signal.throwIfAborted();
       // Live reveals pick the detail tier from the canvas's BACKING long edge
       // (the size passed in is DPR-scaled). The simulation grid is the tier's
       // own, whatever the canvas: the fluid moves in cells, so a different
       // grid paints a different picture, and one tier must paint the same one
       // at every size. An explicit `detail`/`simResolution` option wins.
-      const longEdge = Math.max(size.width, size.height);
+      const longEdge = sourceEdge(size, options.crop);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
@@ -269,6 +279,10 @@ class LiveBackend implements Backend {
       }
       if (options.easing) instance.setProgressCurve('linear');
       try {
+        if (options.crop) {
+          const { x, y, width, height } = options.crop;
+          instance.setCrop(x, y, width, height);
+        }
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });
@@ -291,7 +305,6 @@ class LiveBackend implements Backend {
       }
     } catch (error) {
       host.release();
-      endTurn?.();
       throw toWatercolourError(error);
     }
   }
@@ -323,6 +336,11 @@ class LiveBackend implements Backend {
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
       render: () => this.render(),
+      gpuCostMs: () => {
+        const stats = this.host.stats();
+        const ticks = this.settling ? MAX_SLICE_TICKS : this.isPlaying ? this.instance.tickBudget() : 0;
+        return ticks * (stats?.gpuTickMs ?? 0) + (stats?.gpuRenderMs ?? 0);
+      },
     });
     this.unsubscribeLost = host.onLost((message) => this.fault(new WatercolourError('DeviceLost', message)));
     this.handle.setActive(true);
@@ -473,12 +491,18 @@ class LiveBackend implements Backend {
       return;
     }
     if (!this.isPlaying || this.disposed || this.released) return;
-    if (this.easing) {
-      this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
-      this.step(() => this.instance.advanceToProgress(this.easing!(this.elapsedMs / this.durationMs)));
-    } else {
-      this.step(() => this.instance.advanceByElapsed(dt));
-    }
+    this.step(() => {
+      const before = this.instance.currentTick();
+      let changed: boolean | void;
+      if (this.easing) {
+        this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
+        changed = this.instance.advanceToProgress(this.easing(this.elapsedMs / this.durationMs));
+      } else {
+        changed = this.instance.advanceByElapsed(dt);
+      }
+      this.scheduler.chargeGpuMs((this.instance.currentTick() - before) * (this.host.stats()?.gpuTickMs ?? 0));
+      return changed;
+    });
   }
 
   /**
@@ -500,7 +524,7 @@ class LiveBackend implements Backend {
       let ran = false;
       while (!done) {
         const remaining = scheduler.budgetRemainingMs();
-        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs) : 0;
+        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.gpuBudgetRemainingMs(), gpuTickMs) : 0;
         if (ticks === 0) {
           if (ran || !inFrame) break;
           ticks = 1;
@@ -508,6 +532,7 @@ class LiveBackend implements Backend {
         const started = scheduler.now();
         done = this.instance.advanceTicks!(ticks);
         scheduler.slices.record(ticks, scheduler.now() - started);
+        scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
         ran = true;
       }
       return ran;
@@ -524,6 +549,7 @@ class LiveBackend implements Backend {
       let presented: boolean | void;
       try {
         presented = this.instance.render();
+        this.scheduler.chargeGpuMs(this.host.stats()?.gpuRenderMs ?? 0);
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
@@ -532,6 +558,8 @@ class LiveBackend implements Backend {
       if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
       this.unpresented = 0;
       this.dirty = false;
+      if (presented !== false) this.callbacks.onProgress?.(this.progress);
+      if (this.disposed || this.released) return;
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -616,7 +644,7 @@ class BakedBackend implements Backend {
     const manifest = await loadManifest(urls.manifest);
     const strip = await sharedStrip(urls.strip, manifest);
     const target = acquire2d(canvas);
-    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing);
+    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing, options.crop);
   }
 
   private constructor(
@@ -628,6 +656,7 @@ class BakedBackend implements Backend {
     scheduler: Scheduler,
     private readonly callbacks: BackendCallbacks,
     easing: ((t: number) => number) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.durationMs = durationMs;
     this.easing = easing;
@@ -727,7 +756,9 @@ class BakedBackend implements Backend {
     if (this.disposed) return;
     if (this.dirty) {
       this.dirty = false;
-      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height);
+      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height, this.crop);
+      this.callbacks.onProgress?.(this.progress);
+      if (this.disposed) return;
       if (this.isPlaying && this.finished) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -764,10 +795,11 @@ class StaticBackend implements Backend {
     size: PixelSize,
     callbacks: BackendCallbacks,
     larger?: () => Promise<string>,
+    crop?: CropWindow,
   ): Promise<StaticBackend> {
     const image = await sharedStill(url);
     const target = acquire2d(canvas);
-    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger);
+    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger, crop);
     queueMicrotask(() => callbacks.onFinished());
     return backend;
   }
@@ -778,6 +810,7 @@ class StaticBackend implements Backend {
     private image: ImageBitmap,
     private size: PixelSize,
     private larger: (() => Promise<string>) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.draw();
   }
@@ -792,7 +825,7 @@ class StaticBackend implements Backend {
     this.size = size;
     this.draw();
     const larger = this.larger;
-    if (!larger || Math.max(size.width, size.height) <= SMALL_STILL_EDGE) return;
+    if (!larger || sourceEdge(size, this.crop) <= SMALL_STILL_EDGE) return;
     this.larger = undefined;
     void larger()
       .then(sharedStill)
@@ -815,7 +848,7 @@ class StaticBackend implements Backend {
     if (this.disposed) return;
     this.canvas.width = this.size.width;
     this.canvas.height = this.size.height;
-    drawStill(this.ctx, this.image, this.size.width, this.size.height);
+    drawStill(this.ctx, this.image, this.size.width, this.size.height, this.crop);
   }
 }
 
@@ -929,6 +962,7 @@ class Player implements ArtworkPlayer {
   private readonly host: EngineHost;
   private readonly scheduler: Scheduler;
   private readonly source: SceneSource;
+  private readonly creation = new AbortController();
   private readonly ref: ArtworkRef | undefined;
   private readonly icon: IconRef | undefined;
   readonly ready: Promise<void>;
@@ -938,6 +972,12 @@ class Player implements ArtworkPlayer {
     source: SceneSource | string,
     private readonly options: PlayerOptions,
   ) {
+    if (options.crop) {
+      const { x, y, width, height } = options.crop;
+      if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) {
+        throw new TypeError('crop must be a positive window inside the unit square');
+      }
+    }
     this.currentCanvas = canvas;
     this.source = typeof source === 'string' ? { sceneJson: source } : source;
     this.ref = isArtworkRef(this.source) ? this.source : undefined;
@@ -1039,6 +1079,7 @@ class Player implements ArtworkPlayer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.creation.abort();
     this.viewportWait?.cancel();
     this.backend?.dispose();
     this.backend = undefined;
@@ -1123,7 +1164,7 @@ class Player implements ArtworkPlayer {
 
   /** Withholding baked at hero sizes lets `resolveMode` pick static instead. */
   private bakedServesSize(): boolean {
-    return bakedServesEdge(Math.max(this.size.width, this.size.height));
+    return bakedServesEdge(sourceEdge(this.size, this.options.crop));
   }
 
   private assetOk(variant: AssetVariant): boolean {
@@ -1182,11 +1223,12 @@ class Player implements ArtworkPlayer {
         this.emit('statechange');
       },
       onFault: (error) => this.handleFault(error),
+      onProgress: this.options.onProgress,
     };
     switch (mode) {
       case 'live': {
         const create = (endTurn?: () => void) =>
-          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, endTurn);
+          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, this.creation.signal, endTurn);
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
@@ -1194,8 +1236,9 @@ class Player implements ArtworkPlayer {
         // with budget rather than joining the task that finished the still before it.
         return this.host.stillTurn().then(async (endTurn) => {
           try {
+            this.creation.signal.throwIfAborted();
             await this.scheduler.whenBudget();
-            if (this.disposed) throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+            this.creation.signal.throwIfAborted();
             return await create(endTurn);
           } catch (error) {
             endTurn();
@@ -1218,10 +1261,10 @@ class Player implements ArtworkPlayer {
   }
 
   private async createStatic(callbacks: BackendCallbacks): Promise<Backend> {
-    const variant = stillVariant(Math.max(this.size.width, this.size.height), this.assetOk('final-small'));
+    const variant = stillVariant(sourceEdge(this.size, this.options.crop), this.assetOk('final-small'));
     const [url] = await this.resolveUrls([variant]);
     const larger = variant === 'final-small' ? () => this.resolveUrls(['final']).then(([full]) => full!) : undefined;
-    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger);
+    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger, this.options.crop);
   }
 
   private async resolveUrls<const V extends readonly AssetVariant[]>(variants: V): Promise<string[]> {

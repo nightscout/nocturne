@@ -72,6 +72,18 @@ cargo test -p nocturne-watercolour-infra --release --test reveal_preserves_the_a
 
 ## The reveal instruments
 
+`nocturne-watercolour-wasm/examples/bloom_frames.rs` exports the `avatar-wash`
+donor used by `bloomScene` and renders authored scene JSON at selected ticks:
+
+```bash
+cargo run -p nocturne-watercolour-wasm --example bloom_frames --release -- donor donor.json 320
+cargo run -p nocturne-watercolour-wasm --example bloom_frames --release -- render bloom.json bloom-frames 400 150 2,8,16,26,38,52,70,90,115,150,220
+```
+
+Build `bloom.json` by passing the donor through `bloomScene` with the tile's
+size, reading seed, slope and token colour. The render command validates the
+document through the Rust parser before painting.
+
 Two `nocturne-watercolour-infra` examples exist to check the reveal rather
 than squint at it. Both are CPU-reference by default and take catalogue ids
 and palettes:

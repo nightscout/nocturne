@@ -9,8 +9,8 @@ export { default as DropSurface } from './components/DropSurface.svelte';
 export { default as DropGroup } from './components/DropGroup.svelte';
 export { createDropGroup, getDropGroup, setDropGroup } from './components/drop-group';
 export type { DropGroupContext } from './components/drop-group';
-export type { PlayerReadyCallback, PlayerStateCallback } from './components/helpers';
-export { hostSurface, watchSurface } from './components/helpers';
+export type { MountOptions, PlayerReadyCallback, PlayerStateCallback } from './components/helpers';
+export { hostSurface, watchSurface, mountPlayer } from './components/helpers';
 
 export type {
   ArtworkId,
@@ -21,6 +21,7 @@ export type {
   ArtworkQuality,
   ArtworkAutoplay,
   FitMode,
+  CropWindow,
   Surface,
   DetailLevel,
   IconNode,
@@ -88,3 +89,6 @@ export type { PigmentColours } from './api/drop-colour';
 
 export { WatercolourError, toWatercolourError } from './api/errors';
 export type { WatercolourErrorCode } from './api/errors';
+
+export { bloomScene } from './api/bloom-scene';
+export type { BloomSceneOptions } from './api/bloom-scene';

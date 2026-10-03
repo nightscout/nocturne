@@ -8,6 +8,7 @@ use std::task::{Context, Poll, Waker};
 use bytemuck::{Pod, Zeroable};
 #[cfg(not(target_arch = "wasm32"))]
 use nocturne_watercolour_core::application::Renderer;
+use nocturne_watercolour_core::application::ports::DabCharge;
 use nocturne_watercolour_core::application::{CheckpointId, EngineError, Simulator};
 use nocturne_watercolour_core::domain::optics::RenderParams;
 use nocturne_watercolour_core::domain::paint::{self, StampParams, StampTarget, WET_THRESHOLD};
@@ -23,6 +24,7 @@ use nocturne_watercolour_core::domain::{
 };
 
 use super::context::GpuContext;
+use super::interpolation::Interpolation;
 use super::layout::StateLayout;
 use super::surface::PresentSurface;
 use super::timer::GpuTimer;
@@ -229,6 +231,14 @@ struct StrokeUniform {
     /// Word offset of this stroke's rect in the stamp arena.
     stamp_offset: u32,
     _pad: [u32; 3],
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    inner: f32,
+    cell: f32,
+    scale_x: f32,
+    scale_y: f32,
+    edge_roughness: f32,
 }
 
 /// The rows and columns of a stamp that hold a non-zero coverage bit, with
@@ -310,6 +320,7 @@ struct RenderUniform {
     surface_coverage_gain: f32,
     _p2: f32,
     _p3: f32,
+    crop: [f32; 4],
 }
 
 #[derive(Clone)]
@@ -380,6 +391,7 @@ struct PaperKey {
     height: u32,
     aspect: u32,
     pixel_scale: u32,
+    crop: [u32; 4],
 }
 
 impl PaperKey {
@@ -397,6 +409,12 @@ impl PaperKey {
             height,
             aspect: aspect.to_bits(),
             pixel_scale: pixel_scale.to_bits(),
+            crop: [
+                0.0f32.to_bits(),
+                0.0f32.to_bits(),
+                1.0f32.to_bits(),
+                1.0f32.to_bits(),
+            ],
         }
     }
 }
@@ -418,6 +436,7 @@ struct PaperUniform {
     mix_weights: [f32; 4],
     height: [f32; 4],
     fence: [u32; 4],
+    crop: [f32; 4],
 }
 
 impl PaperUniform {
@@ -425,10 +444,11 @@ impl PaperUniform {
     fn new(paper: &Paper, key: PaperKey, first: u32) -> PaperUniform {
         let (width, height) = (key.width, key.height);
         let (ax, ay) = isotropic_scale(f32::from_bits(key.aspect));
+        let crop = key.crop.map(f32::from_bits);
         let t = PaperTerms::new(
             paper,
             f32::from_bits(key.pixel_scale),
-            grain_band_window(width.max(height) as f32),
+            grain_band_window((width as f32 / crop[2]).max(height as f32 / crop[3])),
         );
         let mut seeds = [[0u32; 4]; 4];
         for (i, seed) in t.seeds.iter().enumerate() {
@@ -459,6 +479,7 @@ impl PaperUniform {
             ],
             height: [paper.height_amplitude, 0.0, 0.0, 0.0],
             fence: [0; 4],
+            crop,
         }
     }
 }
@@ -632,6 +653,8 @@ pub struct GpuEngine {
     paper_cache: PaperCache,
     pool: BufferPool,
     timers: Option<Timers>,
+    interpolation: Option<Interpolation>,
+    crop: [f32; 4],
 }
 
 const COMMON: &str = include_str!("shaders/common.wgsl");
@@ -803,7 +826,9 @@ impl GpuEngine {
 
         let render_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("watercolour-render"),
-            source: wgpu::ShaderSource::Wgsl(RENDER_SOURCE.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!("{}\n{RENDER_SOURCE}", include_str!("shaders/canvas.wgsl")).into(),
+            ),
         });
         let render_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("watercolour-render"),
@@ -937,6 +962,8 @@ impl GpuEngine {
             paper_cache: Arc::default(),
             pool: Arc::default(),
             timers,
+            interpolation: None,
+            crop: [0.0, 0.0, 1.0, 1.0],
         };
         (engine, validation)
     }
@@ -955,6 +982,8 @@ impl GpuEngine {
             present: self.present.clone(),
             paper: self.paper.clone(),
             loaded: None,
+            interpolation: None,
+            crop: [0.0, 0.0, 1.0, 1.0],
             next_checkpoint: 1,
             checkpoint_budget: self.checkpoint_budget,
             in_flight: Mutex::new(VecDeque::new()),
@@ -1419,6 +1448,42 @@ impl GpuEngine {
         self.dispatch_apply(pipeline, rect.w * rect.h, slot)
     }
 
+    fn dab_uniform(
+        &self,
+        dab: &nocturne_watercolour_core::domain::Dab,
+        seed: Seed,
+    ) -> Result<StrokeUniform, EngineError> {
+        let l = self.loaded()?;
+        let geometry = paint::DabStamp::new(
+            dab,
+            l.width,
+            l.height,
+            l.paper_sim.aspect,
+            seed,
+            self.params.stamp,
+        );
+        Ok(StrokeUniform {
+            kind: 3,
+            pigment: dab.pigment as u32,
+            concentration: dab.concentration,
+            water: dab.water,
+            splat_out: self.params.flow.splat_out * dab.water.max(0.0),
+            rect_x: geometry.x,
+            rect_y: geometry.y,
+            rect_w: geometry.width,
+            rect_h: geometry.height,
+            center_x: geometry.center.0,
+            center_y: geometry.center.1,
+            radius: geometry.radius,
+            inner: geometry.inner,
+            cell: geometry.cell,
+            scale_x: geometry.scale.0,
+            scale_y: geometry.scale.1,
+            edge_roughness: geometry.edge_roughness,
+            ..StrokeUniform::zeroed()
+        })
+    }
+
     /// Reads the whole state back; used by tests and the CPU comparison.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn read_grid(&self) -> Result<SimulationGrid, EngineError> {
@@ -1509,7 +1574,9 @@ impl GpuEngine {
                 (l.paper, l.paper_sim.aspect)
             };
             let pixel_scale = if band_limit {
-                render_pixel_scale(width, height, aspect)
+                let virtual_width = (width as f32 / self.crop[2]).round() as u32;
+                let virtual_height = (height as f32 / self.crop[3]).round() as u32;
+                render_pixel_scale(virtual_width, virtual_height, aspect)
             } else {
                 0.0
             };
@@ -1530,10 +1597,9 @@ impl GpuEngine {
             std::mem::size_of::<RenderUniform>() as u64,
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         )?;
-        let paper_buf = self.paper_buffer(
-            PaperKey::new(&paper, width, height, aspect, pixel_scale),
-            &paper,
-        )?;
+        let mut paper_key = PaperKey::new(&paper, width, height, aspect, pixel_scale);
+        paper_key.crop = self.crop.map(f32::to_bits);
+        let paper_buf = self.paper_buffer(paper_key, &paper)?;
         let (presence_len, pigments) = {
             let l = self.loaded()?;
             (
@@ -1835,6 +1901,7 @@ impl GpuEngine {
             surface_coverage_gain: self.render_params.surface_coverage_gain,
             _p2: 0.0,
             _p3: 0.0,
+            crop: self.crop,
         }
     }
 
@@ -2005,7 +2072,10 @@ impl GpuEngine {
 
     /// The render timer when it is free to take a sample.
     fn render_timer(&self) -> Option<&GpuTimer> {
-        self.timers.as_ref().map(|t| &t.render).filter(|t| t.idle())
+        self.timers
+            .as_ref()
+            .map(|t| &t.render)
+            .filter(|t| t.sample_due())
     }
 
     /// The optics pass alone, with no readback or presentation; for timing.
@@ -2022,6 +2092,30 @@ impl GpuEngine {
         width: u32,
         height: u32,
         read_back: bool,
+    ) -> Result<Option<Vec<u8>>, EngineError> {
+        self.present_offscreen_inner(width, height, read_back, None)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn present_offscreen_at(
+        &mut self,
+        width: u32,
+        height: u32,
+        tick: u32,
+        blend: f32,
+    ) -> Result<Vec<u8>, EngineError> {
+        Ok(self
+            .present_offscreen_inner(width, height, true, Some((tick, blend)))?
+            .unwrap())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn present_offscreen_inner(
+        &mut self,
+        width: u32,
+        height: u32,
+        read_back: bool,
+        time: Option<(u32, f32)>,
     ) -> Result<Option<Vec<u8>>, EngineError> {
         let format = wgpu::TextureFormat::Rgba8Unorm;
         let size = wgpu::Extent3d {
@@ -2040,7 +2134,11 @@ impl GpuEngine {
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        self.draw_frame(&view, format, true, width, height)?;
+        if let Some((tick, blend)) = time {
+            self.draw_interpolated(&view, format, true, width, height, tick, blend)?;
+        } else {
+            self.draw_frame(&view, format, true, width, height)?;
+        }
         if !read_back {
             return Ok(None);
         }
@@ -2132,6 +2230,101 @@ impl GpuEngine {
         Ok(true)
     }
 
+    pub fn present_at(
+        &mut self,
+        surface: &PresentSurface,
+        tick: u32,
+        blend: f32,
+    ) -> Result<bool, EngineError> {
+        self.ctx.check()?;
+        let (width, height) = surface.size();
+        let Some(frame) = surface.acquire(&self.ctx)? else {
+            return Ok(false);
+        };
+        let view = frame.texture.create_view(&Default::default());
+        self.draw_interpolated(
+            &view,
+            surface.format(),
+            surface.encodes_srgb_in_shader(),
+            width,
+            height,
+            tick,
+            blend,
+        )?;
+        self.ctx.queue().present(frame);
+        Ok(true)
+    }
+
+    pub fn clear_interpolation(&mut self) {
+        self.interpolation = None;
+    }
+
+    /// Normalised source window; output pixels and paper cover only this region.
+    pub fn set_crop(&mut self, crop: [f32; 4]) -> Result<(), EngineError> {
+        let [x, y, width, height] = crop;
+        if !crop.iter().all(|v| v.is_finite())
+            || x < 0.0
+            || y < 0.0
+            || width <= 0.0
+            || height <= 0.0
+            || x + width > 1.0
+            || y + height > 1.0
+        {
+            return Err(EngineError::new(
+                "crop must be a positive window inside the unit square",
+            ));
+        }
+        if self.crop != crop {
+            self.crop = crop;
+            if let Some(loaded) = self.loaded.as_mut() {
+                loaded.render_cache = None;
+            }
+            self.clear_interpolation();
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_interpolated(
+        &mut self,
+        view: &wgpu::TextureView,
+        format: wgpu::TextureFormat,
+        encode_srgb: bool,
+        width: u32,
+        height: u32,
+        tick: u32,
+        blend: f32,
+    ) -> Result<(), EngineError> {
+        let mut images = self
+            .interpolation
+            .take()
+            .filter(|images| {
+                images.width == width && images.height == height && images.format == format
+            })
+            .unwrap_or_else(|| Interpolation::new(self.ctx.device(), width, height, format));
+        if images.advance(tick) {
+            self.draw_frame(
+                images.current_view(),
+                wgpu::TextureFormat::Rgba16Float,
+                false,
+                width,
+                height,
+            )?;
+        }
+        let commands = images.encode(
+            self.ctx.device(),
+            self.ctx.queue(),
+            view,
+            tick,
+            blend,
+            encode_srgb,
+        );
+        CommandCounter::add(&self.counter.passes, 1);
+        self.submit(commands)?;
+        self.interpolation = Some(images);
+        Ok(())
+    }
+
     fn present_pipeline(&self, format: wgpu::TextureFormat) -> wgpu::RenderPipeline {
         let mut cache = self
             .present
@@ -2210,6 +2403,7 @@ impl Future for MapFuture {
 
 impl Simulator for GpuEngine {
     fn load(&mut self, scene: &Scene) -> Result<(), EngineError> {
+        self.clear_interpolation();
         scene
             .validate()
             .map_err(|e| EngineError::new(format!("invalid scene: {e:?}")))?;
@@ -2370,7 +2564,7 @@ impl Simulator for GpuEngine {
     fn apply(&mut self, op: &Operation, seed: Seed) -> Result<(), EngineError> {
         let stamp_params: StampParams = self.params.stamp;
         match op {
-            Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_) => {
+            Operation::Brush(_) | Operation::Dab(_) | Operation::Water(_) | Operation::Lift(_) => {
                 self.loaded_mut()?.maybe_wet = true;
             }
             Operation::DryAll => self.loaded_mut()?.maybe_wet = false,
@@ -2399,6 +2593,32 @@ impl Simulator for GpuEngine {
             )
         };
         match op {
+            Operation::Dab(dab) => {
+                let stroke = self.dab_uniform(dab, seed)?;
+                if stroke.rect_w == 0 || stroke.rect_h == 0 {
+                    return Ok(());
+                }
+                let full = self
+                    .pending
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .as_ref()
+                    .is_some_and(|p| p.strokes >= STROKE_SLOTS);
+                if full {
+                    self.flush()?;
+                }
+                let slot = self.with_pending(|p| {
+                    let slot = p.strokes;
+                    p.strokes += 1;
+                    slot
+                });
+                self.write_buffer(
+                    &l.stroke,
+                    u64::from(self.stroke_offset(slot)),
+                    bytemuck::bytes_of(&stroke),
+                );
+                self.dispatch_apply(&self.sim.apply_brush, stroke.rect_w * stroke.rect_h, slot)
+            }
             Operation::Brush(s) => {
                 let stamp = rasterize(&s.path, s.radius, s.softness, s.span);
                 let flow = paint::stroke_flow(&s.path, s.span, aspect, s.water, self.params.flow);
@@ -2491,17 +2711,15 @@ impl Simulator for GpuEngine {
             return Ok(());
         }
         let sample_free = !self.with_pending(|p| p.tick_sample);
+        let mut sample = false;
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            if t.tick.idle() && sample_free {
+            sample = sample_free && t.tick.sample_due();
+            if sample {
                 t.sampled_ticks = ticks;
             }
         }
-        let timer = self
-            .timers
-            .as_ref()
-            .map(|t| &t.tick)
-            .filter(|t| t.idle() && sample_free);
+        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|_| sample);
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
@@ -2536,6 +2754,103 @@ impl Simulator for GpuEngine {
         Ok(())
     }
 
+    fn step_with_dabs(&mut self, ticks: u32, charges: &[DabCharge<'_>]) -> Result<(), EngineError> {
+        if charges.is_empty() {
+            return self.step(ticks);
+        }
+        self.loaded_mut()?.maybe_wet = true;
+        let mut tick = 0;
+        while tick < ticks {
+            let (pending_ticks, slots) = self.with_pending(|p| (p.ticks, p.strokes));
+            let mut batch = (ticks - tick).min(TICKS_PER_SUBMIT - pending_ticks);
+            let count = |batch| {
+                charges
+                    .iter()
+                    .filter(|c| c.at_tick >= tick && c.at_tick < tick + batch)
+                    .count() as u32
+            };
+            while batch > 1 && count(batch) > STROKE_SLOTS {
+                batch -= 1;
+            }
+            if count(batch) > STROKE_SLOTS {
+                for charge in charges.iter().filter(|c| c.at_tick == tick) {
+                    self.apply(&Operation::Dab(charge.dab.clone()), charge.seed)?;
+                }
+                self.step(1)?;
+                tick += 1;
+                continue;
+            }
+            if slots + count(batch) > STROKE_SLOTS {
+                self.flush()?;
+                continue;
+            }
+            let uniforms: Vec<_> = charges
+                .iter()
+                .filter(|c| c.at_tick >= tick && c.at_tick < tick + batch)
+                .map(|c| self.dab_uniform(c.dab, c.seed).map(|u| (c.at_tick, u)))
+                .collect::<Result<_, _>>()?;
+            let sample_free = !self.with_pending(|p| p.tick_sample);
+            let mut sample = false;
+            if let Some(t) = self.timers.as_mut() {
+                t.collect();
+                sample = sample_free && t.tick.sample_due();
+                if sample {
+                    t.sampled_ticks = batch;
+                }
+            }
+            let timer = self.timers.as_ref().map(|t| &t.tick).filter(|_| sample);
+            let l = self.loaded()?;
+            for (index, (_, uniform)) in uniforms.iter().enumerate() {
+                self.write_buffer(
+                    &l.stroke,
+                    u64::from(self.stroke_offset(slots + index as u32)),
+                    bytemuck::bytes_of(uniform),
+                );
+            }
+            let full = self.with_pending(|p| {
+                let mut charges = uniforms.iter().enumerate().peekable();
+                {
+                    let mut pass = p.enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("dab-ticks"),
+                        timestamp_writes: timer.map(|t| t.compute_writes(true, true)),
+                    });
+                    CommandCounter::add(&self.counter.passes, 1);
+                    for at_tick in tick..tick + batch {
+                        while charges.peek().is_some_and(|(_, (at, _))| *at == at_tick) {
+                            let (index, (_, uniform)) = charges.next().unwrap();
+                            let cells = uniform.rect_w * uniform.rect_h;
+                            if cells == 0 {
+                                continue;
+                            }
+                            pass.set_pipeline(&self.sim.apply_brush);
+                            pass.set_bind_group(
+                                0,
+                                &l.bind_group,
+                                &[self.stroke_offset(slots + index as u32)],
+                            );
+                            pass.dispatch_workgroups(cells.div_ceil(256), 1, 1);
+                            CommandCounter::add(&self.counter.dispatches, 1);
+                        }
+                        pass.set_bind_group(0, &l.bind_group, &[0]);
+                        self.encode_tick(&mut pass, l);
+                    }
+                }
+                if let Some(t) = timer {
+                    t.resolve(&mut p.enc);
+                    p.tick_sample = true;
+                }
+                p.strokes += uniforms.len() as u32;
+                p.ticks += batch;
+                p.ticks >= TICKS_PER_SUBMIT
+            });
+            tick += batch;
+            if full {
+                self.flush()?;
+            }
+        }
+        Ok(())
+    }
+
     fn snapshot(&mut self) -> Result<Option<CheckpointId>, EngineError> {
         let capacity = self.checkpoint_capacity();
         let l = self.loaded()?;
@@ -2557,6 +2872,7 @@ impl Simulator for GpuEngine {
     }
 
     fn restore(&mut self, id: CheckpointId) -> Result<(), EngineError> {
+        self.clear_interpolation();
         let l = self.loaded()?;
         let src = l
             .checkpoints

@@ -21,6 +21,7 @@ export interface WasmInstance {
   free(): void;
   attach(canvas: HTMLCanvasElement, width: number, height: number): void;
   resize(width: number, height: number): void;
+  setCrop(x: number, y: number, width: number, height: number): void;
   play(): void;
   pause(): void;
   reset(): void;
@@ -46,6 +47,8 @@ export interface WasmInstance {
   simResolution(): number;
   /** Simulation steps the loaded scene's timeline runs. */
   totalTicks(): number;
+  tickBudget(): number;
+  currentTick(): number;
   checkpointBytes(): number;
   detach(): void;
   dispose(): void;

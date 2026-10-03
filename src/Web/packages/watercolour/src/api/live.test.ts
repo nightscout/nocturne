@@ -15,7 +15,11 @@ function fakeInstance(total: number) {
     get tick() {
       return tick;
     },
-    attach() {},
+    attach(canvas: HTMLCanvasElement, width: number, height: number) {
+      canvas.width = width;
+      canvas.height = height;
+    },
+    setCrop: vi.fn(),
     setProgressCurve() {},
     play: () => void (playing = true),
     pause: () => void (playing = false),
@@ -49,6 +53,8 @@ function fakeInstance(total: number) {
     dispose: () => void calls.push('dispose'),
     simResolution: () => 96,
     totalTicks: () => total,
+    tickBudget: () => 6,
+    currentTick: () => tick,
   };
   return instance;
 }
@@ -125,6 +131,118 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('cancelled live creation', () => {
+  it('balances the lease without creating a scene after the engine await', async () => {
+    let complete!: (module: WasmModule) => void;
+    const module_ready = new Promise<WasmModule>(resolve => { complete = resolve; });
+    const instance = fakeInstance(4);
+    const create_instance = vi.fn(() => instance);
+    const module = {
+      default: async () => {},
+      WatercolourEngine: { create: async () => ({ createInstance: create_instance, onDeviceLost() {}, stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }) }) },
+      catalogueScene: () => '{"version":1}',
+    } as unknown as WasmModule;
+    const engine_host = new EngineHost({ loadModule: () => module_ready, capabilities: gpu });
+    const { scheduler } = manualScheduler();
+    const live = player(instance, scheduler, { engineHost: engine_host });
+    await idle();
+    expect(engine_host.refCount).toBe(1);
+    live.dispose();
+    complete(module);
+    await live.ready;
+    expect(create_instance).not.toHaveBeenCalled();
+    expect(engine_host.refCount).toBe(0);
+    const next = player(instance, scheduler, { engineHost: engine_host });
+    await next.ready;
+    expect(next.state.mode).toBe('live');
+    next.dispose();
+    expect(engine_host.refCount).toBe(0);
+  });
+
+  it('ends a cancelled queued still turn before taking an engine lease', async () => {
+    const instance = fakeInstance(4);
+    const engine_host = fakeHost(instance);
+    const end_turn = await engine_host.stillTurn();
+    const { scheduler } = manualScheduler();
+    const live = player(instance, scheduler, { engineHost: engine_host, releaseAfterFinish: true, motion: 'reduced' });
+    await idle(); live.dispose(); end_turn();
+    await live.ready;
+    expect(engine_host.refCount).toBe(0);
+    expect(instance.calls).toEqual([]);
+    const next_turn = await engine_host.stillTurn();
+    next_turn();
+  });
+});
+
+describe('presented progress', () => {
+  it('paints the requested source window into the visible backing size', async () => {
+    const instance = fakeInstance(1);
+    const { scheduler } = manualScheduler();
+    const crop = { x: 0.2, y: 0.3, width: 0.5, height: 0.4 };
+    const live = player(instance, scheduler, { width: 400, height: 150, crop });
+    await live.ready;
+    expect(live.state.mode).toBe('live');
+    expect(instance.setCrop).toHaveBeenCalledWith(0.2, 0.3, 0.5, 0.4);
+    expect(live.canvas.width).toBe(400);
+    expect(live.canvas.height).toBe(150);
+    expect(live.state.detail).toBe('extraLarge');
+    live.dispose();
+  });
+
+  it('rejects a crop outside the authored painting before acquiring an engine', () => {
+    const instance = fakeInstance(1);
+    const { scheduler } = manualScheduler();
+    expect(() => player(instance, scheduler, { crop: { x: 0.9, y: 0, width: 0.2, height: 1 } })).toThrow(TypeError);
+  });
+
+  it('allows a progress callback to dispose the player before finish', async () => {
+    const instance = fakeInstance(1);
+    const { scheduler, frame } = manualScheduler();
+    let live: ReturnType<typeof player>;
+    live = player(instance, scheduler, { onProgress: () => live.dispose() });
+    await live.ready;
+    const finished = vi.fn();
+    live.on('finished', finished);
+    instance.isFinished = () => {
+      if (instance.calls.includes('dispose')) throw new Error('freed instance');
+      return instance.tick >= 1;
+    };
+    expect(() => { for (let i = 0; i < 5; i++) frame(); }).not.toThrow();
+    expect(instance.calls).toContain('dispose');
+    expect(finished).not.toHaveBeenCalled();
+  });
+
+  it('crosses the coverage threshold before finishing without extra state notifications', async () => {
+    const instance = fakeInstance(40);
+    const { scheduler, frame } = manualScheduler();
+    const progress: number[] = [];
+    const live = player(instance, scheduler, { onProgress: (p) => progress.push(p) });
+    await live.ready;
+    const statechange = vi.fn();
+    live.on('statechange', statechange);
+    for (let i = 0; i < 90 && !progress.some((p) => p >= 0.67); i++) frame();
+    expect(progress.some((p) => p >= 0.67 && p < 1)).toBe(true);
+    expect(live.state.finished).toBe(false);
+    expect(statechange).not.toHaveBeenCalled();
+    live.dispose();
+  });
+
+  it('withholds progress while a swapchain frame cannot be presented', async () => {
+    const instance = fakeInstance(40);
+    instance.render = () => false;
+    const { scheduler, frame } = manualScheduler();
+    const onProgress = vi.fn();
+    const live = player(instance, scheduler, { onProgress });
+    await live.ready;
+    for (let i = 0; i < 5; i++) frame();
+    expect(onProgress).not.toHaveBeenCalled();
+    instance.render = () => true;
+    frame();
+    expect(onProgress).toHaveBeenCalledWith(instance.tick / 40);
+    live.dispose();
+  });
 });
 
 describe('a live still under reduced motion', () => {

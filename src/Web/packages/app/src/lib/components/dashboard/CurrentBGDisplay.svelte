@@ -139,7 +139,11 @@
 </script>
 
 {#snippet rangeWash()}
-  <GlucoseTileWash mills={realtimeStore.currentEntry?.mills} variant={tileVariant} />
+  <GlucoseTileWash
+    mills={realtimeStore.currentEntry?.mills}
+    variant={tileVariant}
+    delta={realtimeStore.currentEntry?.mills && currentTime.getTime() - realtimeStore.currentEntry.mills <= STALE_THRESHOLD_MS ? rawBgDelta : 0}
+  />
 {/snippet}
 
 <!-- Desktop only: on mobile, MobileHeader carries the reading. -->

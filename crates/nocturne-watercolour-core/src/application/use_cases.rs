@@ -59,12 +59,17 @@ impl ApplyOperation {
         op: &Operation,
         seed: Seed,
     ) -> Result<(), EngineError> {
-        if let Operation::Brush(b) = op
-            && b.pigment >= scene.palette.len()
+        let pigment = match op {
+            Operation::Brush(b) => Some(b.pigment),
+            Operation::Dab(d) => Some(d.pigment),
+            _ => None,
+        };
+        if let Some(pigment) = pigment
+            && pigment >= scene.palette.len()
         {
             return Err(EngineError::new(format!(
                 "pigment index {} out of range for palette of {}",
-                b.pigment,
+                pigment,
                 scene.palette.len()
             )));
         }

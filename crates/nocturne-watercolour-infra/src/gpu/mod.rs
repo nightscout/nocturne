@@ -5,6 +5,7 @@
 
 mod context;
 mod engine;
+mod interpolation;
 mod layout;
 mod surface;
 mod timer;

@@ -1,20 +1,24 @@
-// Operations (paint::apply_brush, apply_water, apply_lift, sim::dry_all).
-// The stamp coverage is rasterised on the CPU by the shared `paint` module
-// and uploaded (the rect holding its non-zero cells), so geometry is
-// identical on both backends; these entry
-// points only add it into the grid, with stroke water modulated by paper
-// height as in paint::stroke_water_factor. The laydown flow (paint::
-// StrokeFlow) arrives already computed in the stroke uniform, and only its
-// outward direction is evaluated here, off the same stamp buffer the CPU
-// reads. No deviation from the CPU reference.
-
-// Coverage at grid cell (x, y); zero outside the uploaded rect, which holds
-// every non-zero cell of the rasterised stamp.
 fn stamp_at(x: u32, y: u32) -> f32 {
     if x < stroke.rect_x || y < stroke.rect_y { return 0.0; }
     let lx = x - stroke.rect_x;
     let ly = y - stroke.rect_y;
     if lx >= stroke.rect_w || ly >= stroke.rect_h { return 0.0; }
+    if stroke.kind == 3u {
+        let pu = (f32(x) + 0.5) / f32(P.width) * stroke.scale_x;
+        let pv = (f32(y) + 0.5) / f32(P.height) * stroke.scale_y;
+        let dx = pu - stroke.center_x;
+        let dy = pv - stroke.center_y;
+        let distance = sqrt(dx * dx + dy * dy);
+        let grain = state[o_h() + y * P.width + x] - 0.5;
+        let shifted = distance + grain * stroke.edge_roughness * stroke.radius;
+        let aa = 0.75 * stroke.cell / stroke.radius;
+        let inner = min(stroke.inner, 1.0 - aa);
+        let d = shifted / stroke.radius;
+        if d <= inner { return 1.0; }
+        if d >= 1.0 { return 0.0; }
+        let t = (d - inner) / max(1.0 - inner, 1e-5);
+        return 1.0 - t * t * (3.0 - 2.0 * t);
+    }
     return stamp[stroke.stamp_offset + ly * stroke.rect_w + lx];
 }
 
@@ -23,11 +27,7 @@ fn stamp_cell(li: u32) -> u32 {
     return (stroke.rect_y + li / stroke.rect_w) * P.width + stroke.rect_x + li % stroke.rect_w;
 }
 
-// Mirror of paint::outward_at. Coverage is highest on the centre line and
-// falls to zero at the rim, so the descent direction of the stamp field is
-// the direction the landing water is shouldered. The neighbour clamps match
-// the Rust saturating/min pair cell for cell; the lockstep tests compare
-// intermediate ticks and will catch any drift.
+// Flow follows coverage gradients, including paper grain.
 fn outward_at(i: u32) -> vec2<f32> {
     let w = P.width;
     let h = P.height;
@@ -57,7 +57,7 @@ fn apply_brush(@builtin(global_invocation_id) gid: vec3<u32>) {
     let li = gid.x;
     if li >= stroke.rect_w * stroke.rect_h { return; }
     let i = stamp_cell(li);
-    let cov = stamp[stroke.stamp_offset + li] * state[o_m() + i];
+    let cov = stamp_at(i % P.width, i / P.width) * state[o_m() + i];
     if cov <= 0.0 { return; }
     let k = min(stroke.pigment, P.pigment_count - 1u);
     let water = stroke.water * cov * stroke_water_factor(state[o_h() + i]);

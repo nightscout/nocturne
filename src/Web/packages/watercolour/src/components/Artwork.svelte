@@ -2,6 +2,7 @@
   import { type ArtworkId, type ArtworkOptions, type FitMode, type IconArtworkSource, type Surface } from '../types';
   import { getPresentation, subscribePresentation } from '../api/presentation';
   import { iconSvg } from '../api/scenes';
+  import type { CropWindow } from '../types';
   import { type PlayerReadyCallback, type PlayerStateCallback, hostSurface, mountPlayer } from './helpers';
 
   let {
@@ -18,6 +19,7 @@
     mode,
     autoplay,
     fit,
+    crop,
     surface,
     position = 'relative',
     assetBaseUrl,
@@ -33,6 +35,7 @@
     surface?: Surface;
     /** `contain` (default) preserves the artwork's aspect; `fill` stretches to the container. */
     fit?: FitMode;
+    crop?: CropWindow;
     /**
      * The frame's `position`. The canvas is absolute within it, so the frame
      * has to be a containing block; any value but `static` is one. Set
@@ -83,6 +86,7 @@
         mode,
         autoplay,
         fit,
+        crop,
         surface,
         assetBaseUrl,
         releaseAfterFinish: releaseAfterFinish ?? autoplay !== 'never',
@@ -95,20 +99,33 @@
 
 <div
   bind:this={frame}
-  class={className}
+  class="nwc-frame {className}"
+  class:nwc-absolute={position === 'absolute'}
+  class:nwc-fixed={position === 'fixed'}
+  class:nwc-sticky={position === 'sticky'}
   aria-hidden="true"
   role="presentation"
-  style:position
-  style:overflow="hidden"
 >
   {#if plainIcon}
-    <div class="nwc-plain-icon" style="position:absolute;inset:0">{@html plainIcon}</div>
+    <div class="nwc-plain-icon">{@html plainIcon}</div>
   {:else}
-    <canvas bind:this={canvas} style="position:absolute;inset:0;display:block"></canvas>
+    <canvas bind:this={canvas}></canvas>
   {/if}
 </div>
 
 <style>
+  .nwc-frame {
+    position: relative;
+    overflow: hidden;
+  }
+  .nwc-absolute { position: absolute; }
+  .nwc-fixed { position: fixed; }
+  .nwc-sticky { position: sticky; }
+  canvas, .nwc-plain-icon {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
   .nwc-plain-icon :global(svg) {
     display: block;
     width: 100%;

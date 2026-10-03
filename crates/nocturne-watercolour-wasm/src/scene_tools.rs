@@ -213,8 +213,13 @@ pub fn apply_intensity(scene: &mut Scene, intensity: f32) {
         return;
     }
     for event in &mut scene.timeline.events {
-        if let Operation::Brush(b) = &mut event.op {
-            b.concentration = (b.concentration * factor).clamp(0.0, MAX_CONCENTRATION);
+        let concentration = match &mut event.op {
+            Operation::Brush(b) => Some(&mut b.concentration),
+            Operation::Dab(d) => Some(&mut d.concentration),
+            _ => None,
+        };
+        if let Some(concentration) = concentration {
+            *concentration = (*concentration * factor).clamp(0.0, MAX_CONCENTRATION);
         }
     }
 }
