@@ -64,18 +64,24 @@
 
     if (previous === undefined || previous >= target || motion === "reduced") {
       current.pause();
-      current.seek(position);
-      reached();
-      return;
+      current.seekTo(position);
+      let frame = requestAnimationFrame(function watchSeek() {
+        if (!current.state.seeking) { reached(); return; }
+        frame = requestAnimationFrame(watchSeek);
+      });
+      return () => cancelAnimationFrame(frame);
     }
 
-    current.seek(previous / HUB_PAINTING_STOPS);
+    current.seekTo(previous / HUB_PAINTING_STOPS);
     current.play();
     let frame = requestAnimationFrame(function watch() {
-      if (current.state.progress >= position || !current.state.playing) {
+      if (!current.state.seeking && (current.state.progress >= position || !current.state.playing)) {
         current.pause();
-        current.seek(position);
-        reached();
+        current.seekTo(position);
+        frame = requestAnimationFrame(function watchSeek() {
+          if (!current.state.seeking) { reached(); return; }
+          frame = requestAnimationFrame(watchSeek);
+        });
         return;
       }
       frame = requestAnimationFrame(watch);

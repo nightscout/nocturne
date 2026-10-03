@@ -9,7 +9,7 @@
       progress: 0,
       playing: false,
     },
-    seek(progress: number) {
+    seekTo(progress: number) {
       fakePlayer.seeks.push(progress);
       fakePlayer.state.progress = progress;
     },
