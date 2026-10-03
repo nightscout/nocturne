@@ -1,0 +1,40 @@
+{
+  "name": "@nocturne/watercolour",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Watercolour artwork for the Nocturne UI: WebGPU-simulated reveals with baked and static fallbacks",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./assets/*": "./assets/*"
+  },
+  "scripts": {
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "bake": "node scripts/lucide-icons.mjs && cargo run -p nocturne-watercolour-wasm --example bake_catalogue --release --manifest-path ../../../../crates/Cargo.toml -- ./assets ./scripts/bake-manifest.json && node scripts/to-webp.mjs",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "bench": "node bench/run.mjs"
+  },
+  "peerDependencies": {
+    "lucide": ">=0.400.0",
+    "svelte": ">=5.0.0",
+    "tailwindcss": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@types/node": "^24.0.0",
+    "sharp": "^0.34.5",
+    "svelte": "5.55.5",
+    "svelte-check": "^4.4.2",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1",
+    "vitest": "^4.1.6"
+  },
+  "dependencies": {
+    "@chenglou/pretext": "^0.0.9"
+  }
+}

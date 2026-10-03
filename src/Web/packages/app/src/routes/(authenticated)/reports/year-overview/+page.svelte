@@ -3,9 +3,9 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import { scaleThreshold } from "d3-scale";
   import { Button } from "$lib/components/ui/button";
+  import { Artwork } from "@nocturne/watercolour";
   import {
     getAvailableYears,
     getDailySummary,
@@ -678,11 +678,13 @@
         in:fade={{ duration: 300 }}
       >
         <div class="max-w-md space-y-4 text-center">
-          <div
-            class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted"
-          >
-            <CalendarDays class="h-8 w-8 text-muted-foreground" />
-          </div>
+          <Artwork
+            artwork="calendar"
+            palette="moonlight"
+            motion="auto"
+            autoplay="once"
+            class="mx-auto size-48"
+          />
           <h2 class="text-xl font-semibold">No Data Available</h2>
           <p class="text-muted-foreground">
             There is no data to display yet. Connect a data source in your

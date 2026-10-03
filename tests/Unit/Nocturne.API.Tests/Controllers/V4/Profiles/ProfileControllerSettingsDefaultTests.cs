@@ -61,7 +61,8 @@ public class ProfileControllerSettingsDefaultTests
             Mock.Of<ICarbRatioScheduleRepository>(),
             Mock.Of<ISensitivityScheduleRepository>(),
             Mock.Of<ITargetRangeScheduleRepository>(),
-            Mock.Of<IProfileProjectionService>()
+            Mock.Of<IProfileProjectionService>(),
+            Mock.Of<IProfileDeletionService>()
         );
     }
 

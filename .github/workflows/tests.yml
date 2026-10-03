@@ -31,6 +31,7 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e == 'true' || github.event_name != 'pull_request' }}
       migrations: ${{ steps.filter.outputs.migrations == 'true' || github.event_name != 'pull_request' }}
       crates: ${{ steps.filter.outputs.crates == 'true' || github.event_name != 'pull_request' }}
+      watercolour: ${{ steps.filter.outputs.watercolour == 'true' || github.event_name != 'pull_request' }}
       desktop: ${{ steps.filter.outputs.desktop == 'true' || github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v5
@@ -52,7 +53,9 @@ jobs:
               - 'tests/**'
               - 'nocturne.sln'
               - 'docs/postgres/**'
-              - 'crates/**'
+              - &alert-crates 'crates/nocturne-alerts-*/**'
+              - &crates-workspace 'crates/Cargo.*'
+              - 'crates/clippy.toml'
             web:
               - *shared
               - 'src/Web/**'
@@ -72,13 +75,21 @@ jobs:
               - 'docs/postgres/**'
             crates:
               - *shared
-              - 'crates/**'
+              - *alert-crates
+              - *crates-workspace
+              - 'crates/clippy.toml'
               - 'src/API/**'
               - 'tests/Parity/**'
               - 'tests/Unit/Nocturne.Alerts.Native.Tests/**'
             desktop:
               - *shared
               - 'src/Web/packages/desktop/src-tauri/**'
+            watercolour:
+              - *shared
+              - 'crates/nocturne-watercolour-*/**'
+              - *crates-workspace
+              - 'crates/clippy.toml'
+              - 'src/Web/packages/watercolour/**'
 
   # Compiles every test project once and runs the API client codegen (NSwag, then the
   # Zod schemas and remote functions through pnpm) as the API build's post-build step. The test jobs
@@ -277,17 +288,20 @@ jobs:
             crates/target
           # Sources, not just the lockfile: actions/cache restores crates/target with
           # mtimes newer than the checked-out sources, and cargo's path-package fingerprint
-          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build.
-          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+          # is mtime-based, so a lockfile-only key lets a source change reuse a stale build. For
+          # the same reason there are no restore-keys. Only the crates this job builds are hashed.
+          key: cargo-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/nocturne-alerts-*/**/*.rs', 'crates/**/Cargo.toml') }}
       # --all-features compiles the uniffi surface Prelude ships; the default-feature clippy
-      # covers the cdylib the backend loads.
+      # covers the cdylib the backend loads. The watercolour crates have their own job.
       - name: Rust tests, clippy, fmt
         working-directory: crates
         run: |
-          cargo test --workspace --all-features
-          cargo clippy --workspace --all-targets -- -D warnings
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-          cargo fmt --check
+          alerts=(--workspace --exclude nocturne-watercolour-core
+            --exclude nocturne-watercolour-infra --exclude nocturne-watercolour-wasm)
+          cargo test "${alerts[@]}" --all-features
+          cargo clippy "${alerts[@]}" --all-targets -- -D warnings
+          cargo clippy "${alerts[@]}" --all-targets --all-features -- -D warnings
+          cargo fmt --check -p nocturne-alerts-core -p nocturne-alerts-ffi
       - name: Build nocturne_alerts cdylib
         working-directory: crates
         run: cargo build --release -p nocturne-alerts-ffi
@@ -330,6 +344,39 @@ jobs:
         with:
           name: alerts-ffi-parity-trx
           path: "**/*.trx"
+
+  # The watercolour engine crates, apart from the alert engine's job: wgpu/naga and the
+  # catalogue's CPU render sweep are most of this job's time. The GPU tests skip on a runner
+  # without a hardware device. rust-cache keeps only dependencies, so a partial restore never
+  # hands cargo a workspace build whose mtimes outrank the checked-out sources. The reveal
+  # sweep ignored here runs in watercolour-reveal-sweep.yml.
+  watercolour:
+    needs: changes
+    if: needs.changes.outputs.watercolour == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: crates
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: crates -> target
+          key: watercolour
+      - name: Format
+        run: cargo fmt --check -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: cargo clippy -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm --all-targets --locked -- -D warnings
+      - name: Tests
+        if: ${{ !cancelled() }}
+        run: cargo test -p nocturne-watercolour-core -p nocturne-watercolour-infra -p nocturne-watercolour-wasm --locked
 
   # The desktop Companion's Tauri crate. Windows only: tauri-winrt-notification's `windows`
   # dependency does not compile elsewhere (see desktop-release.yml). generate_context! embeds
@@ -814,6 +861,7 @@ jobs:
       - unit
       - alert-corpus-check
       - alerts-ffi-parity
+      - watercolour
       - desktop-rust
       - web-static
       - web-app-tests

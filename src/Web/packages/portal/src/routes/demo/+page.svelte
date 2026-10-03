@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { ConfirmationBackground } from "@nocturne/watercolour";
     import { Button } from "@nocturne/ui/ui/button";
     import ExternalLink from "@lucide/svelte/icons/external-link";
     import { DEMO_ENABLED, DEMO_WEB_URL } from "$lib/config";
@@ -12,6 +13,12 @@
 <div class="container mx-auto px-4 py-20">
     {#if DEMO_ENABLED && DEMO_WEB_URL}
         <div class="max-w-xl mx-auto text-center">
+            <div
+                class="relative mx-auto mb-6 h-16 w-48 overflow-hidden dark:hidden"
+                aria-hidden="true"
+            >
+                <ConfirmationBackground palette="moss" motion="auto" autoplay="once" />
+            </div>
             <h1 class="text-3xl font-bold mb-4">Live demo</h1>
             <p class="text-muted-foreground mb-6">
                 A full Nocturne instance you can explore and change: add treatments, edit

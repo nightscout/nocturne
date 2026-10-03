@@ -1,0 +1,510 @@
+{
+  "version": 1,
+  "seed": 1610,
+  "intensity": 0.7,
+  "detail": "large",
+  "durationMs": 600,
+  "stripFrames": 10,
+  "artworks": [
+    {
+      "id": "crescent-moon",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "alarm-bell",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "linked-rings",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "report-pages",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "magnifying-glass",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "confirmation-mark",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "avatar-wash",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "tab-underline",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 192,
+      "stripHeight": 24
+    },
+    {
+      "id": "selection-edge",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 32,
+      "stripHeight": 192
+    },
+    {
+      "id": "confirmation-background",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 192,
+      "stripHeight": 64
+    },
+    {
+      "id": "header-motif",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 192,
+      "stripHeight": 38
+    },
+    {
+      "id": "moonlit-shoreline",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 192,
+      "stripHeight": 108
+    },
+    {
+      "id": "distant-mountains",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 256,
+      "stripHeight": 128
+    },
+    {
+      "id": "connected-shores",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 256,
+      "stripHeight": 128
+    },
+    {
+      "id": "overlapping-shapes",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 256,
+      "stripHeight": 256
+    },
+    {
+      "id": "calendar",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "clock",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "stopwatch",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "sunrise",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "footprints",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "apple",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "pizza-slice",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "spanner",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "suitcase",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "paint-palette",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "key",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "plug",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "apartment",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "world-globe",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "github-mark",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "heart",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "blood-drop",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "heart-rate",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "shield",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "people-group",
+      "palette": "dusk",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "exclamation-mark",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "chat-bubble",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "phone",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:database",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:server",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:cpu",
+      "palette": "slate",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:fingerprint",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:battery",
+      "palette": "water",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:sprout",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:scale",
+      "palette": "moss",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:syringe",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:flag",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:megaphone",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:rocket",
+      "palette": "ember",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    },
+    {
+      "id": "lucide:book-open",
+      "palette": "moonlight",
+      "surfaces": [
+        "light",
+        "dark"
+      ],
+      "stripWidth": 160,
+      "stripHeight": 160
+    }
+  ]
+}

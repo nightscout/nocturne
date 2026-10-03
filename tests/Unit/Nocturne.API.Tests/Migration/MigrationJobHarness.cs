@@ -101,16 +101,23 @@ internal static class MigrationJobHarness
         IServiceProvider provider, params string[] collections) =>
         RunAsync(provider, onCreated: null, collections);
 
+    /// <summary>A tenant to run several jobs under, so their runs share one migration source row.</summary>
+    public static TenantContext NewTenant() => new(
+        Guid.CreateVersion7(), "migrated", "Migrated Tenant", true, IsDemo: false);
+
     /// <summary>
     /// <paramref name="onCreated"/> receives the job before it starts, so a test's stub source can
     /// cancel it mid-fetch the way the user's Cancel button does.
     /// </summary>
     public static async Task<MigrationJobStatus> RunAsync(
-        IServiceProvider provider, Action<MigrationJob>? onCreated, string[] collections, ILogger? logger = null,
-        string nightscoutUrl = "https://example-nightscout.invalid")
+        IServiceProvider provider,
+        Action<MigrationJob>? onCreated,
+        string[] collections,
+        ILogger? logger = null,
+        string nightscoutUrl = "https://example-nightscout.invalid",
+        TenantContext? owner = null)
     {
-        var tenant = new TenantContext(
-            Guid.CreateVersion7(), "migrated", "Migrated Tenant", true, IsDemo: false);
+        var tenant = owner ?? NewTenant();
 
         var job = new MigrationJob(
             Guid.CreateVersion7(),

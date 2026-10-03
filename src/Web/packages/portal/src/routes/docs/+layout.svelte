@@ -54,7 +54,7 @@
             </div>
         </aside>
 
-        <div class="flex-1 min-w-0">
+        <div class="flex-1 min-w-0 docs-main">
             <article class="prose prose-neutral dark:prose-invert max-w-none">
                 {@render children()}
             </article>
@@ -70,6 +70,35 @@
         display: block;
         max-width: 100%;
         overflow-x: auto;
+    }
+
+    /* The article caps its measure at max-w-3xl, so on a wide screen the rest
+       of the main column is empty. A hero reclaims it: above the float
+       breakpoint the page block widens to take the gutter, while the prose
+       inside it stays capped, so only the floated paint uses the extra width
+       and the reading measure never changes. */
+    /* A non-wrapping hero is placed against this box's right edge. */
+    .docs-main :global(.max-w-3xl) {
+        position: relative;
+    }
+
+    @media (min-width: 1024px) {
+        .docs-main :global(.max-w-3xl) {
+            max-width: min(
+                68rem,
+                min(1536px, 100vw - 2rem) - 16rem - 2rem - 2rem
+            );
+        }
+
+        .docs-main :global(.max-w-3xl) > :global(*) {
+            max-width: 48rem;
+        }
+
+        /* The floated hero and anything sharing its lines are the exception:
+           those lines are already shortened by the paint. */
+        .docs-main :global(.nwc-hero) {
+            max-width: none;
+        }
     }
 
     /* Typography wraps inline code in literal backticks; the code tint already marks it. */

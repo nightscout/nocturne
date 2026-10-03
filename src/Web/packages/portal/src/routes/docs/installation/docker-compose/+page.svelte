@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
     import { resolve } from "$app/paths";
     import SystemRequirements from "$lib/components/docs/SystemRequirements.svelte";
     import VerificationSteps from "$lib/components/docs/VerificationSteps.svelte";
@@ -8,17 +10,20 @@
     import CodeBlock from "$lib/components/docs/CodeBlock.svelte";
     import envExample from "$lib/release/docker-compose/default.env.example?raw";
     import dockerCompose from "$lib/release/docker-compose/docker-compose.yaml?raw";
+
+    const hero = DOCS_HERO["installation/docker-compose"];
 </script>
 
 <div class="max-w-3xl">
-    <div class="flex items-center gap-4 mb-4">
-        <img
-            src="/logos/docker-compose.png"
-            alt="Docker Compose"
-            class="w-12 h-12 object-contain shrink-0"
-        />
-        <h1 class="text-4xl font-bold tracking-tight">Docker Compose</h1>
-    </div>
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
+    <h1 class="text-4xl font-bold tracking-tight mb-4">Docker Compose</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Deploy Nocturne on any server with Docker Compose from the command line.
     </p>

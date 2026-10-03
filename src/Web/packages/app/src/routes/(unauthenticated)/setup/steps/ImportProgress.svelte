@@ -10,7 +10,10 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import * as migrationRemote from "$api/generated/migrations.generated.remote";
   import { MigrationJobState } from "$api";
+  import { Artwork } from "@nocturne/watercolour";
+  import { databaseArtwork } from "$lib/watercolour-icons";
   import { remoteErrorMessage } from "$lib/api/remote-error";
+  import { findSessionJob } from "../migration-session";
   import { SkippedRecordsNote } from "$lib/components/shared";
 
   let {
@@ -95,27 +98,11 @@
     async function poll() {
       let resolvedJobId = jobId;
 
-      // If no jobId provided, find an active migration job
       if (!resolvedJobId) {
         try {
-          const history = await migrationRemote.getHistory().run();
-          const activeJob = history?.find(
-            (j) =>
-              j.state === MigrationJobState.Running ||
-              j.state === MigrationJobState.Pending ||
-              j.state === MigrationJobState.Validating
+          resolvedJobId = findSessionJob(
+            await migrationRemote.getHistory().run()
           );
-          if (activeJob?.id) {
-            resolvedJobId = activeJob.id;
-          } else {
-            // Check for recently completed job
-            const completed = history?.find(
-              (j) => j.state === MigrationJobState.Completed
-            );
-            if (completed?.id) {
-              resolvedJobId = completed.id;
-            }
-          }
         } catch (err) {
           error = remoteErrorMessage(err, "Failed to find active migration");
           loading = false;
@@ -272,6 +259,14 @@
 <div class="flex flex-col gap-8 px-4 py-8">
   <!-- Heading -->
   <div class="flex flex-col items-center gap-4 text-center">
+    <Artwork
+      icon={databaseArtwork}
+      palette="slate"
+      surface="dark"
+      motion="auto"
+      autoplay="once"
+      class="size-48"
+    />
     <h1
       class="font-brand font-hairline leading-tight tracking-tight text-white text-3xl md:text-4xl xl:text-5xl"
     >

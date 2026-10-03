@@ -1,0 +1,121 @@
+/**
+ * Hand-written mirror of the gitignored `src/wasm/nocturne_watercolour.d.ts`,
+ * so a clone without `build:wasm` still type-checks.
+ */
+
+export interface EngineStats {
+  liveInstances: number;
+  maxLiveInstances: number;
+  checkpointBytes: number;
+  lastStepMs: number;
+  lastRenderMs: number;
+  initMs: number;
+  /** GPU time of the last tick batch; `null` without timestamp queries or before a tick. */
+  gpuTickMs: number | null;
+  /** GPU time of the last presented frame; `null` without timestamp queries. */
+  gpuRenderMs: number | null;
+  adapterName: string;
+}
+
+export interface WasmInstance {
+  free(): void;
+  attach(canvas: HTMLCanvasElement, width: number, height: number): void;
+  resize(width: number, height: number): void;
+  setCrop(x: number, y: number, width: number, height: number): void;
+  enableTickBlending(): void;
+  play(): void;
+  pause(): void;
+  reset(): void;
+  /** Whether the simulation moved; an older build returns nothing. */
+  advanceByElapsed(seconds: number): boolean | void;
+  /** Linear progress-to-tick drive; callers apply their own easing first. Returns as `advanceByElapsed`. */
+  advanceToProgress(progress: number): boolean | void;
+  /** Runs up to `ticks` more steps toward the end; `true` once finished. Absent from older builds. */
+  advanceTicks?(ticks: number): boolean;
+  setProgressCurve(curve: 'frontLoaded' | 'linear' | 'reveal'): void;
+  seekProgress(progress: number): void;
+  tickForProgress(progress: number): number;
+  /** Steps replayed towards `target`; the seek has arrived once `currentTick()` is `target`. */
+  seekTowardsTick(target: number, ticks: number): number;
+  finishImmediately(): void;
+  progress(): number;
+  isFinished(): boolean;
+  isPlaying(): boolean;
+  render(): boolean;
+  exportPng(width: number, height: number): Promise<Uint8Array>;
+  exportFrames(count: number, width: number, height: number): Promise<Uint8Array[]>;
+  exportStrip(count: number, size: number): Promise<Uint8Array>;
+  /** Pixel size the swapchain is configured at; `undefined` until `attach`. */
+  surfaceSize(): number[] | undefined;
+  /** Simulation grid side the loaded scene runs at. */
+  simResolution(): number;
+  /** Simulation steps the loaded scene's timeline runs. */
+  totalTicks(): number;
+  /** Ticks `advanceByElapsed(elapsedSeconds)` would run now. */
+  ticksDue(elapsedSeconds: number): number;
+  /** Ticks `advanceToProgress(progress)` would run forward now. */
+  ticksDueAtProgress(progress: number): number;
+  currentTick(): number;
+  checkpointBytes(): number;
+  detach(): void;
+  dispose(): void;
+}
+
+export interface WasmEngine {
+  free(): void;
+  /**
+   * `settleFraction` (0 = unchanged) lengthens the reveal's drying tail.
+   * `paintWallFraction` (0 = keep the default) is the share of the wall clock
+   * the brushwork gets; the playback runs `ProgressCurve::reveal_for(scene,
+   * paintWallFraction)` so the tail covers the settling after the pen leaves
+   * the paper. `checkpointBudgetBytes` (absent or 0 = the engine default) is
+   * this instance's own seek-checkpoint budget; below one checkpoint it keeps
+   * none, so `seekProgress` reloads the scene and replays from the start.
+   */
+  createInstance(sceneJson: string, durationMs: number, settleFraction?: number, paintWallFraction?: number, checkpointBudgetBytes?: number): WasmInstance;
+  /** `createInstance` for a catalogue artwork: `catalogueScene`'s arguments, then `createInstance`'s after the document, with no JSON in between. Absent from older builds. */
+  createCatalogueInstance?(
+    artworkId: string,
+    seed: number,
+    palette: string,
+    intensity: number,
+    detail: string,
+    surface: string,
+    simResolution: number,
+    durationMs: number,
+    settleFraction: number,
+    paintWallFraction: number,
+    checkpointBudgetBytes?: number,
+  ): WasmInstance;
+  /** `createInstance` for a Lucide icon: `iconScene`'s arguments, then `createInstance`'s after the document. Absent from older builds. */
+  createIconInstance?(
+    elementsJson: string,
+    name: string,
+    seed: number,
+    palette: string,
+    intensity: number,
+    detail: string,
+    surface: string,
+    simResolution: number,
+    hintsJson: string,
+    durationMs: number,
+    settleFraction: number,
+    paintWallFraction: number,
+    checkpointBudgetBytes?: number,
+  ): WasmInstance;
+  isLost(): boolean;
+  onDeviceLost(callback: (message: string) => void): void;
+  adapterName(): string;
+  stats(): EngineStats;
+  maxLiveInstances: number;
+}
+
+export interface WasmModule {
+  default(moduleOrPath?: unknown): Promise<unknown>;
+  WatercolourEngine: { create(): Promise<WasmEngine> };
+  catalogueScene(artworkId: string, seed: number, palette: string, intensity: number, detail: string, surface: string, simResolution: number): string;
+  /** Authors a watercolour scene from a Lucide element list (JSON) and returns its scene document. `hintsJson` is per-icon tuning (`""` keeps the defaults). */
+  iconScene(elementsJson: string, name: string, seed: number, palette: string, intensity: number, detail: string, surface: string, simResolution: number, hintsJson: string): string;
+  catalogueIds(): string[];
+  bakedManifest(frames: number, width: number, height: number, durationMs: number): string;
+}

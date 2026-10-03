@@ -31,6 +31,7 @@
   import { patternClass } from "$lib/components/charts/print/chart-print-patterns";
   import { useSearchParams } from "runed/kit";
   import { z } from "zod";
+  import { Artwork } from "@nocturne/watercolour";
 
   const VISIBLE_DAYS = 14;
 
@@ -272,10 +273,17 @@
     </p>
   </div>
 
+
   {#if fullyEmpty}
     <Card>
       <CardContent class="p-12 text-center">
-        <Moon class="mx-auto mb-4 size-8 text-muted-foreground" />
+        <Artwork
+          artwork="crescent-moon"
+          palette="moonlight"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto mb-4 size-48"
+        />
         <h2 class="mb-2 text-xl font-semibold">No sleep data</h2>
         <p class="mx-auto max-w-md text-muted-foreground">
           Sleep sessions arrive from connected sources (Apple Health, Health

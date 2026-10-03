@@ -23,6 +23,7 @@
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
+  import { Artwork } from "@nocturne/watercolour";
   import { cn } from "$lib/utils";
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
@@ -188,9 +189,9 @@
   <div class="mb-8">
     <div class="flex items-center gap-3 mb-2">
       <div
-        class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10"
+        class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10"
       >
-        <Bell class="h-5 w-5 text-primary" />
+        <Bell class="size-6 text-primary" />
       </div>
       <div class="flex-1">
         <div class="flex items-center gap-3">
@@ -240,7 +241,13 @@
         <CardContent>
           {#if trackerNotifications.length === 0}
             <div class="text-center py-8 text-muted-foreground">
-              <Check class="h-12 w-12 mx-auto mb-3 text-success opacity-50" />
+              <Artwork
+                artwork="confirmation-mark"
+                palette="moss"
+                motion="auto"
+                autoplay="once"
+                class="mx-auto mb-3 size-48"
+              />
               <p>All caught up! No active tracker alerts.</p>
             </div>
           {:else}

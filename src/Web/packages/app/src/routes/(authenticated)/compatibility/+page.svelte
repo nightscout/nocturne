@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Link from "@lucide/svelte/icons/link";
   import { page } from "$app/state";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -12,6 +13,7 @@
   import { formatElapsedMs } from "$lib/utils/duration";
   import type { AnalysisListItemDto } from "$lib/api";
   import { getMatchTypeDisplay } from "$lib/utils/compatibility-match";
+  import { Artwork } from "@nocturne/watercolour";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Checkbox } from "$lib/components/ui/checkbox";
@@ -181,7 +183,10 @@
 <div class="@container container mx-auto p-6 space-y-6">
   <!-- Header -->
   <div class="flex flex-col gap-3 @lg:flex-row @lg:justify-between @lg:items-center">
-    <h1 class="text-3xl font-bold">Compatibility Testing</h1>
+    <div class="flex items-center gap-3">
+      <Link class="size-6 text-primary" />
+      <h1 class="text-3xl font-bold">Compatibility Testing</h1>
+    </div>
     <div class="flex gap-2 items-center">
       <span class="text-sm text-muted-foreground">
         Last update: {formatDateTimeCompact(lastUpdate.toISOString())}
@@ -426,6 +431,13 @@
           {:else}
             <tr>
               <td colspan="7" class="px-6 py-12 text-center text-muted-foreground">
+                <Artwork
+                  artwork="linked-rings"
+                  palette="dusk"
+                  motion="auto"
+                  autoplay="once"
+                  class="mx-auto mb-3 size-48"
+                />
                 No analyses found. Make sure the compatibility proxy service is
                 running and receiving traffic.
               </td>

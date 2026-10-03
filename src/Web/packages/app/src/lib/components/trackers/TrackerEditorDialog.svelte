@@ -8,6 +8,8 @@
   import { DurationInput } from "$lib/components/ui/duration-input";
   import { TrackerNotificationEditor, type TrackerNotification } from "$lib/components/trackers";
   import EventTypeCombobox from "$lib/components/treatments/EventTypeCombobox.svelte";
+  import { Artwork } from "@nocturne/watercolour";
+  import { batteryArtwork, sensorArtwork } from "$lib/watercolour-icons";
   import * as trackersRemote from "$api/generated/trackers.generated.remote";
   import { tick } from "svelte";
   import {
@@ -137,6 +139,30 @@
       </Select.Root>
     </div>
   </div>
+
+  {#if formCategory === TrackerCategory.Battery ||
+    formCategory === TrackerCategory.Sensor ||
+    formCategory === TrackerCategory.Cannula}
+    <div class="flex justify-center py-2">
+      {#if formCategory === TrackerCategory.Battery}
+        <Artwork
+          icon={batteryArtwork}
+          palette="water"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {:else}
+        <Artwork
+          icon={sensorArtwork}
+          palette="slate"
+          motion="auto"
+          autoplay="once"
+          class="size-56"
+        />
+      {/if}
+    </div>
+  {/if}
 
   <div class="space-y-2">
     <Label for="description">Description (optional)</Label>

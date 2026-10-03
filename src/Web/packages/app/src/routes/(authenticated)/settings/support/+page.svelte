@@ -8,7 +8,6 @@
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
-  import { Item } from "$lib/components/ui/item";
   import { Separator } from "$lib/components/ui/separator";
   import { Switch } from "$lib/components/ui/switch";
   import { Label } from "$lib/components/ui/label";
@@ -31,6 +30,7 @@
   import Database from "@lucide/svelte/icons/database";
   import CreditCard from "@lucide/svelte/icons/credit-card";
   import GraduationCap from "@lucide/svelte/icons/graduation-cap";
+  import { DropGroup, DropSurface } from "@nocturne/watercolour";
   import { getServicesOverview } from "$api/generated/services.generated.remote";
   import { getStatus } from "$api/generated/status.generated.remote";
   import { getSupportConfig } from "$lib/api/support.remote";
@@ -246,18 +246,24 @@
       <CardDescription>Need help? Here's how to reach us</CardDescription>
     </CardHeader>
     <CardContent class="space-y-4">
+      <!-- No `fonts`: these sizes are inherited, so there is no class to mirror. -->
+      <DropGroup name="support options">
       <div class="grid gap-4 @xl:grid-cols-2">
         {#each supportOptions as option (option.name)}
           {#if option.template === "account" && supportConfig?.accountBilling?.mode === "redirect"}
-            <Item
-              variant="outline"
-              size="lg"
-              class="flex-col"
+            <DropSurface
+              as="a"
+              name={option.template}
+              palette="water"
+              peak={0.6}
               href={supportConfig.accountBilling.url}
               target="_blank"
               rel="external noopener noreferrer"
+              class="rounded-lg border border-border transition-colors hover:not-disabled:border-primary/50 hover:not-disabled:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
+              contentClass="flex flex-col items-center gap-4 p-4"
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <ExternalLink class="h-6 w-6 text-primary" />
@@ -268,20 +274,25 @@
                   {option.description}
                 </p>
               </div>
-            </Item>
+            </DropSurface>
           {:else}
             <!-- The account tile's routing depends on the operator config; keep it inert until
                  the config resolves so a click during the fetch window can't misroute a
                  redirect/api-mode tenant to the generic community dialog. Other templates route
                  the same regardless of config, so they stay interactive. -->
-            <Item
-              variant="outline"
-              size="lg"
-              class="flex-col"
+            <DropSurface
+              as="button"
+              type="button"
+              name={option.template}
+              palette="water"
+              peak={0.6}
+              class="rounded-lg border border-border transition-colors hover:not-disabled:border-primary/50 hover:not-disabled:bg-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
+              contentClass="flex flex-col items-center gap-4 p-4"
               disabled={option.template === "account" && supportConfig === undefined}
               onclick={() => handleSupportAction(option.template, supportConfig?.accountBilling?.mode)}
             >
               <div
+                data-drop-obstacle
                 class="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
               >
                 <option.icon class="h-6 w-6 text-primary" />
@@ -292,10 +303,11 @@
                   {option.description}
                 </p>
               </div>
-            </Item>
+            </DropSurface>
           {/if}
         {/each}
       </div>
+      </DropGroup>
 
       <div class="flex justify-center pt-2">
         <a

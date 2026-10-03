@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { ArtworkHero } from "@nocturne/watercolour";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
     import Callout from "@nocturne/cms/components/Callout.svelte";
     import NextSteps from "$lib/components/docs/NextSteps.svelte";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
@@ -7,9 +9,19 @@
 
     const runCommand =
         "BASE_DOMAIN=nocturne.example.com bash <(curl -fsSL https://github.com/nightscout/nocturne/releases/latest/download/oracle-cloud-install.sh)";
+
+    const hero = DOCS_HERO["installation/oracle-cloud"];
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <h1 class="text-4xl font-bold tracking-tight mb-4">Oracle Cloud</h1>
     <p class="text-lg text-muted-foreground mb-8">
         Run Nocturne on Oracle Cloud's Always Free tier. One command in the browser sets

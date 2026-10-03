@@ -1,8 +1,12 @@
 <script lang="ts">
     import { resolve } from "$app/paths";
+    import { ArtworkHero, ConfirmationBackground } from "@nocturne/watercolour";
     import Content from "../../content/docs/index.svx";
     import SupportNocturne from "$lib/components/docs/SupportNocturne.svelte";
     import ArrowRight from "@lucide/svelte/icons/arrow-right";
+    import { DOCS_HERO } from "$lib/data/docs-artwork";
+
+    const hero = DOCS_HERO[""];
 
     const GUIDES = [
         {
@@ -29,6 +33,14 @@
 </script>
 
 <div class="max-w-3xl">
+    <ArtworkHero
+        artwork={hero.artwork}
+        palette={hero.palette}
+        motion="auto"
+        autoplay="once"
+        size={400}
+        wrap={hero.wrap ?? true}
+    />
     <Content />
 
     <ul class="not-prose m-0 p-0 list-none border-t border-border">
@@ -54,4 +66,11 @@
         The documentation is still growing. If a guide you need is missing,
         check back soon or contribute one on GitHub.
     </p>
+
+    <div
+        class="relative mt-4 h-8 w-24 overflow-hidden sm:h-10 sm:w-[120px] dark:hidden"
+        aria-hidden="true"
+    >
+        <ConfirmationBackground palette="moss" motion="auto" autoplay="once" />
+    </div>
 </div>

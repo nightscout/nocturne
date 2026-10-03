@@ -14,6 +14,7 @@
   import Globe from "@lucide/svelte/icons/globe";
   import Lock from "@lucide/svelte/icons/lock";
   import ScrollText from "@lucide/svelte/icons/scroll-text";
+  import { Artwork } from "@nocturne/watercolour";
   import { getRoles } from "$lib/api/generated/roles.generated.remote";
   import { getShareLink } from "$api/generated/shareLinks.generated.remote";
   import {
@@ -258,9 +259,13 @@
       {#if visibleMembers.length === 0}
         <Card.Root>
           <Card.Content class="flex flex-col items-center justify-center py-12 text-center">
-            <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <Users class="h-6 w-6 text-muted-foreground" />
-            </div>
+            <Artwork
+              artwork="people-group"
+              palette="dusk"
+              motion="auto"
+              autoplay="once"
+              class="mx-auto mb-4 size-48"
+            />
             <p class="max-w-sm text-sm text-muted-foreground">
               No members. Invite someone to share your data.
             </p>

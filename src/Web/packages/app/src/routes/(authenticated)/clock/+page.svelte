@@ -10,6 +10,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
+  import { Artwork } from "@nocturne/watercolour";
   import { toast } from "svelte-sonner";
   import { useToastSubmission } from "$lib/forms";
   import { remoteErrorMessage } from "$lib/api/remote-error";
@@ -113,9 +114,13 @@
         <!-- Empty State -->
         <Card.Root variant="dashed">
           <Card.Content class="flex flex-col items-center justify-center py-12">
-            <div class="mb-4 rounded-full bg-muted p-4">
-              <ClockIcon class="size-8 text-muted-foreground" />
-            </div>
+            <Artwork
+              artwork="clock"
+              palette="slate"
+              motion="auto"
+              autoplay="once"
+              class="mb-4 size-48"
+            />
             <h3 class="mb-2 text-lg font-semibold">No clock faces yet</h3>
             <p class="mb-6 max-w-sm text-center text-muted-foreground">
               Create your first custom clock face to display your glucose data

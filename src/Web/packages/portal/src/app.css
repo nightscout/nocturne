@@ -1,6 +1,7 @@
 @import "@nocturne/ui/theme.css";
 @source "../node_modules/@nocturne/ui/src";
 @source "../node_modules/@nocturne/cms/src";
+@source "../node_modules/@nocturne/watercolour/src";
 /* The app's alert replay, embedded in the alerts docs. */
 @source "../node_modules/@nocturne/app/src/lib/components/alerts";
 @source "../node_modules/@nocturne/app/src/lib/components/dashboard/glucose-chart";

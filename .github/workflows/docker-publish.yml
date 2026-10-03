@@ -252,6 +252,33 @@ jobs:
             exit 1
           fi
 
+      # The web image bundles @nocturne/watercolour, whose wasm is built from crates/.
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: cargo-wasm-${{ runner.os }}-${{ hashFiles('crates/Cargo.lock', 'crates/**/*.rs', 'crates/**/Cargo.toml') }}
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.128
+
+      - name: Install binaryen (wasm-opt)
+        run: npm install -g binaryen
+
+      - name: Build watercolour wasm
+        working-directory: src/Web
+        run: pnpm --filter @nocturne/watercolour build:wasm
+
       - name: Build and push Nocturne.Web container
         run: |
           IFS=',' read -ra TAGS <<< "${{ steps.tags.outputs.web_tags }}"

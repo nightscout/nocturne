@@ -2,8 +2,9 @@
   import * as Card from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
-  import Fingerprint from "@lucide/svelte/icons/fingerprint-pattern";
   import KeyRound from "@lucide/svelte/icons/key-round";
+  import { Artwork } from "@nocturne/watercolour";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import { getAuthState } from "../auth.remote";
   import { getAuthStatus } from "$lib/api/generated";
   import { page } from "$app/state";
@@ -58,15 +59,21 @@
 <div class="flex flex-1 items-center justify-center p-4">
   <Card.Root class="w-full max-w-md" data-testid="sign-in-card">
     <Card.Header class="space-y-1 text-center">
-      <div
-        class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
-      >
-        {#if showGuestCode}
+      {#if showGuestCode}
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10"
+        >
           <KeyRound class="h-6 w-6 text-primary" />
-        {:else}
-          <Fingerprint class="h-6 w-6 text-primary" />
-        {/if}
-      </div>
+        </div>
+      {:else}
+        <Artwork
+          artwork="crescent-moon"
+          palette="moonlight"
+          motion="auto"
+          autoplay="once"
+          class="mx-auto mb-4 size-48"
+        />
+      {/if}
       {#if showGuestCode}
         <Card.Title class="text-2xl font-bold">Enter your guest code</Card.Title>
         <Card.Description>
@@ -103,6 +110,15 @@
       </Card.Footer>
     {:else}
       <Card.Content>
+        <div class="mb-4 flex justify-center">
+          <Artwork
+            icon={fingerprintArtwork}
+            palette="water"
+            motion="auto"
+            autoplay="once"
+            class="size-56"
+          />
+        </div>
         <LoginForm {returnUrl} {tenantless} />
       </Card.Content>
 
