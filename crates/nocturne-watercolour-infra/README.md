@@ -142,7 +142,7 @@ Ids (they match the TypeScript union): hero icons `crescent-moon`, `alarm-bell`,
 `linked-rings`, `report-pages`, `magnifying-glass`, `confirmation-mark`; scenes
 `moonlit-shoreline` (16:9), `distant-mountains`, `connected-shores` (2:1),
 `overlapping-shapes`; accents `avatar-wash`, `tab-underline` (8:1), `selection-edge`
-(1:6), `confirmation-background` (3:1), `header-motif` (5:1). Unknown ids return `None`.
+(1:6), `confirmation-background` (3:1). Unknown ids return `None`.
 Every artwork derives all randomness from the seed, addresses pigments by
 `PigmentRole` so any palette works, and paints nothing outside its shapes.
 

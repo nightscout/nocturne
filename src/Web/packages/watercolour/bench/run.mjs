@@ -69,7 +69,7 @@ const SCENARIOS = {
   empty: { query: 'n=3' },
   hero: { query: '' },
   drops: { query: 'n=8', interact: hoverAll('.drop') },
-  motif: { query: '' },
+  wash: { query: '' },
   edge: { query: 'n=8', interact: clickAll('[data-bench-edge]') },
   mixed: {
     query: '',

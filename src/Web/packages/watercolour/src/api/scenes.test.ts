@@ -12,7 +12,7 @@ vi.mock('../components/PaintedUnderline.svelte', () => ({ default: {} }));
 vi.mock('../components/SelectionEdge.svelte', () => ({ default: {} }));
 vi.mock('../components/AvatarWash.svelte', () => ({ default: {} }));
 vi.mock('../components/ConfirmationBackground.svelte', () => ({ default: {} }));
-vi.mock('../components/HeaderMotif.svelte', () => ({ default: {} }));
+vi.mock('../components/ReportHeaderWash.svelte', () => ({ default: {} }));
 vi.mock('../components/DropSurface.svelte', () => ({ default: {} }));
 vi.mock('../components/DropGroup.svelte', () => ({ default: {} }));
 

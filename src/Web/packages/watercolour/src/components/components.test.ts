@@ -165,7 +165,6 @@ describe('artworkAspect (per-artwork aspect table)', () => {
     expect(artworkAspect('avatar-wash')).toBe(1);
     expect(artworkAspect('tab-underline')).toBe(8);
     expect(artworkAspect('selection-edge')).toBe(1 / 6);
-    expect(artworkAspect('header-motif')).toBe(5);
     expect(artworkAspect('confirmation-background')).toBe(3);
     expect(artworkAspect('distant-mountains')).toBe(2);
     expect(artworkAspect('moonlit-shoreline')).toBeCloseTo(16 / 9, 5);

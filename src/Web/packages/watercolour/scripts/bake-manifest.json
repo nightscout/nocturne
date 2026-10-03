@@ -107,16 +107,6 @@
       "stripHeight": 64
     },
     {
-      "id": "header-motif",
-      "palette": "moonlight",
-      "surfaces": [
-        "light",
-        "dark"
-      ],
-      "stripWidth": 192,
-      "stripHeight": 38
-    },
-    {
       "id": "moonlit-shoreline",
       "palette": "moonlight",
       "surfaces": [

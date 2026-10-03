@@ -16,7 +16,6 @@ export const DEFAULT_PALETTE: Record<string, PaletteId> = {
   'tab-underline': 'ember',
   'selection-edge': 'water',
   'confirmation-background': 'moss',
-  'header-motif': 'moonlight',
   'moonlit-shoreline': 'moonlight',
   'distant-mountains': 'slate',
   'connected-shores': 'water',
