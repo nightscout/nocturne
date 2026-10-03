@@ -51,7 +51,13 @@ public sealed class GoogleHealthOAuthClient(HttpClient http)
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new GoogleHealthException(
-                "reconnect_required",
+                response.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden => "reconnect_required",
+                    System.Net.HttpStatusCode.TooManyRequests => "rate_limited",
+                    _ => "google_unavailable"
+                },
+                retryAfter: GoogleHealthHttpError.RetryAfter(response),
                 stage: "account_identity",
                 providerStatus: (int)response.StatusCode);
 

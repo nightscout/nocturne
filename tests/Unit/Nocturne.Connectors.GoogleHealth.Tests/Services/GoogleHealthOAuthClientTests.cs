@@ -41,6 +41,39 @@ public class GoogleHealthOAuthClientTests
         Assert.Equal("token_refresh", exception.Stage);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "reconnect_required")]
+    [InlineData(HttpStatusCode.Forbidden, "reconnect_required")]
+    [InlineData(HttpStatusCode.TooManyRequests, "rate_limited")]
+    [InlineData(HttpStatusCode.RequestTimeout, "google_unavailable")]
+    [InlineData(HttpStatusCode.InternalServerError, "google_unavailable")]
+    [InlineData(HttpStatusCode.BadGateway, "google_unavailable")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "google_unavailable")]
+    [InlineData(HttpStatusCode.GatewayTimeout, "google_unavailable")]
+    public async Task Account_identity_distinguishes_invalid_credentials_from_retryable_failures(
+        HttpStatusCode status, string expected)
+    {
+        var retryAfter = TimeSpan.FromSeconds(45);
+        var client = new GoogleHealthOAuthClient(new HttpClient(new StubHandler(_ =>
+        {
+            var response = new HttpResponseMessage(status)
+            {
+                Content = new StringContent("sensitive-provider-text")
+            };
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(retryAfter);
+            return response;
+        })));
+
+        var exception = await Assert.ThrowsAsync<GoogleHealthException>(
+            () => client.AccountKeyAsync("access-token", default));
+
+        Assert.Equal(expected, exception.Message);
+        Assert.Equal("account_identity", exception.Stage);
+        Assert.Equal((int)status, exception.ProviderStatus);
+        Assert.Equal(retryAfter, exception.RetryAfter);
+        Assert.Null(exception.InnerException);
+    }
+
     public static IEnumerable<object[]> MalformedSuccessResponses() =>
         from stage in new[] { "authorization_code", "token_refresh", "account_identity" }
         from body in new[] { "{sensitive-provider-text", "null", "[]", "42", "true", "\"secret\"" }
