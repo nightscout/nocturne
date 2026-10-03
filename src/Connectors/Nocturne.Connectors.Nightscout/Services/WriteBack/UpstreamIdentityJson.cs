@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
 using Nocturne.Connectors.Core.Utilities;
 using Nocturne.Core.Models;
@@ -35,12 +36,11 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// (<c>DecomposerBase.PlanStoredIdentitiesAsync</c>).
 /// </para>
 /// <para>
-/// A treatment goes out as it always has, so that the copies earlier write-backs left upstream are
-/// the ones its upserts land on: <c>_id</c> and <c>identifier</c> both carry
+/// A treatment is created upstream with <c>_id</c> and <c>identifier</c> both carrying
 /// <see cref="TreatmentWireKey"/>, the 24-hex coercion of its key. On 15.0.7 and later the upsert
-/// then matches the copy by that <c>identifier</c>. <see cref="IdOnlyOptions"/> leaves the
-/// <c>identifier</c> out, for an edit of a treatment upstream holds under its <c>_id</c> alone
-/// (<see cref="NightscoutTreatmentWriteBackSink"/>).
+/// then matches the copy by that <c>identifier</c>. Earlier releases left copies under other forms
+/// (<see cref="TreatmentWireForms"/>), and an edit is written onto whichever copy the upstream holds
+/// (<see cref="NightscoutTreatmentWriteBackSink"/>, through <see cref="TreatmentPayload"/>).
 /// </para>
 /// </remarks>
 internal static class UpstreamIdentityJson
@@ -50,13 +50,7 @@ internal static class UpstreamIdentityJson
 
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)
     {
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { info => WriteIdentifier(info, withTreatmentIdentifier: true) } },
-    };
-
-    /// <summary><see cref="Options"/>, with no <c>identifier</c> on a treatment.</summary>
-    public static JsonSerializerOptions IdOnlyOptions { get; } = new(JsonSerializerDefaults.Web)
-    {
-        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { info => WriteIdentifier(info, withTreatmentIdentifier: false) } },
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { WriteIdentifier } },
     };
 
     /// <summary>
@@ -65,6 +59,49 @@ internal static class UpstreamIdentityJson
     /// and a v1 edit carries it apart, so both write the same copy.
     /// </summary>
     public static string? TreatmentWireKey(Treatment treatment) => MongoObjectId.Coerce(treatment.LegacyId ?? treatment.Id);
+
+    /// <summary>
+    /// Every <c>identifier</c> a released or merged write-back may have left a treatment's copy under,
+    /// most current first, without repeats:
+    /// <list type="number">
+    /// <item><see cref="TreatmentWireKey"/>, what this release creates under;</item>
+    /// <item>the 24-hex prefix of its record's own uuid (<see cref="Treatment.RecordId"/>): temp
+    /// basals from v0.2.4 to v0.2.7, whose legacy id was not an ObjectId
+    /// (<c>TempBasalToTreatmentMapper</c> served the uuid), and every create on main after #1960,
+    /// which answered with the uuid;</item>
+    /// <item>its key as it is, which v0.0.1 to v0.2.3 sent with no coercion: the legacy id, else
+    /// the record's uuid.</item>
+    /// </list>
+    /// These are the forms the connector's pull resolves back to the record
+    /// (<c>DecomposerBase.PlanStoredIdentitiesAsync</c>).
+    /// </summary>
+    public static IReadOnlyList<string> TreatmentWireForms(Treatment treatment)
+    {
+        string?[] forms =
+        [
+            TreatmentWireKey(treatment),
+            treatment.RecordId is { } recordId ? MongoObjectId.FromGuid(recordId) : null,
+            treatment.LegacyId ?? treatment.RecordId?.ToString() ?? treatment.Id,
+        ];
+        return forms.OfType<string>().Where(f => f.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+    }
+
+    /// <summary>
+    /// <paramref name="treatment"/> as <see cref="Options"/> writes it, with its <c>_id</c> and
+    /// <c>identifier</c> replaced by <paramref name="id"/> and <paramref name="identifier"/>, each left
+    /// out when null.
+    /// </summary>
+    public static JsonObject TreatmentPayload(Treatment treatment, string? id, string? identifier)
+    {
+        var payload = JsonSerializer.SerializeToNode(treatment, Options)!.AsObject();
+        payload.Remove(IdName);
+        payload.Remove(IdentifierName);
+        if (id is not null)
+            payload[IdName] = id;
+        if (identifier is not null)
+            payload[IdentifierName] = identifier;
+        return payload;
+    }
 
     /// <summary>
     /// <see cref="JsonDefaults.CaseInsensitive"/>, plus an upstream document's <c>identifier</c>
@@ -79,7 +116,7 @@ internal static class UpstreamIdentityJson
         },
     };
 
-    private static void WriteIdentifier(JsonTypeInfo info, bool withTreatmentIdentifier)
+    private static void WriteIdentifier(JsonTypeInfo info)
     {
         if (!typeof(ProcessableDocumentBase).IsAssignableFrom(info.Type))
             return;
@@ -92,8 +129,6 @@ internal static class UpstreamIdentityJson
         if (typeof(Treatment).IsAssignableFrom(info.Type))
         {
             identifier.Get = document => TreatmentWireKey((Treatment)document);
-            if (!withTreatmentIdentifier)
-                identifier.ShouldSerialize = (_, _) => false;
             if (id is not null)
                 id.Get = document => TreatmentWireKey((Treatment)document);
         }

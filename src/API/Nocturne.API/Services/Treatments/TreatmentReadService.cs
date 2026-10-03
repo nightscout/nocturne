@@ -289,7 +289,8 @@ public class TreatmentReadService : ITreatmentStore
     /// treatment, so a client that keeps the response id (Loop's objectIdCache, AAPS's nightscoutId)
     /// can edit and delete by it later; the client's own id stays stored as the records' LegacyId.
     /// That legacy id rides along as <see cref="Treatment.LegacyId"/>, the key write-back sends the
-    /// treatment upstream under. A treatment the user's deletion refused (<see cref="IsRefused"/>) is
+    /// treatment upstream under, and the record's uuid as <see cref="Treatment.RecordId"/>, whose
+    /// prefix earlier write-backs used. A treatment the user's deletion refused (<see cref="IsRefused"/>) is
     /// named by the deleted record, as it was served before the delete. A treatment that wrote none
     /// of the projected tables keeps the id it was sent with.
     /// </summary>
@@ -319,6 +320,7 @@ public class TreatmentReadService : ITreatmentStore
         if (served is not null)
         {
             created.LegacyId = served.LegacyId;
+            created.RecordId = served.Id;
             created.Id = served.Id.ToString();
         }
 

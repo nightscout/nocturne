@@ -24,9 +24,11 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// stored one, and inserts it when none matches, which is a duplicate-key error when its <c>_id</c>
 /// is taken. A PUT saves under <c>new ObjectID(_id)</c>, which a string <c>_id</c> never equals.
 /// </para>
-/// Every version keeps <c>identifier</c> as sent and answers <c>find[identifier]</c> within
-/// <c>query.js</c>'s default four-day <c>created_at</c> window unless the find bounds
-/// <c>created_at</c> itself.
+/// Every version keeps <c>identifier</c> as sent and answers <c>find[identifier]</c> (equal to, or
+/// <c>[$in]</c>) within <c>query.js</c>'s default four-day <c>created_at</c> window unless the find
+/// bounds <c>created_at</c> itself. A <c>find[_id]</c> skips that window, and a 24-hex value is cast
+/// to an ObjectId (<c>updateIdQuery</c>), so it never matches a string <c>_id</c>. Reads serve an
+/// ObjectId as lowercase hex, as a string <c>_id</c> is served, and honour <c>count</c>.
 /// </remarks>
 internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHandler
 {
@@ -40,10 +42,21 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
     public int Refusals { get; private set; }
 
+    /// <summary>Every find the upstream was asked, in order.</summary>
+    public List<Uri> Reads { get; } = [];
+
+    /// <summary>The method of every write the upstream was sent, in order.</summary>
+    public List<HttpMethod> Writes { get; } = [];
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         if (request.Method == HttpMethod.Get)
+        {
+            Reads.Add(request.RequestUri!);
             return Json(HttpStatusCode.OK, new JsonArray([.. Find(request.RequestUri!).Select(d => d.DeepClone())]));
+        }
+
+        Writes.Add(request.Method);
 
         var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         var docs = body is JsonArray array ? array.Select(d => d!.AsObject()).ToList() : [body.AsObject()];
@@ -72,11 +85,12 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
     /// </summary>
     private IEnumerable<JsonObject> Find(Uri uri)
     {
-        var find = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+        var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Split('=', 2))
             .Select(p => (Key: Uri.UnescapeDataString(p[0]), Value: Uri.UnescapeDataString(p.ElementAtOrDefault(1) ?? "")))
-            .Where(p => p.Key.StartsWith("find[", StringComparison.Ordinal))
             .ToList();
+        var find = query.Where(p => p.Key.StartsWith("find[", StringComparison.Ordinal)).ToList();
+        var count = query.Where(p => p.Key == "count").Select(p => int.Parse(p.Value)).DefaultIfEmpty(int.MaxValue).First();
 
         var bounds = find.Where(p => p.Key.StartsWith("find[created_at]", StringComparison.Ordinal))
             .Select(p => (Op: p.Key["find[created_at]".Length..], At: DateTimeOffset.Parse(p.Value)))
@@ -84,11 +98,29 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
         if (bounds.Count == 0 && !find.Any(p => p.Key.StartsWith("find[_id]", StringComparison.Ordinal) || p.Key.StartsWith("find[dateString]", StringComparison.Ordinal)))
             bounds.Add(("[$gte]", Now - TimeSpan.FromDays(4)));
 
-        var identifier = find.Where(p => p.Key == "find[identifier]").Select(p => p.Value).FirstOrDefault();
-        return Documents.Select(d => d.Document).Where(d =>
-            (identifier is null || (string?)d["identifier"] == identifier)
-            && bounds.All(b => InBound(DateTimeOffset.Parse((string)d["created_at"]!), b.Op, b.At)));
+        var identifiers = find
+            .Where(p => p.Key == "find[identifier]" || p.Key.StartsWith("find[identifier][$in]", StringComparison.Ordinal))
+            .Select(p => p.Value)
+            .ToList();
+        var id = find.Where(p => p.Key == "find[_id]").Select(p => p.Value).FirstOrDefault();
+        return Documents
+            .Where(d => id is null || IdMatches(d, id))
+            .Select(d => d.Document)
+            .Where(d =>
+                (identifiers.Count == 0 || identifiers.Contains((string?)d["identifier"] ?? ""))
+                && bounds.All(b => InBound(DateTimeOffset.Parse((string)d["created_at"]!), b.Op, b.At)))
+            .Take(count);
     }
+
+    /// <summary>
+    /// <c>updateIdQuery</c>: a 24-hex value is an ObjectId, which a string <c>_id</c> never equals;
+    /// any other value is compared as it is (from 15.0.7 a uuid also matches by identifier, which no
+    /// find here sends).
+    /// </summary>
+    private static bool IdMatches(Stored stored, string id) =>
+        ObjectIdShape.IsMatch(id)
+            ? stored.IsObjectId && stored.Id == id.ToLowerInvariant()
+            : !stored.IsObjectId && stored.Id == id;
 
     private static bool InBound(DateTimeOffset at, string op, DateTimeOffset bound) => op switch
     {

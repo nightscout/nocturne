@@ -41,6 +41,15 @@ public class Treatment : ProcessableDocumentBase
     public string? LegacyId { get; set; }
 
     /// <summary>
+    /// The uuid of the stored record the treatment is served from, which <see cref="Id"/> does not
+    /// carry once an update path re-keys it to the legacy id. Earlier write-backs sent some
+    /// treatments upstream under its 24-hex prefix, so write-back looks for a copy under it. Never on
+    /// the wire.
+    /// </summary>
+    [JsonIgnore]
+    public Guid? RecordId { get; set; }
+
+    /// <summary>
     /// Gets the V3 API identifier - alias for Id for Nightscout V3 compatibility.
     /// Nightscout V3 API returns both _id and identifier fields with the same value.
     /// </summary>

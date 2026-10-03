@@ -18,7 +18,8 @@
 //   as the string sent (no ObjectId cast, no case change). They are inserted in one ordered
 //   `insertMany`: a `_id` already stored is a duplicate-key error (E11000) that stores nothing from
 //   that document on and fails the request with Mongo's message as its description;
-// - `identifier` is always kept as sent, and `find[identifier]` reads by it;
+// - `identifier` is always kept as sent, and `find[identifier]` (or `find[identifier][$in][n]`)
+//   reads by it; `find[_id]` reads by the 24-hex id, every stored `_id` being an ObjectId here;
 // - a treatment or device-status find that names neither `_id`, `created_at` nor `dateString` only
 //   sees `created_at` in the last four days (`lib/server/query.js` `enforceDateFilter`, `deltaAgo`
 //   = TWO_DAYS * 2).
@@ -162,12 +163,14 @@ function readByCreatedAt(from: Map<string, Doc>, query: Record<string, string>):
   const lte = query["find[created_at][$lte]"];
   const id = query["find[_id]"];
   const clientId = query["find[id]"];
-  const identifier = query["find[identifier]"];
+  const identifiers = Object.entries(query)
+    .filter(([k]) => k === "find[identifier]" || k.startsWith("find[identifier][$in]"))
+    .map(([, v]) => v);
   const at = (d: Doc) => String(d.created_at ?? "");
   return [...from.values()]
     .filter((d) => (gte === undefined || at(d) >= gte) && (lte === undefined || at(d) <= lte))
-    .filter((d) => (id === undefined || d._id === id) && (clientId === undefined || d.id === clientId))
-    .filter((d) => identifier === undefined || d.identifier === identifier)
+    .filter((d) => (id === undefined || d._id === id || d._id === id.toLowerCase()) && (clientId === undefined || d.id === clientId))
+    .filter((d) => identifiers.length === 0 || identifiers.includes(String(d.identifier)))
     .sort((a, b) => (at(a) < at(b) ? 1 : at(a) > at(b) ? -1 : 0))
     .slice(0, count(query));
 }

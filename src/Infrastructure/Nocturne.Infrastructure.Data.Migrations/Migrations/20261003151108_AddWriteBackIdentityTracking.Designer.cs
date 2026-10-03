@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Nocturne.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(NocturneDbContext))]
-    [Migration("20260928103654_AddWriteBackIdentityTracking")]
+    [Migration("20261003151108_AddWriteBackIdentityTracking")]
     partial class AddWriteBackIdentityTracking
     {
         /// <inheritdoc />
@@ -2121,6 +2121,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("timestamp");
+
+                    b.Property<string>("Type")
+                        .HasColumnType("text")
+                        .HasColumnName("type");
 
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")
@@ -4304,6 +4308,10 @@ namespace Nocturne.Infrastructure.Data.Migrations
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("timestamp");
+
+                    b.Property<string>("Type")
+                        .HasColumnType("text")
+                        .HasColumnName("type");
 
                     b.Property<int?>("UtcOffset")
                         .HasColumnType("integer")

@@ -209,11 +209,13 @@ public class TreatmentService : ITreatmentService
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
-        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId, so capture
-        // both and restore them after the merge. LegacyId is the key write-back sends the edit
-        // under (UpstreamIdentityJson.TreatmentWireKey); lost, the edit would go to another copy.
+        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId and RecordId,
+        // so capture them and restore them after the merge. They are what write-back finds the
+        // edit's upstream copy by (UpstreamIdentityJson.TreatmentWireForms); lost, the edit would go
+        // to another copy.
         var originalId = treatment.Id;
         var originalLegacyId = treatment.LegacyId;
+        var originalRecordId = treatment.RecordId;
 
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
@@ -246,6 +248,7 @@ public class TreatmentService : ITreatmentService
         // which would otherwise defeat the re-key and duplicate the record).
         treatment.Id = originalId;
         treatment.LegacyId = originalLegacyId;
+        treatment.RecordId = originalRecordId;
     }
 
     /// <inheritdoc />
