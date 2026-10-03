@@ -448,3 +448,29 @@ fn settle_tail_keeps_drying_to_the_end_and_darkens_the_rim() {
         "the boundary band must darken over the tail: {edge_first} -> {edge_final}"
     );
 }
+
+#[test]
+fn sliced_seek_retargets_and_matches_immediate_replay() {
+    for budget in [1, 8] {
+        let mut sliced = unbudgeted(scene(), 3000.0);
+        sliced.set_progress_curve(ProgressCurve::Linear);
+        for target in [0.8, 0.2, 0.65, 0.0, 1.0, 0.3] {
+            for _ in 0..200 {
+                let before = sliced.current_tick();
+                let done = sliced.seek_towards_progress(target, budget).unwrap();
+                assert!(sliced.current_tick() <= before + budget);
+                if done {
+                    break;
+                }
+            }
+            let mut immediate = unbudgeted(scene(), 3000.0);
+            immediate.set_progress_curve(ProgressCurve::Linear);
+            immediate.seek_progress(target).unwrap();
+            assert_eq!(sliced.current_tick(), immediate.current_tick());
+            assert_eq!(
+                sliced.simulator().grid().unwrap(),
+                immediate.simulator().grid().unwrap()
+            );
+        }
+    }
+}

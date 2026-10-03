@@ -25,6 +25,8 @@ export interface PlayerState {
   motion: 'full' | 'reduced';
   playing: boolean;
   finished: boolean;
+  /** Live only: the latest seek target has not yet been presented. */
+  seeking?: boolean;
   /** Raw wall-clock fraction: linear elapsed, or the engine's own curve. */
   progress: number;
   /** The value fed to the simulation: the caller easing applied to `progress`. */
@@ -90,6 +92,8 @@ export interface ArtworkPlayer {
   reset(): void;
   /** Artistic progress 0..1; pauses. */
   seek(progress: number): void;
+  /** Latest target wins; live replay is spread over admitted display frames. */
+  seekTo(progress: number): void;
   finishImmediately(): void;
   resize(width: number, height: number, dpr?: number): void;
   dispose(): void;
@@ -127,6 +131,7 @@ interface Backend {
   readonly canvas: HTMLCanvasElement;
   readonly playing: boolean;
   readonly finished: boolean;
+  readonly seeking?: boolean;
   readonly progress: number;
   /** The eased value fed to the simulation; `progress` is the raw wall fraction. */
   readonly easedProgress: number;
@@ -138,6 +143,7 @@ interface Backend {
   pause(): void;
   reset(): void;
   seek(progress: number): void;
+  seekTo?(progress: number): void;
   /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
   finish(sliced?: boolean): void;
   resize(size: PixelSize): void;
@@ -229,6 +235,9 @@ class LiveBackend implements Backend {
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
+  private seekTarget: number | undefined;
+  private playAfterSeek = false;
+  private seekPresentPending = false;
   private handle: SchedulerHandle;
   private disposed = false;
   private released = false;
@@ -338,12 +347,16 @@ class LiveBackend implements Backend {
       render: () => this.render(),
       gpuCostMs: () => {
         const stats = this.host.stats();
-        const ticks = this.settling ? MAX_SLICE_TICKS : this.isPlaying ? this.instance.tickBudget() : 0;
+        const ticks = this.settling || this.seekTarget !== undefined ? MAX_SLICE_TICKS : this.isPlaying ? this.instance.tickBudget() : 0;
         return ticks * (stats?.gpuTickMs ?? 0) + (stats?.gpuRenderMs ?? 0);
       },
     });
     this.unsubscribeLost = host.onLost((message) => this.fault(new WatercolourError('DeviceLost', message)));
     this.handle.setActive(true);
+  }
+
+  get seeking(): boolean {
+    return this.seekPresentPending;
   }
 
   get playing(): boolean {
@@ -386,7 +399,12 @@ class LiveBackend implements Backend {
   }
 
   play(): void {
-    if (this.disposed || this.released || this.settling || this.finished) return;
+    if (this.disposed || this.released || this.settling) return;
+    if (this.seekTarget !== undefined) {
+      this.playAfterSeek = true;
+      return;
+    }
+    if (this.finished) return;
     this.instance.play();
     this.isPlaying = true;
     this.handle.setActive(true);
@@ -394,11 +412,15 @@ class LiveBackend implements Backend {
 
   pause(): void {
     if (this.disposed || this.released) return;
+    this.playAfterSeek = false;
     this.instance.pause();
     this.isPlaying = false;
   }
 
   reset(): void {
+    this.seekTarget = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     this.settling = false;
     if (this.easing) this.elapsedMs = 0;
     this.step(() => this.instance.reset());
@@ -406,6 +428,9 @@ class LiveBackend implements Backend {
   }
 
   seek(progress: number): void {
+    this.seekTarget = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     this.settling = false;
     const p = Math.min(1, Math.max(0, progress));
     if (this.easing) {
@@ -419,8 +444,21 @@ class LiveBackend implements Backend {
     this.isPlaying = this.guarded(() => this.instance.isPlaying(), false);
   }
 
+  seekTo(progress: number): void {
+    if (this.disposed || this.released) return;
+    this.seekTarget = Math.min(1, Math.max(0, progress));
+    this.seekPresentPending = true;
+    this.playAfterSeek = false;
+    this.isPlaying = false;
+    this.settling = false;
+    this.handle.setActive(true);
+  }
+
   finish(sliced = false): void {
     if (this.disposed || this.released) return;
+    this.seekTarget = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     if (this.easing) this.elapsedMs = this.durationMs;
     this.isPlaying = false;
     if (sliced && this.instance.advanceTicks) {
@@ -486,6 +524,23 @@ class LiveBackend implements Backend {
   }
 
   private tick(dt: number): void {
+    if (this.seekTarget !== undefined) {
+      const target = this.seekTarget;
+      const remaining = this.scheduler.budgetRemainingMs();
+      const gpuTickMs = this.host.stats()?.gpuTickMs;
+      const ticks = Math.max(1, this.scheduler.slices.next(remaining, this.scheduler.gpuBudgetRemainingMs(), gpuTickMs));
+      const started = this.scheduler.now();
+      let reached = false;
+      this.step(() => { reached = this.instance.seekTowardsProgress(target, ticks); });
+      this.scheduler.slices.record(ticks, this.scheduler.now() - started);
+      this.scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
+      if (this.easing) this.elapsedMs = invertEasing(this.easing, this.instance.progress()) * this.durationMs;
+      if (reached) {
+        this.seekTarget = undefined;
+        if (this.playAfterSeek) this.play();
+      }
+      return;
+    }
     if (this.settling) {
       this.settle(true);
       return;
@@ -558,6 +613,7 @@ class LiveBackend implements Backend {
       if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
       this.unpresented = 0;
       this.dirty = false;
+      if (this.seekTarget === undefined) this.seekPresentPending = false;
       if (presented !== false) this.callbacks.onProgress?.(this.progress);
       if (this.disposed || this.released) return;
       if (this.isPlaying && this.instance.isFinished()) {
@@ -570,7 +626,7 @@ class LiveBackend implements Backend {
         return;
       }
     }
-    if (!this.isPlaying && !this.dirty && !this.released) this.handle.setActive(false);
+    if (!this.isPlaying && this.seekTarget === undefined && !this.dirty && !this.released) this.handle.setActive(false);
   }
 
   private releaseResources(): void {
@@ -1007,6 +1063,7 @@ class Player implements ArtworkPlayer {
       motion: this.motion,
       playing: b?.playing ?? false,
       finished: b?.finished ?? false,
+      seeking: b?.seeking,
       progress: b?.progress ?? 0,
       easedProgress: b?.easedProgress ?? 0,
       error: this.error,
@@ -1045,6 +1102,13 @@ class Player implements ArtworkPlayer {
 
   seek(progress: number): void {
     this.backend?.seek(progress);
+    this.emit('statechange');
+  }
+
+  seekTo(progress: number): void {
+    const backend = this.backend;
+    if (backend?.seekTo) backend.seekTo(progress);
+    else backend?.seek(progress);
     this.emit('statechange');
   }
 

@@ -423,28 +423,50 @@ impl<S: Simulator> Playback<S> {
     pub fn seek_tick(&mut self, target: u32) -> Result<(), EngineError> {
         let target = target.min(self.total_ticks());
         if target < self.tick || self.state == PlaybackState::Finished {
-            let cp = self
-                .checkpoints
-                .iter()
-                .filter(|c| c.tick <= target)
-                .max_by_key(|c| c.tick)
-                .copied();
-            match cp {
-                Some(cp) => {
-                    self.sim.restore(cp.id)?;
-                    self.tick = cp.tick;
-                }
-                None => {
-                    self.sim.load(&self.scene)?;
-                    self.checkpoints.clear();
-                    self.tick = 0;
-                    self.take_checkpoint(true)?;
-                }
-            }
-            self.state = PlaybackState::Paused;
+            self.restore_for_seek(target)?;
         }
         self.run_to(target)?;
         self.elapsed_progress = self.progress();
+        Ok(())
+    }
+
+    /// Restores at most one checkpoint, then replays at most `ticks` steps.
+    /// Repeated calls may replace the target without completing an obsolete replay.
+    pub fn seek_towards_progress(
+        &mut self,
+        progress: f32,
+        ticks: u32,
+    ) -> Result<bool, EngineError> {
+        let target = self.tick_for_progress(progress);
+        if target < self.tick {
+            self.restore_for_seek(target)?;
+        }
+        self.pause();
+        self.run_to(self.tick.saturating_add(ticks).min(target))?;
+        self.elapsed_progress = self.progress();
+        Ok(self.tick == target)
+    }
+
+    fn restore_for_seek(&mut self, target: u32) -> Result<(), EngineError> {
+        let cp = self
+            .checkpoints
+            .iter()
+            .filter(|c| c.tick <= target)
+            .max_by_key(|c| c.tick)
+            .copied();
+        match cp {
+            Some(cp) => {
+                self.sim.restore(cp.id)?;
+                self.tick = cp.tick;
+            }
+            None => {
+                self.sim.load(&self.scene)?;
+                self.checkpoints.clear();
+                self.tick = 0;
+                self.take_checkpoint(true)?;
+            }
+        }
+        self.state = PlaybackState::Paused;
         Ok(())
     }
 
