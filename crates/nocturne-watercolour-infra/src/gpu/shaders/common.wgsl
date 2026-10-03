@@ -87,7 +87,18 @@ struct Stroke {
     _pad0: u32,
     _pad1: u32,
     _pad2: u32,
+    center_x: f32,
+    center_y: f32,
+    radius: f32,
+    inner: f32,
+    cell: f32,
+    scale_x: f32,
+    scale_y: f32,
+    edge_roughness: f32,
 };
+
+// Stroke.kind of a dab; mirrors gpu::STROKE_DAB.
+const STROKE_DAB: u32 = 3u;
 
 struct PigmentCoef {
     density: f32,

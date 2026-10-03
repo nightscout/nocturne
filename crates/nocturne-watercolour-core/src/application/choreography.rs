@@ -68,7 +68,7 @@ impl Default for Choreography {
 fn is_stroke(op: &Operation) -> bool {
     matches!(
         op,
-        Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
+        Operation::Brush(_) | Operation::Dab(_) | Operation::Water(_) | Operation::Lift(_)
     )
 }
 
@@ -83,6 +83,7 @@ fn path_length(path: &[Point]) -> f32 {
 fn stroke_weight(op: &Operation) -> f32 {
     match op {
         Operation::Brush(s) => path_length(&s.path) + s.radius.max(),
+        Operation::Dab(s) => s.radius,
         Operation::Water(s) => path_length(&s.path) + s.radius.max(),
         Operation::Lift(s) => path_length(&s.path) + s.radius.max(),
         _ => 0.0,
@@ -274,6 +275,11 @@ fn build_sequence(
             continue;
         }
         let window = laydown_window(params, budget, stroke_weight(&e.op), total_weight);
+        if matches!(e.op, Operation::Dab(_)) {
+            push_clamped(&mut out, walk.cursor, e.op.clone(), total);
+            walk.stroke(params, window);
+            continue;
+        }
         let steps = steps_for(params, window);
         let start = walk.cursor;
         for step in 0..steps {

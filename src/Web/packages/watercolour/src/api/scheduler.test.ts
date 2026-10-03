@@ -43,6 +43,9 @@ function fakeEnv() {
     get queued() {
       return pending.size;
     },
+    spend(ms: number) {
+      clock += ms;
+    },
     setVisibility(state: 'visible' | 'hidden') {
       visibilityState = state;
       for (const l of Array.from(listeners)) l();
@@ -70,6 +73,88 @@ function target() {
 }
 
 describe('Scheduler', () => {
+  it('rotates admission after an expensive tick and retains skipped elapsed time', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const elapsed = [[], [], []] as number[][];
+    const order: number[] = [];
+    elapsed.forEach((ticks, index) => scheduler.register({
+      tick: (dt) => { ticks.push(dt); order.push(index); fake.spend(12); },
+      render() {},
+    }).setActive(true));
+    for (let frame = 0; frame < 6; frame++) fake.frame();
+    expect(order).toEqual([0, 1, 2, 0, 1, 2]);
+    expect(elapsed.map(ticks => ticks.length)).toEqual([2, 2, 2]);
+    expect(elapsed[1]![0]).toBeCloseTo(0.028);
+    expect(elapsed[2]![0]).toBeCloseTo(0.056);
+    expect(elapsed.map(ticks => ticks[1])).toEqual([0.084, 0.084, 0.084]);
+  });
+
+  it('accounts for render cost separately and leaves room for page work', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const order: number[] = [];
+    for (const index of [0, 1]) scheduler.register({
+      tick() {}, render: () => { order.push(index); fake.spend(10); },
+    }).setActive(true);
+    fake.frame(); fake.frame();
+    expect(order).toEqual([0, 1]);
+    expect(scheduler.stats().lastMs).toBe(10);
+  });
+
+  it('rotates only visible active players despite dormant registrations between them', () => {
+    const fake = fakeEnv();
+    class HiddenObserver {
+      constructor(private callback: (records: { isIntersecting: boolean }[]) => void) {}
+      observe() { this.callback([{ isIntersecting: false }]); }
+      disconnect() {}
+    }
+    const scheduler = new Scheduler({ ...fake.env, IntersectionObserver: HiddenObserver as unknown as typeof IntersectionObserver });
+    const order: number[] = [];
+    const active = (index: number) => scheduler.register({
+      tick: () => { order.push(index); fake.spend(12); }, render() {},
+    }).setActive(true);
+    active(0);
+    for (let index = 0; index < 100; index++) {
+      scheduler.register(target().target);
+      scheduler.register({ ...target().target, element: {} as Element }).setActive(true);
+    }
+    active(1);
+    for (let frame = 0; frame < 6; frame++) fake.frame();
+    expect(order).toEqual([0, 1, 0, 1, 0, 1]);
+  });
+
+  it('does not clamp away multiple intervals skipped by the budget', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const elapsed = [[], [], []] as number[][];
+    for (const ticks of elapsed) scheduler.register({
+      tick: (dt) => { ticks.push(dt); fake.spend(100); }, render() {},
+    }).setActive(true);
+    for (let frame = 0; frame < 6; frame++) fake.frame();
+    for (const ticks of elapsed) expect(ticks[1]).toBeCloseTo(0.348);
+  });
+
+  it('reserves GPU work even when queuing it takes little main-thread time', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    const order: number[] = [];
+    for (const index of [0, 1, 2]) scheduler.register({
+      tick: () => order.push(index), render() {}, gpuCostMs: () => 7,
+    }).setActive(true);
+    for (let frame = 0; frame < 3; frame++) fake.frame();
+    expect(order).toEqual([0, 1, 2]);
+  });
+
+  it('does not render a target disposed from its own tick', () => {
+    const fake = fakeEnv();
+    const scheduler = new Scheduler(fake.env);
+    let rendered = false;
+    const handle = scheduler.register({ tick: () => handle.dispose(), render: () => { rendered = true; } });
+    handle.setActive(true); fake.frame();
+    expect(rendered).toBe(false);
+  });
+
   it('does not run until an instance is active, and stops when none is', () => {
     const fake = fakeEnv();
     const scheduler = new Scheduler(fake.env);
@@ -281,11 +366,10 @@ describe('SlicePacer', () => {
   it('caps the ticks a frame queues by their GPU time', () => {
     const pacer = new SlicePacer();
     pacer.record(4, 0.4);
-    expect(pacer.next(10, 10, 2)).toBe(1);
+    expect(pacer.next(10, 2, 2)).toBe(1);
     pacer.record(1, 0.1);
-    expect(pacer.next(10, 10, 2)).toBe(0);
-    pacer.beginFrame();
+    expect(pacer.next(10, 0, 2)).toBe(0);
     expect(pacer.next(10, 10, 2)).toBe(5);
-    expect(pacer.next(10, 10, 50)).toBe(1);
+    expect(pacer.next(10, 10, 50)).toBe(0);
   });
 });

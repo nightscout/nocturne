@@ -32,14 +32,14 @@
     return mountPlayer(
       frame,
       canvas,
-      'tab-underline',
       {
+        artwork: 'tab-underline',
         ...artworkOptionsFrom({ palette, seed, intensity, durationMs, motion, quality, mode }, { autoplay: 'once' }),
         fit,
         surface,
         releaseAfterFinish: true,
+        onReady: onready,
       },
-      onready,
     );
   });
 </script>

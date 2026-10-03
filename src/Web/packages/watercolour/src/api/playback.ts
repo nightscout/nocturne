@@ -1,4 +1,4 @@
-import type { ArtworkAutoplay, ArtworkOptions, DetailLevel, Surface } from '../types';
+import type { ArtworkAutoplay, ArtworkOptions, CropWindow, DetailLevel, Surface } from '../types';
 import { DEFAULT_DURATION_MS, DEFAULT_TAIL, detailForEdge } from '../types';
 import { type AssetKey, type AssetOptions, type AssetVariant, assetAvailable, assetUrl, iconAssetKey, loadManifest } from './assets';
 import { bakedServesEdge, type BakedManifest, type StripBitmap, drawStill, drawStripFrame, parseBakedManifest, sharedStill, sharedStrip } from './baked';
@@ -25,6 +25,8 @@ export interface PlayerState {
   motion: 'full' | 'reduced';
   playing: boolean;
   finished: boolean;
+  /** The latest `seekTo` target has not yet been presented; always false for a static player. */
+  seeking: boolean;
   /** Raw wall-clock fraction: linear elapsed, or the engine's own curve. */
   progress: number;
   /** The value fed to the simulation: the caller easing applied to `progress`. */
@@ -41,17 +43,30 @@ export interface PlayerState {
   released?: boolean;
 }
 
+/**
+ * Runs after a live or baked frame is presented, with that frame's progress
+ * and `seeking`: whether the latest `seekTo` target is still to be presented.
+ */
+export type PlayerProgressCallback = (progress: number, seeking: boolean) => void;
+
 export interface FallbackDetail {
   from: ResolvedMode;
   error: WatercolourError;
 }
 
 export interface PlayerOptions extends ArtworkOptions, AssetOptions {
+  crop?: CropWindow;
   surface?: Surface;
   /** Overrides the detail tier derived from the artwork reference (live). */
   detail?: DetailLevel;
   /** Live only: overrides the simulation grid side; 0 keeps the detail's default. */
   simResolution?: number;
+  /**
+   * Live only: while playing, presents the last two simulated ticks blended
+   * at the clock's position between them, half a tick behind. For a scene
+   * whose growth shows each tick as a step, such as `bloomScene`.
+   */
+  blendTicks?: boolean;
   /** CSS size and device pixel ratio at creation; defaults to the canvas's current size. */
   width?: number;
   height?: number;
@@ -78,6 +93,7 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   scheduler?: Scheduler;
   engineHost?: EngineHost;
   capabilities?: () => Promise<Capabilities>;
+  onProgress?: PlayerProgressCallback;
 }
 
 export interface ArtworkPlayer {
@@ -87,6 +103,8 @@ export interface ArtworkPlayer {
   reset(): void;
   /** Artistic progress 0..1; pauses. */
   seek(progress: number): void;
+  /** Latest target wins; live replay is spread over admitted display frames. */
+  seekTo(progress: number): void;
   finishImmediately(): void;
   resize(width: number, height: number, dpr?: number): void;
   dispose(): void;
@@ -107,6 +125,7 @@ export interface ArtworkPlayer {
 interface BackendCallbacks {
   onFinished(): void;
   onFault(error: WatercolourError): void;
+  onProgress?: PlayerProgressCallback;
 }
 
 interface PixelSize {
@@ -114,11 +133,16 @@ interface PixelSize {
   height: number;
 }
 
+function sourceEdge(size: PixelSize, crop?: CropWindow): number {
+  return Math.max(size.width / (crop?.width ?? 1), size.height / (crop?.height ?? 1));
+}
+
 interface Backend {
   readonly mode: ResolvedMode;
   readonly canvas: HTMLCanvasElement;
   readonly playing: boolean;
   readonly finished: boolean;
+  readonly seeking: boolean;
   readonly progress: number;
   /** The eased value fed to the simulation; `progress` is the raw wall fraction. */
   readonly easedProgress: number;
@@ -130,6 +154,7 @@ interface Backend {
   pause(): void;
   reset(): void;
   seek(progress: number): void;
+  seekTo(progress: number): void;
   /** `sliced`: run the rest of the reveal over the coming frames rather than in this call. */
   finish(sliced?: boolean): void;
   resize(size: PixelSize): void;
@@ -217,10 +242,19 @@ export const MAX_UNPRESENTED_RENDERS = 30;
 class LiveBackend implements Backend {
   readonly mode = 'live' as const;
   private dirty = true;
+  /**
+   * The next frame shades the simulation: a tick ran or the frame was
+   * invalidated. Otherwise a `blendTicks` frame only blends the images
+   * already shaded, a cost `gpuRenderMs` does not measure.
+   */
+  private reshade = true;
   private unpresented = 0;
   private isPlaying = false;
   /** Running to the end a slice per frame; nothing is presented until it gets there. */
   private settling = false;
+  private seekTick: number | undefined;
+  private playAfterSeek = false;
+  private seekPresentPending = false;
   private handle: SchedulerHandle;
   private disposed = false;
   private released = false;
@@ -242,16 +276,18 @@ class LiveBackend implements Backend {
     scheduler: Scheduler,
     callbacks: BackendCallbacks,
     options: PlayerOptions,
+    signal: AbortSignal,
     endTurn?: () => void,
   ): Promise<LiveBackend> {
     try {
       const lease = await host.acquire();
+      signal.throwIfAborted();
       // Live reveals pick the detail tier from the canvas's BACKING long edge
       // (the size passed in is DPR-scaled). The simulation grid is the tier's
       // own, whatever the canvas: the fluid moves in cells, so a different
       // grid paints a different picture, and one tier must paint the same one
       // at every size. An explicit `detail`/`simResolution` option wins.
-      const longEdge = Math.max(size.width, size.height);
+      const longEdge = sourceEdge(size, options.crop);
       const resolvedDetail = options.detail ?? detailForEdge(longEdge);
       // Catalogue scenes carry their own tick tail; only the wall-clock split
       // is passed through, so `tail` is the share of the duration the paint
@@ -269,6 +305,11 @@ class LiveBackend implements Backend {
       }
       if (options.easing) instance.setProgressCurve('linear');
       try {
+        if (options.crop) {
+          const { x, y, width, height } = options.crop;
+          instance.setCrop(x, y, width, height);
+        }
+        if (options.blendTicks) instance.enableTickBlending();
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });
@@ -291,7 +332,6 @@ class LiveBackend implements Backend {
       }
     } catch (error) {
       host.release();
-      endTurn?.();
       throw toWatercolourError(error);
     }
   }
@@ -323,9 +363,14 @@ class LiveBackend implements Backend {
       element: endTurn ? null : canvas,
       tick: (dt) => this.tick(dt),
       render: () => this.render(),
+      gpuCostMs: (elapsedSeconds) => this.gpuCostMs(elapsedSeconds),
     });
     this.unsubscribeLost = host.onLost((message) => this.fault(new WatercolourError('DeviceLost', message)));
     this.handle.setActive(true);
+  }
+
+  get seeking(): boolean {
+    return this.seekPresentPending;
   }
 
   get playing(): boolean {
@@ -368,7 +413,12 @@ class LiveBackend implements Backend {
   }
 
   play(): void {
-    if (this.disposed || this.released || this.settling || this.finished) return;
+    if (this.disposed || this.released || this.settling) return;
+    if (this.seekPresentPending) {
+      this.playAfterSeek = true;
+      return;
+    }
+    if (this.finished) return;
     this.instance.play();
     this.isPlaying = true;
     this.handle.setActive(true);
@@ -376,11 +426,15 @@ class LiveBackend implements Backend {
 
   pause(): void {
     if (this.disposed || this.released) return;
+    this.playAfterSeek = false;
     this.instance.pause();
     this.isPlaying = false;
   }
 
   reset(): void {
+    this.seekTick = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     this.settling = false;
     if (this.easing) this.elapsedMs = 0;
     this.step(() => this.instance.reset());
@@ -388,6 +442,9 @@ class LiveBackend implements Backend {
   }
 
   seek(progress: number): void {
+    this.seekTick = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     this.settling = false;
     const p = Math.min(1, Math.max(0, progress));
     if (this.easing) {
@@ -401,8 +458,21 @@ class LiveBackend implements Backend {
     this.isPlaying = this.guarded(() => this.instance.isPlaying(), false);
   }
 
+  seekTo(progress: number): void {
+    if (this.disposed || this.released) return;
+    this.seekTick = this.instance.tickForProgress(Math.min(1, Math.max(0, progress)));
+    this.seekPresentPending = true;
+    this.playAfterSeek = false;
+    this.isPlaying = false;
+    this.settling = false;
+    this.handle.setActive(true);
+  }
+
   finish(sliced = false): void {
     if (this.disposed || this.released) return;
+    this.seekTick = undefined;
+    this.seekPresentPending = false;
+    this.playAfterSeek = false;
     if (this.easing) this.elapsedMs = this.durationMs;
     this.isPlaying = false;
     if (sliced && this.instance.advanceTicks) {
@@ -439,6 +509,7 @@ class LiveBackend implements Backend {
       const strip = await this.instance.exportStrip(frames, size);
       this.isPlaying = false;
       this.dirty = true;
+      this.reshade = true;
       this.handle.setActive(true);
       return strip;
     } catch (error) {
@@ -468,17 +539,58 @@ class LiveBackend implements Backend {
   }
 
   private tick(dt: number): void {
+    if (this.seekTick !== undefined) {
+      const target = this.seekTick;
+      const remaining = this.scheduler.budgetRemainingMs();
+      const gpuTickMs = this.host.stats()?.gpuTickMs;
+      const ticks = Math.max(1, this.scheduler.slices.next(remaining, this.scheduler.gpuBudgetRemainingMs(), gpuTickMs));
+      const started = this.scheduler.now();
+      let replayed = 0;
+      this.step(() => { replayed = this.instance.seekTowardsTick(target, ticks); });
+      if (this.disposed || this.released) return;
+      this.scheduler.slices.record(replayed, this.scheduler.now() - started);
+      this.scheduler.chargeGpuMs(replayed * (gpuTickMs ?? 0));
+      if (this.easing) this.elapsedMs = invertEasing(this.easing, this.instance.progress()) * this.durationMs;
+      if (this.instance.currentTick() === target) this.seekTick = undefined;
+      return;
+    }
     if (this.settling) {
       this.settle(true);
       return;
     }
     if (!this.isPlaying || this.disposed || this.released) return;
-    if (this.easing) {
-      this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
-      this.step(() => this.instance.advanceToProgress(this.easing!(this.elapsedMs / this.durationMs)));
-    } else {
-      this.step(() => this.instance.advanceByElapsed(dt));
-    }
+    this.step(() => {
+      const before = this.instance.currentTick();
+      let changed: boolean | void;
+      if (this.easing) {
+        this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
+        changed = this.instance.advanceToProgress(this.easing(this.elapsedMs / this.durationMs));
+      } else {
+        changed = this.instance.advanceByElapsed(dt);
+      }
+      const ticked = this.instance.currentTick() - before;
+      this.scheduler.chargeGpuMs(ticked * (this.host.stats()?.gpuTickMs ?? 0));
+      if (ticked > 0) this.reshade = true;
+      return changed;
+    }, false);
+  }
+
+  /**
+   * The GPU time this frame's tick and render are expected to take. A seek or
+   * settle slice sizes itself to the GPU budget left, so only its first tick
+   * is reserved. A render is reserved, and charged, only when it reshades.
+   */
+  private gpuCostMs(elapsedSeconds: number): number {
+    const stats = this.host.stats();
+    const ticks = this.seekTick !== undefined || this.settling ? 1 : this.isPlaying ? this.ticksDue(elapsedSeconds) : 0;
+    const renders = !this.settling && (ticks > 0 || this.reshade);
+    return ticks * (stats?.gpuTickMs ?? 0) + (renders ? (stats?.gpuRenderMs ?? 0) : 0);
+  }
+
+  private ticksDue(elapsedSeconds: number): number {
+    if (!this.easing) return this.instance.ticksDue(elapsedSeconds);
+    const elapsedMs = Math.min(this.durationMs, this.elapsedMs + elapsedSeconds * 1000);
+    return this.instance.ticksDueAtProgress(this.easing(elapsedMs / this.durationMs));
   }
 
   /**
@@ -500,7 +612,7 @@ class LiveBackend implements Backend {
       let ran = false;
       while (!done) {
         const remaining = scheduler.budgetRemainingMs();
-        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.frameBudgetMs, gpuTickMs) : 0;
+        let ticks = remaining > 0 ? scheduler.slices.next(remaining, scheduler.gpuBudgetRemainingMs(), gpuTickMs) : 0;
         if (ticks === 0) {
           if (ran || !inFrame) break;
           ticks = 1;
@@ -508,6 +620,7 @@ class LiveBackend implements Backend {
         const started = scheduler.now();
         done = this.instance.advanceTicks!(ticks);
         scheduler.slices.record(ticks, scheduler.now() - started);
+        scheduler.chargeGpuMs(ticks * (gpuTickMs ?? 0));
         ran = true;
       }
       return ran;
@@ -524,14 +637,24 @@ class LiveBackend implements Backend {
       let presented: boolean | void;
       try {
         presented = this.instance.render();
+        if (this.reshade) this.scheduler.chargeGpuMs(this.host.stats()?.gpuRenderMs ?? 0);
       } catch (error) {
         this.fault(toWatercolourError(error));
         return;
       }
       // No swapchain texture this frame; a still released now would keep a blank canvas.
-      if (presented === false && ++this.unpresented < MAX_UNPRESENTED_RENDERS) return;
+      if (presented === false && (this.seekPresentPending || ++this.unpresented < MAX_UNPRESENTED_RENDERS)) return;
       this.unpresented = 0;
       this.dirty = false;
+      this.reshade = false;
+      const seekPresented = this.seekPresentPending && this.seekTick === undefined;
+      if (seekPresented) this.seekPresentPending = false;
+      if (presented !== false) this.callbacks.onProgress?.(this.progress, this.seekPresentPending);
+      if (this.disposed || this.released) return;
+      if (seekPresented && this.playAfterSeek) {
+        this.playAfterSeek = false;
+        this.play();
+      }
       if (this.isPlaying && this.instance.isFinished()) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -542,7 +665,7 @@ class LiveBackend implements Backend {
         return;
       }
     }
-    if (!this.isPlaying && !this.dirty && !this.released) this.handle.setActive(false);
+    if (!this.isPlaying && this.seekTick === undefined && !this.dirty && !this.released) this.handle.setActive(false);
   }
 
   private releaseResources(): void {
@@ -560,12 +683,16 @@ class LiveBackend implements Backend {
     this.endTurn?.();
   }
 
-  /** `action` returns `false` when it left the simulation as it was, which needs no new frame. */
-  private step(action: () => boolean | void): void {
+  /**
+   * `action` returns `false` when it left the simulation as it was, which
+   * needs no new frame. `reshades` false leaves `reshade` to the action.
+   */
+  private step(action: () => boolean | void, reshades = true): void {
     if (this.disposed || this.released) return;
     try {
       if (action() === false) return;
       this.dirty = true;
+      if (reshades) this.reshade = true;
       this.handle.setActive(true);
     } catch (error) {
       this.fault(toWatercolourError(error));
@@ -598,6 +725,7 @@ class BakedBackend implements Backend {
   private elapsedMs = 0;
   private isPlaying = false;
   private dirty = true;
+  private seekPending = false;
   private size: PixelSize;
   private readonly handle: SchedulerHandle;
   private disposed = false;
@@ -616,7 +744,7 @@ class BakedBackend implements Backend {
     const manifest = await loadManifest(urls.manifest);
     const strip = await sharedStrip(urls.strip, manifest);
     const target = acquire2d(canvas);
-    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing);
+    return new BakedBackend(target.canvas, target.ctx, strip, durationMs, size, scheduler, callbacks, options.easing, options.crop);
   }
 
   private constructor(
@@ -628,6 +756,7 @@ class BakedBackend implements Backend {
     scheduler: Scheduler,
     private readonly callbacks: BackendCallbacks,
     easing: ((t: number) => number) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.durationMs = durationMs;
     this.easing = easing;
@@ -639,6 +768,10 @@ class BakedBackend implements Backend {
       render: () => this.render(),
     });
     this.handle.setActive(true);
+  }
+
+  get seeking(): boolean {
+    return this.seekPending;
   }
 
   get playing(): boolean {
@@ -671,18 +804,27 @@ class BakedBackend implements Backend {
   reset(): void {
     this.elapsedMs = 0;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
   }
 
   seek(progress: number): void {
     this.elapsedMs = Math.min(1, Math.max(0, progress)) * this.durationMs;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
+  }
+
+  /** A strip frame is drawn directly; play waits for the target to be drawn, as live does. */
+  seekTo(progress: number): void {
+    this.seek(progress);
+    this.seekPending = true;
   }
 
   finish(): void {
     this.elapsedMs = this.durationMs;
     this.isPlaying = false;
+    this.seekPending = false;
     this.invalidate();
     this.callbacks.onFinished();
   }
@@ -712,7 +854,7 @@ class BakedBackend implements Backend {
   }
 
   private tick(dt: number): void {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.seekPending) return;
     this.elapsedMs = Math.min(this.durationMs, this.elapsedMs + dt * 1000);
     this.dirty = true;
   }
@@ -727,7 +869,10 @@ class BakedBackend implements Backend {
     if (this.disposed) return;
     if (this.dirty) {
       this.dirty = false;
-      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height);
+      drawStripFrame(this.ctx, this.strip, this.frameProgress(), this.size.width, this.size.height, this.crop);
+      this.seekPending = false;
+      this.callbacks.onProgress?.(this.progress, false);
+      if (this.disposed) return;
       if (this.isPlaying && this.finished) {
         this.isPlaying = false;
         this.callbacks.onFinished();
@@ -752,6 +897,7 @@ export function stillVariant(longEdgeDevicePx: number, hasSmall: boolean): 'fina
 class StaticBackend implements Backend {
   readonly mode = 'static' as const;
   readonly playing = false;
+  readonly seeking = false;
   readonly finished = true;
   readonly progress = 1;
   readonly easedProgress = 1;
@@ -764,10 +910,11 @@ class StaticBackend implements Backend {
     size: PixelSize,
     callbacks: BackendCallbacks,
     larger?: () => Promise<string>,
+    crop?: CropWindow,
   ): Promise<StaticBackend> {
     const image = await sharedStill(url);
     const target = acquire2d(canvas);
-    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger);
+    const backend = new StaticBackend(target.canvas, target.ctx, image, size, larger, crop);
     queueMicrotask(() => callbacks.onFinished());
     return backend;
   }
@@ -778,6 +925,7 @@ class StaticBackend implements Backend {
     private image: ImageBitmap,
     private size: PixelSize,
     private larger: (() => Promise<string>) | undefined,
+    private readonly crop?: CropWindow,
   ) {
     this.draw();
   }
@@ -786,13 +934,14 @@ class StaticBackend implements Backend {
   pause(): void {}
   reset(): void {}
   seek(): void {}
+  seekTo(): void {}
   finish(): void {}
 
   resize(size: PixelSize): void {
     this.size = size;
     this.draw();
     const larger = this.larger;
-    if (!larger || Math.max(size.width, size.height) <= SMALL_STILL_EDGE) return;
+    if (!larger || sourceEdge(size, this.crop) <= SMALL_STILL_EDGE) return;
     this.larger = undefined;
     void larger()
       .then(sharedStill)
@@ -815,7 +964,7 @@ class StaticBackend implements Backend {
     if (this.disposed) return;
     this.canvas.width = this.size.width;
     this.canvas.height = this.size.height;
-    drawStill(this.ctx, this.image, this.size.width, this.size.height);
+    drawStill(this.ctx, this.image, this.size.width, this.size.height, this.crop);
   }
 }
 
@@ -827,6 +976,7 @@ class StaticBackend implements Backend {
 class IconSvgBackend implements Backend {
   readonly mode = 'static' as const;
   readonly playing = false;
+  readonly seeking = false;
   readonly finished = true;
   readonly progress = 1;
   readonly easedProgress = 1;
@@ -856,6 +1006,7 @@ class IconSvgBackend implements Backend {
   pause(): void {}
   reset(): void {}
   seek(): void {}
+  seekTo(): void {}
   finish(): void {}
 
   resize(size: PixelSize): void {
@@ -929,6 +1080,7 @@ class Player implements ArtworkPlayer {
   private readonly host: EngineHost;
   private readonly scheduler: Scheduler;
   private readonly source: SceneSource;
+  private readonly creation = new AbortController();
   private readonly ref: ArtworkRef | undefined;
   private readonly icon: IconRef | undefined;
   readonly ready: Promise<void>;
@@ -938,6 +1090,12 @@ class Player implements ArtworkPlayer {
     source: SceneSource | string,
     private readonly options: PlayerOptions,
   ) {
+    if (options.crop) {
+      const { x, y, width, height } = options.crop;
+      if (![x, y, width, height].every(Number.isFinite) || x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) {
+        throw new TypeError('crop must be a positive window inside the unit square');
+      }
+    }
     this.currentCanvas = canvas;
     this.source = typeof source === 'string' ? { sceneJson: source } : source;
     this.ref = isArtworkRef(this.source) ? this.source : undefined;
@@ -967,6 +1125,7 @@ class Player implements ArtworkPlayer {
       motion: this.motion,
       playing: b?.playing ?? false,
       finished: b?.finished ?? false,
+      seeking: b?.seeking ?? false,
       progress: b?.progress ?? 0,
       easedProgress: b?.easedProgress ?? 0,
       error: this.error,
@@ -1008,6 +1167,11 @@ class Player implements ArtworkPlayer {
     this.emit('statechange');
   }
 
+  seekTo(progress: number): void {
+    this.backend?.seekTo(progress);
+    this.emit('statechange');
+  }
+
   finishImmediately(): void {
     this.backend?.finish();
     this.emit('statechange');
@@ -1039,6 +1203,7 @@ class Player implements ArtworkPlayer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.creation.abort();
     this.viewportWait?.cancel();
     this.backend?.dispose();
     this.backend = undefined;
@@ -1123,7 +1288,7 @@ class Player implements ArtworkPlayer {
 
   /** Withholding baked at hero sizes lets `resolveMode` pick static instead. */
   private bakedServesSize(): boolean {
-    return bakedServesEdge(Math.max(this.size.width, this.size.height));
+    return bakedServesEdge(sourceEdge(this.size, this.options.crop));
   }
 
   private assetOk(variant: AssetVariant): boolean {
@@ -1182,11 +1347,12 @@ class Player implements ArtworkPlayer {
         this.emit('statechange');
       },
       onFault: (error) => this.handleFault(error),
+      onProgress: this.options.onProgress,
     };
     switch (mode) {
       case 'live': {
         const create = (endTurn?: () => void) =>
-          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, endTurn);
+          LiveBackend.create(this.currentCanvas, this.source, this.durationMs, this.size, this.host, this.scheduler, callbacks, this.options, this.creation.signal, endTurn);
         const still = this.options.releaseAfterFinish && this.autoplayAction(true) === 'finish';
         if (!still) return create();
         // Every path out of the turn ends it; a turn left open blocks every later still.
@@ -1194,8 +1360,9 @@ class Player implements ArtworkPlayer {
         // with budget rather than joining the task that finished the still before it.
         return this.host.stillTurn().then(async (endTurn) => {
           try {
+            this.creation.signal.throwIfAborted();
             await this.scheduler.whenBudget();
-            if (this.disposed) throw new WatercolourError('Engine', 'disposed while waiting for a live slot');
+            this.creation.signal.throwIfAborted();
             return await create(endTurn);
           } catch (error) {
             endTurn();
@@ -1218,10 +1385,10 @@ class Player implements ArtworkPlayer {
   }
 
   private async createStatic(callbacks: BackendCallbacks): Promise<Backend> {
-    const variant = stillVariant(Math.max(this.size.width, this.size.height), this.assetOk('final-small'));
+    const variant = stillVariant(sourceEdge(this.size, this.options.crop), this.assetOk('final-small'));
     const [url] = await this.resolveUrls([variant]);
     const larger = variant === 'final-small' ? () => this.resolveUrls(['final']).then(([full]) => full!) : undefined;
-    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger);
+    return StaticBackend.create(this.currentCanvas, url!, this.size, callbacks, larger, this.options.crop);
   }
 
   private async resolveUrls<const V extends readonly AssetVariant[]>(variants: V): Promise<string[]> {

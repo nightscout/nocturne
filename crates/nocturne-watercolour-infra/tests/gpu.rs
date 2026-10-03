@@ -56,6 +56,129 @@ fn small_scene(name: &str) -> Scene {
 }
 
 #[test]
+fn crop_preserves_the_full_frames_pigment_and_paper_at_pixel_centres() {
+    let Some(engine) = gpu() else { return };
+    let mut playback = Playback::new(engine, small_scene("wash"), 1000.0).unwrap();
+    playback.finish_immediately().unwrap();
+    let full = playback
+        .simulator()
+        .present_offscreen(800, 600, true)
+        .unwrap()
+        .unwrap();
+    playback
+        .simulator()
+        .set_crop([0.25, 0.5, 0.25, 0.25])
+        .unwrap();
+    let cropped = playback
+        .simulator()
+        .present_offscreen(200, 150, true)
+        .unwrap()
+        .unwrap();
+    let mut largest = 0;
+    let mut total = 0usize;
+    for y in 0..150usize {
+        for x in 0..200usize {
+            for channel in 0..4 {
+                let expected = full[((y + 300) * 800 + x + 200) * 4 + channel];
+                let actual = cropped[(y * 200 + x) * 4 + channel];
+                let difference = expected.abs_diff(actual);
+                largest = largest.max(difference);
+                total += difference as usize;
+            }
+        }
+    }
+    assert!(largest <= 1, "largest channel difference: {largest}");
+    assert!(total as f64 / ((200 * 150 * 4) as f64) < 0.001);
+    playback.simulator().set_crop([0.0, 0.0, 1.0, 1.0]).unwrap();
+    assert_eq!(
+        playback
+            .simulator()
+            .present_offscreen(800, 600, true)
+            .unwrap()
+            .unwrap(),
+        full
+    );
+}
+
+#[test]
+fn crop_rejects_empty_nonfinite_and_outside_windows() {
+    let Some(mut engine) = gpu() else { return };
+    for window in [
+        [0.0, 0.0, 0.0, 1.0],
+        [-0.1, 0.0, 1.0, 1.0],
+        [0.5, 0.0, 0.6, 1.0],
+        [f32::NAN, 0.0, 1.0, 1.0],
+    ] {
+        assert!(engine.set_crop(window).is_err());
+    }
+}
+
+#[test]
+fn dab_matches_point_brush_deposits_and_paper_driven_flow() {
+    use nocturne_watercolour_core::domain::{Dab, Operation, Point, SizeHint};
+    let Some(mut analytic) = gpu() else { return };
+    let Some(mut stamped) = gpu() else { return };
+    let mut cpu = CpuEngine::default();
+    for (width, height) in [(64, 64), (256, 32), (32, 256)] {
+        for seed in [0, 19] {
+            let mut scene = small_scene("wash");
+            scene.size_hint = SizeHint { width, height };
+            scene.sim_resolution = SimResolution(64);
+            for center in [
+                Point::new(0.0, 0.0),
+                Point::new(0.5, 0.5),
+                Point::new(1.0, 1.0),
+            ] {
+                for radius in [0.004, 0.12, 1.0] {
+                    let dab = Dab {
+                        center,
+                        radius,
+                        pigment: 0,
+                        concentration: 0.1,
+                        water: 0.5,
+                        softness: 0.85,
+                    };
+                    let op = Operation::Dab(dab.clone());
+                    analytic.load(&scene).unwrap();
+                    stamped.load(&scene).unwrap();
+                    cpu.load(&scene).unwrap();
+                    analytic.apply(&op, Seed(seed)).unwrap();
+                    stamped
+                        .apply(&Operation::Brush(dab.as_brush()), Seed(seed))
+                        .unwrap();
+                    cpu.apply(&op, Seed(seed)).unwrap();
+                    let a = analytic.read_grid().unwrap();
+                    let b = stamped.read_grid().unwrap();
+                    let c = cpu.grid().unwrap();
+                    for reference in [&b, c] {
+                        for (name, actual, expected) in [
+                            ("water", &a.pressure, &reference.pressure),
+                            (
+                                "pigment",
+                                &a.pigments_in_water,
+                                &reference.pigments_in_water,
+                            ),
+                            ("flow u", &a.velocity_u, &reference.velocity_u),
+                            ("flow v", &a.velocity_v, &reference.velocity_v),
+                        ] {
+                            let worst = actual
+                                .iter()
+                                .zip(expected)
+                                .map(|(a, b)| (a - b).abs())
+                                .fold(0.0f32, f32::max);
+                            assert!(
+                                worst <= 1e-4,
+                                "{width}x{height} seed {seed} center {center:?} radius {radius}: {name} differs {worst}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn seeded_replay_is_bit_identical_on_the_same_device() {
     let Some(gpu) = gpu() else { return };
     let scene = small_scene("wash");
@@ -70,6 +193,145 @@ fn seeded_replay_is_bit_identical_on_the_same_device() {
     let img_b = pb.simulator().render(64, 64).unwrap();
     assert_eq!(a, b);
     assert_eq!(img_a.rgba, img_b.rgba);
+}
+
+#[test]
+fn dab_batches_preserve_tied_events_seeds_and_control_operations() {
+    use nocturne_watercolour_core::domain::{Dab, Mask, Operation, Point, Timeline};
+    let Some(template) = gpu() else { return };
+    let mut scene = small_scene("wash");
+    scene.sim_resolution = SimResolution(64);
+    scene.timeline = Timeline::new(24);
+    for tick in 0..24 {
+        if tick == 4 {
+            scene.timeline.push(tick, Operation::Dry { rate: 0.8 });
+        }
+        if tick == 12 {
+            scene.timeline.push(
+                tick,
+                Operation::SetMask(Mask::Polygon {
+                    points: vec![
+                        Point::new(0.0, 0.0),
+                        Point::new(1.0, 0.0),
+                        Point::new(1.0, 1.0),
+                    ],
+                    feather: 0.02,
+                }),
+            );
+        }
+        for index in 0..if tick == 5 { 72 } else { 3 } {
+            scene.timeline.push(
+                tick,
+                Operation::Dab(Dab {
+                    center: Point::new(0.2 + index as f32 * 0.003, 0.4),
+                    radius: 0.2,
+                    pigment: 0,
+                    concentration: 0.001,
+                    water: 0.02,
+                    softness: 0.85,
+                }),
+            );
+        }
+        if tick == 12 {
+            scene.timeline.push(tick, Operation::ClearMask);
+        }
+    }
+    scene.timeline.push(24, Operation::DryAll);
+    let mut batched = Playback::new(
+        template.fork().with_checkpoint_budget(0),
+        scene.clone(),
+        1000.0,
+    )
+    .unwrap();
+    let mut single = Playback::new(template.with_checkpoint_budget(0), scene, 1000.0).unwrap();
+    for ticks in [4, 13, 6, 1] {
+        batched.advance_ticks(ticks).unwrap();
+        for _ in 0..ticks {
+            single.advance_ticks(1).unwrap();
+        }
+        assert_eq!(
+            batched.simulator().read_grid().unwrap(),
+            single.simulator().read_grid().unwrap()
+        );
+    }
+    assert!(
+        batched.simulator().command_counts().passes < single.simulator().command_counts().passes
+    );
+    batched.seek_progress(0.3).unwrap();
+    single.seek_progress(0.3).unwrap();
+    assert_eq!(
+        batched.simulator().read_grid().unwrap(),
+        single.simulator().read_grid().unwrap()
+    );
+}
+
+#[test]
+fn tick_interpolation_caches_shading_and_discards_discontinuous_history() {
+    use nocturne_watercolour_core::domain::{Dab, Operation, Point, Timeline};
+    let Some(engine) = gpu() else { return };
+    let mut scene = small_scene("wash");
+    scene.sim_resolution = SimResolution(64);
+    scene.timeline = Timeline::new(30);
+    scene.timeline.push(
+        0,
+        Operation::Dab(Dab {
+            center: Point::new(0.5, 0.5),
+            radius: 0.25,
+            pigment: 0,
+            concentration: 0.1,
+            water: 0.5,
+            softness: 0.85,
+        }),
+    );
+    let mut playback = Playback::new(engine, scene, 1000.0).unwrap();
+    let blank = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 0, 1.0)
+        .unwrap();
+    playback.advance_ticks(1).unwrap();
+    let previous = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 1, 0.0)
+        .unwrap();
+    assert_eq!(previous, blank);
+    let current = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 1, 1.0)
+        .unwrap();
+    let before = playback.simulator().command_counts();
+    let midway = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 1, 0.5)
+        .unwrap();
+    let after = playback.simulator().command_counts();
+    assert_ne!(midway, previous);
+    assert_ne!(midway, current);
+    assert_eq!(after.passes - before.passes, 1);
+    assert_eq!(after.dispatches, before.dispatches);
+    playback.advance_ticks(3).unwrap();
+    let skipped = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 4, 0.0)
+        .unwrap();
+    let full = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 4, 1.0)
+        .unwrap();
+    assert_eq!(skipped, full);
+    playback.simulator().clear_interpolation();
+    let resumed = playback
+        .simulator()
+        .present_offscreen_at(64, 64, 4, 0.05)
+        .unwrap();
+    assert_eq!(resumed, full);
+    playback.seek_tick(0).unwrap();
+    assert_eq!(
+        playback
+            .simulator()
+            .present_offscreen_at(64, 64, 0, 0.5)
+            .unwrap(),
+        blank
+    );
 }
 
 /// Compares the GPU and CPU engines' current state: the rendered 256x256
@@ -575,5 +837,23 @@ fn the_gpu_paper_is_bit_identical_to_the_cpu_paper() {
                 got.len()
             );
         }
+    }
+}
+
+#[test]
+fn sliced_target_seek_preserves_the_gpu_frame() {
+    let Some(gpu) = gpu() else { return };
+    let scene = small_scene("wash");
+    let mut playback = Playback::new(gpu, scene, 1000.0).unwrap();
+    for target in [0.7, 0.2, 1.0, 0.35] {
+        playback.seek_progress(target).unwrap();
+        let expected = playback.simulator().render(80, 60).unwrap().rgba;
+        playback.seek_tick(0).unwrap();
+        let target_tick = playback.tick_for_progress(target);
+        while playback.current_tick() != target_tick {
+            playback.seek_towards_tick(target_tick, 3).unwrap();
+        }
+        let actual = playback.simulator().render(80, 60).unwrap().rgba;
+        assert_eq!(actual, expected);
     }
 }

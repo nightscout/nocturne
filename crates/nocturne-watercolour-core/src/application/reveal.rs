@@ -119,7 +119,7 @@ pub fn settle_after_last_stroke(timeline: &mut Timeline) {
         .filter(|e| {
             matches!(
                 e.op,
-                Operation::Brush(_) | Operation::Water(_) | Operation::Lift(_)
+                Operation::Brush(_) | Operation::Dab(_) | Operation::Water(_) | Operation::Lift(_)
             )
         })
         .map(|e| e.at_tick)
