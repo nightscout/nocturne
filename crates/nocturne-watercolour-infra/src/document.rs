@@ -561,6 +561,23 @@ mod tests {
         assert!(parse_appended_json(r#"[{"op": "clear_mask"}]"#).is_err());
     }
 
+    /// The packing suitcase's operations, in the forms its painter sends; its
+    /// TypeScript test holds every operation it emits to these same forms.
+    #[test]
+    fn parses_every_operation_form_the_packing_suitcase_sends() {
+        let json = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/appended-operations.json"
+        ))
+        .expect("tests/fixtures/appended-operations.json");
+        let ops = parse_appended_json(&json).unwrap();
+        assert_eq!(ops.len(), 7);
+        let scene = (ArtworkCatalogue::entries()[0].build)(Seed(1), Palette::dusk());
+        scene
+            .validate_operations(ops.iter().map(|(_, op)| op))
+            .unwrap();
+    }
+
     #[test]
     fn round_trips_every_catalogue_scene() {
         for entry in ArtworkCatalogue::entries() {
