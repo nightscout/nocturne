@@ -305,7 +305,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
             (cursor.AddHours(-1), cursor.AddMinutes(1))); // late upload: write newer -> delivered
 
         var cursorMills = Mills(cursor);
-        var result = (await _repository.GetModifiedSinceAsync(cursorMills)).ToList();
+        var result = (await _repository.GetModifiedSinceAsync(cursorMills, 1000)).Select(r => r.Record).ToList();
 
         result.Should().ContainSingle()
             .Which.ModifiedAt.Should().Be(cursor.AddMinutes(1));
@@ -323,11 +323,11 @@ public class ApsSnapshotRepositoryTests : IDisposable
             .ToArray());
 
         var start = Mills(at) - 1;
-        var first = (await _repository.GetModifiedSinceAsync(start, limit: 3)).ToList();
+        var first = (await _repository.GetModifiedSinceAsync(start, limit: 3)).Select(r => r.Record).ToList();
 
         first.Should().HaveCount(8);
 
-        var second = (await _repository.GetModifiedSinceAsync(Mills(first.Max(a => a.ModifiedAt)), limit: 3)).ToList();
+        var second = (await _repository.GetModifiedSinceAsync(Mills(first.Max(a => a.ModifiedAt)), limit: 3)).Select(r => r.Record).ToList();
 
         second.Should().BeEmpty();
     }
@@ -349,7 +349,7 @@ public class ApsSnapshotRepositoryTests : IDisposable
         var cursor = Mills(at) - 1;
         for (var page = 0; page < 10; page++)
         {
-            var rows = (await _repository.GetModifiedSinceAsync(cursor, limit: 2)).ToList();
+            var rows = (await _repository.GetModifiedSinceAsync(cursor, limit: 2)).Select(r => r.Record).ToList();
             if (rows.Count == 0)
                 break;
 
@@ -371,11 +371,29 @@ public class ApsSnapshotRepositoryTests : IDisposable
             (nextMillisecond, nextMillisecond));
 
         var start = Mills(boundary) - 1;
-        var first = (await _repository.GetModifiedSinceAsync(start, limit: 1)).ToList();
+        var first = (await _repository.GetModifiedSinceAsync(start, limit: 1)).Select(r => r.Record).ToList();
         first.Should().ContainSingle().Which.ModifiedAt.Should().Be(boundary);
 
-        var second = (await _repository.GetModifiedSinceAsync(Mills(first[0].ModifiedAt), limit: 1)).ToList();
+        var second = (await _repository.GetModifiedSinceAsync(Mills(first[0].ModifiedAt), limit: 1)).Select(r => r.Record).ToList();
         second.Should().ContainSingle().Which.ModifiedAt.Should().Be(nextMillisecond);
+    }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_DeletedSnapshot_IsReturnedFlagged_AtItsDelete()
+    {
+        var written = new DateTime(2026, 4, 30, 12, 0, 0, DateTimeKind.Utc);
+        var ids = await SeedModifiedAsync(TenantA, (written, written), (written, written.AddMilliseconds(1)));
+        var cursor = Mills(written.AddMilliseconds(1));
+
+        await _repository.DeleteAsync(ids[0], Core.Contracts.V4.WriteOrigin.Live);
+
+        var page = await _repository.GetModifiedSinceAsync(cursor, 1000);
+
+        var row = page.Should().ContainSingle().Subject;
+        row.Record.Id.Should().Be(ids[0]);
+        row.Deleted.Should().BeTrue();
+        Mills(row.Record.ModifiedAt).Should().BeGreaterThan(cursor);
+        (await _repository.GetByIdAsync(ids[0])).Should().BeNull();
     }
 
     private async Task<List<Guid>> SeedModifiedAsync(

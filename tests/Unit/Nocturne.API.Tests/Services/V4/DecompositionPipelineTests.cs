@@ -150,15 +150,15 @@ public class DecompositionPipelineTests
     }
 
     [Fact]
-    public async Task DeleteByLegacyIdAsync_WhenDecomposerThrows_ReturnsZero()
+    public async Task DeleteByLegacyIdAsync_WhenDecomposerThrows_Propagates()
     {
         _mockEntryDecomposer
             .Setup(x => x.DeleteByLegacyIdAsync("legacy-123", It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("delete failed"));
 
-        var result = await _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123", WriteOrigin.Live);
+        var act = () => _pipeline.DeleteByLegacyIdAsync<Entry>("legacy-123", WriteOrigin.Live);
 
-        result.Should().Be(0);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("delete failed");
     }
 
     [Fact]

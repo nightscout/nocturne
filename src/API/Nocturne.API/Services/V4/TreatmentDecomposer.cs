@@ -57,7 +57,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     private readonly IActiveProfileResolver _activeProfileResolver;
     private readonly IPatientInsulinRepository _insulinRepo;
     private readonly IAuditContext _auditContext;
-    private readonly IDeduplicationService _deduplicationService;
 
     /// <summary>
     /// Event types that indicate a temp basal treatment (case-insensitive comparison)
@@ -86,7 +85,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         IActiveProfileResolver activeProfileResolver,
         IPatientInsulinRepository insulinRepo,
         IAuditContext auditContext,
-        IDeduplicationService deduplicationService,
         ILogger<TreatmentDecomposer> logger)
         : base(logger)
     {
@@ -106,7 +104,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         _activeProfileResolver = activeProfileResolver;
         _insulinRepo = insulinRepo;
         _auditContext = auditContext;
-        _deduplicationService = deduplicationService;
     }
 
     /// <summary>
@@ -1398,12 +1395,22 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The tables are swept in one transaction, as <see cref="DeleteFromSourceAsync"/>'s are: the
+    /// delete takes every copy in each row's duplicate group (<see cref="DuplicateDelete.EveryCopy"/>),
+    /// and a failure on a later table must not leave the treatment half deleted.
+    /// </remarks>
     public async Task<int> DeleteByLegacyIdAsync(string legacyId, WriteOrigin origin, CancellationToken ct = default)
     {
         // origin is accepted for interface uniformity; the v4-native delete broadcast is deferred to the glucose-unification follow-up (deletes here bypass the repository chokepoint).
-        var deleted = 0;
-        foreach (var table in DecomposedTables)
-            deleted += (await table.SoftDeleteAsync([legacyId], source: null, $"legacy_id={legacyId}", ct)).Count;
+        var deleted = await _dbContext.ExecuteInTransactionAsync(async token =>
+        {
+            var count = 0;
+            foreach (var table in DecomposedTables)
+                count += (await table.SoftDeleteAsync(
+                    [legacyId], source: null, $"legacy_id={legacyId}", DuplicateDelete.EveryCopy, token)).Count;
+            return count;
+        }, ct: ct);
 
         if (deleted > 0)
             Logger.LogDebug("Soft-deleted {Count} v4 records for legacy treatment {LegacyId}", deleted, legacyId);
@@ -1412,10 +1419,6 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The repoint joins the delete's transaction only because the deduplication service shares this
-    /// scope's <see cref="NocturneDbContext"/>, so a failed repoint rolls the delete back with it.
-    /// </remarks>
     public async Task<int> DeleteFromSourceAsync(
         string source, IReadOnlySet<string> legacyIds, CancellationToken ct = default)
     {
@@ -1431,11 +1434,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
 
             var deleted = 0;
             foreach (var table in DecomposedTables)
-            {
-                var result = await table.SoftDeleteAsync(ids, source, scope, ct);
-                deleted += result.Count;
-                await _deduplicationService.RepointPrimariesAwayFromAsync(table.RecordType, result.Entities, ct);
-            }
+                deleted += (await table.SoftDeleteAsync(ids, source, scope, DuplicateDelete.PromoteSurvivor, ct)).Count;
 
             await transaction.CommitAsync(ct);
             return deleted;
@@ -1792,7 +1791,7 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         /// writes below its cap are the right shape for that.
         /// </remarks>
         Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
-            string[] legacyIds, string? source, string scope, CancellationToken ct);
+            string[] legacyIds, string? source, string scope, DuplicateDelete duplicates, CancellationToken ct);
 
         Task<int> SoftDeleteInRangeAsync(DateTime? from, DateTime? to, string scope, CancellationToken ct);
 
@@ -1830,11 +1829,11 @@ public class TreatmentDecomposer : DecomposerBase, ITreatmentDecomposer, IDecomp
         public RecordType RecordType => recordType;
 
         public Task<AuditedSoftDeleteResult<Guid>> SoftDeleteAsync(
-            string[] legacyIds, string? source, string scope, CancellationToken ct)
+            string[] legacyIds, string? source, string scope, DuplicateDelete duplicates, CancellationToken ct)
             => context.AuditedSoftDeleteWithIdsAsync(
                 rows.Where(e => e.LegacyId != null && legacyIds.Contains(e.LegacyId)
                              && (source == null || e.DataSource == source)),
-                auditContext, scope, ct);
+                auditContext, scope, ct, duplicates);
 
         public Task<int> SoftDeleteInRangeAsync(DateTime? from, DateTime? to, string scope, CancellationToken ct)
             => context.AuditedSoftDeleteAsync(inRange(rows, from, to), auditContext, scope, ct);

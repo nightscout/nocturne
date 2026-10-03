@@ -99,12 +99,12 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes a state span by ID.
+    /// Deletes a state span by ID, with every other copy in its duplicate group.
     /// </summary>
     /// <param name="id">The state span identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
-    Task<bool> DeleteStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
+    Task<IReadOnlyList<StateSpan>> DeleteStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
 
@@ -250,12 +250,12 @@ public interface IStateSpanRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deletes an activity state span by ID.
+    /// Deletes an activity state span by ID, with every other copy in its duplicate group.
     /// </summary>
     /// <param name="id">The state span identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><c>true</c> if deleted; <c>false</c> if not found.</returns>
-    Task<bool> DeleteActivityStateSpanAsync(
+    /// <returns>The spans deleted, the requested one first; empty if not found.</returns>
+    Task<IReadOnlyList<StateSpan>> DeleteActivityStateSpanAsync(
         string id,
         CancellationToken cancellationToken = default);
 }

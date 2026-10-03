@@ -6,6 +6,7 @@ using Nocturne.API.Services.Devices;
 using Nocturne.Core.Contracts.Repositories;
 using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
+using Nocturne.Core.Models.Queries;
 using Nocturne.Core.Models.V4;
 using Xunit;
 
@@ -585,7 +586,7 @@ public class DeviceStatusProjectionServiceTests
 
         _apsRepo
             .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new[] { aps });
+            .ReturnsAsync([new HistoryRecord<ApsSnapshot>(aps, Deleted: false)]);
 
         _pumpRepo
             .Setup(r => r.GetByCorrelationIdsAsync(It.IsAny<IEnumerable<Guid>>(), It.IsAny<CancellationToken>()))
@@ -600,6 +601,33 @@ public class DeviceStatusProjectionServiceTests
         results[0].Pump.Should().NotBeNull();
         results[0].Pump!.Reservoir.Should().Be(60.0);
         results[0].SrvModified.Should().Be(Mills(aps.ModifiedAt));
+        results[0].IsValid.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetModifiedSinceAsync_DeletedSnapshot_ProjectsWithIsValidFalse()
+    {
+        var live = CreateApsSnapshot(AidAlgorithm.AndroidAps);
+        live.CorrelationId = null;
+        live.ModifiedAt = ReferenceTime.AddMinutes(1);
+        var deleted = CreateApsSnapshot(AidAlgorithm.AndroidAps);
+        deleted.CorrelationId = null;
+        deleted.LegacyId = "65f000000000000000000def";
+        deleted.ModifiedAt = ReferenceTime.AddMinutes(2);
+
+        _apsRepo
+            .Setup(r => r.GetModifiedSinceAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(
+            [
+                new HistoryRecord<ApsSnapshot>(live, Deleted: false),
+                new HistoryRecord<ApsSnapshot>(deleted, Deleted: true),
+            ]);
+
+        var results = (await _service.GetModifiedSinceAsync(ReferenceMillis, 100, CancellationToken.None)).ToList();
+
+        results.Select(r => (r.Id, r.IsValid, r.SrvModified)).Should().Equal(
+            (live.LegacyId, (bool?)null, Mills(live.ModifiedAt)),
+            ("65f000000000000000000def", (bool?)false, Mills(deleted.ModifiedAt)));
     }
 
     #endregion

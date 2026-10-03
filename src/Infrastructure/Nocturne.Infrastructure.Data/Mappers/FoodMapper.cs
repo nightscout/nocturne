@@ -62,6 +62,8 @@ public static class FoodMapper
             Position = entity.Position,
             // Map SysCreatedAt to created_at for Nightscout parity
             CreatedAt = entity.SysCreatedAt.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            SrvModified = new DateTimeOffset(entity.SysUpdatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            SrvCreated = new DateTimeOffset(entity.SysCreatedAt, TimeSpan.Zero).ToUnixTimeMilliseconds(),
         };
     }
 

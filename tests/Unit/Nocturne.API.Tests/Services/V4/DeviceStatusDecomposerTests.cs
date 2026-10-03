@@ -2310,6 +2310,34 @@ public class DeviceStatusDecomposerTests : IDisposable
     }
 
     [Fact]
+    public async Task DecomposeAsync_ClientIsValidAndServerStamps_AreNotStored()
+    {
+        var json = """
+        {
+            "_id": "aaps-stamps-1",
+            "mills": 1700000000000,
+            "device": "openaps://samsung",
+            "isValid": false,
+            "srvModified": 1,
+            "srvCreated": 1,
+            "configuration": { "sensitivityType": "oref1" },
+            "openaps": {
+                "iob": { "iob": 1.0 },
+                "suggested": { "bg": 120, "eventualBG": 100, "timestamp": "2023-11-14T12:00:00Z" }
+            }
+        }
+        """;
+        var ds = JsonSerializer.Deserialize<DeviceStatus>(json)!;
+
+        await _decomposer.DecomposeAsync(ds, WriteOrigin.Live);
+
+        var extras = _context.DeviceStatusExtras.Single().ExtrasJson;
+        extras.Should().Contain("configuration");
+        extras.Should().NotContain("isValid").And.NotContain("srvModified").And.NotContain("srvCreated");
+        _context.ApsSnapshots.Single().DeletedAt.Should().BeNull();
+    }
+
+    [Fact]
     public async Task DecomposeAsync_WithRadioAdapter_StoresExtras()
     {
         // Arrange

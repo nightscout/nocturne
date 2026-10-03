@@ -234,6 +234,7 @@ public class DeviceStatusProjectionService
     /// <summary>
     /// Returns <see cref="DeviceStatus"/> documents projected from APS snapshots
     /// modified since the given Unix millisecond threshold. Used for AAPS incremental sync.
+    /// A deleted snapshot projects with <c>isValid: false</c>.
     /// </summary>
     /// <param name="lastModified">Unix millisecond timestamp threshold.</param>
     /// <param name="limit">Maximum number of results.</param>
@@ -241,10 +242,12 @@ public class DeviceStatusProjectionService
     public async Task<IEnumerable<DeviceStatus>> GetModifiedSinceAsync(
         long lastModified, int limit, CancellationToken ct)
     {
-        var apsSnapshots = (await _apsRepo.GetModifiedSinceAsync(lastModified, limit, ct)).ToList();
+        var page = await _apsRepo.GetModifiedSinceAsync(lastModified, limit, ct);
 
-        if (apsSnapshots.Count == 0)
+        if (page.Count == 0)
             return Enumerable.Empty<DeviceStatus>();
+
+        var apsSnapshots = page.Select(r => r.Record).ToList();
 
         var correlationIds = apsSnapshots
             .Where(a => a.CorrelationId.HasValue)
@@ -269,14 +272,18 @@ public class DeviceStatusProjectionService
         // Load override state spans the same way as GetAsync/GetByIdAsync
         var overrides = await LoadOverridesForSnapshots(apsSnapshots, ct);
 
-        return apsSnapshots.Select(aps =>
+        return page.Select(row =>
         {
+            var aps = row.Record;
             var cid = aps.CorrelationId;
             var pump = cid.HasValue ? pumpByCorrelation[cid.Value].FirstOrDefault() : null;
             var uploader = cid.HasValue ? uploaderByCorrelation[cid.Value].FirstOrDefault() : null;
             var extra = cid.HasValue ? extrasByCorrelation[cid.Value].FirstOrDefault() : null;
             var overrideSpan = FindOverrideForTimestamp(overrides, aps.Timestamp);
-            return ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
+            var status = ProjectFromSnapshots(aps, pump, uploader, overrideSpan, extra, _logger);
+            if (row.Deleted)
+                status.IsValid = false;
+            return status;
         });
     }
 

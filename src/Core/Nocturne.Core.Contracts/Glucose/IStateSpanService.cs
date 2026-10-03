@@ -199,12 +199,14 @@ public interface IStateSpanService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Delete an activity (stored as StateSpan)
+    /// Delete an activity (stored as StateSpan), with every other copy in its duplicate group
     /// </summary>
     /// <param name="id">Activity ID to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>True if deleted successfully, false otherwise</returns>
-    Task<bool> DeleteActivityAsync(
+    /// <returns>
+    /// The activity ids deleted: <paramref name="id"/> as given, then the copies'. Empty if not found.
+    /// </returns>
+    Task<IReadOnlyList<string>> DeleteActivityAsync(
         string id,
         CancellationToken cancellationToken = default);
 

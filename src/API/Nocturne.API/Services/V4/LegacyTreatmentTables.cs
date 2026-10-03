@@ -7,6 +7,7 @@ using Nocturne.Core.Models.V4;
 using Nocturne.Infrastructure.Data;
 using Nocturne.Infrastructure.Data.Entities;
 using Nocturne.Infrastructure.Data.Entities.V4;
+using Nocturne.Infrastructure.Data.Extensions;
 using Nocturne.Infrastructure.Data.Mappers;
 using Nocturne.Infrastructure.Data.Mappers.V4;
 
@@ -38,14 +39,16 @@ internal readonly record struct LegacyTreatmentRange(
 );
 
 /// <summary>
-/// One record fetched for projection, carrying the table that owns it and the <c>SysCreatedAt</c> and
-/// <c>SysUpdatedAt</c> of the row it came from.
+/// One record fetched for projection, carrying the table that owns it, the <c>SysCreatedAt</c> and
+/// <c>SysUpdatedAt</c> of the row it came from, and whether that row is soft-deleted, which only a
+/// modified-since read returns.
 /// </summary>
 internal readonly record struct FetchedRecord(
     ILegacyTreatmentTable Table,
     object Record,
     DateTime Created,
-    DateTime Modified
+    DateTime Modified,
+    bool Deleted = false
 );
 
 /// <summary>Food breakdown rows for the carb intakes of one projected page, keyed by carb intake.</summary>
@@ -91,14 +94,38 @@ internal interface ILegacyTreatmentTable
 
     /// <summary>
     /// A page of records changed at or after <paramref name="cursorMills"/>, oldest first, ending on
-    /// a millisecond boundary.
+    /// a millisecond boundary, soft-deleted rows included.
     /// </summary>
-    /// <remarks>The boundary rule is <see cref="HistoryPage"/>'s.</remarks>
+    /// <remarks>
+    /// The boundary rule is <see cref="HistoryPage"/>'s. A live copy deduplication marked
+    /// non-primary is left out, as every other treatment read leaves it out, so a client syncing
+    /// through history is sent one copy of a dose two sources reported. A deleted copy is always
+    /// delivered, so its tombstone reaches the client whatever deduplication decided about it.
+    /// <para>
+    /// A demotion is not sent: the demoted row's stamp does not move, and a client that already
+    /// holds it keeps it. That copy stands for the same dose as the group's primary, and a
+    /// tombstone for it would delete the uploader's own record on that client (AAPS invalidates its
+    /// local treatment when history serves its identifier with <c>isValid: false</c>), so the client
+    /// would stop counting a dose that was delivered. A primary that moves because its row was
+    /// deleted is sent: the delete tombstones the old primary and stamps the promoted copy
+    /// (<c>DuplicateGroupPrimaries.RepointAwayFromAsync</c>).
+    /// </para>
+    /// </remarks>
     Task<IReadOnlyList<FetchedRecord>> ModifiedSinceAsync(
         NocturneDbContext context,
         long cursorMills,
         int limit,
         ILogger logger,
+        CancellationToken ct
+    );
+
+    /// <summary>
+    /// The live records carrying one of <paramref name="correlationIds"/>, non-primary copies left
+    /// out as <see cref="ModifiedSinceAsync"/> leaves them out.
+    /// </summary>
+    Task<IReadOnlyList<FetchedRecord>> LiveByCorrelationAsync(
+        NocturneDbContext context,
+        IReadOnlyCollection<Guid> correlationIds,
         CancellationToken ct
     );
 
@@ -116,11 +143,12 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     > inRange,
     Func<TRecord, string?> legacyId,
     Func<NocturneDbContext, IQueryable<TEntity>> table,
+    Nocturne.Core.Models.RecordType dedupType,
     Func<TEntity, TRecord> toRecord,
     Func<TRecord, CarbFoodIndex, Treatment> project
 ) : ILegacyTreatmentTable
     where TRecord : class
-    where TEntity : class, ISystemTimestamped, IIdentified
+    where TEntity : class, ISystemTimestamped, IIdentified, ISoftDeletable
 {
     /// <inheritdoc />
     public string RecordType { get; } = typeof(TRecord).Name;
@@ -150,7 +178,7 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
     )
     {
         var entities = await HistoryPage.GetAsync(
-            table(context).AsNoTracking(),
+            table(context).IncludingDeleted().AsNoTracking().ExcludeNonPrimaryKeepingDeleted(context, dedupType),
             e => e.SysUpdatedAt,
             e => e.Id,
             cursorMills,
@@ -158,6 +186,26 @@ internal sealed class LegacyTreatmentTable<TRecord, TEntity>(
             logger,
             RecordType,
             ct);
+
+        return entities
+            .Select(e => (Record: toRecord(e), e.SysUpdatedAt, Deleted: e.DeletedAt is not null))
+            .Select(x => new FetchedRecord(this, x.Record, CreatedAt(x.Record), x.SysUpdatedAt, x.Deleted))
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<FetchedRecord>> LiveByCorrelationAsync(
+        NocturneDbContext context,
+        IReadOnlyCollection<Guid> correlationIds,
+        CancellationToken ct
+    )
+    {
+        var ids = correlationIds.Select(id => (Guid?)id).ToList();
+        var entities = await table(context)
+            .AsNoTracking()
+            .ExcludeNonPrimary(context, dedupType)
+            .Where(e => ids.Contains(EF.Property<Guid?>(e, nameof(IV4Record.CorrelationId))))
+            .ToListAsync(ct);
 
         return entities
             .Select(e => (Record: toRecord(e), e.SysUpdatedAt))
@@ -206,51 +254,55 @@ internal static class LegacyTreatmentTables
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
-            c => c.Boluses, BolusMapper.ToDomainModel,
+            c => c.Boluses, RecordType.Bolus, BolusMapper.ToDomainModel,
             (r, _) => ProjectCorrectionBolus(r)),
         new LegacyTreatmentTable<CarbIntake, CarbIntakeEntity>(
             (repositories, range, ct) => repositories.CarbIntakes.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
-            c => c.CarbIntakes, CarbIntakeMapper.ToDomainModel,
+            c => c.CarbIntakes, RecordType.CarbIntake, CarbIntakeMapper.ToDomainModel,
             (r, foods) => ProjectCarbCorrection(r, foods.For(r.Id))),
         new LegacyTreatmentTable<BGCheck, BGCheckEntity>(
             (repositories, range, ct) => repositories.BGChecks.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
-            c => c.BGChecks, BGCheckMapper.ToDomainModel,
+            c => c.BGChecks, RecordType.BGCheck, BGCheckMapper.ToDomainModel,
             (r, _) => ProjectBgCheck(r)),
         new LegacyTreatmentTable<Note, NoteEntity>(
             (repositories, range, ct) => repositories.Notes.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
-            c => c.Notes, NoteMapper.ToDomainModel,
+            c => c.Notes, RecordType.Note, NoteMapper.ToDomainModel,
             (r, _) => ProjectNote(r)),
         new LegacyTreatmentTable<DeviceEvent, DeviceEventEntity>(
             (repositories, range, ct) => repositories.DeviceEvents.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, nativeOnly: range.NativeOnly, ct: ct),
             r => r.LegacyId,
-            c => c.DeviceEvents, DeviceEventMapper.ToDomainModel,
+            c => c.DeviceEvents, RecordType.DeviceEvent, DeviceEventMapper.ToDomainModel,
             (r, _) => ProjectDeviceEvent(r)),
         new LegacyTreatmentTable<TempBasal, TempBasalEntity>(
             (repositories, range, ct) => repositories.TempBasals.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, ct: ct),
             r => r.LegacyId,
-            c => c.TempBasals, TempBasalMapper.ToDomainModel,
+            c => c.TempBasals, RecordType.TempBasal, TempBasalMapper.ToDomainModel,
             (r, _) => TempBasalToTreatmentMapper.ToTreatment(r)),
         new LegacyTreatmentTable<BolusCalculation, BolusCalculationEntity>(
             (repositories, range, ct) => repositories.BolusCalculations.GetAsync(
                 from: range.From, to: range.To, device: null, source: null,
                 limit: range.Limit, offset: 0, descending: true, ct: ct),
             r => r.LegacyId,
-            c => c.BolusCalculations, BolusCalculationMapper.ToDomainModel,
+            c => c.BolusCalculations, RecordType.BolusCalculation, BolusCalculationMapper.ToDomainModel,
             (r, _) => ProjectBolusCalculation(r)),
     ];
+
+    /// <summary>The tables whose records pair into a Meal Bolus.</summary>
+    internal static readonly IReadOnlyList<ILegacyTreatmentTable> MealTables =
+        [.. All.Where(t => t.RecordType is nameof(Bolus) or nameof(CarbIntake))];
 
     private static readonly Dictionary<ILegacyTreatmentTable, int> Order =
         All.Select((table, index) => (table, index)).ToDictionary(x => x.table, x => x.index);
@@ -274,7 +326,7 @@ internal static class LegacyTreatmentTables
             if (paired.Contains(row.Record))
                 continue;
 
-            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Created, row.Modified));
+            treatments.Add(Stamp(row.Table.Project(row.Record, foods), row.Created, row.Modified, row.Deleted));
         }
 
         return treatments;
@@ -287,6 +339,8 @@ internal static class LegacyTreatmentTables
     /// Correction Bolus / Carb Correction treatments. Ordering by descending Insulin/Carbs picks the
     /// record a human would recognise as the main one; ThenBy(Id) is a deterministic tiebreaker so
     /// same-timestamp, same-dose records don't produce non-deterministic output across requests.
+    /// A deleted and a live record never pair: the meal a client knows is deleted only when both
+    /// constituents are.
     /// </summary>
     private static HashSet<object> PairMeals(
         IReadOnlyList<FetchedRecord> records,
@@ -299,13 +353,13 @@ internal static class LegacyTreatmentTables
         var boluses = Correlated<Bolus>(records);
         var carbs = Correlated<CarbIntake>(records);
 
-        foreach (var correlationId in boluses.Select(g => g.Key).Union(carbs.Select(g => g.Key)))
+        foreach (var key in boluses.Select(g => g.Key).Union(carbs.Select(g => g.Key)))
         {
-            var bolus = boluses[correlationId]
+            var bolus = boluses[key]
                 .OrderByDescending(b => b.Record.Insulin)
                 .ThenBy(b => b.Record.Id)
                 .FirstOrDefault();
-            var carb = carbs[correlationId]
+            var carb = carbs[key]
                 .OrderByDescending(c => c.Record.Carbs)
                 .ThenBy(c => c.Record.Id)
                 .FirstOrDefault();
@@ -322,29 +376,32 @@ internal static class LegacyTreatmentTables
             treatments.Add(Stamp(
                 ProjectMealBolus(bolus.Record, carb.Record, foods.For(carb.Record.Id)),
                 Oldest(bolus.Record.CreatedAt, carb.Record.CreatedAt),
-                Newest(bolus.Modified, carb.Modified)));
+                Newest(bolus.Modified, carb.Modified),
+                key.Deleted));
         }
 
         return paired;
     }
 
-    private static ILookup<Guid, (T Record, DateTime Modified)> Correlated<T>(
+    private static ILookup<(Guid CorrelationId, bool Deleted), (T Record, DateTime Modified)> Correlated<T>(
         IReadOnlyList<FetchedRecord> records
     )
         where T : class, IV4Record =>
         records
-            .Select(r => (Record: r.Record as T, r.Modified))
+            .Select(r => (Record: r.Record as T, r.Modified, r.Deleted))
             .Where(r => r.Record?.CorrelationId is not null)
-            .ToLookup(r => r.Record!.CorrelationId!.Value, r => (r.Record!, r.Modified));
+            .ToLookup(r => (r.Record!.CorrelationId!.Value, r.Deleted), r => (r.Record!, r.Modified));
 
     private static DateTime Newest(DateTime left, DateTime right) => left > right ? left : right;
 
     private static DateTime Oldest(DateTime left, DateTime right) => left < right ? left : right;
 
-    private static Treatment Stamp(Treatment treatment, DateTime createdAt, DateTime modifiedAt)
+    private static Treatment Stamp(Treatment treatment, DateTime createdAt, DateTime modifiedAt, bool deleted)
     {
         treatment.SrvCreated = new DateTimeOffset(createdAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
         treatment.SrvModified = new DateTimeOffset(modifiedAt, TimeSpan.Zero).ToUnixTimeMilliseconds();
+        if (deleted)
+            treatment.IsValid = false;
         return treatment;
     }
 

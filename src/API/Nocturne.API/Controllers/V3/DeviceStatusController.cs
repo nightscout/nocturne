@@ -655,6 +655,8 @@ public class DeviceStatusController : BaseV3Controller<DeviceStatus>
             dto["uploader"] = status.Uploader;
         if (status.Loop != null)
             dto["loop"] = status.Loop;
+        if (status.IsValid != null)
+            dto["isValid"] = status.IsValid;
 
         return dto;
     }
