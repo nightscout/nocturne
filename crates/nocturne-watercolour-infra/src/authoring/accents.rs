@@ -305,6 +305,16 @@ pub(super) fn confirmation_background(style: &Style, palette: &Palette) -> Scene
     )
 }
 
+/// One `header_motif` stroke: its ends in frame units, belly radius and paint.
+struct HeaderStroke {
+    x: (f32, f32),
+    y: (f32, f32),
+    belly: f32,
+    pigment: usize,
+    concentration: f32,
+    water: f32,
+}
+
 /// Three loose horizontal brush strokes pulled left to right, of different
 /// weights and slightly offset. Each lands light, presses to its belly and
 /// thins as the brush runs dry, ending (from Medium up) in split bristle
@@ -316,17 +326,45 @@ pub(super) fn header_motif(style: &Style, palette: &Palette) -> Scene {
     let shadow = role(palette, PigmentRole::Shadow);
     let mut stream = style.stream(3);
     let mut p = Painting::new(style.ticks(420));
-    // (start x, end x, start y, end y, belly radius, pigment, concentration, water).
     // The thin stroke leads: drawn first, the wide one would put half the
     // finished area down in the reveal's first quarter.
     let strokes = [
-        (0.5, 3.4, 0.2, 0.3, 0.035, base, 0.5, 0.5),
-        (0.15, 4.2, 0.38, 0.54, 0.1, base, 0.55, 0.9),
-        (0.85, 4.5, 0.74, 0.5, 0.06, shadow, 0.6, 0.8),
+        HeaderStroke {
+            x: (0.5, 3.4),
+            y: (0.2, 0.3),
+            belly: 0.035,
+            pigment: base,
+            concentration: 0.5,
+            water: 0.5,
+        },
+        HeaderStroke {
+            x: (0.15, 4.2),
+            y: (0.38, 0.54),
+            belly: 0.1,
+            pigment: base,
+            concentration: 0.55,
+            water: 0.9,
+        },
+        HeaderStroke {
+            x: (0.85, 4.5),
+            y: (0.74, 0.5),
+            belly: 0.06,
+            pigment: shadow,
+            concentration: 0.6,
+            water: 0.8,
+        },
     ];
-    for (x0, x1, y0, y1, belly, pigment, conc, wet) in strokes {
+    for HeaderStroke {
+        x: (x0, x1),
+        y: (y0, y1),
+        belly,
+        pigment,
+        concentration: conc,
+        water: wet,
+    } in strokes
+    {
         let at = |x: f32| y0 + (y1 - y0) * (x - x0) / (x1 - x0);
-        let pt = |x: f32, jitter: f32| frame.pt(x, at(x) + jitter);
+        let pt = |x: f32, dy: f32| frame.pt(x, at(x) + dy);
         let landing = x0 + (x1 - x0) * 0.12;
         let mut body: Vec<Point> = vec![pt(landing, 0.0)];
         body.extend((1..7).map(|i| {

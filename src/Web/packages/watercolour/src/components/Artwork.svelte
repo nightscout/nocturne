@@ -57,7 +57,7 @@
     onready?: PlayerReadyCallback;
     /** Fires on every player state change, including settling on `none`, where `onready` never fires. */
     onstatechange?: PlayerStateCallback;
-    /** Runs after each presented live or baked frame; a host waiting on `seekTo` reads its `seeking` argument. */
+    /** See `PlayerProgressCallback`. */
     onprogress?: PlayerProgressCallback;
     class?: string;
   } & ArtworkOptions = $props();
