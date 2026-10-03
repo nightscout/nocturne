@@ -16,7 +16,7 @@ export function googleOptions(tenant: Tenant) {
   return {
     clientId: `${tenant.slug}.apps.googleusercontent.com`,
     clientSecret: "e2e-google-secret",
-    callbackUrl: `${tenant.webUrl}/settings/connectors/google-health/callback`,
+    callbackUrl: `${env.tenantSecureWebUrl(tenant.slug)}/settings/connectors/google-health/callback`,
     dataTypes: googleTypes,
     historyDays: 2,
     importFrom: new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10) + "T00:00:00Z",

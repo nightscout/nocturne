@@ -17,7 +17,7 @@ import { capture, compose, E2E_DIR, ensureImages, run } from "./lib.ts";
 const PROJECT = "nocturne-e2e-upgrade";
 const PREVIOUS = process.env.E2E_PREVIOUS_API_IMAGE ?? "ghcr.io/nightscout/nocturne/nocturne-api:latest";
 // Its own ports, so it can run beside a live `pnpm e2e:up` stack.
-const ports = { E2E_API_PORT: "1640", E2E_WEB_PORT: "1641", E2E_POSTGRES_PORT: "1643", E2E_MOCKS_PORT: "1644" };
+const ports = { E2E_API_PORT: "1640", E2E_WEB_PORT: "1641", E2E_POSTGRES_PORT: "1643", E2E_MOCKS_PORT: "1644", E2E_WEB_TLS_PORT: "1645" };
 const API = `http://127.0.0.1:${ports.E2E_API_PORT}`;
 const BASE_DOMAIN = `nocturne.localhost:${ports.E2E_WEB_PORT}`;
 const TENANTS = 3;

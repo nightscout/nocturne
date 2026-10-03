@@ -108,6 +108,9 @@ repeat import. These tests do not verify Google's real consent policy or API ava
 Only `e2e/docker-compose.yml` sets `NOCTURNE_GOOGLE_HEALTH_MOCK=true`; the fixed fake-vendor
 transport also requires dev-only endpoints to be enabled. Production defaults keep Google's
 HTTPS destinations unchanged.
+The Google browser spec uses the test-only Caddy TLS proxy on port 1635 (`E2E_WEB_TLS_PORT`),
+with Chromium accepting its internal CA. This preserves the HTTPS callback requirement for
+tenant hosts; other browser specs retain their HTTP origin. The upgrade stack uses port 1645.
 
 **Migration upgrade.** `pnpm e2e:upgrade` starts the latest release
 (`ghcr.io/nightscout/nocturne/nocturne-api:latest`; override with `E2E_PREVIOUS_API_IMAGE`) on a

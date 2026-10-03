@@ -1,9 +1,12 @@
 import { test, expect, signIn } from "./fixtures.ts";
 import { googleConsent, googleOptions, googleReadings, waitForGoogleSync } from "../helpers/google-health.ts";
+import { env } from "../helpers/env.ts";
 
 test("Google OAuth callback, preview, paginated import, repeat sync and disconnect", async ({ page, seed }) => {
   test.setTimeout(120_000);
-  const tenant = await seed();
+  const seeded = await seed();
+  const webUrl = env.tenantSecureWebUrl(seeded.slug);
+  const tenant = { ...seeded, webUrl, loginLink: seeded.loginLink.replace(seeded.webUrl, webUrl) };
   const options = googleOptions(tenant);
   // Only the external consent page is intercepted; callbacks and all Nocturne requests are real.
   await page.route("https://accounts.google.com/o/oauth2/v2/auth**", async (route) => {

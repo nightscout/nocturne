@@ -19,7 +19,7 @@ public static class DevOnlyGoogleHealthMock
 
     private sealed class GoogleHealthMockHandler : DelegatingHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var uri = request.RequestUri!;
             if (uri.Scheme != "https" || !uri.IsDefaultPort ||
@@ -28,7 +28,8 @@ public static class DevOnlyGoogleHealthMock
 
             // Only the explicitly opted-in disposable stack can send credentials to its fake vendor.
             request.RequestUri = new Uri("http://mocks:8080/googlehealth/" + uri.Host + uri.PathAndQuery);
-            return base.SendAsync(request, ct);
+            try { return await base.SendAsync(request, ct); }
+            finally { request.RequestUri = uri; }
         }
     }
 }
