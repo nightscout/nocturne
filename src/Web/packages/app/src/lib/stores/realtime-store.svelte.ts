@@ -44,6 +44,7 @@ import {
 } from "$lib/constants/entry-categories";
 import { toast } from "svelte-sonner";
 import * as alarmState from "$lib/stores/alarm-state.svelte";
+import { closeAlertNotification, raiseAlertNotification } from "./alert-notifications.svelte";
 import { getContext, setContext } from "svelte";
 import { getApiClient } from "$lib/api/client";
 import {
@@ -741,16 +742,21 @@ export class RealtimeStore {
 
   /** Handle new in-app notification from SignalR */
   private handleNotificationCreated(notification: InAppNotificationDto): void {
-    // Add if not already present
-    if (!this.inAppNotifications.some((n) => n.id === notification.id)) {
-      this.inAppNotifications = [notification, ...this.inAppNotifications];
-    }
+    if (!this.addNotification(notification)) return;
+    raiseAlertNotification(notification);
+  }
+
+  /** Adds a notification not yet listed; false when it already was. */
+  private addNotification(notification: InAppNotificationDto): boolean {
+    if (this.inAppNotifications.some((n) => n.id === notification.id)) return false;
+    this.inAppNotifications = [notification, ...this.inAppNotifications];
+    return true;
   }
 
   /** Handle notification archived from SignalR */
   private handleNotificationArchived(notification: InAppNotificationDto): void {
-    // Remove from active notifications
     this.inAppNotifications = this.inAppNotifications.filter((n) => n.id !== notification.id);
+    closeAlertNotification(notification);
   }
 
   /** Handle notification updated from SignalR */
@@ -763,8 +769,7 @@ export class RealtimeStore {
         ...this.inAppNotifications.slice(index + 1),
       ];
     } else {
-      // If not found, treat as create
-      this.handleNotificationCreated(notification);
+      this.addNotification(notification);
     }
   }
 

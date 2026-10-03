@@ -7,10 +7,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Nocturne.API.Services.Platform;
+using Nocturne.API.Services.Profiles;
 using Nocturne.API.Tests.Infrastructure;
 using Nocturne.Core.Contracts.Platform;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Models.Authorization;
+using Nocturne.Core.Models.Configuration;
 using Nocturne.Tests.Shared.Mocks;
 using Nocturne.Infrastructure.Cache.Abstractions;
 using Nocturne.Infrastructure.Data;
@@ -28,6 +30,7 @@ namespace Nocturne.API.Tests.Services.Platform;
 public class StatusServiceTests
 {
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<StatusService>> _mockLogger;
     private readonly Mock<ITenantAccessor> _mockTenantAccessor;
@@ -192,6 +195,7 @@ public class StatusServiceTests
             _httpContextAccessor,
             MockTenantAccessor.Create(tenantId: tenantId, slug: "t", isDemo: isDemo).Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             _mockLogger.Object);
 
         await service.GetSystemStatusAsync();
@@ -555,6 +559,54 @@ public class StatusServiceTests
     #endregion
 
     #region Configuration and Settings Tests
+
+    [Fact]
+    public async Task GetSystemStatusAsync_ReportsTheOwnersChosenUnitsOverTheInstanceConfig()
+    {
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mg/dl");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mmol" })
+            .Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+        (await CreateStatusService(configuration, _dbContext).GetV3SystemStatusAsync())
+            .Settings!["units"].Should().Be("mg/dl");
+    }
+
+    // A tenant upgraded from before the explicit default holds "mg/dl" in its features settings
+    // from the old class default. Status must not read that as the owner's choice.
+    [Fact]
+    public async Task GetSystemStatusAsync_KeepsTheInstanceConfigUntilTheOwnerChooses()
+    {
+        _dbContext.TenantId = MockTenantAccessor.DefaultTenantId;
+        await new UISettingsService(_dbContext, Mock.Of<ILogger<UISettingsService>>()).SaveSectionAsync(
+            "features", new FeatureSettings { Display = new DisplaySettings { Units = "mg/dl" } });
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Display:Units"] = "mmol" })
+            .Build();
+
+        var result = await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mmol");
+
+        _tenants.Setup(t => t.GetDefaultGlucoseUnitsAsync(MockTenantAccessor.DefaultTenantId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("mg/dl");
+
+        (await CreateStatusService(configuration, _dbContext).GetSystemStatusAsync())
+            .Settings!["units"].Should().Be("mg/dl");
+    }
+
+    [Fact]
+    public async Task GetSystemStatusAsync_FallsBackToMgDlWithNeitherTenantNorConfigUnits()
+    {
+        var result = await CreateStatusService(new ConfigurationBuilder().Build(), _dbContext)
+            .GetSystemStatusAsync();
+
+        result.Settings!["units"].Should().Be("mg/dl");
+    }
 
     [Fact]
     public async Task GetSystemStatusAsync_WithCustomDisplaySettings_ShouldIncludeInSettings()
@@ -1070,6 +1122,7 @@ public class StatusServiceTests
             _httpContextAccessor,
             tenantAccessor ?? _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             _mockLogger.Object
         );
     }

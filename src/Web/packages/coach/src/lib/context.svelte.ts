@@ -1,5 +1,6 @@
 import { getContext, setContext, untrack } from "svelte";
 import type {
+  CoachGates,
   CoachMarkAdapter,
   DismissOptions,
   MarkRegistration,
@@ -7,7 +8,7 @@ import type {
   MarkStatus,
   SequenceConfig,
 } from "./types.js";
-import { selectActiveMark, isSequenceDone, sequenceProgress, type SelectionResult } from "./sequencing.js";
+import { selectActiveMark, isPrerequisiteMet, sequenceProgress, type SelectionResult } from "./sequencing.js";
 
 const COACH_CONTEXT_KEY = Symbol("coach-mark-context");
 const DISABLED_STORAGE_KEY = "nocturne:coach-marks-disabled";
@@ -63,6 +64,7 @@ export class CoachMarkContext {
   private sequences: SequenceConfig;
   private settleDelay: number;
   private seenDwellMs: number;
+  private gates: () => CoachGates;
   private _keyToSequence: ReadonlyMap<string, string>;
 
   private _states = $state<MarkStates>(noMarkStates());
@@ -83,11 +85,13 @@ export class CoachMarkContext {
     sequences: SequenceConfig = {},
     settleDelay = 500,
     seenDwellMs = 2000,
+    gates: () => CoachGates = () => ({}),
   ) {
     this.adapter = adapter;
     this.sequences = sequences;
     this.settleDelay = settleDelay;
     this.seenDwellMs = seenDwellMs;
+    this.gates = gates;
 
     this._keyToSequence = indexSequences(sequences);
     // Read here rather than in initialize: marks register before the provider mounts, and a
@@ -245,6 +249,7 @@ export class CoachMarkContext {
         this._states,
         this._registrations,
         this.sequences,
+        this.gates(),
       );
     }
   }
@@ -270,7 +275,10 @@ export class CoachMarkContext {
     if (!seqName) return true; // standalone marks are always eligible
 
     const seq = this.sequences[seqName];
-    if (seq.prerequisite && !isSequenceDone(seq.prerequisite, this.sequences, this._states)) {
+    if (
+      seq.prerequisite &&
+      !isPrerequisiteMet(seq.prerequisite, this.sequences, this._states, this.gates())
+    ) {
       return false;
     }
 
@@ -344,29 +352,28 @@ export class CoachMarkContext {
     const seq = this.sequences[this._forcedSequence];
     if (!seq) return;
 
+    // A step whose element is not on the page is passed over, not waited on: some are mounted
+    // only conditionally (a chart hidden behind an empty state), and waiting on one strands the
+    // rest of the tour. It stays unseen, and register() raises it if it mounts later.
+    let awaitingMount = false;
     for (const stepKey of seq.steps) {
       const status = this.getStatus(stepKey);
       if (status === "completed" || status === "dismissed") continue;
 
-      // Found the first unseen/seen step
-      if (!this._registrations.some((r) => r.key === stepKey)) {
-        // Not mounted yet — wait for lazy registration to trigger
-        return;
-      }
-
-      // Mounted and eligible: activate it
       const stepRegistrations = this._registrations
         .filter((r) => r.key === stepKey)
         .sort((a, b) => a.step - b.step);
 
-      if (stepRegistrations.length > 0) {
-        this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
-        return;
+      if (stepRegistrations.length === 0) {
+        awaitingMount = true;
+        continue;
       }
+
+      this._activeSelection = { key: stepKey, step: stepRegistrations[0].step };
+      return;
     }
 
-    // All steps done
-    this.onForcedSequenceComplete();
+    if (!awaitingMount) this.onForcedSequenceComplete();
   }
 
   private onForcedSequenceComplete(): void {
@@ -428,6 +435,7 @@ export class CoachMarkContext {
         this._states,
         this._registrations,
         this.sequences,
+        this.gates(),
       );
     }, this.settleDelay);
   }
@@ -438,8 +446,9 @@ export function createCoachMarkContext(
   sequences: SequenceConfig = {},
   settleDelay = 500,
   seenDwellMs = 2000,
+  gates: () => CoachGates = () => ({}),
 ): CoachMarkContext {
-  const ctx = new CoachMarkContext(adapter, sequences, settleDelay, seenDwellMs);
+  const ctx = new CoachMarkContext(adapter, sequences, settleDelay, seenDwellMs, gates);
   setContext(COACH_CONTEXT_KEY, ctx);
   return ctx;
 }

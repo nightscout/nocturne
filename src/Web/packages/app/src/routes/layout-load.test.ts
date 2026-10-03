@@ -5,6 +5,7 @@ vi.mock("$app/environment", () => ({ browser: true, building: false, dev: false 
 const registerPreferenceCookieDomain = vi.fn();
 const registerPreferencesWriteThrough = vi.fn();
 const reconcilePreferences = vi.fn();
+const showTenantDefaultUnits = vi.fn();
 
 vi.mock("$lib/stores/appearance-store.svelte", () => ({
   registerPreferenceCookieDomain: (...args: unknown[]) =>
@@ -12,6 +13,7 @@ vi.mock("$lib/stores/appearance-store.svelte", () => ({
   registerPreferencesWriteThrough: (...args: unknown[]) =>
     registerPreferencesWriteThrough(...args),
   reconcilePreferences: (...args: unknown[]) => reconcilePreferences(...args),
+  showTenantDefaultUnits: (...args: unknown[]) => showTenantDefaultUnits(...args),
   preferredLanguage: { current: "en" },
   isSupportedLocale: (locale: string) => locale === "en",
   setLanguage: vi.fn(),
@@ -44,6 +46,7 @@ describe("root layout universal load", () => {
     registerPreferenceCookieDomain.mockClear();
     registerPreferencesWriteThrough.mockClear();
     reconcilePreferences.mockClear();
+    showTenantDefaultUnits.mockClear();
   });
 
   it("hydrates a share viewer from the link owner's preferences", async () => {
@@ -81,5 +84,20 @@ describe("root layout universal load", () => {
     expect(registerPreferenceCookieDomain).toHaveBeenCalledWith("nocturne.run");
     expect(registerPreferencesWriteThrough).toHaveBeenCalled();
     expect(reconcilePreferences).toHaveBeenCalledWith({ glucoseUnits: "mg/dl" });
+  });
+
+  it("offers a signed-in member the tenant default units after their own", async () => {
+    await runLoad({
+      isShareHost: false,
+      isAuthenticated: true,
+      baseDomain: "nocturne.run",
+      user: { preferences: {}, defaultGlucoseUnits: "mmol" },
+      serverPreferences: {},
+    });
+
+    expect(showTenantDefaultUnits).toHaveBeenCalledWith("mmol");
+    expect(reconcilePreferences.mock.invocationCallOrder[0]).toBeLessThan(
+      showTenantDefaultUnits.mock.invocationCallOrder[0]
+    );
   });
 });

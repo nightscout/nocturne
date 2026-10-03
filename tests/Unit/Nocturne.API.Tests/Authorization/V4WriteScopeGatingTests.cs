@@ -339,6 +339,7 @@ public class V4WriteScopeGatingTests
             // schedules are the therapy category (therapy.read on the read side); v1 and v3 profile
             // writes require therapy.readwrite.
             ["ProfileController"] = Scope.TherapyReadWrite,
+            ["SetupTherapyController"] = Scope.TherapyReadWrite,
 
             // treatments: carb_intakes sits under treatments.read, POST /meals also writes a bolus,
             // and treatment_foods is keyed by carb intake (the food catalog is only read).
@@ -381,6 +382,7 @@ public class V4WriteScopeGatingTests
             ["TenantAlertSettingsController"] = Scope.AlertsReadWrite,
             ["AlertCustomSoundsController"] = Scope.AlertsReadWrite,
             ["AlertInvitesController"] = Scope.AlertsReadWrite,
+            ["SetupAlertsController"] = Scope.AlertsReadWrite,
             ["NotificationsController"] = Scope.AlertsReadWrite,
 
             // devices: a reservoir report is stored as a manual-source pump_snapshots row, and a fill
@@ -403,6 +405,10 @@ public class V4WriteScopeGatingTests
             // The actions accept either member-personal capability scope; device.notify is the one
             // asserted, and neither is satisfiable by a read-only credential.
             ["ClientDevicesController"] = Scope.DeviceNotify,
+
+            // setup_hub_items and the tenant's strip dismissal are the owner's onboarding state, not
+            // a data category; the hub is owner-only like the onboarding answers it follows on from.
+            ["SetupHubController"] = Scope.FullAccess,
         };
 
     /// <summary>
@@ -433,6 +439,15 @@ public class V4WriteScopeGatingTests
             // only the connector_food_entries status, which is the food category.
             ["MealMatchingController.AcceptMatch"] = Scope.TreatmentsReadWrite,
             ["MealMatchingController.DismissMatch"] = Scope.FoodReadWrite,
+
+            // The setup hub's Devices item writes the same tables as PatientRecordController above,
+            // plus a tracker definition, which TrackersController gates on alerts.readwrite.
+            ["SetupDevicesController.ConfirmSetupDevice"] = Scope.DevicesReadWrite,
+            ["SetupDevicesController.AddSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.SetTakesNoInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.AddSetupTracker"] = Scope.AlertsReadWrite,
+            ["SetupDevicesController.RemoveSetupInsulin"] = Scope.TherapyReadWrite,
+            ["SetupDevicesController.RemoveSetupTracker"] = Scope.AlertsReadWrite,
         };
 
     [Fact]

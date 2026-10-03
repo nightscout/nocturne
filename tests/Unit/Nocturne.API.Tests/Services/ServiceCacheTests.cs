@@ -32,6 +32,7 @@ public class ServiceCacheTests
     private readonly Mock<IEntryCache> _mockEntryCache;
     private readonly Mock<IDataEventSink<Entry>> _mockEntryEvents;
     private readonly Mock<ICacheService> _mockCacheService;
+    private readonly Mock<ITenantService> _tenants = new();
     private readonly Mock<IDemoModeService> _mockDemoModeService;
     private readonly Mock<ILogger<EntryService>> _mockEntryLogger;
     private readonly Mock<ILogger<StatusService>> _mockStatusLogger;
@@ -199,6 +200,7 @@ public class ServiceCacheTests
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             _mockStatusLogger.Object
         );
 
@@ -280,6 +282,7 @@ public class ServiceCacheTests
             httpContextAccessor,
             _mockTenantAccessor.Object,
             TestPublicAccessCache.Create(),
+            _tenants.Object,
             _mockStatusLogger.Object
         );
 

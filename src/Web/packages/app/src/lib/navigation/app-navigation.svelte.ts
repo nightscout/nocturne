@@ -233,7 +233,10 @@ export function buildAppNavigation(viewer: NavViewer): NavItem[] {
       title: "Settings",
       icon: Settings,
       children: [
-        { title: "Setup", href: "/setup", icon: ListChecks },
+        // The setup hub is the owner's.
+        ...(satisfiesScope(viewer.grantedScopes, "*")
+          ? [{ title: "Setup", href: "/setup", icon: ListChecks }]
+          : []),
         { title: "Account", href: "/settings/account", icon: User },
         {
           title: "Patient Record",
