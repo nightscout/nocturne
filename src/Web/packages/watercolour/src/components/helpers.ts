@@ -17,6 +17,7 @@ export interface MountOptions extends ArtworkOptions {
   /** A Lucide icon source; takes precedence over the artwork id. */
   icon?: IconArtworkSource;
   scene?: (module: WasmModule, width: number, height: number, dpr: number) => string;
+  blendTicks?: boolean;
   onProgress?: (progress: number) => void;
   /**
    * `contain` (default) or `fill`, or a function deciding per container
@@ -248,6 +249,7 @@ export function mountPlayer(
       releaseAfterFinish: options.releaseAfterFinish,
       startFinished,
       onProgress: options.onProgress,
+      blendTicks: options.blendTicks,
       crop: options.crop,
       assetBaseUrl: options.assetBaseUrl,
       width: box.width,

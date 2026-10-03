@@ -20,6 +20,7 @@ function fakeInstance(total: number) {
       canvas.height = height;
     },
     setCrop: vi.fn(),
+    setBlendTicks: vi.fn(),
     setProgressCurve() {},
     play: () => void (playing = true),
     pause: () => void (playing = false),
@@ -199,6 +200,17 @@ describe('presented progress', () => {
     expect(live.canvas.height).toBe(150);
     expect(live.state.detail).toBe('extraLarge');
     live.dispose();
+  });
+
+  it('blends ticks only for a player that asks', async () => {
+    const blended = fakeInstance(1);
+    const plain = fakeInstance(1);
+    const { scheduler } = manualScheduler();
+    const players = [player(blended, scheduler, { blendTicks: true }), player(plain, scheduler, {})];
+    await Promise.all(players.map((live) => live.ready));
+    expect(blended.setBlendTicks).toHaveBeenCalledWith(true);
+    expect(plain.setBlendTicks).not.toHaveBeenCalled();
+    for (const live of players) live.dispose();
   });
 
   it('rejects a crop outside the authored painting before acquiring an engine', () => {

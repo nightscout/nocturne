@@ -22,6 +22,7 @@ export interface WasmInstance {
   attach(canvas: HTMLCanvasElement, width: number, height: number): void;
   resize(width: number, height: number): void;
   setCrop(x: number, y: number, width: number, height: number): void;
+  setBlendTicks(enabled: boolean): void;
   play(): void;
   pause(): void;
   reset(): void;

@@ -55,6 +55,12 @@ export interface PlayerOptions extends ArtworkOptions, AssetOptions {
   detail?: DetailLevel;
   /** Live only: overrides the simulation grid side; 0 keeps the detail's default. */
   simResolution?: number;
+  /**
+   * Live only: while playing, presents the last two simulated ticks blended
+   * at the clock's position between them, half a tick behind. For a scene
+   * whose growth shows each tick as a step, such as `bloomScene`.
+   */
+  blendTicks?: boolean;
   /** CSS size and device pixel ratio at creation; defaults to the canvas's current size. */
   width?: number;
   height?: number;
@@ -292,6 +298,7 @@ class LiveBackend implements Backend {
           const { x, y, width, height } = options.crop;
           instance.setCrop(x, y, width, height);
         }
+        if (options.blendTicks) instance.setBlendTicks(true);
         const target = acquireWebgpu(canvas);
         instance.attach(target, size.width, size.height);
         if (import.meta.env.DEV) (window.__watercolourLive ??= []).push({ canvas: target, instance });

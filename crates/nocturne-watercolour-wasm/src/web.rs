@@ -301,12 +301,7 @@ impl WatercolourEngine {
         }
         self.shared.live.set(self.shared.live.get() + 1);
         let mut instance = SceneInstance {
-            has_dabs: playback.scene().timeline.events.iter().any(|event| {
-                matches!(
-                    event.op,
-                    nocturne_watercolour_core::domain::Operation::Dab(_)
-                )
-            }),
+            blend_ticks: false,
             playback,
             surface: None,
             ctx: self.ctx.clone(),
@@ -517,7 +512,8 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
-    has_dabs: bool,
+    /// While playing, present the blend of the last two ticks; see `setBlendTicks`.
+    blend_ticks: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
     ctx: GpuContext,
@@ -570,7 +566,7 @@ impl SceneInstance {
         let before_blend = self.playback.tick_blend();
         self.timed_step(f)?;
         Ok(self.playback.current_tick() != before
-            || (self.has_dabs && self.playback.tick_blend() != before_blend))
+            || (self.blend_ticks && self.playback.tick_blend() != before_blend))
     }
 
     async fn frames_async(
@@ -649,6 +645,17 @@ impl SceneInstance {
             .simulator()
             .set_crop([x, y, width, height])
             .map_err(engine_err)
+    }
+
+    /// While playing, presents the last two simulated ticks blended at the
+    /// clock's position between them, half a tick behind it: for a scene whose
+    /// growth shows each tick as a step, such as the glucose bloom.
+    #[wasm_bindgen(js_name = setBlendTicks)]
+    pub fn set_blend_ticks(&mut self, enabled: bool) {
+        self.blend_ticks = enabled;
+        if !enabled {
+            self.playback.simulator().clear_interpolation();
+        }
     }
 
     /// Pixel size the swapchain is configured at; `null` until `attach`.
@@ -787,7 +794,7 @@ impl SceneInstance {
         let t0 = now_ms();
         let tick = self.playback.current_tick();
         let blend = self.playback.tick_blend();
-        let presented = if self.has_dabs && self.playback.state() == PlaybackState::Playing {
+        let presented = if self.blend_ticks && self.playback.state() == PlaybackState::Playing {
             self.playback.simulator().present_at(surface, tick, blend)
         } else {
             // A paused or finished scene can hold its canvas indefinitely; its tick images are released.

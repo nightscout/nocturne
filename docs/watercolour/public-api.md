@@ -97,6 +97,8 @@ replaced in place).
 glucose tile's three spreading charges. `colour` is an encoded RGB triple in
 `0..1`; `slope` is clamped to `-1..1`. Width and height are CSS pixels. The
 simulation grid is capped at 320 while the output follows the measured tile.
+Play it with `blendTicks: true`, which presents the bloom's growth between
+simulated ticks.
 
 `mountPlayer(frame, canvas, undefined, { scene, fit: 'fill', ... }, onready,
 onstatechange)` gives generated scenes the component resize and presentation
