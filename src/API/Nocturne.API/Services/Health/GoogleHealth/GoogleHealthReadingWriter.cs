@@ -1,5 +1,6 @@
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Connectors.GoogleHealth.Services;
 using Nocturne.Core.Constants;
 using Nocturne.Core.Models;
@@ -116,7 +117,9 @@ public sealed class GoogleHealthReadingWriter(
                             .Select(session => new ReconciliationRecord(session.Id, session.OriginalId!)),
                             identifiers, type, batch => db.SleepSessions.Where(session =>
                                     session.TenantId == run.TenantId && session.Source == SleepSource.Google.ToString() &&
-                                    session.SourceApp == SourceApp && batch.Contains(session.Id)).ExecuteDeleteAsync(ct), ct);
+                                    session.SourceApp == SourceApp && session.DeletedAt == null && batch.Contains(session.Id))
+                                .ExecuteUpdateAsync(setters => setters.SetProperty(session => session.DeletedAt, deletedAt)
+                                    .SetProperty(session => EF.Property<bool>(session, "DeletedByUser"), false), ct), ct);
                         break;
                 }
             }
@@ -211,9 +214,18 @@ public sealed class GoogleHealthReadingWriter(
                     () => bodyWeights.CreateBodyWeightsAsync(weightBatch, ct));
 
             foreach (var session in sleepSessions)
-                await WriteBatchAsync("sleep", 1,
-                    new DateTimeOffset(DateTime.SpecifyKind(session.EndTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
-                    () => sleep.UpsertSessionAsync(session, ct));
+            {
+                try
+                {
+                    await WriteBatchAsync("sleep", 1,
+                        new DateTimeOffset(DateTime.SpecifyKind(session.EndTime, DateTimeKind.Utc)).ToUnixTimeMilliseconds(),
+                        () => sleep.UpsertSessionAsync(session, ct));
+                }
+                catch (RecreationBlockedException)
+                {
+                    logger.LogDebug("Skipping a manually deleted Google Health sleep session");
+                }
+            }
         }
         catch (Exception ex)
         {

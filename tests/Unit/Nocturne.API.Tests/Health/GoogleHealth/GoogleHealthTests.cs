@@ -19,6 +19,7 @@ using Nocturne.Core.Contracts.Connectors;
 using Nocturne.Core.Contracts.Health;
 using Nocturne.Core.Contracts.Multitenancy;
 using Nocturne.Core.Contracts.Sleep;
+using Nocturne.Core.Contracts.V4.Repositories;
 using Nocturne.Core.Models;
 using Nocturne.Core.Models.Health;
 using Nocturne.Infrastructure.Data;
@@ -213,6 +214,11 @@ public class GoogleHealthTests
             Session("after", to.AddHours(6)),
             Session("other-source", from.AddHours(6), "Manual"),
             Session("other-app", from.AddHours(6), app: "Other app"));
+        var userDeletedAt = from.AddDays(-1).UtcDateTime;
+        var userDeleted = Session("user-deleted", from.AddHours(6));
+        userDeleted.DeletedAt = userDeletedAt;
+        db.SleepSessions.Add(userDeleted);
+        db.Entry(userDeleted).Property("DeletedByUser").CurrentValue = true;
         await db.SaveChangesAsync();
         db.TenantId = otherTenantId;
         db.SleepSessions.Add(Session("other-tenant", from.AddHours(6)));
@@ -235,6 +241,17 @@ public class GoogleHealthTests
         Assert.Contains("before", remaining);
         Assert.Contains("other-source", remaining);
         Assert.Contains("other-app", remaining);
+        var stored = await db.SleepSessions.IgnoreQueryFilters().AsNoTracking()
+            .Where(session => session.TenantId == tenantId)
+            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, "DeletedByUser") })
+            .ToListAsync();
+        Assert.Equal(9, stored.Count);
+        var stale = Assert.Single(stored, session => session.OriginalId == "stale-overnight");
+        Assert.NotNull(stale.DeletedAt);
+        Assert.False(stale.DeletedByUser);
+        var deleted = Assert.Single(stored, session => session.OriginalId == "user-deleted");
+        Assert.Equal(userDeletedAt, deleted.DeletedAt);
+        Assert.True(deleted.DeletedByUser);
         db.TenantId = otherTenantId;
         Assert.Equal("other-tenant", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
     }
@@ -915,6 +932,26 @@ public class GoogleHealthTests
         Assert.Single(await db.BodyWeights.AsNoTracking().ToListAsync());
         Assert.Single(await db.StepCounts.AsNoTracking().ToListAsync());
         Assert.Single(await db.SleepSessions.AsNoTracking().ToListAsync());
+    }
+
+    [Fact]
+    public async Task Writer_skips_manually_deleted_sleep_and_continues_the_import()
+    {
+        await using var db = new NocturneDbContext(new DbContextOptionsBuilder<NocturneDbContext>()
+            .UseSqlite("Data Source=:memory:").Options);
+        var deleted = new SleepSession { Id = "deleted", EndTime = DateTime.UtcNow };
+        var next = new SleepSession { Id = "next", EndTime = deleted.EndTime };
+        var sleep = new Mock<ISleepService>();
+        sleep.Setup(service => service.UpsertSessionAsync(deleted, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new RecreationBlockedException("sleep session", "deleted"));
+        sleep.Setup(service => service.UpsertSessionAsync(next, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(next);
+        var writer = new GoogleHealthReadingWriter(Mock.Of<IHeartRateService>(), Mock.Of<IStepCountService>(),
+            Mock.Of<IBodyWeightService>(), sleep.Object, db, NullLogger<GoogleHealthReadingWriter>.Instance);
+
+        await writer.WriteAsync([], [deleted, next], 2, default);
+
+        sleep.Verify(service => service.UpsertSessionAsync(next, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

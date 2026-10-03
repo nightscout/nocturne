@@ -171,6 +171,47 @@ public sealed class GoogleHealthReconciliationTests(GoogleHealthPostgresFixture 
 
 
     [Fact]
+    public async Task Sleep_reconciliation_preserves_user_tombstones_and_soft_deletes_missing_sessions()
+    {
+        await using var db = Context();
+        await UseTenantAsync(db, tenantId);
+        var userDeletedAt = from.AddDays(-1).UtcDateTime;
+        foreach (var identifier in new[] { "retained", "stale", "user-deleted" })
+        {
+            var session = new SleepSessionEntity
+            {
+                Id = Guid.NewGuid(), OriginalId = identifier, Source = "Google", SourceApp = "Google Health",
+                StartTime = from.UtcDateTime, EndTime = from.AddHours(8).UtcDateTime,
+                DeletedAt = identifier == "user-deleted" ? userDeletedAt : null
+            };
+            db.SleepSessions.Add(session);
+            db.Entry(session).Property("DeletedByUser").CurrentValue = identifier == "user-deleted";
+        }
+        await db.SaveChangesAsync();
+        var writer = Writer(db);
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var run = await writer.BeginReconciliationAsync(["sleep"], from, from.AddDays(1), default);
+            await writer.StageReconciliationIdsAsync(run, "sleep", ["retained"], default);
+            await writer.CompleteReconciliationAsync(run, default);
+        }
+
+        var sessions = await db.SleepSessions.IgnoreQueryFilters().AsNoTracking()
+            .Where(session => session.TenantId == tenantId)
+            .Select(session => new { session.OriginalId, session.DeletedAt, DeletedByUser = EF.Property<bool>(session, "DeletedByUser") })
+            .ToListAsync();
+        Assert.Equal(3, sessions.Count);
+        var stale = Assert.Single(sessions, session => session.OriginalId == "stale");
+        Assert.NotNull(stale.DeletedAt);
+        Assert.False(stale.DeletedByUser);
+        var deleted = Assert.Single(sessions, session => session.OriginalId == "user-deleted");
+        Assert.Equal(userDeletedAt, deleted.DeletedAt);
+        Assert.True(deleted.DeletedByUser);
+        Assert.Equal("retained", (await db.SleepSessions.AsNoTracking().SingleAsync()).OriginalId);
+    }
+
+    [Fact]
     public async Task Interrupted_reconciliation_does_not_delete_data_or_require_persistent_staging()
     {
         await using var db = Context();
