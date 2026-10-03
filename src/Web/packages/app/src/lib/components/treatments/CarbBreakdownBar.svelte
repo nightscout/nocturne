@@ -19,7 +19,14 @@
 
   let { totalCarbs, foods, seedKey, class: className }: Props = $props();
 
-  // Color palette for food segments
+  function cssGeometry(element: HTMLElement, properties: Record<string, string>) {
+    const update = (next: Record<string, string>) => {
+      for (const [name, value] of Object.entries(next)) element.style.setProperty(name, value);
+    };
+    update(properties);
+    return { update };
+  }
+
   const colorPalette = [
     "oklch(0.765 0.177 163.223)", // emerald-500
     "oklch(0.623 0.214 259.815)", // blue-500
@@ -33,24 +40,16 @@
 
   const unattributedColor = "oklch(0.556 0.046 257.417)"; // muted gray
 
-  function getColorForIndex(index: number): string {
-    return colorPalette[index % colorPalette.length];
-  }
-
-  // Calculate attributed carbs first
   const attributedCarbs = $derived(
     foods.reduce((sum, f) => sum + (f.carbs ?? 0), 0)
   );
 
-  // Calculate unattributed carbs
   const unattributedCarbs = $derived(Math.max(0, totalCarbs - attributedCarbs));
 
-  // Generate a stable key for the chart based on food IDs to force re-render
   const chartKey = $derived(
     foods.map((f) => f.id ?? "").join("-") + `-${unattributedCarbs > 0}`
   );
 
-  // Build series config for each food + unattributed
   const seriesConfig = $derived.by(() => {
     if (totalCarbs <= 0) return [];
 
@@ -64,12 +63,11 @@
       const key = food.id ?? `food-${index}`;
       config.push({
         key,
-        color: getColorForIndex(index),
+        color: colorPalette[index % colorPalette.length],
         label: food.foodName ?? food.note ?? "Other",
       });
     });
 
-    // Add unattributed segment
     if (unattributedCarbs > 0) {
       config.push({
         key: "unattributed",
@@ -81,7 +79,6 @@
     return config;
   });
 
-  // Build data object with carb values for each food
   const chartData = $derived.by(() => {
     if (totalCarbs <= 0) return [];
 
@@ -92,7 +89,6 @@
       data[key] = food.carbs ?? 0;
     });
 
-    // Add unattributed
     if (unattributedCarbs > 0) {
       data["unattributed"] = unattributedCarbs;
     }
@@ -100,11 +96,8 @@
     return [data];
   });
 
-  // Always show chart if there are carbs
   const shouldShowChart = $derived(totalCarbs > 0);
 
-  // Calculate width as percentage of max carbs (100g = 100%)
-  // with minimum of 20% so small amounts are still visible
   const MAX_CARBS = 100;
   const MIN_WIDTH_PERCENT = 20;
   const chartWidthPercent = $derived(
@@ -155,7 +148,7 @@
 
 <div class={cn("h-8 flex justify-end", className)}>
   {#if shouldShowChart && seriesConfig.length > 0}
-    <div class="relative isolate h-full w-(--chart-w)" style:--chart-w="{chartWidthPercent}%">
+    <div class="relative isolate h-full w-(--chart-w)" use:cssGeometry={{ '--chart-w': `${chartWidthPercent}%` }}>
       {#key chartKey}
         <div bind:this={chartEl} class="h-full">
         <BarChart
@@ -187,18 +180,17 @@
         </div>
       {/key}
       {#if paintBox}
-        <!-- A grey wash multiplied over the attributed bars, so the paint takes each bar's own hue.
-             Multiply, where the glucose tile soft-lights: on a bar this light and this small a
-             soft-light wash vanishes, and there is no text over it to lose contrast. Cropped to the
-             wash's interior so no dried edge floats inside the bar. -->
+        <!-- Soft-light is too faint over these small, light bars. -->
         <div
           aria-hidden="true"
           data-carb-wash
           class="pointer-events-none absolute top-(--paint-y) left-(--paint-x) h-(--paint-h) w-(--paint-w) overflow-hidden"
-          style:--paint-x="{paintBox.left}px"
-          style:--paint-y="{paintBox.top}px"
-          style:--paint-w="{paintBox.width}px"
-          style:--paint-h="{paintBox.height}px"
+          use:cssGeometry={{
+            '--paint-x': `${paintBox.left}px`,
+            '--paint-y': `${paintBox.top}px`,
+            '--paint-w': `${paintBox.width}px`,
+            '--paint-h': `${paintBox.height}px`,
+          }}
         >
           <div class="absolute inset-0 wash-grain mix-blend-multiply">
             <Artwork
