@@ -749,6 +749,17 @@ impl SceneInstance {
         self.timed_step(|p| p.seek_progress(progress))
     }
 
+    #[wasm_bindgen(js_name = seekTowardsProgress)]
+    pub fn seek_towards_progress(&mut self, progress: f32, ticks: u32) -> Result<bool, JsError> {
+        self.playback.simulator().clear_interpolation();
+        let mut reached = false;
+        self.timed_step(|p| {
+            reached = p.seek_towards_progress(progress, ticks)?;
+            Ok(())
+        })?;
+        Ok(reached)
+    }
+
     #[wasm_bindgen(js_name = finishImmediately)]
     pub fn finish_immediately(&mut self) -> Result<(), JsError> {
         self.timed_step(|p| p.finish_immediately())
