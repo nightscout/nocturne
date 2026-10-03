@@ -4,6 +4,7 @@
   as the scene, so a test reads what a bloom was asked to paint.
 -->
 <script module lang="ts">
+  import { SvelteSet } from "svelte/reactivity";
   import type { mountPlayer as MountPlayer, PlayerState, PlayerStateCallback, WasmModule } from "@nocturne/watercolour";
 
   export interface FakePainting {
@@ -13,7 +14,7 @@
     paint(progress: number, finished?: boolean): void;
   }
 
-  const live = new Set<FakePainting>();
+  const live = new SvelteSet<FakePainting>();
 
   export const engine = {
     live: () => [...live],
