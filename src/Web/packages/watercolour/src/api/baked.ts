@@ -147,14 +147,14 @@ export function drawStripFrame(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.globalAlpha = 1;
-  const source_x = crop.x * manifest.width;
-  const source_y = crop.y * manifest.height;
-  const source_width = crop.width * manifest.width;
-  const source_height = crop.height * manifest.height;
-  ctx.drawImage(bitmap, source_x, from * manifest.height + source_y, source_width, source_height, 0, 0, width, height);
+  const sourceX = crop.x * manifest.width;
+  const sourceY = crop.y * manifest.height;
+  const sourceWidth = crop.width * manifest.width;
+  const sourceHeight = crop.height * manifest.height;
+  ctx.drawImage(bitmap, sourceX, from * manifest.height + sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
   if (blend > 0) {
     ctx.globalAlpha = blend;
-    ctx.drawImage(bitmap, source_x, to * manifest.height + source_y, source_width, source_height, 0, 0, width, height);
+    ctx.drawImage(bitmap, sourceX, to * manifest.height + sourceY, sourceWidth, sourceHeight, 0, 0, width, height);
     ctx.globalAlpha = 1;
   }
 }
