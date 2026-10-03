@@ -512,7 +512,6 @@ pub fn baked_manifest(frames: u32, width: u32, height: u32, duration_ms: u32) ->
 
 #[wasm_bindgen]
 pub struct SceneInstance {
-    /// While playing, present the blend of the last two ticks; see `setBlendTicks`.
     blend_ticks: bool,
     playback: Playback<GpuEngine>,
     surface: Option<PresentSurface>,
@@ -647,9 +646,7 @@ impl SceneInstance {
             .map_err(engine_err)
     }
 
-    /// While playing, presents the last two simulated ticks blended at the
-    /// clock's position between them, half a tick behind it: for a scene whose
-    /// growth shows each tick as a step, such as the glucose bloom.
+    /// Whether playing frames blend the last two ticks; see `PlayerOptions.blendTicks`.
     #[wasm_bindgen(js_name = setBlendTicks)]
     pub fn set_blend_ticks(&mut self, enabled: bool) {
         self.blend_ticks = enabled;
