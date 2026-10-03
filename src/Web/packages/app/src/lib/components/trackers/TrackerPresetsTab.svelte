@@ -8,10 +8,10 @@
     CardTitle,
   } from "$lib/components/ui/card";
   import { Button } from "$lib/components/ui/button";
-  import Bookmark from "@lucide/svelte/icons/bookmark";
   import Plus from "@lucide/svelte/icons/plus";
   import Play from "@lucide/svelte/icons/play";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { EmptyState } from "$lib/components/shared";
   import type { TrackerDefinitionDto, TrackerPresetDto } from "$api";
 
   interface Props {
@@ -47,23 +47,19 @@
     </CardHeader>
     <CardContent>
       {#if presets.length === 0}
-        <div class="text-center py-8 text-muted-foreground">
-          <Bookmark class="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No presets yet</p>
-          <p class="text-sm">
-            Create presets for one-click tracker activation
-          </p>
-          {#if definitions.length > 0}
-            <Button
-              variant="outline"
-              class="mt-4"
-              onclick={openNewPreset}
-            >
-              <Plus class="h-4 w-4 mr-2" />
-              Create Preset
-            </Button>
-          {/if}
-        </div>
+        <EmptyState
+          art="stopwatch"
+          variant="outline"
+          title="No presets yet"
+          body="Create presets for one-click tracker activation"
+          action={definitions.length > 0 ? createPresetAction : undefined}
+        />
+        {#snippet createPresetAction()}
+          <Button variant="outline" onclick={openNewPreset}>
+            <Plus class="h-4 w-4 mr-2" />
+            Create Preset
+          </Button>
+        {/snippet}
       {:else}
         <div class="space-y-3">
           {#each presets as preset (preset.id)}

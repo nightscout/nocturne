@@ -1,7 +1,7 @@
 <script lang="ts">
   import { FALLBACK_GLUCOSE_THRESHOLDS } from "$lib/constants/glucose-thresholds";
   import { AreaChart, Tooltip } from "layerchart";
-  import BarChart3 from "@lucide/svelte/icons/chart-column";
+  import { EmptyState } from "$lib/components/shared";
   import {
     glucoseUnits,
     timeFormat,
@@ -228,13 +228,12 @@
   />
 </div>
 {:else}
-  <div
-    class="flex h-full w-full items-center justify-center text-muted-foreground"
-  >
-    <div class="text-center">
-      <BarChart3 class="mx-auto h-10 w-10 opacity-30" />
-      <p class="mt-2 font-medium">No pattern data</p>
-      <p class="text-sm">Need more readings to show your typical day</p>
-    </div>
+  <div class="flex h-full w-full items-center justify-center">
+    <EmptyState
+      art="report-pages"
+      size="compact"
+      title="No pattern data"
+      body="Need more readings to show your typical day"
+    />
   </div>
 {/if}

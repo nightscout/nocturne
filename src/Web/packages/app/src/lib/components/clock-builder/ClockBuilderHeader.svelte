@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { SubmitButton } from "$lib/forms";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Play from "@lucide/svelte/icons/play";
   import Save from "@lucide/svelte/icons/save";
@@ -13,6 +14,8 @@
   interface Props {
     clockName: string;
     saving: boolean;
+    /** See `SubmitButton`'s `saved`. */
+    saved: number;
     canUndo: boolean;
     canRedo: boolean;
     onNameChange: (name: string) => void;
@@ -27,6 +30,7 @@
   let {
     clockName,
     saving,
+    saved,
     canUndo,
     canRedo,
     onNameChange,
@@ -80,11 +84,11 @@
     {#if children}
       {@render children()}
     {/if}
-    <Button variant="outline" onclick={onSave} disabled={saving}>
+    <SubmitButton type="button" variant="outline" {saved} onclick={onSave} disabled={saving} title="Save">
       {#if saving}<Loader2 class="size-4 animate-spin" />{:else}<Save
           class="size-4"
         />{/if}
-    </Button>
+    </SubmitButton>
     <Button onclick={onPreview}>
       <Play class="size-4" />
       <span class="ml-2 hidden sm:inline">Preview</span>

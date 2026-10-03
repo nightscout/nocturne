@@ -1,18 +1,13 @@
 <script lang="ts">
-  import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-    CardDescription,
-  } from "$lib/components/ui/card";
+  import { Card, CardContent } from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/shared";
   import { Button } from "$lib/components/ui/button";
   import Loader2 from "@lucide/svelte/icons/loader-circle";
   import Plug from "@lucide/svelte/icons/plug";
   import KeyRound from "@lucide/svelte/icons/key-round";
   import Download from "@lucide/svelte/icons/download";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
-  import { Artwork, DropGroup, DropSurface } from "@nocturne/watercolour";
+  import { DropGroup, DropSurface } from "@nocturne/watercolour";
   import { resolve } from "$app/paths";
   import type { ConnectorStatusDto } from "$lib/api/generated/nocturne-api-client";
 
@@ -44,19 +39,12 @@
 </script>
 
 <Card data-testid="first-reading-empty-state">
-  <CardHeader class="items-center text-center">
-    <Artwork
-      artwork="sunrise"
-      palette="ember"
-      motion="auto"
-      autoplay="once"
-      class="mb-1 size-48"
-    />
-    <CardTitle>Waiting for your first reading</CardTitle>
-    <CardDescription>
-      Your glucose chart will appear here as soon as the first reading arrives.
-    </CardDescription>
-  </CardHeader>
+  <EmptyState
+    art="sunrise"
+    title="Waiting for your first reading"
+    headingLevel={2}
+    body="Your glucose chart will appear here as soon as the first reading arrives."
+  />
   <CardContent class="space-y-4">
     {#if hasConnector}
       <div class="space-y-3" data-testid="waiting-connectors">

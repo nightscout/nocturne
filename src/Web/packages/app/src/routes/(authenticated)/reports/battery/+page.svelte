@@ -25,7 +25,7 @@
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
   import { contextResource } from "$lib/hooks/resource-context.svelte";
   import { formatMinutesDuration } from "$lib/utils/duration";
-  import { Artwork } from "@nocturne/watercolour";
+  import { EmptyState } from "$lib/components/shared";
   import { batteryArtwork } from "$lib/watercolour-icons";
 
   // Get shared date params from context (set by reports layout)
@@ -137,24 +137,13 @@
   </div>
 
   {#if statistics.length === 0}
-    <Card>
-      <CardContent class="pt-6">
-        <div class="text-center py-8">
-          <Artwork
-            icon={batteryArtwork}
-            palette="water"
-            motion="auto"
-            autoplay="once"
-            class="mx-auto mb-4 size-48"
-          />
-          <h3 class="text-lg font-medium">No Battery Data Available</h3>
-          <p class="text-sm text-muted-foreground mt-2">
-            Battery data is collected from devices that report uploader status.
-            Make sure your CGM uploader app is sending device status data.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <EmptyState
+      art={batteryArtwork}
+      variant="card"
+      title="No Battery Data Available"
+      headingLevel={3}
+      body="Battery data is collected from devices that report uploader status. Make sure your CGM uploader app is sending device status data."
+    />
   {:else}
     {#if allDevices.length > 1}
       <div class="flex gap-2 flex-wrap print:hidden">

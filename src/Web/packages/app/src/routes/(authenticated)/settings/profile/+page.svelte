@@ -21,6 +21,8 @@
   import Lock from "@lucide/svelte/icons/lock";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
+  import { EmptyState } from "$lib/components/shared";
+  import { syringeArtwork } from "$lib/watercolour-icons";
   import * as Alert from "$lib/components/ui/alert";
   import { bgLabel } from "$lib/utils/formatting";
   import { goto } from "$app/navigation";
@@ -221,32 +223,20 @@
     </div>
 
     {#if profileNames.length === 0}
-      <!-- Empty State -->
-      <Card variant="dashed">
-        <CardContent class="py-12">
-          <div class="text-center space-y-4">
-            <div
-              class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted"
-            >
-              <User class="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold">No Profile Found</h3>
-              <p class="text-sm text-muted-foreground max-w-md mx-auto mt-1">
-                Profiles are typically uploaded from your diabetes management
-                app (like AAPS, Loop, or xDrip+). They contain your basal rates,
-                insulin sensitivity factors, and carb ratios.
-              </p>
-            </div>
-            <div class="flex items-center justify-center gap-2">
-              <Button variant="outline" href="/settings/connectors">
-                <Settings class="h-4 w-4 mr-2" />
-                Configure Data Sources
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <EmptyState
+        art={syringeArtwork}
+        variant="dashed"
+        title="No Profile Found"
+        headingLevel={3}
+        body="Profiles are typically uploaded from your diabetes management app (like AAPS, Loop, or xDrip+). They contain your basal rates, insulin sensitivity factors, and carb ratios."
+      >
+        {#snippet action()}
+          <Button variant="outline" href="/settings/connectors">
+            <Settings class="h-4 w-4 mr-2" />
+            Configure Data Sources
+          </Button>
+        {/snippet}
+      </EmptyState>
     {:else}
       <!-- Profile Name Tabs (when multiple profiles exist) -->
       {#if profileNames.length > 1}
@@ -551,15 +541,11 @@
         </Card>
       {:else if selectedProfileName}
         <!-- Profile selected but no therapy settings found -->
-        <Card variant="dashed">
-          <CardContent class="py-8">
-            <div class="text-center text-muted-foreground">
-              <p>
-                No therapy settings found for profile "{selectedProfileName}".
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          art={syringeArtwork}
+          variant="dashed"
+          title={`No therapy settings found for profile "${selectedProfileName}"`}
+        />
       {/if}
     {/if}
   </div>

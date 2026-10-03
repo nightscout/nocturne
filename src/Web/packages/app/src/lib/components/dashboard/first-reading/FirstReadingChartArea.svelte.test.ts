@@ -9,8 +9,13 @@ import CoachHarness from "./FirstReadingCoachHarness.test.svelte";
 
 const state = vi.hoisted(() => {
   const connectors: ConnectorStatusDto[] = [];
-  return { connectors };
+  return { connectors, reducedMotion: false };
 });
+
+vi.mock("@nocturne/watercolour", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@nocturne/watercolour")>()),
+  prefersReducedMotion: () => state.reducedMotion,
+}));
 
 vi.mock("$api/generated/connectorStatus.generated.remote", () => ({
   getStatus: () => remoteQuery(() => state.connectors),
@@ -112,5 +117,76 @@ describe("FirstReadingChartArea", () => {
     await expect
       .element(page.getByTestId("coach-eligible"))
       .toHaveTextContent("yes");
+  });
+
+  describe("first reading arrival", () => {
+    const waiting: ConnectorStatusDto = {
+      id: "dexcom",
+      name: "Dexcom Share",
+      hasDatabaseConfig: true,
+      totalEntries: 0,
+    };
+
+    async function renderWaiting() {
+      state.connectors = [waiting];
+      const screen = render(FirstReadingChartArea, {
+        chart,
+        bypass: false,
+        recentHistoryReady: true,
+        hasRecentHistory: false,
+      });
+      await expect
+        .element(page.getByTestId("first-reading-empty-state"))
+        .toBeVisible();
+      return screen;
+    }
+
+    it("shows the chart at once and fades the sunrise off it when the first reading arrives", async () => {
+      state.reducedMotion = false;
+      const screen = await renderWaiting();
+
+      await screen.rerender({ bypass: true });
+
+      await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
+      await expect
+        .element(page.getByTestId("first-reading-arrival"))
+        .toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("first-reading-empty-state"))
+        .not.toBeInTheDocument();
+      await expect
+        .element(page.getByTestId("first-reading-arrival"), { timeout: 3000 })
+        .not.toBeInTheDocument();
+    });
+
+    it("swaps straight to the chart under reduced motion", async () => {
+      state.reducedMotion = true;
+      const screen = await renderWaiting();
+
+      await screen.rerender({ bypass: true });
+
+      await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
+      expect(
+        document.querySelector('[data-testid="first-reading-arrival"]')
+      ).toBeNull();
+    });
+
+    it("plays nothing when data arrives before the empty state was ever shown", async () => {
+      state.reducedMotion = false;
+      state.connectors = [];
+      const screen = render(FirstReadingChartArea, {
+        chart,
+        bypass: false,
+        recentHistoryReady: false,
+        hasRecentHistory: false,
+      });
+
+      await screen.rerender({ bypass: true });
+
+      await expect.element(page.getByText("CHART SHOWN")).toBeVisible();
+      expect(
+        document.querySelector('[data-testid="first-reading-arrival"]')
+      ).toBeNull();
+    });
   });
 });

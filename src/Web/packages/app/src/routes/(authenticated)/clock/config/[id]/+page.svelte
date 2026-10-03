@@ -493,6 +493,7 @@
     <ClockBuilderHeader
       {clockName}
       saving={save.busy}
+      saved={save.saved}
       canUndo={history.canUndo}
       canRedo={history.canRedo}
       onNameChange={(name) => (clockName = name)}

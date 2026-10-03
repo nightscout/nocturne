@@ -116,13 +116,15 @@ export class FoodState {
     }
   }
 
-  async addFood(food: Food) {
+  /** The composer confirms the add itself, so this posts no success toast. */
+  async addFood(food: Food): Promise<Food | null> {
     try {
       const result = await createFoodRemote(food);
-      if (result?._id) {
-        this.foods = [result, ...this.foods];
-        toast.success('Food created');
+      if (!result?._id) {
+        toast.error('Failed to create food');
+        return null;
       }
+      this.foods = [result, ...this.foods];
       return result;
     } catch (err) {
       toast.error(describeSubmitError(err, 'Failed to create food'));

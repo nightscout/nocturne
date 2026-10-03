@@ -86,7 +86,7 @@ describe("OidcProvidersTabContent", () => {
 		render(OidcProvidersTabContent, default_props({ providers: [] }));
 
 		await expect
-			.element(page.getByText("No identity providers configured."))
+			.element(page.getByText("No identity providers configured"))
 			.toBeVisible();
 	});
 

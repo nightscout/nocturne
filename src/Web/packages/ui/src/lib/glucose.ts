@@ -238,3 +238,23 @@ export function glucoseTileVariant(status: string | null | undefined): GlucoseTi
   const known: Partial<Record<string, GlucoseTileVariant>> = glucoseStatusTileVariant;
   return (status && Object.hasOwn(known, status) && known[status]) || "neutral";
 }
+
+/** What a current-reading tile shows: its flat fill, and whether a host's artwork covers it. */
+export interface GlucoseTileFill {
+  fill: GlucoseTileVariant;
+  painted: boolean;
+}
+
+/**
+ * A stale reading shows the neutral fill and a disconnected one keeps its range fill; artwork
+ * is painted only over the range fill of a current, connected reading.
+ */
+export function glucoseTileFill(
+  variant: GlucoseTileVariant,
+  { stale, disconnected }: { stale: boolean; disconnected: boolean },
+): GlucoseTileFill {
+  return {
+    fill: stale ? "neutral" : variant,
+    painted: !stale && !disconnected && variant !== "neutral",
+  };
+}

@@ -5,6 +5,7 @@
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Calendar from "@lucide/svelte/icons/calendar";
+  import { EmptyState } from "$lib/components/shared";
   import { getWeekdayAverages } from "$api/reports.remote";
   import type { DayOfWeek } from "$lib/api";
   import { requireDateParamsContext } from "$lib/hooks/date-params.svelte";
@@ -146,10 +147,12 @@
         }))}
       />
     {:else}
-      <div
-        class="flex h-[280px] items-center justify-center text-muted-foreground @md:h-[360px]"
-      >
-        No data available for this week
+      <div class="flex h-[280px] items-center justify-center @md:h-[360px]">
+        <EmptyState
+          art="report-pages"
+          size="compact"
+          title="No data available for this week"
+        />
       </div>
     {/if}
   </div>

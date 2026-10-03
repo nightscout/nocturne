@@ -74,6 +74,9 @@
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import Timer from "@lucide/svelte/icons/timer";
   import Eye from "@lucide/svelte/icons/eye";
+  import Paintbrush from "@lucide/svelte/icons/paintbrush";
+  import { illustrations } from "$lib/stores/illustrations.svelte";
+  import { PRESENTATIONS } from "@nocturne/watercolour";
   import SettingsPageSkeleton from "$lib/components/settings/SettingsPageSkeleton.svelte";
   import { browser } from "$app/environment";
   import { resolve } from "$app/paths";
@@ -486,6 +489,51 @@
             Sign in to sync your language preference across devices.
           {/if}
         </p>
+      </CardContent>
+    </Card>
+
+    <!-- Illustrations -->
+    <Card>
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2">
+          <Paintbrush class="h-5 w-5" />
+          Illustrations
+        </CardTitle>
+        <CardDescription>
+          How the watercolour paintings are shown. This applies to this device
+          only.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <RadioGroup.Root
+          class="grid @xl:grid-cols-3"
+          aria-label="Illustrations"
+          value={illustrations.current}
+          onValueChange={(value) => {
+            const choice = PRESENTATIONS.find((option) => option === value);
+            if (choice) illustrations.current = choice;
+          }}
+        >
+          <RadioGroup.Card value="animated">
+            <div class="font-semibold">Animated</div>
+            <p class="text-sm text-muted-foreground">
+              Paint each illustration in as it appears. Follows your device's
+              reduced-motion setting.
+            </p>
+          </RadioGroup.Card>
+          <RadioGroup.Card value="still">
+            <div class="font-semibold">Still</div>
+            <p class="text-sm text-muted-foreground">
+              Show finished paintings without animation.
+            </p>
+          </RadioGroup.Card>
+          <RadioGroup.Card value="off">
+            <div class="font-semibold">Off</div>
+            <p class="text-sm text-muted-foreground">
+              Hide decorative paintings.
+            </p>
+          </RadioGroup.Card>
+        </RadioGroup.Root>
       </CardContent>
     </Card>
 

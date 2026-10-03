@@ -20,6 +20,8 @@
 	import ShieldAlert from '@lucide/svelte/icons/shield-alert';
 	import Clock from '@lucide/svelte/icons/clock';
 	import BarChart3 from '@lucide/svelte/icons/chart-column';
+	import { EmptyState } from '$lib/components/shared';
+	import { databaseArtwork } from '$lib/watercolour-icons';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { getTransitionStatus } from '$api/generated/nightscoutTransitions.generated.remote';
@@ -152,7 +154,11 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="text-sm text-muted-foreground">No migration data available yet.</p>
+					<EmptyState
+						art={databaseArtwork}
+						size="compact"
+						title="No migration data available yet"
+					/>
 				{/if}
 
 				<Separator />

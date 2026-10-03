@@ -10,7 +10,6 @@
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
-  import Shield from "@lucide/svelte/icons/shield";
   import Plus from "@lucide/svelte/icons/plus";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -18,6 +17,8 @@
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ToggleLeft from "@lucide/svelte/icons/toggle-left";
   import ToggleRight from "@lucide/svelte/icons/toggle-right";
+  import { EmptyState } from "$lib/components/shared";
+  import { fingerprintArtwork } from "$lib/watercolour-icons";
   import type { OidcProviderResponse } from "$api";
   import ProviderIcon from "$lib/components/auth/ProviderIcon.svelte";
 
@@ -70,10 +71,10 @@
             <Alert.Description>{error}</Alert.Description>
           </Alert.Root>
         {:else if providers.length === 0}
-          <div class="text-center py-8 text-muted-foreground">
-            <Shield class="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No identity providers configured.</p>
-          </div>
+          <EmptyState
+            art={fingerprintArtwork}
+            title="No identity providers configured"
+          />
         {:else}
           <div class="space-y-2">
             {#each providers as provider (provider.id)}
