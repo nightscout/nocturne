@@ -5,7 +5,7 @@
   import { getRealtimeStore } from "$lib/stores/realtime-store.svelte";
   import { glucoseUnits } from "$lib/stores/appearance-store.svelte";
   import { createConnectionIndicator } from "$lib/stores/connection-indicator.svelte";
-  import { currentGlucoseStatus } from "$lib/stores/current-glucose-status.svelte";
+  import { displayedGlucose } from "$lib/stores/current-glucose-status.svelte";
   import { STALE_THRESHOLD_MS } from "$lib/constants/staleness";
   import { getGlucoseTileVariant } from "$lib/utils/glucose-status";
   import { getDirectionInfo } from "$lib/utils";
@@ -32,15 +32,15 @@
 
   const units = $derived(glucoseUnits.current);
   const unitLabel = $derived(getUnitLabel(units));
-  const mills = $derived(realtimeStore.currentEntry?.mills);
-  const tileVariant = $derived(getGlucoseTileVariant(currentGlucoseStatus(mills)));
+  const glucose = displayedGlucose(realtimeStore);
+  const tileVariant = $derived(getGlucoseTileVariant(glucose.status));
   const lastUpdated = $derived(realtimeStore.lastUpdated);
   const now = $derived(realtimeStore.now);
 
-  const isLoading = $derived(realtimeStore.currentBG === 0 && realtimeStore.entries.length === 0);
+  const isLoading = $derived(glucose.currentBG === 0 && realtimeStore.entries.length === 0);
   const isStale = $derived(now - lastUpdated > STALE_THRESHOLD_MS);
   const isDisconnected = $derived(connection.isDisconnected);
-  const directionInfo = $derived(getDirectionInfo(realtimeStore.direction));
+  const directionInfo = $derived(getDirectionInfo(glucose.direction));
   const DirectionIcon = $derived(directionInfo.icon);
 
   const batteryStatusPromise = getCurrentBatteryStatus({ recentMinutes: 30 });
@@ -55,7 +55,7 @@
 </script>
 
 {#snippet rangeWash()}
-  <GlucoseTileWash {mills} variant={tileVariant} delta={mills && now - mills <= STALE_THRESHOLD_MS ? realtimeStore.bgDelta : 0} />
+  <GlucoseTileWash mills={glucose.mills} variant={tileVariant} delta={glucose.bgDelta} />
 {/snippet}
 
 <!-- Unit under the arrow, in the tile's own foreground. The trend is dropped while stale: it
@@ -112,7 +112,7 @@
       })}
     >
       <GlucoseValueIndicator
-        displayValue={formatGlucoseValue(realtimeStore.currentBG, units)}
+        displayValue={formatGlucoseValue(glucose.currentBG, units)}
         variant={tileVariant}
         {isLoading}
         {isStale}
@@ -127,7 +127,7 @@
     <div class="flex min-h-5 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       {#if !isLoading && !isStale}
         <p class="flex items-baseline gap-1.5 tabular-nums">
-          <span class="font-medium">{formatGlucoseDelta(realtimeStore.bgDelta, units)}</span>
+          <span class="font-medium">{formatGlucoseDelta(glucose.bgDelta, units)}</span>
           <span class="text-xs text-muted-foreground">{unitLabel}</span>
         </p>
       {/if}

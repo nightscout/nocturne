@@ -1,6 +1,7 @@
 import { render } from "vitest-browser-svelte";
 import { page } from "vitest/browser";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { remoteQuery } from "$lib/test-stubs/remote-resource";
 
 const now = Date.UTC(2026, 5, 14, 9, 30, 0);
 
@@ -25,9 +26,9 @@ vi.mock("$api/generated/batteries.generated.remote", () => ({
   getCurrentBatteryStatus: () => Promise.resolve(battery.status),
 }));
 
-// Neutral keeps the watercolour engine out of the test.
-vi.mock("$lib/stores/current-glucose-status.svelte", () => ({
-  currentGlucoseStatus: () => undefined,
+// A summary with no status keeps the tile neutral, which keeps the watercolour engine out of the test.
+vi.mock("$api/generated/summaries.generated.remote", () => ({
+  getSummary: () => remoteQuery(() => ({})),
 }));
 
 import { setGlucoseUnits } from "$lib/stores/appearance-store.svelte";
