@@ -137,10 +137,8 @@ describe("eHbA1c chart tooltips", () => {
     await expect
       .element(page.getByLabelText("Result (mmol/mol)"))
       .toBeVisible();
-    expect(
-      (await page.getByTestId("lab-marker").elements())[0].textContent
-    ).toContain("49 mmol/mol");
-    expect(document.querySelector('[data-slot="toggle-group"]')).toBeNull();
+    await expect.element(page.getByTestId("lab-marker").first()).toHaveTextContent("49 mmol/mol");
+    await expect.element(page.getByRole("group", { name: /A1c units/i })).not.toBeInTheDocument();
   });
 
   it("submits the entered unit to the backend and clears drafts when units change", async () => {

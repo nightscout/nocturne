@@ -51,7 +51,9 @@ const GLUCOSE_UNITS = ["mg/dl", "mmol"] as const;
 export type GlucoseUnits = (typeof GLUCOSE_UNITS)[number];
 
 const TIME_FORMATS = ["12", "24"] as const;
+// @wc-ignore
 const A1C_NAMES = ["HbA1c", "A1c"] as const;
+// @wc-ignore
 const A1C_UNITS = ["percent", "mmol/mol"] as const;
 
 /** Time format preference */
@@ -340,9 +342,11 @@ export const glucoseUnits = new SyncedPref<GlucoseUnits>(
   oneOfPref(GLUCOSE_UNITS)
 );
 
+// @wc-ignore
 export const a1cName = new SyncedPref<(typeof A1C_NAMES)[number]>(
   "nocturne-a1c-name", "HbA1c", (p) => p.a1cName, oneOfPref(A1C_NAMES)
 );
+// @wc-ignore
 export const a1cUnits = new SyncedPref<(typeof A1C_UNITS)[number]>(
   "nocturne-a1c-units", "percent", (p) => p.a1cUnits, oneOfPref(A1C_UNITS)
 );

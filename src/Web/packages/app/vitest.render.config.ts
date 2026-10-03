@@ -16,18 +16,10 @@ export default defineConfig({
   plugins: [svelte(), wuchale()],
   test: {
     // Its own suffix: `*.ssr.test.ts` already belongs to tests that run under
-    // the node config, and those reach the generated API client, which the
-    // job running this one does not build.
+    // the node config without the production translation transform.
     include: ["src/**/*.render.test.ts"],
     environment: "node",
     alias: [
-      {
-        // Relative, so it cannot be matched by module name.
-        find: /api\/generated\/nocturne-api-client$/,
-        replacement: fileURLToPath(
-          new URL("./src/lib/test-stubs/nocturne-api-client.ts", import.meta.url)
-        ),
-      },
       {
         // Before the $lib prefix, so it wins for this one module: the real
         // barrel re-exports formatting, which reaches the generated client.

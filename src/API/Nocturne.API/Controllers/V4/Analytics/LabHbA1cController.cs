@@ -62,7 +62,7 @@ public class LabHbA1cController : ControllerBase
             ? A1cDisplayValue.ToPercent(request.Value!.Value)
             : request.Value!.Value);
         if (!double.IsFinite(valuePercent) || valuePercent is < 3.0 or > 20.0)
-            return Problem(detail: "ValuePercent must be between 3.0 and 20.0", statusCode: 400, title: "Bad Request");
+            return Problem(detail: "Lab value must be equivalent to 3.0–20.0% (NGSP)", statusCode: 400, title: "Bad Request");
         if (request.MeasuredAt.Date > DateTime.UtcNow.Date.AddDays(1))
             return Problem(detail: "MeasuredAt cannot be in the future", statusCode: 400, title: "Bad Request");
 

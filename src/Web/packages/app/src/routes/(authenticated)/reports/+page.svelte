@@ -206,14 +206,14 @@
                 <dt class="text-sm text-muted-foreground">Coefficient of variation</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
                   {variability?.coefficientOfVariation?.toFixed(0) ?? "–"}<span class="text-sm font-normal text-muted-foreground">
-                    {a1cUnitLabel()}</span>
+                    %</span>
                 </dd>
               </div>
               <div class="flex items-baseline justify-between gap-4 px-6 py-4">
                 <dt class="text-sm text-muted-foreground">Time below range</dt>
                 <dd class="m-0 text-lg font-semibold tabular-nums">
                   {((tir?.low ?? 0) + (tir?.veryLow ?? 0)).toFixed(1)}<span class="text-sm font-normal text-muted-foreground">
-                    {a1cUnitLabel()}</span>
+                    %</span>
                 </dd>
               </div>
             </dl>
