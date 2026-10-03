@@ -21,12 +21,18 @@ namespace Nocturne.Connectors.Nightscout.Services.WriteBack;
 /// ObjectId lookups and AAPS's <c>isObjectId()</c>. Every version stores <c>identifier</c> as sent.
 /// </para>
 /// <para>
-/// So <c>_id</c> goes out as the 24-hex ObjectId every Nocturne read serves
-/// (<see cref="MongoObjectId.Coerce"/>), and <c>identifier</c> carries the record's own key
-/// verbatim: its legacy id or, with none, its uuid. The pull-back resolves <c>identifier</c> first
-/// and <c>_id</c> after (<c>DecomposerBase.PlanStoredIdentitiesAsync</c>). An entry whose id is not
-/// an ObjectId goes out with no <c>_id</c>, since any <c>_id</c> other than the stored reading's
-/// breaks the entries upsert.
+/// So <c>identifier</c> carries the key the upstream copy is found by, and <c>_id</c> goes out
+/// only where the upstream keeps it:
+/// <list type="bullet">
+/// <item>a device status: <c>_id</c> is <see cref="MongoObjectId.Coerce"/> of its id, the ObjectId
+/// every Nocturne read serves, and <c>identifier</c> its id verbatim;</item>
+/// <item>an entry: <c>identifier</c> is its id verbatim, and <c>_id</c> goes out only when that id
+/// is an ObjectId, since any <c>_id</c> other than the stored reading's breaks the entries
+/// upsert;</item>
+/// <item>a treatment: both carry <see cref="TreatmentWireKey"/>, below.</item>
+/// </list>
+/// The pull-back resolves <c>identifier</c> first and <c>_id</c> after
+/// (<c>DecomposerBase.PlanStoredIdentitiesAsync</c>).
 /// </para>
 /// <para>
 /// A treatment goes out as it always has, so that the copies earlier write-backs left upstream are

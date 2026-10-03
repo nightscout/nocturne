@@ -5,8 +5,8 @@
 // Ids are normalised as cgm-remote-monitor 15.0.7 and later do (REQ-SYNC-072, UUID_HANDLING on),
 // and it reports itself as 15.0.8:
 // - a `_id` that is not a 24-hex ObjectId moves to `identifier` when that is empty and is dropped,
-//   so the record gets a fresh ObjectId (entries and treatments); devicestatus refuses it with 400;
-//   a 24-hex `_id` is kept, as an ObjectId;
+//   so the record gets a fresh ObjectId (entries and treatments); a 24-hex `_id` is kept, as an
+//   ObjectId;
 // - a treatment carrying an `identifier` is upserted by `$or: [{identifier}, {_id: identifier}]`
 //   and its `_id` is dropped, so a new one gets a fresh ObjectId and an existing one keeps its own.
 //   The `_id` arm compares a string, so it never matches a document stored under an ObjectId;
@@ -14,9 +14,14 @@
 // - an entry is upserted by date and type with `$set: doc`, in one ordered bulk write: a `_id`
 //   other than the stored reading's is an immutable-field error that stores nothing from that
 //   document on and fails the request;
-// - device statuses are inserted in one ordered `insertMany`: a `_id` already stored is a
-//   duplicate-key error (E11000) that stores nothing from that document on and fails the request;
-// - `identifier` is always kept as sent, and `find[identifier]` reads by it.
+// - device statuses: a `_id` that is not a 24-hex string is refused with 400; one that is is stored
+//   as the string sent (no ObjectId cast, no case change). They are inserted in one ordered
+//   `insertMany`: a `_id` already stored is a duplicate-key error (E11000) that stores nothing from
+//   that document on and fails the request with Mongo's message as its description;
+// - `identifier` is always kept as sent, and `find[identifier]` reads by it;
+// - a treatment or device-status find that names neither `_id`, `created_at` nor `dateString` only
+//   sees `created_at` in the last four days (`lib/server/query.js` `enforceDateFilter`, `deltaAgo`
+//   = TWO_DAYS * 2).
 // State lives for the life of the mocks container and is shared by every tenant pointed here, so a
 // spec keeps its records apart by device name or time.
 
@@ -36,6 +41,7 @@ function newObjectId(): string {
 }
 
 const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
+const MINUTE_MS = 60_000;
 
 function parseDocs(body: string): Record<string, unknown>[] {
   const parsed = JSON.parse(body) as Record<string, unknown> | Record<string, unknown>[];
@@ -102,17 +108,27 @@ function storeTreatments(body: string): Doc[] {
 function storeDeviceStatuses(body: string): VendorReply {
   const docs = parseDocs(body);
   const invalid = docs.find((d) => d._id !== undefined && d._id !== null && !(typeof d._id === "string" && OBJECT_ID.test(d._id)));
-  if (invalid) return { status: 400, body: { status: 400, message: "Invalid _id format", description: String(invalid._id) } };
+  if (invalid) {
+    return {
+      status: 400,
+      body: {
+        status: 400,
+        message: "Invalid _id format",
+        description: `Must be 24-character hex string or omit for auto-generation. Got: ${String(invalid._id)}`,
+      },
+    };
+  }
   const stored: Doc[] = [];
   for (const raw of docs) {
-    const doc = normaliseId(raw);
+    const doc: Record<string, unknown> = { ...raw };
+    if (doc._id === undefined || doc._id === null) delete doc._id;
     if (typeof doc._id === "string" && deviceStatuses.has(doc._id)) {
       return {
         status: 500,
         body: {
           status: 500,
           message: "Mongo Error",
-          description: `E11000 duplicate key error collection: nightscout.devicestatus index: _id_ dup key: { _id: ObjectId('${doc._id}') }`,
+          description: `E11000 duplicate key error collection: nightscout.devicestatus index: _id_ dup key: { _id: "${doc._id}" }`,
         },
       };
     }
@@ -136,8 +152,13 @@ function readEntries(query: Record<string, string>, type?: string): Doc[] {
     .slice(0, count(query));
 }
 
+const FOUR_DAYS = 4 * 24 * 60 * MINUTE_MS;
+
 function readByCreatedAt(from: Map<string, Doc>, query: Record<string, string>): Doc[] {
-  const gte = query["find[created_at][$gte]"];
+  const bounded = Object.keys(query).some(
+    (k) => k.startsWith("find[_id]") || k.startsWith("find[created_at]") || k.startsWith("find[dateString]"),
+  );
+  const gte = query["find[created_at][$gte]"] ?? (bounded ? undefined : new Date(Date.now() - FOUR_DAYS).toISOString());
   const lte = query["find[created_at][$lte]"];
   const id = query["find[_id]"];
   const clientId = query["find[id]"];

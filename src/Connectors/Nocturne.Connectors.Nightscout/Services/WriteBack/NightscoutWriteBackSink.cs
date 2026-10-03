@@ -126,8 +126,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
 
     /// <summary>
     /// Reads <paramref name="pathAndQuery"/> from the upstream, for a sink that must know what the
-    /// upstream holds before it writes. A failed read is logged and not held against the breaker:
-    /// the write that follows is.
+    /// upstream holds before it writes. A read that fails counts against the circuit breaker, as a
+    /// failed write does: the sink cannot write without its answer.
     /// </summary>
     /// <returns>The response body, or null when the read failed.</returns>
     protected async Task<string?> GetAsync(
@@ -138,11 +138,15 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
             using var request = new HttpRequestMessage(HttpMethod.Get, ResolveAbsoluteUrl(config.Url, pathAndQuery));
             request.Headers.Add("api-secret", NightscoutConnectorService.ComputeApiSecretHash(config.ApiSecret));
             using var response = await _httpClient.SendAsync(request, ct);
-            return response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(ct) : null;
+            if (response.IsSuccessStatusCode)
+                return await response.Content.ReadAsStringAsync(ct);
+
+            RecordFailure(HttpMethod.Get, null);
+            return null;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Nightscout write-back read failed for {Endpoint}", Endpoint);
+            RecordFailure(HttpMethod.Get, ex);
             return null;
         }
     }
@@ -235,7 +239,8 @@ public abstract class NightscoutWriteBackSink<T> : IDataEventSink<T>
         }
     }
 
-    private void RecordFailure(HttpMethod method, Exception? ex)
+    /// <summary>Counts a failed exchange with the upstream against the circuit breaker, and logs it.</summary>
+    protected void RecordFailure(HttpMethod method, Exception? ex)
     {
         _circuitBreaker.RecordFailure();
         _logger.LogWarning(

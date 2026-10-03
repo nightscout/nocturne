@@ -641,32 +641,62 @@ public class NightscoutWriteBackSinkTests
         new(status) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") };
 
     /// <summary>
-    /// An edit asks the upstream whether it holds a copy under the treatment's identifier. A copy
-    /// an earlier write-back stored is found that way, and the edit is POSTed in its shape: 15.0.7
-    /// and later upsert it onto that copy by identifier, and up to 15.0.6 a POST finds it by time and
-    /// event type where a PUT, saving under an ObjectId, would miss the string <c>_id</c> it was
-    /// stored under and insert a second copy. An upstream that cannot answer is given the same.
+    /// An edit asks the upstream whether it holds a copy under the treatment's identifier, with a
+    /// <c>created_at</c> bound of its own so Nightscout's default four-day window does not hide the
+    /// copy of an older treatment. A copy an earlier write-back stored is found that way, and the
+    /// edit is POSTed in its shape: 15.0.7 and later upsert it onto that copy by identifier, and up
+    /// to 15.0.6 a POST finds it by time and event type where a PUT, saving under an ObjectId, would
+    /// miss the string <c>_id</c> it was stored under and insert a second copy.
     /// </summary>
-    [Theory]
-    [InlineData(HttpStatusCode.OK, """[{"_id":"66b0c1d2e3f405162738495a","identifier":"{0}"}]""")]
-    [InlineData(HttpStatusCode.InternalServerError, "")]
-    [InlineData(HttpStatusCode.OK, "not json")]
-    public async Task TreatmentEdit_OfACopyUnderItsIdentifierOrUnknown_IsPostedInTheSameShape(HttpStatusCode probe, string probeBody)
+    [Fact]
+    public async Task TreatmentEdit_OfACopyUnderItsIdentifier_IsPostedInTheSameShape()
     {
         const string legacyId = "syn-3a7c0e9f1b2d4c6e";
         var wire = MongoObjectId.Coerce(legacyId)!;
         var handler = new RecordingHttpMessageHandler
         {
-            RespondTo = (method, _) => method == HttpMethod.Get ? Json(probe, probeBody.Replace("{0}", wire)) : null,
+            RespondTo = (method, _) => method == HttpMethod.Get
+                ? Json(HttpStatusCode.OK, $$"""[{"_id":"66b0c1d2e3f405162738495a","identifier":"{{wire}}"}]""")
+                : null,
         };
 
         await TreatmentSink(handler).OnUpdatedAsync(
             new Treatment { Id = RecordUuid, LegacyId = legacyId, EventType = "Correction Bolus", Insulin = 2, DataSource = "nocturne" });
 
         handler.Methods.Should().Equal(HttpMethod.Get, HttpMethod.Post);
-        handler.Uris[0].PathAndQuery.Should().Be($"/api/v1/treatments.json?find[identifier]={wire}&count=1");
+        handler.Uris[0].PathAndQuery.Should().Be(
+            $"/api/v1/treatments.json?find[identifier]={wire}&find[created_at][$gte]=1970-01-01T00%3A00%3A00.000Z&count=1");
         IdKeys(JsonSerializer.Deserialize<JsonElement>(handler.Bodies[1])[0])
             .Should().BeEquivalentTo(new Dictionary<string, string?> { ["_id"] = wire, ["identifier"] = wire });
+    }
+
+    /// <summary>
+    /// An upstream that cannot say whether it holds the copy is sent nothing: a POST would store a
+    /// second copy of a treatment it holds under its <c>_id</c> alone, a PUT of one it holds under
+    /// its identifier. The failure counts against the circuit breaker.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, "", false)]
+    [InlineData(HttpStatusCode.Unauthorized, "", false)]
+    [InlineData(HttpStatusCode.OK, "not json", false)]
+    [InlineData(HttpStatusCode.OK, """{"status":200}""", false)]
+    [InlineData(HttpStatusCode.OK, "", true)]
+    public async Task TreatmentEdit_WhenTheUpstreamCannotSayWhetherItHoldsTheCopy_SendsNothingAndCountsAFailure(
+        HttpStatusCode probe, string probeBody, bool throws)
+    {
+        var handler = new RecordingHttpMessageHandler
+        {
+            RespondTo = (method, _) => method == HttpMethod.Get ? Json(probe, probeBody) : null,
+            ThrowFor = _ => throws ? new HttpRequestException("connection refused") : null,
+        };
+        for (var i = 0; i < 4; i++)
+            Breaker.RecordFailure();
+
+        await TreatmentSink(handler).OnUpdatedAsync(
+            new Treatment { Id = RecordUuid, LegacyId = "65a1b2c3d4e5f60718293a4b", EventType = "Correction Bolus", Insulin = 2, DataSource = "nocturne" });
+
+        handler.Methods.Should().Equal(HttpMethod.Get);
+        Breaker.IsOpen.Should().BeTrue();
     }
 
     /// <summary>

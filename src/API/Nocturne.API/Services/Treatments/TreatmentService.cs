@@ -189,8 +189,10 @@ public class TreatmentService : ITreatmentService
         if (existing is null) return null;
 
         // Re-key to the stored LegacyId so re-decomposition upserts this record in place instead
-        // of creating a duplicate when AAPS patches by a derived ObjectId.
-        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.Id;
+        // of creating a duplicate, whether AAPS patches by a derived ObjectId or by the raw legacy
+        // id its create was answered with (which resolves no canonical id, and leaves the
+        // projection's uuid as the id).
+        existing.Id = await _store.ResolveCanonicalIdAsync(id, cancellationToken) ?? existing.LegacyId ?? existing.Id;
 
         // Apply patch fields to existing treatment
         ApplyJsonPatch(existing, patchData);
@@ -207,9 +209,11 @@ public class TreatmentService : ITreatmentService
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)
     {
         // The identity used to upsert (LegacyId matching) must survive the round-trip. Serializing
-        // rewrites _id to its 24-hex ObjectId form, so capture the real Id and restore it after the
-        // merge unless the patch explicitly changes _id.
+        // rewrites _id to its 24-hex ObjectId form and drops the [JsonIgnore] LegacyId, so capture
+        // both and restore them after the merge. LegacyId is the key write-back sends the edit
+        // under (UpstreamIdentityJson.TreatmentWireKey); lost, the edit would go to another copy.
         var originalId = treatment.Id;
+        var originalLegacyId = treatment.LegacyId;
 
         // JSON merge-patch: serialize existing, overlay patch properties, deserialize back
         var existingJson = JsonSerializer.Serialize(treatment);
@@ -241,6 +245,7 @@ public class TreatmentService : ITreatmentService
         // upsert key even if the client echoed an _id in the body (AAPS sends the derived ObjectId,
         // which would otherwise defeat the re-key and duplicate the record).
         treatment.Id = originalId;
+        treatment.LegacyId = originalLegacyId;
     }
 
     /// <inheritdoc />

@@ -24,7 +24,9 @@ namespace Nocturne.Connectors.Nightscout.Tests.TestSupport;
 /// stored one, and inserts it when none matches, which is a duplicate-key error when its <c>_id</c>
 /// is taken. A PUT saves under <c>new ObjectID(_id)</c>, which a string <c>_id</c> never equals.
 /// </para>
-/// Every version keeps <c>identifier</c> as sent and answers <c>find[identifier]</c>.
+/// Every version keeps <c>identifier</c> as sent and answers <c>find[identifier]</c> within
+/// <c>query.js</c>'s default four-day <c>created_at</c> window unless the find bounds
+/// <c>created_at</c> itself.
 /// </remarks>
 internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHandler
 {
@@ -41,12 +43,7 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         if (request.Method == HttpMethod.Get)
-        {
-            var identifier = Uri.UnescapeDataString(
-                Regex.Match(request.RequestUri!.Query, @"find\[identifier\]=([^&]+)").Groups[1].Value);
-            var found = Documents.Where(d => (string?)d.Document["identifier"] == identifier).Select(d => d.Document);
-            return Json(HttpStatusCode.OK, new JsonArray([.. found.Select(d => d.DeepClone())]));
-        }
+            return Json(HttpStatusCode.OK, new JsonArray([.. Find(request.RequestUri!).Select(d => d.DeepClone())]));
 
         var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
         var docs = body is JsonArray array ? array.Select(d => d!.AsObject()).ToList() : [body.AsObject()];
@@ -64,6 +61,43 @@ internal sealed class FakeNightscoutTreatments(string version) : HttpMessageHand
 
         return Json(HttpStatusCode.OK, new JsonArray());
     }
+
+    /// <summary>The clock the default <c>created_at</c> window of a find is taken from.</summary>
+    public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// A <c>find[identifier]</c>, bounded as <c>lib/server/query.js</c> bounds it: a find naming
+    /// neither <c>_id</c>, <c>created_at</c> nor <c>dateString</c> only sees <c>created_at</c> in the
+    /// last four days (<c>enforceDateFilter</c>, <c>deltaAgo = TWO_DAYS * 2</c>).
+    /// </summary>
+    private IEnumerable<JsonObject> Find(Uri uri)
+    {
+        var find = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2))
+            .Select(p => (Key: Uri.UnescapeDataString(p[0]), Value: Uri.UnescapeDataString(p.ElementAtOrDefault(1) ?? "")))
+            .Where(p => p.Key.StartsWith("find[", StringComparison.Ordinal))
+            .ToList();
+
+        var bounds = find.Where(p => p.Key.StartsWith("find[created_at]", StringComparison.Ordinal))
+            .Select(p => (Op: p.Key["find[created_at]".Length..], At: DateTimeOffset.Parse(p.Value)))
+            .ToList();
+        if (bounds.Count == 0 && !find.Any(p => p.Key.StartsWith("find[_id]", StringComparison.Ordinal) || p.Key.StartsWith("find[dateString]", StringComparison.Ordinal)))
+            bounds.Add(("[$gte]", Now - TimeSpan.FromDays(4)));
+
+        var identifier = find.Where(p => p.Key == "find[identifier]").Select(p => p.Value).FirstOrDefault();
+        return Documents.Select(d => d.Document).Where(d =>
+            (identifier is null || (string?)d["identifier"] == identifier)
+            && bounds.All(b => InBound(DateTimeOffset.Parse((string)d["created_at"]!), b.Op, b.At)));
+    }
+
+    private static bool InBound(DateTimeOffset at, string op, DateTimeOffset bound) => op switch
+    {
+        "[$gte]" => at >= bound,
+        "[$gt]" => at > bound,
+        "[$lte]" => at <= bound,
+        "[$lt]" => at < bound,
+        _ => throw new NotSupportedException($"find[created_at]{op}"),
+    };
 
     /// <summary>Stores <paramref name="doc"/> under a string or ObjectId <c>_id</c>, as a client other than Nocturne would.</summary>
     public void Seed(JsonObject doc, bool asObjectId) =>

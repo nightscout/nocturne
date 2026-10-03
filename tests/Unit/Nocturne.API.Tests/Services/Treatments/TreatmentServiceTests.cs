@@ -168,6 +168,31 @@ public class TreatmentServiceTests
         _mockEvents.Verify(x => x.OnUpdatedAsync(It.IsAny<Treatment>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>
+    /// A PATCH by the raw legacy id resolves no canonical id. The edit is decomposed under the legacy
+    /// id, so it updates the stored record in place, and raised with it, the key write-back sends the
+    /// edit under, although the merge round trips through JSON, where the legacy id is not carried.
+    /// </summary>
+    [Fact]
+    public async Task PatchTreatmentAsync_ByTheRawLegacyId_DecomposesAndRaisesTheEditUnderItsLegacyId()
+    {
+        const string legacyId = "65a1b2c3d4e5f60718293a4b";
+        const string uuid = "0198c2a4-1f3b-7c2d-9e55-6a1b2c3d4e5f";
+        _mockStore.Setup(x => x.GetByIdAsync(legacyId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Treatment { Id = uuid, LegacyId = legacyId, Mills = 1000, EventType = "Correction Bolus", Insulin = 1 });
+        _mockDecomposer.Setup(x => x.DecomposeAsync(It.IsAny<Treatment>(), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new DecompositionResult());
+
+        await _treatmentService.PatchTreatmentAsync(
+            legacyId, JsonSerializer.Deserialize<JsonElement>("""{"insulin":2}"""), CancellationToken.None);
+
+        _mockDecomposer.Verify(x => x.DecomposeAsync(
+            It.Is<Treatment>(t => t.Id == legacyId), It.IsAny<WriteOrigin>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockEvents.Verify(x => x.OnUpdatedAsync(
+            It.Is<Treatment>(t => t.Id == legacyId && t.LegacyId == legacyId && t.Insulin == 2),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task PatchTreatmentAsync_WhenNotFound_ReturnsNull()
     {

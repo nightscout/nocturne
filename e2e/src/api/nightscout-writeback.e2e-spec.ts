@@ -370,6 +370,34 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await upstreamTreatmentsAt(at, "Correction Bolus"))).toHaveLength(1);
   });
 
+  // Nightscout narrows a treatment find that bounds no created_at to the last four days, so the
+  // lookup an edit makes for its copy must bound created_at itself: missing the copy of an older
+  // treatment, the edit would go out under its `_id` alone and 15.0.8 would store a second copy.
+  it.each([
+    ["an ObjectId", 6, () => objectId()],
+    ["a uuid", 9, () => crypto.randomUUID()],
+    ["another", 12, () => `e2e-tr-old-${crypto.randomUUID()}`],
+  ])("writes an edit of a treatment keyed by %s and %i days old onto its one copy", async (_shape, daysAgo, key) => {
+    const legacyId = key();
+    const wire = wireId(legacyId);
+    const at = new Date(Date.now() - daysAgo * 24 * 60 * MINUTE).toISOString();
+    const upload = { _id: legacyId, eventType: "Correction Bolus", insulin: 0.4, created_at: at, enteredBy: `e2e-writeback-old-${run}` };
+    await writeBack(false);
+    try {
+      await tenant.api.ok("POST", "/api/v1/treatments", [upload]);
+    } finally {
+      await writeBack(true);
+    }
+    const [copy] = await upstreamPost("/api/v1/treatments", [{ ...upload, _id: wire, identifier: wire }]);
+    expect(await upstreamRead("/api/v1/treatments.json", { "find[identifier]": wire })).toEqual([]);
+
+    const [bolus] = (await bolusesAround(at)).data;
+    await tenant.api.ok("PUT", `/api/v1/treatments/${uuidPrefix(bolus!.id)}`, { ...upload, insulin: 0.8 });
+
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.8]]);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.insulin])).toEqual([[bolus!.id, 0.8]]);
+  });
+
   // A treatment upstream holds under its ObjectId alone, such as the original of one a Nightscout
   // migration imported, has no copy under its identifier. An edit carrying one would match neither
   // on 15.0.7+ and store a second copy, so it goes out under the ObjectId alone.

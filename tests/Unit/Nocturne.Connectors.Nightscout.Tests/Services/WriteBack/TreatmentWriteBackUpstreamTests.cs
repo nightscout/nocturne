@@ -67,6 +67,30 @@ public class TreatmentWriteBackUpstreamTests
         "4f1c1d2e-3a4b-4c5d-8e6f-7a8b9c0d1e2f",
     };
 
+    /// <summary>
+    /// Nightscout narrows a treatment find that bounds no <c>created_at</c> to the last four days, so
+    /// asking for the copy by its identifier alone misses the copy of an older treatment, and the
+    /// edit PUT under its <c>_id</c> alone lands on neither copy: 15.0.8 stores a second one. The
+    /// lookup bounds <c>created_at</c> itself, including below a time the edit moved.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Keys))]
+    public async Task On1508_AnEditOfATreatmentOlderThanFourDaysLandsOnTheOneCopy(string key)
+    {
+        var upstream = new FakeNightscoutTreatments("15.0.8") { Now = DateTimeOffset.Parse(At).AddDays(30) };
+        await EarlierWriteBackAsync(upstream, HttpMethod.Post, Uploaded(key));
+        using (var client = new HttpClient(upstream))
+        {
+            (await client.GetStringAsync($"https://nightscout.example.com/api/v1/treatments.json?find[identifier]={MongoObjectId.Coerce(key)}&count=1"))
+                .Should().Be("[]", "a find with no created_at bound only sees the last four days");
+        }
+
+        await Sink(upstream).OnUpdatedAsync(Edited(key, insulin: 2));
+        await Sink(upstream).OnUpdatedAsync(Edited(key, insulin: 3, at: "2026-08-20T08:00:00.000Z"));
+
+        Copies(upstream).Should().Equal((MongoObjectId.Coerce(key), 3d));
+    }
+
     [Theory]
     [MemberData(nameof(Keys))]
     public async Task On1508_AnEditLandsOnTheCopyAnEarlierWriteBackCreated(string key)
