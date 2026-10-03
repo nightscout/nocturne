@@ -104,21 +104,32 @@ describe('mountPlayer', () => {
     expect(created[1].options.startFinished).toBe(true);
   });
 
+  it('crops each painting to the window chosen for its box', () => {
+    vi.useFakeTimers();
+    const crop = (width: number, height: number) => ({ x: 0, y: 0, width: 1, height: height / width });
+    mount(fakeFrame(400, 40), canvas, { scene: () => '{}', fit: 'fill', releaseAfterFinish: true, crop });
+    expect(created[0].options).toMatchObject({ crop: { height: 0.1 } });
+    released = true;
+    observed!([{ contentRect: { width: 800, height: 40 } }]);
+    vi.advanceTimersByTime(200);
+    expect(created[1].options).toMatchObject({ crop: { height: 0.05 } });
+  });
+
   it('creates no player while the frame has no area, then one at its first real size', () => {
-    mount(fakeFrame(0, 0), canvas, { artwork: 'header-motif', surface: 'light' });
+    mount(fakeFrame(0, 0), canvas, { artwork: 'confirmation-background', surface: 'light' });
     expect(created).toHaveLength(0);
 
     observed!([{ contentRect: { width: 0, height: 0 } }]);
     expect(created).toHaveLength(0);
 
-    observed!([{ contentRect: { width: 160, height: 32 } }]);
+    observed!([{ contentRect: { width: 96, height: 32 } }]);
     expect(created).toHaveLength(1);
-    expect(created[0].options.width).toBe(160);
+    expect(created[0].options.width).toBe(96);
     expect(created[0].options.height).toBe(32);
   });
 
   it('creates the player at once for a frame that already has area', () => {
-    mount(fakeFrame(160, 32), canvas, { artwork: 'header-motif', surface: 'light' });
+    mount(fakeFrame(96, 32), canvas, { artwork: 'confirmation-background', surface: 'light' });
     expect(created).toHaveLength(1);
   });
 

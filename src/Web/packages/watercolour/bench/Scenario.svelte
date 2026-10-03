@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Artwork, ArtworkHero, AvatarWash, ConfirmationBackground, DropGroup, DropSurface, HeaderMotif, PaintedUnderline, SelectionEdge } from '../src';
+  import { Artwork, ArtworkHero, AvatarWash, ConfirmationBackground, DropGroup, DropSurface, PaintedUnderline, ReportHeaderWash, SelectionEdge } from '../src';
   import type { ArtworkId } from '../src';
   import { expectArtworks, track } from './hooks';
 
@@ -21,7 +21,7 @@
     empty: () => count(3) + 1,
     hero: () => 1,
     drops: () => 0,
-    motif: () => 1,
+    wash: () => 1,
     edge: () => 1,
     mixed: () => 1 + 1 + 10 + 2 + 1,
   } as Record<string, () => number>;
@@ -101,15 +101,15 @@
         {/each}
       </div>
     </DropGroup>
-  {:else if scenario === 'motif'}
-    <HeaderMotif onready={track('motif')} />
+  {:else if scenario === 'wash'}
+    <ReportHeaderWash name="/reports/agp" class="header-wash" onready={track('wash')} />
   {:else if scenario === 'edge'}
     {@render edges(count(8))}
   {:else if scenario === 'mixed'}
     <div class="shell">
       {@render edges(6)}
       <div class="main">
-        <HeaderMotif onready={track('motif')} />
+        <ReportHeaderWash name="/reports/agp" class="header-wash" onready={track('wash')} />
         {@render tabs(5)}
         <h3>Members</h3>
         {@render avatars(10)}

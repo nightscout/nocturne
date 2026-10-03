@@ -650,7 +650,7 @@ fn parse_cli() -> Cli {
     let id = positionals
         .first()
         .cloned()
-        .unwrap_or_else(|| "header-motif".to_string());
+        .unwrap_or_else(|| "crescent-moon".to_string());
     let palette_name = positionals
         .get(1)
         .cloned()

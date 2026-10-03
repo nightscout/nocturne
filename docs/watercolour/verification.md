@@ -233,7 +233,7 @@ spot checks on the machine above. The repeatable harness is below.
 ### Benchmark harness
 
 `packages/watercolour/bench/` builds plain scenario pages (`avatars`, `tabs`,
-`empty`, `hero`, `drops`, `motif`, `edge`, `mixed`; `?s=<name>&n=<count>`) from
+`empty`, `hero`, `drops`, `wash`, `edge`, `mixed`; `?s=<name>&n=<count>`) from
 the package's public components, and `run.mjs` drives them in real Chrome
 through Playwright against a production `vite build` served by `vite preview`.
 It depends on nothing but the package's own source, so it runs against any

@@ -250,7 +250,7 @@ bundled set only - an `assetBaseUrl` is served exactly as requested.
 
 | Artwork | Default palette |
 |---|---|
-| `crescent-moon`, `moonlit-shoreline`, `header-motif`, `alarm-bell` | `moonlight` |
+| `crescent-moon`, `moonlit-shoreline`, `alarm-bell` | `moonlight` |
 | `magnifying-glass`, `connected-shores`, `avatar-wash`, `selection-edge` | `water` |
 | `overlapping-shapes`, `linked-rings`, `hub-dawn-ridges` | `dusk` |
 | `confirmation-mark`, `confirmation-background` | `moss` |

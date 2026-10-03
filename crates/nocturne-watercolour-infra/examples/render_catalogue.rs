@@ -95,9 +95,7 @@ fn contact_sheet(images: &[Image], long: u32, columns: u32, ground: Rgb) -> Imag
 
 fn default_palette(id: &str) -> Palette {
     match id {
-        "crescent-moon" | "moonlit-shoreline" | "header-motif" | "selection-edge" => {
-            Palette::moonlight()
-        }
+        "crescent-moon" | "moonlit-shoreline" | "selection-edge" => Palette::moonlight(),
         "connected-shores" | "magnifying-glass" | "avatar-wash" | "report-pages" => {
             Palette::water()
         }
