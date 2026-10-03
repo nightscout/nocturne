@@ -2072,7 +2072,10 @@ impl GpuEngine {
 
     /// The render timer when it is free to take a sample.
     fn render_timer(&self) -> Option<&GpuTimer> {
-        self.timers.as_ref().map(|t| &t.render).filter(|t| t.idle())
+        self.timers
+            .as_ref()
+            .map(|t| &t.render)
+            .filter(|t| t.sample_due())
     }
 
     /// The optics pass alone, with no readback or presentation; for timing.
@@ -2708,17 +2711,15 @@ impl Simulator for GpuEngine {
             return Ok(());
         }
         let sample_free = !self.with_pending(|p| p.tick_sample);
+        let mut sample = false;
         if let Some(t) = self.timers.as_mut() {
             t.collect();
-            if t.tick.idle() && sample_free {
+            sample = sample_free && t.tick.sample_due();
+            if sample {
                 t.sampled_ticks = ticks;
             }
         }
-        let timer = self
-            .timers
-            .as_ref()
-            .map(|t| &t.tick)
-            .filter(|t| t.idle() && sample_free);
+        let timer = self.timers.as_ref().map(|t| &t.tick).filter(|_| sample);
         let l = self.loaded()?;
         let mut remaining = ticks;
         while remaining > 0 {
@@ -2789,17 +2790,15 @@ impl Simulator for GpuEngine {
                 .map(|c| self.dab_uniform(c.dab, c.seed).map(|u| (c.at_tick, u)))
                 .collect::<Result<_, _>>()?;
             let sample_free = !self.with_pending(|p| p.tick_sample);
+            let mut sample = false;
             if let Some(t) = self.timers.as_mut() {
                 t.collect();
-                if t.tick.idle() && sample_free {
+                sample = sample_free && t.tick.sample_due();
+                if sample {
                     t.sampled_ticks = batch;
                 }
             }
-            let timer = self
-                .timers
-                .as_ref()
-                .map(|t| &t.tick)
-                .filter(|t| t.idle() && sample_free);
+            let timer = self.timers.as_ref().map(|t| &t.tick).filter(|_| sample);
             let l = self.loaded()?;
             for (index, (_, uniform)) in uniforms.iter().enumerate() {
                 self.write_buffer(

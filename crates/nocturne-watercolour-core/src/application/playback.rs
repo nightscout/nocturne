@@ -386,12 +386,6 @@ impl<S: Simulator> Playback<S> {
         if target > self.tick {
             let reached = self.budgeted(target);
             self.run_to(reached)?;
-            if reached < target {
-                // Hold the clock to the tick actually reached. Carrying the
-                // shortfall forward would ask the next frame for even more
-                // ticks, which is the runaway the budget exists to stop.
-                self.elapsed_progress = self.progress();
-            }
         }
         Ok(())
     }
@@ -656,8 +650,6 @@ mod tests {
         assert_eq!(pb.current_tick() - before, 3, "the shortfall compounded");
     }
 
-    /// The clock follows the ticks that were actually run, so a reveal that
-    /// cannot keep up slips rather than stuttering — and still finishes.
     #[test]
     fn a_budgeted_reveal_slips_but_still_arrives() {
         let mut pb = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
@@ -684,6 +676,24 @@ mod tests {
             frames > 60,
             "a budget of 4 cannot finish 400 ticks in {frames} frames"
         );
+    }
+
+    #[test]
+    fn skipped_clock_time_is_retained_while_each_advance_stays_bounded() {
+        let mut playback = Playback::new(CpuEngine::default(), budget_scene(), 1000.0)
+            .unwrap()
+            .with_tick_budget(4);
+        playback.play();
+        playback.advance_by_elapsed(1.0).unwrap();
+        assert_eq!(playback.current_tick(), 4);
+        while playback.state() != PlaybackState::Finished {
+            let before = playback.current_tick();
+            playback.advance_by_elapsed(0.0).unwrap();
+            assert!(playback.current_tick() - before <= 4);
+        }
+        let mut reference = Playback::new(CpuEngine::default(), budget_scene(), 1000.0).unwrap();
+        reference.finish_immediately().unwrap();
+        assert_eq!(playback.simulator().grid(), reference.simulator().grid());
     }
 
     /// Records the step sizes a playback asks for.

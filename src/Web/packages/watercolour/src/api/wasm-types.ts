@@ -47,6 +47,8 @@ export interface WasmInstance {
   simResolution(): number;
   /** Simulation steps the loaded scene's timeline runs. */
   totalTicks(): number;
+  tickBudget(): number;
+  currentTick(): number;
   checkpointBytes(): number;
   detach(): void;
   dispose(): void;

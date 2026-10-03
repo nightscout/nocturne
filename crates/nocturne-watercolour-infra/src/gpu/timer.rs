@@ -2,19 +2,24 @@
 //! a sample is only started while the previous one is not in flight, and a
 //! finished one is collected on a later call. Needs `TIMESTAMP_QUERY`; see
 //! `GpuContext::has_timestamps`.
+//! The first eligible operation is sampled; subsequent samples skip fifteen
+//! eligible operations to limit query resolves and host callbacks.
 
+use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 const IDLE: u8 = 0;
 const PENDING: u8 = 1;
 const MAPPED: u8 = 2;
+const SAMPLE_INTERVAL: u8 = 16;
 
 pub(super) struct GpuTimer {
     set: wgpu::QuerySet,
     resolve: wgpu::Buffer,
     readback: wgpu::Buffer,
     state: Arc<AtomicU8>,
+    sample_wait: Cell<u8>,
 }
 
 impl GpuTimer {
@@ -39,12 +44,26 @@ impl GpuTimer {
                 mapped_at_creation: false,
             }),
             state: Arc::new(AtomicU8::new(IDLE)),
+            sample_wait: Cell::new(0),
         }
     }
 
     /// Whether a new sample may start: the last one has been collected.
     pub(super) fn idle(&self) -> bool {
         self.state.load(Ordering::Acquire) == IDLE
+    }
+
+    pub(super) fn sample_due(&self) -> bool {
+        if !self.idle() {
+            return false;
+        }
+        let remaining = self.sample_wait.get();
+        self.sample_wait.set(if remaining == 0 {
+            SAMPLE_INTERVAL - 1
+        } else {
+            remaining - 1
+        });
+        remaining == 0
     }
 
     pub(super) fn compute_writes(

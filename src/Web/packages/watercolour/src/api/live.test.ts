@@ -53,6 +53,8 @@ function fakeInstance(total: number) {
     dispose: () => void calls.push('dispose'),
     simResolution: () => 96,
     totalTicks: () => total,
+    tickBudget: () => 6,
+    currentTick: () => tick,
   };
   return instance;
 }
@@ -129,6 +131,49 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('cancelled live creation', () => {
+  it('balances the lease without creating a scene after the engine await', async () => {
+    let complete!: (module: WasmModule) => void;
+    const module_ready = new Promise<WasmModule>(resolve => { complete = resolve; });
+    const instance = fakeInstance(4);
+    const create_instance = vi.fn(() => instance);
+    const module = {
+      default: async () => {},
+      WatercolourEngine: { create: async () => ({ createInstance: create_instance, onDeviceLost() {}, stats: () => ({ liveInstances: 0, maxLiveInstances: 4 }) }) },
+      catalogueScene: () => '{"version":1}',
+    } as unknown as WasmModule;
+    const engine_host = new EngineHost({ loadModule: () => module_ready, capabilities: gpu });
+    const { scheduler } = manualScheduler();
+    const live = player(instance, scheduler, { engineHost: engine_host });
+    await idle();
+    expect(engine_host.refCount).toBe(1);
+    live.dispose();
+    complete(module);
+    await live.ready;
+    expect(create_instance).not.toHaveBeenCalled();
+    expect(engine_host.refCount).toBe(0);
+    const next = player(instance, scheduler, { engineHost: engine_host });
+    await next.ready;
+    expect(next.state.mode).toBe('live');
+    next.dispose();
+    expect(engine_host.refCount).toBe(0);
+  });
+
+  it('ends a cancelled queued still turn before taking an engine lease', async () => {
+    const instance = fakeInstance(4);
+    const engine_host = fakeHost(instance);
+    const end_turn = await engine_host.stillTurn();
+    const { scheduler } = manualScheduler();
+    const live = player(instance, scheduler, { engineHost: engine_host, releaseAfterFinish: true, motion: 'reduced' });
+    await idle(); live.dispose(); end_turn();
+    await live.ready;
+    expect(engine_host.refCount).toBe(0);
+    expect(instance.calls).toEqual([]);
+    const next_turn = await engine_host.stillTurn();
+    next_turn();
+  });
 });
 
 describe('presented progress', () => {

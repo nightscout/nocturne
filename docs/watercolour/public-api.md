@@ -135,7 +135,17 @@ first artwork mounts. The wasm bindings are loaded through a Vite glob because
 baked instance on the page. Hidden time is not counted as elapsed, so a reveal
 resumes where it paused instead of jumping to the end. Off-screen artworks are
 neither stepped nor rendered (`IntersectionObserver`); a stalled frame is
-clamped to `MAX_FRAME_SECONDS = 0.25`.
+clamped to `MAX_FRAME_SECONDS = 0.25`. Visible, active players rotate first
+admission through a shared CPU/GPU frame budget. Tick and render costs are
+estimated separately. A skipped player's visible elapsed intervals accumulate;
+hidden, offscreen and inactive time does not. The engine retains clock shortfall
+while limiting each advance's tick count. A single indivisible call can overrun
+its estimate; first admission still runs to prevent starvation.
+
+GPU timestamp queries sample the first eligible operation and then every 16th
+eligible operation after the previous readback completes. Tick samples include
+batched dab work; render samples include pigment shading. The scheduler combines
+those costs when reserving GPU work.
 
 ```ts
 import { getScheduler } from '@nocturne/watercolour';
