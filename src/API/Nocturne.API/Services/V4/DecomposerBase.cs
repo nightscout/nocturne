@@ -88,10 +88,12 @@ public abstract class DecomposerBase
             {
                 created = await repository.CreateAsync(model, origin, ct);
             }
-            catch (RecreationBlockedException)
+            catch (RecreationBlockedException blocked)
             {
                 // No live row carries the legacy id, so what holds it is the user's deletion.
                 result.SkippedDeleted++;
+                if (blocked.HeldBy is { } heldBy)
+                    result.RefusedRecords.Add(new RefusedRecord(typeof(TRecord), heldBy));
                 Logger.LogDebug("Skipped a {RecordType}: its identity is held by a deleted record", recordType);
                 return null;
             }

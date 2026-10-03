@@ -29,11 +29,21 @@ public sealed class BulkWrite<TRecord>(IReadOnlyList<TRecord> written, int skipp
     public IReadOnlyList<TRecord> Updated { get; init; } = [];
 
     /// <summary>
-    /// The returned records that wrote nothing because the user had deleted them, for a service that
-    /// returns them as it did before it carried <see cref="SkippedDeleted"/>. The same instances the
-    /// collection enumerates; empty where a writer returns only what it wrote.
+    /// What the write answers for each submitted record it settled, in submission order: the written
+    /// records, and the records not written because the user had deleted them, as the stored row that
+    /// refused them is named. The written records alone when not set.
     /// </summary>
-    public IReadOnlyList<TRecord> Withheld { get; init; } = [];
+    /// <remarks>
+    /// Uploaders such as Loop pair a reply with their request by position, so a refused record still
+    /// takes its place in the reply; only the written records are broadcast.
+    /// </remarks>
+    public IReadOnlyList<TRecord> Settled
+    {
+        get => _settled ?? written;
+        init => _settled = value;
+    }
+
+    private readonly IReadOnlyList<TRecord>? _settled;
 
     public int Count => written.Count;
 

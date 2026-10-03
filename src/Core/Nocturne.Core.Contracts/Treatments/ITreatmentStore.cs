@@ -73,8 +73,9 @@ public interface ITreatmentStore
     /// <param name="treatments">The treatments to create.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>
-    /// The created <see cref="Treatment"/> records, each under the id reads serve for it, carrying
-    /// how many of their records were not written because the user had deleted them.
+    /// The written <see cref="Treatment"/> records under the id the reads serve them by, carrying how
+    /// many of their records were not written because the user had deleted them. A treatment none of
+    /// whose records was written is left out, and answered only in <see cref="BulkWrite{TRecord}.Settled"/>.
     /// </returns>
     Task<BulkWrite<Treatment>> CreateAsync(IReadOnlyList<Treatment> treatments, CancellationToken ct = default);
 

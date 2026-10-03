@@ -57,6 +57,14 @@ public class Treatment : ProcessableDocumentBase
     [JsonConverter(typeof(ObjectIdJsonConverter))]
     public string? Identifier => Id;
 
+    /// <summary>A shallow copy of this treatment under another served id.</summary>
+    public Treatment WithId(string? id)
+    {
+        var copy = (Treatment)MemberwiseClone();
+        copy.Id = id;
+        return copy;
+    }
+
     /// <summary>
     /// Gets the server-modified timestamp for V3 compatibility.
     /// Falls back to Mills, which already resolves every other timestamp this document

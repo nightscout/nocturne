@@ -166,20 +166,10 @@ public class TreatmentService : ITreatmentService
         var created = await _store.CreateAsync(treatmentList, cancellationToken);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnCreatedAsync(Written(created), cancellationToken);
+        await _events.OnCreatedAsync(created, cancellationToken);
 
         return created;
     }
-
-    /// <summary>
-    /// The created treatments the store wrote. One the user had deleted is returned to the caller as
-    /// before but stored nothing, so no event announces it, and write-back does not put it upstream
-    /// again.
-    /// </summary>
-    private static IReadOnlyList<Treatment> Written(BulkWrite<Treatment> created) =>
-        created.Withheld.Count == 0
-            ? created
-            : created.Where(t => !created.Withheld.Contains(t, ReferenceEqualityComparer.Instance)).ToList();
 
     /// <inheritdoc />
     /// <returns>The updated <see cref="Treatment"/>, or <see langword="null"/> if not found.</returns>
@@ -207,12 +197,13 @@ public class TreatmentService : ITreatmentService
         ApplyJsonPatch(existing, patchData);
 
         // Re-decompose (idempotent upsert via LegacyId matching)
-        await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var result = await _decomposer.DecomposeAsync(existing, WriteOrigin.Live, cancellationToken);
+        var patched = TreatmentReadService.ToCreated(existing, result);
 
         await _cache.InvalidateAsync(cancellationToken);
-        await _events.OnUpdatedAsync(existing, cancellationToken);
+        await _events.OnUpdatedAsync(patched, cancellationToken);
 
-        return existing;
+        return patched;
     }
 
     private static void ApplyJsonPatch(Treatment treatment, JsonElement patchData)

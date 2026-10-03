@@ -41,6 +41,14 @@ interface Bolus {
   insulin: number;
 }
 
+interface TempBasal {
+  id: string;
+}
+
+interface V1Treatment {
+  _id: string;
+}
+
 interface V1DeviceStatus {
   _id: string;
   device: string;
@@ -267,6 +275,74 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await bolusesAround(at)).data).toEqual([]);
   });
 
+  const tempBasalsAround = (at: string) => {
+    const from = encodeURIComponent(new Date(Date.parse(at) - MINUTE).toISOString());
+    const to = encodeURIComponent(new Date(Date.parse(at) + MINUTE).toISOString());
+    return tenant.api.ok<Page<TempBasal>>("GET", `/api/v4/insulin/temp-basals?limit=50&from=${from}&to=${to}`);
+  };
+
+  /** The `[_id, identifier]` of each write-back of the treatment its legacy key names, in order. */
+  const sentTreatments = async (legacyKey: string) =>
+    (await writtenBack("/api/v1/treatments")).filter((t) => t.identifier === wireId(legacyKey)).map((t) => [t._id, t.identifier]);
+
+  // A create goes out under the coerced legacy key, as `_id` and `identifier` both; the upstream
+  // keeps that identifier under an ObjectId it mints. A PUT and a PATCH by the id the create answered
+  // look the copy up by that identifier and are PUT under its ObjectId with the same identifier, so
+  // each lands on the one copy upstream and each pull lands on the stored treatment.
+  it("pulls a v1 treatment it wrote back on create, PUT and PATCH onto that treatment", async () => {
+    const syncIdentifier = crypto.randomUUID();
+    const wire = wireId(syncIdentifier);
+    const at = new Date(Date.now() - 55 * MINUTE).toISOString();
+    const upload = { eventType: "Correction Bolus", insulin: 0.75, created_at: at, enteredBy: `loop://e2e-writeback-${run}`, syncIdentifier };
+    const [created] = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [upload]);
+    const id = created!._id;
+    expect(id).toMatch(/^[0-9a-f]{24}$/);
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire]]);
+    const [copy] = await upstreamTreatmentsAt(at, "Correction Bolus");
+    expect(copy?.identifier).toBe(wire);
+
+    expect((await sync()).success).toBe(true);
+    const stored = (await bolusesAround(at)).data;
+    expect(stored).toHaveLength(1);
+    expect(uuidPrefix(stored[0]!.id)).toBe(id);
+    // The pulled copy is the write-back's echo: it leaves the upload's source, so later edits are written back too.
+    const kept = [[stored[0]!.id, stored[0]!.dataSource ?? null]];
+    expect(kept[0]![1]).not.toBe("nightscout-connector");
+
+    await tenant.api.ok("PUT", `/api/v1/treatments/${id}`, { ...upload, insulin: 0.8 });
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [copy!._id, wire]]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.8]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
+
+    await tenant.api.ok("PATCH", `/api/v3/treatments/${id}`, { insulin: 0.85 });
+    expect(await sentTreatments(syncIdentifier)).toEqual([[wire, wire], [copy!._id, wire], [copy!._id, wire]]);
+    expect((await upstreamTreatmentsAt(at, "Correction Bolus")).map((t) => [t._id, t.identifier, t.insulin])).toEqual([[copy!._id, wire, 0.85]]);
+    expect((await sync()).success).toBe(true);
+    expect((await bolusesAround(at)).data.map((b) => [b.id, b.dataSource ?? null])).toEqual(kept);
+  });
+
+  it("pulls a temp basal it wrote back onto that temp basal", async () => {
+    const at = new Date(Date.now() - 60 * MINUTE).toISOString();
+    const [created] = await tenant.api.ok<V1Treatment[]>("POST", "/api/v1/treatments", [
+      { eventType: "Temp Basal", duration: 30, absolute: 0.45, rate: 0.45, created_at: at, enteredBy: `e2e-writeback-${run}` },
+    ]);
+    const id = created!._id;
+    expect(id).toMatch(/^[0-9a-f]{24}$/);
+
+    const sent = (await writtenBack("/api/v1/treatments")).filter((t) => t.created_at === at && t.eventType === "Temp Basal");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!._id).toMatch(/^[0-9a-f]{24}$/);
+    expect(sent[0]!.identifier).toBe(sent[0]!._id);
+    expect((await upstreamTreatmentsAt(at, "Temp Basal")).map((t) => t.identifier)).toEqual([sent[0]!.identifier]);
+
+    expect((await sync()).success).toBe(true);
+
+    const stored = (await tempBasalsAround(at)).data;
+    expect(stored).toHaveLength(1);
+    expect(uuidPrefix(stored[0]!.id)).toBe(id);
+  });
+
   it("pulls a reading whose legacy id is not an ObjectId back onto that reading", async () => {
     const device = `e2e-writeback-legacy-${run}`;
     const legacyId = `e2e-legacy-${run}`;
@@ -424,12 +500,6 @@ describe("Nightscout connector write-back round trip", () => {
     expect((await sync()).success).toBe(true);
     expect((await bolusesAround(at)).data.map((b) => b.insulin)).toEqual([0.9]);
   });
-
-  const tempBasalsAround = (at: string) => {
-    const from = encodeURIComponent(new Date(Date.parse(at) - MINUTE).toISOString());
-    const to = encodeURIComponent(new Date(Date.parse(at) + MINUTE).toISOString());
-    return tenant.api.ok<Page<{ id: string }>>("GET", `/api/v4/insulin/temp-basals?limit=50&from=${from}&to=${to}`);
-  };
 
   /** Stores a v1 upload with write-back off, so that only what the spec puts upstream is there. */
   async function uploadWithoutWriteBack(upload: Record<string, unknown>): Promise<void> {

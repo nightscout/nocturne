@@ -33,4 +33,7 @@ public sealed class RecreationBlockedException : Exception
         => $"sync identifier '{syncIdentifier}' from '{dataSource}'";
 
     public static string LegacyIdIdentity(string legacyId) => $"legacy id '{legacyId}'";
+
+    /// <summary>The id of the stored row that holds the identity, when the refusing path read it.</summary>
+    public Guid? HeldBy { get; init; }
 }
