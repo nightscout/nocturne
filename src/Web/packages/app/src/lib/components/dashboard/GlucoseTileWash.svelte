@@ -4,8 +4,8 @@
   /** What the tile showed before this wash: a range fill, or the loading skeleton. */
   type PriorFill = GlucoseTileVariant | "skeleton";
 
-  // Module state, not instance state: the tile unmounts this wash whenever it paints none, and
-  // the reading can move between the header tile and the Current Glucose widget, so it must
+  // Module state, not instance state: the tile unmounts this wash whenever it shows a flat fill,
+  // and the reading can move between the header tile and the Current Glucose widget, so it must
   // outlive any one mount. That also means one live wash at a time.
   let settledSeed = $state<number | null>(null);
   let fadedSeed = $state<number | null>(null);
