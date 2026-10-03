@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { washInterior } from '$lib/watercolour-wash';
   import { untrack } from "svelte";
   import { Artwork, prefersReducedMotion } from "@nocturne/watercolour";
   import GlucoseTileBloom from "./GlucoseTileBloom.svelte";
@@ -121,7 +122,7 @@
         </span>
       {:else}
         <span
-          class="absolute wash-crop wash-grain wash-fade {washBlend[variant]}"
+          class="absolute inset-0 wash-grain wash-fade {washBlend[variant]}"
           class:faded
           ontransitionend={markFaded}
           ontransitioncancel={markFaded}
@@ -137,6 +138,7 @@
             releaseAfterFinish
             onstatechange={onWashState}
             fit="fill"
+            crop={washInterior}
             class="size-full"
           />
         </span>
@@ -145,19 +147,13 @@
   {/key}
 {:else}
   {#key variant}
-    <span class="absolute wash-crop wash-grain {washBlend[variant]}">
-      <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" class="size-full" />
+    <span class="absolute inset-0 wash-grain {washBlend[variant]}">
+      <Artwork artwork="wash" palette="slate" surface="light" releaseAfterFinish fit="fill" crop={washInterior} class="size-full" />
     </span>
   {/key}
 {/if}
 
 <style>
-  .wash-crop {
-    top: -100%;
-    left: -46%;
-    height: 303%;
-    width: 192%;
-  }
   /* Grayscale precedes brightening to avoid clipping individual pigment channels. */
   .wash-grain {
     filter: grayscale(1) brightness(1.5) contrast(1.6);

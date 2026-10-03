@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { washInterior } from '$lib/watercolour-wash';
   import type { TreatmentFood } from "$lib/api";
   import { cn } from "$lib/utils";
   import { BarChart } from "layerchart";
@@ -199,7 +200,7 @@
           style:--paint-w="{paintBox.width}px"
           style:--paint-h="{paintBox.height}px"
         >
-          <div class="absolute -top-full -left-[46%] h-[303%] w-[192%] wash-grain mix-blend-multiply">
+          <div class="absolute inset-0 wash-grain mix-blend-multiply">
             <Artwork
               artwork="wash"
               palette="slate"
@@ -208,6 +209,7 @@
               autoplay="never"
               releaseAfterFinish
               fit="fill"
+              crop={washInterior}
               class="size-full"
             />
           </div>
